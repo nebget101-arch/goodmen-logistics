@@ -131,8 +131,8 @@ class DynatraceLogger {
       app: this.appName,
       ...metadata
     };
-this.addToBuffer(logEntry);
-    
+
+    this.addToBuffer(logEntry);
     console.warn('⚠️ ', JSON.stringify(logEntry));
     
     if (this.enabled) {
@@ -156,8 +156,7 @@ this.addToBuffer(logEntry);
       ...metadata
     };
 
-    this.addToBuffer(logEntry);    };
-
+    this.addToBuffer(logEntry);
     console.log(`🌐 ${method} ${path} - ${statusCode} (${duration}ms)`);
 
     if (this.enabled) {
@@ -173,7 +172,11 @@ this.addToBuffer(logEntry);
   /**
    * Track database query
    */
-  traclevel: success ? 'INFO' : 'ERROR',
+  trackDatabase(operation, table, duration, success = true, metadata = {}) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      type: 'DATABASE',
+      level: success ? 'INFO' : 'ERROR',
       operation,
       table,
       duration,
@@ -183,11 +186,7 @@ this.addToBuffer(logEntry);
       ...metadata
     };
 
-    this.addToBuffer(logEntry);      success,
-      app: this.appName,
-      ...metadata
-    };
-
+    this.addToBuffer(logEntry);
     console.log(`🗄️  ${operation} ${table} - ${success ? 'Success' : 'Failed'} (${duration}ms)`);
 
     if (this.enabled) {
@@ -201,20 +200,20 @@ this.addToBuffer(logEntry);
   }
 
   /**
-   * Tlevel: 'INFO',
+   * Track business event
+   */
+  trackEvent(eventName, eventData = {}) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      type: 'BUSINESS_EVENT',
+      level: 'INFO',
       event: eventName,
       message: `Event: ${eventName}`,
       app: this.appName,
       ...eventData
     };
 
-    this.addToBuffer(logEntry);      timestamp: new Date().toISOString(),
-      type: 'BUSINESS_EVENT',
-      event: eventName,
-      app: this.appName,
-      ...eventData
-    };
-
+    this.addToBuffer(logEntry);
     console.log(`📊 Event: ${eventName}`, eventData);
 
     if (this.enabled) {
