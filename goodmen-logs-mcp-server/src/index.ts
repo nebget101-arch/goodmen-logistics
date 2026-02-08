@@ -657,12 +657,12 @@ class GoodmenLogsMCPServer {
             try {
               const testDir = path.join(__dirname, '..', '..', 'k6-performance-tests');
               
-              // Generate HTML report
-              console.error('Generating HTML report...');
-              execSync(`cd ${testDir} && node scripts/generate-html-report.js`, { stdio: 'inherit' });
+              // Generate Confluence-optimized HTML report
+              console.error('Generating Confluence-compatible HTML report...');
+              execSync(`cd ${testDir} && node scripts/generate-confluence-html.js`, { stdio: 'inherit' });
               
-              // Read the generated HTML report
-              const htmlReportPath = path.join(testDir, 'reports', 'performance-report.html');
+              // Read the generated Confluence HTML report
+              const htmlReportPath = path.join(testDir, 'reports', 'confluence-report.html');
               
               if (!fs.existsSync(htmlReportPath)) {
                 return {
@@ -688,7 +688,7 @@ class GoodmenLogsMCPServer {
                 content: [
                   {
                     type: "text",
-                    text: `✅ HTML Performance Report posted to Confluence!\n\nPage Title: ${pageTitle}\nPage URL: ${confluenceResult.url}\n\nThe report includes:\n- Interactive charts and visualizations\n- Detailed metrics tables\n- Pass/fail status indicators\n- Performance recommendations\n- Color-coded success rates`,
+                    text: `✅ HTML Performance Report posted to Confluence!\n\nPage Title: ${pageTitle}\nPage URL: ${confluenceResult.url}\n\nThe report includes:\n- Color-coded status indicators\n- Success rate progress bars\n- Detailed metrics tables\n- Performance recommendations\n- Confluence-optimized formatting`,
                   },
                 ],
               };

@@ -178,8 +178,29 @@ export class ConfluenceService {
    * Format logs into Confluence storage format (HTML)
    */
   private formatLogsForConfluence(logs: string): string {
-    // If logs is already formatted markdown, convert to HTML
-    // For now, we'll wrap it in <pre> tags for code formatting
+    // Check if this is already Confluence-compatible HTML (no DOCTYPE, just div/table content)
+    if (logs.trim().startsWith('<div') || logs.trim().startsWith('<table')) {
+      // Already clean HTML - return as is
+      return logs;
+    }
+
+    // Check if this is a full HTML document (contains <!DOCTYPE or <html>)
+    if (logs.trim().startsWith('<!DOCTYPE') || logs.trim().startsWith('<html')) {
+      // Extract body content
+      const bodyMatch = logs.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+      if (bodyMatch) {
+        return bodyMatch[1].trim();
+      }
+      // If no body tag, strip document structure tags
+      return logs
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<!DOCTYPE[^>]*>/gi, '')
+        .replace(/<\/?html[^>]*>/gi, '')
+        .replace(/<\/?head[^>]*>/gi, '')
+        .replace(/<\/?body[^>]*>/gi, '')
+        .trim();
+    }
 
     // Check if logs is a JSON string
     try {
