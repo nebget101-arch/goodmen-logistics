@@ -2,7 +2,7 @@ services:
   - type: web
     name: safetyapp
     runtime: node
-    plan: starter
+    plan: free
     rootDir: goodmen-logistics
     buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install
     startCommand: node backend/server.js
@@ -16,16 +16,8 @@ services:
       - key: PORT
         value: 10000
 
-  - type: worker
-    name: goodmen-logs-mcp
-    runtime: node
-    plan: starter
-    rootDir: goodmen-logs-mcp-server
-    buildCommand: npm install && npm run build
-    startCommand: npm run start
-
 databases:
   - name: safetyapp-db
     databaseName: goodmen_logistics
     user: goodmen_user
-    plan: basic-256mb
+    plan: free
