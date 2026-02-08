@@ -52,7 +52,7 @@ router.post('/', async (req, res) => {
       license_plate, 
       state, 
       mileage, 
-      last_inspection_date,
+      inspection_expiry,
       next_pm_due,
       next_pm_mileage,
       insurance_expiry, 
@@ -63,14 +63,14 @@ router.post('/', async (req, res) => {
     const result = await query(
       `INSERT INTO vehicles (
         unit_number, vin, make, model, year, license_plate, state, mileage, 
-        last_inspection_date, next_pm_due, next_pm_mileage,
+        inspection_expiry, next_pm_due, next_pm_mileage,
         insurance_expiry, registration_expiry, oos_reason, status
       )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'in-service') 
        RETURNING *`,
       [
         unit_number, vin, make, model, year, license_plate, state, mileage || 0,
-        last_inspection_date, next_pm_due, next_pm_mileage,
+        inspection_expiry, next_pm_due, next_pm_mileage,
         insurance_expiry, registration_expiry, oos_reason
       ]
     );

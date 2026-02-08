@@ -12,7 +12,7 @@ interface VehicleFormData {
   state: string;
   status: string;
   mileage: number;
-  last_inspection_date: string;
+  inspection_expiry: string;
   next_pm_due: string;
   next_pm_mileage: number;
   insurance_expiry: string;
@@ -54,7 +54,7 @@ export class VehicleFormComponent implements OnInit, OnChanges {
     state: '',
     status: 'in-service',
     mileage: 0,
-    last_inspection_date: '',
+    inspection_expiry: '',
     next_pm_due: '',
     next_pm_mileage: 0,
     insurance_expiry: '',
@@ -117,7 +117,7 @@ export class VehicleFormComponent implements OnInit, OnChanges {
         state: '',
         status: 'in-service',
         mileage: 0,
-        last_inspection_date: '',
+        inspection_expiry: '',
         next_pm_due: '',
         next_pm_mileage: 0,
         insurance_expiry: '',
@@ -175,7 +175,7 @@ export class VehicleFormComponent implements OnInit, OnChanges {
   }
 
   getInspectionStatus(): 'valid' | 'warning' | 'expired' {
-    return this.getExpiryStatus(this.formData.last_inspection_date);
+    return this.getExpiryStatus(this.formData.inspection_expiry);
   }
 
   validateForm(): boolean {
