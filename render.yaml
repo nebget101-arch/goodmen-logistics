@@ -2,6 +2,7 @@ services:
   - type: web
     name: safetyapp
     env: node
+    plan: starter
     rootDir: goodmen-logistics
     buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install
     startCommand: node backend/server.js
@@ -18,6 +19,7 @@ services:
   - type: worker
     name: goodmen-logs-mcp
     env: node
+    plan: starter
     rootDir: goodmen-logs-mcp-server
     buildCommand: npm install && npm run build
     startCommand: npm run start
@@ -26,3 +28,4 @@ databases:
   - name: safetyapp-db
     databaseName: goodmen_logistics
     user: goodmen_user
+    plan: starter
