@@ -1,0 +1,32 @@
+{
+  "name": "goodmen-logistics-k6-tests",
+  "version": "1.0.0",
+  "description": "Enterprise K6 Performance Testing Framework for Goodmen Logistics",
+  "scripts": {
+    "test:smoke": "k6 run tests/smoke.test.js",
+    "test:load": "k6 run tests/load.test.js",
+    "test:stress": "k6 run tests/stress.test.js",
+    "test:spike": "k6 run tests/spike.test.js",
+    "test:soak": "k6 run tests/soak.test.js",
+    "test:all": "npm run test:smoke && npm run test:load && npm run test:stress",
+    "report": "node scripts/generate-report.js && node scripts/generate-html-report.js",
+    "report:html": "node scripts/generate-html-report.js",
+    "generate-data": "node scripts/generate-test-data.js",
+    "cleanup": "node scripts/cleanup-test-data.js",
+    "cleanup:dry-run": "node scripts/cleanup-test-data.js --dry-run",
+    "populate-test-data": "node scripts/generate-test-data.js --populate"
+  },
+  "keywords": [
+    "k6",
+    "performance",
+    "load-testing",
+    "stress-testing"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@faker-js/faker": "^9.9.0",
+    "axios": "^1.6.0",
+    "k6-html-reporter": "^1.0.5"
+  }
+}
