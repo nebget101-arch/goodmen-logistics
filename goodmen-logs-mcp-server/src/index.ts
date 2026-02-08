@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -57,12 +58,8 @@ class GoodmenLogsMCPServer {
     });
 
     this.setupToolHandlers();
-    
+
     this.server.onerror = (error) => console.error("[MCP Error]", error);
-    process.on("SIGINT", async () => {
-      await this.server.close();
-      process.exit(0);
-    });
   }
 
   private setupToolHandlers() {
@@ -237,12 +234,71 @@ class GoodmenLogsMCPServer {
     });
   }
 
-  async run() {
-    const transport = new StdioServerTransport();
+  async runWithTransport(transport: StreamableHTTPServerTransport) {
     await this.server.connect(transport);
-    console.error("Goodmen Logs MCP server running on stdio");
+  }
+
+  async close() {
+    await this.server.close();
   }
 }
 
-const server = new GoodmenLogsMCPServer();
-server.run().catch(console.error);
+const app = createMcpExpressApp();
+
+app.post("/mcp", async (req, res) => {
+  const server = new GoodmenLogsMCPServer();
+  try {
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined
+    });
+    await server.runWithTransport(transport);
+    await transport.handleRequest(req, res, req.body);
+    res.on("close", () => {
+      transport.close();
+      server.close().catch(() => undefined);
+    });
+  } catch (error) {
+    console.error("Error handling MCP request:", error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32603,
+          message: "Internal server error"
+        },
+        id: null
+      });
+    }
+  }
+});
+
+app.get("/mcp", async (_req, res) => {
+  res.writeHead(405).end(JSON.stringify({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: "Method not allowed."
+    },
+    id: null
+  }));
+});
+
+app.delete("/mcp", async (_req, res) => {
+  res.writeHead(405).end(JSON.stringify({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: "Method not allowed."
+    },
+    id: null
+  }));
+});
+
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+app.listen(PORT, (error: unknown) => {
+  if (error) {
+    console.error("Failed to start MCP server:", error);
+    process.exit(1);
+  }
+  console.error(`Goodmen Logs MCP server listening on port ${PORT}`);
+});

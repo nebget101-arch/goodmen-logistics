@@ -1,8 +1,4 @@
-import { exec } from "child_process";
-import { promisify } from "util";
 import axios from "axios";
-
-const execAsync = promisify(exec);
 
 export interface LogQuery {
   level?: string;
@@ -33,7 +29,8 @@ export class LogsService {
 
     try {
       // Example: Query the backend's health endpoint
-      const response = await axios.get("http://localhost:3000/api/health");
+      const baseUrl = this.backendPath || "http://localhost:3000";
+      const response = await axios.get(`${baseUrl}/api/health`);
       logs.push({
         timestamp: new Date().toISOString(),
         level: "INFO",
