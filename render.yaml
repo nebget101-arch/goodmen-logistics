@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     rootDir: goodmen-logistics
-    buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install
+    buildCommand: cd frontend && npm install --include=dev && npm run build && cd ../backend && npm install
     startCommand: node backend/server.js
     envVars:
       - key: DATABASE_URL
