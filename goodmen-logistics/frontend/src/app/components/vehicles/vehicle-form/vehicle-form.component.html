@@ -157,17 +157,17 @@
           <h3 class="section-title">Compliance & Maintenance</h3>
           
           <div class="form-row">
-            <!-- Last Inspection -->
+            <!-- Inspection Expiry -->
             <div class="form-group">
-              <label for="last-inspection">Last Inspection Date</label>
+              <label for="inspection-expiry">Inspection Expiration Date</label>
               <input
-                id="last-inspection"
+                id="inspection-expiry"
                 type="date"
                 class="form-control"
-                [(ngModel)]="formData.last_inspection_date"
-                name="last_inspection_date"
+                [(ngModel)]="formData.inspection_expiry"
+                name="inspection_expiry"
               />
-              <div *ngIf="formData.last_inspection_date" class="status-indicator">
+              <div *ngIf="formData.inspection_expiry" class="status-indicator">
                 <span [class]="'badge badge-' + getInspectionStatus()">
                   {{ getInspectionStatus() === 'expired' ? 'Expired' : 
                      getInspectionStatus() === 'warning' ? 'Expiring Soon' : 'Valid' }}

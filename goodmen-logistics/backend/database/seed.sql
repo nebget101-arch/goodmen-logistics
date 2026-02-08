@@ -8,7 +8,7 @@ INSERT INTO drivers (id, first_name, last_name, email, phone, cdl_number, cdl_st
 (uuid_generate_v4(), 'Robert', 'Brown', 'robert.brown@goodmenlogistics.com', '555-0105', 'CDL567890', 'IL', 'A', ARRAY['H', 'N'], '2026-04-25', '2025-09-30', '2022-11-08', 'active', 85, '654 Lake Shore Dr, Chicago, IL 60601', '1992-07-22', '2025-01-08', 'eligible');
 
 -- Insert Vehicles
-INSERT INTO vehicles (id, unit_number, vin, make, model, year, license_plate, state, status, mileage, last_inspection_date, next_pm_due, next_pm_mileage, eld_device_id, insurance_expiry, registration_expiry, oos_reason) VALUES
+INSERT INTO vehicles (id, unit_number, vin, make, model, year, license_plate, state, status, mileage, inspection_expiry, next_pm_due, next_pm_mileage, eld_device_id, insurance_expiry, registration_expiry, oos_reason) VALUES
 (uuid_generate_v4(), 'TRK-001', '1HGBH41JXMN109186', 'Freightliner', 'Cascadia', 2022, 'CA-TRK001', 'CA', 'in-service', 125000, '2025-01-15', '2025-03-15', 135000, 'ELD-TRK001', '2025-12-31', '2025-11-30', NULL),
 (uuid_generate_v4(), 'TRK-002', '2FMDK3KC5DBA12345', 'Kenworth', 'T680', 2021, 'TX-TRK002', 'TX', 'in-service', 98000, '2025-01-20', '2025-02-20', 108000, 'ELD-TRK002', '2025-12-31', '2025-10-15', NULL),
 (uuid_generate_v4(), 'TRK-003', '3AKJHHDR1JSKG1234', 'Peterbilt', '579', 2020, 'FL-TRK003', 'FL', 'out-of-service', 245000, '2025-01-25', '2025-01-28', 250000, 'ELD-TRK003', '2025-12-31', '2025-09-20', 'Brake system repair required'),

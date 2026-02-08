@@ -48,7 +48,7 @@ CREATE TABLE vehicles (
     state VARCHAR(2),
     status VARCHAR(20) DEFAULT 'in-service',
     mileage INTEGER DEFAULT 0,
-    last_inspection_date DATE,
+    inspection_expiry DATE,
     next_pm_due DATE,
     next_pm_mileage INTEGER,
     eld_device_id VARCHAR(50),

@@ -13,15 +13,14 @@ interface Vehicle {
   state: string;
   status: string;
   mileage: number;
-  last_inspection_date: string;
+  inspection_expiry: string;
   next_pm_due: string;
   next_pm_mileage: number;
   oos_reason?: string;
   registration_expiry?: string;
-  inspection_expiry?: string;
 }
 
-type SortField = 'unit_number' | 'last_inspection_date';
+type SortField = 'unit_number' | 'inspection_expiry';
 type SortOrder = 'asc' | 'desc';
 
 @Component({
@@ -45,6 +44,10 @@ export class VehiclesComponent implements OnInit {
 
   // Sort state
   sortField: SortField = 'unit_number';
+  
+  // Detail view state
+  selectedVehicleDetails: Vehicle | null = null;
+  showVehicleDetails = false;
   sortOrder: SortOrder = 'asc';
 
   // Pagination state
@@ -147,9 +150,9 @@ export class VehiclesComponent implements OnInit {
       if (this.sortField === 'unit_number') {
         aValue = a.unit_number;
         bValue = b.unit_number;
-      } else if (this.sortField === 'last_inspection_date') {
-        aValue = new Date(a.last_inspection_date).getTime();
-        bValue = new Date(b.last_inspection_date).getTime();
+      } else if (this.sortField === 'inspection_expiry') {
+        aValue = new Date(a.inspection_expiry).getTime();
+        bValue = new Date(b.inspection_expiry).getTime();
       }
 
       if (aValue < bValue) return this.sortOrder === 'asc' ? -1 : 1;
@@ -296,17 +299,13 @@ export class VehiclesComponent implements OnInit {
       }
     }
     
-    // Check inspection
-    if (vehicle.last_inspection_date) {
-      const inspectionDate = new Date(vehicle.last_inspection_date);
-      const oneYearFromInspection = new Date(inspectionDate);
-      oneYearFromInspection.setFullYear(oneYearFromInspection.getFullYear() + 1);
-      const daysUntilInspectionDue = Math.floor((oneYearFromInspection.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (daysUntilInspectionDue < 0) {
+    // Check inspection expiry
+    if (vehicle.inspection_expiry) {
+      const daysUntilExpiry = this.getDaysUntilExpiry(vehicle.inspection_expiry);
+      if (daysUntilExpiry < 0) {
         messages.push('Annual inspection overdue');
-      } else if (daysUntilInspectionDue <= 60) {
-        messages.push(`Inspection due in ${daysUntilInspectionDue} days`);
+      } else if (daysUntilExpiry <= 60) {
+        messages.push(`Inspection expires in ${daysUntilExpiry} days`);
       }
     }
     
@@ -329,14 +328,21 @@ export class VehiclesComponent implements OnInit {
     }
     
     // Check if inspection is expired
-    if (vehicle.last_inspection_date) {
-      const inspectionDate = new Date(vehicle.last_inspection_date);
-      const oneYearFromInspection = new Date(inspectionDate);
-      oneYearFromInspection.setFullYear(oneYearFromInspection.getFullYear() + 1);
-      const daysUntilInspectionDue = Math.floor((oneYearFromInspection.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-      if (daysUntilInspectionDue < 0) return true;
+    if (vehicle.inspection_expiry) {
+      const daysUntilExpiry = this.getDaysUntilExpiry(vehicle.inspection_expiry);
+      if (daysUntilExpiry < 0) return true;
     }
     
     return false;
+  }
+
+  openVehicleDetails(vehicle: Vehicle): void {
+    this.selectedVehicleDetails = vehicle;
+    this.showVehicleDetails = true;
+  }
+
+  closeVehicleDetails(): void {
+    this.showVehicleDetails = false;
+    this.selectedVehicleDetails = null;
   }
 }
