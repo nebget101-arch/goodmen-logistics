@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: safetyapp
+    env: node
+    rootDir: goodmen-logistics
+    buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install
+    startCommand: node backend/server.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: safetyapp-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+
+  - type: worker
+    name: goodmen-logs-mcp
+    env: node
+    rootDir: goodmen-logs-mcp-server
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+
+databases:
+  - name: safetyapp-db
+    databaseName: goodmen_logistics
+    user: goodmen_user

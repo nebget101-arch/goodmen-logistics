@@ -1,0 +1,40 @@
+{
+  "name": "goodmen-logistics-cypress-tests",
+  "version": "1.0.0",
+  "description": "Cypress E2E tests for Goodmen Logistics FMCSA Compliance System",
+  "main": "index.js",
+  "scripts": {
+    "cy:open": "cypress open",
+    "cy:run": "cypress run",
+    "cy:run:chrome": "cypress run --browser chrome",
+    "cy:run:firefox": "cypress run --browser firefox",
+    "cy:run:edge": "cypress run --browser edge",
+    "cy:run:headed": "cypress run --headed",
+    "cy:run:dashboard": "cypress run --spec 'cypress/e2e/dashboard/*.cy.js'",
+    "cy:run:drivers": "cypress run --spec 'cypress/e2e/drivers/*.cy.js'",
+    "cy:run:vehicles": "cypress run --spec 'cypress/e2e/vehicles/*.cy.js'",
+    "cy:run:hos": "cypress run --spec 'cypress/e2e/hos/*.cy.js'",
+    "cy:run:maintenance": "cypress run --spec 'cypress/e2e/maintenance/*.cy.js'",
+    "cy:run:loads": "cypress run --spec 'cypress/e2e/loads/*.cy.js'",
+    "cy:run:audit": "cypress run --spec 'cypress/e2e/audit/*.cy.js'",
+    "cy:run:smoke": "cypress run --spec 'cypress/e2e/smoke/*.cy.js'",
+    "test": "cypress run",
+    "test:report": "cypress run --reporter mochawesome"
+  },
+  "keywords": [
+    "cypress",
+    "e2e",
+    "testing",
+    "logistics",
+    "fmcsa"
+  ],
+  "author": "Goodmen Logistics",
+  "license": "ISC",
+  "devDependencies": {
+    "cypress": "^13.6.2",
+    "cypress-mochawesome-reporter": "^3.8.1",
+    "mochawesome": "^7.1.3",
+    "mochawesome-merge": "^4.3.0",
+    "mochawesome-report-generator": "^6.2.0"
+  }
+}

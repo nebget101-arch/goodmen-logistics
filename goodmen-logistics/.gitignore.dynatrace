@@ -1,0 +1,5 @@
+# Add these to your main .gitignore file
+
+# Dynatrace local configuration (contains secrets)
+.env.dynatrace.local
+**/dynatrace-credentials.json

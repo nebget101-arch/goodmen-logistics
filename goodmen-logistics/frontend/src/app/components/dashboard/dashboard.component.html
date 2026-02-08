@@ -1,0 +1,90 @@
+<div class="container">
+  <h2 style="margin-bottom: 30px; color: var(--primary-color);">📊 Compliance Dashboard</h2>
+
+  <div *ngIf="loading" class="loading">
+    <div class="spinner"></div>
+  </div>
+
+  <div *ngIf="!loading">
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Active Drivers</div>
+        <div class="stat-value">{{ stats.activeDrivers }}/{{ stats.totalDrivers }}</div>
+        <div class="stat-subtext">Total drivers in fleet</div>
+      </div>
+
+      <div class="stat-card" [ngClass]="stats.oosVehicles > 0 ? 'danger' : 'success'">
+        <div class="stat-label">Vehicle Status</div>
+        <div class="stat-value">{{ stats.activeVehicles }}/{{ stats.totalVehicles }}</div>
+        <div class="stat-subtext">{{ stats.oosVehicles }} out of service</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Active Loads</div>
+        <div class="stat-value">{{ stats.activeLoads }}</div>
+        <div class="stat-subtext">{{ stats.pendingLoads }} pending assignment</div>
+      </div>
+
+      <div class="stat-card" [ngClass]="stats.hosViolations > 0 ? 'warning' : 'success'">
+        <div class="stat-label">HOS Compliance</div>
+        <div class="stat-value">{{ stats.hosViolations }}</div>
+        <div class="stat-subtext">Violations/warnings today</div>
+      </div>
+
+      <div class="stat-card" [ngClass]="stats.dqfComplianceRate < 90 ? 'warning' : 'success'">
+        <div class="stat-label">DQF Compliance</div>
+        <div class="stat-value">{{ stats.dqfComplianceRate }}%</div>
+        <div class="stat-subtext">Average completeness</div>
+      </div>
+
+      <div class="stat-card" [ngClass]="stats.expiredMedCerts > 0 ? 'danger' : (stats.upcomingMedCerts > 0 ? 'warning' : 'success')">
+        <div class="stat-label">Medical Certificates</div>
+        <div class="stat-value">{{ stats.expiredMedCerts }}</div>
+        <div class="stat-subtext">{{ stats.upcomingMedCerts }} expiring soon</div>
+      </div>
+
+      <div class="stat-card" [ngClass]="stats.vehiclesNeedingMaintenance > 0 ? 'warning' : 'success'">
+        <div class="stat-label">Maintenance Due</div>
+        <div class="stat-value">{{ stats.vehiclesNeedingMaintenance }}</div>
+        <div class="stat-subtext">Vehicles needing service</div>
+      </div>
+
+      <div class="stat-card" [ngClass]="stats.clearinghouseIssues > 0 ? 'danger' : 'success'">
+        <div class="stat-label">Clearinghouse</div>
+        <div class="stat-value">{{ stats.clearinghouseIssues }}</div>
+        <div class="stat-subtext">Queries pending/issues</div>
+      </div>
+    </div>
+
+    <!-- Alerts Section -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">⚠️ Compliance Alerts</h3>
+      </div>
+
+      <div *ngIf="alerts.length === 0" style="text-align: center; padding: 40px; color: var(--text-light);">
+        <p>✅ No compliance alerts at this time</p>
+      </div>
+
+      <div *ngFor="let alert of alerts" [class]="'alert ' + getAlertClass(alert.type)">
+        <strong>{{ alert.category | uppercase }}:</strong> {{ alert.message }}
+        <span *ngIf="alert.date" style="margin-left: 10px; font-size: 12px;">({{ alert.date }})</span>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">🔧 Quick Actions</h3>
+      </div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button class="btn btn-primary" routerLink="/drivers">Manage Drivers</button>
+        <button class="btn btn-primary" routerLink="/vehicles">Manage Vehicles</button>
+        <button class="btn btn-primary" routerLink="/loads">Dispatch Load</button>
+        <button class="btn btn-primary" routerLink="/hos">View HOS Records</button>
+        <button class="btn btn-success" routerLink="/audit">Generate Audit Report</button>
+      </div>
+    </div>
+  </div>
+</div>

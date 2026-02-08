@@ -1,0 +1,41 @@
+#!/usr/bin/env node
+
+/**
+ * Run Schema Only Script
+ */
+
+const { Client } = require('pg');
+const fs = require('fs');
+const path = require('path');
+require('dotenv').config();
+
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
+  database: process.env.DB_NAME || 'goodmen_logistics',
+};
+
+async function runSchema() {
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log('📡 Connected to database');
+
+    const schemaPath = path.join(__dirname, 'schema.sql');
+    const schema = fs.readFileSync(schemaPath, 'utf8');
+
+    await client.query(schema);
+    console.log('✅ Database schema created successfully');
+
+    await client.end();
+  } catch (error) {
+    console.error('❌ Error creating schema:', error.message);
+    await client.end();
+    process.exit(1);
+  }
+}
+
+runSchema();

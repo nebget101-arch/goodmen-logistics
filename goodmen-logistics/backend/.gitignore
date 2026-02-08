@@ -1,0 +1,29 @@
+# Environment Variables - Do Not Commit
+.env
+.env.local
+.env.*.local
+.env.dynatrace
+.env.dynatrace.local
+
+# Dependencies
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database
+*.sql.backup
+*.dump

@@ -1,0 +1,70 @@
+<div class="container">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">⏰ Hours of Service (HOS) Records</h2>
+      <button class="btn btn-primary">ELD Integration</button>
+    </div>
+
+    <div *ngIf="loading" class="loading">
+      <div class="spinner"></div>
+    </div>
+
+    <table class="table" *ngIf="!loading">
+      <thead>
+        <tr>
+          <th>Driver</th>
+          <th>Date</th>
+          <th>On Duty</th>
+          <th>Driving</th>
+          <th>Off Duty</th>
+          <th>Violations</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let record of hosRecords">
+          <td><strong>{{ record.driverName }}</strong></td>
+          <td>{{ record.date }}</td>
+          <td>{{ record.onDutyHours }}h</td>
+          <td>{{ record.drivingHours }}h</td>
+          <td>{{ record.offDutyHours }}h</td>
+          <td>
+            <div *ngIf="record.violations.length === 0">-</div>
+            <div *ngFor="let violation of record.violations" style="font-size: 12px; color: var(--warning-color);">
+              {{ violation }}
+            </div>
+          </td>
+          <td>
+            <span [class]="'badge ' + getStatusBadge(record.status)">
+              {{ record.status }}
+            </span>
+          </td>
+          <td>
+            <button class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">View Logs</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" *ngIf="violations.length > 0">
+    <div class="card-header">
+      <h3 class="card-title">⚠️ HOS Violations & Warnings</h3>
+    </div>
+    <div *ngFor="let record of violations" class="alert alert-warning">
+      <strong>{{ record.driverName }}</strong> - {{ record.date }}: 
+      <span *ngFor="let v of record.violations">{{ v }}</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">📋 HOS Retention Requirements</h3>
+    </div>
+    <div style="padding: 10px; background-color: #f9f9f9; border-radius: 4px;">
+      <p><strong>49 CFR 395.8:</strong> Motor carriers must retain Records of Duty Status (RODS) and supporting documents for at least 6 months from the date of receipt.</p>
+      <p style="margin-top: 10px;"><strong>Driver Requirement:</strong> Drivers must have the previous 7 days of RODS available while on duty.</p>
+    </div>
+  </div>
+</div>

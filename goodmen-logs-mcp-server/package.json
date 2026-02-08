@@ -1,0 +1,28 @@
+{
+  "name": "goodmen-logs-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for reading Goodmen Logistics app logs and posting to Confluence",
+  "type": "module",
+  "bin": {
+    "goodmen-logs-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "start": "node build/index.js",
+    "watch": "tsc --watch",
+    "dev": "npm run build && node build/index.js"
+  },
+  "keywords": ["mcp", "confluence", "logs", "monitoring"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

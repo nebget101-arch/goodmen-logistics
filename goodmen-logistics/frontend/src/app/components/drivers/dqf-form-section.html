@@ -1,0 +1,137 @@
+<!-- Application for Employment -->
+<div style="padding: 10px; background: white; border-radius: 4px;">
+  <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+    <input type="checkbox" [(ngModel)]="dqfForm.applicationComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+    <span style="font-weight: 500;">Application for Employment (§391.21)</span>
+  </label>
+  <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+    <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+      📤 Upload File
+      <input type="file" (change)="onDQFFileSelected($event, 'application')" 
+             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
+             [disabled]="uploadingDocuments['application']">
+    </label>
+    <span *ngIf="uploadingDocuments['application']" style="font-size: 12px; color: #666;">Uploading...</span>
+    <div *ngFor="let doc of getDocumentsByType('application')" 
+         style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+      <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+      <button (click)="deleteDocument(doc.id, 'application')" 
+              style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- Motor Vehicle Record -->
+<div style="padding: 10px; background: white; border-radius: 4px;">
+  <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+    <input type="checkbox" [(ngModel)]="dqfForm.mvrComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+    <span style="font-weight: 500;">Motor Vehicle Record (MVR) - Past 3 Years</span>
+  </label>
+  <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+    <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+      📤 Upload File
+      <input type="file" (change)="onDQFFileSelected($event, 'mvr')" 
+             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
+             [disabled]="uploadingDocuments['mvr']">
+    </label>
+    <span *ngIf="uploadingDocuments['mvr']" style="font-size: 12px; color: #666;">Uploading...</span>
+    <div *ngFor="let doc of getDocumentsByType('mvr')" 
+         style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+      <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+      <button (click)="deleteDocument(doc.id, 'mvr')" 
+              style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- Road Test Certificate -->
+<div style="padding: 10px; background: white; border-radius: 4px;">
+  <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+    <input type="checkbox" [(ngModel)]="dqfForm.roadTestComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+    <span style="font-weight: 500;">Road Test Certificate or Equivalent (§391.31)</span>
+  </label>
+  <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+    <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+      📤 Upload File
+      <input type="file" (change)="onDQFFileSelected($event, 'road_test')" 
+             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
+             [disabled]="uploadingDocuments['road_test']">
+    </label>
+    <span *ngIf="uploadingDocuments['road_test']" style="font-size: 12px; color: #666;">Uploading...</span>
+    <div *ngFor="let doc of getDocumentsByType('road_test')" 
+         style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+      <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+      <button (click)="deleteDocument(doc.id, 'road_test')" 
+              style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- Medical Certificate -->
+<div style="padding: 10px; background: white; border-radius: 4px;">
+  <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+    <input type="checkbox" [(ngModel)]="dqfForm.medicalCertComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+    <span style="font-weight: 500;">Medical Examiner's Certificate (§391.43)</span>
+  </label>
+  <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+    <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+      📤 Upload File
+      <input type="file" (change)="onDQFFileSelected($event, 'medical_cert')" 
+             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
+             [disabled]="uploadingDocuments['medical_cert']">
+    </label>
+    <span *ngIf="uploadingDocuments['medical_cert']" style="font-size: 12px; color: #666;">Uploading...</span>
+    <div *ngFor="let doc of getDocumentsByType('medical_cert')" 
+         style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+      <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+      <button (click)="deleteDocument(doc.id, 'medical_cert')" 
+              style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- Annual Review -->
+<div style="padding: 10px; background: white; border-radius: 4px;">
+  <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+    <input type="checkbox" [(ngModel)]="dqfForm.annualReviewComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+    <span style="font-weight: 500;">Annual Review of Driving Record (§391.25)</span>
+  </label>
+  <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+    <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+      📤 Upload File
+      <input type="file" (change)="onDQFFileSelected($event, 'annual_review')" 
+             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
+             [disabled]="uploadingDocuments['annual_review']">
+    </label>
+    <span *ngIf="uploadingDocuments['annual_review']" style="font-size: 12px; color: #666;">Uploading...</span>
+    <div *ngFor="let doc of getDocumentsByType('annual_review')" 
+         style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+      <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+      <button (click)="deleteDocument(doc.id, 'annual_review')" 
+              style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- Clearinghouse Consent -->
+<div style="padding: 10px; background: white; border-radius: 4px;">
+  <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+    <input type="checkbox" [(ngModel)]="dqfForm.clearinghouseConsentComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+    <span style="font-weight: 500;">FMCSA Clearinghouse Consent (§382.701)</span>
+  </label>
+  <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+    <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+      📤 Upload File
+      <input type="file" (change)="onDQFFileSelected($event, 'clearinghouse_consent')" 
+             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
+             [disabled]="uploadingDocuments['clearinghouse_consent']">
+    </label>
+    <span *ngIf="uploadingDocuments['clearinghouse_consent']" style="font-size: 12px; color: #666;">Uploading...</span>
+    <div *ngFor="let doc of getDocumentsByType('clearinghouse_consent')" 
+         style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+      <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+      <button (click)="deleteDocument(doc.id, 'clearinghouse_consent')" 
+              style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+    </div>
+  </div>
+</div>

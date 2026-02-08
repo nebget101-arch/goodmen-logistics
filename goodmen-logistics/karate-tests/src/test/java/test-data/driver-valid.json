@@ -1,0 +1,16 @@
+{
+  "firstName": "John",
+  "lastName": "Smith",
+  "email": "john.smith@test.com",
+  "phone": "555-0100",
+  "cdlNumber": "CDL1234567",
+  "cdlState": "CA",
+  "cdlClass": "A",
+  "endorsements": ["H", "N", "T"],
+  "cdlExpiry": "2027-12-31",
+  "medicalCertExpiry": "2027-06-30",
+  "hireDate": "2023-01-15",
+  "dateOfBirth": "1985-05-20",
+  "address": "123 Main St, Los Angeles, CA 90001",
+  "clearinghouseStatus": "eligible"
+}

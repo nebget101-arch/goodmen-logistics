@@ -1,0 +1,56 @@
+{
+  "validVehicle": {
+    "unitNumber": "T-100",
+    "vin": "1HGBH41JXMN109186",
+    "make": "Freightliner",
+    "model": "Cascadia",
+    "year": 2022,
+    "type": "Tractor",
+    "currentMileage": 125000,
+    "lastInspection": "2026-01-15",
+    "nextPMDue": "2026-03-01",
+    "status": "Active"
+  },
+  "maintenanceDueVehicle": {
+    "unitNumber": "T-200",
+    "vin": "1HGBH41JXMN109187",
+    "make": "Kenworth",
+    "model": "T680",
+    "year": 2021,
+    "type": "Tractor",
+    "currentMileage": 145000,
+    "lastInspection": "2025-12-01",
+    "nextPMDue": "2026-02-05",
+    "status": "Maintenance Due"
+  },
+  "newVehicle": {
+    "unitNumber": "T-150",
+    "vin": "1HGBH41JXMN109999",
+    "make": "Peterbilt",
+    "model": "579",
+    "year": 2024,
+    "type": "Tractor",
+    "currentMileage": 5000,
+    "lastInspection": "2026-02-01",
+    "nextPMDue": "2026-08-01",
+    "status": "Active"
+  },
+  "vehiclesList": [
+    {
+      "id": 1,
+      "unitNumber": "T-300",
+      "vin": "1HGBH41JXMN109300",
+      "make": "Volvo",
+      "model": "VNL",
+      "status": "Active"
+    },
+    {
+      "id": 2,
+      "unitNumber": "T-400",
+      "vin": "1HGBH41JXMN109400",
+      "make": "International",
+      "model": "LT",
+      "status": "Out of Service"
+    }
+  ]
+}

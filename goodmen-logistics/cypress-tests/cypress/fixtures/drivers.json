@@ -1,0 +1,83 @@
+{
+  "validDriver": {
+    "firstName": "John",
+    "lastName": "Smith",
+    "email": "john.smith@test.com",
+    "phone": "555-0101",
+    "cdlNumber": "CDL123456",
+    "cdlState": "CA",
+    "cdlClass": "A",
+    "endorsements": ["H", "N", "T"],
+    "cdlExpiry": "2027-12-31",
+    "medicalCertExpiry": "2027-06-30",
+    "hireDate": "2023-01-15",
+    "dateOfBirth": "1985-05-20",
+    "address": "123 Main St, Los Angeles, CA 90001",
+    "status": "active",
+    "dqfCompleteness": 100,
+    "clearinghouseStatus": "eligible"
+  },
+  "expiredMedicalDriver": {
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "email": "jane.doe@test.com",
+    "phone": "555-0102",
+    "cdlNumber": "CDL987654",
+    "cdlState": "TX",
+    "cdlClass": "A",
+    "endorsements": ["H", "N"],
+    "cdlExpiry": "2027-03-15",
+    "medicalCertExpiry": "2024-01-01",
+    "hireDate": "2022-06-10",
+    "dateOfBirth": "1990-08-15",
+    "address": "456 Oak Ave, Houston, TX 77001",
+    "status": "inactive",
+    "dqfCompleteness": 75,
+    "clearinghouseStatus": "query-pending"
+  },
+  "newDriver": {
+    "firstName": "Mike",
+    "lastName": "Johnson",
+    "email": "mike.johnson@test.com",
+    "phone": "555-0103",
+    "cdlNumber": "CDL555123",
+    "cdlState": "FL",
+    "cdlClass": "B",
+    "endorsements": ["P"],
+    "cdlExpiry": "2027-08-20",
+    "medicalCertExpiry": "2027-08-20",
+    "hireDate": "2026-02-01",
+    "dateOfBirth": "1988-11-30",
+    "address": "789 Beach Blvd, Miami, FL 33101",
+    "status": "active",
+    "dqfCompleteness": 100,
+    "clearinghouseStatus": "eligible"
+  },
+  "driversList": [
+    {
+      "id": "uuid-1",
+      "firstName": "Robert",
+      "lastName": "Wilson",
+      "cdlNumber": "CDL777888",
+      "status": "active",
+      "dqfCompleteness": 100
+    },
+    {
+      "id": "uuid-2",
+      "firstName": "Sarah",
+      "lastName": "Davis",
+      "cdlNumber": "CDL444555",
+      "status": "active",
+      "dqfCompleteness": 88
+    },
+    {
+      "id": "uuid-3",
+      "firstName": "James",
+      "lastName": "Brown",
+      "cdlNumber": "CDL111222",
+      "status": "inactive",
+      "dqfCompleteness": 50
+    }
+  ]
+}
+

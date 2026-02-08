@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "goodmen-logs": {
+      "command": "node",
+      "args": [
+        "/Users/nebyougetaneh/Desktop/SafetyApp/goodmen-logs-mcp-server/build/index.js"
+      ]
+    }
+  },
+  "preferences": {
+    "sidebarMode": "chat",
+    "coworkScheduledTasksEnabled": false
+  }
+}

@@ -1,0 +1,60 @@
+<div class="container">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">🔧 Maintenance & Repair Records</h2>
+      <button class="btn btn-primary">+ New Work Order</button>
+    </div>
+
+    <div *ngIf="loading" class="loading">
+      <div class="spinner"></div>
+    </div>
+
+    <table class="table" *ngIf="!loading">
+      <thead>
+        <tr>
+          <th>Vehicle</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Date</th>
+          <th>Mileage</th>
+          <th>Mechanic</th>
+          <th>Cost</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let record of maintenanceRecords">
+          <td><strong>{{ record.vehicleUnit }}</strong></td>
+          <td>
+            <span [class]="'badge ' + (record.type === 'Repair' ? 'badge-warning' : 'badge-info')">
+              {{ record.type }}
+            </span>
+            <span *ngIf="record.priority === 'critical'" class="badge badge-danger" style="margin-left: 5px;">
+              CRITICAL
+            </span>
+          </td>
+          <td>{{ record.description }}</td>
+          <td>{{ record.datePerformed || 'Not yet performed' }}</td>
+          <td>{{ record.mileage?.toLocaleString() }} mi</td>
+          <td>{{ record.mechanicName }}</td>
+          <td>${{ record.cost?.toFixed(2) }}</td>
+          <td>
+            <span [class]="'badge ' + getStatusBadge(record.status)">
+              {{ record.status }}
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" *ngIf="pendingRecords.length > 0">
+    <div class="card-header">
+      <h3 class="card-title">⚠️ Pending Maintenance</h3>
+    </div>
+    <div *ngFor="let record of pendingRecords" class="alert" [ngClass]="record.priority === 'critical' ? 'alert-critical' : 'alert-warning'">
+      <strong>{{ record.vehicleUnit }}</strong> - {{ record.description }}
+      <span *ngIf="record.priority === 'critical'"> (CRITICAL - Vehicle OOS)</span>
+    </div>
+  </div>
+</div>

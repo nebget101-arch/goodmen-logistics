@@ -1,0 +1,381 @@
+<div class="container">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">👥 Driver Qualification Files (DQF)</h2>
+      <button class="btn btn-primary" (click)="toggleAddForm()">+ Add Driver</button>
+    </div>
+
+    <!-- Add Driver Form -->
+    <div *ngIf="showAddForm" style="padding: 20px; border-bottom: 1px solid var(--border-color); background-color: #f9f9f9;">
+      <h3 style="margin-bottom: 20px;">Add New Driver</h3>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">First Name *</label>
+          <input type="text" [(ngModel)]="newDriver.firstName" class="form-input" placeholder="John" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Last Name *</label>
+          <input type="text" [(ngModel)]="newDriver.lastName" class="form-input" placeholder="Doe" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Email *</label>
+          <input type="email" [(ngModel)]="newDriver.email" class="form-input" placeholder="john.doe@example.com" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Phone</label>
+          <input type="tel" [(ngModel)]="newDriver.phone" class="form-input" placeholder="(555) 123-4567">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Number *</label>
+          <input type="text" [(ngModel)]="newDriver.cdlNumber" class="form-input" placeholder="A1234567" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL State *</label>
+          <input type="text" [(ngModel)]="newDriver.cdlState" class="form-input" placeholder="CA" maxlength="2" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Class *</label>
+          <select [(ngModel)]="newDriver.cdlClass" class="form-input" required>
+            <option value="A">Class A</option>
+            <option value="B">Class B</option>
+            <option value="C">Class C</option>
+          </select>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Expiry</label>
+          <input type="date" [(ngModel)]="newDriver.cdlExpiry" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Medical Cert Expiry</label>
+          <input type="date" [(ngModel)]="newDriver.medicalCertExpiry" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Hire Date</label>
+          <input type="date" [(ngModel)]="newDriver.hireDate" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Date of Birth</label>
+          <input type="date" [(ngModel)]="newDriver.dateOfBirth" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Address</label>
+          <input type="text" [(ngModel)]="newDriver.address" class="form-input" placeholder="123 Main St, City, ST 12345">
+        </div>
+      </div>
+      <div style="margin-top: 20px; display: flex; gap: 10px;">
+        <button class="btn btn-primary" (click)="addDriver()" [disabled]="saving">
+          {{ saving ? 'Saving...' : 'Save Driver' }}
+        </button>
+        <button class="btn" (click)="toggleAddForm()" [disabled]="saving" 
+                style="background-color: #6c757d; color: white;">Cancel</button>
+      </div>
+    </div>
+    <!-- Edit Driver Form -->
+    <div *ngIf="editingDriver" style="padding: 20px; border-bottom: 1px solid var(--border-color); background-color: #fff3cd;">
+      <h3 style="margin-bottom: 20px;">✏️ Edit Driver: {{editingDriver.firstName}} {{editingDriver.lastName}}</h3>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">First Name *</label>
+          <input type="text" [(ngModel)]="editingDriver.firstName" class="form-input" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Last Name *</label>
+          <input type="text" [(ngModel)]="editingDriver.lastName" class="form-input" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Email *</label>
+          <input type="email" [(ngModel)]="editingDriver.email" class="form-input" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Phone</label>
+          <input type="tel" [(ngModel)]="editingDriver.phone" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Number *</label>
+          <input type="text" [(ngModel)]="editingDriver.cdlNumber" class="form-input" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL State *</label>
+          <input type="text" [(ngModel)]="editingDriver.cdlState" class="form-input" maxlength="2" required>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Class *</label>
+          <select [(ngModel)]="editingDriver.cdlClass" class="form-input" required>
+            <option value="A">Class A</option>
+            <option value="B">Class B</option>
+            <option value="C">Class C</option>
+          </select>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Expiry</label>
+          <input type="date" [(ngModel)]="editingDriver.cdlExpiry" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Medical Cert Expiry</label>
+          <input type="date" [(ngModel)]="editingDriver.medicalCertExpiry" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Hire Date</label>
+          <input type="date" [(ngModel)]="editingDriver.hireDate" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Date of Birth</label>
+          <input type="date" [(ngModel)]="editingDriver.dateOfBirth" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Address</label>
+          <input type="text" [(ngModel)]="editingDriver.address" class="form-input">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Status</label>
+          <select [(ngModel)]="editingDriver.status" class="form-input">
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top: 20px; display: flex; gap: 10px;">
+        <button class="btn btn-primary" (click)="saveEdit()" [disabled]="saving">
+          {{ saving ? 'Saving...' : 'Save Changes' }}
+        </button>
+        <button class="btn" (click)="cancelEdit()" [disabled]="saving" 
+                style="background-color: #6c757d; color: white;">Cancel</button>
+      </div>
+    </div>
+
+    <!-- DQF Completion Form -->
+    <div *ngIf="showDQFForm && selectedDriver" style="padding: 20px; border-bottom: 1px solid var(--border-color); background-color: #d1ecf1;">
+      <h3 style="margin-bottom: 20px;">📋 DQF Checklist: {{selectedDriver.firstName}} {{selectedDriver.lastName}}</h3>
+      <p style="margin-bottom: 20px; color: #666;">49 CFR 391.51 - Required Documents for Driver Qualification File</p>
+      
+      <div style="display: grid; gap: 15px;">
+        <!-- Application for Employment -->
+        <div style="padding: 10px; background: white; border-radius: 4px;">
+          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+            <input type="checkbox" [(ngModel)]="dqfForm.applicationComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+            <span style="font-weight: 500;">Application for Employment (§391.21)</span>
+          </label>
+          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+              📤 Upload
+              <input type="file" (change)="onDQFFileSelected($event, 'application')" 
+                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
+            </label>
+            <span *ngIf="uploadingDocuments['application']" style="font-size: 12px; color: #666;">Uploading...</span>
+            <div *ngFor="let doc of getDocumentsByType('application')" 
+                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+              <button (click)="deleteDocument(doc.id, 'application')" 
+                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Motor Vehicle Record -->
+        <div style="padding: 10px; background: white; border-radius: 4px;">
+          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+            <input type="checkbox" [(ngModel)]="dqfForm.mvrComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+            <span style="font-weight: 500;">Motor Vehicle Record (MVR) - Past 3 Years</span>
+          </label>
+          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+              📤 Upload
+              <input type="file" (change)="onDQFFileSelected($event, 'mvr')" 
+                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
+            </label>
+            <span *ngIf="uploadingDocuments['mvr']" style="font-size: 12px; color: #666;">Uploading...</span>
+            <div *ngFor="let doc of getDocumentsByType('mvr')" 
+                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+              <button (click)="deleteDocument(doc.id, 'mvr')" 
+                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Road Test Certificate -->
+        <div style="padding: 10px; background: white; border-radius: 4px;">
+          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+            <input type="checkbox" [(ngModel)]="dqfForm.roadTestComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+            <span style="font-weight: 500;">Road Test Certificate or Equivalent (§391.31)</span>
+          </label>
+          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+              📤 Upload
+              <input type="file" (change)="onDQFFileSelected($event, 'road_test')" 
+                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
+            </label>
+            <span *ngIf="uploadingDocuments['road_test']" style="font-size: 12px; color: #666;">Uploading...</span>
+            <div *ngFor="let doc of getDocumentsByType('road_test')" 
+                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+              <button (click)="deleteDocument(doc.id, 'road_test')" 
+                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Medical Certificate -->
+        <div style="padding: 10px; background: white; border-radius: 4px;">
+          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+            <input type="checkbox" [(ngModel)]="dqfForm.medicalCertComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+            <span style="font-weight: 500;">Medical Examiner's Certificate (§391.43)</span>
+          </label>
+          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+              📤 Upload
+              <input type="file" (change)="onDQFFileSelected($event, 'medical_cert')" 
+                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
+            </label>
+            <span *ngIf="uploadingDocuments['medical_cert']" style="font-size: 12px; color: #666;">Uploading...</span>
+            <div *ngFor="let doc of getDocumentsByType('medical_cert')" 
+                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+              <button (click)="deleteDocument(doc.id, 'medical_cert')" 
+                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Annual Review -->
+        <div style="padding: 10px; background: white; border-radius: 4px;">
+          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+            <input type="checkbox" [(ngModel)]="dqfForm.annualReviewComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+            <span style="font-weight: 500;">Annual Review of Driving Record (§391.25)</span>
+          </label>
+          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+              📤 Upload
+              <input type="file" (change)="onDQFFileSelected($event, 'annual_review')" 
+                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
+            </label>
+            <span *ngIf="uploadingDocuments['annual_review']" style="font-size: 12px; color: #666;">Uploading...</span>
+            <div *ngFor="let doc of getDocumentsByType('annual_review')" 
+                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+              <button (click)="deleteDocument(doc.id, 'annual_review')" 
+                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Clearinghouse Consent -->
+        <div style="padding: 10px; background: white; border-radius: 4px;">
+          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
+            <input type="checkbox" [(ngModel)]="dqfForm.clearinghouseConsentComplete" style="margin-right: 10px; width: 18px; height: 18px;">
+            <span style="font-weight: 500;">FMCSA Clearinghouse Consent (§382.701)</span>
+          </label>
+          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
+              📤 Upload
+              <input type="file" (change)="onDQFFileSelected($event, 'clearinghouse_consent')" 
+                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
+            </label>
+            <span *ngIf="uploadingDocuments['clearinghouse_consent']" style="font-size: 12px; color: #666;">Uploading...</span>
+            <div *ngFor="let doc of getDocumentsByType('clearinghouse_consent')" 
+                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
+              <button (click)="deleteDocument(doc.id, 'clearinghouse_consent')" 
+                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+            </div>
+          </div>
+        </div>
+        
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Notes</label>
+          <textarea [(ngModel)]="dqfForm.notes" class="form-input" rows="3" 
+                    placeholder="Additional notes about DQF status..."></textarea>
+        </div>
+      </div>
+      
+      <div style="margin-top: 20px; display: flex; gap: 10px;">
+        <button class="btn btn-primary" (click)="saveDQFForm()" [disabled]="saving">
+          {{ saving ? 'Saving...' : 'Update DQF Status' }}
+        </button>
+        <button class="btn" (click)="closeDQFForm()" [disabled]="saving" 
+                style="background-color: #6c757d; color: white;">Close</button>
+      </div>
+    </div>
+    <div *ngIf="loading" class="loading">
+      <div class="spinner"></div>
+    </div>
+
+    <table class="table" *ngIf="!loading">
+      <thead>
+        <tr>
+          <th>Driver Name</th>
+          <th>CDL Number</th>
+          <th>CDL Expiry</th>
+          <th>Med Cert Expiry</th>
+          <th>DQF Complete</th>
+          <th>Clearinghouse</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let driver of drivers">
+          <td>
+            <strong>{{ driver.firstName }} {{ driver.lastName }}</strong><br>
+            <small style="color: var(--text-light);">{{ driver.email }}</small>
+          </td>
+          <td>{{ driver.cdlNumber }}<br><small>Class {{ driver.cdlClass }} - {{ driver.cdlState }}</small></td>
+          <td [style.color]="isExpiringSoon(driver.cdlExpiry) ? 'var(--danger-color)' : 'inherit'">
+            {{ driver.cdlExpiry }}
+            <span *ngIf="isExpiringSoon(driver.cdlExpiry)"> ⚠️</span>
+          </td>
+          <td [style.color]="isExpiringSoon(driver.medicalCertExpiry) ? 'var(--danger-color)' : 'inherit'">
+            {{ driver.medicalCertExpiry }}
+            <span *ngIf="isExpiringSoon(driver.medicalCertExpiry)"> ⚠️</span>
+          </td>
+          <td>
+            <span [class]="'badge ' + getComplianceBadge(driver.dqfCompleteness)">
+              {{ driver.dqfCompleteness }}%
+            </span>
+          </td>
+          <td>
+            <span [class]="'badge ' + (driver.clearinghouseStatus === 'eligible' ? 'badge-success' : 'badge-warning')">
+              {{ driver.clearinghouseStatus }}
+            </span>
+          </td>
+          <td>
+            <span [class]="'badge ' + getStatusBadge(driver.status)">
+              {{ driver.status }}
+            </span>
+          </td>
+          <td>
+            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+              <button class="btn btn-sm" (click)="editDriver(driver)" 
+                      style="font-size: 12px; padding: 6px 12px; background-color: #0066cc; color: white;">
+                ✏️ Edit
+              </button>
+              <button class="btn btn-sm" (click)="openDQFForm(driver)"
+                      style="font-size: 12px; padding: 6px 12px; background-color: #28a745; color: white;">
+                📋 DQF
+              </button>
+              <label style="font-size: 12px; padding: 6px 12px; background-color: #ffc107; color: black; border-radius: 4px; cursor: pointer; margin: 0;">
+                📤 Upload
+                <input type="file" (change)="onFileSelected($event, driver)" 
+                       accept=".pdf,.jpg,.jpeg,.png" style="display: none;">
+              </label>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div *ngIf="!loading && drivers.length === 0" style="text-align: center; padding: 40px; color: var(--text-light);">
+      <p>No drivers found</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">📋 DQF Retention Requirements</h3>
+    </div>
+    <div style="padding: 10px; background-color: #f9f9f9; border-radius: 4px;">
+      <p><strong>49 CFR 391.51:</strong> Driver qualification files must be retained for the duration of employment plus 3 years after employment ends.</p>
+      <p style="margin-top: 10px;"><strong>Required Documents:</strong> Application, Motor vehicle record, Road test certificate, Medical examiner's certificate, Annual review of driving record</p>
+    </div>
+  </div>
+</div>

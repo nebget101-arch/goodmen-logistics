@@ -1,0 +1,149 @@
+<div class="container">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">📊 Compliance Audit & Reporting</h2>
+      <div>
+        <select [(ngModel)]="selectedCategory" class="form-control" style="width: auto; display: inline-block; margin-right: 10px;">
+          <option value="dqf">Driver Qualification Files</option>
+          <option value="hos">Hours of Service</option>
+          <option value="maintenance">Maintenance Records</option>
+          <option value="drug-alcohol">Drug & Alcohol Testing</option>
+        </select>
+        <button class="btn btn-success" (click)="exportData()">📥 Export Data</button>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="loading">
+      <div class="spinner"></div>
+    </div>
+
+    <div *ngIf="!loading && complianceSummary">
+      <h3 style="margin: 20px 0; color: var(--primary-color);">Compliance Summary Report</h3>
+      
+      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+        <p><strong>Company:</strong> {{ complianceSummary.companyName }}</p>
+        <p><strong>Report Period:</strong> {{ complianceSummary.reportPeriod.start }} to {{ complianceSummary.reportPeriod.end }}</p>
+        <p><strong>Generated:</strong> {{ complianceSummary.generatedAt }}</p>
+      </div>
+
+      <!-- Driver Compliance -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+          <h4 class="card-title">👥 Driver Compliance</h4>
+        </div>
+        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+          <div>
+            <div class="stat-label">Total Drivers</div>
+            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.driverCompliance.totalDrivers }}</div>
+          </div>
+          <div>
+            <div class="stat-label">Active Drivers</div>
+            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.driverCompliance.activeDrivers }}</div>
+          </div>
+          <div>
+            <div class="stat-label">Avg DQF Completeness</div>
+            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.driverCompliance.averageDQFCompleteness }}%</div>
+          </div>
+          <div>
+            <div class="stat-label">Expired Med Certs</div>
+            <div class="stat-value" style="font-size: 24px; color: var(--danger-color);">{{ complianceSummary.driverCompliance.expiredMedCerts }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vehicle Compliance -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+          <h4 class="card-title">🚛 Vehicle Compliance</h4>
+        </div>
+        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+          <div>
+            <div class="stat-label">Total Vehicles</div>
+            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.vehicleCompliance.totalVehicles }}</div>
+          </div>
+          <div>
+            <div class="stat-label">In Service</div>
+            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.vehicleCompliance.inService }}</div>
+          </div>
+          <div>
+            <div class="stat-label">Out of Service</div>
+            <div class="stat-value" style="font-size: 24px; color: var(--danger-color);">{{ complianceSummary.vehicleCompliance.outOfService }}</div>
+          </div>
+          <div>
+            <div class="stat-label">Maintenance Overdue</div>
+            <div class="stat-value" style="font-size: 24px; color: var(--warning-color);">{{ complianceSummary.vehicleCompliance.maintenanceOverdue }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HOS Compliance -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+          <h4 class="card-title">⏰ HOS Compliance</h4>
+        </div>
+        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+          <div>
+            <div class="stat-label">Total Records</div>
+            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.hosCompliance.totalRecords }}</div>
+          </div>
+          <div>
+            <div class="stat-label">Compliant</div>
+            <div class="stat-value" style="font-size: 24px; color: var(--success-color);">{{ complianceSummary.hosCompliance.compliant }}</div>
+          </div>
+          <div>
+            <div class="stat-label">Warnings</div>
+            <div class="stat-value" style="font-size: 24px; color: var(--warning-color);">{{ complianceSummary.hosCompliance.warnings }}</div>
+          </div>
+          <div>
+            <div class="stat-label">Violations</div>
+            <div class="stat-value" style="font-size: 24px; color: var(--danger-color);">{{ complianceSummary.hosCompliance.violations }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recommended Actions -->
+      <div class="card" *ngIf="complianceSummary.recommendedActions.length > 0">
+        <div class="card-header">
+          <h4 class="card-title">✅ Recommended Actions</h4>
+        </div>
+        <ul style="margin-left: 20px;">
+          <li *ngFor="let action of complianceSummary.recommendedActions" style="margin-bottom: 10px;">
+            {{ action }}
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit Trail -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">📜 Audit Trail (Recent Changes)</h3>
+    </div>
+    
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Resource</th>
+          <th>IP Address</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let entry of auditTrail">
+          <td>{{ entry.timestamp | date:'short' }}</td>
+          <td>{{ entry.userId }}</td>
+          <td>
+            <span [class]="'badge ' + (entry.action === 'DELETE' ? 'badge-danger' : (entry.action === 'CREATE' ? 'badge-success' : 'badge-info'))">
+              {{ entry.action }}
+            </span>
+          </td>
+          <td>{{ entry.resource }}</td>
+          <td><small>{{ entry.ip }}</small></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

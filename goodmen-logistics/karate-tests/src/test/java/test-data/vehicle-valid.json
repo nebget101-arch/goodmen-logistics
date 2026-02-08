@@ -1,0 +1,15 @@
+{
+  "unitNumber": "T-999",
+  "vin": "1HGBH41JXMN109999",
+  "make": "Freightliner",
+  "model": "Cascadia",
+  "year": 2023,
+  "type": "Tractor",
+  "status": "Active",
+  "currentMileage": 50000,
+  "lastInspection": "2026-01-15",
+  "nextPMDue": "2026-04-15",
+  "nextPMMileage": 60000,
+  "licensePlate": "ABC1234",
+  "state": "CA"
+}

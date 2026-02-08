@@ -1,0 +1,42 @@
+import { NgModule, ErrorHandler } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { HttpClientModule } from '@angular/common/http';
+import { FormsModule } from '@angular/forms';
+import { AppRoutingModule } from './app-routing.module';
+
+import { AppComponent } from './app.component';
+import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { DriversComponent } from './components/drivers/drivers.component';
+import { VehiclesComponent } from './components/vehicles/vehicles.component';
+import { HosComponent } from './components/hos/hos.component';
+import { MaintenanceComponent } from './components/maintenance/maintenance.component';
+import { LoadsComponent } from './components/loads/loads.component';
+import { AuditComponent } from './components/audit/audit.component';
+
+// Dynatrace Error Handler
+import { DynatraceErrorHandler } from './dynatrace-error-handler';
+
+@NgModule({
+  declarations: [
+    AppComponent,
+    DashboardComponent,
+    DriversComponent,
+    VehiclesComponent,
+    HosComponent,
+    MaintenanceComponent,
+    LoadsComponent,
+    AuditComponent
+  ],
+  imports: [
+    BrowserModule,
+    AppRoutingModule,
+    HttpClientModule,
+    FormsModule
+  ],
+  providers: [
+    // Enable Dynatrace error reporting
+    // Uncomment to enable: { provide: ErrorHandler, useClass: DynatraceErrorHandler }
+  ],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
