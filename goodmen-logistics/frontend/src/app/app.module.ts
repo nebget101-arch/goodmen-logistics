@@ -8,6 +8,7 @@ import { AppComponent } from './app.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { DriversComponent } from './components/drivers/drivers.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
+import { VehicleFormComponent } from './components/vehicles/vehicle-form/vehicle-form.component';
 import { HosComponent } from './components/hos/hos.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { LoadsComponent } from './components/loads/loads.component';
@@ -22,6 +23,7 @@ import { DynatraceErrorHandler } from './dynatrace-error-handler';
     DashboardComponent,
     DriversComponent,
     VehiclesComponent,
+    VehicleFormComponent,
     HosComponent,
     MaintenanceComponent,
     LoadsComponent,

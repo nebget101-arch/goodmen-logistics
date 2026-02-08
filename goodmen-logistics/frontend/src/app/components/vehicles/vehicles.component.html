@@ -1,63 +1,294 @@
 <div class="container">
   <div class="card">
+    <!-- Card Header -->
     <div class="card-header">
-      <h2 class="card-title">🚛 Vehicle Fleet Management</h2>
-      <button class="btn btn-primary">+ Add Vehicle</button>
+      <h2 class="card-title" id="vehicles-title">
+        <span aria-label="truck" role="img">🚛</span> Vehicle Fleet Management
+      </h2>
+      <button 
+        class="btn btn-primary" 
+        (click)="openAddVehicleForm()"
+        aria-label="Add new vehicle"
+        type="button">
+        + Add Vehicle
+      </button>
     </div>
 
-    <div *ngIf="loading" class="loading">
-      <div class="spinner"></div>
+    <!-- Search and Filter Controls -->
+    <div *ngIf="!loading && !error" class="controls-section">
+      <div class="controls-row">
+        <!-- Search Input -->
+        <div class="control-group search-group">
+          <label for="vehicle-search" class="control-label">
+            <span aria-hidden="true">🔍</span> Search
+          </label>
+          <input
+            id="vehicle-search"
+            type="text"
+            class="form-control search-input"
+            placeholder="Search by unit #, plate, VIN, make/model..."
+            [value]="searchQuery"
+            (input)="onSearchInput($event)"
+            aria-label="Search vehicles by unit number, plate, VIN, or make/model"
+          />
+        </div>
+
+        <!-- Status Filter -->
+        <div class="control-group filter-group">
+          <label for="status-filter" class="control-label">
+            <span aria-hidden="true">📊</span> Status
+          </label>
+          <select
+            id="status-filter"
+            class="form-control filter-select"
+            [(ngModel)]="selectedStatus"
+            (change)="onStatusChange(selectedStatus)"
+            aria-label="Filter vehicles by status"
+          >
+            <option *ngFor="let option of statusOptions" [value]="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+
+        <!-- Items Per Page -->
+        <div class="control-group pagesize-group">
+          <label for="page-size" class="control-label">
+            <span aria-hidden="true">📄</span> Show
+          </label>
+          <select
+            id="page-size"
+            class="form-control pagesize-select"
+            [value]="itemsPerPage"
+            (change)="onPageSizeChange(+$any($event.target).value)"
+            aria-label="Items per page"
+          >
+            <option *ngFor="let size of pageSizeOptions" [value]="size">
+              {{ size }} items
+            </option>
+          </select>
+        </div>
+
+        <!-- Clear Filters Button -->
+        <button
+          *ngIf="hasActiveFilters"
+          class="btn btn-secondary clear-btn"
+          (click)="clearFilters()"
+          type="button"
+          aria-label="Clear all filters"
+        >
+          <span aria-hidden="true">✕</span> Clear
+        </button>
+      </div>
+
+      <!-- Results Summary -->
+      <div class="results-summary" role="status" aria-live="polite">
+        <span class="results-text">
+          Showing {{ displayingRange }}
+          <span *ngIf="hasActiveFilters" class="filtered-text">(filtered from {{ allVehicles.length }} total)</span>
+        </span>
+      </div>
     </div>
 
-    <table class="table" *ngIf="!loading">
-      <thead>
-        <tr>
-          <th>Unit #</th>
-          <th>Vehicle Details</th>
-          <th>VIN</th>
-          <th>Mileage</th>
-          <th>Last Inspection</th>
-          <th>Next PM Due</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let vehicle of vehicles">
-          <td><strong>{{ vehicle.unitNumber }}</strong></td>
-          <td>
-            {{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}<br>
-            <small style="color: var(--text-light);">{{ vehicle.licensePlate }}</small>
-          </td>
-          <td><small>{{ vehicle.vin }}</small></td>
-          <td>{{ vehicle.mileage?.toLocaleString() }} mi</td>
-          <td>{{ vehicle.lastInspectionDate }}</td>
-          <td>
-            {{ vehicle.nextPMDue }}<br>
-            <small>&#64; {{ vehicle.nextPMMileage?.toLocaleString() }} mi</small>
-          </td>
-          <td>
-            <span [class]="'badge ' + getStatusBadge(vehicle.status)">
-              {{ vehicle.status }}
-            </span>
-            <div *ngIf="vehicle.oosReason" style="font-size: 11px; color: var(--danger-color); margin-top: 4px;">
-              {{ vehicle.oosReason }}
-            </div>
-          </td>
-          <td>
-            <button class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">View</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- Loading State with Skeleton -->
+    <div *ngIf="loading" class="vehicles-loading" role="status" aria-live="polite" aria-label="Loading vehicles">
+      <div class="skeleton-table">
+        <div class="skeleton-header">
+          <div class="skeleton-cell" *ngFor="let i of [1,2,3,4,5,6,7,8]"></div>
+        </div>
+        <div class="skeleton-row" *ngFor="let row of skeletonRows">
+          <div class="skeleton-cell skeleton-pulse"></div>
+          <div class="skeleton-cell skeleton-pulse"></div>
+          <div class="skeleton-cell skeleton-pulse"></div>
+          <div class="skeleton-cell skeleton-pulse"></div>
+          <div class="skeleton-cell skeleton-pulse"></div>
+          <div class="skeleton-cell skeleton-pulse"></div>
+          <div class="skeleton-cell skeleton-pulse"></div>
+          <div class="skeleton-cell skeleton-pulse"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div *ngIf="!loading && error" class="error-state" role="alert">
+      <div class="error-icon" aria-hidden="true">⚠️</div>
+      <h3 class="error-title">Unable to Load Vehicles</h3>
+      <p class="error-message">{{ error }}</p>
+      <button 
+        class="btn btn-primary retry-btn" 
+        (click)="retryLoad()"
+        type="button"
+        aria-label="Retry loading vehicles">
+        <span aria-hidden="true">🔄</span> Retry
+      </button>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!loading && !error && filteredVehicles.length === 0" class="empty-state">
+      <div class="empty-icon" aria-hidden="true">🚛</div>
+      <h3 class="empty-title">{{ hasActiveFilters ? 'No Vehicles Match Your Search' : 'No Vehicles Found' }}</h3>
+      <p class="empty-message">
+        {{ hasActiveFilters ? 'Try adjusting your search or filter criteria.' : 'Your vehicle fleet is empty. Add your first vehicle to get started.' }}
+      </p>
+      <button 
+        *ngIf="hasActiveFilters"
+        class="btn btn-primary" 
+        (click)="clearFilters()"
+        type="button"
+        aria-label="Clear all filters">
+        Clear Filters
+      </button>
+      <button 
+        *ngIf="!hasActiveFilters"
+        class="btn btn-primary" 
+        type="button"
+        aria-label="Add your first vehicle">
+        + Add Your First Vehicle
+      </button>
+    </div>
+
+    <!-- Data Table -->
+    <div *ngIf="!loading && !error && filteredVehicles.length > 0" class="table-responsive">
+      <table class="table vehicles-table" aria-labelledby="vehicles-title">
+        <thead>
+          <tr>
+            <th scope="col" class="sortable" (click)="onSortChange('unit_number')" role="button" tabindex="0" 
+                (keydown.enter)="onSortChange('unit_number')" (keydown.space)="onSortChange('unit_number')"
+                [attr.aria-sort]="sortField === 'unit_number' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'">
+              Unit # <span class="sort-icon" aria-hidden="true">{{ getSortIcon('unit_number') }}</span>
+            </th>
+            <th scope="col">Vehicle Details</th>
+            <th scope="col">VIN</th>
+            <th scope="col">Mileage</th>
+            <th scope="col" class="sortable" (click)="onSortChange('last_inspection_date')" role="button" tabindex="0"
+                (keydown.enter)="onSortChange('last_inspection_date')" (keydown.space)="onSortChange('last_inspection_date')"
+                [attr.aria-sort]="sortField === 'last_inspection_date' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'">
+              Last Inspection <span class="sort-icon" aria-hidden="true">{{ getSortIcon('last_inspection_date') }}</span>
+            </th>
+            <th scope="col">Next PM Due</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let vehicle of paginatedVehicles; trackBy: trackByVehicleId" [class]="getWarningClass(vehicle)">
+            <td data-label="Unit #">
+              <strong>{{ vehicle.unit_number }}</strong>
+              <small class="vin-suffix">({{ vehicle.vin.slice(-4) }})</small>
+            </td>
+            <td data-label="Vehicle Details">
+              <div class="vehicle-details">
+                <span class="vehicle-info">{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}</span>
+                <small class="vehicle-plate">{{ vehicle.license_plate }}</small>
+              </div>
+            </td>
+            <td data-label="VIN">
+              <small class="vin-text">{{ vehicle.vin }}</small>
+            </td>
+            <td data-label="Mileage">
+              {{ vehicle.mileage.toLocaleString() }} mi
+            </td>
+            <td data-label="Last Inspection">
+              {{ vehicle.last_inspection_date | date: 'yyyy-MM-dd' }}
+            </td>
+            <td data-label="Next PM Due">
+              <div class="pm-info">
+                <span>{{ vehicle.next_pm_due | date: 'yyyy-MM-dd' }}</span>
+                <small>&#64; {{ vehicle.next_pm_mileage.toLocaleString() }} mi</small>
+              </div>
+            </td>
+            <td data-label="Status">
+              <span 
+                [class]="'badge ' + (isVehicleExpired(vehicle) ? 'badge-danger' : getStatusBadge(vehicle.status))"
+                [attr.aria-label]="'Vehicle status: ' + (isVehicleExpired(vehicle) ? 'Out of Service - Expired Documents' : getStatusLabel(vehicle.status))">
+                {{ isVehicleExpired(vehicle) ? 'Out of Service' : getStatusLabel(vehicle.status) }}
+              </span>
+              <div *ngIf="isVehicleExpired(vehicle) || vehicle.oos_reason" class="oos-reason" role="note">
+                {{ isVehicleExpired(vehicle) ? 'Registration/Inspection Expired' : vehicle.oos_reason }}
+              </div>
+              <div *ngIf="getExpiryWarning(vehicle)" 
+                   [class]="(getExpiryWarning(vehicle)?.includes('expired') || getExpiryWarning(vehicle)?.includes('overdue')) ? 'expiry-error' : 'expiry-warning'" 
+                   role="alert">
+                {{ (getExpiryWarning(vehicle)?.includes('expired') || getExpiryWarning(vehicle)?.includes('overdue')) ? '🚫' : '⚠️' }} {{ getExpiryWarning(vehicle) }}
+              </div>
+            </td>
+            <td data-label="Actions">
+              <button 
+                class="btn btn-primary btn-sm" 
+                type="button"
+                (click)="openEditVehicleForm(vehicle)"
+                [attr.aria-label]="'Edit vehicle ' + vehicle.unit_number">
+                Edit
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Pagination Controls -->
+    <div *ngIf="!loading && !error && filteredVehicles.length > 0" class="pagination-section">
+      <div class="pagination-info">
+        Showing {{ displayingRange }}
+      </div>
+      
+      <nav class="pagination-nav" role="navigation" aria-label="Vehicles pagination">
+        <button
+          class="pagination-btn"
+          [disabled]="currentPage === 1"
+          (click)="onPageChange(currentPage - 1)"
+          type="button"
+          aria-label="Previous page"
+        >
+          ‹ Prev
+        </button>
+
+        <button
+          *ngFor="let page of getPageNumbers()"
+          class="pagination-btn page-number"
+          [class.active]="page === currentPage"
+          [class.ellipsis]="page === -1"
+          [disabled]="page === -1"
+          (click)="page !== -1 && onPageChange(page)"
+          type="button"
+          [attr.aria-label]="page === -1 ? 'More pages' : 'Go to page ' + page"
+          [attr.aria-current]="page === currentPage ? 'page' : null"
+        >
+          {{ page === -1 ? '...' : page }}
+        </button>
+
+        <button
+          class="pagination-btn"
+          [disabled]="currentPage === totalPages"
+          (click)="onPageChange(currentPage + 1)"
+          type="button"
+          aria-label="Next page"
+        >
+          Next ›
+        </button>
+      </nav>
+    </div>
   </div>
 
-  <div class="card">
+  <!-- Compliance Information -->
+  <div class="card compliance-card">
     <div class="card-header">
-      <h3 class="card-title">📋 Maintenance Retention Requirements</h3>
+      <h3 class="card-title">
+        <span aria-label="clipboard" role="img">📋</span> Maintenance Retention Requirements
+      </h3>
     </div>
-    <div style="padding: 10px; background-color: #f9f9f9; border-radius: 4px;">
-      <p><strong>49 CFR 396.3:</strong> Maintenance records must be retained for 1 year where housed/maintained, and for 6 months after the vehicle leaves the carrier's control.</p>
+    <div class="compliance-content">
+      <p>
+        <strong>49 CFR 396.3:</strong> Maintenance records must be retained for 1 year where housed/maintained, 
+        and for 6 months after the vehicle leaves the carrier's control.
+      </p>
     </div>
   </div>
 </div>
+
+<!-- Vehicle Form Modal -->
+<app-vehicle-form
+  [isOpen]="showVehicleForm"
+  [vehicle]="selectedVehicle"
+  (close)="closeVehicleForm()"
+  (save)="onVehicleSaved($event)">
+</app-vehicle-form>
