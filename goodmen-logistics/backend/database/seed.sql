@@ -258,3 +258,55 @@ SELECT
     'system',
     '127.0.0.1'
 FROM drivers d LIMIT 1;
+
+-- Insert Vehicle Documents
+INSERT INTO vehicle_documents (vehicle_id, document_type, file_name, file_path, file_size, mime_type, expiry_date, uploaded_by, notes)
+SELECT 
+    v.id,
+    'inspection',
+    'annual_inspection_2025.pdf',
+    '/uploads/vehicles/TRK-001/inspection_2025.pdf',
+    245632,
+    'application/pdf',
+    '2026-01-15',
+    'admin',
+    'Annual DOT inspection completed'
+FROM vehicles v WHERE v.unit_number = 'TRK-001';
+
+INSERT INTO vehicle_documents (vehicle_id, document_type, file_name, file_path, file_size, mime_type, expiry_date, uploaded_by, notes)
+SELECT 
+    v.id,
+    'registration',
+    'vehicle_registration.pdf',
+    '/uploads/vehicles/TRK-001/registration.pdf',
+    128456,
+    'application/pdf',
+    '2025-11-30',
+    'admin',
+    'California vehicle registration'
+FROM vehicles v WHERE v.unit_number = 'TRK-001';
+
+INSERT INTO vehicle_documents (vehicle_id, document_type, file_name, file_path, file_size, mime_type, expiry_date, uploaded_by, notes)
+SELECT 
+    v.id,
+    'insurance',
+    'insurance_certificate.pdf',
+    '/uploads/vehicles/TRK-002/insurance.pdf',
+    198234,
+    'application/pdf',
+    '2025-12-31',
+    'admin',
+    'Commercial vehicle insurance policy'
+FROM vehicles v WHERE v.unit_number = 'TRK-002';
+
+INSERT INTO vehicle_documents (vehicle_id, document_type, file_name, file_path, file_size, mime_type, expiry_date, uploaded_by, notes)
+SELECT 
+    v.id,
+    'maintenance',
+    'brake_repair_receipt.pdf',
+    '/uploads/vehicles/TRK-003/maintenance_brake_2025.pdf',
+    87456,
+    'application/pdf',
+    NULL,
+    'Brake system repair - OOS reason'
+FROM vehicles v WHERE v.unit_number = 'TRK-003';

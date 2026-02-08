@@ -1,0 +1,332 @@
+<div class="modal-overlay" *ngIf="isOpen" (click)="onClose()" (keydown.escape)="onClose()" tabindex="-1">
+  <div class="modal-container" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+    <!-- Modal Header -->
+    <div class="modal-header">
+      <h2 class="modal-title">
+        <span aria-hidden="true">🚛</span>
+        {{ isEditMode ? 'Edit Vehicle' : 'Add New Vehicle' }}
+      </h2>
+      <button class="close-btn" (click)="onClose()" type="button" aria-label="Close modal">
+        ✕
+      </button>
+    </div>
+
+    <!-- Modal Body -->
+    <div class="modal-body">
+      <form (ngSubmit)="onSubmit()">
+        <!-- Basic Information -->
+        <div class="form-section">
+          <h3 class="section-title">Basic Information</h3>
+          
+          <div class="form-row">
+            <!-- Unit Number -->
+            <div class="form-group">
+              <label for="unit-number">Unit # *</label>
+              <input
+                id="unit-number"
+                type="text"
+                class="form-control"
+                [(ngModel)]="formData.unit_number"
+                name="unit_number"
+                readonly
+                placeholder="Auto-generated"
+              />
+              <small class="help-text">Auto-generated from VIN</small>
+            </div>
+
+            <!-- VIN -->
+            <div class="form-group">
+              <label for="vin">VIN *</label>
+              <input
+                id="vin"
+                type="text"
+                class="form-control"
+                [(ngModel)]="formData.vin"
+                name="vin"
+                (input)="onVinChange()"
+                maxlength="17"
+                required
+                placeholder="17-character VIN"
+                [class.error]="errors.vin"
+              />
+              <small class="error-text" *ngIf="errors.vin">{{ errors.vin }}</small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <!-- Year -->
+            <div class="form-group">
+              <label for="year">Year *</label>
+              <input
+                id="year"
+                type="number"
+                class="form-control"
+                [(ngModel)]="formData.year"
+                name="year"
+                min="1990"
+                [max]="maxYear"
+                required
+                [class.error]="errors.year"
+              />
+              <small class="error-text" *ngIf="errors.year">{{ errors.year }}</small>
+            </div>
+
+            <!-- Make -->
+            <div class="form-group">
+              <label for="make">Make *</label>
+              <select
+                id="make"
+                class="form-control"
+                [(ngModel)]="formData.make"
+                name="make"
+                required
+                [class.error]="errors.make"
+              >
+                <option value="">Select Make</option>
+                <option *ngFor="let make of makes" [value]="make">{{ make }}</option>
+              </select>
+              <small class="error-text" *ngIf="errors.make">{{ errors.make }}</small>
+            </div>
+
+            <!-- Model -->
+            <div class="form-group">
+              <label for="model">Model *</label>
+              <input
+                id="model"
+                type="text"
+                class="form-control"
+                [(ngModel)]="formData.model"
+                name="model"
+                required
+                [class.error]="errors.model"
+              />
+              <small class="error-text" *ngIf="errors.model">{{ errors.model }}</small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <!-- License Plate -->
+            <div class="form-group">
+              <label for="license-plate">License Plate *</label>
+              <input
+                id="license-plate"
+                type="text"
+                class="form-control"
+                [(ngModel)]="formData.license_plate"
+                name="license_plate"
+                required
+                [class.error]="errors.license_plate"
+              />
+              <small class="error-text" *ngIf="errors.license_plate">{{ errors.license_plate }}</small>
+            </div>
+
+            <!-- State -->
+            <div class="form-group">
+              <label for="state">State *</label>
+              <select
+                id="state"
+                class="form-control"
+                [(ngModel)]="formData.state"
+                name="state"
+                required
+                [class.error]="errors.state"
+              >
+                <option value="">Select State</option>
+                <option *ngFor="let state of states" [value]="state">{{ state }}</option>
+              </select>
+              <small class="error-text" *ngIf="errors.state">{{ errors.state }}</small>
+            </div>
+
+            <!-- Mileage -->
+            <div class="form-group">
+              <label for="mileage">Current Mileage</label>
+              <input
+                id="mileage"
+                type="number"
+                class="form-control"
+                [(ngModel)]="formData.mileage"
+                name="mileage"
+                min="0"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Inspection & Registration -->
+        <div class="form-section">
+          <h3 class="section-title">Compliance & Maintenance</h3>
+          
+          <div class="form-row">
+            <!-- Last Inspection -->
+            <div class="form-group">
+              <label for="last-inspection">Last Inspection Date</label>
+              <input
+                id="last-inspection"
+                type="date"
+                class="form-control"
+                [(ngModel)]="formData.last_inspection_date"
+                name="last_inspection_date"
+              />
+              <div *ngIf="formData.last_inspection_date" class="status-indicator">
+                <span [class]="'badge badge-' + getInspectionStatus()">
+                  {{ getInspectionStatus() === 'expired' ? 'Expired' : 
+                     getInspectionStatus() === 'warning' ? 'Expiring Soon' : 'Valid' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Registration Expiry -->
+            <div class="form-group">
+              <label for="registration-expiry">Registration Expiry</label>
+              <input
+                id="registration-expiry"
+                type="date"
+                class="form-control"
+                [(ngModel)]="formData.registration_expiry"
+                name="registration_expiry"
+              />
+              <div *ngIf="formData.registration_expiry" class="status-indicator">
+                <span [class]="'badge badge-' + getRegistrationStatus()">
+                  {{ getDaysUntilExpiry(formData.registration_expiry) >= 0 ? 
+                     'Expires in ' + getDaysUntilExpiry(formData.registration_expiry) + ' days' : 'Expired' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Insurance Expiry -->
+            <div class="form-group">
+              <label for="insurance-expiry">Insurance Expiry</label>
+              <input
+                id="insurance-expiry"
+                type="date"
+                class="form-control"
+                [(ngModel)]="formData.insurance_expiry"
+                name="insurance_expiry"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <!-- Next PM Due -->
+            <div class="form-group">
+              <label for="next-pm-due">Next PM Due Date</label>
+              <input
+                id="next-pm-due"
+                type="date"
+                class="form-control"
+                [(ngModel)]="formData.next_pm_due"
+                name="next_pm_due"
+              />
+            </div>
+
+            <!-- Next PM Mileage -->
+            <div class="form-group">
+              <label for="next-pm-mileage">Next PM Mileage</label>
+              <input
+                id="next-pm-mileage"
+                type="number"
+                class="form-control"
+                [(ngModel)]="formData.next_pm_mileage"
+                name="next_pm_mileage"
+                min="0"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Status & OOS Reason -->
+        <div class="form-section">
+          <h3 class="section-title">Status</h3>
+          
+          <div class="form-row">
+            <!-- Status -->
+            <div class="form-group">
+              <label for="status">Vehicle Status</label>
+              <select
+                id="status"
+                class="form-control"
+                [(ngModel)]="formData.status"
+                name="status"
+              >
+                <option value="in-service">In Service</option>
+                <option value="out-of-service">Out of Service</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- OOS Reason (shown only if status is out-of-service) -->
+          <div class="form-row" *ngIf="formData.status === 'out-of-service'">
+            <div class="form-group full-width">
+              <label for="oos-reason">Out of Service Reason</label>
+              <textarea
+                id="oos-reason"
+                class="form-control"
+                [(ngModel)]="formData.oos_reason"
+                name="oos_reason"
+                rows="3"
+                placeholder="Describe the reason for out-of-service status..."
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Documents Section -->
+        <div class="form-section">
+          <h3 class="section-title">Documents</h3>
+          
+          <div class="documents-list">
+            <div *ngFor="let docType of documentTypes; let i = index" class="document-item">
+              <div class="document-header">
+                <div class="document-info">
+                  <span class="document-icon" [class]="'icon-' + docType.value">📄</span>
+                  <span class="document-label">{{ docType.label }}</span>
+                </div>
+                <label [for]="'file-' + docType.value" class="upload-btn">
+                  📎 Upload
+                  <input
+                    [id]="'file-' + docType.value"
+                    type="file"
+                    (change)="onFileSelect($event, docType.value)"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    hidden
+                  />
+                </label>
+              </div>
+              
+              <!-- Uploaded files for this type -->
+              <div class="uploaded-files">
+                <div *ngFor="let doc of documents; let j = index" class="uploaded-file">
+                  <span *ngIf="doc.type === docType.value" class="file-name">{{ doc.name }}</span>
+                  <button
+                    *ngIf="doc.type === docType.value"
+                    type="button"
+                    class="remove-file-btn"
+                    (click)="removeDocument(j)"
+                    aria-label="Remove file"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error Message -->
+        <div *ngIf="errors.submit" class="form-error">
+          {{ errors.submit }}
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="onClose()">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" [disabled]="saving">
+            {{ saving ? 'Saving...' : (isEditMode ? 'Update Vehicle' : 'Add Vehicle') }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

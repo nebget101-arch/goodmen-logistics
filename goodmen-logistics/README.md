@@ -65,6 +65,23 @@ npm start
 
 The application will be available at `http://localhost:4200`
 
+**Note**: The frontend is configured to connect to the hosted backend API at `https://safetyapp-ln58.onrender.com/api`. To use a local backend instead, update `src/environments/environment.ts` with `apiUrl: 'http://localhost:3000/api'`.
+
+## 🔧 Configuration
+
+### Frontend API Configuration
+
+The frontend uses environment files to configure the backend API URL:
+
+- **Development**: `src/environments/environment.ts`
+  - Default: `https://safetyapp-ln58.onrender.com/api` (hosted backend)
+  - For local backend: Change to `http://localhost:3000/api`
+
+- **Production**: `src/environments/environment.prod.ts`
+  - Points to: `https://safetyapp-ln58.onrender.com/api`
+
+To switch between local and hosted backend, edit the `apiUrl` in the environment file.
+
 ## 📚 API Endpoints
 
 ### Dashboard

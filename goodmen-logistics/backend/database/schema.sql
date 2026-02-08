@@ -202,6 +202,26 @@ CREATE TABLE dqf_documents (
 CREATE INDEX idx_dqf_documents_driver ON dqf_documents(driver_id);
 CREATE INDEX idx_dqf_documents_type ON dqf_documents(document_type);
 
+-- Vehicle Documents Table
+CREATE TABLE vehicle_documents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    document_type VARCHAR(100) NOT NULL, -- inspection, registration, insurance, maintenance, other
+    file_name VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_size INTEGER,
+    mime_type VARCHAR(100),
+    expiry_date DATE,
+    uploaded_by VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_vehicle_documents_vehicle ON vehicle_documents(vehicle_id);
+CREATE INDEX idx_vehicle_documents_type ON vehicle_documents(document_type);
+CREATE INDEX idx_vehicle_documents_expiry ON vehicle_documents(expiry_date);
+
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -231,4 +251,7 @@ CREATE TRIGGER update_loads_updated_at BEFORE UPDATE ON loads
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_dqf_documents_updated_at BEFORE UPDATE ON dqf_documents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_vehicle_documents_updated_at BEFORE UPDATE ON vehicle_documents
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
