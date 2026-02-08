@@ -13,10 +13,33 @@ class DynatraceLogger {
     this.apiToken = process.env.DYNATRACE_API_TOKEN;
     this.appName = process.env.DYNATRACE_APP_NAME || 'Goodmen-Logistics';
     
+    // In-memory log buffer to store recent logs (last 500 entries)
+    this.logBuffer = [];
+    this.maxBufferSize = 500;
+    
     if (this.enabled && (!this.environmentUrl || !this.apiToken || this.apiToken === 'your-api-token-here')) {
       console.warn('⚠️  Dynatrace is enabled but credentials are missing. Logging will be local only.');
       this.enabled = false;
     }
+  }
+  
+  /**
+   * Add log entry to buffer
+   */
+  addToBuffer(logEntry) {
+    this.logBuffer.push(logEntry);
+    
+    // Keep buffer size limited
+    if (this.logBuffer.length > this.maxBufferSize) {
+      this.logBuffer.shift(); // Remove oldest entry
+    }
+  }
+  
+  /**
+   * Get recent logs from buffer
+   */
+  getRecentLogs(limit = 100) {
+    return this.logBuffer.slice(-limit).reverse(); // Return most recent first
   }
 
   /**
@@ -67,6 +90,7 @@ class DynatraceLogger {
       ...metadata
     };
 
+    this.addToBuffer(logEntry);
     console.log('ℹ️ ', JSON.stringify(logEntry));
     
     if (this.enabled) {
@@ -88,6 +112,7 @@ class DynatraceLogger {
       ...metadata
     };
 
+    this.addToBuffer(logEntry);
     console.error('❌', JSON.stringify(logEntry));
     
     if (this.enabled) {
@@ -106,7 +131,8 @@ class DynatraceLogger {
       app: this.appName,
       ...metadata
     };
-
+this.addToBuffer(logEntry);
+    
     console.warn('⚠️ ', JSON.stringify(logEntry));
     
     if (this.enabled) {
@@ -120,14 +146,17 @@ class DynatraceLogger {
   trackRequest(method, path, statusCode, duration, metadata = {}) {
     const logEntry = {
       timestamp: new Date().toISOString(),
-      type: 'API_REQUEST',
+      level: statusCode >= 400 ? 'ERROR' : 'INFO',
       method,
       path,
       statusCode,
       duration,
+      message: `${method} ${path} - ${statusCode} (${duration}ms)`,
       app: this.appName,
       ...metadata
     };
+
+    this.addToBuffer(logEntry);    };
 
     console.log(`🌐 ${method} ${path} - ${statusCode} (${duration}ms)`);
 
@@ -144,14 +173,17 @@ class DynatraceLogger {
   /**
    * Track database query
    */
-  trackDatabase(operation, table, duration, success = true, metadata = {}) {
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      type: 'DATABASE',
+  traclevel: success ? 'INFO' : 'ERROR',
       operation,
       table,
       duration,
       success,
+      message: `${operation} ${table} - ${success ? 'Success' : 'Failed'} (${duration}ms)`,
+      app: this.appName,
+      ...metadata
+    };
+
+    this.addToBuffer(logEntry);      success,
       app: this.appName,
       ...metadata
     };
@@ -169,11 +201,14 @@ class DynatraceLogger {
   }
 
   /**
-   * Track business event
-   */
-  trackEvent(eventName, eventData = {}) {
-    const logEntry = {
-      timestamp: new Date().toISOString(),
+   * Tlevel: 'INFO',
+      event: eventName,
+      message: `Event: ${eventName}`,
+      app: this.appName,
+      ...eventData
+    };
+
+    this.addToBuffer(logEntry);      timestamp: new Date().toISOString(),
       type: 'BUSINESS_EVENT',
       event: eventName,
       app: this.appName,

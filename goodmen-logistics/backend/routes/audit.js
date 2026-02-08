@@ -1,6 +1,27 @@
 const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
+const dtLogger = require('../utils/dynatrace-logger');
+
+// GET application logs (from dtLogger buffer)
+router.get('/logs', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const level = req.query.level; // Filter by level if provided
+    
+    let logs = dtLogger.getRecentLogs(limit);
+    
+    // Apply level filter if specified
+    if (level && level !== 'all') {
+      logs = logs.filter(log => log.level === level.toUpperCase());
+    }
+    
+    res.json(logs);
+  } catch (error) {
+    console.error('Error fetching application logs:', error);
+    res.status(500).json({ message: 'Failed to fetch application logs' });
+  }
+});
 
 // GET audit trail
 router.get('/trail', async (req, res) => {

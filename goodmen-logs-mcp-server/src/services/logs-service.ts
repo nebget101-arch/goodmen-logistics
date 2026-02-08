@@ -22,26 +22,63 @@ export class LogsService {
    */
   async fetchLogs(query: LogQuery): Promise<any[]> {
     const logs: any[] = [];
-    const baseUrl = this.backendPath || "http://localhost:3000";
+    const baseUrl = this.backendPath?.trim();
+    if (!baseUrl) {
+      throw new Error("BACKEND_PATH is not configured for LogsService");
+    }
 
     try {
-      // Use the audit trail as the primary log source
-      const auditResponse = await axios.get(`${baseUrl}/api/audit/trail`);
-      const auditLogs = Array.isArray(auditResponse.data) ? auditResponse.data : [];
-
-      auditLogs.forEach((entry: any) => {
-        logs.push({
-          timestamp: entry.created_at || entry.timestamp || new Date().toISOString(),
-          level: "INFO",
-          message: `${entry.action || "ACTION"} ${entry.resource || "resource"}`,
-          path: entry.resource ? `/api/${String(entry.resource).toLowerCase()}` : undefined,
-          resourceId: entry.resource_id || entry.resourceId,
-          userId: entry.user_id || entry.userId,
-          changes: entry.changes
+      // First, try to get application logs from the new /api/audit/logs endpoint
+      try {
+        const appLogsResponse = await axios.get(`${baseUrl}/api/audit/logs`, {
+          params: {
+            limit: query.limit || 100
+          }
         });
-      });
+        
+        if (Array.isArray(appLogsResponse.data) && appLogsResponse.data.length > 0) {
+          appLogsResponse.data.forEach((entry: any) => {
+            logs.push({
+              timestamp: entry.timestamp || new Date().toISOString(),
+              level: entry.level || "INFO",
+              message: entry.message,
+              type: entry.type,
+              path: entry.path,
+              method: entry.method,
+              statusCode: entry.statusCode,
+              duration: entry.duration,
+              operation: entry.operation,
+              table: entry.table,
+              error: entry.error,
+              stack: entry.stack,
+              app: entry.app,
+              ...entry
+            });
+          });
+        }
+      } catch (appLogError) {
+        console.error("Could not fetch application logs, falling back to audit trail:", appLogError);
+      }
 
-      // If no audit logs exist, fall back to a health check entry
+      // If no application logs, fall back to audit trail
+      if (logs.length === 0) {
+        const auditResponse = await axios.get(`${baseUrl}/api/audit/trail`);
+        const auditLogs = Array.isArray(auditResponse.data) ? auditResponse.data : [];
+
+        auditLogs.forEach((entry: any) => {
+          logs.push({
+            timestamp: entry.created_at || entry.timestamp || new Date().toISOString(),
+            level: "INFO",
+            message: `${entry.action || "ACTION"} ${entry.resource || "resource"}`,
+            path: entry.resource ? `/api/${String(entry.resource).toLowerCase()}` : undefined,
+            resourceId: entry.resource_id || entry.resourceId,
+            userId: entry.user_id || entry.userId,
+            changes: entry.changes
+          });
+        });
+      }
+
+      // If still no logs, fall back to a health check entry
       if (logs.length === 0) {
         const response = await axios.get(`${baseUrl}/api/health`);
         logs.push({

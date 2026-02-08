@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
-import type { Request, Response } from "express";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -20,9 +18,22 @@ const __dirname = path.dirname(__filename);
 
 // Load .env file from the parent directory (where .env is located)
 // Don't override existing environment variables from Claude Desktop
-const envPath = path.join(__dirname, '..', '.env');
-console.error("Loading .env from:", envPath);
-dotenv.config({ path: envPath, override: false });
+const envPath = path.join(__dirname, "..", ".env");
+const requiredEnvVars = [
+  "BACKEND_PATH",
+  "CONFLUENCE_BASE_URL",
+  "CONFLUENCE_EMAIL",
+  "CONFLUENCE_API_TOKEN",
+  "CONFLUENCE_SPACE_KEY",
+];
+const missingEnvVars = requiredEnvVars.filter((key) => !process.env[key]);
+if (missingEnvVars.length > 0) {
+  console.error("Loading .env from:", envPath);
+  console.error("Missing env vars:", missingEnvVars.join(", "));
+  dotenv.config({ path: envPath, override: false });
+} else {
+  console.error("Env vars already set; skipping .env load.");
+}
 
 // Debug: Log environment variables to stderr (visible in Claude Desktop logs)
 console.error("=== Environment Variables Debug ===");
@@ -235,71 +246,19 @@ class GoodmenLogsMCPServer {
     });
   }
 
-  async runWithTransport(transport: StreamableHTTPServerTransport) {
+  async run() {
+    const transport = new StdioServerTransport();
     await this.server.connect(transport);
-  }
-
-  async close() {
-    await this.server.close();
+    console.error("Goodmen Logs MCP server running on stdio");
   }
 }
 
-const app = createMcpExpressApp();
-
-app.post("/mcp", async (req: Request, res: Response) => {
+async function main() {
   const server = new GoodmenLogsMCPServer();
-  try {
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined
-    });
-    await server.runWithTransport(transport);
-    await transport.handleRequest(req, res, req.body);
-    res.on("close", () => {
-      transport.close();
-      server.close().catch(() => undefined);
-    });
-  } catch (error) {
-    console.error("Error handling MCP request:", error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: "2.0",
-        error: {
-          code: -32603,
-          message: "Internal server error"
-        },
-        id: null
-      });
-    }
-  }
-});
+  await server.run();
+}
 
-app.get("/mcp", async (_req: Request, res: Response) => {
-  res.writeHead(405).end(JSON.stringify({
-    jsonrpc: "2.0",
-    error: {
-      code: -32000,
-      message: "Method not allowed."
-    },
-    id: null
-  }));
-});
-
-app.delete("/mcp", async (_req: Request, res: Response) => {
-  res.writeHead(405).end(JSON.stringify({
-    jsonrpc: "2.0",
-    error: {
-      code: -32000,
-      message: "Method not allowed."
-    },
-    id: null
-  }));
-});
-
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-app.listen(PORT, (error: unknown) => {
-  if (error) {
-    console.error("Failed to start MCP server:", error);
-    process.exit(1);
-  }
-  console.error(`Goodmen Logs MCP server listening on port ${PORT}`);
+main().catch((error) => {
+  console.error("Fatal error in main():", error);
+  process.exit(1);
 });
