@@ -3,6 +3,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
+import type { Request, Response } from "express";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -245,7 +246,7 @@ class GoodmenLogsMCPServer {
 
 const app = createMcpExpressApp();
 
-app.post("/mcp", async (req, res) => {
+app.post("/mcp", async (req: Request, res: Response) => {
   const server = new GoodmenLogsMCPServer();
   try {
     const transport = new StreamableHTTPServerTransport({
@@ -272,7 +273,7 @@ app.post("/mcp", async (req, res) => {
   }
 });
 
-app.get("/mcp", async (_req, res) => {
+app.get("/mcp", async (_req: Request, res: Response) => {
   res.writeHead(405).end(JSON.stringify({
     jsonrpc: "2.0",
     error: {
@@ -283,7 +284,7 @@ app.get("/mcp", async (_req, res) => {
   }));
 });
 
-app.delete("/mcp", async (_req, res) => {
+app.delete("/mcp", async (_req: Request, res: Response) => {
   res.writeHead(405).end(JSON.stringify({
     jsonrpc: "2.0",
     error: {
