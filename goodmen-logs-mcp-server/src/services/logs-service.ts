@@ -19,56 +19,54 @@ export class LogsService {
 
   /**
    * Fetch logs from the running Goodmen Logistics application
-   * This assumes the backend is running on localhost:3000
    */
   async fetchLogs(query: LogQuery): Promise<any[]> {
-    // If the backend exposes a logs endpoint, we can query it
-    // For now, we'll demonstrate with a health check
-    
     const logs: any[] = [];
+    const baseUrl = this.backendPath || "http://localhost:3000";
 
     try {
-      // Example: Query the backend's health endpoint
-      const baseUrl = this.backendPath || "http://localhost:3000";
-      const response = await axios.get(`${baseUrl}/api/health`);
-      logs.push({
-        timestamp: new Date().toISOString(),
-        level: "INFO",
-        message: "Health check",
-        data: response.data,
+      // Use the audit trail as the primary log source
+      const auditResponse = await axios.get(`${baseUrl}/api/audit/trail`);
+      const auditLogs = Array.isArray(auditResponse.data) ? auditResponse.data : [];
+
+      auditLogs.forEach((entry: any) => {
+        logs.push({
+          timestamp: entry.created_at || entry.timestamp || new Date().toISOString(),
+          level: "INFO",
+          message: `${entry.action || "ACTION"} ${entry.resource || "resource"}`,
+          path: entry.resource ? `/api/${String(entry.resource).toLowerCase()}` : undefined,
+          resourceId: entry.resource_id || entry.resourceId,
+          userId: entry.user_id || entry.userId,
+          changes: entry.changes
+        });
       });
 
-      // In a real implementation, you would:
-      // 1. Read from log files in the backend directory
-      // 2. Query a logging database
-      // 3. Use the backend's log API if available
-      // 4. Parse terminal output or Docker logs
-
-      // For demonstration, let's simulate reading recent API logs
-      logs.push(
-        {
+      // If no audit logs exist, fall back to a health check entry
+      if (logs.length === 0) {
+        const response = await axios.get(`${baseUrl}/api/health`);
+        logs.push({
           timestamp: new Date().toISOString(),
           level: "INFO",
-          path: "/api/drivers",
-          method: "GET",
-          status: 200,
-          duration: 19,
-        },
-        {
-          timestamp: new Date().toISOString(),
-          level: "INFO",
-          path: "/api/vehicles",
-          method: "GET",
-          status: 200,
-          duration: 8,
-        }
-      );
+          message: "Health check",
+          data: response.data,
+        });
+      }
 
       // Apply filters
       let filteredLogs = logs;
 
       if (query.level && query.level !== "all") {
         filteredLogs = filteredLogs.filter((log) => log.level === query.level);
+      }
+
+      if (query.startDate) {
+        const start = new Date(query.startDate);
+        filteredLogs = filteredLogs.filter((log) => new Date(log.timestamp) >= start);
+      }
+
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        filteredLogs = filteredLogs.filter((log) => new Date(log.timestamp) <= end);
       }
 
       if (query.apiPath) {
