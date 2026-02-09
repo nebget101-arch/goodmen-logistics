@@ -264,6 +264,11 @@ class JiraMCPServer {
                 description: "Create a Confluence page with test results",
                 default: false,
               },
+              verbose: {
+                type: "boolean",
+                description: "Include full test output in response (useful for debugging)",
+                default: false,
+              },
             },
           },
         },
@@ -634,6 +639,7 @@ class JiraMCPServer {
             const testName = args?.testName as string | undefined;
             const createBugs = (args?.createBugs as boolean) || false;
             const createConfluenceReport = (args?.createConfluenceReport as boolean) || false;
+            const verbose = (args?.verbose as boolean) || false;
 
             const result = await this.testRunnerService.runCypressTests(specPattern, testName);
             
@@ -691,6 +697,42 @@ class JiraMCPServer {
 
               const confluencePage = await this.confluenceService.createTestReport(reportData);
               resultText += `\n📄 Confluence Report: ${confluencePage.url}\n`;
+            }
+
+            // Add detailed test output
+            if (result.failures.length > 0) {
+              resultText += `\n*Failed Tests:*\n`;
+              result.failures.forEach((failure, idx) => {
+                resultText += `\n${idx + 1}. ${failure.testName}\n`;
+                resultText += `   Error: ${failure.errorMessage}\n`;
+                if (failure.stackTrace) {
+                  resultText += `   Stack: ${failure.stackTrace.split('\n')[0]}\n`;
+                }
+              });
+            }
+
+            // Add raw output excerpt for debugging
+            if (!result.success && result.rawOutput) {
+              const outputLines = result.rawOutput.split('\n');
+              const relevantLines = outputLines.filter(line => 
+                line.includes('Error') || 
+                line.includes('Failed') || 
+                line.includes('✖') ||
+                line.includes('AssertionError') ||
+                line.includes('at ')
+              ).slice(0, 20);
+              
+              if (relevantLines.length > 0) {
+                resultText += `\n*Test Output (errors):*\n\`\`\`\n${relevantLines.join('\n')}\n\`\`\`\n`;
+              }
+            }
+
+            // Add full output if verbose mode enabled
+            if (verbose && result.rawOutput) {
+              const truncatedOutput = result.rawOutput.length > 10000 
+                ? result.rawOutput.substring(0, 10000) + '\n\n... (truncated, output too long)'
+                : result.rawOutput;
+              resultText += `\n*Full Test Output:*\n\`\`\`\n${truncatedOutput}\n\`\`\`\n`;
             }
 
             return {
@@ -767,6 +809,31 @@ class JiraMCPServer {
               resultText += `\n📄 Confluence Report: ${confluencePage.url}\n`;
             }
 
+            // Add detailed test output
+            if (result.failures.length > 0) {
+              resultText += `\n*Failed Scenarios:*\n`;
+              result.failures.forEach((failure, idx) => {
+                resultText += `\n${idx + 1}. ${failure.testName}\n`;
+                resultText += `   Error: ${failure.errorMessage}\n`;
+              });
+            }
+
+            // Add Maven output excerpt for debugging
+            if (!result.success && result.rawOutput) {
+              const outputLines = result.rawOutput.split('\n');
+              const relevantLines = outputLines.filter(line => 
+                line.includes('[ERROR]') || 
+                line.includes('FAILED') || 
+                line.includes('<<< FAILURE!') ||
+                line.includes('expected:') ||
+                line.includes('actual:')
+              ).slice(0, 20);
+              
+              if (relevantLines.length > 0) {
+                resultText += `\n*Maven Output (errors):*\n\`\`\`\n${relevantLines.join('\n')}\n\`\`\`\n`;
+              }
+            }
+
             return {
               content: [
                 {
@@ -812,6 +879,27 @@ class JiraMCPServer {
 
               const confluencePage = await this.confluenceService.createTestReport(reportData);
               resultText += `\n📄 Confluence Report: ${confluencePage.url}\n`;
+            }
+
+            // Add K6 detailed metrics
+            if (result.rawOutput) {
+              const outputLines = result.rawOutput.split('\n');
+              
+              // Extract metrics section
+              const metricsStart = outputLines.findIndex(line => line.includes('checks') || line.includes('http_req'));
+              if (metricsStart > -1) {
+                const metricsLines = outputLines.slice(metricsStart, metricsStart + 15).filter(line => 
+                  line.trim().length > 0 && 
+                  (line.includes('checks') || 
+                   line.includes('http_req') || 
+                   line.includes('iteration') ||
+                   line.includes('vus'))
+                );
+                
+                if (metricsLines.length > 0) {
+                  resultText += `\n*Performance Metrics:*\n\`\`\`\n${metricsLines.join('\n')}\n\`\`\`\n`;
+                }
+              }
             }
 
             return {

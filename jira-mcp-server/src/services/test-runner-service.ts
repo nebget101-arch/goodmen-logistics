@@ -48,15 +48,35 @@ export class TestRunnerService {
       }
 
       console.error('Running Cypress command:', command);
+      console.error('This may take 1-2 minutes...');
       
       const output = execSync(command, {
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+        timeout: 180000, // 3 minute timeout
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
       return this.parseCypressResults(output);
     } catch (error: any) {
+      // Handle timeout
+      if (error.killed && error.signal === 'SIGTERM') {
+        return {
+          framework: 'cypress',
+          success: false,
+          totalTests: 0,
+          passing: 0,
+          failing: 0,
+          duration: '0s',
+          failures: [{
+            testName: 'Test Execution Timeout',
+            errorMessage: 'Cypress tests exceeded 3 minute timeout. The tests may be hanging or the application is not responding. Try running tests locally or check if the app at https://safetyapp-ln58.onrender.com is accessible.',
+          }],
+          summary: 'Test execution timed out',
+          rawOutput: error.stdout || error.stderr || '',
+        };
+      }
+      
       // Cypress exits with non-zero code on test failures
       const output = error.stdout || error.stderr || error.message;
       return this.parseCypressResults(output);
@@ -80,15 +100,35 @@ export class TestRunnerService {
       }
 
       console.error('Running Karate command:', command);
+      console.error('This may take 1-2 minutes...');
       
       const output = execSync(command, {
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024,
+        timeout: 180000, // 3 minute timeout
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
       return this.parseKarateResults(output);
     } catch (error: any) {
+      // Handle timeout
+      if (error.killed && error.signal === 'SIGTERM') {
+        return {
+          framework: 'karate',
+          success: false,
+          totalTests: 0,
+          passing: 0,
+          failing: 0,
+          duration: '0s',
+          failures: [{
+            testName: 'Test Execution Timeout',
+            errorMessage: 'Karate tests exceeded 3 minute timeout. The tests may be hanging or the API is not responding. Try running tests locally or check if the app at https://safetyapp-ln58.onrender.com/api is accessible.',
+          }],
+          summary: 'Test execution timed out',
+          rawOutput: error.stdout || error.stderr || '',
+        };
+      }
+      
       const output = error.stdout || error.stderr || error.message;
       return this.parseKarateResults(output);
     }
@@ -106,15 +146,35 @@ export class TestRunnerService {
       const command = `cd "${k6Dir}" && k6 run "${script}"`;
       
       console.error('Running K6 command:', command);
+      console.error('Performance test in progress...');
       
       const output = execSync(command, {
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024,
+        timeout: 300000, // 5 minute timeout for performance tests
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
       return this.parseK6Results(output);
     } catch (error: any) {
+      // Handle timeout
+      if (error.killed && error.signal === 'SIGTERM') {
+        return {
+          framework: 'k6',
+          success: false,
+          totalTests: 0,
+          passing: 0,
+          failing: 0,
+          duration: '0s',
+          failures: [{
+            testName: 'Performance Test Timeout',
+            errorMessage: 'K6 performance test exceeded 5 minute timeout. The test may be configured to run longer than expected. Check the test configuration.',
+          }],
+          summary: 'Performance test timed out',
+          rawOutput: error.stdout || error.stderr || '',
+        };
+      }
+      
       const output = error.stdout || error.stderr || error.message;
       return this.parseK6Results(output);
     }

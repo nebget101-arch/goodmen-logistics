@@ -2,8 +2,8 @@ const { defineConfig } = require('cypress');
 
 module.exports = defineConfig({
   e2e: {
-    baseUrl: 'https://safetyapp-ln58.onrender.com',
-    apiUrl: 'https://safetyapp-ln58.onrender.com/api',
+    baseUrl: process.env.CYPRESS_BASE_URL || 'https://safetyapp-ln58.onrender.com',
+    apiUrl: (process.env.CYPRESS_BASE_URL || 'https://safetyapp-ln58.onrender.com') + '/api',
     viewportWidth: 1920,
     viewportHeight: 1080,
     defaultCommandTimeout: 10000,
@@ -37,7 +37,7 @@ module.exports = defineConfig({
   },
 
   retries: {
-    runMode: 2,
+    runMode: 0,
     openMode: 0,
   },
 

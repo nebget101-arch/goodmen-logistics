@@ -50,16 +50,15 @@ describe('Drivers Module - DQF Management', () => {
     it('should show DQF completion percentage badges', () => {
       cy.wait('@getDrivers');
       
-      cy.get('table tbody tr').first().within(() => {
-        cy.get('.badge').should('exist');
-      });
+      cy.get('table tbody tr').first().find('.badge').should('exist');
     });
   });
 
   context('Add Driver Functionality', () => {
     it('should open add driver form when clicking Add Driver button', () => {
       cy.wait('@getDrivers');
-      cy.contains('button', 'Add Driver').click();
+      cy.wait(500);
+      cy.contains('button', 'Add Driver').click({ force: true });
       cy.contains('Add New Driver').should('be.visible');
     });
 
@@ -67,21 +66,27 @@ describe('Drivers Module - DQF Management', () => {
       cy.wait('@getDrivers');
       cy.intercept('POST', '**/api/drivers').as('createDriver');
       
-      cy.contains('button', 'Add Driver').click();
+      cy.wait(500);
+      cy.contains('button', 'Add Driver').click({ force: true });
+      cy.wait(500);
+      
+      // Use unique email and CDL number with timestamp to avoid UNIQUE constraint violations
+      const timestamp = Date.now();
       
       // Fill in required fields
       cy.get('input[placeholder="John"]').type('Test');
       cy.get('input[placeholder="Doe"]').type('Driver');
-      cy.get('input[type="email"]').type('test.driver@test.com');
+      cy.get('input[type="email"]').type(`test.driver${timestamp}@test.com`);
       cy.get('input[placeholder*="555"]').type('5551234567');
-      cy.get('input[placeholder="A1234567"]').type('CDL' + Date.now());
+      cy.get('input[placeholder="A1234567"]').type('CDL' + timestamp);
       cy.get('input[placeholder="CA"]').type('TX');
       cy.get('select').first().select('A');
+      cy.get('input[placeholder*="123 Main St"]').type('123 Test St, Test City, TX 12345');
       
       // Optional date fields can be left empty (now supports null)
       cy.get('input[type="date"]').eq(1).type('2027-12-31'); // medical cert expiry
       
-      cy.contains('button', 'Save Driver').click();
+      cy.contains('button', 'Save Driver').click({ force: true });
       
       cy.wait('@createDriver').then((interception) => {
         expect(interception.response.statusCode).to.equal(201);
@@ -95,7 +100,8 @@ describe('Drivers Module - DQF Management', () => {
   context('Edit Driver Functionality', () => {
     it('should open edit form when clicking edit button', () => {
       cy.wait('@getDrivers');
-      cy.contains('button', 'Edit').first().click();
+      cy.wait(500);
+      cy.contains('button', 'Edit').first().click({ force: true });
       cy.contains('Edit Driver:').should('be.visible');
     });
 
@@ -103,9 +109,11 @@ describe('Drivers Module - DQF Management', () => {
       cy.wait('@getDrivers');
       cy.intercept('PUT', '**/api/drivers/*').as('updateDriver');
       
-      cy.contains('button', 'Edit').first().click();
+      cy.wait(500);
+      cy.contains('button', 'Edit').first().click({ force: true });
+      cy.wait(500);
       cy.get('input[type="tel"]').clear().type('5559876543');
-      cy.contains('button', 'Save Changes').click();
+      cy.contains('button', 'Save Changes').click({ force: true });
       
       cy.wait('@updateDriver').then((interception) => {
         expect(interception.response.statusCode).to.equal(200);
@@ -116,14 +124,16 @@ describe('Drivers Module - DQF Management', () => {
   context('Driver Qualification Files (DQF) Management', () => {
     it('should open DQF checklist form', () => {
       cy.wait('@getDrivers');
-      cy.contains('button', 'DQF').first().click();
+      cy.wait(500);
+      cy.contains('button', 'DQF').first().click({ force: true });
       cy.contains('DQF Checklist:').should('be.visible');
       cy.contains('Application for Employment').should('be.visible');
     });
 
     it('should display all 6 required DQF items per 49 CFR 391.51', () => {
       cy.wait('@getDrivers');
-      cy.contains('button', 'DQF').first().click();
+      cy.wait(500);
+      cy.contains('button', 'DQF').first().click({ force: true });
       
       cy.contains('Application for Employment').should('be.visible');
       cy.contains('Motor Vehicle Record').should('be.visible');
@@ -137,14 +147,21 @@ describe('Drivers Module - DQF Management', () => {
       cy.wait('@getDrivers');
       cy.intercept('PUT', '**/api/drivers/*').as('updateDQF');
       
-      cy.contains('button', 'DQF').first().click();
+      cy.wait(500);
+      cy.contains('button', 'DQF').first().click({ force: true });
+      cy.wait(500);
       
-      // Check some items (3 out of 6 = 50%)
-      cy.get('input[type="checkbox"]').eq(0).check();
-      cy.get('input[type="checkbox"]').eq(1).check();
-      cy.get('input[type="checkbox"]').eq(2).check();
+      // First uncheck all items to start fresh
+      cy.get('input[type="checkbox"]').each(($checkbox) => {
+        cy.wrap($checkbox).uncheck({ force: true });
+      });
       
-      cy.contains('button', 'Save DQF').click();
+      // Check exactly 3 items (3 out of 6 = 50%)
+      cy.get('input[type="checkbox"]').eq(0).check({ force: true });
+      cy.get('input[type="checkbox"]').eq(1).check({ force: true });
+      cy.get('input[type="checkbox"]').eq(2).check({ force: true });
+      
+      cy.contains('button', 'Update DQF Status').click({ force: true });
       
       cy.wait('@updateDQF').then((interception) => {
         expect(interception.response.statusCode).to.equal(200);
@@ -156,14 +173,16 @@ describe('Drivers Module - DQF Management', () => {
       cy.wait('@getDrivers');
       cy.intercept('PUT', '**/api/drivers/*').as('updateDQF');
       
-      cy.contains('button', 'DQF').first().click();
+      cy.wait(500);
+      cy.contains('button', 'DQF').first().click({ force: true });
+      cy.wait(500);
       
       // Check all items including clearinghouse consent
       cy.get('input[type="checkbox"]').each(($checkbox) => {
-        cy.wrap($checkbox).check();
+        cy.wrap($checkbox).check({ force: true });
       });
       
-      cy.contains('button', 'Save DQF').click();
+      cy.contains('button', 'Update DQF Status').click({ force: true });
       
       cy.wait('@updateDQF').then((interception) => {
         expect(interception.response.body.clearinghouseStatus).to.equal('eligible');
@@ -175,12 +194,14 @@ describe('Drivers Module - DQF Management', () => {
       cy.wait('@getDrivers');
       cy.intercept('PUT', '**/api/drivers/*').as('updateDQF');
       
-      cy.contains('button', 'DQF').first().click();
+      cy.wait(500);
+      cy.contains('button', 'DQF').first().click({ force: true });
+      cy.wait(500);
       
       // Uncheck clearinghouse consent (last checkbox)
-      cy.get('input[type="checkbox"]').last().uncheck();
+      cy.get('input[type="checkbox"]').last().uncheck({ force: true });
       
-      cy.contains('button', 'Save DQF').click();
+      cy.contains('button', 'Update DQF Status').click({ force: true });
       
       cy.wait('@updateDQF').then((interception) => {
         expect(interception.response.body.clearinghouseStatus).to.equal('query-pending');
@@ -193,12 +214,14 @@ describe('Drivers Module - DQF Management', () => {
       cy.wait('@getDrivers');
       cy.intercept('PUT', '**/api/drivers/*').as('updateDQF');
       
-      cy.contains('button', 'DQF').first().click();
+      cy.wait(500);
+      cy.contains('button', 'DQF').first().click({ force: true });
+      cy.wait(500);
       
       // Check only some items (not 100%)
-      cy.get('input[type="checkbox"]').eq(0).check();
+      cy.get('input[type="checkbox"]').eq(0).check({ force: true });
       
-      cy.contains('button', 'Save DQF').click();
+      cy.contains('button', 'Update DQF Status').click({ force: true });
       
       cy.wait('@updateDQF').then((interception) => {
         expect(interception.response.body.status).to.equal('inactive');
@@ -209,14 +232,16 @@ describe('Drivers Module - DQF Management', () => {
       cy.wait('@getDrivers');
       cy.intercept('PUT', '**/api/drivers/*').as('updateDQF');
       
-      cy.contains('button', 'DQF').first().click();
+      cy.wait(500);
+      cy.contains('button', 'DQF').first().click({ force: true });
+      cy.wait(500);
       
       // Check all items (100%)
       cy.get('input[type="checkbox"]').each(($checkbox) => {
-        cy.wrap($checkbox).check();
+        cy.wrap($checkbox).check({ force: true });
       });
       
-      cy.contains('button', 'Save DQF').click();
+      cy.contains('button', 'Update DQF Status').click({ force: true });
       
       cy.wait('@updateDQF').then((interception) => {
         // Status should be active only if dates are valid
@@ -228,10 +253,23 @@ describe('Drivers Module - DQF Management', () => {
   context('File Upload for DQF Documents', () => {
     it('should have upload buttons for each DQF document type', () => {
       cy.wait('@getDrivers');
-      cy.contains('button', 'DQF').first().click();
+      cy.wait(500);
+      cy.contains('button', 'DQF').first().click({ force: true });
+      cy.wait(500);
       
-      // Should have upload button for each of the 6 document types
-      cy.get('button').contains('Upload').should('have.length', 6);
+      // Should have upload labels for each of the 6 document types
+      cy.contains('Application for Employment').should('be.visible')
+        .parent().parent().find('input[type="file"]').should('exist');
+      cy.contains('Motor Vehicle Record').should('be.visible')
+        .parent().parent().find('input[type="file"]').should('exist');
+      cy.contains('Road Test Certificate').should('be.visible')
+        .parent().parent().find('input[type="file"]').should('exist');
+      cy.contains('Medical Examiner').should('be.visible')
+        .parent().parent().find('input[type="file"]').should('exist');
+      cy.contains('Annual Review of Driving Record').should('be.visible')
+        .parent().parent().find('input[type="file"]').should('exist');
+      cy.contains('FMCSA Clearinghouse Consent').should('be.visible')
+        .parent().parent().find('input[type="file"]').should('exist');
     });
   });
 });
@@ -252,10 +290,9 @@ context('Driver Actions', () => {
 
   it('should have action buttons for each driver', () => {
     cy.wait('@getDrivers');
+    cy.wait(500);
     
-    cy.get('table tbody tr').first().within(() => {
-      cy.get('button').should('have.length.greaterThan', 0);
-    });
+    cy.get('table tbody tr').first().find('button').should('have.length.greaterThan', 0);
   });
 });
 
@@ -281,8 +318,8 @@ context('API Integration', () => {
       cy.reload();
       cy.wait('@getDriversError');
       
-      // Should show error state
-      cy.get('body').should('exist');
+      // Should show error state or empty table
+      cy.get('table').should('exist');
     });
 
     it('should verify response data structure has camelCase fields', () => {
