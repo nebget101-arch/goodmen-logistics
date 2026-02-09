@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "remote-gateway": {
+      "command": "node",
+      "args": [
+        "/Users/nebyougetaneh/Desktop/SafetyApp/remote-mcp-proxy/dist/index.js"
+      ],
+      "env": {
+        "REMOTE_API_URL": "https://mcp-http-gateway-867b.onrender.com"
+      }
+    }
+  }
+}
