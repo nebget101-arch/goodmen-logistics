@@ -10,17 +10,26 @@ import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { config } from '../config/config.js';
 
+// Parameterized configuration using environment variables
+const RAMP_TIME = __ENV.STRESS_RAMP_TIME || '2m';
+const STEADY_TIME = __ENV.STRESS_STEADY_TIME || '5m';
+const RECOVERY_TIME = __ENV.STRESS_RECOVERY_TIME || '5m';
+const TARGET_VU_1 = parseInt(__ENV.STRESS_TARGET_VU_1 || '20');
+const TARGET_VU_2 = parseInt(__ENV.STRESS_TARGET_VU_2 || '50');
+const TARGET_VU_3 = parseInt(__ENV.STRESS_TARGET_VU_3 || '100');
+const TARGET_VU_4 = parseInt(__ENV.STRESS_TARGET_VU_4 || '150');
+
 export const options = {
   stages: [
-    { duration: '2m', target: 20 },   // Normal load
-    { duration: '5m', target: 20 },   
-    { duration: '2m', target: 50 },   // Above normal
-    { duration: '5m', target: 50 },   
-    { duration: '2m', target: 100 },  // Stress level
-    { duration: '5m', target: 100 },  
-    { duration: '2m', target: 150 },  // Breaking point
-    { duration: '5m', target: 150 },  
-    { duration: '5m', target: 0 },    // Recovery
+    { duration: RAMP_TIME, target: TARGET_VU_1 },      // Normal load
+    { duration: STEADY_TIME, target: TARGET_VU_1 },   
+    { duration: RAMP_TIME, target: TARGET_VU_2 },      // Above normal
+    { duration: STEADY_TIME, target: TARGET_VU_2 },   
+    { duration: RAMP_TIME, target: TARGET_VU_3 },      // Stress level
+    { duration: STEADY_TIME, target: TARGET_VU_3 },  
+    { duration: RAMP_TIME, target: TARGET_VU_4 },      // Breaking point
+    { duration: STEADY_TIME, target: TARGET_VU_4 },  
+    { duration: RECOVERY_TIME, target: 0 },            // Recovery
   ],
   thresholds: {
     http_req_failed: ['rate<0.05'], // Allow higher error rate

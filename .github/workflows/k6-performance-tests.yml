@@ -15,6 +15,11 @@ on:
           - spike
           - soak
           - all
+      config:
+        description: 'Optional JSON config (e.g., {"smoke_vus":"5","smoke_duration":"2m"})'
+        required: false
+        default: '{}'
+        type: string
 
 jobs:
   k6-tests:
@@ -60,24 +65,54 @@ jobs:
       - name: Run K6 tests
         working-directory: k6-performance-tests
         run: |
+          # Parse JSON config and export as environment variables
+          CONFIG='${{ github.event.inputs.config }}'
+          if [ "$CONFIG" != "{}" ] && [ -n "$CONFIG" ]; then
+            echo "📝 Parsing custom configuration..."
+            echo "$CONFIG" | jq -r 'to_entries | .[] | "export \(.key)=\(.value)"' > /tmp/k6_env.sh
+            source /tmp/k6_env.sh
+            echo "Applied custom configuration"
+          fi
+          
           echo "Running ${{ github.event.inputs.test_type }} test..."
           case "${{ github.event.inputs.test_type }}" in
             smoke)
+              echo "📊 Smoke Test Configuration:"
+              echo "  VUs: ${VUS:-1}"
+              echo "  Duration: ${DURATION:-30s}"
               npm run test:smoke
               ;;
             load)
+              echo "📊 Load Test Configuration:"
+              echo "  Ramp Up: ${RAMP_UP_TIME:-2m}"
+              echo "  Steady Time: ${STEADY_TIME:-5m}"
+              echo "  Target VU Levels: ${TARGET_VU_1:-10} → ${TARGET_VU_2:-20} → ${TARGET_VU_3:-30}"
               npm run test:load
               ;;
             stress)
+              echo "📊 Stress Test Configuration:"
+              echo "  Ramp Time: ${STRESS_RAMP_TIME:-2m}"
+              echo "  Steady Time: ${STRESS_STEADY_TIME:-5m}"
+              echo "  Recovery: ${STRESS_RECOVERY_TIME:-5m}"
+              echo "  Target VU Levels: ${STRESS_TARGET_VU_1:-20} → ${STRESS_TARGET_VU_2:-50} → ${STRESS_TARGET_VU_3:-100} → ${STRESS_TARGET_VU_4:-150}"
               npm run test:stress
               ;;
             spike)
+              echo "📊 Spike Test Configuration:"
+              echo "  Normal VUs: ${SPIKE_NORMAL_VU:-5}"
+              echo "  Peak VUs: ${SPIKE_PEAK_VU:-100}"
+              echo "  Spike Up: ${SPIKE_UP_TIME:-30s}"
+              echo "  Sustain: ${SPIKE_SUSTAIN_TIME:-3m}"
               npm run test:spike
               ;;
             soak)
+              echo "📊 Soak Test Configuration:"
+              echo "  VUs: ${SOAK_VUS:-20}"
+              echo "  Duration: ${SOAK_DURATION:-1h}"
               npm run test:soak
               ;;
             all)
+              echo "📊 Running all tests with configured parameters"
               npm run test:all
               ;;
           esac

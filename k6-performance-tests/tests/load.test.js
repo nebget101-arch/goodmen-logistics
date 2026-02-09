@@ -11,15 +11,22 @@ import { check, group, sleep } from 'k6';
 import { config } from '../config/config.js';
 import { makeRequest, thinkTime, generateDriverData, generateVehicleData } from '../utils/helpers.js';
 
+// Parameterized configuration using environment variables
+const RAMP_UP_TIME = __ENV.RAMP_UP_TIME || '2m';
+const STEADY_TIME = __ENV.STEADY_TIME || '5m';
+const TARGET_VU_1 = parseInt(__ENV.TARGET_VU_1 || '10');
+const TARGET_VU_2 = parseInt(__ENV.TARGET_VU_2 || '20');
+const TARGET_VU_3 = parseInt(__ENV.TARGET_VU_3 || '30');
+
 export const options = {
   stages: [
-    { duration: '2m', target: 10 },  // Ramp up to 10 users
-    { duration: '5m', target: 10 },  // Stay at 10
-    { duration: '2m', target: 20 },  // Ramp to 20
-    { duration: '5m', target: 20 },  // Stay at 20
-    { duration: '2m', target: 30 },  // Ramp to 30
-    { duration: '5m', target: 30 },  // Stay at 30
-    { duration: '2m', target: 0 },   // Ramp down
+    { duration: RAMP_UP_TIME, target: TARGET_VU_1 },  // Ramp up to first level
+    { duration: STEADY_TIME, target: TARGET_VU_1 },   // Stay at first level
+    { duration: RAMP_UP_TIME, target: TARGET_VU_2 },  // Ramp to second level
+    { duration: STEADY_TIME, target: TARGET_VU_2 },   // Stay at second level
+    { duration: RAMP_UP_TIME, target: TARGET_VU_3 },  // Ramp to third level
+    { duration: STEADY_TIME, target: TARGET_VU_3 },   // Stay at third level
+    { duration: RAMP_UP_TIME, target: 0 },            // Ramp down
   ],
   thresholds: config.thresholds,
   tags: {

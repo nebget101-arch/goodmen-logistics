@@ -10,9 +10,13 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { config } from '../config/config.js';
 
+// Parameterized configuration using environment variables
+const VUS = parseInt(__ENV.SOAK_VUS || '20');
+const DURATION = __ENV.SOAK_DURATION || '1h';
+
 export const options = {
-  vus: 20,
-  duration: '1h',
+  vus: VUS,
+  duration: DURATION,
   thresholds: {
     http_req_failed: ['rate<0.01'],
     http_req_duration: ['p(95)<800'],
