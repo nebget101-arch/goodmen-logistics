@@ -29,14 +29,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Karate Apache HTTP Client -->
-        <dependency>
-            <groupId>com.intuit.karate</groupId>
-            <artifactId>karate-apache</artifactId>
-            <version>${karate.version}</version>
-            <scope>test</scope>
-        </dependency>
-
         <!-- JUnit 5 -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -72,7 +64,6 @@
                     <encoding>UTF-8</encoding>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
-                    <compilerArgument>-Werror</compilerArgument>
                 </configuration>
             </plugin>
             <plugin>

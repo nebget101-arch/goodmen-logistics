@@ -10,7 +10,7 @@ function fn() {
   // Base configuration for all environments
   var config = {
     env: env,
-    baseUrl: 'http://localhost:3000/api',
+    baseUrl: 'https://safetyapp-ln58.onrender.com/api',
     apiTimeout: 10000,
     retryInterval: 1000,
     maxRetries: 3
@@ -24,7 +24,7 @@ function fn() {
   } else if (env == 'staging') {
     config.baseUrl = 'http://staging.goodmenlogistics.com/api';
   } else if (env == 'prod') {
-    config.baseUrl = 'http://api.goodmenlogistics.com/api';
+    config.baseUrl = 'https://safetyapp-ln58.onrender.com/api';
   }
 
   // Common headers

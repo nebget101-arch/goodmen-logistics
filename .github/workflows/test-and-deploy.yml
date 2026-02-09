@@ -1,0 +1,71 @@
+name: Test and Deploy
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  cypress-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: goodmen-logistics/cypress-tests/package-lock.json
+
+      - name: Wait for deployment to be ready
+        run: |
+          echo "Waiting for https://safetyapp-ln58.onrender.com to be ready..."
+          for i in {1..30}; do
+            if curl -sf https://safetyapp-ln58.onrender.com/api/health > /dev/null; then
+              echo "✅ Application is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: Not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "❌ Application did not become ready in time"
+          exit 1
+
+      - name: Install Cypress dependencies
+        working-directory: ./goodmen-logistics/cypress-tests
+        run: npm install
+
+      - name: Run Cypress tests
+        working-directory: ./goodmen-logistics/cypress-tests
+        run: npx cypress run --config video=false
+
+      - name: Upload Cypress screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: goodmen-logistics/cypress-tests/cypress/screenshots
+          if-no-files-found: ignore
+
+      - name: Upload Cypress videos on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          path: goodmen-logistics/cypress-tests/cypress/videos
+          if-no-files-found: ignore
+
+  deploy:
+    needs: cypress-tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    
+    steps:
+      - name: Trigger Render deployment
+        run: |
+          echo "✅ All tests passed! Render will auto-deploy from this push."
+          echo "Monitor deployment at: https://dashboard.render.com"
