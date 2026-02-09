@@ -24,6 +24,43 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm run start
 
+  - type: web
+    name: mcp-http-gateway
+    runtime: node
+    plan: starter
+    rootDir: mcp-http-gateway
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_OWNER
+        value: nebget101-arch
+      - key: GITHUB_REPO
+        value: goodmen-logistics
+      - key: WORKFLOW_FILE
+        value: test-and-deploy.yml
+      - key: CONFLUENCE_BASE_URL
+        value: https://nebget101.atlassian.net/wiki
+      - key: CONFLUENCE_EMAIL
+        sync: false
+      - key: CONFLUENCE_API_TOKEN
+        sync: false
+      - key: CONFLUENCE_SPACE_KEY
+        value: SA
+      - key: JIRA_BASE_URL
+        value: https://nebget101.atlassian.net
+      - key: JIRA_EMAIL
+        sync: false
+      - key: JIRA_API_TOKEN
+        sync: false
+      - key: JIRA_PROJECT_KEY
+        value: KAN
+      - key: BACKEND_PATH
+        value: https://safetyapp-ln58.onrender.com
+      - key: PORT
+        value: 10001
+
 databases:
   - name: safetyapp-db
     databaseName: goodmen_logistics
