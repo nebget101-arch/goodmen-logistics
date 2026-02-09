@@ -13,20 +13,24 @@ export class GitHubService {
     this.workflowFile = workflowFile;
   }
 
-  async triggerWorkflow(branch: string = "main") {
+  async triggerWorkflow(branch: string = "main", workflowFile?: string, inputs?: Record<string, any>) {
     try {
+      const workflow = workflowFile || this.workflowFile;
       const response = await this.octokit.actions.createWorkflowDispatch({
         owner: this.owner,
         repo: this.repo,
-        workflow_id: this.workflowFile,
+        workflow_id: workflow,
         ref: branch,
+        inputs: inputs || {},
       });
 
       return {
         success: true,
-        message: `Workflow triggered successfully on branch: ${branch}`,
+        message: `Workflow ${workflow} triggered successfully on branch: ${branch}`,
         status: response.status,
         branch,
+        workflow,
+        inputs,
       };
     } catch (error: any) {
       return {
@@ -37,12 +41,13 @@ export class GitHubService {
     }
   }
 
-  async getWorkflowRuns(limit: number = 10, branch?: string) {
+  async getWorkflowRuns(limit: number = 10, branch?: string, workflowFile?: string) {
     try {
+      const workflow = workflowFile || this.workflowFile;
       const params: any = {
         owner: this.owner,
         repo: this.repo,
-        workflow_id: this.workflowFile,
+        workflow_id: workflow,
         per_page: limit,
       };
 

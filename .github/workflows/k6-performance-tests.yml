@@ -1,0 +1,212 @@
+name: K6 Performance Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of test to run'
+        required: true
+        default: 'smoke'
+        type: choice
+        options:
+          - smoke
+          - load
+          - stress
+          - spike
+          - soak
+          - all
+
+jobs:
+  k6-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: k6-performance-tests/package-lock.json
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Install dependencies
+        working-directory: k6-performance-tests
+        run: npm ci
+
+      - name: Wait for deployment to be ready
+        run: |
+          echo "Waiting for https://safetyapp-ln58.onrender.com to be ready..."
+          for i in {1..30}; do
+            if curl -sf https://safetyapp-ln58.onrender.com/api/health > /dev/null; then
+              echo "✅ Application is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: Not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "❌ Application failed to respond"
+          exit 1
+
+      - name: Run K6 tests
+        working-directory: k6-performance-tests
+        run: |
+          echo "Running ${{ github.event.inputs.test_type }} test..."
+          case "${{ github.event.inputs.test_type }}" in
+            smoke)
+              npm run test:smoke
+              ;;
+            load)
+              npm run test:load
+              ;;
+            stress)
+              npm run test:stress
+              ;;
+            spike)
+              npm run test:spike
+              ;;
+            soak)
+              npm run test:soak
+              ;;
+            all)
+              npm run test:all
+              ;;
+          esac
+
+      - name: Cleanup test data
+        if: always()
+        working-directory: k6-performance-tests
+        run: |
+          echo "Cleaning up test data..."
+          npm run cleanup
+
+      - name: Generate performance reports
+        if: always()
+        working-directory: k6-performance-tests
+        run: |
+          echo "Generating performance reports..."
+          npm run report || echo "Report generation completed"
+
+      - name: Upload test results as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-performance-results-${{ github.event.inputs.test_type }}-${{ github.run_number }}
+          path: |
+            k6-performance-tests/reports/*.json
+            k6-performance-tests/reports/*.html
+            k6-performance-tests/reports/*.md
+          retention-days: 30
+
+      - name: Parse test results
+        if: always()
+        id: parse-results
+        working-directory: k6-performance-tests
+        run: |
+          # Try to find the most recent summary JSON file
+          SUMMARY_FILE=$(ls -t reports/*summary.json 2>/dev/null | head -1)
+          
+          if [ -f "$SUMMARY_FILE" ]; then
+            echo "Found summary file: $SUMMARY_FILE"
+            TOTAL_REQUESTS=$(jq -r '.totalRequests // "N/A"' "$SUMMARY_FILE")
+            FAILED_REQUESTS=$(jq -r '.failedRequests // 0' "$SUMMARY_FILE")
+            AVG_RESPONSE=$(jq -r '.avgResponseTime // "N/A"' "$SUMMARY_FILE")
+            P95_RESPONSE=$(jq -r '.p95ResponseTime // "N/A"' "$SUMMARY_FILE")
+            PASSED=$(jq -r '.passed // false' "$SUMMARY_FILE")
+            
+            echo "total_requests=$TOTAL_REQUESTS" >> $GITHUB_OUTPUT
+            echo "failed_requests=$FAILED_REQUESTS" >> $GITHUB_OUTPUT
+            echo "avg_response=$AVG_RESPONSE" >> $GITHUB_OUTPUT
+            echo "p95_response=$P95_RESPONSE" >> $GITHUB_OUTPUT
+            echo "test_passed=$PASSED" >> $GITHUB_OUTPUT
+            echo "has_results=true" >> $GITHUB_OUTPUT
+          else
+            echo "No summary file found, will use basic results"
+            echo "has_results=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post results to GitHub
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const testType = '${{ github.event.inputs.test_type }}';
+            const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const hasResults = '${{ steps.parse-results.outputs.has_results }}' === 'true';
+            const jobStatus = '${{ job.status }}';
+            
+            let resultsBody = `## 🚀 K6 Performance Test Results
+            
+            **Test Type:** ${testType.toUpperCase()}
+            **Triggered by:** @${{ github.actor }}
+            **Status:** ${jobStatus === 'success' ? '✅ Completed' : '❌ Failed'}
+            **Run:** [#${{ github.run_number }}](${runUrl})
+            
+            `;
+            
+            if (hasResults) {
+              const totalRequests = '${{ steps.parse-results.outputs.total_requests }}';
+              const failedRequests = '${{ steps.parse-results.outputs.failed_requests }}';
+              const avgResponse = '${{ steps.parse-results.outputs.avg_response }}';
+              const p95Response = '${{ steps.parse-results.outputs.p95_response }}';
+              const testPassed = '${{ steps.parse-results.outputs.test_passed }}' === 'true';
+              
+              resultsBody += `### 📊 Metrics Summary
+              
+              - **Total Requests:** ${totalRequests}
+              - **Failed Requests:** ${failedRequests}
+              - **Average Response Time:** ${avgResponse}ms
+              - **95th Percentile:** ${p95Response}ms
+              - **Test Status:** ${testPassed ? '✅ Passed' : '❌ Failed'}
+              
+              `;
+            } else {
+              resultsBody += `### ℹ️ Test Execution
+              
+              Test execution completed. Detailed metrics may not be available.
+              
+              `;
+            }
+            
+            resultsBody += `### 📥 Download Reports
+            
+            View and download detailed reports from the [Actions run page](${runUrl}).
+            
+            **Available Reports:**
+            - JSON summary
+            - HTML performance report
+            - Markdown summary
+            
+            ---
+            *Performance test completed at ${new Date().toISOString()}*
+            `;
+            
+            // Create an issue comment with results
+            try {
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body: resultsBody
+              });
+              console.log('✅ Posted results as commit comment');
+            } catch (error) {
+              console.log('Could not post commit comment, posting as discussion instead');
+              console.log(resultsBody);
+            }
+
+      - name: Fail if tests failed
+        if: failure()
+        run: |
+          echo "❌ K6 performance tests failed"
+          exit 1
+

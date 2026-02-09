@@ -47,7 +47,7 @@ class RemoteMCPProxy {
         // GitHub Actions Tools
         {
           name: 'trigger_github_workflow',
-          description: 'Trigger a GitHub Actions workflow',
+          description: 'Trigger a GitHub Actions workflow (Cypress tests or K6 performance tests)',
           inputSchema: {
             type: 'object',
             properties: {
@@ -55,6 +55,56 @@ class RemoteMCPProxy {
                 type: 'string',
                 description: 'Branch to run the workflow on',
                 default: 'main'
+              },
+              workflow: {
+                type: 'string',
+                description: 'Workflow file to trigger (test-and-deploy.yml or k6-performance-tests.yml)',
+                enum: ['test-and-deploy.yml', 'k6-performance-tests.yml']
+              },
+              inputs: {
+                type: 'object',
+                description: 'Workflow inputs (e.g., {test_type: "smoke"} for K6)',
+                properties: {
+                  test_type: {
+                    type: 'string',
+                    description: 'Type of K6 test (smoke, load, stress, spike, soak, all)',
+                    enum: ['smoke', 'load', 'stress', 'spike', 'soak', 'all']
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          name: 'trigger_cypress_tests',
+          description: 'Trigger Cypress E2E tests workflow',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              branch: {
+                type: 'string',
+                description: 'Branch to test',
+                default: 'main'
+              }
+            }
+          }
+        },
+        {
+          name: 'trigger_k6_tests',
+          description: 'Trigger K6 performance tests with specific test type',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              branch: {
+                type: 'string',
+                description: 'Branch to test',
+                default: 'main'
+              },
+              test_type: {
+                type: 'string',
+                description: 'Type of performance test to run',
+                enum: ['smoke', 'load', 'stress', 'spike', 'soak', 'all'],
+                default: 'smoke'
               }
             }
           }
@@ -73,6 +123,10 @@ class RemoteMCPProxy {
               branch: {
                 type: 'string',
                 description: 'Filter by branch'
+              },
+              workflow: {
+                type: 'string',
+                description: 'Filter by workflow file'
               }
             }
           }
@@ -347,6 +401,21 @@ class RemoteMCPProxy {
           // GitHub Actions
           case 'trigger_github_workflow':
             response = await axios.post(`${REMOTE_API_URL}/github/trigger-workflow`, args);
+            break;
+          case 'trigger_cypress_tests':
+            response = await axios.post(`${REMOTE_API_URL}/github/trigger-workflow`, {
+              branch: args.branch || 'main',
+              workflow: 'test-and-deploy.yml'
+            });
+            break;
+          case 'trigger_k6_tests':
+            response = await axios.post(`${REMOTE_API_URL}/github/trigger-workflow`, {
+              branch: args.branch || 'main',
+              workflow: 'k6-performance-tests.yml',
+              inputs: {
+                test_type: args.test_type || 'smoke'
+              }
+            });
             break;
           case 'get_workflow_runs':
             response = await axios.get(`${REMOTE_API_URL}/github/workflow-runs`, { params: args });

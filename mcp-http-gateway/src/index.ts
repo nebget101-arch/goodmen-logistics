@@ -58,8 +58,8 @@ app.get('/health', (req, res) => {
 // GitHub Actions endpoints
 app.post('/github/trigger-workflow', async (req, res) => {
   try {
-    const { branch = 'main' } = req.body;
-    const result = await githubService.triggerWorkflow(branch);
+    const { branch = 'main', workflow, inputs } = req.body;
+    const result = await githubService.triggerWorkflow(branch, workflow, inputs);
     res.json(result);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -70,7 +70,8 @@ app.get('/github/workflow-runs', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
     const branch = req.query.branch as string;
-    const result = await githubService.getWorkflowRuns(limit, branch);
+    const workflow = req.query.workflow as string;
+    const result = await githubService.getWorkflowRuns(limit, branch, workflow);
     res.json(result);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
