@@ -142,12 +142,13 @@ jobs:
             const testType = '${{ github.event.inputs.test_type }}';
             const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
             const hasResults = '${{ steps.parse-results.outputs.has_results }}' === 'true';
+            const jobStatus = '${{ job.status }}';
             
             let resultsBody = `## 🚀 K6 Performance Test Results
             
             **Test Type:** ${testType.toUpperCase()}
             **Triggered by:** @${{ github.actor }}
-            **Status:** ${{ job.status === 'success' ? '✅ Completed' : '❌ Failed' }}
+            **Status:** ${jobStatus === 'success' ? '✅ Completed' : '❌ Failed'}
             **Run:** [#${{ github.run_number }}](${runUrl})
             
             `;
