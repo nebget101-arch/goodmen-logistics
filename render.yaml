@@ -4,7 +4,11 @@ services:
     runtime: node
     plan: starter
     rootDir: goodmen-logistics
-    buildCommand: cd frontend && npm install --include=dev && npm run build && cd ../backend && npm install
+    buildCommand: |
+      # Install Dynatrace OneAgent
+      wget -O Dynatrace-OneAgent-Linux.sh "https://muz70888.live.dynatrace.com/api/v1/deployment/installer/agent/unix/default/latest?arch=x86&flavor=default" --header="Authorization: Api-Token $DYNATRACE_PAAS_TOKEN" && \
+      /bin/sh Dynatrace-OneAgent-Linux.sh --set-app-log-content-access=true --set-monitoring-mode=fullstack && \
+      cd frontend && npm install --include=dev && npm run build && cd ../backend && npm install
     startCommand: node backend/server.js
     envVars:
       - key: DATABASE_URL
@@ -15,6 +19,12 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: DYNATRACE_PAAS_TOKEN
+        sync: false
+      - key: DYNATRACE_ENVIRONMENT_URL
+        sync: false
+      - key: DYNATRACE_API_TOKEN
+        sync: false
 
   - type: web
     name: goodmen-logs-mcp
@@ -29,9 +39,15 @@ services:
     runtime: node
     plan: starter
     rootDir: mcp-http-gateway
-    buildCommand: npm install && npm run build
+    buildCommand: |
+      # Install Dynatrace OneAgent
+      wget -O Dynatrace-OneAgent-Linux.sh "https://muz70888.live.dynatrace.com/api/v1/deployment/installer/agent/unix/default/latest?arch=x86&flavor=default" --header="Authorization: Api-Token $DYNATRACE_PAAS_TOKEN" && \
+      /bin/sh Dynatrace-OneAgent-Linux.sh --set-app-log-content-access=true --set-monitoring-mode=fullstack && \
+      npm install && npm run build
     startCommand: npm start
     envVars:
+      - key: DYNATRACE_PAAS_TOKEN
+        sync: false
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_OWNER
