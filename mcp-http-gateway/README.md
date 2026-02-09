@@ -93,6 +93,27 @@ GET /confluence/pages?limit=25
 
 ### Logs Service
 
+**Fetch Logs**
+```bash
+GET /logs/fetch?level=ERROR&limit=100&startDate=2026-02-09&endDate=2026-02-09&apiPath=/api/drivers
+Query Parameters:
+  - level: ERROR, WARN, INFO, or all
+  - limit: number of logs to return
+  - startDate: filter by start date (YYYY-MM-DD)
+  - endDate: filter by end date (YYYY-MM-DD)
+  - apiPath: filter by API endpoint path
+```
+
+**Generate Daily Report**
+```bash
+POST /logs/daily-report
+Body: {
+  "date": "2026-02-09",
+  "includeErrors": true,
+  "includeStats": true
+}
+```
+
 **Get Backend Health**
 ```bash
 GET /logs/backend

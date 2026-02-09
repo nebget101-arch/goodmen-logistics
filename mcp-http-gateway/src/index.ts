@@ -5,6 +5,7 @@ import { GitHubService } from './services/github-service.js';
 import { ConfluenceService } from './services/confluence-service.js';
 import { ConfluenceService as LogsConfluenceService } from './services/logs-confluence-service.js';
 import { JiraService } from './services/jira-service.js';
+import { LogsService } from './services/logs-service.js';
 import axios from 'axios';
 
 dotenv.config();
@@ -43,6 +44,8 @@ const jiraService = new JiraService({
   apiToken: process.env.JIRA_API_TOKEN!,
   projectKey: process.env.JIRA_PROJECT_KEY!
 });
+
+const logsService = new LogsService(process.env.BACKEND_PATH!);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -137,6 +140,35 @@ app.get('/confluence/pages', async (req, res) => {
 });
 
 // Logs Service endpoints
+app.get('/logs/fetch', async (req, res) => {
+  try {
+    const query = {
+      level: req.query.level as string,
+      startDate: req.query.startDate as string,
+      endDate: req.query.endDate as string,
+      apiPath: req.query.apiPath as string,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined
+    };
+    const logs = await logsService.fetchLogs(query);
+    res.json(logs);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/logs/daily-report', async (req, res) => {
+  try {
+    const { date, includeErrors = true, includeStats = true } = req.body;
+    if (!date) {
+      return res.status(400).json({ error: 'date is required' });
+    }
+    const report = await logsService.generateDailyReport({ date, includeErrors, includeStats });
+    res.json({ report });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/logs/backend', async (req, res) => {
   try {
     const backendUrl = process.env.BACKEND_PATH || 'https://safetyapp-ln58.onrender.com';
