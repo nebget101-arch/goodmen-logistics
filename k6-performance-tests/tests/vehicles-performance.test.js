@@ -10,11 +10,17 @@ import { check, group, sleep } from 'k6';
 import { config } from '../config/config.js';
 import { makeRequest, thinkTime, validateResponse } from '../utils/helpers.js';
 
+// Parameterized configuration using environment variables
+const RAMP_UP_TIME = __ENV.VEHICLES_RAMP_UP || '30s';
+const STEADY_TIME = __ENV.VEHICLES_STEADY || '1m';
+const RAMP_DOWN_TIME = __ENV.VEHICLES_RAMP_DOWN || '20s';
+const TARGET_VU = parseInt(__ENV.VEHICLES_TARGET_VU || '10');
+
 export const options = {
   stages: [
-    { duration: '30s', target: 10 }, // Ramp up
-    { duration: '1m', target: 10 },  // Steady state
-    { duration: '20s', target: 0 },  // Ramp down
+    { duration: RAMP_UP_TIME, target: TARGET_VU },   // Ramp up
+    { duration: STEADY_TIME, target: TARGET_VU },    // Steady state
+    { duration: RAMP_DOWN_TIME, target: 0 },         // Ramp down
   ],
   thresholds: {
     http_req_failed: ['rate<0.05'],

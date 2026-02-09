@@ -10,13 +10,21 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { config } from '../config/config.js';
 
+// Parameterized configuration using environment variables
+const NORMAL_VU = parseInt(__ENV.SPIKE_NORMAL_VU || '5');
+const SPIKE_VU = parseInt(__ENV.SPIKE_PEAK_VU || '100');
+const SPIKE_UP_TIME = __ENV.SPIKE_UP_TIME || '30s';
+const SPIKE_SUSTAIN_TIME = __ENV.SPIKE_SUSTAIN_TIME || '3m';
+const SPIKE_DOWN_TIME = __ENV.SPIKE_DOWN_TIME || '30s';
+const RECOVERY_TIME = __ENV.SPIKE_RECOVERY_TIME || '2m';
+
 export const options = {
   stages: [
-    { duration: '30s', target: 5 },    // Normal load
-    { duration: '30s', target: 100 },  // Spike!
-    { duration: '3m', target: 100 },   // Sustain spike
-    { duration: '30s', target: 5 },    // Return to normal
-    { duration: '2m', target: 5 },     // Recovery period
+    { duration: SPIKE_UP_TIME, target: NORMAL_VU },      // Normal load
+    { duration: SPIKE_UP_TIME, target: SPIKE_VU },       // Spike!
+    { duration: SPIKE_SUSTAIN_TIME, target: SPIKE_VU },  // Sustain spike
+    { duration: SPIKE_DOWN_TIME, target: NORMAL_VU },    // Return to normal
+    { duration: RECOVERY_TIME, target: NORMAL_VU },      // Recovery period
   ],
   thresholds: {
     http_req_failed: ['rate<0.05'],

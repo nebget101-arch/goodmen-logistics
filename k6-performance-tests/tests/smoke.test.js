@@ -11,9 +11,13 @@ import { check, group, sleep } from 'k6';
 import { config } from '../config/config.js';
 import { makeRequest, thinkTime, validateResponse } from '../utils/helpers.js';
 
+// Parameterized configuration using environment variables
+const VUS = parseInt(__ENV.VUS || '1');
+const DURATION = __ENV.DURATION || '30s';
+
 export const options = {
-  vus: 1,
-  duration: '30s',
+  vus: VUS,
+  duration: DURATION,
   thresholds: {
     http_req_failed: ['rate<0.01'],
     http_req_duration: ['p(95)<1000'],
