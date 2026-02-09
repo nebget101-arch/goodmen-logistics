@@ -106,10 +106,49 @@ class RemoteMCPProxy {
                 enum: ['smoke', 'load', 'stress', 'spike', 'soak', 'all'],
                 default: 'smoke'
               },
-              config: {
-                type: 'object',
-                description: 'Optional test configuration. Use parameter names as keys (e.g., VUS, DURATION, RAMP_UP_TIME, TARGET_VU_1, STRESS_TARGET_VU_3, SPIKE_PEAK_VU, SOAK_VUS, VEHICLES_TARGET_VU, etc.)',
-                additionalProperties: true
+              VUS: {
+                type: 'string',
+                description: 'Smoke test: Number of virtual users (e.g., "5")'
+              },
+              DURATION: {
+                type: 'string',
+                description: 'Smoke test: Duration (e.g., "1m", "30s")'
+              },
+              RAMP_UP_TIME: {
+                type: 'string',
+                description: 'Load test: Ramp up time (e.g., "3m")'
+              },
+              STEADY_TIME: {
+                type: 'string',
+                description: 'Load test: Steady time (e.g., "10m")'
+              },
+              TARGET_VU_1: {
+                type: 'string',
+                description: 'Load test: Target VU level 1 (e.g., "15")'
+              },
+              TARGET_VU_2: {
+                type: 'string',
+                description: 'Load test: Target VU level 2 (e.g., "30")'
+              },
+              TARGET_VU_3: {
+                type: 'string',
+                description: 'Load test: Target VU level 3 (e.g., "45")'
+              },
+              STRESS_TARGET_VU_4: {
+                type: 'string',
+                description: 'Stress test: Breaking point VUs (e.g., "200")'
+              },
+              SPIKE_PEAK_VU: {
+                type: 'string',
+                description: 'Spike test: Peak VUs (e.g., "150")'
+              },
+              SOAK_VUS: {
+                type: 'string',
+                description: 'Soak test: Virtual users (e.g., "30")'
+              },
+              SOAK_DURATION: {
+                type: 'string',
+                description: 'Soak test: Duration (e.g., "2h", "30m")'
               }
             }
           }
@@ -418,12 +457,26 @@ class RemoteMCPProxy {
               test_type: args.test_type || 'smoke'
             };
             
-            // If config object is provided, convert it to JSON string
-            if (args.config && typeof args.config === 'object') {
-              k6Inputs.config = JSON.stringify(args.config);
-            } else {
-              k6Inputs.config = '{}';
-            }
+            // Build config object from provided parameters
+            const configObj: Record<string, string> = {};
+            const configParams = [
+              'VUS', 'DURATION', 'RAMP_UP_TIME', 'STEADY_TIME', 
+              'TARGET_VU_1', 'TARGET_VU_2', 'TARGET_VU_3',
+              'STRESS_RAMP_TIME', 'STRESS_STEADY_TIME', 'STRESS_RECOVERY_TIME',
+              'STRESS_TARGET_VU_1', 'STRESS_TARGET_VU_2', 'STRESS_TARGET_VU_3', 'STRESS_TARGET_VU_4',
+              'SPIKE_NORMAL_VU', 'SPIKE_PEAK_VU', 'SPIKE_UP_TIME', 'SPIKE_SUSTAIN_TIME', 
+              'SPIKE_DOWN_TIME', 'SPIKE_RECOVERY_TIME',
+              'SOAK_VUS', 'SOAK_DURATION',
+              'VEHICLES_RAMP_UP', 'VEHICLES_STEADY', 'VEHICLES_RAMP_DOWN', 'VEHICLES_TARGET_VU'
+            ];
+            
+            configParams.forEach(param => {
+              if (args[param]) {
+                configObj[param] = args[param];
+              }
+            });
+            
+            k6Inputs.config = Object.keys(configObj).length > 0 ? JSON.stringify(configObj) : '{}';
             
             response = await axios.post(`${REMOTE_API_URL}/github/trigger-workflow`, {
               branch: args.branch || 'main',
