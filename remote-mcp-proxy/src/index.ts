@@ -91,7 +91,7 @@ class RemoteMCPProxy {
         },
         {
           name: 'trigger_k6_tests',
-          description: 'Trigger K6 performance tests with specific test type and optional parameters',
+          description: 'Trigger K6 performance tests with specific test type and optional custom configuration',
           inputSchema: {
             type: 'object',
             properties: {
@@ -106,109 +106,10 @@ class RemoteMCPProxy {
                 enum: ['smoke', 'load', 'stress', 'spike', 'soak', 'all'],
                 default: 'smoke'
               },
-              smoke_vus: {
-                type: 'string',
-                description: 'Smoke: VUs (default: 1)',
-              },
-              smoke_duration: {
-                type: 'string',
-                description: 'Smoke: Duration (default: 30s)',
-              },
-              load_ramp_up: {
-                type: 'string',
-                description: 'Load: Ramp up time (default: 2m)',
-              },
-              load_steady: {
-                type: 'string',
-                description: 'Load: Steady time (default: 5m)',
-              },
-              load_target_vu1: {
-                type: 'string',
-                description: 'Load: Target VU level 1 (default: 10)',
-              },
-              load_target_vu2: {
-                type: 'string',
-                description: 'Load: Target VU level 2 (default: 20)',
-              },
-              load_target_vu3: {
-                type: 'string',
-                description: 'Load: Target VU level 3 (default: 30)',
-              },
-              stress_ramp_time: {
-                type: 'string',
-                description: 'Stress: Ramp time (default: 2m)',
-              },
-              stress_steady_time: {
-                type: 'string',
-                description: 'Stress: Steady time (default: 5m)',
-              },
-              stress_recovery_time: {
-                type: 'string',
-                description: 'Stress: Recovery time (default: 5m)',
-              },
-              stress_target_vu1: {
-                type: 'string',
-                description: 'Stress: Normal VUs (default: 20)',
-              },
-              stress_target_vu2: {
-                type: 'string',
-                description: 'Stress: Above normal VUs (default: 50)',
-              },
-              stress_target_vu3: {
-                type: 'string',
-                description: 'Stress: Stress level VUs (default: 100)',
-              },
-              stress_target_vu4: {
-                type: 'string',
-                description: 'Stress: Breaking point VUs (default: 150)',
-              },
-              spike_normal_vu: {
-                type: 'string',
-                description: 'Spike: Normal VUs (default: 5)',
-              },
-              spike_peak_vu: {
-                type: 'string',
-                description: 'Spike: Peak VUs (default: 100)',
-              },
-              spike_up_time: {
-                type: 'string',
-                description: 'Spike: Up time (default: 30s)',
-              },
-              spike_sustain_time: {
-                type: 'string',
-                description: 'Spike: Sustain time (default: 3m)',
-              },
-              spike_down_time: {
-                type: 'string',
-                description: 'Spike: Down time (default: 30s)',
-              },
-              spike_recovery_time: {
-                type: 'string',
-                description: 'Spike: Recovery time (default: 2m)',
-              },
-              soak_vus: {
-                type: 'string',
-                description: 'Soak: VUs (default: 20)',
-              },
-              soak_duration: {
-                type: 'string',
-                description: 'Soak: Duration (default: 1h)',
-              },
-              vehicles_ramp_up: {
-                type: 'string',
-                description: 'Vehicles: Ramp up time (default: 30s)',
-              },
-              vehicles_steady: {
-                type: 'string',
-                description: 'Vehicles: Steady time (default: 1m)',
-              },
-              vehicles_ramp_down: {
-                type: 'string',
-                description: 'Vehicles: Ramp down time (default: 20s)',
-              },
-              vehicles_target_vu: {
-                type: 'string',
-                description: 'Vehicles: Target VUs (default: 10)',
+              config: {
+                type: 'object',
+                description: 'Optional test configuration. Use parameter names as keys (e.g., VUS, DURATION, RAMP_UP_TIME, TARGET_VU_1, STRESS_TARGET_VU_3, SPIKE_PEAK_VU, SOAK_VUS, VEHICLES_TARGET_VU, etc.)',
+                additionalProperties: true
               }
             }
           }
@@ -516,33 +417,13 @@ class RemoteMCPProxy {
             const k6Inputs: Record<string, any> = {
               test_type: args.test_type || 'smoke'
             };
-            // Add optional parameters if provided
-            if (args.smoke_vus) k6Inputs.smoke_vus = args.smoke_vus;
-            if (args.smoke_duration) k6Inputs.smoke_duration = args.smoke_duration;
-            if (args.load_ramp_up) k6Inputs.load_ramp_up = args.load_ramp_up;
-            if (args.load_steady) k6Inputs.load_steady = args.load_steady;
-            if (args.load_target_vu1) k6Inputs.load_target_vu1 = args.load_target_vu1;
-            if (args.load_target_vu2) k6Inputs.load_target_vu2 = args.load_target_vu2;
-            if (args.load_target_vu3) k6Inputs.load_target_vu3 = args.load_target_vu3;
-            if (args.stress_ramp_time) k6Inputs.stress_ramp_time = args.stress_ramp_time;
-            if (args.stress_steady_time) k6Inputs.stress_steady_time = args.stress_steady_time;
-            if (args.stress_recovery_time) k6Inputs.stress_recovery_time = args.stress_recovery_time;
-            if (args.stress_target_vu1) k6Inputs.stress_target_vu1 = args.stress_target_vu1;
-            if (args.stress_target_vu2) k6Inputs.stress_target_vu2 = args.stress_target_vu2;
-            if (args.stress_target_vu3) k6Inputs.stress_target_vu3 = args.stress_target_vu3;
-            if (args.stress_target_vu4) k6Inputs.stress_target_vu4 = args.stress_target_vu4;
-            if (args.spike_normal_vu) k6Inputs.spike_normal_vu = args.spike_normal_vu;
-            if (args.spike_peak_vu) k6Inputs.spike_peak_vu = args.spike_peak_vu;
-            if (args.spike_up_time) k6Inputs.spike_up_time = args.spike_up_time;
-            if (args.spike_sustain_time) k6Inputs.spike_sustain_time = args.spike_sustain_time;
-            if (args.spike_down_time) k6Inputs.spike_down_time = args.spike_down_time;
-            if (args.spike_recovery_time) k6Inputs.spike_recovery_time = args.spike_recovery_time;
-            if (args.soak_vus) k6Inputs.soak_vus = args.soak_vus;
-            if (args.soak_duration) k6Inputs.soak_duration = args.soak_duration;
-            if (args.vehicles_ramp_up) k6Inputs.vehicles_ramp_up = args.vehicles_ramp_up;
-            if (args.vehicles_steady) k6Inputs.vehicles_steady = args.vehicles_steady;
-            if (args.vehicles_ramp_down) k6Inputs.vehicles_ramp_down = args.vehicles_ramp_down;
-            if (args.vehicles_target_vu) k6Inputs.vehicles_target_vu = args.vehicles_target_vu;
+            
+            // If config object is provided, convert it to JSON string
+            if (args.config && typeof args.config === 'object') {
+              k6Inputs.config = JSON.stringify(args.config);
+            } else {
+              k6Inputs.config = '{}';
+            }
             
             response = await axios.post(`${REMOTE_API_URL}/github/trigger-workflow`, {
               branch: args.branch || 'main',

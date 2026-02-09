@@ -15,116 +15,11 @@ on:
           - spike
           - soak
           - all
-      # Smoke Test Parameters
-      smoke_vus:
-        description: 'Smoke Test: Virtual Users'
+      config:
+        description: 'Optional JSON config (e.g., {"smoke_vus":"5","smoke_duration":"2m"})'
         required: false
-        default: '1'
-      smoke_duration:
-        description: 'Smoke Test: Duration (e.g., 30s, 1m)'
-        required: false
-        default: '30s'
-      # Load Test Parameters
-      load_ramp_up:
-        description: 'Load Test: Ramp up time (e.g., 2m, 5m)'
-        required: false
-        default: '2m'
-      load_steady:
-        description: 'Load Test: Steady state time (e.g., 5m, 10m)'
-        required: false
-        default: '5m'
-      load_target_vu1:
-        description: 'Load Test: Target VU Level 1'
-        required: false
-        default: '10'
-      load_target_vu2:
-        description: 'Load Test: Target VU Level 2'
-        required: false
-        default: '20'
-      load_target_vu3:
-        description: 'Load Test: Target VU Level 3'
-        required: false
-        default: '30'
-      # Stress Test Parameters
-      stress_ramp_time:
-        description: 'Stress Test: Ramp time between levels'
-        required: false
-        default: '2m'
-      stress_steady_time:
-        description: 'Stress Test: Steady time at each level'
-        required: false
-        default: '5m'
-      stress_recovery_time:
-        description: 'Stress Test: Recovery time'
-        required: false
-        default: '5m'
-      stress_target_vu1:
-        description: 'Stress Test: Normal load VUs'
-        required: false
-        default: '20'
-      stress_target_vu2:
-        description: 'Stress Test: Above normal VUs'
-        required: false
-        default: '50'
-      stress_target_vu3:
-        description: 'Stress Test: Stress level VUs'
-        required: false
-        default: '100'
-      stress_target_vu4:
-        description: 'Stress Test: Breaking point VUs'
-        required: false
-        default: '150'
-      # Spike Test Parameters
-      spike_normal_vu:
-        description: 'Spike Test: Normal load VUs'
-        required: false
-        default: '5'
-      spike_peak_vu:
-        description: 'Spike Test: Peak spike VUs'
-        required: false
-        default: '100'
-      spike_up_time:
-        description: 'Spike Test: Time to spike (e.g., 30s)'
-        required: false
-        default: '30s'
-      spike_sustain_time:
-        description: 'Spike Test: Sustain spike duration'
-        required: false
-        default: '3m'
-      spike_down_time:
-        description: 'Spike Test: Time to return to normal'
-        required: false
-        default: '30s'
-      spike_recovery_time:
-        description: 'Spike Test: Recovery period'
-        required: false
-        default: '2m'
-      # Soak Test Parameters
-      soak_vus:
-        description: 'Soak Test: Virtual Users'
-        required: false
-        default: '20'
-      soak_duration:
-        description: 'Soak Test: Duration (e.g., 1h, 30m)'
-        required: false
-        default: '1h'
-      # Vehicles Test Parameters
-      vehicles_ramp_up:
-        description: 'Vehicles Test: Ramp up time'
-        required: false
-        default: '30s'
-      vehicles_steady:
-        description: 'Vehicles Test: Steady state time'
-        required: false
-        default: '1m'
-      vehicles_ramp_down:
-        description: 'Vehicles Test: Ramp down time'
-        required: false
-        default: '20s'
-      vehicles_target_vu:
-        description: 'Vehicles Test: Target VUs'
-        required: false
-        default: '10'
+        default: '{}'
+        type: string
 
 jobs:
   k6-tests:
@@ -169,40 +64,16 @@ jobs:
 
       - name: Run K6 tests
         working-directory: k6-performance-tests
-        env:
-          # Smoke test parameters
-          VUS: ${{ github.event.inputs.smoke_vus }}
-          DURATION: ${{ github.event.inputs.smoke_duration }}
-          # Load test parameters
-          RAMP_UP_TIME: ${{ github.event.inputs.load_ramp_up }}
-          STEADY_TIME: ${{ github.event.inputs.load_steady }}
-          TARGET_VU_1: ${{ github.event.inputs.load_target_vu1 }}
-          TARGET_VU_2: ${{ github.event.inputs.load_target_vu2 }}
-          TARGET_VU_3: ${{ github.event.inputs.load_target_vu3 }}
-          # Stress test parameters
-          STRESS_RAMP_TIME: ${{ github.event.inputs.stress_ramp_time }}
-          STRESS_STEADY_TIME: ${{ github.event.inputs.stress_steady_time }}
-          STRESS_RECOVERY_TIME: ${{ github.event.inputs.stress_recovery_time }}
-          STRESS_TARGET_VU_1: ${{ github.event.inputs.stress_target_vu1 }}
-          STRESS_TARGET_VU_2: ${{ github.event.inputs.stress_target_vu2 }}
-          STRESS_TARGET_VU_3: ${{ github.event.inputs.stress_target_vu3 }}
-          STRESS_TARGET_VU_4: ${{ github.event.inputs.stress_target_vu4 }}
-          # Spike test parameters
-          SPIKE_NORMAL_VU: ${{ github.event.inputs.spike_normal_vu }}
-          SPIKE_PEAK_VU: ${{ github.event.inputs.spike_peak_vu }}
-          SPIKE_UP_TIME: ${{ github.event.inputs.spike_up_time }}
-          SPIKE_SUSTAIN_TIME: ${{ github.event.inputs.spike_sustain_time }}
-          SPIKE_DOWN_TIME: ${{ github.event.inputs.spike_down_time }}
-          SPIKE_RECOVERY_TIME: ${{ github.event.inputs.spike_recovery_time }}
-          # Soak test parameters
-          SOAK_VUS: ${{ github.event.inputs.soak_vus }}
-          SOAK_DURATION: ${{ github.event.inputs.soak_duration }}
-          # Vehicles test parameters
-          VEHICLES_RAMP_UP: ${{ github.event.inputs.vehicles_ramp_up }}
-          VEHICLES_STEADY: ${{ github.event.inputs.vehicles_steady }}
-          VEHICLES_RAMP_DOWN: ${{ github.event.inputs.vehicles_ramp_down }}
-          VEHICLES_TARGET_VU: ${{ github.event.inputs.vehicles_target_vu }}
         run: |
+          # Parse JSON config and export as environment variables
+          CONFIG='${{ github.event.inputs.config }}'
+          if [ "$CONFIG" != "{}" ] && [ -n "$CONFIG" ]; then
+            echo "📝 Parsing custom configuration..."
+            echo "$CONFIG" | jq -r 'to_entries | .[] | "export \(.key)=\(.value)"' > /tmp/k6_env.sh
+            source /tmp/k6_env.sh
+            echo "Applied custom configuration"
+          fi
+          
           echo "Running ${{ github.event.inputs.test_type }} test..."
           case "${{ github.event.inputs.test_type }}" in
             smoke)
