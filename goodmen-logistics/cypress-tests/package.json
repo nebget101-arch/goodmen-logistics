@@ -4,6 +4,8 @@
   "description": "Cypress E2E tests for Goodmen Logistics FMCSA Compliance System",
   "main": "index.js",
   "scripts": {
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
     "cy:open": "cypress open",
     "cy:run": "cypress run",
     "cy:run:chrome": "cypress run --browser chrome",

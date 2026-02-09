@@ -15,7 +15,7 @@ public class TestRunner {
 
     @Karate.Test
     Karate testParallel() {
-        return Karate.run().tags("~@ignore").relativeTo(getClass()).parallel(5);
+        return Karate.run().tags("~@ignore").relativeTo(getClass());
     }
 
     @Karate.Test
@@ -25,6 +25,6 @@ public class TestRunner {
 
     @Karate.Test
     Karate testRegression() {
-        return Karate.run().tags("@regression").relativeTo(getClass()).parallel(5);
+        return Karate.run().tags("@regression").relativeTo(getClass());
     }
 }

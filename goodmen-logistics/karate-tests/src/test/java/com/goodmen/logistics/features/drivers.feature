@@ -159,8 +159,6 @@ Feature: Drivers API - Driver Qualification Files Management
     Then status 200
     # Status should remain inactive or be set to inactive if DQF < 100%
     And match response.dqfCompleteness == 75
-      }
-      """
 
   @fmcsa @compliance
   Scenario: Verify CDL format validation

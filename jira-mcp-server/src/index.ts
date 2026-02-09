@@ -9,6 +9,8 @@ import {
 import { JiraService } from "./services/jira-service.js";
 import { CodebaseService } from "./services/codebase-service.js";
 import { TestAnalysisService } from "./services/test-analysis-service.js";
+import { TestRunnerService } from "./services/test-runner-service.js";
+import { ConfluenceService } from "./services/confluence-service.js";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -41,6 +43,8 @@ class JiraMCPServer {
   private jiraService: JiraService;
   private codebaseService: CodebaseService;
   private testAnalysisService: TestAnalysisService;
+  private testRunnerService: TestRunnerService;
+  private confluenceService: ConfluenceService | null;
 
   constructor() {
     this.server = new Server(
@@ -64,6 +68,19 @@ class JiraMCPServer {
 
     this.codebaseService = new CodebaseService(process.env.WORKSPACE_PATH || "");
     this.testAnalysisService = new TestAnalysisService(process.env.TEST_RESULTS_PATH || "");
+    this.testRunnerService = new TestRunnerService(process.env.WORKSPACE_PATH || "");
+    
+    // Confluence is optional
+    this.confluenceService = null;
+    if (process.env.CONFLUENCE_BASE_URL && process.env.CONFLUENCE_EMAIL && 
+        process.env.CONFLUENCE_API_TOKEN && process.env.CONFLUENCE_SPACE_KEY) {
+      this.confluenceService = new ConfluenceService({
+        baseUrl: process.env.CONFLUENCE_BASE_URL,
+        email: process.env.CONFLUENCE_EMAIL,
+        apiToken: process.env.CONFLUENCE_API_TOKEN,
+        spaceKey: process.env.CONFLUENCE_SPACE_KEY,
+      });
+    }
 
     this.setupToolHandlers();
     this.server.onerror = (error) => console.error("[MCP Error]", error);
@@ -196,6 +213,105 @@ class JiraMCPServer {
               },
             },
             required: ["jql"],
+          },
+        },
+        {
+          name: "list_available_tests",
+          description:
+            "List all available test specs/features/scripts across Cypress, Karate, and K6 frameworks.",
+          inputSchema: {
+            type: "object",
+            properties: {},
+          },
+        },
+        {
+          name: "get_test_cases",
+          description:
+            "Get all test cases (individual tests) from a specific test file. Shows the test names that can be run individually.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              testFile: {
+                type: "string",
+                description: "Test file path relative to test directory (e.g., 'vehicles/vehicles.cy.js', 'vehicles.feature', 'smoke.test.js')",
+              },
+            },
+            required: ["testFile"],
+          },
+        },
+        {
+          name: "run_cypress_tests",
+          description:
+            "Run Cypress E2E tests. Optionally filter by spec pattern and/or specific test name, create JIRA bugs for failures, and generate Confluence documentation.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              specPattern: {
+                type: "string",
+                description: "Spec pattern to run (e.g., 'cypress/e2e/vehicles/*.cy.js' or leave empty for all tests)",
+              },
+              testName: {
+                type: "string",
+                description: "Specific test name to run (e.g., 'should display vehicle details'). Use with specPattern to run one test from a file.",
+              },
+              createBugs: {
+                type: "boolean",
+                description: "Automatically create JIRA bugs for test failures",
+                default: false,
+              },
+              createConfluenceReport: {
+                type: "boolean",
+                description: "Create a Confluence page with test results",
+                default: false,
+              },
+            },
+          },
+        },
+        {
+          name: "run_karate_tests",
+          description:
+            "Run Karate API tests. Optionally filter by tag or specific scenario name, create JIRA bugs for failures, and generate Confluence documentation.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              tag: {
+                type: "string",
+                description: "Tag to filter tests (e.g., '@smoke', '@vehicles')",
+              },
+              scenarioName: {
+                type: "string",
+                description: "Specific scenario name to run (e.g., 'Get vehicle by ID'). Cannot be used with tag.",
+              },
+              createBugs: {
+                type: "boolean",
+                description: "Automatically create JIRA bugs for test failures",
+                default: false,
+              },
+              createConfluenceReport: {
+                type: "boolean",
+                description: "Create a Confluence page with test results",
+                default: false,
+              },
+            },
+          },
+        },
+        {
+          name: "run_k6_tests",
+          description:
+            "Run K6 performance tests and optionally generate Confluence documentation.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              scriptPath: {
+                type: "string",
+                description: "Path to K6 script (e.g., 'tests/smoke.test.js')",
+              },
+              createConfluenceReport: {
+                type: "boolean",
+                description: "Create a Confluence page with test results",
+                default: false,
+              },
+            },
           },
         },
       ],
@@ -441,6 +557,262 @@ class JiraMCPServer {
               resultText += `Status: ${issue.fields.status.name}\n`;
               resultText += `URL: ${process.env.JIRA_BASE_URL}/browse/${issue.key}\n\n`;
             });
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: resultText,
+                },
+              ],
+            };
+          }
+
+          case "list_available_tests": {
+            const tests = await this.testRunnerService.getAvailableTests();
+
+            let resultText = `*Available Test Suites*\n\n`;
+            resultText += `*Cypress (E2E):* ${tests.cypress.length} specs\n`;
+            tests.cypress.slice(0, 10).forEach(spec => {
+              resultText += `  - ${spec}\n`;
+            });
+            if (tests.cypress.length > 10) {
+              resultText += `  ... and ${tests.cypress.length - 10} more\n`;
+            }
+
+            resultText += `\n*Karate (API):* ${tests.karate.length} features\n`;
+            tests.karate.slice(0, 10).forEach(feat => {
+              resultText += `  - ${feat}\n`;
+            });
+            if (tests.karate.length > 10) {
+              resultText += `  ... and ${tests.karate.length - 10} more\n`;
+            }
+
+            resultText += `\n*K6 (Performance):* ${tests.k6.length} scripts\n`;
+            tests.k6.forEach(script => {
+              resultText += `  - ${script}\n`;
+            });
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: resultText,
+                },
+              ],
+            };
+          }
+
+          case "get_test_cases": {
+            const testFile = args?.testFile as string;
+            const result = await this.testRunnerService.getTestCases(testFile);
+
+            let resultText = `*Test Cases in ${testFile}*\n\n`;
+            resultText += `Framework: ${result.framework}\n`;
+            resultText += `Total Test Cases: ${result.testCases.length}\n\n`;
+            
+            result.testCases.forEach((testCase, index) => {
+              resultText += `${index + 1}. ${testCase}\n`;
+            });
+
+            if (result.testCases.length === 0) {
+              resultText += `\nNo test cases found. Make sure the file path is correct.`;
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: resultText,
+                },
+              ],
+            };
+          }
+
+          case "run_cypress_tests": {
+            const specPattern = args?.specPattern as string | undefined;
+            const testName = args?.testName as string | undefined;
+            const createBugs = (args?.createBugs as boolean) || false;
+            const createConfluenceReport = (args?.createConfluenceReport as boolean) || false;
+
+            const result = await this.testRunnerService.runCypressTests(specPattern, testName);
+            
+            let resultText = `*Cypress Test Results*\n\n`;
+            if (testName) {
+              resultText += `Test: "${testName}"\n`;
+            }
+            if (specPattern) {
+              resultText += `Spec: ${specPattern}\n`;
+            }
+            resultText += `Status: ${result.success ? "✅ PASSED" : "❌ FAILED"}\n`;
+            resultText += `Total: ${result.totalTests} | Passing: ${result.passing} | Failing: ${result.failing}\n`;
+            resultText += `Duration: ${result.duration}\n\n`;
+
+            const createdBugs: string[] = [];
+
+            if (result.failures.length > 0 && createBugs) {
+              resultText += `*Creating JIRA Bugs for Failures...*\n\n`;
+              
+              for (const failure of result.failures) {
+                const analysis = this.testAnalysisService.analyzeTestFailure(failure);
+                
+                if (analysis.isActualBug && analysis.confidence !== "Low") {
+                  const bugReport = this.testAnalysisService.generateBugReport(failure, analysis);
+                  const issue = await this.jiraService.createIssue({
+                    summary: `[Cypress] ${failure.testName}`,
+                    description: bugReport,
+                    issueType: "Bug",
+                    priority: analysis.severity === "Critical" ? "Highest" : 
+                             analysis.severity === "High" ? "High" : "Medium",
+                    labels: ["cypress", "test-failure", ...analysis.affectedComponents],
+                  });
+                  
+                  createdBugs.push(issue.key);
+                  resultText += `  ✅ Created ${issue.key}: ${failure.testName}\n`;
+                }
+              }
+            }
+
+            if (createConfluenceReport && this.confluenceService) {
+              const timestamp = new Date().toISOString();
+              const reportData = {
+                title: `Cypress Test Run`,
+                framework: 'cypress',
+                timestamp,
+                success: result.success,
+                totalTests: result.totalTests,
+                passing: result.passing,
+                failing: result.failing,
+                duration: result.duration,
+                failures: result.failures,
+                summary: result.summary,
+                jiraBugs: createdBugs,
+              };
+
+              const confluencePage = await this.confluenceService.createTestReport(reportData);
+              resultText += `\n📄 Confluence Report: ${confluencePage.url}\n`;
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: resultText,
+                },
+              ],
+            };
+          }
+
+          case "run_karate_tests": {
+            const tag = args?.tag as string | undefined;
+            const scenarioName = args?.scenarioName as string | undefined;
+            const createBugs = (args?.createBugs as boolean) || false;
+            const createConfluenceReport = (args?.createConfluenceReport as boolean) || false;
+
+            const result = await this.testRunnerService.runKarateTests(tag, scenarioName);
+            
+            let resultText = `*Karate Test Results*\n\n`;
+            if (tag) {
+              resultText += `Tag: ${tag}\n`;
+            }
+            if (scenarioName) {
+              resultText += `Scenario: "${scenarioName}"\n`;
+            }
+            resultText += `Status: ${result.success ? "✅ PASSED" : "❌ FAILED"}\n`;
+            resultText += `Total: ${result.totalTests} | Passing: ${result.passing} | Failing: ${result.failing}\n`;
+            resultText += `Duration: ${result.duration}\n\n`;
+
+            const createdBugs: string[] = [];
+
+            if (result.failures.length > 0 && createBugs) {
+              resultText += `*Creating JIRA Bugs for Failures...*\n\n`;
+              
+              for (const failure of result.failures) {
+                const analysis = this.testAnalysisService.analyzeTestFailure(failure);
+                
+                if (analysis.isActualBug && analysis.confidence !== "Low") {
+                  const bugReport = this.testAnalysisService.generateBugReport(failure, analysis);
+                  const issue = await this.jiraService.createIssue({
+                    summary: `[Karate] ${failure.testName}`,
+                    description: bugReport,
+                    issueType: "Bug",
+                    priority: analysis.severity === "Critical" ? "Highest" : 
+                             analysis.severity === "High" ? "High" : "Medium",
+                    labels: ["karate", "api-test", "test-failure", ...analysis.affectedComponents],
+                  });
+                  
+                  createdBugs.push(issue.key);
+                  resultText += `  ✅ Created ${issue.key}: ${failure.testName}\n`;
+                }
+              }
+            }
+
+            if (createConfluenceReport && this.confluenceService) {
+              const timestamp = new Date().toISOString();
+              const reportData = {
+                title: `Karate API Test Run`,
+                framework: 'karate',
+                timestamp,
+                success: result.success,
+                totalTests: result.totalTests,
+                passing: result.passing,
+                failing: result.failing,
+                duration: result.duration,
+                failures: result.failures,
+                summary: result.summary,
+                jiraBugs: createdBugs,
+              };
+
+              const confluencePage = await this.confluenceService.createTestReport(reportData);
+              resultText += `\n📄 Confluence Report: ${confluencePage.url}\n`;
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: resultText,
+                },
+              ],
+            };
+          }
+
+          case "run_k6_tests": {
+            const scriptPath = args?.scriptPath as string | undefined;
+            const createConfluenceReport = (args?.createConfluenceReport as boolean) || false;
+
+            const result = await this.testRunnerService.runK6Tests(scriptPath);
+            
+            let resultText = `*K6 Performance Test Results*\n\n`;
+            resultText += `Status: ${result.success ? "✅ PASSED" : "❌ FAILED"}\n`;
+            resultText += `Checks: ${result.passing}/${result.totalTests} passed\n`;
+            resultText += `Duration: ${result.duration}\n\n`;
+
+            if (result.failures.length > 0) {
+              resultText += `*Failed Checks:*\n`;
+              result.failures.forEach(failure => {
+                resultText += `  ❌ ${failure.testName}: ${failure.errorMessage}\n`;
+              });
+            }
+
+            if (createConfluenceReport && this.confluenceService) {
+              const timestamp = new Date().toISOString();
+              const reportData = {
+                title: `K6 Performance Test Run`,
+                framework: 'k6',
+                timestamp,
+                success: result.success,
+                totalTests: result.totalTests,
+                passing: result.passing,
+                failing: result.failing,
+                duration: result.duration,
+                failures: result.failures,
+                summary: result.summary,
+              };
+
+              const confluencePage = await this.confluenceService.createTestReport(reportData);
+              resultText += `\n📄 Confluence Report: ${confluencePage.url}\n`;
+            }
 
             return {
               content: [
