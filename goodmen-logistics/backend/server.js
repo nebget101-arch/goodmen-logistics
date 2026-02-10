@@ -4,16 +4,15 @@ const bodyParser = require('body-parser');
 const path = require('path');
 require('dotenv').config();
 
-// Initialize Dynatrace monitoring (must be first)
+// Initialize Dynatrace SDK (must be first)
 const { 
   initializeDynatrace, 
-  createDynatraceMiddleware,
-  trackCustomMetric 
-} = require('./config/dynatrace');
-const dynatrace = initializeDynatrace();
+  dynatraceMiddleware,
+  sendLog 
+} = require('./config/dynatrace-sdk');
 
-// Initialize Dynatrace logger (simpler, API-based approach)
-const dtLogger = require('./utils/dynatrace-logger');
+// Initialize Dynatrace
+initializeDynatrace();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,10 +31,8 @@ pool.query('SELECT NOW()', (err, res) => {
 // Middleware
 app.use(cors());
 
-// Dynatrace request tracking middleware
-if (dynatrace) {
-  app.use(createDynatraceMiddleware(dynatrace));
-}
+// Dynatrace request tracking middleware (add before other routes)
+app.use(dynatraceMiddleware);
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -65,19 +62,16 @@ app.use('/api/db-example', dbExampleRouter);
 app.use('/api/dqf-documents', dqfDocumentsRouter);
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
   const healthStatus = {
     status: 'ok',
     message: 'Goodmen Logistics API is running',
-    dynatrace: dynatrace ? 'enabled' : 'disabled',
+    dynatrace: process.env.DYNATRACE_ENABLED === 'true' ? 'enabled' : 'disabled',
     timestamp: new Date().toISOString()
   };
   
   // Track health check in Dynatrace
-  dtLogger.info('Health check requested', healthStatus);
-  if (dynatrace) {
-    trackCustomMetric(dynatrace, 'health-check', 1, healthStatus);
-  }
+  await sendLog('INFO', 'Health check requested', healthStatus);
   
   res.json(healthStatus);
 });
@@ -191,12 +185,11 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚛 Goodmen Logistics Backend running on http://localhost:${PORT}`);
   console.log(`📊 API Health: http://localhost:${PORT}/api/health`);
   console.log(`🗄️  Database Examples: http://localhost:${PORT}/api/db-example/drivers`);
   
   // Log startup event to Dynatrace
-  dtLogger.info('Server started successfully', { port: PORT });
-  dtLogger.trackEvent('server.startup', { port: PORT, timestamp: new Date().toISOString() });
+  await sendLog('INFO', 'Server started successfully', { port: PORT });
 });
