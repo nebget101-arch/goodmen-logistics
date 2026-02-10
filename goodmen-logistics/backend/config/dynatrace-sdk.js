@@ -50,9 +50,15 @@ async function sendMetric(metricName, value, dimensions = {}) {
   };
 
   try {
-    // Dynatrace metrics API expects newline-delimited format, not JSON array
-    const metricLine = `${metricName},${Object.entries(dimensions).map(([k,v]) => `${k}=${v}`).join(',')} ${value} ${Date.now()}`;
-    
+    // Build dimensions string only if dimensions are present
+    let dimStr = '';
+    const dimEntries = Object.entries(dimensions);
+    if (dimEntries.length > 0) {
+      dimStr = ',' + dimEntries.map(([k, v]) => `${k}=${v}`).join(',');
+    }
+    // Compose metric line according to Dynatrace format
+    // metric.name[,dimension=value ...] value [timestamp]
+    const metricLine = `${metricName}${dimStr} ${value} ${Date.now()}`;
     await axios.post(
       `${config.environmentUrl}/api/v2/metrics/ingest`,
       metricLine,
