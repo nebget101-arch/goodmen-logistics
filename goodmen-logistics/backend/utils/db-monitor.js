@@ -11,53 +11,66 @@ const { sendMetric, sendLog, sendEvent } = require('../config/dynatrace-sdk');
 function monitorQuery(pool) {
   const originalQuery = pool.query.bind(pool);
   
-  pool.query = async function(...args) {
+  pool.query = function(...args) {
     const startTime = Date.now();
     const queryText = typeof args[0] === 'string' ? args[0] : args[0]?.text || 'unknown';
-    const queryType = queryText.trim().split(' ')[0].toUpperCase(); // SELECT, INSERT, UPDATE, DELETE
+    const queryType = queryText.trim().split(' ')[0].toUpperCase();
     
-    try {
-      const result = await originalQuery(...args);
-      const duration = Date.now() - startTime;
-      
-      // Send query duration metric
-      await sendMetric('custom.database.query.duration', duration, {
-        queryType: queryType,
-        rowCount: result.rowCount || 0
-      });
-      
-      // Log slow queries (> 1 second)
-      if (duration > 1000) {
-        await sendLog('WARN', 'Slow database query detected', {
-          queryType: queryType,
-          duration: duration,
-          rowCount: result.rowCount,
-          query: queryText.substring(0, 200) // First 200 chars
-        });
-      }
-      
-      return result;
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      
-      // Log database error
-      await sendLog('ERROR', 'Database query failed', {
-        queryType: queryType,
-        duration: duration,
-        error: error.message,
-        code: error.code,
-        query: queryText.substring(0, 200)
-      });
-      
-      // Send error event
-      await sendEvent('ERROR_EVENT', 'Database query failed', {
-        queryType: queryType,
-        error: error.message,
-        code: error.code
-      });
-      
-      throw error;
+    // Call original query (handles both callback and promise)
+    const result = originalQuery(...args);
+    
+    // If it's a promise, track it
+    if (result && typeof result.then === 'function') {
+      return result.then(
+        (res) => {
+          const duration = Date.now() - startTime;
+          
+          // Track metrics asynchronously (don't block the query)
+          setImmediate(async () => {
+            try {
+              await sendMetric('custom.database.query.duration', duration, {
+                queryType: queryType,
+                rowCount: res?.rowCount || 0
+              });
+              
+              if (duration > 1000) {
+                await sendLog('WARN', 'Slow database query detected', {
+                  queryType: queryType,
+                  duration: duration,
+                  rowCount: res?.rowCount || 0,
+                  query: queryText.substring(0, 200)
+                });
+              }
+            } catch (err) {
+              // Silently fail - don't break queries
+            }
+          });
+          
+          return res;
+        },
+        (error) => {
+          const duration = Date.now() - startTime;
+          
+          setImmediate(async () => {
+            try {
+              await sendLog('ERROR', 'Database query failed', {
+                queryType: queryType,
+                duration: duration,
+                error: error.message,
+                code: error.code,
+                query: queryText.substring(0, 200)
+              });
+            } catch (err) {
+              // Silently fail
+            }
+          });
+          
+          throw error;
+        }
+      );
     }
+    
+    return result;
   };
   
   return pool;

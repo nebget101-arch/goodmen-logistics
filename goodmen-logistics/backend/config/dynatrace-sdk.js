@@ -17,29 +17,21 @@ const config = {
   }
 };
 
-let sdk = null;
-
-// Initialize Dynatrace SDK
+// Initialize Dynatrace SDK (API-based, no OneAgent package needed)
 function initializeDynatrace() {
   if (!config.enabled) {
     console.log('[Dynatrace] Disabled - DYNATRACE_ENABLED not set to true');
-    return null;
+    return;
   }
 
   if (!config.apiToken || !config.environmentUrl) {
     console.warn('[Dynatrace] Missing required configuration (API token or environment URL)');
-    return null;
+    return;
   }
 
-  try {
-    const dynatrace = require('@dynatrace/oneagent-sdk');
-    sdk = dynatrace();
-    console.log('[Dynatrace] SDK initialized successfully');
-    return sdk;
-  } catch (error) {
-    console.error('[Dynatrace] Failed to initialize SDK:', error.message);
-    return null;
-  }
+  console.log('[Dynatrace] SDK initialized successfully');
+  console.log('[Dynatrace] Environment:', config.environmentUrl);
+  console.log('[Dynatrace] App Name:', config.appName);
 }
 
 // Send custom metrics to Dynatrace
@@ -58,13 +50,16 @@ async function sendMetric(metricName, value, dimensions = {}) {
   };
 
   try {
+    // Dynatrace metrics API expects newline-delimited format, not JSON array
+    const metricLine = `${metricName},${Object.entries(dimensions).map(([k,v]) => `${k}=${v}`).join(',')} ${value} ${Date.now()}`;
+    
     await axios.post(
       `${config.environmentUrl}/api/v2/metrics/ingest`,
-      { metrics: [metric] },
+      metricLine,
       {
         headers: {
           'Authorization': `Api-Token ${config.apiToken}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'text/plain; charset=utf-8'
         },
         timeout: 5000
       }
@@ -202,6 +197,5 @@ module.exports = {
   sendMetric,
   sendLog,
   sendEvent,
-  getSDK: () => sdk,
   isEnabled: () => config.enabled
 };
