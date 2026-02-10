@@ -59,6 +59,7 @@ async function sendMetric(metricName, value, dimensions = {}) {
     // Compose metric line according to Dynatrace format
     // metric.name[,dimension=value ...] value [timestamp]
     const metricLine = `${metricName}${dimStr} ${value} ${Date.now()}`;
+    console.log('[Dynatrace][DEBUG] Sending metric line:', metricLine);
     await axios.post(
       `${config.environmentUrl}/api/v2/metrics/ingest`,
       metricLine,
