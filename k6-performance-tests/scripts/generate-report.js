@@ -5,8 +5,10 @@
 
 const fs = require('fs');
 const path = require('path');
-
-const REPORTS_DIR = path.join(__dirname, '..', 'reports');
+const reportsDir = path.join(__dirname, '../reports');
+if (!fs.existsSync(reportsDir)) {
+  fs.mkdirSync(reportsDir, { recursive: true });
+}
 
 function loadReport(filename) {
   try {

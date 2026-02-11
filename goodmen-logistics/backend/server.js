@@ -2,8 +2,15 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env.dynatrace') });
 
+// Debug: Print loaded Dynatrace environment variables
+console.log('DYNATRACE_ENVIRONMENT_URL:', process.env.DYNATRACE_ENVIRONMENT_URL);
+console.log('DYNATRACE_API_TOKEN:', process.env.DYNATRACE_API_TOKEN ? 'set' : 'not set');
+console.log('DYNATRACE_ENABLED:', process.env.DYNATRACE_ENABLED);
+
+const { sendTestMetricLine } = require('./config/dynatrace-sdk');
+sendTestMetricLine();
 // Initialize Dynatrace SDK (must be first)
 const { 
   initializeDynatrace, 

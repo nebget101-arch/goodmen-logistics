@@ -1,3 +1,26 @@
+// TEST: Send a basic standard metric to Dynatrace to verify integration
+async function sendTestMetricLine() {
+  if (!config.enabled || !config.apiToken) return;
+  // Send a basic metric (standard name)
+  const metricLine = 'server.cpu.temperature,cpu.id=0 42';
+  console.log('[Dynatrace][DEBUG] Sending test metric line:', metricLine);
+  try {
+    await axios.post(
+      `${config.environmentUrl}/api/v2/metrics/ingest`,
+      metricLine,
+      {
+        headers: {
+          'Authorization': `Api-Token ${config.apiToken}`,
+          'Content-Type': 'text/plain; charset=utf-8'
+        },
+        timeout: 5000
+      }
+    );
+    console.log('[Dynatrace][DEBUG] Test metric sent successfully');
+  } catch (error) {
+    console.error('[Dynatrace][DEBUG] Failed to send test metric:', error.message);
+  }
+}
 /**
  * Dynatrace SDK Configuration
  * Uses OneAgent SDK instead of full OneAgent (no root required)
@@ -204,5 +227,6 @@ module.exports = {
   sendMetric,
   sendLog,
   sendEvent,
-  isEnabled: () => config.enabled
+  isEnabled: () => config.enabled,
+  sendTestMetricLine
 };
