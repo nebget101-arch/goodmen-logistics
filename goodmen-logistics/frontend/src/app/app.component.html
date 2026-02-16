@@ -12,6 +12,9 @@
         <li *ngIf="isLoggedIn() && canSee('loads')"><a routerLink="/loads" routerLinkActive="active">Loads</a></li>
         <li *ngIf="isLoggedIn() && canSee('hos')"><a routerLink="/hos" routerLinkActive="active">HOS</a></li>
         <li *ngIf="isLoggedIn() && canSee('maintenance')"><a routerLink="/maintenance" routerLinkActive="active">Maintenance</a></li>
+        <li *ngIf="isLoggedIn() && canSee('parts')"><a routerLink="/parts" routerLinkActive="active">Parts</a></li>
+        <li *ngIf="isLoggedIn() && canSee('customers')"><a routerLink="/customers" routerLinkActive="active">Customers</a></li>
+        <li *ngIf="isLoggedIn() && canSee('invoices')"><a routerLink="/invoices" routerLinkActive="active">Invoices</a></li>
         <li *ngIf="isLoggedIn() && canSee('audit')"><a routerLink="/audit" routerLinkActive="active">Audit</a></li>
         <li *ngIf="isLoggedIn() && userRole === 'admin'"><a routerLink="/users/create" routerLinkActive="active">Add User</a></li>
       </ul>

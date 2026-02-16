@@ -11,6 +11,7 @@ import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { AuthGuard } from './auth.guard';
 import { UserCreateComponent } from './components/user-create/user-create.component';
+import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
@@ -23,6 +24,9 @@ const routes: Routes = [
   { path: 'work-order/:id', component: WorkOrderComponent, canActivate: [AuthGuard] },
   { path: 'loads', component: LoadsComponent, canActivate: [AuthGuard] },
   { path: 'audit', component: AuditComponent, canActivate: [AuthGuard] },
+  { path: 'parts', component: PartsCatalogComponent, canActivate: [AuthGuard] },
+  { path: 'customers', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
+  { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
   { path: 'users/create', component: UserCreateComponent, canActivate: [AuthGuard] },
   { path: 'login', component: LoginComponent }
 ];

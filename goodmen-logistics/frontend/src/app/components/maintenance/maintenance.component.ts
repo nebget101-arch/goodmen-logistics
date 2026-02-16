@@ -8,14 +8,25 @@ import { Router } from '@angular/router';
   styleUrls: ['./maintenance.component.css']
 })
 export class MaintenanceComponent implements OnInit {
-  maintenanceRecords: any[] = [];
-  pendingRecords: any[] = [];
+  workOrders: any[] = [];
   loading = true;
+  filters: any = {
+    status: '',
+    locationId: '',
+    type: '',
+    invoiceStatus: '',
+    search: ''
+  };
+  locations: any[] = [];
+  statuses = ['DRAFT', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'CLOSED', 'CANCELED'];
+  types = ['REPAIR', 'PM', 'INSPECTION', 'TIRE', 'OTHER'];
+  invoiceStatuses = ['DRAFT', 'SENT', 'PARTIAL', 'PAID', 'VOID'];
 
   constructor(private apiService: ApiService, private router: Router) { }
 
   ngOnInit(): void {
-    this.loadMaintenance();
+    this.loadLocations();
+    this.loadWorkOrders();
   }
 
   goToWorkOrder(): void {
@@ -27,31 +38,53 @@ export class MaintenanceComponent implements OnInit {
     this.router.navigate(['/work-order', record.id]);
   }
 
-  loadMaintenance(): void {
-    this.apiService.getMaintenanceRecords().subscribe({
-      next: (data) => {
-        this.maintenanceRecords = data;
-        this.loading = false;
-      },
-      error: (error) => {
-        console.error('Error loading maintenance records:', error);
-        this.loading = false;
-      }
+  loadLocations(): void {
+    this.apiService.getLocations().subscribe({
+      next: (data) => { this.locations = data || []; }
     });
+  }
 
-    this.apiService.getPendingMaintenance().subscribe({
-      next: (data) => {
-        this.pendingRecords = data;
+  loadWorkOrders(): void {
+    this.loading = true;
+    this.apiService.listWorkOrders(this.filters).subscribe({
+      next: (res: any) => {
+        this.workOrders = res.rows || res.data || [];
+        this.loading = false;
       },
       error: (error) => {
-        console.error('Error loading pending maintenance:', error);
+        console.error('Error loading work orders:', error);
+        this.loading = false;
       }
     });
   }
 
+  applyFilters(): void {
+    this.loadWorkOrders();
+  }
+
+  clearFilters(): void {
+    this.filters = { status: '', locationId: '', type: '', invoiceStatus: '', search: '' };
+    this.loadWorkOrders();
+  }
+
   getStatusBadge(status: string): string {
-    if (status === 'completed') return 'badge-success';
-    if (status === 'pending') return 'badge-warning';
+    if (status === 'COMPLETED' || status === 'CLOSED') return 'badge-success';
+    if (status === 'WAITING_PARTS') return 'badge-warning';
+    if (status === 'CANCELED') return 'badge-danger';
     return 'badge-info';
+  }
+
+  getInvoiceBadge(status: string): string {
+    if (status === 'PAID') return 'badge-success';
+    if (status === 'PARTIAL') return 'badge-warning';
+    if (status === 'VOID') return 'badge-danger';
+    return 'badge-info';
+  }
+
+  generateInvoice(record: any): void {
+    if (!record?.id) return;
+    this.apiService.generateInvoiceFromWorkOrder(record.id).subscribe({
+      next: () => this.loadWorkOrders()
+    });
   }
 }

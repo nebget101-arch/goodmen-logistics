@@ -1,0 +1,66 @@
+<div class="invoices-list">
+  <div class="header">
+    <h2>Invoices</h2>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+
+  <div class="filters">
+    <input class="form-control" placeholder="Search invoice # or customer" [(ngModel)]="filters.search" (input)="loadInvoices()" />
+
+    <select class="form-control" [(ngModel)]="filters.status" (change)="loadInvoices()">
+      <option value="">All Statuses</option>
+      <option *ngFor="let s of statuses" [value]="s">{{ s }}</option>
+    </select>
+
+    <select class="form-control" [(ngModel)]="filters.customerId" (change)="loadInvoices()">
+      <option value="">All Customers</option>
+      <option *ngFor="let c of customers" [value]="c.id">{{ c.company_name }}</option>
+    </select>
+
+    <select class="form-control" [(ngModel)]="filters.locationId" (change)="loadInvoices()">
+      <option value="">All Locations</option>
+      <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+    </select>
+
+    <input class="form-control" type="date" [(ngModel)]="filters.dateFrom" (change)="loadInvoices()" />
+    <input class="form-control" type="date" [(ngModel)]="filters.dateTo" (change)="loadInvoices()" />
+
+    <button class="btn btn-secondary" (click)="clearFilters()">Clear</button>
+  </div>
+
+  <div *ngIf="loading" class="alert alert-info">Loading...</div>
+
+  <div class="table-responsive" *ngIf="!loading">
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Invoice #</th>
+          <th>Customer</th>
+          <th>Location</th>
+          <th>Issued</th>
+          <th>Due</th>
+          <th>Status</th>
+          <th>Total</th>
+          <th>Paid</th>
+          <th>Balance</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let inv of invoices">
+          <td>{{ inv.invoice_number }}</td>
+          <td>{{ inv.company_name }}</td>
+          <td>{{ inv.location_id }}</td>
+          <td>{{ inv.issued_date }}</td>
+          <td>{{ inv.due_date }}</td>
+          <td>{{ inv.status }}</td>
+          <td>${{ inv.total_amount | number:'1.2-2' }}</td>
+          <td>${{ inv.amount_paid | number:'1.2-2' }}</td>
+          <td>${{ inv.balance_due | number:'1.2-2' }}</td>
+          <td><button class="btn btn-sm btn-info" (click)="openInvoice(inv.id)">View</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

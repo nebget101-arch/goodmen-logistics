@@ -4,6 +4,19 @@ const { query } = require('../config/database');
 const dtLogger = require('../utils/dynatrace-logger');
 const auth = require('./auth-middleware');
 
+async function getCustomerPricing(customerId) {
+  if (!customerId) return null;
+  const result = await query(
+    `SELECT c.id, c.status, c.customer_type, c.is_deleted,
+            pr.default_labor_rate, pr.parts_discount_percent, pr.labor_discount_percent
+     FROM customers c
+     LEFT JOIN customer_pricing_rules pr ON pr.customer_id = c.id
+     WHERE c.id = $1 AND c.is_deleted = false`,
+    [customerId]
+  );
+  return result.rows[0] || null;
+}
+
 // Protect all work order routes: admin, fleet
 router.use(auth(['admin', 'fleet']));
 
@@ -110,12 +123,39 @@ router.post('/', async (req, res) => {
           .filter(Boolean)
       : null;
 
-    const partsCost = Array.isArray(parts)
+    let partsCost = Array.isArray(parts)
       ? parts.reduce((sum, p) => sum + (Number(p?.totalCost) || 0), 0)
       : 0;
-    const laborCost = Array.isArray(labor)
+    let laborCost = Array.isArray(labor)
       ? labor.reduce((sum, l) => sum + (Number(l?.totalCost) || 0), 0)
       : 0;
+
+    const pricing = await getCustomerPricing(normalize(customerId));
+    if (pricing && pricing.status === 'INACTIVE') {
+      return res.status(400).json({ message: 'Inactive customers cannot be used for new work orders' });
+    }
+
+    if (pricing) {
+      const defaultLaborRate = pricing.default_labor_rate !== null && pricing.default_labor_rate !== undefined
+        ? Number(pricing.default_labor_rate)
+        : (pricing.customer_type === 'WARRANTY' ? 0 : null);
+
+      if (defaultLaborRate !== null && Array.isArray(labor) && labor.some(l => l?.hours !== undefined && l?.hours !== null)) {
+        laborCost = labor.reduce((sum, l) => {
+          const hours = Number(l?.hours) || 0;
+          const rate = l?.rate !== undefined && l?.rate !== null ? Number(l.rate) : defaultLaborRate;
+          return sum + (hours * (Number.isNaN(rate) ? 0 : rate));
+        }, 0);
+      }
+
+      if (pricing.parts_discount_percent !== null && pricing.parts_discount_percent !== undefined) {
+        partsCost = partsCost * (1 - Number(pricing.parts_discount_percent) / 100);
+      }
+      if (pricing.labor_discount_percent !== null && pricing.labor_discount_percent !== undefined) {
+        laborCost = laborCost * (1 - Number(pricing.labor_discount_percent) / 100);
+      }
+    }
+
     const totalCost = partsCost + laborCost;
 
     const result = await query(
@@ -228,12 +268,39 @@ router.put('/:id', async (req, res) => {
           .filter(Boolean)
       : null;
 
-    const partsCost = Array.isArray(parts)
+    let partsCost = Array.isArray(parts)
       ? parts.reduce((sum, p) => sum + (Number(p?.totalCost) || 0), 0)
       : 0;
-    const laborCost = Array.isArray(labor)
+    let laborCost = Array.isArray(labor)
       ? labor.reduce((sum, l) => sum + (Number(l?.totalCost) || 0), 0)
       : 0;
+
+    const pricing = await getCustomerPricing(normalize(customerId));
+    if (pricing && pricing.status === 'INACTIVE') {
+      return res.status(400).json({ message: 'Inactive customers cannot be used for work orders' });
+    }
+
+    if (pricing) {
+      const defaultLaborRate = pricing.default_labor_rate !== null && pricing.default_labor_rate !== undefined
+        ? Number(pricing.default_labor_rate)
+        : (pricing.customer_type === 'WARRANTY' ? 0 : null);
+
+      if (defaultLaborRate !== null && Array.isArray(labor) && labor.some(l => l?.hours !== undefined && l?.hours !== null)) {
+        laborCost = labor.reduce((sum, l) => {
+          const hours = Number(l?.hours) || 0;
+          const rate = l?.rate !== undefined && l?.rate !== null ? Number(l.rate) : defaultLaborRate;
+          return sum + (hours * (Number.isNaN(rate) ? 0 : rate));
+        }, 0);
+      }
+
+      if (pricing.parts_discount_percent !== null && pricing.parts_discount_percent !== undefined) {
+        partsCost = partsCost * (1 - Number(pricing.parts_discount_percent) / 100);
+      }
+      if (pricing.labor_discount_percent !== null && pricing.labor_discount_percent !== undefined) {
+        laborCost = laborCost * (1 - Number(pricing.labor_discount_percent) / 100);
+      }
+    }
+
     const totalCost = partsCost + laborCost;
 
     const result = await query(

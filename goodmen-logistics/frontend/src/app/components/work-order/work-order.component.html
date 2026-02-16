@@ -1,7 +1,25 @@
 <div class="container">
   <div class="card">
     <div class="card-header">
-      <h2 class="card-title">🛠️ New Work Order</h2>
+      <h2 class="card-title">🛠️ Work Order</h2>
+    </div>
+    <div *ngIf="workOrderLoadError" class="alert alert-danger mt-2">{{ workOrderLoadError }}</div>
+    <div class="row" style="margin: 12px 0;">
+      <div class="col">
+        <strong>Status:</strong>
+        <span class="badge badge-info" style="margin-left:8px;">{{ workOrder.status || 'DRAFT' }}</span>
+      </div>
+      <div class="col">
+        <strong>Invoice:</strong>
+        <span *ngIf="invoiceInfo" class="badge badge-success" style="margin-left:8px;">{{ invoiceInfo.status }}</span>
+        <span *ngIf="!invoiceInfo" style="margin-left:8px;">None</span>
+      </div>
+      <div class="col" style="display:flex; justify-content:flex-end; gap:8px;">
+        <button type="button" class="btn btn-outline-success" (click)="generateInvoice()" [disabled]="!canGenerateInvoice()">
+          {{ invoiceInfo ? 'Regenerate Invoice' : 'Generate Invoice' }}
+        </button>
+        <a *ngIf="invoiceInfo" class="btn btn-outline-primary" [routerLink]="['/invoices', invoiceInfo.id]">View Invoice</a>
+      </div>
     </div>
     <form (ngSubmit)="submitWorkOrder()" #workOrderForm="ngForm">
       <!-- Customer Section -->
@@ -19,7 +37,7 @@
             <label for="customerId">Or select customer</label>
             <select id="customerId" class="form-control" [(ngModel)]="workOrder.customerId" name="customerId">
               <option [ngValue]="null">-- Select --</option>
-              <option *ngFor="let c of customers" [ngValue]="c.id">{{c.name}} (DOT: {{c.dot_number}})</option>
+              <option *ngFor="let c of customers" [ngValue]="c.id">{{c.company_name}} (DOT: {{c.dot_number}})</option>
             </select>
           </div>
           <div class="col">
@@ -28,7 +46,7 @@
         </div>
         <div *ngIf="customerSearchError" class="alert alert-danger mt-2">{{customerSearchError}}</div>
         <div *ngIf="selectedCustomer">
-          <div class="mt-2"><strong>Selected:</strong> {{selectedCustomer.name}} (DOT: {{selectedCustomer.dot_number}})</div>
+          <div class="mt-2"><strong>Selected:</strong> {{selectedCustomer.company_name}} (DOT: {{selectedCustomer.dot_number}})</div>
         </div>
       </div>
       <!-- New Customer Modal -->
@@ -41,8 +59,8 @@
             </div>
             <div class="modal-body">
               <div class="mb-2">
-                <label for="newCustomerName">Name</label>
-                <input id="newCustomerName" type="text" class="form-control" [(ngModel)]="newCustomer.name" name="newCustomerName">
+                <label for="newCustomerName">Company Name</label>
+                <input id="newCustomerName" type="text" class="form-control" [(ngModel)]="newCustomer.company_name" name="newCustomerName">
               </div>
               <div class="mb-2">
                 <label for="newCustomerDot">DOT Number</label>
@@ -96,30 +114,31 @@
           <div class="col">
             <label for="workOrderType">Type</label>
             <select id="workOrderType" class="form-control" [(ngModel)]="workOrder.type" name="type" required>
-              <option value="Preventive Maintenance">Preventive Maintenance</option>
-              <option value="Repair">Repair</option>
-              <option value="Inspection">Inspection</option>
-              <option value="Breakdown">Breakdown</option>
+              <option value="REPAIR">Repair</option>
+              <option value="PM">PM</option>
+              <option value="INSPECTION">Inspection</option>
+              <option value="TIRE">Tire</option>
+              <option value="OTHER">Other</option>
             </select>
           </div>
           <div class="col">
             <label for="workOrderPriority">Priority</label>
             <select id="workOrderPriority" class="form-control" [(ngModel)]="workOrder.priority" name="priority" required>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-              <option value="Critical">Critical</option>
+              <option value="LOW">Low</option>
+              <option value="NORMAL">Normal</option>
+              <option value="HIGH">High</option>
+              <option value="URGENT">Urgent</option>
             </select>
           </div>
           <div class="col">
             <label for="workOrderStatus">Status</label>
             <select id="workOrderStatus" class="form-control" [(ngModel)]="workOrder.status" name="status" required>
-              <option value="Open">Open</option>
-              <option value="Assigned">Assigned</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Waiting Parts">Waiting Parts</option>
-              <option value="Completed">Completed</option>
-              <option value="Closed">Closed</option>
+              <option value="DRAFT">Draft</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="WAITING_PARTS">Waiting Parts</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CLOSED">Closed</option>
+              <option value="CANCELED">Canceled</option>
             </select>
           </div>
         </div>
@@ -197,7 +216,7 @@
                       <label for="newCustomerVehicleCustomer">Customer</label>
                       <select id="newCustomerVehicleCustomer" class="form-control" [(ngModel)]="newCustomerVehicle.customer_id" name="newCustomerVehicleCustomer">
                         <option [ngValue]="null">-- Select Customer --</option>
-                        <option *ngFor="let c of customers" [ngValue]="c.id">{{ c.name }} (DOT: {{ c.dot_number }})</option>
+                        <option *ngFor="let c of customers" [ngValue]="c.id">{{ c.company_name }} (DOT: {{ c.dot_number }})</option>
                       </select>
                     </div>
                     <div class="mb-2">
@@ -412,6 +431,59 @@
                 </tr>
               </tbody>
             </table>
+
+            <div class="row" style="margin-top: 12px;">
+              <div class="col">
+                <label>Reserve Part from Inventory</label>
+                <div style="display:flex; gap:8px; flex-wrap: wrap;">
+                  <select class="form-control" [(ngModel)]="reservePartForm.partId" name="reservePartPartId" style="max-width: 260px;">
+                    <option [ngValue]="''">Select Part</option>
+                    <option *ngFor="let p of partsCatalog" [ngValue]="p.id">{{ p.sku }} - {{ p.name }}</option>
+                  </select>
+                  <input type="number" class="form-control" placeholder="Qty" [(ngModel)]="reservePartForm.qtyRequested" name="reservePartQty" style="max-width: 120px;">
+                  <input type="number" class="form-control" placeholder="Unit Price" [(ngModel)]="reservePartForm.unitPrice" name="reservePartPrice" style="max-width: 140px;">
+                  <select class="form-control" [(ngModel)]="reservePartForm.locationId" name="reservePartLocation" style="max-width: 220px;">
+                    <option [ngValue]="''">WO Location</option>
+                    <option *ngFor="let loc of locations" [ngValue]="loc.id">{{ loc.name }}</option>
+                  </select>
+                  <button type="button" class="btn btn-outline-primary" (click)="reservePart()" [disabled]="!reservePartForm.partId">Reserve</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 12px;">
+              <div class="col">
+                <table class="table table-striped">
+                  <thead>
+                    <tr>
+                      <th>Part</th>
+                      <th>Requested</th>
+                      <th>Reserved</th>
+                      <th>Issued</th>
+                      <th>Status</th>
+                      <th>Unit Price</th>
+                      <th>Line Total</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let line of workOrderParts">
+                      <td>{{ line.part_sku || line.part_name || line.part_id }}</td>
+                      <td>{{ line.qty_requested }}</td>
+                      <td>{{ line.qty_reserved }}</td>
+                      <td>{{ line.qty_issued }}</td>
+                      <td>{{ line.status }}</td>
+                      <td>${{ line.unit_price | number:'1.2-2' }}</td>
+                      <td>${{ line.line_total | number:'1.2-2' }}</td>
+                      <td style="display:flex; gap:6px;">
+                        <button type="button" class="btn btn-sm btn-outline-success" (click)="issuePart(line)">Issue</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="returnPart(line)">Return</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
         <div class="row">
@@ -547,6 +619,15 @@
           <div class="col">
             <label for="workOrderAttachments">Attachments</label>
             <input id="workOrderAttachments" type="file" class="form-control" (change)="onFileChange($event)" multiple>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 12px;">
+          <div class="col">
+            <label for="workOrderDocuments">Work Order Documents</label>
+            <input id="workOrderDocuments" type="file" class="form-control" (change)="uploadDocument($event)">
+            <ul style="margin-top: 8px;">
+              <li *ngFor="let doc of documents">{{ doc.file_name }}</li>
+            </ul>
           </div>
         </div>
       </div>

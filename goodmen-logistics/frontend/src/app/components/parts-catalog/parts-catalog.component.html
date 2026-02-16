@@ -1,0 +1,385 @@
+<div class="parts-catalog-container">
+  <div class="header">
+    <h2>Parts Catalog</h2>
+    <button class="btn btn-primary" (click)="openForm()" *ngIf="userRole === 'admin' || userRole === 'parts_manager'">
+      + Add New Part
+    </button>
+  </div>
+
+  <!-- Success/Error Messages -->
+  <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <!-- Filters -->
+  <div class="filters-section">
+    <div class="filter-row">
+      <div class="filter-group">
+        <label for="searchInput">Search (SKU/Name):</label>
+        <input
+          id="searchInput"
+          type="text"
+          class="form-control"
+          placeholder="Search..."
+          (input)="onSearchInput($event)"
+          [disabled]="loading"
+        />
+      </div>
+
+      <div class="filter-group">
+        <label for="categorySelect">Category:</label>
+        <select
+          id="categorySelect"
+          class="form-control"
+          (change)="onCategorySelect($event)"
+          [disabled]="loading"
+        >
+          <option value="">All Categories</option>
+          <option *ngFor="let cat of categories" [value]="cat">{{ cat }}</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="manufacturerSelect">Manufacturer:</label>
+        <select
+          id="manufacturerSelect"
+          class="form-control"
+          (change)="onManufacturerSelect($event)"
+          [disabled]="loading"
+        >
+          <option value="">All Manufacturers</option>
+          <option *ngFor="let mfr of manufacturers" [value]="mfr">{{ mfr }}</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div *ngIf="loading" class="alert alert-info">Loading...</div>
+
+  <!-- Parts Table -->
+  <div class="table-responsive" *ngIf="!loading && filteredParts.length > 0">
+    <table class="table table-striped table-hover">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Manufacturer</th>
+          <th>UOM</th>
+          <th>Cost</th>
+          <th>Retail Price</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let part of filteredParts">
+          <td>{{ part.sku }}</td>
+          <td>{{ part.name }}</td>
+          <td>{{ part.category }}</td>
+          <td>{{ part.manufacturer }}</td>
+          <td>{{ part.uom }}</td>
+          <td>${{ part.default_cost | number: '1.2-2' }}</td>
+          <td>${{ part.default_retail_price | number: '1.2-2' }}</td>
+          <td>
+            <span class="badge" [ngClass]="part.is_active ? 'badge-success' : 'badge-secondary'">
+              {{ part.is_active ? 'Active' : 'Inactive' }}
+            </span>
+          </td>
+          <td>
+            <button
+              class="btn btn-sm btn-info"
+              (click)="openForm(part)"
+              *ngIf="userRole === 'admin' || userRole === 'parts_manager'"
+            >
+              Edit
+            </button>
+            <button
+              class="btn btn-sm btn-warning"
+              (click)="deactivatePart(part.id)"
+              *ngIf="(userRole === 'admin' || userRole === 'parts_manager') && part.is_active"
+            >
+              Deactivate
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- No Results -->
+  <div *ngIf="!loading && filteredParts.length === 0" class="alert alert-info">
+    No parts found matching your filters.
+  </div>
+
+  <!-- Form Modal -->
+  <div class="modal" [class.show]="showForm" [style.display]="showForm ? 'block' : 'none'">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5>{{ editingPartId ? 'Edit Part' : 'Create New Part' }}</h5>
+          <button type="button" class="btn-close" (click)="closeForm()"></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="partForm">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="sku">SKU *</label>
+                  <input
+                    id="sku"
+                    type="text"
+                    class="form-control"
+                    formControlName="sku"
+                    [readOnly]="editingPartId !== null"
+                  />
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="name">Name *</label>
+                  <input
+                    id="name"
+                    type="text"
+                    class="form-control"
+                    formControlName="name"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="category">Category *</label>
+                  <input
+                    id="category"
+                    type="text"
+                    class="form-control"
+                    formControlName="category"
+                  />
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="manufacturer">Manufacturer *</label>
+                  <input
+                    id="manufacturer"
+                    type="text"
+                    class="form-control"
+                    formControlName="manufacturer"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label for="uom">UOM</label>
+                  <input
+                    id="uom"
+                    type="text"
+                    class="form-control"
+                    formControlName="uom"
+                  />
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label for="defaultCost">Default Cost</label>
+                  <input
+                    id="defaultCost"
+                    type="number"
+                    class="form-control"
+                    formControlName="default_cost"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label for="retailPrice">Retail Price</label>
+                  <input
+                    id="retailPrice"
+                    type="number"
+                    class="form-control"
+                    formControlName="default_retail_price"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label for="barcode">Barcode</label>
+                  <input
+                    id="barcode"
+                    type="text"
+                    class="form-control"
+                    formControlName="barcode"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-3">
+                <div class="form-check">
+                  <input
+                    id="coreItem"
+                    type="checkbox"
+                    class="form-check-input"
+                    formControlName="core_item"
+                  />
+                  <label class="form-check-label" for="coreItem">Core Item</label>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-check">
+                  <input
+                    id="hazmat"
+                    type="checkbox"
+                    class="form-check-input"
+                    formControlName="hazmat"
+                  />
+                  <label class="form-check-label" for="hazmat">Hazmat</label>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="warrantyDays">Warranty Days</label>
+                  <input
+                    id="warrantyDays"
+                    type="number"
+                    class="form-control"
+                    formControlName="warranty_days"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="reorderPoint">Reorder Point</label>
+                  <input
+                    id="reorderPoint"
+                    type="number"
+                    class="form-control"
+                    formControlName="reorder_point_default"
+                  />
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="reorderQty">Reorder Qty</label>
+                  <input
+                    id="reorderQty"
+                    type="number"
+                    class="form-control"
+                    formControlName="reorder_qty_default"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="description">Description</label>
+              <textarea
+                id="description"
+                class="form-control"
+                rows="3"
+                formControlName="description"
+              ></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="notes">Notes</label>
+              <textarea
+                id="notes"
+                class="form-control"
+                rows="2"
+                formControlName="notes"
+              ></textarea>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeForm()">Cancel</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="savePart()"
+            [disabled]="!partForm.valid || loading"
+          >
+            {{ loading ? 'Saving...' : 'Save' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.parts-catalog-container {
+  padding: 20px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.filters-section {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 15px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-group label {
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.modal.show {
+  display: block !important;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.btn-sm {
+  margin-right: 5px;
+}
+
+.alert {
+  margin-bottom: 15px;
+}
+
+.badge {
+  padding: 5px 10px;
+  border-radius: 3px;
+}
+
+.badge-success {
+  background-color: #28a745;
+  color: white;
+}
+
+.badge-secondary {
+  background-color: #6c757d;
+  color: white;
+}
+</style>

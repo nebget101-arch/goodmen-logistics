@@ -1,0 +1,23 @@
+.customers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.table-responsive {
+  background: #fff;
+  padding: 8px;
+  border-radius: 8px;
+}

@@ -43,11 +43,68 @@ http://localhost:4200
 
 ---
 
+## 📦 Phase 2: Testing Inventory APIs (New!)
+
+After backend + frontend are running:
+
+### Option 1: Use the Test Script
+```bash
+cd /Users/nebyougetaneh/Desktop/SafetyApp/goodmen-logistics/backend
+chmod +x test-inventory-api.sh
+./test-inventory-api.sh
+```
+
+This runs 26 test requests covering:
+- Parts Catalog (CRUD, filters, dropdowns)
+- Inventory (status, alerts, details)
+- Receiving Workflow (create → add lines → post)
+- Adjustments (create → finalize with variance)
+- Cycle Counts (create → update lines → submit)
+- Reports (5 report types)
+- Permission Tests (RBAC validation)
+
+### Option 2: Manual Testing with cURL
+```bash
+# Get all parts
+curl http://localhost:3000/api/parts \
+  -H "x-user-role: admin" | jq .
+
+# Get inventory alerts for location
+curl "http://localhost:3000/api/inventory/alerts?locationId=aaaa0000-0000-0000-0000-000000000001" \
+  -H "x-user-role: admin" | jq .
+
+# Create receiving ticket
+curl -X POST http://localhost:3000/api/receiving \
+  -H "Content-Type: application/json" \
+  -H "x-user-role: admin" \
+  -d '{"locationId":"aaaa0000-0000-0000-0000-000000000001","vendorName":"Test Vendor"}' | jq .
+```
+
+### Option 3: Test via Frontend
+- **Parts Catalog**: Navigate to Parts > Catalog
+  - View, create, edit, deactivate parts
+  - Filter by category/manufacturer
+  - Search by SKU/name
+  
+- **Inventory Dashboard**: Navigate to Inventory
+  - View current stock levels by location
+  - View low stock alerts
+  - Check inventory status and values
+
+---
+
 ## ✅ You're Done!
 
 Once both are running, you'll have:
 - **Backend API** at http://localhost:3000
 - **Frontend App** at http://localhost:4200
+- **Phase 2 Inventory APIs** fully functional with:
+  - Parts Catalog management
+  - Multi-location inventory tracking
+  - Receiving/Adjustment/Cycle Count workflows
+  - Role-based access control
+  - Transaction audit logs
+  - 5 comprehensive reports
 
 Navigate through all the features:
 - Dashboard

@@ -1,0 +1,75 @@
+<div class="customers-list">
+  <div class="header">
+    <h2>Customers</h2>
+    <button class="btn btn-primary" (click)="goToNew()">+ New Customer</button>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+
+  <div class="filters">
+    <input class="form-control" placeholder="Search company, phone, email" [(ngModel)]="filters.search" (input)="loadCustomers()" />
+
+    <select class="form-control" [(ngModel)]="filters.type" (change)="loadCustomers()">
+      <option value="">All Types</option>
+      <option *ngFor="let t of customerTypes" [value]="t">{{ t }}</option>
+    </select>
+
+    <select class="form-control" [(ngModel)]="filters.status" (change)="loadCustomers()">
+      <option value="">All Statuses</option>
+      <option *ngFor="let s of statuses" [value]="s">{{ s }}</option>
+    </select>
+
+    <select class="form-control" [(ngModel)]="filters.paymentTerms" (change)="loadCustomers()">
+      <option value="">All Payment Terms</option>
+      <option *ngFor="let p of paymentTerms" [value]="p">{{ p }}</option>
+    </select>
+
+    <select class="form-control" [(ngModel)]="filters.locationId" (change)="loadCustomers()">
+      <option value="">All Locations</option>
+      <option *ngFor="let loc of locations" [value]="loc.id">{{ loc.name }}</option>
+    </select>
+
+    <button class="btn btn-secondary" (click)="clearFilters()">Clear</button>
+  </div>
+
+  <div *ngIf="loading" class="alert alert-info">Loading...</div>
+
+  <div class="table-responsive" *ngIf="!loading">
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Default Location</th>
+          <th>Last Service Date</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let c of customers">
+          <td>{{ c.company_name }}</td>
+          <td>{{ c.customer_type }}</td>
+          <td>
+            <span class="badge" [ngClass]="c.status === 'ACTIVE' ? 'badge-success' : 'badge-secondary'">
+              {{ c.status }}
+            </span>
+          </td>
+          <td>{{ c.phone }}</td>
+          <td>{{ c.email }}</td>
+          <td>{{ c.default_location_id || '—' }}</td>
+          <td>{{ c.last_service_date ? (c.last_service_date | date:'shortDate') : '—' }}</td>
+          <td>
+            <button class="btn btn-sm btn-info" (click)="viewCustomer(c.id)">View</button>
+            <button class="btn btn-sm btn-primary" (click)="editCustomer(c.id)">Edit</button>
+            <button class="btn btn-sm btn-warning" (click)="toggleStatus(c)">
+              {{ c.status === 'ACTIVE' ? 'Deactivate' : 'Activate' }}
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

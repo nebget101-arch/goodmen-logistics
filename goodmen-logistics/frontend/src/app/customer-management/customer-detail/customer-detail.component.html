@@ -1,0 +1,110 @@
+<div class="customer-detail" *ngIf="customer">
+  <div class="header">
+    <div>
+      <h2>{{ customer.company_name }}</h2>
+      <span class="badge" [ngClass]="customer.status === 'ACTIVE' ? 'badge-success' : 'badge-secondary'">
+        {{ customer.status }}
+      </span>
+    </div>
+    <button class="btn btn-primary" (click)="editCustomer()">Edit</button>
+  </div>
+
+  <div *ngIf="alerts?.missing_billing_info" class="alert alert-warning">
+    Missing billing information.
+  </div>
+  <div *ngIf="alerts?.inactive_warning" class="alert alert-danger">
+    Customer is inactive.
+  </div>
+
+  <div class="tabs">
+    <button class="btn" [class.active]="activeTab === 'overview'" (click)="activeTab = 'overview'">Overview</button>
+    <button class="btn" [class.active]="activeTab === 'work-orders'" (click)="activeTab = 'work-orders'">Work Orders</button>
+    <button class="btn" [class.active]="activeTab === 'service-history'" (click)="activeTab = 'service-history'">Service History</button>
+    <button class="btn" [class.active]="activeTab === 'pricing'" (click)="activeTab = 'pricing'">Pricing</button>
+    <button class="btn" [class.active]="activeTab === 'notes'" (click)="activeTab = 'notes'">Notes</button>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'overview'">
+    <div class="grid">
+      <div><strong>Type:</strong> {{ customer.customer_type }}</div>
+      <div><strong>Phone:</strong> {{ customer.phone || '—' }}</div>
+      <div><strong>Email:</strong> {{ customer.email || '—' }}</div>
+      <div><strong>Payment Terms:</strong> {{ customer.payment_terms || '—' }}</div>
+      <div><strong>Credit Limit:</strong> {{ customer.credit_limit || '—' }}</div>
+      <div><strong>Tax Exempt:</strong> {{ customer.tax_exempt ? 'Yes' : 'No' }}</div>
+    </div>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'work-orders'">
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Work Order</th>
+          <th>Service Date</th>
+          <th>Status</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let wo of workOrders">
+          <td>{{ wo.id }}</td>
+          <td>{{ wo.date_performed | date:'shortDate' }}</td>
+          <td>{{ wo.status }}</td>
+          <td>${{ wo.cost | number:'1.2-2' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'service-history'">
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Service Date</th>
+          <th>Status</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let wo of serviceHistory">
+          <td>{{ wo.date_performed | date:'shortDate' }}</td>
+          <td>{{ wo.status }}</td>
+          <td>${{ wo.cost | number:'1.2-2' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'pricing'">
+    <div class="grid">
+      <div><strong>Default Labor Rate:</strong> {{ pricing?.default_labor_rate ?? 'System Default' }}</div>
+      <div><strong>Parts Discount %:</strong> {{ pricing?.parts_discount_percent ?? '—' }}</div>
+      <div><strong>Labor Discount %:</strong> {{ pricing?.labor_discount_percent ?? '—' }}</div>
+      <div><strong>Shop Supplies %:</strong> {{ pricing?.shop_supplies_percent ?? '—' }}</div>
+      <div><strong>Tax Override %:</strong> {{ pricing?.tax_override_percent ?? '—' }}</div>
+      <div><strong>Contract Pricing:</strong> {{ pricing?.contract_pricing_enabled ? 'Yes' : 'No' }}</div>
+    </div>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'notes'">
+    <div class="note-form">
+      <select class="form-control" [(ngModel)]="notePayload.note_type">
+        <option value="GENERAL">General</option>
+        <option value="BILLING">Billing</option>
+        <option value="SERVICE_ISSUE">Service Issue</option>
+      </select>
+      <textarea class="form-control" [(ngModel)]="notePayload.note" placeholder="Add a note"></textarea>
+      <button class="btn btn-primary" (click)="addNote()">Add Note</button>
+    </div>
+
+    <div class="notes-list">
+      <div class="note" *ngFor="let n of notes">
+        <div class="note-header">
+          <strong>{{ n.note_type }}</strong>
+          <span>{{ n.created_at | date:'short' }}</span>
+        </div>
+        <div class="note-body">{{ n.note }}</div>
+      </div>
+    </div>
+  </div>
+</div>

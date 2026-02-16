@@ -16,7 +16,7 @@ export class WorkOrderComponent implements OnInit {
   customerSearchError: string = '';
   selectedCustomer: any = null;
   showNewCustomerModal = false;
-  newCustomer: any = { name: '', dot_number: '', address: '', city: '', state: '', zip: '', phone: '', email: '' };
+  newCustomer: any = { company_name: '', dot_number: '', address: '', city: '', state: '', zip: '', phone: '', email: '' };
   newCustomerError: string = '';
   workOrder: any = {
     vehicleId: null,
@@ -36,6 +36,12 @@ export class WorkOrderComponent implements OnInit {
   workOrderSaveSuccess: string = '';
   isEditMode = false;
   workOrderId: string | null = null;
+  documents: any[] = [];
+  invoiceInfo: any = null;
+  workOrderLoadError: string = '';
+  partsCatalog: any[] = [];
+  workOrderParts: any[] = [];
+  reservePartForm: any = { partId: '', qtyRequested: 1, unitPrice: null, locationId: '' };
 
   constructor(private apiService: ApiService, private route: ActivatedRoute) { }
 
@@ -43,6 +49,7 @@ export class WorkOrderComponent implements OnInit {
     this.loadVehicles();
     this.loadCustomers();
     this.loadLocations();
+    this.loadParts();
     this.initWorkOrder();
     this.route.paramMap.subscribe(params => {
       const id = params.get('id');
@@ -57,26 +64,46 @@ export class WorkOrderComponent implements OnInit {
   loadWorkOrder(id: string): void {
     this.apiService.getWorkOrder(id).subscribe({
       next: (data) => {
-        if (!data) return;
-        this.workOrder.id = data.id;
-        this.workOrder.workOrderNumber = data.id;
-        this.workOrder.vehicleId = data.vehicleId;
-        this.workOrder.customerId = data.customerId;
-        this.workOrder.title = data.description || '';
-        this.workOrder.type = data.type || 'Repair';
-        this.workOrder.status = data.status || 'pending';
-        this.workOrder.priority = data.priority || '';
-        this.workOrder.requestDate = data.createdAt ? data.createdAt.slice(0, 10) : '';
-        this.workOrder.completionDate = data.datePerformed ? data.datePerformed.slice(0, 10) : '';
-        this.workOrder.currentOdometer = data.mileage || '';
-        this.workOrder.assignedTo = data.mechanicName || '';
-        this.workOrder.unitNumber = data.vehicleUnit || '';
-        this.workOrder.vin = data.vin || '';
+        const payload = data?.data || data;
+        if (!payload) return;
+
+        const wo = payload.workOrder || payload;
+        this.workOrder.id = wo.id;
+        this.workOrder.workOrderNumber = wo.work_order_number || wo.workOrderNumber || wo.id;
+        this.workOrder.vehicleId = wo.vehicle_id || wo.vehicleId;
+        this.workOrder.customerId = wo.customer_id || wo.customerId;
+        this.workOrder.shopLocationId = wo.location_id || wo.locationId;
+        this.workOrder.title = wo.description || '';
+        this.workOrder.type = wo.type || 'REPAIR';
+        this.workOrder.status = wo.status || 'DRAFT';
+        this.workOrder.priority = wo.priority || '';
+        this.workOrder.requestDate = wo.created_at ? wo.created_at.slice(0, 10) : '';
+        this.workOrder.completionDate = wo.completed_at ? wo.completed_at.slice(0, 10) : '';
+        this.workOrder.currentOdometer = wo.odometer_miles || '';
+        this.workOrder.assignedTo = wo.assigned_mechanic_user_id || '';
+
+        const vehicle = payload.vehicle || {};
+        this.workOrder.unitNumber = vehicle.unit_number || wo.vehicle_unit || '';
+        this.workOrder.vin = vehicle.vin || wo.vehicle_vin || '';
         this.onVehicleSelect();
+
+        this.documents = payload.documents || [];
+        this.invoiceInfo = (payload.invoices && payload.invoices.length) ? payload.invoices[0] : null;
+        this.workOrderParts = payload.parts || [];
+        this.reservePartForm.locationId = this.workOrder.shopLocationId || '';
       },
       error: (err) => {
-        this.workOrderSaveError = err?.error?.message || 'Failed to load work order.';
+        this.workOrderLoadError = err?.error?.error || err?.error?.message || 'Failed to load work order.';
       }
+    });
+  }
+
+  loadParts(): void {
+    this.apiService.getParts({ pageSize: 500 }).subscribe({
+      next: (res: any) => {
+        this.partsCatalog = res?.rows || res?.data || res || [];
+      },
+      error: () => { this.partsCatalog = []; }
     });
   }
 
@@ -89,7 +116,9 @@ export class WorkOrderComponent implements OnInit {
 
   loadCustomers(): void {
     this.apiService.getCustomers().subscribe({
-      next: (data) => { this.customers = data; },
+      next: (data) => {
+        this.customers = data?.rows || data?.data || data || [];
+      },
       error: () => { this.customers = []; }
     });
   }
@@ -100,9 +129,10 @@ export class WorkOrderComponent implements OnInit {
     if (!this.customerDotSearch) return;
     this.apiService.getCustomerByDot(this.customerDotSearch).subscribe({
       next: (data) => {
-        if (data && data.length > 0) {
-          this.selectedCustomer = data[0];
-          this.workOrder.customerId = data[0].id;
+        const rows = data?.rows || data?.data || data || [];
+        if (rows && rows.length > 0) {
+          this.selectedCustomer = rows[0];
+          this.workOrder.customerId = rows[0].id;
         } else {
           this.fetchFmcsadot(this.customerDotSearch);
         }
@@ -116,7 +146,7 @@ export class WorkOrderComponent implements OnInit {
       next: (company) => {
         if (company) {
           this.newCustomer = {
-            name: company.legal_name || '',
+            company_name: company.legal_name || company.name || '',
             dot_number: dot,
             address: company.address || '',
             city: company.city || '',
@@ -136,8 +166,8 @@ export class WorkOrderComponent implements OnInit {
 
   createCustomer(): void {
     this.newCustomerError = '';
-    if (!this.newCustomer.name || !this.newCustomer.dot_number) {
-      this.newCustomerError = 'Name and DOT number are required.';
+    if (!this.newCustomer.company_name || !this.newCustomer.dot_number) {
+      this.newCustomerError = 'Company name and DOT number are required.';
       return;
     }
     this.apiService.createCustomer(this.newCustomer).subscribe({
@@ -374,18 +404,94 @@ export class WorkOrderComponent implements OnInit {
   submitWorkOrder(): void {
     this.workOrderSaveError = '';
     this.workOrderSaveSuccess = '';
+    const payload: any = {
+      vehicleId: this.workOrder.vehicleId,
+      customerId: this.workOrder.customerId,
+      locationId: this.workOrder.shopLocationId,
+      type: this.workOrder.type,
+      priority: this.workOrder.priority,
+      status: this.workOrder.status,
+      description: this.workOrder.title,
+      odometerMiles: this.workOrder.currentOdometer,
+      assignedMechanicUserId: this.workOrder.assignedTo,
+      labor: this.workOrder.labor || [],
+      fees: this.workOrder.fees || [],
+      discountType: this.workOrder.discountType,
+      discountValue: this.workOrder.discountValue,
+      taxRatePercent: this.workOrder.taxRatePercent
+    };
+
     const save$ = this.isEditMode && this.workOrderId
-      ? this.apiService.updateWorkOrder(this.workOrderId, this.workOrder)
-      : this.apiService.createWorkOrder(this.workOrder);
+      ? this.apiService.updateWorkOrder(this.workOrderId, payload)
+      : this.apiService.createWorkOrder(payload);
 
     save$.subscribe({
       next: (saved) => {
-        this.workOrder.workOrderNumber = saved?.id || saved?.work_order_id || this.workOrder.workOrderNumber;
+        const savedData = saved?.data || saved;
+        this.workOrder.workOrderNumber = savedData?.work_order_number || savedData?.id || this.workOrder.workOrderNumber;
         this.workOrderSaveSuccess = this.isEditMode ? 'Work order updated successfully.' : 'Work order saved successfully.';
       },
       error: (err) => {
         this.workOrderSaveError = err?.error?.message || 'Failed to save work order.';
       }
+    });
+  }
+
+  generateInvoice(): void {
+    if (!this.workOrderId) return;
+    this.apiService.generateInvoiceFromWorkOrder(this.workOrderId).subscribe({
+      next: (res: any) => {
+        this.invoiceInfo = res?.data || res;
+      }
+    });
+  }
+
+  uploadDocument(event: any): void {
+    const file = event.target.files?.[0];
+    if (!file || !this.workOrderId) return;
+    this.apiService.uploadWorkOrderDocument(this.workOrderId, file).subscribe({
+      next: () => this.loadWorkOrder(this.workOrderId as string)
+    });
+  }
+
+  canGenerateInvoice(): boolean {
+    const status = (this.workOrder?.status || '').toString().toUpperCase();
+    return status === 'COMPLETED';
+  }
+
+  reservePart(): void {
+    if (!this.workOrderId) return;
+    const payload = {
+      partId: this.reservePartForm.partId,
+      qtyRequested: this.reservePartForm.qtyRequested,
+      unitPrice: this.reservePartForm.unitPrice,
+      locationId: this.reservePartForm.locationId || this.workOrder.shopLocationId
+    };
+    this.apiService.reserveWorkOrderPart(this.workOrderId, payload).subscribe({
+      next: () => {
+        this.reservePartForm = { partId: '', qtyRequested: 1, unitPrice: null, locationId: this.workOrder.shopLocationId || '' };
+        this.loadWorkOrder(this.workOrderId as string);
+      }
+    });
+  }
+
+  issuePart(line: any): void {
+    if (!this.workOrderId || !line?.id) return;
+    const qtyStr = prompt('Qty to issue:', '1');
+    const qty = qtyStr ? Number(qtyStr) : 0;
+    if (!qty || qty <= 0) return;
+    this.apiService.issueWorkOrderPart(this.workOrderId, line.id, qty).subscribe({
+      next: () => this.loadWorkOrder(this.workOrderId as string)
+    });
+  }
+
+  returnPart(line: any): void {
+    if (!this.workOrderId || !line?.id) return;
+    const qtyStr = prompt('Qty to return:', '1');
+    const qty = qtyStr ? Number(qtyStr) : 0;
+    if (!qty || qty <= 0) return;
+    this.apiService.returnWorkOrderPart(this.workOrderId, line.id, qty).subscribe({
+      next: () => this.loadWorkOrder(this.workOrderId as string)
     });
   }
 }

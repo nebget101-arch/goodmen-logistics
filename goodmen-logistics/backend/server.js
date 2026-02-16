@@ -43,6 +43,7 @@ app.use(dynatraceMiddleware);
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Import routes
 const driversRouter = require('./routes/drivers');
@@ -55,19 +56,23 @@ const dashboardRouter = require('./routes/dashboard');
 const auditRouter = require('./routes/audit');
 const dbExampleRouter = require('./routes/db-example');
 const dqfDocumentsRouter = require('./routes/dqf-documents');
+const invoicesRouter = require('./routes/invoices');
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
-const workOrdersRouter = require('./routes/work-orders');
-
+const workOrdersRouter = require('./routes/work-orders-hub');
+const partsRouter = require('./routes/parts');
+const inventoryRouter = require('./routes/inventory');
+const receivingRouter = require('./routes/receiving');
+const adjustmentsRouter = require('./routes/adjustments');
+const cycleCountsRouter = require('./routes/cycle-counts');
+const reportsRouter = require('./routes/reports');
 
 const locationsRouter = require('./routes/locations');
 const customersRouter = require('./routes/customers');
 
 // Use routes
 
-// Register customers API
-const knex = require('knex')(require('./knexfile').development);
-app.use('/api/customers', customersRouter(knex));
+app.use('/api/customers', customersRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/locations', locationsRouter);
 app.use('/api/drivers', driversRouter);
@@ -82,6 +87,14 @@ app.use('/api/db-example', dbExampleRouter);
 app.use('/api/dqf-documents', dqfDocumentsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/work-orders', workOrdersRouter);
+app.use('/api/invoices', invoicesRouter);
+// Inventory Management Routes (Phase 2)
+app.use('/api/parts', partsRouter);
+app.use('/api/inventory', inventoryRouter);
+app.use('/api/receiving', receivingRouter);
+app.use('/api/adjustments', adjustmentsRouter);
+app.use('/api/cycle-counts', cycleCountsRouter);
+app.use('/api/reports', reportsRouter);
 
 // Health check
 app.get('/api/health', async (req, res) => {
