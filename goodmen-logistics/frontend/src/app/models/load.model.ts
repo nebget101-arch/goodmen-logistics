@@ -1,0 +1,34 @@
+export interface Load {
+  id: string;
+  loadNumber: string;
+  driverId: string;
+  driverName: string;
+  vehicleId: string;
+  vehicleUnit: string;
+  status: string;
+  pickupLocation: string;
+  pickupDate: string;
+  pickupCity?: string;
+  pickupState?: string;
+  pickupZip?: string;
+  deliveryLocation: string;
+  deliveryDate: string;
+  deliveryCity?: string;
+  deliveryState?: string;
+  deliveryZip?: string;
+  commodity: string;
+  weight: number;
+  distance: number;
+  rate: number;
+  shipper: string;
+  consignee: string;
+  bolNumber: string;
+  billingStatus?: string;
+  dispatcher?: string;
+  notes?: string;
+  broker?: string;
+  brokerPO?: string;
+  brokerRate?: number;
+  truck?: string;
+  trailer?: string;
+}

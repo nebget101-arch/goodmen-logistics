@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 const dtLogger = require('../utils/dynatrace-logger');
+const auth = require('./auth-middleware');
+
+// Protect all dashboard routes: admin, safety
+router.use(auth(['admin', 'safety']));
 
 // GET dashboard statistics
 router.get('/stats', async (req, res) => {

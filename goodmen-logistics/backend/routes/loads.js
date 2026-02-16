@@ -1,33 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { query } = require('../config/database');
-const dtLogger = require('../utils/dynatrace-logger');
+// const { query } = require('../config/database');
+// const dtLogger = require('../utils/dynatrace-logger');
+const { loads } = require('../data/mock-data');
+const auth = require('./auth-middleware');
+
+// Protect all loads routes: admin, dispatch
+router.use(auth(['admin', 'dispatch']));
 
 // GET all loads
-router.get('/', async (req, res) => {
-  const startTime = Date.now();
-  try {
-    const result = await query(`
-      SELECT l.*, d.first_name || ' ' || d.last_name as "driverName", v.unit_number as "vehicleUnit"
-      FROM loads l
-      LEFT JOIN drivers d ON l.driver_id = d.id
-      LEFT JOIN vehicles v ON l.vehicle_id = v.id
-      ORDER BY l.pickup_date DESC
-    `);
-    const duration = Date.now() - startTime;
-    
-    dtLogger.trackDatabase('SELECT', 'loads', duration, true, { count: result.rows.length });
-    dtLogger.trackRequest('GET', '/api/loads', 200, duration, { count: result.rows.length });
-    
-    res.json(result.rows);
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    dtLogger.error('Failed to fetch loads', error, { path: '/api/loads' });
-    dtLogger.trackRequest('GET', '/api/loads', 500, duration);
-    
-    console.error('Error fetching loads:', error);
-    res.status(500).json({ message: 'Failed to fetch loads' });
-  }
+// Return all mock loads
+router.get('/', (req, res) => {
+  res.json(loads);
 });
 
 // GET load by ID

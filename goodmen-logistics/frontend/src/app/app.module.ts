@@ -1,6 +1,6 @@
 import { NgModule, ErrorHandler } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
-import { HttpClientModule } from '@angular/common/http';
+import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { AppRoutingModule } from './app-routing.module';
 
@@ -13,9 +13,11 @@ import { HosComponent } from './components/hos/hos.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { LoadsComponent } from './components/loads/loads.component';
 import { AuditComponent } from './components/audit/audit.component';
+import { LoginComponent } from './components/login/login.component';
 
 // Dynatrace Error Handler
 import { DynatraceErrorHandler } from './dynatrace-error-handler';
+import { AuthInterceptor } from './auth.interceptor';
 
 @NgModule({
   declarations: [
@@ -27,7 +29,8 @@ import { DynatraceErrorHandler } from './dynatrace-error-handler';
     HosComponent,
     MaintenanceComponent,
     LoadsComponent,
-    AuditComponent
+    AuditComponent,
+    LoginComponent
   ],
   imports: [
     BrowserModule,
@@ -37,7 +40,12 @@ import { DynatraceErrorHandler } from './dynatrace-error-handler';
   ],
   providers: [
     // Enable Dynatrace error reporting
-    // Uncomment to enable: { provide: ErrorHandler, useClass: DynatraceErrorHandler }
+    // Uncomment to enable: { provide: ErrorHandler, useClass: DynatraceErrorHandler },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuthInterceptor,
+      multi: true
+    }
   ],
   bootstrap: [AppComponent]
 })

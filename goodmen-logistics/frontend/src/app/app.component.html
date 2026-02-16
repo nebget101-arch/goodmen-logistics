@@ -1,0 +1,24 @@
+<header class="header">
+  <div class="header-content">
+    <div class="logo">
+      <img src="assets/goodmen-logo-simple.svg" alt="Goodmen Logistics Logo" style="height: 48px; width: auto; background: white; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+      <h1>GOODMEN LOGISTICS</h1>
+    </div>
+    <nav style="display: flex; align-items: center; gap: 24px;">
+      <ul class="nav-links">
+        <li *ngIf="isLoggedIn() && canSee('dashboard')"><a routerLink="/dashboard" routerLinkActive="active">Dashboard</a></li>
+        <li *ngIf="isLoggedIn() && canSee('drivers')"><a routerLink="/drivers" routerLinkActive="active">Drivers</a></li>
+        <li *ngIf="isLoggedIn() && canSee('vehicles')"><a routerLink="/vehicles" routerLinkActive="active">Vehicles</a></li>
+        <li *ngIf="isLoggedIn() && canSee('loads')"><a routerLink="/loads" routerLinkActive="active">Loads</a></li>
+        <li *ngIf="isLoggedIn() && canSee('hos')"><a routerLink="/hos" routerLinkActive="active">HOS</a></li>
+        <li *ngIf="isLoggedIn() && canSee('maintenance')"><a routerLink="/maintenance" routerLinkActive="active">Maintenance</a></li>
+        <li *ngIf="isLoggedIn() && canSee('audit')"><a routerLink="/audit" routerLinkActive="active">Audit</a></li>
+      </ul>
+      <button *ngIf="!isLoggedIn()" routerLink="/login" class="btn" style="background:#b00;color:#fff;">Login</button>
+      <button *ngIf="isLoggedIn()" (click)="logout()" class="btn" style="background:#222;color:#fff;">Logout</button>
+    </nav>
+  </div>
+</header>
+<main>
+  <router-outlet></router-outlet>
+</main>

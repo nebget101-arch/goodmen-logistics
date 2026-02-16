@@ -1,0 +1,7 @@
+<svg width="320" height="120" viewBox="0 0 320 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="10" y="10" width="300" height="100" rx="18" fill="#fff" stroke="#b00" stroke-width="3"/>
+  <polygon points="30,60 10,70 30,80" fill="#b00"/>
+  <polygon points="290,60 310,70 290,80" fill="#b00"/>
+  <text x="50%" y="55" text-anchor="middle" fill="#b00" font-size="32" font-family="Arial Black, Arial, sans-serif" font-weight="bold">GOODMEN</text>
+  <text x="50%" y="90" text-anchor="middle" fill="#222" font-size="22" font-family="Arial Black, Arial, sans-serif" font-weight="bold" letter-spacing="6">LOGISTICS</text>
+</svg>

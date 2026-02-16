@@ -8,6 +8,9 @@ DROP TABLE IF EXISTS hos_logs CASCADE;
 DROP TABLE IF EXISTS hos_records CASCADE;
 DROP TABLE IF EXISTS vehicles CASCADE;
 DROP TABLE IF EXISTS drivers CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS dqf_documents CASCADE;
+DROP TABLE IF EXISTS vehicle_documents CASCADE;
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -151,6 +154,15 @@ CREATE TABLE audit_logs (
     changes JSONB,
     performed_by VARCHAR(100),
     ip_address VARCHAR(45),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Users Table for Authentication and Roles
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(32) NOT NULL CHECK (role IN ('admin', 'safety', 'fleet', 'dispatch')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

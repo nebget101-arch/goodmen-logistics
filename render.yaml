@@ -11,6 +11,26 @@ services:
         fromDatabase:
           name: safetyapp-db
           property: connectionString
+      - key: PG_DATABASE
+        fromDatabase:
+          name: safetyapp-db
+          property: databaseName
+      - key: PG_USER
+        fromDatabase:
+          name: safetyapp-db
+          property: user
+      - key: PG_PASSWORD
+        fromDatabase:
+          name: safetyapp-db
+          property: password
+      - key: PG_HOST
+        fromDatabase:
+          name: safetyapp-db
+          property: host
+      - key: PG_PORT
+        fromDatabase:
+          name: safetyapp-db
+          property: port
       - key: NODE_ENV
         value: production
       - key: PORT

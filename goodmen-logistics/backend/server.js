@@ -55,6 +55,7 @@ const dashboardRouter = require('./routes/dashboard');
 const auditRouter = require('./routes/audit');
 const dbExampleRouter = require('./routes/db-example');
 const dqfDocumentsRouter = require('./routes/dqf-documents');
+const authRouter = require('./routes/auth');
 
 // Use routes
 app.use('/api/drivers', driversRouter);
@@ -67,6 +68,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/db-example', dbExampleRouter);
 app.use('/api/dqf-documents', dqfDocumentsRouter);
+app.use('/api/auth', authRouter);
 
 // Health check
 app.get('/api/health', async (req, res) => {

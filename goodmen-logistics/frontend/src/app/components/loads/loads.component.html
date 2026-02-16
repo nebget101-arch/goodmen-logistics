@@ -2,7 +2,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">📦 Load Dispatch & Tracking</h2>
-      <button class="btn btn-primary">+ Create Load</button>
+      <button class="btn btn-primary" (click)="openCreateModal()">+ Create Load</button>
     </div>
 
     <div *ngIf="loading" class="loading">
@@ -44,7 +44,194 @@
             </span>
           </td>
           <td>
-            <button class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">View</button>
+            <button class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;" (click)="openDetails(load)">View</button>
+            <button class="btn btn-warning" style="font-size: 12px; padding: 6px 12px; margin-left: 4px;" (click)="openEditModal(load)">Edit</button>
+          <!-- Create Load Modal (Redesigned) -->
+          <div class="modal-backdrop" *ngIf="showCreateModal">
+            <div class="modal" style="max-width: 900px;">
+              <div class="modal-header">
+                <h3>Create Load</h3>
+                <button class="close" (click)="closeCreateModal()">&times;</button>
+              </div>
+              <div class="modal-body">
+                <form (ngSubmit)="createLoad()" style="display: flex; flex-wrap: wrap; gap: 24px;">
+                  <div style="flex: 1 1 300px; min-width: 300px;">
+                    <h4>Status & Billing</h4>
+                    <div><label>Status:
+                      <select [(ngModel)]="newLoad.status" name="status">
+                        <option value="new">New</option>
+                        <option value="pending">Pending</option>
+                        <option value="tonu">TONU</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </label></div>
+                    <div><label>Billing Status:
+                      <select [(ngModel)]="newLoad.billingStatus" name="billingStatus">
+                        <option value="pending">Pending</option>
+                        <option value="funded">Funded</option>
+                        <option value="invoiced">Invoiced</option>
+                      </select>
+                    </label></div>
+                    <div><label>Dispatcher: <input [(ngModel)]="newLoad.dispatcher" name="dispatcher"></label></div>
+                    <div><label>Notes: <input [(ngModel)]="newLoad.notes" name="notes"></label></div>
+                  </div>
+                  <div style="flex: 1 1 300px; min-width: 300px;">
+                    <h4>Pickup</h4>
+                    <div><label>Date: <input type="date" [(ngModel)]="newLoad.pickupDate" name="pickupDate"></label></div>
+                    <div><label>City: <input [(ngModel)]="newLoad.pickupCity" name="pickupCity"></label></div>
+                    <div><label>State: <input [(ngModel)]="newLoad.pickupState" name="pickupState"></label></div>
+                    <div><label>ZIP: <input [(ngModel)]="newLoad.pickupZip" name="pickupZip"></label></div>
+                            <div><label>ZIP: <input [(ngModel)]="newLoad.pickupZip" name="pickupZip" (blur)="lookupPickupZip()"></label></div>
+                  </div>
+                  <div style="flex: 1 1 300px; min-width: 300px;">
+                    <h4>Delivery</h4>
+                    <div><label>Date: <input type="date" [(ngModel)]="newLoad.deliveryDate" name="deliveryDate"></label></div>
+                    <div><label>City: <input [(ngModel)]="newLoad.deliveryCity" name="deliveryCity"></label></div>
+                    <div><label>State: <input [(ngModel)]="newLoad.deliveryState" name="deliveryState"></label></div>
+                    <div><label>ZIP: <input [(ngModel)]="newLoad.deliveryZip" name="deliveryZip"></label></div>
+                            <div><label>ZIP: <input [(ngModel)]="newLoad.deliveryZip" name="deliveryZip" (blur)="lookupDeliveryZip()"></label></div>
+                  </div>
+                  <div style="flex: 1 1 300px; min-width: 300px;">
+                    <h4>Broker</h4>
+                    <div><label>Broker: <input [(ngModel)]="newLoad.broker" name="broker"></label></div>
+                    <div><label>PO #: <input [(ngModel)]="newLoad.brokerPO" name="brokerPO"></label></div>
+                    <div><label>Rate: <input type="number" [(ngModel)]="newLoad.brokerRate" name="brokerRate"></label></div>
+                  </div>
+                  <div style="flex: 1 1 300px; min-width: 300px;">
+                    <h4>Driver</h4>
+                    <div>
+                      <label>Driver:
+                        <input [(ngModel)]="driverSearch" name="driverSearch" placeholder="Search driver..." autocomplete="off">
+                        <select [(ngModel)]="newLoad.driverId" name="driverId">
+                          <option *ngFor="let d of filteredDrivers" [value]="d.id">
+                            {{ d.firstName }} {{ d.lastName }}
+                          </option>
+                        </select>
+                      </label>
+                    </div>
+                    <div><label>Truck: <input [(ngModel)]="newLoad.truck" name="truck"></label></div>
+                    <div><label>Trailer: <input [(ngModel)]="newLoad.trailer" name="trailer"></label></div>
+                  </div>
+                  <div style="flex: 1 1 300px; min-width: 300px;">
+                    <h4>Attachments</h4>
+                    <div style="border: 1px dashed #ccc; padding: 12px; border-radius: 4px; background: #fafafa;">
+                      <input type="file" name="attachments" multiple>
+                      <div style="margin-top: 8px; color: #888;">Drag and drop or upload</div>
+                    </div>
+                  </div>
+                  <div style="flex: 1 1 100%; text-align: right; margin-top: 24px;">
+                    <button class="btn btn-primary" type="submit">Create Load</button>
+                    <button class="btn btn-secondary" type="button" (click)="closeCreateModal()">Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+          <!-- Edit Load Modal -->
+          <div class="modal-backdrop" *ngIf="showEditModal">
+            <div class="modal">
+              <div class="modal-header">
+                <h3>Edit Load - {{ editLoad?.loadNumber }}</h3>
+                <button class="close" (click)="closeEditModal()">&times;</button>
+              </div>
+              <div class="modal-body" *ngIf="editLoad">
+                <form (ngSubmit)="updateLoad()">
+                  <div><label>Driver Name: <input [(ngModel)]="editLoad.driverName" name="editDriverName" required></label></div>
+                  <div><label>Vehicle Unit: <input [(ngModel)]="editLoad.vehicleUnit" name="editVehicleUnit" required></label></div>
+                  <div><label>Pickup Location: <input [(ngModel)]="editLoad.pickupLocation" name="editPickupLocation" required></label></div>
+                  <div><label>Pickup City: <input [(ngModel)]="editLoad.pickupCity" name="editPickupCity"></label></div>
+                  <div><label>Pickup State: <input [(ngModel)]="editLoad.pickupState" name="editPickupState"></label></div>
+                  <div><label>Pickup ZIP: <input [(ngModel)]="editLoad.pickupZip" name="editPickupZip" (blur)="lookupEditPickupZip()"></label></div>
+                  <div><label>Delivery Location: <input [(ngModel)]="editLoad.deliveryLocation" name="editDeliveryLocation" required></label></div>
+                  <div><label>Delivery City: <input [(ngModel)]="editLoad.deliveryCity" name="editDeliveryCity"></label></div>
+                  <div><label>Delivery State: <input [(ngModel)]="editLoad.deliveryState" name="editDeliveryState"></label></div>
+                  <div><label>Delivery ZIP: <input [(ngModel)]="editLoad.deliveryZip" name="editDeliveryZip" (blur)="lookupEditDeliveryZip()"></label></div>
+                  <div><label>Pickup Date: <input type="datetime-local" [(ngModel)]="editLoad.pickupDate" name="editPickupDate" required></label></div>
+                  <div><label>Delivery Date: <input type="datetime-local" [(ngModel)]="editLoad.deliveryDate" name="editDeliveryDate" required></label></div>
+                  <div><label>Commodity: <input [(ngModel)]="editLoad.commodity" name="editCommodity"></label></div>
+                  <div><label>Weight: <input type="number" [(ngModel)]="editLoad.weight" name="editWeight"></label></div>
+                  <div><label>Distance: <input type="number" [(ngModel)]="editLoad.distance" name="editDistance"></label></div>
+                  <div><label>Rate: <input type="number" [(ngModel)]="editLoad.rate" name="editRate"></label></div>
+                  <div><label>Shipper: <input [(ngModel)]="editLoad.shipper" name="editShipper"></label></div>
+                  <div><label>Consignee: <input [(ngModel)]="editLoad.consignee" name="editConsignee"></label></div>
+                  <div><label>BOL #: <input [(ngModel)]="editLoad.bolNumber" name="editBolNumber"></label></div>
+                  <div><label>Status: <select [(ngModel)]="editLoad.status" name="editStatus">
+                    <option value="pending">Pending</option>
+                    <option value="in-transit">In Transit</option>
+                    <option value="completed">Completed</option>
+                  </select></label></div>
+                  <div class="modal-footer">
+                    <button class="btn btn-primary" type="submit">Save</button>
+                    <button class="btn btn-secondary" type="button" (click)="closeEditModal()">Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+          <!-- Load Details Modal -->
+          <div class="modal-backdrop" *ngIf="showDetailsModal">
+            <div class="modal">
+              <div class="modal-header">
+                <h3>Load Details - {{ selectedLoad?.loadNumber }}</h3>
+                <button class="close" (click)="closeDetails()">&times;</button>
+              </div>
+              <div class="modal-body" *ngIf="selectedLoad">
+                <div><strong>Status:</strong> <span [class]="'badge ' + getStatusBadge(selectedLoad.status)">{{ selectedLoad.status }}</span></div>
+                <div><strong>Driver:</strong> {{ selectedLoad.driverName }}</div>
+                <div><strong>Vehicle:</strong> {{ selectedLoad.vehicleUnit }}</div>
+                <div><strong>Pickup:</strong> {{ selectedLoad.pickupLocation }} ({{ selectedLoad.pickupDate | date:'short' }})</div>
+                <div><strong>Delivery:</strong> {{ selectedLoad.deliveryLocation }} ({{ selectedLoad.deliveryDate | date:'short' }})</div>
+                <div><strong>Commodity:</strong> {{ selectedLoad.commodity }}</div>
+                <div><strong>Weight:</strong> {{ selectedLoad.weight | number }} lbs</div>
+                <div><strong>Distance:</strong> {{ selectedLoad.distance }} mi</div>
+                <div><strong>Rate:</strong> ${{ selectedLoad.rate | number:'1.2-2' }}</div>
+                <div><strong>Shipper:</strong> {{ selectedLoad.shipper }}</div>
+                <div><strong>Consignee:</strong> {{ selectedLoad.consignee }}</div>
+                <div><strong>BOL #:</strong> {{ selectedLoad.bolNumber }}</div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-secondary" (click)="closeDetails()">Close</button>
+              </div>
+            </div>
+          </div>
+          <!-- Modal Styles -->
+          <style>
+          .modal-backdrop {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .modal {
+            background: #fff;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+            padding: 24px 24px 12px 24px;
+            position: relative;
+          }
+          .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+          }
+          .modal-header .close {
+            background: none;
+            border: none;
+            font-size: 2rem;
+            cursor: pointer;
+          }
+          .modal-footer {
+            text-align: right;
+            margin-top: 16px;
+          }
+          </style>
           </td>
         </tr>
       </tbody>
