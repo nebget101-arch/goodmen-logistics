@@ -10,7 +10,8 @@
     "db:reset": "node database/reset.js",
     "db:schema": "node database/run-schema.js",
     "db:seed": "node database/run-seed.js",
-    "db:status": "node database/status.js"
+    "db:status": "node database/status.js",
+    "postdeploy": "npx knex migrate:latest --env production"
   },
   "keywords": [
     "logistics",
