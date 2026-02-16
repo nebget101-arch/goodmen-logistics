@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 const dtLogger = require('../utils/dynatrace-logger');
+const auth = require('./auth-middleware');
 
 // GET application logs (from dtLogger buffer)
 router.get('/logs', (req, res) => {
@@ -36,6 +37,9 @@ router.get('/trail', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch audit trail' });
   }
 });
+
+// Protect all audit routes: admin, safety
+router.use(auth(['admin', 'safety']));
 
 // Old mock code below - keeping for reference
 router.get('/trail-mock', (req, res) => {

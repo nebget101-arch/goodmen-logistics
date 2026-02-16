@@ -1,36 +1,9 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-root',
-  template: `
-    <div class="app">
-      <header class="header">
-        <div class="header-content">
-          <div class="logo">
-            <span class="logo-icon">🚛</span>
-            <div>
-              <h1>Goodmen Logistics</h1>
-              <small style="opacity: 0.9;">FMCSA Compliance & Operations</small>
-            </div>
-          </div>
-          <nav>
-            <ul class="nav-links">
-              <li><a routerLink="/dashboard" routerLinkActive="active">Dashboard</a></li>
-              <li><a routerLink="/drivers" routerLinkActive="active">Drivers</a></li>
-              <li><a routerLink="/vehicles" routerLinkActive="active">Vehicles</a></li>
-              <li><a routerLink="/hos" routerLinkActive="active">HOS</a></li>
-              <li><a routerLink="/maintenance" routerLinkActive="active">Maintenance</a></li>
-              <li><a routerLink="/loads" routerLinkActive="active">Loads</a></li>
-              <li><a routerLink="/audit" routerLinkActive="active">Audit</a></li>
-            </ul>
-          </nav>
-        </div>
-      </header>
-      <main>
-        <router-outlet></router-outlet>
-      </main>
-    </div>
-  `,
+  templateUrl: './app.component.html',
   styles: [`
     .app {
       min-height: 100vh;
@@ -43,6 +16,34 @@ import { Component } from '@angular/core';
     }
   `]
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   title = 'Goodmen Logistics';
+
+  constructor(private router: Router) {}
+
+  isLoggedIn(): boolean {
+    return !!localStorage.getItem('token');
+  }
+
+  logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    this.router.navigate(['/login']);
+  }
+
+  getRole(): string | null {
+    return localStorage.getItem('role');
+  }
+
+  canSee(tab: string): boolean {
+    const role = this.getRole();
+    if (!role) return false;
+    if (role === 'admin') return true;
+    if (role === 'safety') return ['dashboard','drivers', 'vehicles', 'hos', 'audit'].includes(tab);
+    if (role === 'fleet') return ['maintenance'].includes(tab);
+    if (role === 'dispatch') return ['loads'].includes(tab);
+    return false;
+  }
+
+  ngOnInit(): void {}
 }

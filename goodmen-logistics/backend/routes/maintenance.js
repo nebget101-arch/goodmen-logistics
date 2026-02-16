@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 const dtLogger = require('../utils/dynatrace-logger');
+const auth = require('./auth-middleware');
+
+// Protect all maintenance routes: admin, fleet
+router.use(auth(['admin', 'fleet']));
 
 // GET all maintenance records
 router.get('/', async (req, res) => {

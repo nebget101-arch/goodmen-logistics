@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Performance Test Report - Goodmen Logistics</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+      color: #333;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 40px;
+      text-align: center;
+    }
+    
+    .header h1 {
+      font-size: 2.5em;
+      margin-bottom: 10px;
+    }
+    
+    .header p {
+      font-size: 1.1em;
+      opacity: 0.9;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 10px 20px;
+      border-radius: 25px;
+      font-weight: bold;
+      margin-top: 15px;
+      font-size: 1.2em;
+    }
+    
+    .status-pass {
+      background: #10b981;
+      color: white;
+    }
+    
+    .status-fail {
+      background: #ef4444;
+      color: white;
+    }
+    
+    .status-partial {
+      background: #f59e0b;
+      color: white;
+    }
+    
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      padding: 40px;
+      background: #f9fafb;
+    }
+    
+    .summary-card {
+      background: white;
+      padding: 25px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-left: 4px solid #667eea;
+    }
+    
+    .summary-card h3 {
+      color: #667eea;
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+    
+    .summary-card .value {
+      font-size: 2.5em;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .content {
+      padding: 40px;
+    }
+    
+    .test-section {
+      margin-bottom: 40px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .test-header {
+      background: #f3f4f6;
+      padding: 20px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .test-header h2 {
+      color: #333;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .test-body {
+      padding: 25px;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    
+    th {
+      background: #667eea;
+      color: white;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.85em;
+      letter-spacing: 0.5px;
+    }
+    
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    tr:hover {
+      background: #f9fafb;
+    }
+    
+    .metric-good { color: #10b981; font-weight: bold; }
+    .metric-warning { color: #f59e0b; font-weight: bold; }
+    .metric-bad { color: #ef4444; font-weight: bold; }
+    
+    .recommendations {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    
+    .recommendations h3 {
+      color: #92400e;
+      margin-bottom: 15px;
+    }
+    
+    .recommendation-item {
+      margin: 15px 0;
+      padding: 15px;
+      background: white;
+      border-radius: 6px;
+    }
+    
+    .priority-high { border-left: 4px solid #ef4444; }
+    .priority-medium { border-left: 4px solid #f59e0b; }
+    .priority-low { border-left: 4px solid #10b981; }
+    .priority-info { border-left: 4px solid #3b82f6; }
+    
+    .footer {
+      background: #f3f4f6;
+      padding: 30px;
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.9em;
+    }
+    
+    .chart-container {
+      margin: 30px 0;
+      padding: 20px;
+      background: #f9fafb;
+      border-radius: 8px;
+    }
+    
+    .progress-bar {
+      background: #e5e7eb;
+      border-radius: 10px;
+      height: 30px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #059669);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 0.9em;
+    }
+    
+    @media print {
+      body { background: white; padding: 0; }
+      .container { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🚀 Performance Test Report</h1>
+      <p>Goodmen Logistics Safety App</p>
+      <p style="font-size: 0.9em; margin-top: 10px;">Generated: 2/8/2026, 2:59:51 PM</p>
+      <div class="status-badge status-pass">
+        ✅ PASS
+      </div>
+    </div>
+    
+    <div class="summary">
+      <div class="summary-card">
+        <h3>Tests Executed</h3>
+        <div class="value">1</div>
+      </div>
+      <div class="summary-card">
+        <h3>Test Types</h3>
+        <div class="value">SMOKE</div>
+      </div>
+      <div class="summary-card">
+        <h3>Overall Status</h3>
+        <div class="value">✅ PASS</div>
+      </div>
+    </div>
+    
+    <div class="content">
+      <div class="test-section">
+        <div class="test-header">
+          <h2>SMOKE Test Results</h2>
+        </div>
+        <div class="test-body">
+          <div class="chart-container">
+            <h3>Request Success Rate</h3>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: 100.0%">100.0%</div>
+            </div>
+            <h3 style="margin-top: 20px;">Check Success Rate</h3>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: 100.0%">100.0%</div>
+            </div>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Test Duration</td>
+                <td>35.7s</td>
+                <td>ℹ️</td>
+              </tr>
+              <tr>
+                <td>Total Requests</td>
+                <td>24</td>
+                <td>✅</td>
+              </tr>
+              <tr>
+                <td>Failed Requests</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td>Error Rate</td>
+                <td>0.00%</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td>Avg Response Time</td>
+                <td>109.89ms</td>
+                <td class="metric-good">
+                  ✅
+                </td>
+              </tr>
+              <tr>
+                <td>Min Response Time</td>
+                <td>71.92ms</td>
+                <td>ℹ️</td>
+              </tr>
+              <tr>
+                <td>Median (P50)</td>
+                <td>102.43ms</td>
+                <td>ℹ️</td>
+              </tr>
+              <tr>
+                <td>P95 Response Time</td>
+                <td>182.67ms</td>
+                <td class="metric-good">
+                  ✅
+                </td>
+              </tr>
+              <tr>
+                <td>P99 Response Time</td>
+                <td>N/Ams</td>
+                <td class="metric-warning">
+                  ⚠️
+                </td>
+              </tr>
+              <tr>
+                <td>Max Response Time</td>
+                <td>226.11ms</td>
+                <td>ℹ️</td>
+              </tr>
+              <tr>
+                <td>Throughput</td>
+                <td>0.67 req/s</td>
+                <td>✅</td>
+              </tr>
+              <tr>
+                <td>Checks Passed</td>
+                <td>66/66</td>
+                <td class="metric-good">✅</td>
+              </tr>
+            </tbody>
+          </table>
+          <h3 style="margin-top: 30px; color: #667eea;">Endpoint Details</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Endpoint</th>
+                <th>Check</th>
+                <th>Passed</th>
+                <th>Failed</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Health Check</strong></td>
+                <td>health check is 200</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>Health Check</strong></td>
+                <td>health check responds quickly</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>Driver Operations</strong></td>
+                <td>status is 200</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>Driver Operations</strong></td>
+                <td>has json content-type</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>Driver Operations</strong></td>
+                <td>response body exists</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>Vehicle Operations</strong></td>
+                <td>status is 200</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>Vehicle Operations</strong></td>
+                <td>has json content-type</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>Vehicle Operations</strong></td>
+                <td>response body exists</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>HOS Operations</strong></td>
+                <td>status is 200</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>HOS Operations</strong></td>
+                <td>has json content-type</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+              <tr>
+                <td><strong>HOS Operations</strong></td>
+                <td>response body exists</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="metric-good">✅</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="recommendations">
+        <h3>💡 Recommendations</h3>
+        <div class="recommendation-item priority-info">
+          <strong>INFO:</strong> No critical issues detected<br>
+          <em>→ System performs well. Continue monitoring and regular performance testing.</em>
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>Generated by K6 Performance Testing Framework</p>
+      <p>Goodmen Logistics - Safety App Performance Report</p>
+      <p style="margin-top: 10px; font-size: 0.85em;">
+        For more details, check the JSON reports in the reports directory
+      </p>
+    </div>
+  </div>
+</body>
+</html>

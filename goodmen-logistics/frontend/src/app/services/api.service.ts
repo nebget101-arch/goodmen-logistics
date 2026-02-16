@@ -143,4 +143,9 @@ export class ApiService {
     }
     return this.http.get(url);
   }
+
+  // Auth
+  login(username: string, password: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/auth/login`, { username, password });
+  }
 }
