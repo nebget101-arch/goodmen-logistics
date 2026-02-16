@@ -14,7 +14,7 @@ services:
       - key: PG_DATABASE
         fromDatabase:
           name: safetyapp-db
-          property: databaseName
+          property: database
       - key: PG_USER
         fromDatabase:
           name: safetyapp-db
