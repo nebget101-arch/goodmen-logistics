@@ -11,6 +11,35 @@ export class ApiService {
 
   constructor(private http: HttpClient) { }
 
+  // Locations
+  getLocations(): Observable<any> {
+    return this.http.get(`${this.baseUrl}/locations`);
+  }
+
+  // FMCSA company info lookup
+  getFmcsainfo(dot: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/customers/fmcsainfo/${encodeURIComponent(dot)}`);
+  }
+
+  // Customers
+  getCustomers(query?: string): Observable<any> {
+    let url = `${this.baseUrl}/customers`;
+    if (query) url += `?q=${encodeURIComponent(query)}`;
+    return this.http.get(url);
+  }
+
+  getCustomerByDot(dot: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/customers?dot=${encodeURIComponent(dot)}`);
+  }
+
+  createCustomer(customer: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/customers`, customer);
+  }
+    // Users
+    createUser(user: { username: string; password: string; role: string }): Observable<any> {
+      return this.http.post(`${this.baseUrl}/users`, user);
+    }
+
   // Dashboard
   getDashboardStats(): Observable<any> {
     return this.http.get(`${this.baseUrl}/dashboard/stats`);
@@ -68,6 +97,14 @@ export class ApiService {
   }
 
   // Vehicles
+  // Search vehicles by (partial) VIN
+  getVehiclesByVin(vin: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/vehicles/search?vin=${encodeURIComponent(vin)}`);
+  }
+
+  decodeVin(vin: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/vehicles/decode-vin/${encodeURIComponent(vin)}`);
+  }
   getVehicles(): Observable<any> {
     return this.http.get(`${this.baseUrl}/vehicles`);
   }
@@ -78,6 +115,11 @@ export class ApiService {
 
   createVehicle(vehicle: any): Observable<any> {
     return this.http.post(`${this.baseUrl}/vehicles`, vehicle);
+  }
+
+  // Customer Vehicles
+  createCustomerVehicle(vehicle: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/vehicles/customer`, vehicle);
   }
 
   updateVehicle(id: string, vehicle: any): Observable<any> {
@@ -108,6 +150,19 @@ export class ApiService {
 
   updateMaintenanceRecord(id: string, record: any): Observable<any> {
     return this.http.put(`${this.baseUrl}/maintenance/${id}`, record);
+  }
+
+  // Work Orders
+  createWorkOrder(workOrder: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/work-orders`, workOrder);
+  }
+
+  getWorkOrder(id: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/work-orders/${id}`);
+  }
+
+  updateWorkOrder(id: string, workOrder: any): Observable<any> {
+    return this.http.put(`${this.baseUrl}/work-orders/${id}`, workOrder);
   }
 
   // Loads

@@ -13,6 +13,7 @@
         <li *ngIf="isLoggedIn() && canSee('hos')"><a routerLink="/hos" routerLinkActive="active">HOS</a></li>
         <li *ngIf="isLoggedIn() && canSee('maintenance')"><a routerLink="/maintenance" routerLinkActive="active">Maintenance</a></li>
         <li *ngIf="isLoggedIn() && canSee('audit')"><a routerLink="/audit" routerLinkActive="active">Audit</a></li>
+        <li *ngIf="isLoggedIn() && userRole === 'admin'"><a routerLink="/users/create" routerLinkActive="active">Add User</a></li>
       </ul>
       <button *ngIf="!isLoggedIn()" routerLink="/login" class="btn" style="background:#b00;color:#fff;">Login</button>
       <button *ngIf="isLoggedIn()" (click)="logout()" class="btn" style="background:#222;color:#fff;">Logout</button>

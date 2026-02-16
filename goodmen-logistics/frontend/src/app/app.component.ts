@@ -18,6 +18,7 @@ import { Router } from '@angular/router';
 })
 export class AppComponent implements OnInit {
   title = 'Goodmen Logistics';
+  userRole: string | null = null;
 
   constructor(private router: Router) {}
 
@@ -29,6 +30,7 @@ export class AppComponent implements OnInit {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
     this.router.navigate(['/login']);
+    this.userRole = null;
   }
 
   getRole(): string | null {
@@ -45,5 +47,7 @@ export class AppComponent implements OnInit {
     return false;
   }
 
-  ngOnInit(): void {}
+  ngOnInit(): void {
+    this.userRole = this.getRole();
+  }
 }

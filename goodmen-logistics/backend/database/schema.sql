@@ -1,4 +1,19 @@
 -- Goodmen Logistics Database Schema
+
+-- Customers Table
+CREATE TABLE customers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    dot_number VARCHAR(32) UNIQUE,
+    address VARCHAR(255),
+    city VARCHAR(100),
+    state VARCHAR(2),
+    zip VARCHAR(20),
+    phone VARCHAR(32),
+    email VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 -- Drop existing tables if they exist
 DROP TABLE IF EXISTS audit_logs CASCADE;
 DROP TABLE IF EXISTS loads CASCADE;

@@ -2,7 +2,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">🔧 Maintenance & Repair Records</h2>
-      <button class="btn btn-primary">+ New Work Order</button>
+      <button class="btn btn-primary" (click)="goToWorkOrder()">+ New Work Order</button>
     </div>
 
     <div *ngIf="loading" class="loading">
@@ -20,6 +20,7 @@
           <th>Mechanic</th>
           <th>Cost</th>
           <th>Status</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -42,6 +43,9 @@
             <span [class]="'badge ' + getStatusBadge(record.status)">
               {{ record.status }}
             </span>
+          </td>
+          <td>
+            <button type="button" class="btn btn-sm btn-outline-primary" (click)="editWorkOrder(record)">Edit</button>
           </td>
         </tr>
       </tbody>

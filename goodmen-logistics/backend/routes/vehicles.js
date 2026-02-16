@@ -1,11 +1,136 @@
+
 const express = require('express');
 const router = express.Router();
-const { query } = require('../config/database');
-const dtLogger = require('../utils/dynatrace-logger');
 const auth = require('./auth-middleware');
+const axios = require('axios');
+const dtLogger = require('../utils/dynatrace-logger');
+const { query } = require('../config/database');
 
 // Protect all vehicles routes: admin, safety
 router.use(auth(['admin', 'safety']));
+
+// GET decode VIN using NHTSA vPIC
+router.get('/decode-vin/:vin', async (req, res) => {
+  const startTime = Date.now();
+  const vin = (req.params.vin || '').trim();
+  if (!vin) {
+    return res.status(400).json({ message: 'VIN is required' });
+  }
+  try {
+    const response = await axios.get(
+      `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`
+    );
+    const result = response.data?.Results?.[0] || {};
+    const decoded = {
+      vin,
+      make: result.Make || '',
+      model: result.Model || '',
+      year: result.ModelYear || ''
+    };
+    const duration = Date.now() - startTime;
+    dtLogger.trackRequest('GET', `/api/vehicles/decode-vin/${vin}`, 200, duration);
+    res.json(decoded);
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    dtLogger.trackRequest('GET', `/api/vehicles/decode-vin/${vin}`, 500, duration);
+    console.error('Error decoding VIN:', error);
+    res.status(500).json({ message: 'Failed to decode VIN' });
+  }
+});
+
+// POST create new customer vehicle
+router.post('/customer', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const {
+      unit_number,
+      vin,
+      make,
+      model,
+      year,
+      license_plate,
+      state,
+      mileage,
+      inspection_expiry,
+      next_pm_due,
+      next_pm_mileage,
+      customer_id
+    } = req.body;
+
+    // Convert empty strings to null and set VIN/unit number fallbacks
+    const finalVin = (vin && vin.trim()) ? vin.trim() : (unit_number ? unit_number.slice(-4) : null);
+    const finalUnitNumber = (unit_number && unit_number.trim()) ? unit_number.trim() : (finalVin ? finalVin.slice(-4) : null);
+    const finalMake = (make && make.trim()) ? make.trim() : null;
+    const finalModel = (model && model.trim()) ? model.trim() : null;
+    const finalYear = (year && year.trim()) ? year.trim() : null;
+    const finalLicensePlate = (license_plate && license_plate.trim()) ? license_plate.trim() : null;
+    const finalState = (state && state.trim()) ? state.trim() : null;
+    const finalMileage = mileage ? parseInt(mileage) : null;
+    const finalInspectionExpiry = (inspection_expiry && inspection_expiry.trim()) ? inspection_expiry : null;
+    const finalNextPmDue = (next_pm_due && next_pm_due.trim()) ? next_pm_due : null;
+    const finalNextPmMileage = next_pm_mileage ? parseInt(next_pm_mileage) : null;
+    const finalCustomerId = (customer_id && customer_id.trim()) ? customer_id.trim() : null;
+
+    const result = await query(
+      `INSERT INTO customer_vehicles (
+        unit_number, vin, make, model, year, license_plate, state, mileage,
+        inspection_expiry, next_pm_due, next_pm_mileage, customer_id
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING *`,
+      [
+        finalUnitNumber, finalVin, finalMake, finalModel, finalYear, finalLicensePlate, finalState, finalMileage,
+        finalInspectionExpiry, finalNextPmDue, finalNextPmMileage, finalCustomerId
+      ]
+    );
+    const duration = Date.now() - startTime;
+    dtLogger.trackDatabase('INSERT', 'customer_vehicles', duration, true, { vehicleId: result.rows[0].id });
+    dtLogger.trackEvent('customer_vehicle.created', { vehicleId: result.rows[0].id, unit_number, vin });
+    dtLogger.trackRequest('POST', '/api/vehicles/customer', 201, duration);
+    dtLogger.info('Customer vehicle created successfully', { vehicleId: result.rows[0].id, unit_number });
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    dtLogger.error('Failed to create customer vehicle', error, { body: req.body });
+    dtLogger.trackRequest('POST', '/api/vehicles/customer', 500, duration);
+    console.error('Error creating customer vehicle:', error);
+    res.status(500).json({ message: 'Failed to create customer vehicle', error: error.message });
+  }
+});
+
+
+
+// Protect all vehicles routes: admin, safety
+router.use(auth(['admin', 'safety']));
+
+
+
+// GET vehicles by (partial) VIN
+router.get('/search', async (req, res) => {
+  const vin = req.query.vin;
+  if (!vin || vin.length < 1) {
+    return res.status(400).json({ message: 'VIN query parameter is required' });
+  }
+  try {
+    // Search company vehicles
+    const companyResult = await query(
+      `SELECT *, true as company_owned FROM vehicles WHERE LOWER(vin) LIKE LOWER($1) ORDER BY unit_number`,
+      [`%${vin}%`]
+    );
+    // Search customer vehicles
+    const customerResult = await query(
+      `SELECT *, false as company_owned FROM customer_vehicles WHERE LOWER(vin) LIKE LOWER($1) ORDER BY unit_number`,
+      [`%${vin}%`]
+    );
+    // Combine results
+    const vehicles = [...companyResult.rows, ...customerResult.rows];
+    res.json(vehicles);
+  } catch (error) {
+    console.error('Error searching vehicles by VIN:', error);
+    res.status(500).json({ message: 'Failed to search vehicles by VIN' });
+  }
+});
+
 
 // GET all vehicles
 router.get('/', async (req, res) => {
@@ -63,6 +188,9 @@ router.post('/', async (req, res) => {
       registration_expiry,
       oos_reason
     } = req.body;
+
+    const finalVin = (vin && vin.trim()) ? vin.trim() : (unit_number ? unit_number.slice(-4) : null);
+    const finalUnitNumber = (unit_number && unit_number.trim()) ? unit_number.trim() : (finalVin ? finalVin.slice(-4) : null);
     
     const result = await query(
       `INSERT INTO vehicles (
@@ -73,7 +201,7 @@ router.post('/', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'in-service') 
        RETURNING *`,
       [
-        unit_number, vin, make, model, year, license_plate, state, mileage || 0,
+        finalUnitNumber, finalVin, make, model, year, license_plate, state, mileage || 0,
         inspection_expiry, next_pm_due, next_pm_mileage,
         insurance_expiry, registration_expiry, oos_reason
       ]

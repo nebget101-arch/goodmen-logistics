@@ -87,7 +87,8 @@ export class VehiclesComponent implements OnInit {
     
     this.apiService.getVehicles().subscribe({
       next: (data) => {
-        this.allVehicles = data;
+        // Only show company-owned vehicles (company_owned true or missing for legacy)
+        this.allVehicles = (data || []).filter((v: any) => v.company_owned === true || v.company_owned === undefined);
         this.applyFiltersAndSort();
         this.loading = false;
       },

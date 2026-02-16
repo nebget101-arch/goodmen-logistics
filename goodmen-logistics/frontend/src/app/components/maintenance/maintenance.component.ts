@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../services/api.service';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-maintenance',
@@ -11,10 +12,19 @@ export class MaintenanceComponent implements OnInit {
   pendingRecords: any[] = [];
   loading = true;
 
-  constructor(private apiService: ApiService) { }
+  constructor(private apiService: ApiService, private router: Router) { }
 
   ngOnInit(): void {
     this.loadMaintenance();
+  }
+
+  goToWorkOrder(): void {
+    this.router.navigate(['/work-order']);
+  }
+
+  editWorkOrder(record: any): void {
+    if (!record?.id) return;
+    this.router.navigate(['/work-order', record.id]);
   }
 
   loadMaintenance(): void {

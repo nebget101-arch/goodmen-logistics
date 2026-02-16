@@ -56,8 +56,20 @@ const auditRouter = require('./routes/audit');
 const dbExampleRouter = require('./routes/db-example');
 const dqfDocumentsRouter = require('./routes/dqf-documents');
 const authRouter = require('./routes/auth');
+const usersRouter = require('./routes/users');
+const workOrdersRouter = require('./routes/work-orders');
+
+
+const locationsRouter = require('./routes/locations');
+const customersRouter = require('./routes/customers');
 
 // Use routes
+
+// Register customers API
+const knex = require('knex')(require('./knexfile').development);
+app.use('/api/customers', customersRouter(knex));
+app.use('/api/users', usersRouter);
+app.use('/api/locations', locationsRouter);
 app.use('/api/drivers', driversRouter);
 app.use('/api/vehicles', vehiclesRouter);
 app.use('/api/hos', hosRouter);
@@ -69,6 +81,7 @@ app.use('/api/audit', auditRouter);
 app.use('/api/db-example', dbExampleRouter);
 app.use('/api/dqf-documents', dqfDocumentsRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/work-orders', workOrdersRouter);
 
 // Health check
 app.get('/api/health', async (req, res) => {

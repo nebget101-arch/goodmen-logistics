@@ -1,4 +1,10 @@
 -- Goodmen Logistics Sample Data
+-- Insert Locations
+INSERT INTO locations (id, name, address, settings, created_at, updated_at)
+VALUES
+    (uuid_generate_v4(), 'Garland', '123 Garland Ave, Garland, TX 75040', '{}', NOW(), NOW()),
+    (uuid_generate_v4(), 'Rockwall', '456 Rockwall Rd, Rockwall, TX 75087', '{}', NOW(), NOW()),
+    (uuid_generate_v4(), 'Hutchins', '789 Hutchins Blvd, Hutchins, TX 75141', '{}', NOW(), NOW());
 -- Insert Drivers
 INSERT INTO drivers (id, first_name, last_name, email, phone, cdl_number, cdl_state, cdl_class, endorsements, cdl_expiry, medical_cert_expiry, hire_date, status, dqf_completeness, address, date_of_birth, last_mvr_check, clearinghouse_status) VALUES
 (uuid_generate_v4(), 'John', 'Smith', 'john.smith@goodmenlogistics.com', '555-0101', 'CDL123456', 'CA', 'A', ARRAY['H', 'N', 'T'], '2026-12-15', '2025-08-20', '2022-03-15', 'active', 95, '123 Main St, Los Angeles, CA 90001', '1985-05-12', '2025-01-15', 'eligible'),
