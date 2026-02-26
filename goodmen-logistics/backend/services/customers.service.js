@@ -190,7 +190,7 @@ async function listCustomers({ search, type, status, locationId, dot, paymentTer
         qb.andWhere('dot_number', dot);
       } else if (search) {
         qb.andWhere(function() {
-          this.where('name', 'ilike', `%${search}%`)
+          this.where('company_name', 'ilike', `%${search}%`)
             .orWhere('phone', 'ilike', `%${search}%`)
             .orWhere('email', 'ilike', `%${search}%`);
         });
@@ -207,7 +207,7 @@ async function listCustomers({ search, type, status, locationId, dot, paymentTer
     .select(
       'customers.*'
     )
-    .orderBy('name', 'asc')
+    .orderBy('company_name', 'asc')
     .limit(limit)
     .offset(offset);
 
