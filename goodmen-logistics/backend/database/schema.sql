@@ -1,4 +1,8 @@
 -- Goodmen Logistics Database Schema
+
+-- Enable UUID extension first (must be before any tables)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Drop existing tables if they exist
 DROP TABLE IF EXISTS audit_logs CASCADE;
 DROP TABLE IF EXISTS loads CASCADE;
@@ -11,9 +15,30 @@ DROP TABLE IF EXISTS drivers CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS dqf_documents CASCADE;
 DROP TABLE IF EXISTS vehicle_documents CASCADE;
+DROP TABLE IF EXISTS customers CASCADE;
+DROP TABLE IF EXISTS customer_vehicles CASCADE;
+DROP TABLE IF EXISTS work_orders CASCADE;
+DROP TABLE IF EXISTS locations CASCADE;
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Customers Table
+CREATE TABLE customers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    company_name VARCHAR(255),
+    dot_number VARCHAR(32) UNIQUE,
+    address VARCHAR(255),
+    city VARCHAR(100),
+    state VARCHAR(2),
+    zip VARCHAR(20),
+    phone VARCHAR(32),
+    email VARCHAR(255),
+    status VARCHAR(50) DEFAULT 'ACTIVE',
+    is_deleted BOOLEAN DEFAULT FALSE,
+    customer_type VARCHAR(50),
+    payment_terms VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Drivers Table
 CREATE TABLE drivers (
@@ -161,6 +186,9 @@ CREATE TABLE audit_logs (
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username VARCHAR(100) UNIQUE NOT NULL,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    email VARCHAR(255),
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(32) NOT NULL CHECK (role IN ('admin', 'safety', 'fleet', 'dispatch')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -266,4 +294,70 @@ CREATE TRIGGER update_dqf_documents_updated_at BEFORE UPDATE ON dqf_documents
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_vehicle_documents_updated_at BEFORE UPDATE ON vehicle_documents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Locations Table
+CREATE TABLE IF NOT EXISTS locations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    address VARCHAR(255),
+    settings JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Customer Vehicles Table (for customer-owned vehicles)
+CREATE TABLE IF NOT EXISTS customer_vehicles (
+    id SERIAL PRIMARY KEY,
+    unit_number VARCHAR(255),
+    vin VARCHAR(17),
+    make VARCHAR(100),
+    model VARCHAR(100),
+    year INTEGER,
+    license_plate VARCHAR(20),
+    state VARCHAR(2),
+    mileage INTEGER DEFAULT 0,
+    inspection_expiry DATE,
+    next_pm_due DATE,
+    next_pm_mileage INTEGER,
+    insurance_expiry DATE,
+    customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_vehicles_customer ON customer_vehicles(customer_id);
+
+-- Add company_owned column to vehicles if it doesn't exist
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS company_owned BOOLEAN DEFAULT TRUE;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS location_id UUID REFERENCES locations(id) ON DELETE SET NULL;
+
+-- Work Orders Table
+CREATE TABLE IF NOT EXISTS work_orders (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    vehicle_id UUID NOT NULL REFERENCES vehicles(id),
+    customer_id UUID REFERENCES customers(id),
+    location_id UUID REFERENCES locations(id),
+    description TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'open',
+    priority VARCHAR(20),
+    assigned_to UUID REFERENCES drivers(id),
+    start_date TIMESTAMP,
+    completion_date TIMESTAMP,
+    notes TEXT,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_work_orders_vehicle ON work_orders(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status);
+CREATE INDEX IF NOT EXISTS idx_work_orders_location ON work_orders(location_id);
+
+CREATE TRIGGER update_locations_updated_at BEFORE UPDATE ON locations
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_customer_vehicles_updated_at BEFORE UPDATE ON customer_vehicles
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_work_orders_updated_at BEFORE UPDATE ON work_orders
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

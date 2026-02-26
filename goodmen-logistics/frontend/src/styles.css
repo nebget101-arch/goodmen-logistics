@@ -133,6 +133,28 @@ body {
   color: white;
 }
 
+.btn-secondary {
+  background-color: #616161;
+  color: white;
+}
+
+.btn-info {
+  background-color: #1976d2;
+  color: white;
+}
+
+.btn-outline-secondary {
+  background-color: transparent;
+  color: #616161;
+  border: 1px solid #616161;
+}
+
+.btn:disabled,
+.btn.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-warning {
   background-color: var(--warning-color);
   color: white;

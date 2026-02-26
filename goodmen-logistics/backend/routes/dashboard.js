@@ -3,6 +3,7 @@ const router = express.Router();
 const { query } = require('../config/database');
 const dtLogger = require('../utils/dynatrace-logger');
 const auth = require('./auth-middleware');
+const db = require('../config/knex');
 
 // Protect all dashboard routes: admin, safety
 router.use(auth(['admin', 'safety']));
@@ -15,16 +16,16 @@ router.get('/stats', async (req, res) => {
       SELECT 
         (SELECT COUNT(*) FROM drivers WHERE status = 'active') as "activeDrivers",
         (SELECT COUNT(*) FROM drivers) as "totalDrivers",
-        (SELECT COUNT(*) FROM vehicles WHERE status = 'in-service') as "activeVehicles",
-        (SELECT COUNT(*) FROM vehicles) as "totalVehicles",
-        (SELECT COUNT(*) FROM vehicles WHERE status = 'out-of-service') as "oosVehicles",
+        (SELECT COUNT(*) FROM all_vehicles WHERE status = 'in-service') as "activeVehicles",
+        (SELECT COUNT(*) FROM all_vehicles) as "totalVehicles",
+        (SELECT COUNT(*) FROM all_vehicles WHERE status = 'out-of-service') as "oosVehicles",
         (SELECT COUNT(*) FROM loads WHERE status = 'in-transit') as "activeLoads",
         (SELECT COUNT(*) FROM loads WHERE status = 'pending') as "pendingLoads",
         (SELECT COUNT(*) FROM loads WHERE status = 'completed' AND DATE(delivery_date) = CURRENT_DATE) as "completedLoadsToday",
         (SELECT COUNT(*) FROM hos_records WHERE array_length(violations, 1) > 0) as "hosViolations",
         (SELECT COUNT(*) FROM hos_records WHERE status = 'warning') as "hosWarnings",
         (SELECT COALESCE(ROUND(AVG(dqf_completeness)), 0) FROM drivers) as "dqfComplianceRate",
-        (SELECT COUNT(*) FROM vehicles WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') as "vehiclesNeedingMaintenance",
+        (SELECT COUNT(*) FROM all_vehicles WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') as "vehiclesNeedingMaintenance",
         (SELECT COUNT(*) FROM drivers WHERE medical_cert_expiry <= CURRENT_DATE) as "expiredMedCerts",
         (SELECT COUNT(*) FROM drivers WHERE medical_cert_expiry > CURRENT_DATE AND medical_cert_expiry <= CURRENT_DATE + INTERVAL '30 days') as "upcomingMedCerts",
         (SELECT COUNT(*) FROM drivers WHERE cdl_expiry <= CURRENT_DATE) as "expiredCDLs",
@@ -55,119 +56,117 @@ router.get('/stats', async (req, res) => {
 });
 
 // GET compliance alerts
-router.get('/alerts', (req, res) => {
-  const alerts = [];
-  const now = new Date();
-  const thirtyDaysFromNow = new Date(Date.now() + 30*24*60*60*1000);
-  
-  // Driver compliance alerts
-  drivers.forEach(driver => {
-    const medExpiry = new Date(driver.medicalCertExpiry);
-    const cdlExpiry = new Date(driver.cdlExpiry);
+router.get('/alerts', auth(['admin', 'safety']), async (req, res) => {
+  try {
+    const alerts = [];
+    const now = new Date();
+    const thirtyDaysFromNow = new Date(Date.now() + 30*24*60*60*1000);
     
-    if (medExpiry <= now) {
-      alerts.push({
-        type: 'critical',
-        category: 'driver',
-        message: `${driver.firstName} ${driver.lastName}'s medical certificate has expired`,
-        driverId: driver.id,
-        date: driver.medicalCertExpiry
-      });
-    } else if (medExpiry <= thirtyDaysFromNow) {
-      alerts.push({
-        type: 'warning',
-        category: 'driver',
-        message: `${driver.firstName} ${driver.lastName}'s medical certificate expires soon`,
-        driverId: driver.id,
-        date: driver.medicalCertExpiry
-      });
-    }
+    // Get driver compliance data
+    const drivers = await db('drivers')
+      .select('id', 'first_name', 'last_name', 'medical_cert_expiry', 'cdl_expiry', 'dqf_completeness', 'clearinghouse_status')
+      .where('status', 'active');
     
-    if (cdlExpiry <= now) {
-      alerts.push({
-        type: 'critical',
-        category: 'driver',
-        message: `${driver.firstName} ${driver.lastName}'s CDL has expired`,
-        driverId: driver.id,
-        date: driver.cdlExpiry
-      });
-    }
-    
-    if (driver.dqfCompleteness < 90) {
-      alerts.push({
-        type: 'warning',
-        category: 'compliance',
-        message: `${driver.firstName} ${driver.lastName}'s DQF is ${driver.dqfCompleteness}% complete`,
-        driverId: driver.id
-      });
-    }
-    
-    if (driver.clearinghouseStatus !== 'eligible') {
-      alerts.push({
-        type: 'critical',
-        category: 'compliance',
-        message: `${driver.firstName} ${driver.lastName} - Clearinghouse query pending`,
-        driverId: driver.id
-      });
-    }
-  });
-  
-  // Vehicle maintenance alerts
-  vehicles.forEach(vehicle => {
-    if (vehicle.status === 'out-of-service') {
-      alerts.push({
-        type: 'critical',
-        category: 'vehicle',
-        message: `${vehicle.unitNumber} is out of service: ${vehicle.oosReason || 'Unknown reason'}`,
-        vehicleId: vehicle.id
-      });
-    }
-    
-    if (vehicle.nextPMDue) {
-      const pmDue = new Date(vehicle.nextPMDue);
-      if (pmDue <= now) {
+    drivers.forEach(driver => {
+      const medExpiry = driver.medical_cert_expiry ? new Date(driver.medical_cert_expiry) : null;
+      const cdlExpiry = driver.cdl_expiry ? new Date(driver.cdl_expiry) : null;
+      
+      if (medExpiry && medExpiry <= now) {
         alerts.push({
           type: 'critical',
-          category: 'maintenance',
-          message: `${vehicle.unitNumber} preventive maintenance is overdue`,
-          vehicleId: vehicle.id,
-          date: vehicle.nextPMDue
+          category: 'driver',
+          message: `${driver.first_name} ${driver.last_name}'s medical certificate has expired`,
+          driverId: driver.id,
+          date: driver.medical_cert_expiry
         });
-      } else if (pmDue <= thirtyDaysFromNow) {
+      } else if (medExpiry && medExpiry <= thirtyDaysFromNow) {
         alerts.push({
           type: 'warning',
-          category: 'maintenance',
-          message: `${vehicle.unitNumber} preventive maintenance due soon`,
-          vehicleId: vehicle.id,
-          date: vehicle.nextPMDue
+          category: 'driver',
+          message: `${driver.first_name} ${driver.last_name}'s medical certificate expires soon`,
+          driverId: driver.id,
+          date: driver.medical_cert_expiry
         });
       }
-    }
-  });
-  
-  // HOS violations
-  hosRecords.forEach(record => {
-    if (record.violations.length > 0) {
-      record.violations.forEach(violation => {
+      
+      if (cdlExpiry && cdlExpiry <= now) {
+        alerts.push({
+          type: 'critical',
+          category: 'driver',
+          message: `${driver.first_name} ${driver.last_name}'s CDL has expired`,
+          driverId: driver.id,
+          date: driver.cdl_expiry
+        });
+      }
+      
+      const dqf = parseInt(driver.dqf_completeness) || 0;
+      if (dqf < 90) {
         alerts.push({
           type: 'warning',
-          category: 'hos',
-          message: `${record.driverName}: ${violation}`,
-          driverId: record.driverId,
-          date: record.date
+          category: 'compliance',
+          message: `${driver.first_name} ${driver.last_name}'s DQF is ${dqf}% complete`,
+          driverId: driver.id
         });
-      });
-    }
-  });
-  
-  // Sort by type (critical first)
-  alerts.sort((a, b) => {
-    if (a.type === 'critical' && b.type !== 'critical') return -1;
-    if (a.type !== 'critical' && b.type === 'critical') return 1;
-    return 0;
-  });
-  
-  res.json(alerts);
+      }
+      
+      if (driver.clearinghouse_status !== 'eligible') {
+        alerts.push({
+          type: 'critical',
+          category: 'compliance',
+          message: `${driver.first_name} ${driver.last_name} - Clearinghouse query pending`,
+          driverId: driver.id
+        });
+      }
+    });
+    
+    // Get vehicle maintenance alerts
+    const vehicles = await db('all_vehicles')
+      .select('id', 'unit_number', 'status', 'oos_reason', 'next_pm_due');
+    
+    vehicles.forEach(vehicle => {
+      if (vehicle.status === 'out-of-service' || vehicle.status === 'OOS') {
+        alerts.push({
+          type: 'critical',
+          category: 'vehicle',
+          message: `${vehicle.unit_number} is out of service: ${vehicle.oos_reason || 'Unknown reason'}`,
+          vehicleId: vehicle.id
+        });
+      }
+      
+      if (vehicle.next_pm_due) {
+        const pmDue = new Date(vehicle.next_pm_due);
+        if (pmDue <= now) {
+          alerts.push({
+            type: 'critical',
+            category: 'maintenance',
+            message: `${vehicle.unit_number} preventive maintenance is overdue`,
+            vehicleId: vehicle.id,
+            date: vehicle.next_pm_due
+          });
+        } else if (pmDue <= thirtyDaysFromNow) {
+          alerts.push({
+            type: 'warning',
+            category: 'maintenance',
+            message: `${vehicle.unit_number} preventive maintenance due soon`,
+            vehicleId: vehicle.id,
+            date: vehicle.next_pm_due
+          });
+        }
+      }
+    });
+    
+    // Sort by type (critical first) then by date
+    alerts.sort((a, b) => {
+      if (a.type === 'critical' && b.type !== 'critical') return -1;
+      if (a.type !== 'critical' && b.type === 'critical') return 1;
+      return 0;
+    });
+    
+    res.json(alerts);
+  } catch (error) {
+    console.error('Dashboard alerts error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 module.exports = router;

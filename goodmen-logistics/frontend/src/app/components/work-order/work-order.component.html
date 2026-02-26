@@ -1,0 +1,794 @@
+<div class="container">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">🛠️ Work Order</h2>
+    </div>
+    <div *ngIf="workOrderLoadError" class="alert alert-danger mt-2">{{ workOrderLoadError }}</div>
+    <div class="row" style="margin: 12px 0;">
+      <div class="col">
+        <strong>Status:</strong>
+        <span class="badge badge-info" style="margin-left:8px;">{{ workOrder.status || 'DRAFT' }}</span>
+      </div>
+      <div class="col">
+        <strong>Invoice:</strong>
+        <span *ngIf="invoiceInfo" class="badge badge-success" style="margin-left:8px;">{{ invoiceInfo.status }}</span>
+        <span *ngIf="!invoiceInfo" style="margin-left:8px;">None</span>
+      </div>
+      <div class="col" style="display:flex; justify-content:flex-end; gap:8px;">
+        <button type="button" class="btn btn-outline-success" (click)="generateInvoice()" [disabled]="!canGenerateInvoice()">
+          {{ invoiceInfo ? 'Regenerate Invoice' : 'Generate Invoice' }}
+        </button>
+        <a *ngIf="invoiceInfo" class="btn btn-outline-primary" [routerLink]="['/invoices', invoiceInfo.id]">View Invoice</a>
+      </div>
+    </div>
+
+    <!-- Credit Information Section -->
+    <div *ngIf="customerCreditLimit > 0" class="row" style="margin: 12px 0; padding: 12px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
+      <div class="col-md-8">
+        <strong style="color: #495057;">💳 Customer Credit Limit: ${{ customerCreditLimit | number:'1.2-2' }}</strong>
+        <span *ngIf="creditCheckLoading" style="margin-left: 8px; color: #6c757d;">Loading credit info...</span>
+        <span *ngIf="availableCredit > 0" style="margin-left: 12px; color: #28a745; font-weight: 500;">
+          Available: ${{ availableCredit | number:'1.2-2' }}
+        </span>
+        <span *ngIf="availableCredit <= 0" style="margin-left: 12px; color: #dc3545;">
+          No available credit (used: ${{ (customerCreditLimit - availableCredit) | number:'1.2-2' }})
+        </span>
+      </div>
+      <div class="col-md-4" style="display: flex; align-items: center; justify-content: flex-end; margin-top: 20px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0;">
+          <input type="checkbox" [(ngModel)]="useCustomerCredit" [disabled]="availableCredit <= 0" name="useCustomerCredit">
+          <span>Use Credit</span>
+          <span *ngIf="availableCredit <= 0" style="color: #dc3545; font-size: 0.9em;">(Insufficient)</span>
+        </label>
+      </div>
+      <div *ngIf="creditCheckError" class="col-md-12" style="margin-top: 8px;">
+        <div class="alert alert-danger" style="margin: 0; padding: 8px 12px;">
+          ⚠️ {{ creditCheckError }}
+        </div>
+      </div>
+    </div>
+
+    <form (ngSubmit)="submitWorkOrder()" #workOrderForm="ngForm">
+      <!-- Customer Section -->
+      <div class="section">
+        <h3>Customer</h3>
+        <div class="row align-items-end">
+          <div class="col">
+            <label for="customerDotSearch">Search by DOT Number</label>
+            <input id="customerDotSearch" type="text" class="form-control" [(ngModel)]="customerDotSearch" name="customerDotSearch" placeholder="Enter DOT Number">
+          </div>
+          <div class="col">
+            <button type="button" class="btn btn-secondary" (click)="searchCustomerByDot()">Search</button>
+          </div>
+          <div class="col">
+            <label for="customerSearch">Or search and select customer by name</label>
+            <div style="position: relative;">
+              <input id="customerSearch" type="text" class="form-control" [(ngModel)]="customerSearch" (ngModelChange)="onCustomerSearchChange()" (blur)="onCustomerBlur()" name="customerSearch" placeholder="Type customer name or DOT...">
+              <div *ngIf="showCustomerDropdown && filteredCustomers.length > 0" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
+                <div *ngFor="let c of filteredCustomers" (click)="selectCustomer(c)" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f5f5f5'" onmouseout="this.style.backgroundColor='white'">
+                  {{ c.displayName || c.company_name || c.name }} <span *ngIf="c.dot_number" style="color: #999;">(DOT: {{ c.dot_number }})</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <button type="button" class="btn btn-outline-primary" (click)="showNewCustomerModal = true">Add New Customer</button>
+          </div>
+        </div>
+        <div *ngIf="customerSearchError" class="alert alert-danger mt-2">{{customerSearchError}}</div>
+        <div *ngIf="selectedCustomer">
+          <div class="mt-2"><strong>Selected:</strong> {{ selectedCustomer.displayName || selectedCustomer.company_name || selectedCustomer.name }} (DOT: {{selectedCustomer.dot_number}})</div>
+        </div>
+      </div>
+      <!-- New Customer Modal -->
+      <div class="modal" tabindex="-1" [ngClass]="{show: showNewCustomerModal}" style="display: block;" *ngIf="showNewCustomerModal">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Add New Customer</h5>
+              <button type="button" class="btn-close" (click)="showNewCustomerModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-2">
+                <label for="newCustomerName">Company Name</label>
+                <input id="newCustomerName" type="text" class="form-control" [(ngModel)]="newCustomer.company_name" name="newCustomerName">
+              </div>
+              <div class="mb-2">
+                <label for="newCustomerDot">DOT Number</label>
+                <input id="newCustomerDot" type="text" class="form-control" [(ngModel)]="newCustomer.dot_number" name="newCustomerDot">
+              </div>
+              <div class="mb-2">
+                <label for="newCustomerAddress">Address</label>
+                <input id="newCustomerAddress" type="text" class="form-control" [(ngModel)]="newCustomer.address" name="newCustomerAddress">
+              </div>
+              <div class="mb-2">
+                <label for="newCustomerCity">City</label>
+                <input id="newCustomerCity" type="text" class="form-control" [(ngModel)]="newCustomer.city" name="newCustomerCity">
+              </div>
+              <div class="mb-2">
+                <label for="newCustomerState">State</label>
+                <input id="newCustomerState" type="text" class="form-control" [(ngModel)]="newCustomer.state" name="newCustomerState">
+              </div>
+              <div class="mb-2">
+                <label for="newCustomerZip">ZIP</label>
+                <input id="newCustomerZip" type="text" class="form-control" [(ngModel)]="newCustomer.zip" name="newCustomerZip">
+              </div>
+              <div class="mb-2">
+                <label for="newCustomerPhone">Phone</label>
+                <input id="newCustomerPhone" type="text" class="form-control" [(ngModel)]="newCustomer.phone" name="newCustomerPhone">
+              </div>
+              <div class="mb-2">
+                <label for="newCustomerEmail">Email</label>
+                <input id="newCustomerEmail" type="email" class="form-control" [(ngModel)]="newCustomer.email" name="newCustomerEmail">
+              </div>
+              <div *ngIf="newCustomerError" class="alert alert-danger">{{newCustomerError}}</div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="showNewCustomerModal = false">Cancel</button>
+              <button type="button" class="btn btn-primary" (click)="createCustomer()">Create</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 1️⃣ Work Order Header -->
+      <div class="section">
+        <h3>Work Order Info</h3>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderNumber">Work Order Number</label>
+            <input id="workOrderNumber" type="text" class="form-control" [(ngModel)]="workOrder.workOrderNumber" name="workOrderNumber" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderTitle">Title</label>
+            <input id="workOrderTitle" type="text" class="form-control" [(ngModel)]="workOrder.title" name="title" required>
+          </div>
+          <div class="col">
+            <label for="workOrderType">Type</label>
+            <select id="workOrderType" class="form-control" [(ngModel)]="workOrder.type" name="type" required>
+              <option value="REPAIR">Repair</option>
+              <option value="PM">PM</option>
+              <option value="INSPECTION">Inspection</option>
+              <option value="TIRE">Tire</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          <div class="col">
+            <label for="workOrderPriority">Priority</label>
+            <select id="workOrderPriority" class="form-control" [(ngModel)]="workOrder.priority" name="priority" required>
+              <option value="LOW">Low</option>
+              <option value="NORMAL">Normal</option>
+              <option value="HIGH">High</option>
+              <option value="URGENT">Urgent</option>
+            </select>
+          </div>
+          <div class="col">
+            <label for="workOrderStatus">Status</label>
+            <select id="workOrderStatus" class="form-control" [(ngModel)]="workOrder.status" name="status" required>
+              <option value="DRAFT">Draft</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="WAITING_PARTS">Waiting Parts</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CLOSED">Closed</option>
+              <option value="CANCELED">Canceled</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderRequestedBy">Requested By</label>
+            <input id="workOrderRequestedBy" type="text" class="form-control" [(ngModel)]="workOrder.requestedBy" name="requestedBy" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderAssignedTo">Assigned To</label>
+            <input id="workOrderAssignedTo" type="text" class="form-control" [(ngModel)]="workOrder.assignedTo" name="assignedTo" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderVendor">Vendor</label>
+            <input id="workOrderVendor" type="text" class="form-control" [(ngModel)]="workOrder.vendor" name="vendor">
+          </div>
+          <div class="col">
+            <label for="workOrderShopLocation">Shop Location</label>
+            <select id="workOrderShopLocation" class="form-control" [(ngModel)]="workOrder.shopLocationId" name="shopLocationId">
+              <option [ngValue]="null">-- Select Location --</option>
+              <option *ngFor="let loc of locations" [ngValue]="loc.id">{{ loc.name }} ({{ loc.address }})</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderRequestDate">Request Date</label>
+            <input id="workOrderRequestDate" type="date" class="form-control" [(ngModel)]="workOrder.requestDate" name="requestDate">
+          </div>
+          <div class="col">
+            <label for="workOrderScheduledDate">Scheduled Date</label>
+            <input id="workOrderScheduledDate" type="date" class="form-control" [(ngModel)]="workOrder.scheduledDate" name="scheduledDate">
+          </div>
+          <div class="col">
+            <label for="workOrderStartDate">Start Date</label>
+            <input id="workOrderStartDate" type="date" class="form-control" [(ngModel)]="workOrder.startDate" name="startDate">
+          </div>
+          <div class="col">
+            <label for="workOrderCompletionDate">Completion Date</label>
+            <input id="workOrderCompletionDate" type="date" class="form-control" [(ngModel)]="workOrder.completionDate" name="completionDate">
+          </div>
+        </div>
+      </div>
+      <!-- 2️⃣ Vehicle Section -->
+      <div class="section">
+        <h3>Vehicle Info</h3>
+        <div class="row">
+          <div class="col">
+            <label for="vehicleSearch">Search Vehicle (Unit, VIN, Make, Model)</label>
+            <div style="position: relative;">
+              <input id="vehicleSearch" type="text" class="form-control mb-2" [(ngModel)]="vehicleSearch" name="vehicleSearch" placeholder="Type to search vehicles..." (ngModelChange)="onVehicleSearchChange()" (blur)="onVehicleBlur()">
+              <div *ngIf="showVehicleDropdown && filteredVehicles.length > 0" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000; margin-top: -8px;">
+                <div *ngFor="let vehicle of filteredVehicles" (click)="selectVehicle(vehicle)" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f5f5f5'" onmouseout="this.style.backgroundColor='white'">
+                  <strong>{{ vehicle.unit_number || vehicle.unitNumber }}</strong> - {{ vehicle.vin }} 
+                  <span style="color: #666;">({{ vehicle.make }} {{ vehicle.model }} {{ vehicle.year }})</span>
+                  <span class="badge" [ngClass]="vehicle.source === 'customer' || vehicle.company_owned === false ? 'badge-info' : 'badge-secondary'" style="margin-left: 8px;">
+                    {{ vehicle.source === 'customer' || vehicle.company_owned === false ? 'Customer' : 'Internal' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button type="button" class="btn btn-outline-primary mb-2" (click)="openAddVehicleModal()">Add Vehicle</button>
+            <!-- Add Customer Vehicle Modal -->
+            <div class="modal" tabindex="-1" [ngClass]="{show: showNewCustomerVehicleModal}" style="display: block;" *ngIf="showNewCustomerVehicleModal">
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">Add Vehicle</h5>
+                    <button type="button" class="btn-close" (click)="showNewCustomerVehicleModal = false"></button>
+                  </div>
+                  <div class="modal-body">
+                    <div class="mb-2">
+                      <label for="newVehicleOwnership">Ownership</label>
+                      <select id="newVehicleOwnership" class="form-control" [(ngModel)]="newVehicleOwnership" name="newVehicleOwnership">
+                        <option value="company">Company Owned</option>
+                        <option value="customer">Customer Owned</option>
+                      </select>
+                    </div>
+                    <div class="mb-2" *ngIf="newVehicleOwnership === 'customer'">
+                      <label for="newCustomerVehicleCustomer">Customer</label>
+                      <select id="newCustomerVehicleCustomer" class="form-control" [(ngModel)]="newCustomerVehicle.customer_id" name="newCustomerVehicleCustomer">
+                        <option [ngValue]="null">-- Select Customer --</option>
+                        <option *ngFor="let c of customers" [ngValue]="c.id">{{ c.company_name }} (DOT: {{ c.dot_number }})</option>
+                      </select>
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleVin">VIN</label>
+                      <input id="newCustomerVehicleVin" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.vin" name="newCustomerVehicleVin">
+                      <button type="button" class="btn btn-sm btn-outline-secondary mt-2" (click)="decodeVinForNewVehicle()">Decode VIN</button>
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleUnitNumber">Unit Number</label>
+                      <input id="newCustomerVehicleUnitNumber" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.unit_number" name="newCustomerVehicleUnitNumber">
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleMake">Make</label>
+                      <input id="newCustomerVehicleMake" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.make" name="newCustomerVehicleMake">
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleModel">Model</label>
+                      <input id="newCustomerVehicleModel" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.model" name="newCustomerVehicleModel">
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleYear">Year</label>
+                      <input id="newCustomerVehicleYear" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.year" name="newCustomerVehicleYear">
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleLicensePlate">License Plate</label>
+                      <input id="newCustomerVehicleLicensePlate" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.license_plate" name="newCustomerVehicleLicensePlate">
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleState">State</label>
+                      <input id="newCustomerVehicleState" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.state" name="newCustomerVehicleState">
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleMileage">Mileage</label>
+                      <input id="newCustomerVehicleMileage" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.mileage" name="newCustomerVehicleMileage">
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleInspectionExpiry">Inspection Expiry</label>
+                      <input id="newCustomerVehicleInspectionExpiry" type="date" class="form-control" [(ngModel)]="newCustomerVehicle.inspection_expiry" name="newCustomerVehicleInspectionExpiry">
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleNextPmDue">Next PM Due</label>
+                      <input id="newCustomerVehicleNextPmDue" type="date" class="form-control" [(ngModel)]="newCustomerVehicle.next_pm_due" name="newCustomerVehicleNextPmDue">
+                    </div>
+                    <div class="mb-2">
+                      <label for="newCustomerVehicleNextPmMileage">Next PM Mileage</label>
+                      <input id="newCustomerVehicleNextPmMileage" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.next_pm_mileage" name="newCustomerVehicleNextPmMileage">
+                    </div>
+                    <div *ngIf="newCustomerVehicleError" class="alert alert-danger">{{newCustomerVehicleError}}</div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" (click)="showNewCustomerVehicleModal = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" (click)="createVehicleFromWorkOrder()">Create</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <label for="workOrderUnitNumber">Unit Number</label>
+            <input id="workOrderUnitNumber" type="text" class="form-control" [(ngModel)]="workOrder.unitNumber" name="unitNumber" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderVin">VIN</label>
+            <input id="workOrderVin" type="text" class="form-control" [(ngModel)]="workOrder.vin" name="vin" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderLicensePlate">License Plate</label>
+            <input id="workOrderLicensePlate" type="text" class="form-control" [(ngModel)]="workOrder.licensePlate" name="licensePlate" readonly>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderMake">Make</label>
+            <input id="workOrderMake" type="text" class="form-control" [(ngModel)]="workOrder.make" name="make" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderModel">Model</label>
+            <input id="workOrderModel" type="text" class="form-control" [(ngModel)]="workOrder.model" name="model" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderYear">Year</label>
+            <input id="workOrderYear" type="text" class="form-control" [(ngModel)]="workOrder.year" name="year" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderVehicleType">Vehicle Type</label>
+            <input id="workOrderVehicleType" type="text" class="form-control" [(ngModel)]="workOrder.vehicleType" name="vehicleType" readonly>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderCurrentOdometer">Current Odometer</label>
+            <input id="workOrderCurrentOdometer" type="number" class="form-control" [(ngModel)]="workOrder.currentOdometer" name="currentOdometer" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderEngineHours">Engine Hours</label>
+            <input id="workOrderEngineHours" type="number" class="form-control" [(ngModel)]="workOrder.engineHours" name="engineHours" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderFleetTerminal">Fleet / Terminal</label>
+            <input id="workOrderFleetTerminal" type="text" class="form-control" [(ngModel)]="workOrder.fleetTerminal" name="fleetTerminal" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderDriverAssigned">Driver Assigned</label>
+            <input id="workOrderDriverAssigned" type="text" class="form-control" [(ngModel)]="workOrder.driverAssigned" name="driverAssigned" readonly>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderVehicleStatus">Status</label>
+            <input id="workOrderVehicleStatus" type="text" class="form-control" [(ngModel)]="workOrder.vehicleStatus" name="vehicleStatus" readonly>
+          </div>
+        </div>
+      </div>
+      <!-- 3️⃣ Service / Repair Details -->
+      <div class="section">
+        <h3>Service / Repair Details</h3>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderServiceCategory">Service Category</label>
+            <select id="workOrderServiceCategory" class="form-control" [(ngModel)]="workOrder.serviceCategory" name="serviceCategory">
+              <option value="Engine">Engine</option>
+              <option value="Transmission">Transmission</option>
+              <option value="Tires">Tires</option>
+              <option value="Electrical">Electrical</option>
+              <option value="PM Service">PM Service</option>
+              <option value="Brake">Brake</option>
+            </select>
+          </div>
+          <div class="col">
+            <label for="workOrderServiceDescription">Service Description</label>
+            <input id="workOrderServiceDescription" type="text" class="form-control" [(ngModel)]="workOrder.serviceDescription" name="serviceDescription">
+          </div>
+          <div class="col">
+            <label for="workOrderProblemReported">Problem Reported</label>
+            <input id="workOrderProblemReported" type="text" class="form-control" [(ngModel)]="workOrder.problemReported" name="problemReported">
+          </div>
+          <div class="col">
+            <label for="workOrderRootCause">Root Cause</label>
+            <input id="workOrderRootCause" type="text" class="form-control" [(ngModel)]="workOrder.rootCause" name="rootCause">
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderWorkPerformed">Work Performed</label>
+            <input id="workOrderWorkPerformed" type="text" class="form-control" [(ngModel)]="workOrder.workPerformed" name="workPerformed">
+          </div>
+          <div class="col">
+            <label for="workOrderSafetyIssue">Safety Issue</label>
+            <select id="workOrderSafetyIssue" class="form-control" [(ngModel)]="workOrder.safetyIssue" name="safetyIssue">
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+          <div class="col">
+            <label for="workOrderDowntimeReason">Downtime Reason</label>
+            <input id="workOrderDowntimeReason" type="text" class="form-control" [(ngModel)]="workOrder.downtimeReason" name="downtimeReason">
+          </div>
+          <div class="col">
+            <label for="workOrderRoadCall">Road Call</label>
+            <select id="workOrderRoadCall" class="form-control" [(ngModel)]="workOrder.roadCall" name="roadCall">
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderBreakdownLocation">Breakdown Location</label>
+            <input id="workOrderBreakdownLocation" type="text" class="form-control" [(ngModel)]="workOrder.breakdownLocation" name="breakdownLocation">
+          </div>
+          <div class="col">
+            <label for="workOrderEstimatedDuration">Estimated Duration (hrs)</label>
+            <input id="workOrderEstimatedDuration" type="number" class="form-control" [(ngModel)]="workOrder.estimatedDuration" name="estimatedDuration">
+          </div>
+        </div>
+      </div>
+      <!-- 4️⃣ Parts & Labor Section -->
+      <div class="section">
+        <h3>Parts & Labor</h3>
+        <div class="row">
+          <div class="col">
+            <span class="form-label">Parts</span>
+            <button type="button" class="btn btn-secondary" (click)="addPart()">+ Add Part</button>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Part Name</th>
+                  <th>Part Number</th>
+                  <th>Quantity</th>
+                  <th>Unit Cost</th>
+                  <th>Total Cost</th>
+                  <th>Vendor</th>
+                  <th>Warranty</th>
+                  <th>Remove</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let part of workOrder.parts; let i = index">
+                  <td>
+                    <input type="text" class="form-control" list="partOptions" [(ngModel)]="part.partName" name="partName{{i}}" (input)="onPartLookup(i, part.partName)" (change)="onPartLookup(i, part.partName)">
+                  </td>
+                  <td><input type="text" class="form-control" [(ngModel)]="part.partNumber" name="partNumber{{i}}"></td>
+                  <td><input type="number" class="form-control" [(ngModel)]="part.quantity" name="quantity{{i}}" (input)="updatePartTotals(i)"></td>
+                  <td><input type="number" class="form-control" [(ngModel)]="part.unitCost" name="unitCost{{i}}" (input)="updatePartTotals(i)"></td>
+                  <td><input type="number" class="form-control" [(ngModel)]="part.totalCost" name="totalCost{{i}}" readonly></td>
+                  <td><input type="text" class="form-control" [(ngModel)]="part.vendor" name="vendor{{i}}"></td>
+                  <td>
+                    <select class="form-control" [(ngModel)]="part.warranty" name="warranty{{i}}">
+                      <option value="No">No</option>
+                      <option value="Yes">Yes</option>
+                    </select>
+                  </td>
+                  <td><button type="button" class="btn btn-danger" (click)="removePart(i)">Remove</button></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <datalist id="partOptions">
+              <option *ngFor="let p of partsCatalog" [value]="p.sku + ' - ' + p.name"></option>
+            </datalist>
+
+            <div class="row" style="margin-top: 12px;">
+              <div class="col">
+                <label>Reserve Part from Inventory</label>
+                <div style="display:flex; gap:8px; flex-wrap: wrap;">
+                  <div style="position: relative; max-width: 260px;">
+                    <input type="text" class="form-control" placeholder="Search by SKU, name, or part number..." [(ngModel)]="partSearch" name="partSearch" (ngModelChange)="onPartSearchChange()" (blur)="onPartBlur()" autocomplete="off">
+                    <div *ngIf="showPartDropdown && filteredParts.length > 0" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
+                      <div *ngFor="let p of filteredParts" (click)="selectPart(p)" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; border-left: 3px solid; transition: background-color 0.2s;" [ngStyle]="{'border-left-color': (p.quantity_on_hand > 0) ? '#28a745' : '#dc3545', 'background-color': 'white'}" (mouseenter)="onPartHover($event, true)" (mouseleave)="onPartHover($event, false)">
+                        <strong>{{ p.sku }}</strong> - {{ p.name }}
+                        <div style="font-size: 0.85em; color: #666;">
+                          {{ p.part_number }} | 
+                          <span [ngStyle]="{'color': (p.quantity_on_hand > 0) ? '#28a745' : '#dc3545', 'font-weight': '600'}">Stock: {{ p.quantity_on_hand || 0 }}</span> | 
+                          Price: ${{ p.unit_price | number:'1.2-2' }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <input type="number" class="form-control" placeholder="Qty" [(ngModel)]="reservePartForm.qtyRequested" name="reservePartQty" style="max-width: 120px;">
+                  <input type="number" class="form-control" placeholder="Unit Price" [(ngModel)]="reservePartForm.unitPrice" name="reservePartPrice" style="max-width: 140px;">
+                  <select class="form-control" [(ngModel)]="reservePartForm.locationId" name="reservePartLocation" style="max-width: 220px;">
+                    <option [ngValue]="''">WO Location</option>
+                    <option *ngFor="let loc of locations" [ngValue]="loc.id">{{ loc.name }}</option>
+                  </select>
+                  <button type="button" class="btn btn-outline-primary" (click)="reservePart()" [disabled]="!reservePartForm.partId">Reserve</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 12px;">
+              <div class="col">
+                <table class="table table-striped">
+                  <thead>
+                    <tr>
+                      <th>Part</th>
+                      <th>Requested</th>
+                      <th>Reserved</th>
+                      <th>Issued</th>
+                      <th>Status</th>
+                      <th>Unit Price</th>
+                      <th>Line Total</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let line of workOrderParts">
+                      <td>
+                        <div>{{ line.part_sku || line.part_id }}</div>
+                        <small class="text-muted" *ngIf="line.part_name">{{ line.part_name }}</small>
+                      </td>
+                      <td>{{ line.qty_requested }}</td>
+                      <td>{{ line.qty_reserved }}</td>
+                      <td>{{ line.qty_issued }}</td>
+                      <td>
+                        <span [ngStyle]="line.status === 'BACKORDERED' ? {'background-color': '#ffc107', 'color': '#000', 'padding': '4px 8px', 'border-radius': '3px', 'font-size': '0.85em', 'font-weight': '600'} : {'background-color': '#17a2b8', 'color': 'white', 'padding': '4px 8px', 'border-radius': '3px', 'font-size': '0.85em', 'font-weight': '600'}">
+                          {{ line.status }}
+                        </span>
+                        <span *ngIf="line.status === 'BACKORDERED'" style="font-size: 0.8em; color: #ff9800; margin-left: 4px; cursor: help;" title="Click Issue to check if stock is now available">ℹ️</span>
+                      </td>
+                      <td>${{ line.unit_price | number:'1.2-2' }}</td>
+                      <td>${{ line.line_total | number:'1.2-2' }}</td>
+                      <td style="display:flex; gap:6px;">
+                        <button type="button" class="btn btn-sm btn-outline-success" (click)="issuePart(line)" [disabled]="(line.qty_reserved || 0) - (line.qty_issued || 0) <= 0" [title]="(line.qty_reserved || 0) - (line.qty_issued || 0) <= 0 ? 'Reserve quantity before issuing' : 'Issue reserved quantity'">Issue</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" *ngIf="(line.qty_reserved || 0) - (line.qty_issued || 0) <= 0" (click)="reserveFromLine(line)">Reserve</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="returnPart(line)">Return</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <span class="form-label">Labor</span>
+            <button type="button" class="btn btn-secondary" (click)="addLabor()">+ Add Labor</button>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Mechanic Name</th>
+                  <th>Labor Hours</th>
+                  <th>Labor Rate</th>
+                  <th>Labor Cost</th>
+                  <th>Remove</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let labor of workOrder.labor; let j = index">
+                  <td>
+                    <div class="technician-input-wrap">
+                      <input
+                        type="text"
+                        class="form-control"
+                        [(ngModel)]="labor.mechanicName"
+                        name="mechanicName{{j}}"
+                        (input)="onMechanicLookup(j, labor.mechanicName)"
+                        (focus)="showTechnicianDropdown(j, true)"
+                        (blur)="showTechnicianDropdown(j, false)"
+                        autocomplete="off"
+                      >
+                      <div class="technician-dropdown" *ngIf="activeMechanicIndex === j">
+                        <button
+                          type="button"
+                          class="technician-option"
+                          *ngFor="let tech of filterTechnicians(labor.mechanicName)"
+                          (mousedown)="selectTechnician(j, tech)"
+                        >
+                          {{ tech.username }}
+                        </button>
+                        <div class="technician-empty" *ngIf="filterTechnicians(labor.mechanicName).length === 0">
+                          No matches
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><input type="number" class="form-control" [(ngModel)]="labor.hours" name="hours{{j}}" (input)="updateLaborTotals(j)"></td>
+                  <td><input type="number" class="form-control" [(ngModel)]="labor.rate" name="rate{{j}}" (input)="updateLaborTotals(j)"></td>
+                  <td><input type="number" class="form-control" [(ngModel)]="labor.cost" name="cost{{j}}" readonly></td>
+                  <td><button type="button" class="btn btn-danger" (click)="removeLabor(j)">Remove</button></td>
+                </tr>
+              </tbody>
+            </table>
+
+          </div>
+        </div>
+      </div>
+      <!-- 5️⃣ Financial Section -->
+      <div class="section">
+        <h3>Financials</h3>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderEstimatedCost">Estimated Cost</label>
+            <input id="workOrderEstimatedCost" type="number" class="form-control" [(ngModel)]="workOrder.estimatedCost" name="estimatedCost">
+          </div>
+          <div class="col">
+            <label for="workOrderActualCost">Actual Cost</label>
+            <input id="workOrderActualCost" type="number" class="form-control" [(ngModel)]="workOrder.actualCost" name="actualCost">
+          </div>
+          <div class="col">
+            <label for="workOrderTax">Tax</label>
+            <input id="workOrderTax" type="number" class="form-control" [(ngModel)]="workOrder.tax" name="tax">
+          </div>
+          <div class="col">
+            <label for="workOrderTotalCost">Total Cost</label>
+            <input id="workOrderTotalCost" type="number" class="form-control" [(ngModel)]="workOrder.totalCost" name="totalCost" readonly>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderCostType">Internal Cost vs Billable</label>
+            <select id="workOrderCostType" class="form-control" [(ngModel)]="workOrder.costType" name="costType">
+              <option value="Internal">Internal</option>
+              <option value="Billable">Billable</option>
+            </select>
+          </div>
+          <div class="col">
+            <label for="workOrderInvoiceNumber">Invoice Number</label>
+            <input id="workOrderInvoiceNumber" type="text" class="form-control" [(ngModel)]="workOrder.invoiceNumber" name="invoiceNumber">
+          </div>
+          <div class="col">
+            <label for="workOrderBillingStatus">Billing Status</label>
+            <select id="workOrderBillingStatus" class="form-control" [(ngModel)]="workOrder.billingStatus" name="billingStatus">
+              <option value="Pending">Pending</option>
+              <option value="Billed">Billed</option>
+              <option value="Paid">Paid</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <!-- 6️⃣ Status / Workflow Tracking -->
+      <div class="section">
+        <h3>Status / Workflow Tracking</h3>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderApprovalRequired">Approval Required</label>
+            <select id="workOrderApprovalRequired" class="form-control" [(ngModel)]="workOrder.approvalRequired" name="approvalRequired">
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+          <div class="col">
+            <label for="workOrderApprovedBy">Approved By</label>
+            <input id="workOrderApprovedBy" type="text" class="form-control" [(ngModel)]="workOrder.approvedBy" name="approvedBy">
+          </div>
+          <div class="col">
+            <label for="workOrderApprovalDate">Approval Date</label>
+            <input id="workOrderApprovalDate" type="date" class="form-control" [(ngModel)]="workOrder.approvalDate" name="approvalDate">
+          </div>
+          <div class="col">
+            <label for="workOrderQaInspectionPassed">QA Inspection Passed</label>
+            <select id="workOrderQaInspectionPassed" class="form-control" [(ngModel)]="workOrder.qaInspectionPassed" name="qaInspectionPassed">
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderCompletedBy">Completed By</label>
+            <input id="workOrderCompletedBy" type="text" class="form-control" [(ngModel)]="workOrder.completedBy" name="completedBy">
+          </div>
+          <div class="col">
+            <label for="workOrderClosedBy">Closed By</label>
+            <input id="workOrderClosedBy" type="text" class="form-control" [(ngModel)]="workOrder.closedBy" name="closedBy">
+          </div>
+        </div>
+      </div>
+      <!-- 7️⃣ Notes & Attachments -->
+      <div class="section">
+        <h3>Notes & Attachments</h3>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderInternalNotes">Internal Notes</label>
+            <textarea id="workOrderInternalNotes" class="form-control" [(ngModel)]="workOrder.internalNotes" name="internalNotes"></textarea>
+          </div>
+          <div class="col">
+            <label for="workOrderMechanicNotes">Mechanic Notes</label>
+            <textarea id="workOrderMechanicNotes" class="form-control" [(ngModel)]="workOrder.mechanicNotes" name="mechanicNotes"></textarea>
+          </div>
+          <div class="col">
+            <label for="workOrderDriverNotes">Driver Notes</label>
+            <textarea id="workOrderDriverNotes" class="form-control" [(ngModel)]="workOrder.driverNotes" name="driverNotes"></textarea>
+          </div>
+          <div class="col">
+            <label for="workOrderCustomerNotes">Customer Notes</label>
+            <textarea id="workOrderCustomerNotes" class="form-control" [(ngModel)]="workOrder.customerNotes" name="customerNotes"></textarea>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderAttachments">Attachments</label>
+            <input id="workOrderAttachments" type="file" class="form-control" (change)="onFileChange($event)" multiple>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 12px;">
+          <div class="col">
+            <label for="workOrderDocuments">Work Order Documents</label>
+            <input id="workOrderDocuments" type="file" class="form-control" (change)="uploadDocument($event)">
+            <ul style="margin-top: 8px;">
+              <li *ngFor="let doc of documents">{{ doc.file_name }}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <!-- 8️⃣ Compliance / Fleet Maintenance Fields -->
+      <div class="section">
+        <h3>Compliance / Fleet Maintenance</h3>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderPmScheduleId">PM Schedule ID</label>
+            <input id="workOrderPmScheduleId" type="text" class="form-control" [(ngModel)]="workOrder.pmScheduleId" name="pmScheduleId">
+          </div>
+          <div class="col">
+            <label for="workOrderInspectionType">Inspection Type</label>
+            <input id="workOrderInspectionType" type="text" class="form-control" [(ngModel)]="workOrder.inspectionType" name="inspectionType">
+          </div>
+          <div class="col">
+            <label for="workOrderDotInspectionRequired">DOT Inspection Required</label>
+            <select id="workOrderDotInspectionRequired" class="form-control" [(ngModel)]="workOrder.dotInspectionRequired" name="dotInspectionRequired">
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+          <div class="col">
+            <label for="workOrderComplianceStatus">Compliance Status</label>
+            <input id="workOrderComplianceStatus" type="text" class="form-control" [(ngModel)]="workOrder.complianceStatus" name="complianceStatus">
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderNextServiceDueDate">Next Service Due Date</label>
+            <input id="workOrderNextServiceDueDate" type="date" class="form-control" [(ngModel)]="workOrder.nextServiceDueDate" name="nextServiceDueDate">
+          </div>
+          <div class="col">
+            <label for="workOrderNextServiceOdometer">Next Service Odometer</label>
+            <input id="workOrderNextServiceOdometer" type="number" class="form-control" [(ngModel)]="workOrder.nextServiceOdometer" name="nextServiceOdometer">
+          </div>
+        </div>
+      </div>
+      <!-- 9️⃣ Audit Fields -->
+      <div class="section">
+        <h3>Audit</h3>
+        <div class="row">
+          <div class="col">
+            <label for="workOrderCreatedBy">Created By</label>
+            <input id="workOrderCreatedBy" type="text" class="form-control" [(ngModel)]="workOrder.createdBy" name="createdBy" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderCreatedDate">Created Date</label>
+            <input id="workOrderCreatedDate" type="date" class="form-control" [(ngModel)]="workOrder.createdDate" name="createdDate" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderLastUpdatedBy">Last Updated By</label>
+            <input id="workOrderLastUpdatedBy" type="text" class="form-control" [(ngModel)]="workOrder.lastUpdatedBy" name="lastUpdatedBy" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderLastUpdatedDate">Last Updated Date</label>
+            <input id="workOrderLastUpdatedDate" type="date" class="form-control" [(ngModel)]="workOrder.lastUpdatedDate" name="lastUpdatedDate" readonly>
+          </div>
+          <div class="col">
+            <label for="workOrderDeletedFlag">Deleted Flag</label>
+            <select id="workOrderDeletedFlag" class="form-control" [(ngModel)]="workOrder.deletedFlag" name="deletedFlag" readonly>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+          <div class="col">
+            <label for="workOrderVersion">Version</label>
+            <input id="workOrderVersion" type="number" class="form-control" [(ngModel)]="workOrder.version" name="version" readonly>
+          </div>
+        </div>
+      </div>
+      <div *ngIf="workOrderSaveError" class="alert alert-danger mt-3">{{workOrderSaveError}}</div>
+      <div *ngIf="workOrderSaveSuccess" class="alert alert-success mt-3">{{workOrderSaveSuccess}}</div>
+      <button type="submit" class="btn btn-success mt-3">Save Work Order</button>
+    </form>
+  </div>
+</div>

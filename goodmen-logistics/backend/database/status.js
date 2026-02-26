@@ -36,7 +36,7 @@ async function checkStatus() {
     const counts = await client.query(`
       SELECT 
         (SELECT COUNT(*) FROM drivers) as drivers,
-        (SELECT COUNT(*) FROM vehicles) as vehicles,
+        (SELECT COUNT(*) FROM all_vehicles) as vehicles,
         (SELECT COUNT(*) FROM hos_records) as hos_records,
         (SELECT COUNT(*) FROM hos_logs) as hos_logs,
         (SELECT COUNT(*) FROM maintenance_records) as maintenance,

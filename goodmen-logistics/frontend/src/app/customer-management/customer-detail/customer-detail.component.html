@@ -1,0 +1,304 @@
+<div class="customer-detail" *ngIf="customer">
+  <div class="header">
+    <div>
+      <h2>{{ customer.company_name }}</h2>
+      <span class="badge" [ngClass]="customer.status === 'ACTIVE' ? 'badge-success' : 'badge-secondary'">
+        {{ customer.status }}
+      </span>
+    </div>
+    <button class="btn btn-primary" (click)="editCustomer()">Edit</button>
+  </div>
+
+  <div *ngIf="alerts?.missing_billing_info" class="alert alert-warning">
+    Missing billing information.
+  </div>
+  <div *ngIf="alerts?.inactive_warning" class="alert alert-danger">
+    Customer is inactive.
+  </div>
+
+  <div class="tabs">
+    <button class="btn" [class.active]="activeTab === 'overview'" (click)="activeTab = 'overview'">Overview</button>
+    <button class="btn" [class.active]="activeTab === 'work-orders'" (click)="activeTab = 'work-orders'">Work Orders</button>
+    <button class="btn" [class.active]="activeTab === 'invoices'" (click)="activeTab = 'invoices'">Invoices</button>
+    <button class="btn" [class.active]="activeTab === 'credit'" (click)="activeTab = 'credit'">Credit</button>
+    <button class="btn" [class.active]="activeTab === 'service-history'" (click)="activeTab = 'service-history'">Service History</button>
+    <button class="btn" [class.active]="activeTab === 'pricing'" (click)="activeTab = 'pricing'">Pricing</button>
+    <button class="btn" [class.active]="activeTab === 'vehicles'" (click)="activeTab = 'vehicles'">Vehicles</button>
+    <button class="btn" [class.active]="activeTab === 'notes'" (click)="activeTab = 'notes'">Notes</button>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'overview'">
+    <div class="grid">
+      <div><strong>Type:</strong> {{ customer.customer_type }}</div>
+      <div><strong>Phone:</strong> {{ customer.phone || '—' }}</div>
+      <div><strong>Email:</strong> {{ customer.email || '—' }}</div>
+      <div><strong>Payment Terms:</strong> {{ customer.payment_terms || '—' }}</div>
+      <div><strong>Credit Limit:</strong> {{ customer.credit_limit || '—' }}</div>
+      <div><strong>Tax Exempt:</strong> {{ customer.tax_exempt ? 'Yes' : 'No' }}</div>
+    </div>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'work-orders'">
+    <div *ngIf="workOrders && workOrders.length > 0">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Work Order</th>
+            <th>Service Date</th>
+            <th>Status</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let wo of workOrders">
+            <td>{{ wo.work_order_number }}</td>
+            <td>{{ wo.start_date | date:'shortDate' }}</td>
+            <td>{{ wo.status }}</td>
+            <td>${{ wo.cost | number:'1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div *ngIf="!workOrders || workOrders.length === 0" class="alert alert-info">
+      No work orders found for this customer.
+    </div>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'invoices'">
+    <div *ngIf="invoices && invoices.length > 0">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Invoice #</th>
+            <th>Work Order</th>
+            <th>Issued</th>
+            <th>Due</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let inv of invoices">
+            <td>
+              <a [routerLink]="['/invoices', inv.id]">{{ inv.invoice_number }}</a>
+            </td>
+            <td>{{ getWorkOrderNumber(inv.work_order_id) }}</td>
+            <td>{{ inv.issued_date | date:'shortDate' }}</td>
+            <td>{{ inv.due_date | date:'shortDate' }}</td>
+            <td>{{ inv.status }}</td>
+            <td>${{ inv.total_amount | number:'1.2-2' }}</td>
+            <td>${{ inv.balance_due | number:'1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div *ngIf="!invoices || invoices.length === 0" class="alert alert-info">
+      No invoices found for this customer.
+    </div>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'credit'">
+    <div *ngIf="creditBalance" class="credit-section">
+      <div class="credit-summary">
+        <h4>Credit Status</h4>
+        <div class="credit-stats">
+          <div class="stat-box">
+            <div class="label">Credit Limit</div>
+            <div class="value">${{ creditBalance.credit_limit | number:'1.2-2' }}</div>
+          </div>
+          <div class="stat-box">
+            <div class="label">Credit Used</div>
+            <div class="value">${{ creditBalance.credit_used | number:'1.2-2' }}</div>
+          </div>
+          <div class="stat-box">
+            <div class="label">Available Credit</div>
+            <div class="value" [class]="'text-' + getCreditClass()">${{ creditBalance.available_credit | number:'1.2-2' }}</div>
+          </div>
+        </div>
+        
+        <div class="credit-progress">
+          <div class="progress">
+            <div class="progress-bar" [ngClass]="'bg-' + getCreditClass()" 
+                 [style.width.%]="getCreditPercentage()"></div>
+          </div>
+          <div class="progress-text">{{ getCreditPercentage() | number:'1.0-0' }}% Used</div>
+        </div>
+      </div>
+
+      <div class="credit-limit-update">
+        <h4>Update Credit Limit</h4>
+        <div class="form-group">
+          <label>New Credit Limit</label>
+          <input type="number" class="form-control" [(ngModel)]="newCreditLimit" 
+                 [disabled]="updatingCreditLimit" min="0" step="100">
+        </div>
+        <button class="btn btn-primary" (click)="updateCreditLimit()" 
+                [disabled]="updatingCreditLimit || newCreditLimit === null">
+          {{ updatingCreditLimit ? 'Updating...' : 'Update Credit Limit' }}
+        </button>
+        <span class="text-success" *ngIf="creditLimitSuccess">✓ Credit limit updated successfully</span>
+      </div>
+
+      <div class="credit-history">
+        <h4>Credit Transaction History</h4>
+        <div *ngIf="creditTransactions && creditTransactions.length > 0">
+          <table class="table table-striped table-sm">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Amount</th>
+                <th>Previous Balance</th>
+                <th>New Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let tx of creditTransactions">
+                <td>{{ tx.created_at | date:'short' }}</td>
+                <td><span class="badge" [ngClass]="tx.transaction_type === 'INVOICE_APPLIED' ? 'badge-danger' : 'badge-success'">
+                  {{ tx.transaction_type }}
+                </span></td>
+                <td>{{ tx.description }}</td>
+                <td [class.text-danger]="tx.amount < 0" [class.text-success]="tx.amount > 0">
+                  {{ tx.amount < 0 ? '-' : '+' }}${{ Math.abs(tx.amount) | number:'1.2-2' }}
+                </td>
+                <td>${{ tx.previous_balance | number:'1.2-2' }}</td>
+                <td>${{ tx.new_balance | number:'1.2-2' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div *ngIf="!creditTransactions || creditTransactions.length === 0" class="alert alert-info">
+          No credit transactions found.
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="!creditBalance" class="alert alert-warning">
+      No credit limit set for this customer.
+    </div>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'service-history'">
+    <div *ngIf="serviceHistory && serviceHistory.length > 0">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Service Date</th>
+            <th>Reference</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let sh of serviceHistory">
+            <td>{{ sh.date_performed | date:'shortDate' }}</td>
+            <td>{{ sh.work_order_number || sh.source_type }}</td>
+            <td>{{ sh.description || '—' }}</td>
+            <td>{{ sh.status }}</td>
+            <td>${{ sh.cost | number:'1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div *ngIf="!serviceHistory || serviceHistory.length === 0" class="alert alert-info">
+      No service history found for this customer.
+    </div>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'pricing'">
+    <div class="grid">
+      <div><strong>Default Labor Rate:</strong> {{ pricing?.default_labor_rate ?? 'System Default' }}</div>
+      <div><strong>Parts Discount %:</strong> {{ pricing?.parts_discount_percent ?? '—' }}</div>
+      <div><strong>Labor Discount %:</strong> {{ pricing?.labor_discount_percent ?? '—' }}</div>
+      <div><strong>Shop Supplies %:</strong> {{ pricing?.shop_supplies_percent ?? '—' }}</div>
+      <div><strong>Tax Override %:</strong> {{ pricing?.tax_override_percent ?? '—' }}</div>
+      <div><strong>Contract Pricing:</strong> {{ pricing?.contract_pricing_enabled ? 'Yes' : 'No' }}</div>
+    </div>
+
+    <div class="pricing-edit-section">
+      <h4>Edit Pricing Rules</h4>
+      <form [formGroup]="pricingForm">
+        <div class="form-group">
+          <label>Labor Rate Multiplier (%)</label>
+          <input type="number" class="form-control" formControlName="labor_rate_multiplier" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Markup Percentage (%)</label>
+          <input type="number" class="form-control" formControlName="markup_percentage" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Discount Percentage (%)</label>
+          <input type="number" class="form-control" formControlName="discount_percentage" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Effective Date</label>
+          <input type="date" class="form-control" formControlName="effective_date">
+        </div>
+        <div class="form-group">
+          <label>End Date (Optional)</label>
+          <input type="date" class="form-control" formControlName="end_date">
+        </div>
+        <button type="button" class="btn btn-primary" (click)="savePricingRules()">Save Pricing</button>
+        <span class="text-success" *ngIf="pricingSuccess">✓ Pricing rules saved successfully</span>
+      </form>
+    </div>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'vehicles'">
+    <div *ngIf="vehicles && vehicles.length > 0">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>VIN</th>
+            <th>Make/Model</th>
+            <th>Year</th>
+            <th>License Plate</th>
+            <th>Status</th>
+            <th>Odometer</th>
+            <th>Last Service</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let vehicle of vehicles">
+            <td>{{ vehicle.vin }}</td>
+            <td>{{ vehicle.make }} {{ vehicle.model }}</td>
+            <td>{{ vehicle.year }}</td>
+            <td>{{ vehicle.license_plate }}</td>
+            <td>{{ vehicle.status }}</td>
+            <td>{{ vehicle.odometer_miles | number:'1.0-0' }} mi</td>
+            <td>{{ vehicle.last_service_date ? (vehicle.last_service_date | date:'shortDate') : '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div *ngIf="!vehicles || vehicles.length === 0" class="alert alert-info">
+      No vehicles found for this customer.
+    </div>
+  </div>
+
+  <div class="tab-content" *ngIf="activeTab === 'notes'">
+    <div class="note-form">
+      <select class="form-control" [(ngModel)]="notePayload.note_type">
+        <option value="GENERAL">General</option>
+        <option value="BILLING">Billing</option>
+        <option value="SERVICE_ISSUE">Service Issue</option>
+      </select>
+      <textarea class="form-control" [(ngModel)]="notePayload.note" placeholder="Add a note"></textarea>
+      <button class="btn btn-primary" (click)="addNote()">Add Note</button>
+    </div>
+
+    <div class="notes-list">
+      <div class="note" *ngFor="let n of notes">
+        <div class="note-header">
+          <strong>{{ n.note_type }}</strong>
+          <span>{{ n.created_at | date:'short' }}</span>
+        </div>
+        <div class="note-body">{{ n.note }}</div>
+      </div>
+    </div>
+  </div>
+</div>

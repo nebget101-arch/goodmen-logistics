@@ -1,0 +1,101 @@
+<div class="alert alert-danger" *ngIf="error">{{ error }}</div>
+<div *ngIf="loading">Loading...</div>
+
+<div class="invoice-detail" *ngIf="invoice">
+  <div class="header">
+    <div>
+      <h2>{{ invoice.invoice_number }}</h2>
+      <span class="badge" [ngClass]="invoice.status === 'PAID' ? 'badge-success' : (invoice.status === 'VOID' ? 'badge-danger' : 'badge-warning')">
+        {{ invoice.status }}
+      </span>
+    </div>
+    <div class="actions">
+      <button class="btn btn-secondary" (click)="downloadPdf()">Download PDF</button>
+      <button class="btn btn-info" (click)="generatePdf()">Generate PDF</button>
+      <button class="btn btn-success" (click)="markSent()" [disabled]="invoice.status !== 'DRAFT'">Mark Sent</button>
+      <button class="btn btn-danger" (click)="voidInvoice()" [disabled]="invoice.status === 'VOID'">Void</button>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div><strong>Issued:</strong> {{ invoice.issued_date }}</div>
+    <div><strong>Due:</strong> {{ invoice.due_date }}</div>
+    <div><strong>Total:</strong> ${{ invoice.total_amount | number:'1.2-2' }}</div>
+    <div><strong>Paid:</strong> ${{ invoice.amount_paid | number:'1.2-2' }}</div>
+    <div><strong>Balance:</strong> ${{ invoice.balance_due | number:'1.2-2' }}</div>
+  </div>
+
+  <div class="section">
+    <h4>Line Items</h4>
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Qty</th>
+          <th>Unit Price</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of lineItems">
+          <td>{{ item.line_type }}</td>
+          <td>{{ item.description }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>${{ item.unit_price | number:'1.2-2' }}</td>
+          <td>${{ item.line_total | number:'1.2-2' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h4>Payments</h4>
+    <div class="payment-form" *ngIf="invoice.status !== 'VOID' && invoice.status !== 'PAID'">
+      <input type="date" class="form-control" [(ngModel)]="paymentForm.paymentDate" />
+      <input type="number" class="form-control" placeholder="Amount" [(ngModel)]="paymentForm.amount" />
+      <select class="form-control" [(ngModel)]="paymentForm.method">
+        <option value="CASH">Cash</option>
+        <option value="CHECK">Check</option>
+        <option value="CARD">Card</option>
+        <option value="ACH">ACH</option>
+        <option value="WIRE">Wire</option>
+        <option value="ZELLE">Zelle</option>
+        <option value="OTHER">Other</option>
+      </select>
+      <input type="text" class="form-control" placeholder="Reference" [(ngModel)]="paymentForm.referenceNumber" />
+      <input type="text" class="form-control" placeholder="Memo" [(ngModel)]="paymentForm.memo" />
+      <button class="btn btn-primary" (click)="addPayment()">Add Payment</button>
+    </div>
+
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Method</th>
+          <th>Amount</th>
+          <th>Reference</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let p of payments">
+          <td>{{ p.payment_date }}</td>
+          <td>{{ p.method }}</td>
+          <td>${{ p.amount | number:'1.2-2' }}</td>
+          <td>{{ p.reference_number }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h4>Documents</h4>
+    <input type="file" (change)="uploadDoc($event)" />
+    <ul>
+      <li *ngFor="let doc of documents">
+        {{ doc.file_name }}
+        <a *ngIf="getDocumentUrl(doc)" [href]="getDocumentUrl(doc)" target="_blank" rel="noopener">Download</a>
+      </li>
+    </ul>
+  </div>
+</div>

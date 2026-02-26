@@ -190,15 +190,15 @@
               <small class="vin-text">{{ vehicle.vin }}</small>
             </td>
             <td data-label="Mileage">
-              {{ vehicle.mileage.toLocaleString() }} mi
+              {{ vehicle.mileage ? (vehicle.mileage | number:'1.0-0') : 'N/A' }} mi
             </td>
             <td data-label="Inspection Expires">
               {{ vehicle.inspection_expiry | date: 'yyyy-MM-dd' }}
             </td>
             <td data-label="Next PM Due">
               <div class="pm-info">
-                <span>{{ vehicle.next_pm_due | date: 'yyyy-MM-dd' }}</span>
-                <small>&#64; {{ vehicle.next_pm_mileage.toLocaleString() }} mi</small>
+                <span>{{ vehicle.next_pm_due ? (vehicle.next_pm_due | date: 'yyyy-MM-dd') : 'N/A' }}</span>
+                <small *ngIf="vehicle.next_pm_mileage">&#64; {{ vehicle.next_pm_mileage | number:'1.0-0' }} mi</small>
               </div>
             </td>
             <td data-label="Status">
@@ -328,7 +328,7 @@
           </div>
           <div class="detail-row">
             <span class="detail-label">Mileage:</span>
-            <span class="detail-value">{{ selectedVehicleDetails.mileage.toLocaleString() }} miles</span>
+            <span class="detail-value">{{ selectedVehicleDetails.mileage ? (selectedVehicleDetails.mileage | number:'1.0-0') : 'N/A' }} miles</span>
           </div>
         </div>
 
@@ -370,7 +370,7 @@
           </div>
           <div class="detail-row">
             <span class="detail-label">Next PM Mileage:</span>
-            <span class="detail-value">{{ selectedVehicleDetails.next_pm_mileage.toLocaleString() }} miles</span>
+            <span class="detail-value">{{ selectedVehicleDetails.next_pm_mileage ? (selectedVehicleDetails.next_pm_mileage | number:'1.0-0') : 'N/A' }} miles</span>
           </div>
         </div>
       </div>

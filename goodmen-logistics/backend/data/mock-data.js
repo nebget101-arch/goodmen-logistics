@@ -1,3 +1,6 @@
+// Deprecated mock data removed for deployment readiness.
+module.exports = {};
+/*
 const { v4: uuidv4 } = require('uuid');
 
 // Mock Drivers Data
@@ -375,3 +378,34 @@ module.exports = {
   loads,
   dashboardStats
 };
+
+// Mock Locations Data
+const locations = [
+  {
+    id: uuidv4(),
+    name: 'Los Angeles Terminal',
+    address: '123 Main St, Los Angeles, CA 90001',
+    type: 'terminal',
+    status: 'active',
+    notes: 'Primary West Coast terminal.'
+  },
+  {
+    id: uuidv4(),
+    name: 'Houston Yard',
+    address: '456 Oak Ave, Houston, TX 77001',
+    type: 'yard',
+    status: 'active',
+    notes: 'Main Texas yard.'
+  },
+  {
+    id: uuidv4(),
+    name: 'Miami Drop Lot',
+    address: '789 Beach Blvd, Miami, FL 33101',
+    type: 'drop-lot',
+    status: 'inactive',
+    notes: 'Seasonal use only.'
+  }
+];
+
+module.exports.locations = locations;
+*/

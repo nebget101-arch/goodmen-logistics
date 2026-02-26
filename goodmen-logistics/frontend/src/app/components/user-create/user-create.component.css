@@ -1,0 +1,39 @@
+.user-create-form {
+  max-width: 400px;
+  margin: 2rem auto;
+  padding: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: #fafafa;
+}
+.user-create-form h2 {
+  margin-bottom: 1rem;
+}
+.user-create-form label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+.user-create-form input,
+.user-create-form select {
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+.user-create-form button {
+  padding: 0.5rem 1.5rem;
+  border-radius: 4px;
+  border: none;
+  background: #1976d2;
+  color: #fff;
+  font-weight: bold;
+}
+.success {
+  color: green;
+  margin-top: 1rem;
+}
+.error {
+  color: red;
+  margin-top: 1rem;
+}

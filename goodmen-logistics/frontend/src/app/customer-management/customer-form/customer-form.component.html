@@ -1,0 +1,124 @@
+<div class="customer-form">
+  <h2>{{ customerId ? 'Edit Customer' : 'New Customer' }}</h2>
+
+  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+  <div *ngIf="success" class="alert alert-success">{{ success }}</div>
+
+  <form [formGroup]="form">
+    <div class="section">
+      <h4>Basic Information</h4>
+      <div class="grid">
+        <div>
+          <label>Company Name *</label>
+          <input class="form-control" formControlName="company_name" />
+        </div>
+        <div>
+          <label>Customer Type *</label>
+          <select class="form-control" formControlName="customer_type">
+            <option *ngFor="let t of customerTypes" [value]="t">{{ t }}</option>
+          </select>
+        </div>
+        <div>
+          <label>Status *</label>
+          <select class="form-control" formControlName="status">
+            <option *ngFor="let s of statuses" [value]="s">{{ s }}</option>
+          </select>
+        </div>
+        <div>
+          <label>Tax ID / EIN</label>
+          <input class="form-control" formControlName="tax_id" />
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>Contact</h4>
+      <div class="grid">
+        <div>
+          <label>Primary Contact</label>
+          <input class="form-control" formControlName="primary_contact_name" />
+        </div>
+        <div>
+          <label>Phone</label>
+          <input class="form-control" formControlName="phone" />
+        </div>
+        <div>
+          <label>Email</label>
+          <input class="form-control" formControlName="email" />
+        </div>
+        <div>
+          <label>Secondary Phone</label>
+          <input class="form-control" formControlName="secondary_phone" />
+        </div>
+        <div>
+          <label>Website</label>
+          <input class="form-control" formControlName="website" />
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>Billing Address</h4>
+      <div class="grid">
+        <div>
+          <label>Address Line 1</label>
+          <input class="form-control" formControlName="billing_address_line1" />
+        </div>
+        <div>
+          <label>Address Line 2</label>
+          <input class="form-control" formControlName="billing_address_line2" />
+        </div>
+        <div>
+          <label>City</label>
+          <input class="form-control" formControlName="billing_city" />
+        </div>
+        <div>
+          <label>State</label>
+          <input class="form-control" formControlName="billing_state" />
+        </div>
+        <div>
+          <label>Zip</label>
+          <input class="form-control" formControlName="billing_zip" />
+        </div>
+        <div>
+          <label>Country</label>
+          <input class="form-control" formControlName="billing_country" />
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>Payment & Billing</h4>
+      <div class="grid">
+        <div>
+          <label>Payment Terms *</label>
+          <select class="form-control" formControlName="payment_terms">
+            <option *ngFor="let p of paymentTerms" [value]="p">{{ p }}</option>
+          </select>
+        </div>
+        <div *ngIf="form.value.payment_terms === 'CUSTOM'">
+          <label>Custom Days</label>
+          <input class="form-control" type="number" formControlName="payment_terms_custom_days" />
+        </div>
+        <div>
+          <label>Credit Limit</label>
+          <input class="form-control" type="number" formControlName="credit_limit" />
+        </div>
+        <div class="checkbox">
+          <label>
+            <input type="checkbox" formControlName="tax_exempt" /> Tax Exempt
+          </label>
+        </div>
+        <div>
+          <label>Billing Notes</label>
+          <textarea class="form-control" formControlName="billing_notes"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="loading">Save</button>
+    </div>
+  </form>
+</div>

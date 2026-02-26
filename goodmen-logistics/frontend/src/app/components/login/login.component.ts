@@ -19,6 +19,15 @@ export class LoginComponent {
       next: (res) => {
         localStorage.setItem('token', res.token);
         localStorage.setItem('role', res.role);
+        if (res.username) {
+          localStorage.setItem('username', res.username);
+        }
+        if (res.firstName || res.lastName) {
+          const displayName = `${res.firstName || ''}${res.firstName && res.lastName ? '.' : ''}${res.lastName || ''}`.trim().toLowerCase();
+          if (displayName) {
+            localStorage.setItem('displayName', displayName);
+          }
+        }
         this.router.navigate(['/dashboard']);
       },
       error: () => {

@@ -1,8 +1,44 @@
 <div class="container">
   <div class="card">
     <div class="card-header">
-      <h2 class="card-title">🔧 Maintenance & Repair Records</h2>
-      <button class="btn btn-primary">+ New Work Order</button>
+      <h2 class="card-title">🔧 Work Orders Hub</h2>
+      <button class="btn btn-primary" (click)="goToWorkOrder()">+ New Work Order</button>
+    </div>
+
+    <div class="card-body" style="padding-bottom: 0;">
+      <div class="row">
+        <div class="col">
+          <input type="text" class="form-control" placeholder="Search WO #, unit, VIN, customer" [(ngModel)]="filters.search" (keyup.enter)="applyFilters()">
+        </div>
+        <div class="col">
+          <select class="form-control" [(ngModel)]="filters.status">
+            <option value="">All Statuses</option>
+            <option *ngFor="let status of statuses" [value]="status">{{ status }}</option>
+          </select>
+        </div>
+        <div class="col">
+          <select class="form-control" [(ngModel)]="filters.type">
+            <option value="">All Types</option>
+            <option *ngFor="let type of types" [value]="type">{{ type }}</option>
+          </select>
+        </div>
+        <div class="col">
+          <select class="form-control" [(ngModel)]="filters.locationId">
+            <option value="">All Locations</option>
+            <option *ngFor="let loc of locations" [value]="loc.id">{{ loc.name }}</option>
+          </select>
+        </div>
+        <div class="col">
+          <select class="form-control" [(ngModel)]="filters.invoiceStatus">
+            <option value="">All Invoice Statuses</option>
+            <option *ngFor="let status of invoiceStatuses" [value]="status">{{ status }}</option>
+          </select>
+        </div>
+        <div class="col" style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary" (click)="applyFilters()">Apply</button>
+          <button class="btn btn-outline-secondary" (click)="clearFilters()">Clear</button>
+        </div>
+      </div>
     </div>
 
     <div *ngIf="loading" class="loading">
@@ -12,49 +48,46 @@
     <table class="table" *ngIf="!loading">
       <thead>
         <tr>
+          <th>WO #</th>
           <th>Vehicle</th>
+          <th>Customer</th>
+          <th>Location</th>
           <th>Type</th>
-          <th>Description</th>
-          <th>Date</th>
-          <th>Mileage</th>
-          <th>Mechanic</th>
-          <th>Cost</th>
+          <th>Totals</th>
           <th>Status</th>
+          <th>Invoice</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let record of maintenanceRecords">
-          <td><strong>{{ record.vehicleUnit }}</strong></td>
+        <tr *ngFor="let record of workOrders">
+          <td><strong>{{ record.work_order_number }}</strong></td>
+          <td>{{ record.vehicle_unit }}</td>
+          <td>{{ record.customer_name || 'Internal' }}</td>
+          <td>{{ record.location_name }}</td>
+          <td>{{ record.type }}</td>
           <td>
-            <span [class]="'badge ' + (record.type === 'Repair' ? 'badge-warning' : 'badge-info')">
-              {{ record.type }}
-            </span>
-            <span *ngIf="record.priority === 'critical'" class="badge badge-danger" style="margin-left: 5px;">
-              CRITICAL
-            </span>
+            ${{ record.total_amount | number:'1.2-2' }}
           </td>
-          <td>{{ record.description }}</td>
-          <td>{{ record.datePerformed || 'Not yet performed' }}</td>
-          <td>{{ record.mileage?.toLocaleString() }} mi</td>
-          <td>{{ record.mechanicName }}</td>
-          <td>${{ record.cost?.toFixed(2) }}</td>
           <td>
             <span [class]="'badge ' + getStatusBadge(record.status)">
               {{ record.status }}
             </span>
           </td>
+          <td>
+            <span *ngIf="record.invoice_status" [class]="'badge ' + getInvoiceBadge(record.invoice_status)">
+              {{ record.invoice_status }}
+            </span>
+            <span *ngIf="!record.invoice_status">—</span>
+          </td>
+          <td style="display:flex; gap:6px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-sm btn-outline-primary" (click)="editWorkOrder(record)">View</button>
+            <button type="button" class="btn btn-sm btn-outline-success" (click)="generateInvoice(record)" [disabled]="record.status !== 'COMPLETED' || record.invoice_id">
+              Generate Invoice
+            </button>
+          </td>
         </tr>
       </tbody>
     </table>
-  </div>
-
-  <div class="card" *ngIf="pendingRecords.length > 0">
-    <div class="card-header">
-      <h3 class="card-title">⚠️ Pending Maintenance</h3>
-    </div>
-    <div *ngFor="let record of pendingRecords" class="alert" [ngClass]="record.priority === 'critical' ? 'alert-critical' : 'alert-warning'">
-      <strong>{{ record.vehicleUnit }}</strong> - {{ record.description }}
-      <span *ngIf="record.priority === 'critical'"> (CRITICAL - Vehicle OOS)</span>
-    </div>
   </div>
 </div>

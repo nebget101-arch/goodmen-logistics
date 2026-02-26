@@ -1,0 +1,35 @@
+<div class="user-create-form">
+  <h2>Create User</h2>
+  <form (ngSubmit)="createUser()">
+    <div>
+      <label for="userCreateFirstName">First Name:</label>
+      <input id="userCreateFirstName" [(ngModel)]="firstName" name="firstName" />
+    </div>
+    <div>
+      <label for="userCreateLastName">Last Name:</label>
+      <input id="userCreateLastName" [(ngModel)]="lastName" name="lastName" />
+    </div>
+    <div>
+      <label for="userCreateEmail">Email:</label>
+      <input id="userCreateEmail" [(ngModel)]="email" name="email" type="email" />
+    </div>
+    <div>
+      <label for="userCreateUsername">Username:</label>
+      <input id="userCreateUsername" [(ngModel)]="username" name="username" placeholder="Auto: first.last" />
+      <small *ngIf="!username && generatedUsername">Suggested: {{ generatedUsername }}</small>
+    </div>
+    <div>
+      <label for="userCreatePassword">Password:</label>
+      <input id="userCreatePassword" [(ngModel)]="password" name="password" type="password" required />
+    </div>
+    <div>
+      <label for="userCreateRole">Role:</label>
+      <select id="userCreateRole" [(ngModel)]="role" name="role">
+        <option *ngFor="let r of roles" [value]="r">{{ r }}</option>
+      </select>
+    </div>
+    <button type="submit">Create User</button>
+  </form>
+  <div *ngIf="message" class="success">{{ message }}</div>
+  <div *ngIf="error" class="error">{{ error }}</div>
+</div>
