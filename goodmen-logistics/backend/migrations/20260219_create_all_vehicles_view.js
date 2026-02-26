@@ -32,7 +32,7 @@ exports.up = async function(knex) {
       v.updated_at,
       v.location_id,
       v.company_owned,
-      v.customer_id,
+      NULL::uuid AS customer_id,
       'internal'::text AS source
     FROM vehicles v
     UNION ALL
