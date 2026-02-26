@@ -31,7 +31,7 @@ exports.up = async function(knex) {
       v.created_at,
       v.updated_at,
       v.location_id,
-      v.is_company_owned,
+      v.company_owned,
       v.customer_id,
       'internal'::text AS source
     FROM vehicles v
@@ -56,7 +56,7 @@ exports.up = async function(knex) {
       cv.created_at,
       cv.updated_at,
       NULL::uuid AS location_id,
-      false AS is_company_owned,
+      false AS company_owned,
       cv.customer_id,
       'customer'::text AS source
     FROM customer_vehicles cv
