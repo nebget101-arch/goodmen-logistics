@@ -1,5 +1,11 @@
 exports.up = async function(knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  const hasCompanyOwned = await knex.schema.hasColumn('vehicles', 'company_owned');
+  if (!hasCompanyOwned) {
+    await knex.schema.alterTable('vehicles', table => {
+      table.boolean('company_owned').defaultTo(true);
+    });
+  }
   const hasVehicleUuid = await knex.schema.hasColumn('customer_vehicles', 'vehicle_uuid');
   if (!hasVehicleUuid) {
     await knex.schema.alterTable('customer_vehicles', table => {
