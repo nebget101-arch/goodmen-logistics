@@ -26,6 +26,12 @@ export class CustomersListComponent implements OnInit {
   pageSize = 20;
   total = 0;
 
+  get totalPages(): number {
+    return Math.ceil(this.total / this.pageSize);
+  }
+
+  Math = Math; // Expose Math for template usage
+
   customerTypes = ['FLEET', 'WALK_IN', 'INTERNAL', 'WARRANTY'];
   statuses = ['ACTIVE', 'INACTIVE'];
   paymentTerms = ['DUE_ON_RECEIPT', 'NET_15', 'NET_30', 'CUSTOM'];
@@ -94,5 +100,41 @@ export class CustomersListComponent implements OnInit {
       next: () => this.loadCustomers(),
       error: () => this.loadCustomers()
     });
+  }
+
+  previousPage(): void {
+    if (this.page > 1) {
+      this.page--;
+      this.loadCustomers();
+    }
+  }
+
+  nextPage(): void {
+    if (this.page < this.totalPages) {
+      this.page++;
+      this.loadCustomers();
+    }
+  }
+
+  goToPage(pageNumber: number): void {
+    this.page = pageNumber;
+    this.loadCustomers();
+  }
+
+  getPageNumbers(): number[] {
+    const pages: number[] = [];
+    const maxPages = Math.min(this.totalPages, 5); // Show max 5 page buttons
+    let startPage = Math.max(1, this.page - 2);
+    let endPage = Math.min(this.totalPages, startPage + 4);
+
+    // Adjust startPage if we're near the end
+    if (endPage - startPage < 4) {
+      startPage = Math.max(1, endPage - 4);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
   }
 }

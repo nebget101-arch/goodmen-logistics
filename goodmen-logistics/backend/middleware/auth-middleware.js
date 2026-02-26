@@ -9,15 +9,19 @@ const dtLogger = require('../utils/dynatrace-logger');
 function authMiddleware(req, res, next) {
 	try {
 		const authHeader = req.headers.authorization;
+		const isProd = process.env.NODE_ENV === 'production';
 		
 		if (!authHeader || !authHeader.startsWith('Bearer ')) {
-			// For Phase 2 implementation, use mock user if no token provided
-			req.user = {
-				id: 'mock-user-id',
-				username: 'demo-user',
-				role: req.headers['x-user-role'] || 'admin'
-			};
-			return next();
+			if (!isProd) {
+				// Dev-only: allow mock user for local testing
+				req.user = {
+					id: 'mock-user-id',
+					username: 'demo-user',
+					role: req.headers['x-user-role'] || 'admin'
+				};
+				return next();
+			}
+			return res.status(401).json({ error: 'Missing or invalid token' });
 		}
 
 		const token = authHeader.substring(7);
@@ -32,13 +36,16 @@ function authMiddleware(req, res, next) {
 			};
 			next();
 		} catch (verifyError) {
-			// If token is invalid, use mock user
-			req.user = {
-				id: 'mock-user-id',
-				username: 'demo-user',
-				role: req.headers['x-user-role'] || 'technician'
-			};
-			next();
+			if (!isProd) {
+				// Dev-only: allow mock user for local testing
+				req.user = {
+					id: 'mock-user-id',
+					username: 'demo-user',
+					role: req.headers['x-user-role'] || 'technician'
+				};
+				return next();
+			}
+			return res.status(401).json({ error: 'Invalid token' });
 		}
 	} catch (error) {
 		dtLogger.error('auth_middleware_error', { error: error.message });

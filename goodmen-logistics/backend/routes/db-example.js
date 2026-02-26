@@ -61,7 +61,7 @@ router.get('/drivers/:id', async (req, res) => {
 router.get('/vehicles', async (req, res) => {
   try {
     const result = await query(
-      'SELECT * FROM vehicles ORDER BY unit_number'
+      'SELECT * FROM all_vehicles ORDER BY unit_number'
     );
     
     res.json({
@@ -88,7 +88,7 @@ router.get('/loads', async (req, res) => {
         v.unit_number
       FROM loads l
       LEFT JOIN drivers d ON l.driver_id = d.id
-      LEFT JOIN vehicles v ON l.vehicle_id = v.id
+      LEFT JOIN all_vehicles v ON l.vehicle_id = v.id
       ORDER BY l.pickup_date DESC
     `);
     
@@ -113,8 +113,8 @@ router.get('/dashboard', async (req, res) => {
       SELECT 
         (SELECT COUNT(*) FROM drivers WHERE status = 'active') as active_drivers,
         (SELECT COUNT(*) FROM drivers) as total_drivers,
-        (SELECT COUNT(*) FROM vehicles WHERE status = 'in-service') as active_vehicles,
-        (SELECT COUNT(*) FROM vehicles) as total_vehicles,
+        (SELECT COUNT(*) FROM all_vehicles WHERE status = 'in-service') as active_vehicles,
+        (SELECT COUNT(*) FROM all_vehicles) as total_vehicles,
         (SELECT COUNT(*) FROM loads WHERE status = 'in-transit') as active_loads,
         (SELECT COUNT(*) FROM loads WHERE status = 'pending') as pending_loads,
         (SELECT COUNT(*) FROM hos_records WHERE status = 'warning' OR status = 'violation') as hos_violations,

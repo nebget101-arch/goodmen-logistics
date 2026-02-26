@@ -1,4 +1,18 @@
 const PDFDocument = require('pdfkit');
+const path = require('path');
+const fs = require('fs');
+
+function formatDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toISOString().slice(0, 10);
+}
+
+function formatMoney(value) {
+  const num = Number(value || 0);
+  return num.toFixed(2);
+}
 
 function buildInvoicePdf({ invoice, customer, location, lineItems, payments }) {
   return new Promise((resolve, reject) => {
@@ -9,70 +23,103 @@ function buildInvoicePdf({ invoice, customer, location, lineItems, payments }) {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(18).text('Invoice', { align: 'right' });
-    doc.moveDown(0.5);
+    const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const startX = doc.page.margins.left;
+    const startY = doc.page.margins.top;
 
-    doc.fontSize(10).text(`Invoice #: ${invoice.invoice_number}`);
-    doc.text(`Status: ${invoice.status}`);
-    doc.text(`Issued: ${invoice.issued_date || ''}`);
-    doc.text(`Due: ${invoice.due_date || ''}`);
-    doc.text(`Terms: ${invoice.payment_terms || ''}`);
+    // Header
+    const logoPath = path.join(__dirname, '..', 'frontend', 'src', 'assets', 'goodmen-logo.png');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, startX, startY, { width: 120 });
+    }
 
-    doc.moveDown();
-    doc.fontSize(12).text('Bill To', { underline: true });
-    doc.fontSize(10).text(customer.company_name || '');
-    doc.text(customer.billing_address_line1 || '');
-    if (customer.billing_address_line2) doc.text(customer.billing_address_line2);
-    doc.text([customer.billing_city, customer.billing_state, customer.billing_zip].filter(Boolean).join(', '));
-    doc.text(customer.billing_country || '');
+    doc.fontSize(20).fillColor('#1a237e').text('INVOICE', startX + 140, startY, { align: 'right', width: pageWidth - 140 });
+    doc.fontSize(10).fillColor('#333');
+    doc.text(`Invoice #: ${invoice.invoice_number}`, startX + 140, startY + 26, { align: 'right', width: pageWidth - 140 });
+    doc.text(`Status: ${invoice.status}`, startX + 140, startY + 40, { align: 'right', width: pageWidth - 140 });
 
-    doc.moveDown();
-    doc.fontSize(12).text('Location', { underline: true });
-    doc.fontSize(10).text(location?.name || '');
-    if (location?.address) doc.text(location.address);
+    doc.moveTo(startX, startY + 70).lineTo(startX + pageWidth, startY + 70).strokeColor('#e0e0e0').stroke();
 
-    doc.moveDown();
-    doc.fontSize(12).text('Line Items', { underline: true });
-    doc.moveDown(0.5);
+    // Bill To + Location
+    const blockTop = startY + 85;
+    doc.fontSize(11).fillColor('#1a237e').text('Bill To', startX, blockTop);
+    doc.fontSize(10).fillColor('#333');
+    doc.text(customer?.company_name || '', startX, blockTop + 14);
+    doc.text(customer?.billing_address_line1 || '', startX, blockTop + 28);
+    if (customer?.billing_address_line2) doc.text(customer.billing_address_line2, startX, blockTop + 42);
+    doc.text([customer?.billing_city, customer?.billing_state, customer?.billing_zip].filter(Boolean).join(', '), startX, blockTop + 56);
+    doc.text(customer?.billing_country || '', startX, blockTop + 70);
 
-    const tableHeader = ['Type', 'Description', 'Qty', 'Unit', 'Total'];
-    doc.fontSize(10).text(tableHeader.join(' | '));
-    doc.moveDown(0.2);
+    const rightBlockX = startX + pageWidth / 2 + 20;
+    doc.fontSize(11).fillColor('#1a237e').text('Location', rightBlockX, blockTop);
+    doc.fontSize(10).fillColor('#333');
+    doc.text(location?.name || '', rightBlockX, blockTop + 14);
+    doc.text(location?.address || '', rightBlockX, blockTop + 28, { width: pageWidth / 2 - 20 });
 
+    doc.fontSize(11).fillColor('#1a237e').text('Invoice Details', rightBlockX, blockTop + 60);
+    doc.fontSize(10).fillColor('#333');
+    doc.text(`Issued: ${formatDate(invoice.issued_date)}`, rightBlockX, blockTop + 74);
+    doc.text(`Due: ${formatDate(invoice.due_date)}`, rightBlockX, blockTop + 88);
+    doc.text(`Terms: ${invoice.payment_terms || ''}`, rightBlockX, blockTop + 102);
+
+    // Line items table
+    const tableTop = blockTop + 130;
+    const rowHeight = 20;
+    const colX = [startX, startX + 70, startX + 310, startX + 380, startX + 460];
+    const colWidths = [70, 240, 70, 70, 80];
+
+    doc.rect(startX, tableTop, pageWidth, rowHeight).fill('#f5f5f5');
+    doc.fillColor('#333').fontSize(10);
+    doc.text('Type', colX[0] + 4, tableTop + 5, { width: colWidths[0] });
+    doc.text('Description', colX[1] + 4, tableTop + 5, { width: colWidths[1] });
+    doc.text('Qty', colX[2], tableTop + 5, { width: colWidths[2], align: 'right' });
+    doc.text('Unit', colX[3], tableTop + 5, { width: colWidths[3], align: 'right' });
+    doc.text('Total', colX[4], tableTop + 5, { width: colWidths[4], align: 'right' });
+
+    doc.strokeColor('#e0e0e0').lineWidth(1).rect(startX, tableTop, pageWidth, rowHeight).stroke();
+
+    let y = tableTop + rowHeight;
     lineItems.forEach(item => {
-      doc.text([
-        item.line_type,
-        item.description,
-        Number(item.quantity || 0).toFixed(2),
-        Number(item.unit_price || 0).toFixed(2),
-        Number(item.line_total || 0).toFixed(2)
-      ].join(' | '));
+      doc.fillColor('#333').fontSize(10);
+      doc.text(item.line_type || '', colX[0] + 4, y + 5, { width: colWidths[0] });
+      doc.text(item.description || '', colX[1] + 4, y + 5, { width: colWidths[1] });
+      doc.text(formatMoney(item.quantity || 0), colX[2], y + 5, { width: colWidths[2], align: 'right' });
+      doc.text(formatMoney(item.unit_price || 0), colX[3], y + 5, { width: colWidths[3], align: 'right' });
+      doc.text(formatMoney(item.line_total || 0), colX[4], y + 5, { width: colWidths[4], align: 'right' });
+      doc.strokeColor('#f0f0f0').rect(startX, y, pageWidth, rowHeight).stroke();
+      y += rowHeight;
     });
 
-    doc.moveDown();
-    doc.fontSize(12).text('Totals', { underline: true });
-    doc.fontSize(10).text(`Subtotal Labor: $${Number(invoice.subtotal_labor || 0).toFixed(2)}`);
-    doc.text(`Subtotal Parts: $${Number(invoice.subtotal_parts || 0).toFixed(2)}`);
-    doc.text(`Subtotal Fees: $${Number(invoice.subtotal_fees || 0).toFixed(2)}`);
-    doc.text(`Discount: $${Number(invoice.discount_value || 0).toFixed(2)} (${invoice.discount_type})`);
-    doc.text(`Tax: $${Number(invoice.tax_amount || 0).toFixed(2)} (${invoice.tax_rate_percent}%)`);
-    doc.text(`Total: $${Number(invoice.total_amount || 0).toFixed(2)}`);
-    doc.text(`Amount Paid: $${Number(invoice.amount_paid || 0).toFixed(2)}`);
-    doc.text(`Balance Due: $${Number(invoice.balance_due || 0).toFixed(2)}`);
+    // Totals box
+    const totalsTop = y + 10;
+    const totalsX = startX + pageWidth - 220;
+    const totalsWidth = 220;
 
+    doc.rect(totalsX, totalsTop, totalsWidth, 130).fill('#fafafa');
+    doc.fillColor('#333').fontSize(10);
+    doc.text(`Labor: $${formatMoney(invoice.subtotal_labor)}`, totalsX + 10, totalsTop + 10);
+    doc.text(`Parts: $${formatMoney(invoice.subtotal_parts)}`, totalsX + 10, totalsTop + 26);
+    doc.text(`Fees: $${formatMoney(invoice.subtotal_fees)}`, totalsX + 10, totalsTop + 42);
+    doc.text(`Discount: $${formatMoney(invoice.discount_value)} (${invoice.discount_type || 'NONE'})`, totalsX + 10, totalsTop + 58, { width: totalsWidth - 20 });
+    doc.text(`Tax: $${formatMoney(invoice.tax_amount)} (${invoice.tax_rate_percent || 0}%)`, totalsX + 10, totalsTop + 74);
+    doc.fontSize(11).fillColor('#1a237e').text(`Total: $${formatMoney(invoice.total_amount)}`, totalsX + 10, totalsTop + 94);
+    doc.fontSize(10).fillColor('#333').text(`Paid: $${formatMoney(invoice.amount_paid)}`, totalsX + 10, totalsTop + 110);
+    doc.fontSize(11).fillColor('#1a237e').text(`Balance: $${formatMoney(invoice.balance_due)}`, totalsX + 10, totalsTop + 126);
+
+    // Payments
     if (payments?.length) {
-      doc.moveDown();
-      doc.fontSize(12).text('Payments', { underline: true });
-      doc.fontSize(10);
-      payments.forEach(p => {
-        doc.text(`${p.payment_date} - ${p.method} - $${Number(p.amount || 0).toFixed(2)} ${p.reference_number || ''}`);
+      const payTop = totalsTop + 150;
+      doc.fontSize(11).fillColor('#1a237e').text('Payments', startX, payTop);
+      doc.fontSize(10).fillColor('#333');
+      payments.forEach((p, idx) => {
+        doc.text(`${formatDate(p.payment_date)} - ${p.method} - $${formatMoney(p.amount)} ${p.reference_number || ''}`, startX, payTop + 14 + idx * 14);
       });
     }
 
     if (invoice.notes) {
-      doc.moveDown();
-      doc.fontSize(12).text('Notes', { underline: true });
-      doc.fontSize(10).text(invoice.notes);
+      const notesTop = totalsTop + 150 + (payments?.length ? payments.length * 14 + 20 : 20);
+      doc.fontSize(11).fillColor('#1a237e').text('Notes', startX, notesTop);
+      doc.fontSize(10).fillColor('#333').text(invoice.notes, startX, notesTop + 14, { width: pageWidth });
     }
 
     doc.end();

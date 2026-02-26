@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
         v.unit_number as "vehicleUnit",
         v.vin
       FROM maintenance_records mr
-      JOIN vehicles v ON mr.vehicle_id = v.id
+      JOIN all_vehicles v ON mr.vehicle_id = v.id
       ORDER BY mr.date_performed DESC NULLS LAST, mr.created_at DESC
     `);
     const duration = Date.now() - startTime;
@@ -80,8 +80,8 @@ router.get('/status/pending', async (req, res) => {
         mr.customer_id as "customerId",
         v.unit_number as "vehicleUnit",
         v.vin
-       FROM maintenance_records mr
-       JOIN vehicles v ON mr.vehicle_id = v.id
+      FROM maintenance_records mr
+      JOIN all_vehicles v ON mr.vehicle_id = v.id
        WHERE mr.status = 'pending'
        ORDER BY mr.created_at DESC`,
       []

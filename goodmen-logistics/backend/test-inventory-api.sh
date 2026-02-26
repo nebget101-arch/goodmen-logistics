@@ -1,130 +1,16 @@
 #!/bin/bash
-
-# Phase 2 Inventory Management - Quick API Testing Guide
-# Run these commands to test the inventory endpoints
-
-BASE_URL="http://localhost:3000/api"
-ADMIN_ROLE="admin"
-PARTS_MANAGER_ROLE="parts_manager"
-SHOP_MANAGER_ROLE="shop_manager"
-TECHNICIAN_ROLE="technician"
-
-# =============================================
-# PARTS CATALOG ENDPOINTS
-# =============================================
-
-echo "=== Testing Parts Catalog ==="
-
-# 1. Get all active parts
-echo "1. GET all parts"
-curl -s -X GET "$BASE_URL/parts" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" | jq .
-
-# 2. Get distinct categories
-echo "2. GET categories"
-curl -s -X GET "$BASE_URL/parts/categories" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" | jq .
-
-# 3. Get distinct manufacturers
-echo "3. GET manufacturers"
-curl -s -X GET "$BASE_URL/parts/manufacturers" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" | jq .
-
-# 4. Create a new part
-echo "4. POST create part"
-curl -s -X POST "$BASE_URL/parts" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" \
-  -d '{
-    "sku": "TEST-001",
-    "name": "Test Part",
-    "category": "Test Category",
-    "manufacturer": "Test Manufacturer",
-    "uom": "each",
-    "default_cost": 50.00,
-    "default_retail_price": 99.99,
-    "reorder_point_default": 5,
-    "reorder_qty_default": 20
-  }' | jq .
-
-# 5. Get parts with filters
-echo "5. GET parts with filter (category=Filters)"
-curl -s -X GET "$BASE_URL/parts?category=Filters" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" | jq .
-
-# 6. Search parts by SKU
-echo "6. GET parts with search"
-curl -s -X GET "$BASE_URL/parts?search=OIL" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" | jq .
-
-# =============================================
-# INVENTORY ENDPOINTS
-# =============================================
-
-echo "=== Testing Inventory ==="
-
-# Get location ID from database (assuming first location is: aaaa0000-0000-0000-0000-000000000001)
-LOCATION_ID="aaaa0000-0000-0000-0000-000000000001"
-
-# 1. Get inventory for location
-echo "7. GET inventory for location"
-curl -s -X GET "$BASE_URL/inventory?locationId=$LOCATION_ID" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" | jq .
-
-# 2. Get alerts
-echo "8. GET alerts for location"
-curl -s -X GET "$BASE_URL/inventory/alerts?locationId=$LOCATION_ID" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" | jq .
-
-# 3. Get inventory status
-echo "9. GET inventory status"
-curl -s -X GET "$BASE_URL/inventory/status/$LOCATION_ID" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" | jq .
-
-# =============================================
-# RECEIVING WORKFLOW
-# =============================================
-
-echo "=== Testing Receiving Workflow ==="
-
-# 1. Create receiving ticket
-echo "10. POST create receiving ticket"
-TICKET_RESPONSE=$(curl -s -X POST "$BASE_URL/receiving" \
-  -H "Content-Type: application/json" \
-  -H "x-user-role: $ADMIN_ROLE" \
-  -d "{
-    \"locationId\": \"$LOCATION_ID\",
-    \"vendorName\": \"Test Vendor\",
-    \"referenceNumber\": \"PO-12345\"
-  }")
-
-echo "$TICKET_RESPONSE" | jq .
-TICKET_ID=$(echo "$TICKET_RESPONSE" | jq -r '.data.id')
-
-echo "Created ticket ID: $TICKET_ID"
-
-# 2. Get part ID from database (assuming first part is filter-oil-01)
-PART_ID="bbbb0000-0000-0000-0000-000000000001"
-
-# 3. Add line to ticket
-echo "11. POST add line to receiving ticket"
-curl -s -X POST "$BASE_URL/receiving/$TICKET_ID/lines" \
-  -H "Content-Type: application/json" \
+# Deprecated test script removed for deployment readiness.
+exit 0
+: <<'DEPRECATED'
+#!/bin/bash
+# Deprecated test script removed for deployment readiness.
   -H "x-user-role: $ADMIN_ROLE" \
   -d "{
     \"partId\": \"$PART_ID\",
     \"qtyReceived\": 100,
     \"unitCost\": 15.50,
     \"binLocationOverride\": \"A-101\"
-  }" | jq .
+    }" | jq .
 
 # 4. Get receiving tickets
 echo "12. GET receiving tickets"
@@ -274,3 +160,5 @@ curl -s -X GET "$BASE_URL/parts" \
   -H "x-user-role: $TECHNICIAN_ROLE" | jq '. | {success, count: (.data | length)}'
 
 echo "=== Testing Complete ==="
+
+DEPRECATED

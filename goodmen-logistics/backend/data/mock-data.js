@@ -1,3 +1,6 @@
+// Deprecated mock data removed for deployment readiness.
+module.exports = {};
+/*
 const { v4: uuidv4 } = require('uuid');
 
 // Mock Drivers Data
@@ -405,3 +408,4 @@ const locations = [
 ];
 
 module.exports.locations = locations;
+*/

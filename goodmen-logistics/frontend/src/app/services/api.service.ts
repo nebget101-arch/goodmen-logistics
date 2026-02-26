@@ -22,9 +22,12 @@ export class ApiService {
   }
 
   // Customers
-  getCustomers(query?: string): Observable<any> {
+  getCustomers(params?: { query?: string; pageSize?: number }): Observable<any> {
     let url = `${this.baseUrl}/customers`;
-    if (query) url += `?search=${encodeURIComponent(query)}`;
+    const queryParams: string[] = [];
+    if (params?.query) queryParams.push(`search=${encodeURIComponent(params.query)}`);
+    if (params?.pageSize) queryParams.push(`pageSize=${params.pageSize}`);
+    if (queryParams.length > 0) url += `?${queryParams.join('&')}`;
     return this.http.get(url);
   }
 
@@ -39,10 +42,19 @@ export class ApiService {
     }
     return this.http.post(`${this.baseUrl}/customers`, payload);
   }
-    // Users
-    createUser(user: { username: string; password: string; role: string }): Observable<any> {
-      return this.http.post(`${this.baseUrl}/users`, user);
-    }
+
+  // Users
+  createUser(user: { username?: string; password: string; role: string; firstName?: string; lastName?: string; email?: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/users`, user);
+  }
+
+  getTechnicians(): Observable<any> {
+    return this.http.get(`${this.baseUrl}/users/technicians`);
+  }
+
+  getUserById(id: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/users/${id}`);
+  }
 
   // Dashboard
   getDashboardStats(): Observable<any> {
@@ -199,8 +211,8 @@ export class ApiService {
     return this.http.patch(`${this.baseUrl}/work-orders/${id}/status`, { status });
   }
 
-  generateInvoiceFromWorkOrder(id: string): Observable<any> {
-    return this.http.post(`${this.baseUrl}/work-orders/${id}/generate-invoice`, {});
+  generateInvoiceFromWorkOrder(id: string, payload?: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/work-orders/${id}/generate-invoice`, payload || {});
   }
 
   uploadWorkOrderDocument(id: string, file: File): Observable<any> {

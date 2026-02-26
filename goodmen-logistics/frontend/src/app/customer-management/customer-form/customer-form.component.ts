@@ -12,6 +12,7 @@ export class CustomerFormComponent implements OnInit {
   form: FormGroup;
   loading = false;
   error = '';
+  success = '';
   customerId: string | null = null;
 
   customerTypes = ['FLEET', 'WALK_IN', 'INTERNAL', 'WARRANTY'];
@@ -80,7 +81,10 @@ export class CustomerFormComponent implements OnInit {
     }
 
     this.loading = true;
+    this.error = '';
     const payload = this.form.value;
+
+    console.log('Saving customer:', { id: this.customerId, payload });
 
     const request = this.customerId
       ? this.customerService.updateCustomer(this.customerId, payload)
@@ -88,12 +92,21 @@ export class CustomerFormComponent implements OnInit {
 
     request.subscribe({
       next: (res: any) => {
+        console.log('Save response:', res);
         const id = this.customerId || res?.data?.id || res?.customer?.id;
         this.loading = false;
-        this.router.navigate(['/customers', id]);
+        this.success = this.customerId ? 'Customer updated successfully' : 'Customer created successfully';
+        setTimeout(() => {
+          if (id) {
+            this.router.navigate(['/customers', id]);
+          } else {
+            this.error = 'Customer saved but could not navigate: missing ID';
+          }
+        }, 1000);
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to save customer';
+        console.error('Save error:', err);
+        this.error = err?.error?.error || err?.message || 'Failed to save customer';
         this.loading = false;
       }
     });

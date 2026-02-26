@@ -1,6 +1,7 @@
 const db = require('../config/knex');
 const dtLogger = require('../utils/dynatrace-logger');
 const { generateInvoiceNumber } = require('../utils/invoice-number');
+const creditService = require('./credit.service');
 
 function normalizeDecimal(value) {
   if (value === undefined || value === null || value === '') return 0;
@@ -77,7 +78,7 @@ async function createInvoiceFromWorkOrder(workOrderId, payload, userId) {
 
     if (!workOrder) {
       const mr = await trx('maintenance_records as mr')
-        .join('vehicles as v', 'mr.vehicle_id', 'v.id')
+        .join('all_vehicles as v', 'mr.vehicle_id', 'v.id')
         .select('mr.*', 'v.location_id')
         .where('mr.id', workOrderId)
         .first();
@@ -147,6 +148,29 @@ async function createInvoiceFromWorkOrder(workOrderId, payload, userId) {
     await trx('invoice_line_items').insert(lineItems);
 
     const updated = await recomputeInvoiceTotals(trx, invoice.id);
+    
+    // If useCredit is true, apply invoice amount to customer credit
+    if (payload.useCredit && updated.invoice.total_amount > 0) {
+      try {
+        const creditCheck = await creditService.canUseCredit(customerId, updated.invoice.total_amount);
+        if (creditCheck.canUse) {
+          await creditService.applyInvoiceToCredit(customerId, invoice.id, updated.invoice.total_amount, userId);
+          const [statusUpdated] = await trx('invoices')
+            .where({ id: invoice.id })
+            .update({ status: 'INVOICED', updated_at: trx.fn.now() })
+            .returning('*');
+          if (statusUpdated) {
+            updated.invoice = statusUpdated;
+          }
+        } else {
+          throw new Error(`Insufficient credit. Required: $${creditCheck.requiredAmount.toFixed(2)}, Available: $${creditCheck.availableCredit.toFixed(2)}`);
+        }
+      } catch (creditError) {
+        dtLogger.error('invoice_credit_apply_failed', creditError);
+        throw creditError;
+      }
+    }
+    
     return updated.invoice;
   });
 }

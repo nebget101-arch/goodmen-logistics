@@ -190,7 +190,7 @@ async function listCustomers({ search, type, status, locationId, dot, paymentTer
         qb.andWhere('dot_number', dot);
       } else if (search) {
         qb.andWhere(function() {
-          this.where('company_name', 'ilike', `%${search}%`)
+          this.where('name', 'ilike', `%${search}%`)
             .orWhere('phone', 'ilike', `%${search}%`)
             .orWhere('email', 'ilike', `%${search}%`);
         });
@@ -205,10 +205,9 @@ async function listCustomers({ search, type, status, locationId, dot, paymentTer
 
   const rows = await baseQuery.clone()
     .select(
-      'customers.*',
-      db.raw('(SELECT MAX(date_performed) FROM maintenance_records WHERE maintenance_records.customer_id = customers.id) as last_service_date')
+      'customers.*'
     )
-    .orderBy('company_name', 'asc')
+    .orderBy('name', 'asc')
     .limit(limit)
     .offset(offset);
 
@@ -299,17 +298,18 @@ async function getCustomerWorkOrders(customerId, { status, from, to, page = 1, p
   const limit = Math.max(parseInt(pageSize, 10) || 20, 1);
   const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
 
-  let query = db('maintenance_records')
-    .where({ customer_id: customerId })
+  let query = db('work_orders')
+    .where({ customer_id: customerId, is_deleted: false })
     .modify(qb => {
       if (status) qb.andWhere('status', status);
-      if (from) qb.andWhere('date_performed', '>=', from);
-      if (to) qb.andWhere('date_performed', '<=', to);
+      if (from) qb.andWhere('start_date', '>=', from);
+      if (to) qb.andWhere('completion_date', '<=', to);
     });
 
   const [{ count }] = await query.clone().count();
   const rows = await query
-    .orderBy('date_performed', 'desc')
+    .select('id', 'work_order_number', 'status', 'start_date', 'completion_date', 'total_amount as cost', 'description')
+    .orderBy('start_date', 'desc')
     .limit(limit)
     .offset(offset);
 
@@ -320,21 +320,92 @@ async function getCustomerServiceHistory(customerId, { from, to, page = 1, pageS
   const limit = Math.max(parseInt(pageSize, 10) || 20, 1);
   const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
 
-  let query = db('maintenance_records')
-    .where({ customer_id: customerId })
-    .andWhere('status', 'completed')
-    .modify(qb => {
-      if (from) qb.andWhere('date_performed', '>=', from);
-      if (to) qb.andWhere('date_performed', '<=', to);
-    });
+  // Query both maintenance_records AND completed work_orders for comprehensive service history
+  const countResult = await db.raw(`
+    SELECT COUNT(*) as count FROM (
+      SELECT id, date_performed FROM maintenance_records 
+      WHERE customer_id = ? AND status = 'completed'
+      UNION ALL
+      SELECT id, COALESCE(completion_date, updated_at) as date_performed FROM work_orders 
+      WHERE customer_id = ? AND status IN ('completed', 'closed')
+    ) combined
+  `, [customerId, customerId]);
 
-  const [{ count }] = await query.clone().count();
-  const rows = await query
-    .orderBy('date_performed', 'desc')
-    .limit(limit)
-    .offset(offset);
+  const count = parseInt(countResult.rows[0]?.count || 0);
 
-  return { rows, total: parseInt(count, 10) || 0, page: parseInt(page, 10) || 1, pageSize: limit };
+  const rows = await db.raw(`
+    SELECT * FROM (
+      SELECT 
+        id,
+        NULL as work_order_id,
+        'maintenance_record' as source_type,
+        date_performed,
+        status,
+        description,
+        cost,
+        NULL as work_order_number
+      FROM maintenance_records 
+      WHERE customer_id = ? AND status = 'completed'
+      UNION ALL
+      SELECT 
+        id,
+        id as work_order_id,
+        'work_order' as source_type,
+        COALESCE(completion_date, updated_at) as date_performed,
+        status,
+        description,
+        total_amount as cost,
+        work_order_number
+      FROM work_orders 
+      WHERE customer_id = ? AND status IN ('completed', 'closed')
+    ) combined
+    ORDER BY date_performed DESC NULLS LAST
+    LIMIT ? OFFSET ?
+  `, [customerId, customerId, limit, offset]);
+
+  return { rows: rows.rows || [], total: count, page: parseInt(page, 10) || 1, pageSize: limit };
+}
+
+async function getCustomerVehicles(customerId, { page = 1, pageSize = 20 } = {}) {
+  const limit = Math.max(parseInt(pageSize, 10) || 20, 1);
+  const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
+
+  // Get vehicles directly assigned to this customer
+  const countResult = await db.raw(`
+    SELECT COUNT(*) as count
+    FROM all_vehicles
+    WHERE customer_id = ?
+  `, [customerId]);
+
+  const count = parseInt(countResult.rows[0]?.count || 0);
+
+  const rows = await db.raw(`
+    SELECT 
+      all_vehicles.id,
+      all_vehicles.unit_number,
+      all_vehicles.vin,
+      all_vehicles.make,
+      all_vehicles.model,
+      all_vehicles.year,
+      all_vehicles.license_plate,
+      all_vehicles.status,
+      all_vehicles.mileage,
+      all_vehicles.created_at,
+      all_vehicles.source
+    FROM all_vehicles
+    WHERE customer_id = ?
+    ORDER BY all_vehicles.created_at DESC
+    LIMIT ? OFFSET ?
+  `, [customerId, limit, offset]);
+
+  // Transform mileage to odometer_miles for consistency
+  const transformedRows = rows.rows.map(row => ({
+    ...row,
+    odometer_miles: row.mileage,
+    last_service_date: row.created_at
+  }));
+
+  return { rows: transformedRows, total: count, page: parseInt(page, 10) || 1, pageSize: limit };
 }
 
 module.exports = {
@@ -349,5 +420,6 @@ module.exports = {
   upsertPricingRules,
   getCustomerWorkOrders,
   getCustomerServiceHistory,
+  getCustomerVehicles,
   getEffectivePricing
 };

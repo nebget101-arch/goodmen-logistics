@@ -106,8 +106,7 @@ async function getAlerts(locationId, filters = {}) {
 				`),
 				'inventory.updated_at as lastActivity'
 			)
-			.where({ 'inventory.location_id': locationId })
-			.andWhere('parts.is_active', true);
+			.where({ 'inventory.location_id': locationId });
 
 		// Filter by severity if provided
 		if (filters.severity && filters.severity !== 'ALL') {
@@ -143,10 +142,6 @@ async function validateInventoryOperation(locationId, partId, requiredQty, opera
 		const part = await db('parts').where({ id: partId }).first();
 		if (!part) {
 			throw new Error(`Part ${partId} not found`);
-		}
-
-		if (!part.is_active) {
-			throw new Error(`Part ${part.sku} is inactive and cannot be used in ${operationType} operations`);
 		}
 
 		const inventory = await db('inventory')

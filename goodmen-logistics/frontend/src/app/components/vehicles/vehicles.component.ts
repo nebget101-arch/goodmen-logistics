@@ -87,8 +87,11 @@ export class VehiclesComponent implements OnInit {
     
     this.apiService.getVehicles().subscribe({
       next: (data) => {
-        // Only show company-owned vehicles (company_owned true or missing for legacy)
-        this.allVehicles = (data || []).filter((v: any) => v.company_owned === true || v.company_owned === undefined);
+        console.log('API returned:', data?.length, 'vehicles');
+        // All vehicles from API are company-owned
+        this.allVehicles = (data || []);
+        console.log('Processing:', this.allVehicles.length, 'vehicles');
+        console.log('First vehicle:', this.allVehicles[0]);
         this.applyFiltersAndSort();
         this.loading = false;
       },
@@ -173,6 +176,7 @@ export class VehiclesComponent implements OnInit {
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
     const endIndex = startIndex + this.itemsPerPage;
     this.paginatedVehicles = this.filteredVehicles.slice(startIndex, endIndex);
+    console.log('Pagination update - Filtered:', this.filteredVehicles.length, 'Paginated:', this.paginatedVehicles.length, 'Page:', this.currentPage);
   }
 
   onPageChange(page: number): void {

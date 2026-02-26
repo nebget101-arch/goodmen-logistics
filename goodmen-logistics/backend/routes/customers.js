@@ -178,4 +178,15 @@ router.get('/:id/service-history', authMiddleware, async (req, res) => {
   }
 });
 
+router.get('/:id/vehicles', authMiddleware, async (req, res) => {
+  try {
+    const { page, pageSize } = req.query;
+    const result = await customersService.getCustomerVehicles(req.params.id, { page, pageSize });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    dtLogger.error('customer_vehicles_failed', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

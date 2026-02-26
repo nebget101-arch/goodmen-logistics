@@ -62,52 +62,15 @@ router.post('/', async (req, res) => {
       const lookupUnit = normalize(req.body?.unitNumber || req.body?.unit_number || normalizedVehicleId);
 
       const vehicleLookup = await query(
-        `SELECT id FROM vehicles WHERE ($1::text IS NOT NULL AND vin = $1) OR ($2::text IS NOT NULL AND unit_number = $2) LIMIT 1`,
+        `SELECT id FROM all_vehicles WHERE ($1::text IS NOT NULL AND vin = $1) OR ($2::text IS NOT NULL AND unit_number = $2) LIMIT 1`,
         [lookupVin, lookupUnit]
       );
 
       if (vehicleLookup.rows.length === 0) {
-        const customerVehicleLookup = await query(
-          `SELECT * FROM customer_vehicles WHERE ($1::text IS NOT NULL AND vin = $1) OR ($2::text IS NOT NULL AND unit_number = $2) LIMIT 1`,
-          [lookupVin, lookupUnit]
-        );
-
-        if (customerVehicleLookup.rows.length === 0) {
-          return res.status(400).json({ message: 'vehicleId must be a valid UUID or match an existing vehicle vin/unit_number' });
-        }
-
-        // Create a matching record in vehicles to satisfy FK constraint
-        const customerVehicle = customerVehicleLookup.rows[0];
-        const finalVin = normalize(lookupVin || customerVehicle.vin);
-        const finalUnitNumber = normalize(lookupUnit || customerVehicle.unit_number || (finalVin ? finalVin.slice(-4) : null));
-        const finalMake = normalize(req.body?.make || customerVehicle.make);
-        const finalModel = normalize(req.body?.model || customerVehicle.model);
-        const finalYear = normalize(req.body?.year || customerVehicle.year);
-        const finalState = normalize(req.body?.state || customerVehicle.state);
-        const finalMileage = normalize(req.body?.currentOdometer || customerVehicle.mileage);
-
-        const createdVehicle = await query(
-          `INSERT INTO vehicles (
-            unit_number, vin, make, model, year, license_plate, state, mileage,
-            status
-          )
-           VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, 'in-service')
-           RETURNING id`,
-          [
-            finalUnitNumber,
-            finalVin,
-            finalMake,
-            finalModel,
-            finalYear,
-            finalState,
-            finalMileage ? parseInt(finalMileage, 10) : null
-          ]
-        );
-
-        normalizedVehicleId = createdVehicle.rows[0].id;
-      } else {
-        normalizedVehicleId = vehicleLookup.rows[0].id;
+        return res.status(400).json({ message: 'vehicleId must be a valid UUID or match an existing vehicle vin/unit_number' });
       }
+
+      normalizedVehicleId = vehicleLookup.rows[0].id;
     }
 
     const normalizedStatus = status ? status.toString().trim().toLowerCase().replace(/\s+/g, '_') : 'pending';
@@ -215,7 +178,7 @@ router.get('/:id', async (req, res) => {
         v.unit_number as "vehicleUnit",
         v.vin
       FROM maintenance_records mr
-      JOIN vehicles v ON mr.vehicle_id = v.id
+      JOIN all_vehicles v ON mr.vehicle_id = v.id
       WHERE mr.id = $1`,
       [req.params.id]
     );

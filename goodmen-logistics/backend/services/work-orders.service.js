@@ -2,6 +2,7 @@ const db = require('../config/knex');
 const dtLogger = require('../utils/dynatrace-logger');
 const { generateInvoiceNumber } = require('../utils/invoice-number');
 const { recomputeInvoiceTotals } = require('./invoices.service');
+const creditService = require('./credit.service');
 
 const STATUS_TRANSITIONS = {
   DRAFT: ['IN_PROGRESS', 'CANCELED'],
@@ -11,6 +12,30 @@ const STATUS_TRANSITIONS = {
   CLOSED: [],
   CANCELED: []
 };
+
+async function resolveUserId(trx, userId) {
+  if (!userId) return null;
+  const user = await trx('users').where({ id: userId }).first();
+  return user ? userId : null;
+}
+
+async function resolveUserIdByUsername(trx, username) {
+  const normalized = (username || '').toString().trim().toLowerCase();
+  if (!normalized) return null;
+  const user = await trx('users').whereRaw('LOWER(username) = ?', [normalized]).first();
+  return user ? user.id : null;
+}
+
+async function resolveMechanicUserId(trx, line) {
+  const directId = normalizeUuid(line?.mechanicId || line?.mechanic_user_id);
+  if (directId) return directId;
+
+  const name = (line?.mechanicName || line?.mechanic_username || line?.username || '').toString().trim().toLowerCase();
+  if (!name) return null;
+
+  const user = await trx('users').whereRaw('LOWER(username) = ?', [name]).first();
+  return user ? user.id : null;
+}
 
 const LEGACY_STATUS_VALUES = ['open', 'in_progress', 'completed', 'closed'];
 const STATUS_MAP = {
@@ -41,6 +66,18 @@ function normalizeUuid(value) {
   if (value === undefined || value === null) return null;
   if (typeof value === 'string' && value.trim() === '') return null;
   return value;
+}
+
+function computeDueDate(issuedDate, paymentTerms, customDays) {
+  if (!issuedDate) return null;
+  const base = new Date(issuedDate);
+  let days = 0;
+  if (paymentTerms === 'NET_15') days = 15;
+  if (paymentTerms === 'NET_30') days = 30;
+  if (paymentTerms === 'CUSTOM') days = Number(customDays) || 0;
+  if (days <= 0) return issuedDate;
+  const due = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+  return due.toISOString().slice(0, 10);
 }
 
 function computeTotalsFromLines({ laborLines, partLines, feeLines, discountType, discountValue, taxRatePercent }) {
@@ -129,33 +166,34 @@ async function listWorkOrders(filters = {}) {
   const limit = Math.max(parseInt(pageSize, 10) || 20, 1);
   const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
 
+  const latestInvoice = db('invoices as i')
+    .select('i.id', 'i.status', 'i.work_order_id')
+    .distinctOn('i.work_order_id')
+    .orderBy('i.work_order_id')
+    .orderBy('i.created_at', 'desc')
+    .as('i');
+
   const baseQuery = db('work_orders as wo')
-    .leftJoin('vehicles as v', 'wo.vehicle_id', 'v.id')
+    .leftJoin('all_vehicles as v', 'wo.vehicle_id', 'v.id')
     .leftJoin('customers as c', 'wo.customer_id', 'c.id')
     .leftJoin('locations as l', 'wo.location_id', 'l.id')
-    .leftJoin('invoices as i', 'i.work_order_id', 'wo.id')
+    .leftJoin(latestInvoice, 'wo.id', 'i.work_order_id')
     .select(
       'wo.id',
       'wo.work_order_number',
       'wo.type',
+      'wo.description',
+      'wo.total_amount',
       'wo.priority',
       'wo.status',
-      'wo.description',
-      'wo.labor_subtotal',
-      'wo.parts_subtotal',
-      'wo.fees_subtotal',
-      'wo.tax_amount',
-      'wo.total_amount',
       'wo.created_at',
       'wo.updated_at',
       'v.unit_number as vehicle_unit',
       'v.vin as vehicle_vin',
-      'c.company_name as customer_name',
+      db.raw('COALESCE(c.company_name, c.name) as customer_name'),
       'l.name as location_name',
-      'i.id as invoice_id',
-      'i.invoice_number',
       'i.status as invoice_status',
-      'i.balance_due'
+      'i.id as invoice_id'
     )
     .modify(qb => {
       if (search) {
@@ -191,10 +229,49 @@ async function getWorkOrderById(workOrderId) {
   const workOrder = await db('work_orders').where({ id: workOrderId }).first();
   if (!workOrder) return null;
 
-  const vehicle = await db('vehicles').where({ id: workOrder.vehicle_id }).first();
+  let requestedBy = null;
+  const requestedByUserId = workOrder.requested_by_user_id;
+  if (requestedByUserId) {
+    const requester = await db('users').where({ id: requestedByUserId }).first();
+    if (requester) {
+      requestedBy = {
+        id: requester.id,
+        username: requester.username,
+        first_name: requester.first_name || null,
+        last_name: requester.last_name || null,
+        email: requester.email || null
+      };
+      workOrder.requested_by_username = requester.username;
+    }
+  }
+
+  let assignedMechanic = null;
+  if (workOrder.assigned_mechanic_user_id) {
+    assignedMechanic = await db('users').where({ id: workOrder.assigned_mechanic_user_id }).first();
+    if (assignedMechanic) {
+      workOrder.assigned_mechanic_username = assignedMechanic.username;
+      workOrder.assigned_to = assignedMechanic.username;
+    }
+  }
+
+  const vehicle = await db('all_vehicles').where({ id: workOrder.vehicle_id }).first();
   const customer = workOrder.customer_id ? await db('customers').where({ id: workOrder.customer_id }).first() : null;
   const location = workOrder.location_id ? await db('locations').where({ id: workOrder.location_id }).first() : null;
-  const labor = await db('work_order_labor_items').where({ work_order_id: workOrderId }).orderBy('created_at');
+  const labor = await db('work_order_labor_items as woli')
+    .leftJoin('users as u', 'woli.mechanic_user_id', 'u.id')
+    .select('woli.*', 'u.username as mechanic_username', 'u.first_name as mechanic_first_name', 'u.last_name as mechanic_last_name')
+    .where({ 'woli.work_order_id': workOrderId })
+    .orderBy('woli.created_at');
+  if (assignedMechanic) {
+    labor.forEach(line => {
+      if (!line.mechanic_user_id) {
+        line.mechanic_user_id = assignedMechanic.id;
+        line.mechanic_username = assignedMechanic.username;
+        line.mechanic_first_name = assignedMechanic.first_name || null;
+        line.mechanic_last_name = assignedMechanic.last_name || null;
+      }
+    });
+  }
   const parts = await db('work_order_part_items as wopi')
     .leftJoin('parts as p', 'wopi.part_id', 'p.id')
     .select('wopi.*', 'p.sku as part_sku', 'p.name as part_name')
@@ -204,7 +281,7 @@ async function getWorkOrderById(workOrderId) {
   const invoices = await db('invoices').where({ work_order_id: workOrderId }).orderBy('created_at', 'desc');
   const documents = await db('work_order_documents').where({ work_order_id: workOrderId }).orderBy('created_at', 'desc');
 
-  return { workOrder, vehicle, customer, location, labor, parts, fees, invoices, documents };
+  return { workOrder, vehicle, customer, location, labor, parts, fees, invoices, documents, requestedBy };
 }
 
 async function createWorkOrder(payload, userId) {
@@ -219,18 +296,16 @@ async function createWorkOrder(payload, userId) {
       if (customer.status === 'INACTIVE') throw new Error('Inactive customers cannot be used for work orders');
     }
 
-    const numberPrefix = `WO-${new Date().getFullYear()}-`;
-    const last = await trx('work_orders')
-      .where('work_order_number', 'like', `${numberPrefix}%`)
-      .orderBy('work_order_number', 'desc')
-      .first();
-    let seq = 0;
-    if (last?.work_order_number) {
-      const parts = last.work_order_number.split('-');
-      const lastSeq = parts[2] ? parseInt(parts[2], 10) : 0;
-      seq = Number.isNaN(lastSeq) ? 0 : lastSeq;
+    const maxResult = await trx.raw(
+      "SELECT MAX(NULLIF(regexp_replace(work_order_number, '\\D', '', 'g'), '')::int) AS max_seq FROM work_orders"
+    );
+    const maxSeq = maxResult?.rows?.[0]?.max_seq || 0;
+    const workOrderNumber = `WO-${maxSeq + 1}`;
+
+    let resolvedUserId = normalizeUuid(userId);
+    if (!resolvedUserId) {
+      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedBy || payload.requestedByUsername);
     }
-    const workOrderNumber = `${numberPrefix}${String(seq + 1).padStart(6, '0')}`;
 
     const [workOrder] = await trx('work_orders').insert({
       work_order_number: workOrderNumber,
@@ -243,6 +318,7 @@ async function createWorkOrder(payload, userId) {
       description: payload.description || null,
       odometer_miles: payload.odometerMiles || null,
       assigned_mechanic_user_id: normalizeUuid(payload.assignedMechanicUserId),
+      requested_by_user_id: resolvedUserId,
       discount_type: payload.discountType || 'NONE',
       discount_value: payload.discountValue || 0,
       tax_rate_percent: payload.taxRatePercent || 0,
@@ -254,8 +330,10 @@ async function createWorkOrder(payload, userId) {
       for (const line of payload.labor) {
         const hours = normalizeDecimal(line.hours);
         const rate = normalizeDecimal(line.labor_rate ?? line.rate);
+        const mechanicUserId = await resolveMechanicUserId(trx, line) || normalizeUuid(payload.assignedMechanicUserId);
         await trx('work_order_labor_items').insert({
           work_order_id: workOrder.id,
+          mechanic_user_id: mechanicUserId,
           description: line.description || 'Labor',
           hours,
           labor_rate: rate,
@@ -282,7 +360,7 @@ async function createWorkOrder(payload, userId) {
   });
 }
 
-async function updateWorkOrder(workOrderId, payload) {
+async function updateWorkOrder(workOrderId, payload, userId) {
   return db.transaction(async trx => {
     const workOrder = await trx('work_orders').where({ id: workOrderId }).first();
     if (!workOrder) throw new Error('Work order not found');
@@ -298,6 +376,11 @@ async function updateWorkOrder(workOrderId, payload) {
     const locationId = normalizeUuid(payload.locationId ?? workOrder.location_id);
     const assignedMechanicId = normalizeUuid(payload.assignedMechanicUserId ?? workOrder.assigned_mechanic_user_id);
 
+    let resolvedUserId = normalizeUuid(userId);
+    if (!resolvedUserId) {
+      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedBy || payload.requestedByUsername);
+    }
+
     await trx('work_orders').where({ id: workOrderId }).update({
       vehicle_id: vehicleId,
       customer_id: customerId,
@@ -308,6 +391,7 @@ async function updateWorkOrder(workOrderId, payload) {
       description: payload.description ?? workOrder.description,
       odometer_miles: payload.odometerMiles ?? workOrder.odometer_miles,
       assigned_mechanic_user_id: assignedMechanicId,
+      requested_by_user_id: workOrder.requested_by_user_id || resolvedUserId,
       discount_type: payload.discountType ?? workOrder.discount_type,
       discount_value: payload.discountValue ?? workOrder.discount_value,
       tax_rate_percent: payload.taxRatePercent ?? workOrder.tax_rate_percent,
@@ -319,8 +403,10 @@ async function updateWorkOrder(workOrderId, payload) {
       for (const line of payload.labor) {
         const hours = normalizeDecimal(line.hours);
         const rate = normalizeDecimal(line.labor_rate ?? line.rate);
+        const mechanicUserId = await resolveMechanicUserId(trx, line) || assignedMechanicId;
         await trx('work_order_labor_items').insert({
           work_order_id: workOrderId,
+          mechanic_user_id: mechanicUserId,
           description: line.description || 'Labor',
           hours,
           labor_rate: rate,
@@ -369,6 +455,29 @@ async function updateWorkOrderStatus(workOrderId, nextStatus, userRole) {
       updated_at: trx.fn.now()
     });
 
+    // If work order is being completed, sync to service history (maintenance_records)
+    if (legacyStatus === 'completed') {
+      const existingRecord = await trx('maintenance_records')
+        .where({ work_order_id: workOrderId })
+        .first();
+
+      if (!existingRecord) {
+        // Create a new maintenance record for service history
+        await trx('maintenance_records').insert({
+          id: require('uuid').v4(),
+          vehicle_id: workOrder.vehicle_id,
+          customer_id: workOrder.customer_id,
+          date_performed: trx.fn.now(),
+          status: 'completed',
+          description: workOrder.description || `Work Order ${workOrder.work_order_number}`,
+          cost: workOrder.total_amount || 0,
+          work_order_id: workOrderId,
+          created_at: trx.fn.now(),
+          updated_at: trx.fn.now()
+        });
+      }
+    }
+
     return await trx('work_orders').where({ id: workOrderId }).first();
   });
 }
@@ -387,14 +496,40 @@ async function reservePart(workOrderId, payload, userId) {
 
     const part = await trx('parts').where({ id: partId }).first();
     if (!part) throw new Error('Part not found');
-    if (!part.is_active) throw new Error('Part is inactive');
 
-    const inventory = await trx('inventory').where({ location_id: locationId, part_id: partId }).first();
-    if (!inventory) throw new Error('Inventory record not found');
+    let inventory = await trx('inventory').where({ location_id: locationId, part_id: partId }).first();
+    if (!inventory) {
+      const [createdInventory] = await trx('inventory')
+        .insert({
+          location_id: locationId,
+          part_id: partId,
+          on_hand_qty: part.quantity_on_hand || 0,
+          reserved_qty: 0,
+          min_stock_level: part.reorder_level || 0,
+          created_at: trx.fn.now(),
+          updated_at: trx.fn.now()
+        })
+        .returning('*');
+      inventory = createdInventory;
+    }
+
+    // Fallback: if inventory is zero but parts catalog shows stock, sync on_hand_qty
+    const catalogQty = normalizeDecimal(part.quantity_on_hand);
+    if (catalogQty > 0 && normalizeDecimal(inventory.on_hand_qty) < catalogQty) {
+      const [updatedInventory] = await trx('inventory')
+        .where({ location_id: locationId, part_id: partId })
+        .update({ on_hand_qty: catalogQty, updated_at: trx.fn.now() })
+        .returning('*');
+      if (updatedInventory) {
+        inventory = updatedInventory;
+      }
+    }
 
     const availableQty = normalizeDecimal(inventory.on_hand_qty) - normalizeDecimal(inventory.reserved_qty);
     const reserveQty = Math.min(availableQty, qtyRequested);
     const backordered = qtyRequested > reserveQty;
+
+    const resolvedUserId = await resolveUserId(trx, userId);
 
     if (reserveQty > 0) {
       await trx('inventory')
@@ -407,26 +542,49 @@ async function reservePart(workOrderId, payload, userId) {
         part_id: partId,
         transaction_type: 'RESERVE',
         qty_change: reserveQty,
-        unit_cost_at_time: part.default_cost || null,
+        unit_cost_at_time: part.unit_cost || null,
         reference_type: 'WORK_ORDER',
         reference_id: workOrderId,
-        performed_by_user_id: userId || null,
+        performed_by_user_id: resolvedUserId,
         notes: 'Reserved for work order'
       });
     }
 
-    const [line] = await trx('work_order_part_items').insert({
-      work_order_id: workOrderId,
-      part_id: partId,
-      location_id: locationId,
-      qty_requested: qtyRequested,
-      qty_reserved: reserveQty,
-      qty_issued: 0,
-      unit_price: normalizeDecimal(payload.unitPrice) || part.default_retail_price || 0,
-      taxable: payload.taxable !== undefined ? payload.taxable === true : (part.taxable === true),
-      status: backordered ? 'BACKORDERED' : 'RESERVED',
-      line_total: 0
-    }).returning('*');
+    let line;
+    if (payload.partLineId) {
+      const existingLine = await trx('work_order_part_items')
+        .where({ id: payload.partLineId, work_order_id: workOrderId })
+        .first();
+      if (!existingLine) throw new Error('Part line not found');
+      if (existingLine.part_id !== partId) throw new Error('Part line does not match partId');
+
+      const newReserved = normalizeDecimal(existingLine.qty_reserved) + reserveQty;
+      const newStatus = newReserved < normalizeDecimal(existingLine.qty_requested) ? 'BACKORDERED' : 'RESERVED';
+
+      const [updatedLine] = await trx('work_order_part_items')
+        .where({ id: payload.partLineId, work_order_id: workOrderId })
+        .update({
+          qty_reserved: newReserved,
+          status: newStatus,
+          updated_at: trx.fn.now()
+        })
+        .returning('*');
+      line = updatedLine;
+    } else {
+      const [createdLine] = await trx('work_order_part_items').insert({
+        work_order_id: workOrderId,
+        part_id: partId,
+        location_id: locationId,
+        qty_requested: qtyRequested,
+        qty_reserved: reserveQty,
+        qty_issued: 0,
+        unit_price: normalizeDecimal(payload.unitPrice) || part.unit_price || 0,
+        taxable: payload.taxable !== undefined ? payload.taxable === true : (part.taxable === true),
+        status: backordered ? 'BACKORDERED' : 'RESERVED',
+        line_total: 0
+      }).returning('*');
+      line = createdLine;
+    }
 
     await recomputeWorkOrderTotals(trx, workOrderId);
 
@@ -452,6 +610,8 @@ async function issuePart(workOrderId, partLineId, payload, userId) {
       .decrement('on_hand_qty', qtyToIssue)
       .update({ last_issued_at: trx.fn.now(), updated_at: trx.fn.now() });
 
+    const resolvedUserId = await resolveUserId(trx, userId);
+
     await trx('inventory_transactions').insert({
       location_id: line.location_id,
       part_id: line.part_id,
@@ -460,7 +620,7 @@ async function issuePart(workOrderId, partLineId, payload, userId) {
       unit_cost_at_time: line.unit_price,
       reference_type: 'WORK_ORDER',
       reference_id: workOrderId,
-      performed_by_user_id: userId || null,
+      performed_by_user_id: resolvedUserId,
       notes: 'Issued to work order'
     });
 
@@ -500,6 +660,8 @@ async function returnPart(workOrderId, partLineId, payload, userId) {
       .increment('on_hand_qty', qtyToReturn)
       .update({ updated_at: trx.fn.now() });
 
+    const resolvedUserId = await resolveUserId(trx, userId);
+
     await trx('inventory_transactions').insert({
       location_id: line.location_id,
       part_id: line.part_id,
@@ -508,7 +670,7 @@ async function returnPart(workOrderId, partLineId, payload, userId) {
       unit_cost_at_time: line.unit_price,
       reference_type: 'WORK_ORDER',
       reference_id: workOrderId,
-      performed_by_user_id: userId || null,
+      performed_by_user_id: resolvedUserId,
       notes: 'Returned from work order'
     });
 
@@ -566,8 +728,10 @@ async function addLaborLine(workOrderId, payload) {
 
     const hours = normalizeDecimal(payload.hours);
     const rate = normalizeDecimal(payload.laborRate || payload.labor_rate || payload.rate);
+    const mechanicUserId = await resolveMechanicUserId(trx, payload);
     const [line] = await trx('work_order_labor_items').insert({
       work_order_id: workOrderId,
+      mechanic_user_id: mechanicUserId,
       description: payload.description || 'Labor',
       hours,
       labor_rate: rate,
@@ -587,10 +751,14 @@ async function updateLaborLine(workOrderId, laborId, payload) {
 
     const hours = normalizeDecimal(payload.hours ?? line.hours);
     const rate = normalizeDecimal(payload.laborRate ?? payload.labor_rate ?? payload.rate ?? line.labor_rate);
+    const mechanicUserId = payload.mechanicId || payload.mechanicName || payload.mechanic_username
+      ? await resolveMechanicUserId(trx, payload)
+      : line.mechanic_user_id;
     const [updated] = await trx('work_order_labor_items')
       .where({ id: laborId })
       .update({
         description: payload.description ?? line.description,
+        mechanic_user_id: mechanicUserId,
         hours,
         labor_rate: rate,
         taxable: payload.taxable ?? line.taxable,
@@ -611,7 +779,7 @@ async function deleteLaborLine(workOrderId, laborId) {
   });
 }
 
-async function generateInvoiceForWorkOrder(workOrderId, userId) {
+async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}) {
   return db.transaction(async trx => {
     const workOrder = await trx('work_orders').where({ id: workOrderId }).first();
     if (!workOrder) throw new Error('Work order not found');
@@ -620,8 +788,9 @@ async function generateInvoiceForWorkOrder(workOrderId, userId) {
       throw new Error('Only completed work orders can be invoiced');
     }
 
+    let customer = null;
     if (workOrder.customer_id) {
-      const customer = await trx('customers').where({ id: workOrder.customer_id }).first();
+      customer = await trx('customers').where({ id: workOrder.customer_id }).first();
       if (!customer || customer.is_deleted) throw new Error('Customer not found');
       if (customer.status === 'INACTIVE') throw new Error('Inactive customer cannot be invoiced');
     } else {
@@ -629,12 +798,128 @@ async function generateInvoiceForWorkOrder(workOrderId, userId) {
     }
 
     const existingInvoice = await trx('invoices').where({ work_order_id: workOrderId }).first();
-    if (existingInvoice) return existingInvoice;
+    if (existingInvoice) {
+      if (payload.regenerate) {
+        const laborLines = await trx('work_order_labor_items').where({ work_order_id: workOrderId });
+        const partLines = await trx('work_order_part_items').where({ work_order_id: workOrderId });
+        const feeLines = await trx('work_order_fees').where({ work_order_id: workOrderId });
+
+        const partCatalog = partLines.length
+          ? await trx('parts').whereIn('id', partLines.map(p => p.part_id))
+          : [];
+        const partNameById = partCatalog.reduce((acc, p) => {
+          acc[p.id] = p.name || p.sku || p.id;
+          return acc;
+        }, {});
+
+        await trx('invoice_line_items').where({ invoice_id: existingInvoice.id }).del();
+
+        const invoiceLines = [];
+
+        for (const labor of laborLines) {
+          invoiceLines.push({
+            invoice_id: existingInvoice.id,
+            line_type: 'LABOR',
+            source_ref_type: 'work_order_labor',
+            source_ref_id: labor.id,
+            description: labor.description || 'Labor',
+            quantity: labor.hours || 0,
+            unit_price: labor.labor_rate || 0,
+            taxable: labor.taxable === true,
+            line_total: labor.line_total || 0
+          });
+        }
+
+        for (const part of partLines) {
+          const qty = normalizeDecimal(part.qty_issued);
+          if (qty <= 0) continue;
+          invoiceLines.push({
+            invoice_id: existingInvoice.id,
+            line_type: 'PART',
+            source_ref_type: 'work_order_part',
+            source_ref_id: part.id,
+            description: partNameById[part.part_id] || `Part ${part.part_id}`,
+            quantity: qty,
+            unit_price: part.unit_price || 0,
+            taxable: part.taxable === true,
+            line_total: qty * normalizeDecimal(part.unit_price)
+          });
+        }
+
+        for (const fee of feeLines) {
+          invoiceLines.push({
+            invoice_id: existingInvoice.id,
+            line_type: 'FEE',
+            source_ref_type: 'work_order_fee',
+            source_ref_id: fee.id,
+            description: fee.fee_type,
+            quantity: 1,
+            unit_price: fee.amount || 0,
+            taxable: fee.taxable === true,
+            line_total: fee.amount || 0
+          });
+        }
+
+        if (invoiceLines.length) {
+          await trx('invoice_line_items').insert(invoiceLines);
+        }
+
+        const issuedDate = existingInvoice.issued_date || new Date().toISOString().slice(0, 10);
+        const paymentTerms = customer.payment_terms || 'DUE_ON_RECEIPT';
+        const dueDate = computeDueDate(issuedDate, paymentTerms, customer.payment_terms_custom_days);
+
+        await trx('invoices')
+          .where({ id: existingInvoice.id })
+          .update({
+            issued_date: issuedDate,
+            due_date: dueDate,
+            payment_terms: paymentTerms,
+            updated_at: trx.fn.now()
+          });
+
+        const totals = await recomputeInvoiceTotals(trx, existingInvoice.id);
+        const totalAmount = normalizeDecimal(totals?.invoice?.total_amount);
+
+        if (payload.useCredit && workOrder.customer_id && totalAmount > 0) {
+          const creditStatus = await creditService.canUseCredit(workOrder.customer_id, totalAmount);
+          if (!creditStatus.canUse) {
+            throw new Error(`Insufficient credit. Available: $${creditStatus.availableCredit.toFixed(2)}, Required: $${creditStatus.requiredAmount.toFixed(2)}, Shortfall: $${creditStatus.shortfall.toFixed(2)}`);
+          }
+          await creditService.applyInvoiceToCredit(workOrder.customer_id, existingInvoice.id, totalAmount, userId);
+          const [updatedInvoice] = await trx('invoices')
+            .where({ id: existingInvoice.id })
+            .update({ status: 'INVOICED', updated_at: trx.fn.now() })
+            .returning('*');
+          return updatedInvoice || totals?.invoice || existingInvoice;
+        }
+
+        return totals?.invoice || existingInvoice;
+      }
+
+      if (payload.useCredit && workOrder.customer_id) {
+        const totals = await recomputeInvoiceTotals(trx, existingInvoice.id);
+        const totalAmount = normalizeDecimal(totals?.invoice?.total_amount);
+        if (totalAmount > 0) {
+          const creditStatus = await creditService.canUseCredit(workOrder.customer_id, totalAmount);
+          if (!creditStatus.canUse) {
+            throw new Error(`Insufficient credit. Available: $${creditStatus.availableCredit.toFixed(2)}, Required: $${creditStatus.requiredAmount.toFixed(2)}, Shortfall: $${creditStatus.shortfall.toFixed(2)}`);
+          }
+          await creditService.applyInvoiceToCredit(workOrder.customer_id, existingInvoice.id, totalAmount, userId);
+          const [updatedInvoice] = await trx('invoices')
+            .where({ id: existingInvoice.id })
+            .update({ status: 'INVOICED', updated_at: trx.fn.now() })
+            .returning('*');
+          return updatedInvoice || existingInvoice;
+        }
+      }
+      return existingInvoice;
+    }
 
     const invoiceNumber = await generateInvoiceNumber(trx);
 
     const issuedDate = new Date().toISOString().slice(0, 10);
-    const dueDate = issuedDate;
+    const paymentTerms = customer.payment_terms || 'DUE_ON_RECEIPT';
+    const dueDate = computeDueDate(issuedDate, paymentTerms, customer.payment_terms_custom_days);
 
     const [invoice] = await trx('invoices').insert({
       invoice_number: invoiceNumber,
@@ -644,7 +929,7 @@ async function generateInvoiceForWorkOrder(workOrderId, userId) {
       status: 'DRAFT',
       issued_date: issuedDate,
       due_date: dueDate,
-      payment_terms: 'DUE_ON_RECEIPT',
+      payment_terms: paymentTerms,
       notes: workOrder.description || null,
       discount_type: workOrder.discount_type || 'NONE',
       discount_value: workOrder.discount_value || 0,
@@ -714,10 +999,24 @@ async function generateInvoiceForWorkOrder(workOrderId, userId) {
       await trx('invoice_line_items').insert(invoiceLines);
     }
 
-    await recomputeInvoiceTotals(trx, invoice.id);
+    const totals = await recomputeInvoiceTotals(trx, invoice.id);
     await trx('invoices').where({ id: invoice.id }).update({ updated_at: trx.fn.now() });
 
-    return invoice;
+    // Apply credit if requested
+    if (payload.useCredit && workOrder.customer_id) {
+      const totalAmount = normalizeDecimal(totals?.invoice?.total_amount);
+      if (totalAmount <= 0) return totals?.invoice || invoice;
+      const creditStatus = await creditService.canUseCredit(workOrder.customer_id, totalAmount);
+      if (!creditStatus.canUse) {
+        throw new Error(`Insufficient credit. Available: $${creditStatus.availableCredit.toFixed(2)}, Required: $${creditStatus.requiredAmount.toFixed(2)}, Shortfall: $${creditStatus.shortfall.toFixed(2)}`);
+      }
+      await creditService.applyInvoiceToCredit(workOrder.customer_id, invoice.id, totalAmount, userId);
+      await trx('invoices')
+        .where({ id: invoice.id })
+        .update({ status: 'INVOICED', updated_at: trx.fn.now() });
+    }
+
+    return totals?.invoice || invoice;
   });
 }
 

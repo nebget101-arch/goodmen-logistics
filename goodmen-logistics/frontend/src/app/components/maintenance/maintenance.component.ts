@@ -46,7 +46,8 @@ export class MaintenanceComponent implements OnInit {
 
   loadWorkOrders(): void {
     this.loading = true;
-    this.apiService.listWorkOrders(this.filters).subscribe({
+    const filtersWithPageSize = { ...this.filters, pageSize: 10000 };
+    this.apiService.listWorkOrders(filtersWithPageSize).subscribe({
       next: (res: any) => {
         this.workOrders = res.rows || res.data || [];
         this.loading = false;

@@ -34,16 +34,13 @@ export class PartsCatalogComponent implements OnInit {
       category: ['', Validators.required],
       manufacturer: ['', Validators.required],
       uom: ['each'],
-      default_cost: [0, Validators.required],
-      default_retail_price: [0],
+      unit_cost: [0, Validators.required],
+      unit_price: [0],
       description: [''],
       barcode: [''],
-      core_item: [false],
-      hazmat: [false],
-      warranty_days: [null],
-      reorder_point_default: [5],
-      reorder_qty_default: [20],
-      preferred_vendor_name: [''],
+      quantity_on_hand: [0],
+      reorder_level: [5],
+      supplier_id: [''],
       notes: ['']
     });
   }

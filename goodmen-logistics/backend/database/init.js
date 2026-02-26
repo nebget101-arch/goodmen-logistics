@@ -92,7 +92,7 @@ async function runSeedScript() {
     const counts = await client.query(`
       SELECT 
         (SELECT COUNT(*) FROM drivers) as drivers,
-        (SELECT COUNT(*) FROM vehicles) as vehicles,
+        (SELECT COUNT(*) FROM all_vehicles) as vehicles,
         (SELECT COUNT(*) FROM hos_records) as hos_records,
         (SELECT COUNT(*) FROM maintenance_records) as maintenance,
         (SELECT COUNT(*) FROM drug_alcohol_tests) as drug_tests,

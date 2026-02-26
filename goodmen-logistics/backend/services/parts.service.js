@@ -6,19 +6,15 @@ const dtLogger = require('../utils/dynatrace-logger');
  */
 async function getParts(filters = {}) {
 	try {
-		let query = db('parts').where('is_active', true);
+		let query = db('parts').where('status', 'ACTIVE');
 
 		if (filters.category) {
 			query = query.where('category', filters.category);
 		}
-		if (filters.manufacturer) {
-			query = query.where('manufacturer', filters.manufacturer);
-		}
 		if (filters.search) {
 			query = query.where(function() {
 				this.whereRaw('LOWER(sku) LIKE ?', [`%${filters.search.toLowerCase()}%`])
-					.orWhereRaw('LOWER(name) LIKE ?', [`%${filters.search.toLowerCase()}%`])
-					.orWhereRaw('LOWER(barcode) LIKE ?', [`%${filters.search.toLowerCase()}%`]);
+					.orWhereRaw('LOWER(name) LIKE ?', [`%${filters.search.toLowerCase()}%`]);
 			});
 		}
 
@@ -38,10 +34,10 @@ async function getParts(filters = {}) {
  */
 async function getPartById(id) {
 	try {
-		const part = await db('parts').where({ id, is_active: true }).first();
+		const part = await db('parts').where({ id }).first();
 
 		if (!part) {
-			throw new Error(`Part ${id} not found or is inactive`);
+			throw new Error(`Part ${id} not found`);
 		}
 
 		return part;
@@ -75,8 +71,8 @@ async function getPartBySku(sku) {
 async function createPart(partData) {
 	try {
 		// Validate required fields
-		if (!partData.sku || !partData.name || !partData.category || !partData.manufacturer) {
-			throw new Error('SKU, name, category, and manufacturer are required');
+		if (!partData.sku || !partData.name) {
+			throw new Error('SKU and name are required');
 		}
 
 		// Check for duplicate SKU
@@ -89,22 +85,13 @@ async function createPart(partData) {
 			sku: partData.sku.toUpperCase(),
 			name: partData.name,
 			category: partData.category,
-			manufacturer: partData.manufacturer,
-			uom: partData.uom || 'each',
-			default_cost: partData.default_cost || 0,
-			default_retail_price: partData.default_retail_price || 0,
-			taxable: partData.taxable !== false,
-			is_active: true,
 			description: partData.description,
-			barcode: partData.barcode,
-			image_url: partData.image_url,
-			core_item: partData.core_item || false,
-			hazmat: partData.hazmat || false,
-			warranty_days: partData.warranty_days,
-			reorder_point_default: partData.reorder_point_default,
-			reorder_qty_default: partData.reorder_qty_default,
-			preferred_vendor_name: partData.preferred_vendor_name,
-			notes: partData.notes
+			unit_cost: partData.unit_cost || 0,
+			unit_price: partData.unit_price || 0,
+			quantity_on_hand: partData.quantity_on_hand || 0,
+			reorder_level: partData.reorder_level || 5,
+			supplier_id: partData.supplier_id,
+			status: 'ACTIVE'
 		}).returning('*');
 
 		dtLogger.info('part_created', { id: part[0].id, sku: part[0].sku });
@@ -135,26 +122,25 @@ async function updatePart(id, partData) {
 			}
 		}
 
-		const updated = await db('parts').where({ id }).update({
-			sku: partData.sku ? partData.sku.toUpperCase() : existing.sku,
-			name: partData.name || existing.name,
-			category: partData.category || existing.category,
-			manufacturer: partData.manufacturer || existing.manufacturer,
-			uom: partData.uom || existing.uom,
-			default_cost: partData.default_cost !== undefined ? partData.default_cost : existing.default_cost,
-			default_retail_price: partData.default_retail_price !== undefined ? partData.default_retail_price : existing.default_retail_price,
-			taxable: partData.taxable !== undefined ? partData.taxable : existing.taxable,
-			description: partData.description !== undefined ? partData.description : existing.description,
-			barcode: partData.barcode !== undefined ? partData.barcode : existing.barcode,
-			image_url: partData.image_url !== undefined ? partData.image_url : existing.image_url,
-			core_item: partData.core_item !== undefined ? partData.core_item : existing.core_item,
-			hazmat: partData.hazmat !== undefined ? partData.hazmat : existing.hazmat,
-			warranty_days: partData.warranty_days !== undefined ? partData.warranty_days : existing.warranty_days,
-			reorder_point_default: partData.reorder_point_default !== undefined ? partData.reorder_point_default : existing.reorder_point_default,
-			reorder_qty_default: partData.reorder_qty_default !== undefined ? partData.reorder_qty_default : existing.reorder_qty_default,
-			preferred_vendor_name: partData.preferred_vendor_name !== undefined ? partData.preferred_vendor_name : existing.preferred_vendor_name,
-			notes: partData.notes !== undefined ? partData.notes : existing.notes
-		}).returning('*');
+		const updateData = {};
+		if (partData.sku) updateData.sku = partData.sku.toUpperCase();
+		if (partData.name) updateData.name = partData.name;
+		if (partData.category) updateData.category = partData.category;
+		if (partData.description !== undefined) updateData.description = partData.description;
+		if (partData.unit_cost !== undefined) updateData.unit_cost = partData.unit_cost;
+		if (partData.unit_price !== undefined) updateData.unit_price = partData.unit_price;
+		if (partData.quantity_on_hand !== undefined) updateData.quantity_on_hand = partData.quantity_on_hand;
+		if (partData.reorder_level !== undefined) updateData.reorder_level = partData.reorder_level;
+		if (partData.supplier_id !== undefined) updateData.supplier_id = partData.supplier_id;
+		// Preserve status or ensure it's ACTIVE (automatic for new parts with quantity > 0)
+		if (partData.status !== undefined) {
+			updateData.status = partData.status;
+		} else {
+			// If status not provided in update, preserve existing status
+			updateData.status = existing.status || 'ACTIVE';
+		}
+
+		const updated = await db('parts').where({ id }).update(updateData).returning('*');
 
 		dtLogger.info('part_updated', { id, sku: updated[0].sku });
 
@@ -166,48 +152,22 @@ async function updatePart(id, partData) {
 }
 
 /**
- * Deactivate a part (soft delete)
- * Check if part is used in any active receiving/adjustment before deactivating
+ * Delete a part
  */
-async function deactivatePart(id) {
+async function deletePart(id) {
 	try {
 		const part = await db('parts').where({ id }).first();
 		if (!part) {
 			throw new Error(`Part ${id} not found`);
 		}
 
-		if (!part.is_active) {
-			throw new Error(`Part is already inactive`);
-		}
+		await db('parts').where({ id }).del();
 
-		// Check for active receiving tickets with this part
-		const activeReceiving = await db('receiving_ticket_lines')
-			.join('receiving_tickets', 'receiving_ticket_lines.ticket_id', 'receiving_tickets.id')
-			.where({ 'receiving_ticket_lines.part_id': id, 'receiving_tickets.status': 'DRAFT' })
-			.first();
+		dtLogger.info('part_deleted', { id, sku: part.sku });
 
-		if (activeReceiving) {
-			throw new Error(`Cannot deactivate part: it's referenced in active receiving tickets`);
-		}
-
-		// Check for active adjustments
-		const activeAdjustment = await db('inventory_adjustments')
-			.where({ part_id: id, status: 'DRAFT' })
-			.first();
-
-		if (activeAdjustment) {
-			throw new Error(`Cannot deactivate part: it's referenced in active adjustments`);
-		}
-
-		const updated = await db('parts').where({ id }).update({
-			is_active: false
-		}).returning('*');
-
-		dtLogger.info('part_deactivated', { id, sku: part.sku });
-
-		return updated[0];
+		return { success: true, id };
 	} catch (error) {
-		dtLogger.error('part_deactivation_failed', { id, error: error.message });
+		dtLogger.error('part_deletion_failed', { id, error: error.message });
 		throw error;
 	}
 }
@@ -218,11 +178,11 @@ async function deactivatePart(id) {
 async function getCategories() {
 	try {
 		const categories = await db('parts')
-			.where('is_active', true)
+			.where('status', 'ACTIVE')
 			.distinct('category')
 			.orderBy('category', 'asc');
 
-		return categories.map(c => c.category);
+		return categories.map(c => c.category).filter(c => c);
 	} catch (error) {
 		dtLogger.error('categories_retrieval_failed', { error: error.message });
 		throw error;
@@ -230,16 +190,16 @@ async function getCategories() {
 }
 
 /**
- * Get part manufacturers (distinct)
+ * Get all manufacturers from active parts
  */
 async function getManufacturers() {
 	try {
 		const manufacturers = await db('parts')
-			.where('is_active', true)
+			.where('status', 'ACTIVE')
 			.distinct('manufacturer')
 			.orderBy('manufacturer', 'asc');
 
-		return manufacturers.map(m => m.manufacturer);
+		return manufacturers.map(m => m.manufacturer).filter(m => m);
 	} catch (error) {
 		dtLogger.error('manufacturers_retrieval_failed', { error: error.message });
 		throw error;
@@ -252,7 +212,7 @@ module.exports = {
 	getPartBySku,
 	createPart,
 	updatePart,
-	deactivatePart,
+	deletePart,
 	getCategories,
 	getManufacturers
 };

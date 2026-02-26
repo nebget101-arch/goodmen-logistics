@@ -79,11 +79,11 @@
           <td>{{ part.category }}</td>
           <td>{{ part.manufacturer }}</td>
           <td>{{ part.uom }}</td>
-          <td>${{ part.default_cost | number: '1.2-2' }}</td>
-          <td>${{ part.default_retail_price | number: '1.2-2' }}</td>
+          <td>${{ part.unit_cost | number: '1.2-2' }}</td>
+          <td>${{ part.unit_price | number: '1.2-2' }}</td>
           <td>
-            <span class="badge" [ngClass]="part.is_active ? 'badge-success' : 'badge-secondary'">
-              {{ part.is_active ? 'Active' : 'Inactive' }}
+            <span class="badge" [ngClass]="part.status === 'ACTIVE' ? 'badge-success' : 'badge-secondary'">
+              {{ part.status }}
             </span>
           </td>
           <td>
@@ -97,7 +97,7 @@
             <button
               class="btn btn-sm btn-warning"
               (click)="deactivatePart(part.id)"
-              *ngIf="(userRole === 'admin' || userRole === 'parts_manager') && part.is_active"
+              *ngIf="(userRole === 'admin' || userRole === 'parts_manager') && part.status === 'ACTIVE'"
             >
               Deactivate
             </button>
@@ -187,24 +187,24 @@
               </div>
               <div class="col-md-3">
                 <div class="form-group">
-                  <label for="defaultCost">Default Cost</label>
+                  <label for="defaultCost">Unit Cost</label>
                   <input
                     id="defaultCost"
                     type="number"
                     class="form-control"
-                    formControlName="default_cost"
+                    formControlName="unit_cost"
                     step="0.01"
                   />
                 </div>
               </div>
               <div class="col-md-3">
                 <div class="form-group">
-                  <label for="retailPrice">Retail Price</label>
+                  <label for="retailPrice">Unit Price</label>
                   <input
                     id="retailPrice"
                     type="number"
                     class="form-control"
-                    formControlName="default_retail_price"
+                    formControlName="unit_price"
                     step="0.01"
                   />
                 </div>
@@ -223,61 +223,25 @@
             </div>
 
             <div class="row">
-              <div class="col-md-3">
-                <div class="form-check">
-                  <input
-                    id="coreItem"
-                    type="checkbox"
-                    class="form-check-input"
-                    formControlName="core_item"
-                  />
-                  <label class="form-check-label" for="coreItem">Core Item</label>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="form-check">
-                  <input
-                    id="hazmat"
-                    type="checkbox"
-                    class="form-check-input"
-                    formControlName="hazmat"
-                  />
-                  <label class="form-check-label" for="hazmat">Hazmat</label>
-                </div>
-              </div>
               <div class="col-md-6">
                 <div class="form-group">
-                  <label for="warrantyDays">Warranty Days</label>
+                  <label for="quantityOnHand">Quantity On Hand</label>
                   <input
-                    id="warrantyDays"
+                    id="quantityOnHand"
                     type="number"
                     class="form-control"
-                    formControlName="warranty_days"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div class="row">
-              <div class="col-md-6">
-                <div class="form-group">
-                  <label for="reorderPoint">Reorder Point</label>
-                  <input
-                    id="reorderPoint"
-                    type="number"
-                    class="form-control"
-                    formControlName="reorder_point_default"
+                    formControlName="quantity_on_hand"
                   />
                 </div>
               </div>
               <div class="col-md-6">
                 <div class="form-group">
-                  <label for="reorderQty">Reorder Qty</label>
+                  <label for="reorderLevel">Reorder Level</label>
                   <input
-                    id="reorderQty"
+                    id="reorderLevel"
                     type="number"
                     class="form-control"
-                    formControlName="reorder_qty_default"
+                    formControlName="reorder_level"
                   />
                 </div>
               </div>

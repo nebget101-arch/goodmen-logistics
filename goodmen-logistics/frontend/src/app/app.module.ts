@@ -22,6 +22,7 @@ import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.
 // Dynatrace Error Handler
 import { DynatraceErrorHandler } from './dynatrace-error-handler';
 import { AuthInterceptor } from './auth.interceptor';
+import { CacheBustingInterceptor } from './cache-busting.interceptor';
 
 @NgModule({
   declarations: [
@@ -50,6 +51,11 @@ import { AuthInterceptor } from './auth.interceptor';
   providers: [
     // Enable Dynatrace error reporting
     // Uncomment to enable: { provide: ErrorHandler, useClass: DynatraceErrorHandler },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: CacheBustingInterceptor,
+      multi: true
+    },
     {
       provide: HTTP_INTERCEPTORS,
       useClass: AuthInterceptor,

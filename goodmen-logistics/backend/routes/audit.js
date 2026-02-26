@@ -41,44 +41,6 @@ router.get('/trail', async (req, res) => {
 // Protect all audit routes: admin, safety
 router.use(auth(['admin', 'safety']));
 
-// Old mock code below - keeping for reference
-router.get('/trail-mock', (req, res) => {
-  const auditLog = [
-    {
-      id: '1',
-      timestamp: new Date(Date.now() - 2*60*60*1000).toISOString(),
-      userId: 'admin@goodmenlogistics.com',
-      action: 'UPDATE',
-      resource: 'Driver',
-      resourceId: 'mock-id',
-      changes: { medicalCertExpiry: '2025-08-20' },
-      ip: '192.168.1.100'
-    },
-    {
-      id: '2',
-      timestamp: new Date(Date.now() - 5*60*60*1000).toISOString(),
-      userId: 'safety@goodmenlogistics.com',
-      action: 'CREATE',
-      resource: 'MaintenanceRecord',
-      resourceId: 'mock-id',
-      changes: {},
-      ip: '192.168.1.101'
-    },
-    {
-      id: '3',
-      timestamp: new Date(Date.now() - 24*60*60*1000).toISOString(),
-      userId: 'dispatcher@goodmenlogistics.com',
-      action: 'UPDATE',
-      resource: 'Load',
-      resourceId: 'LD-2025-001',
-      changes: { status: 'in-transit' },
-      ip: '192.168.1.102'
-    }
-  ];
-  
-  res.json(auditLog);
-});
-
 // GET export data for compliance review
 router.get('/export/:category', async (req, res) => {
   try {
@@ -125,7 +87,7 @@ router.get('/export/:category', async (req, res) => {
         const maintenance = await query(`
           SELECT mr.*, v.unit_number
           FROM maintenance_records mr
-          JOIN vehicles v ON mr.vehicle_id = v.id
+          JOIN all_vehicles v ON mr.vehicle_id = v.id
           ORDER BY mr.date_performed DESC NULLS LAST
         `);
         
@@ -178,10 +140,10 @@ router.get('/compliance-summary', async (req, res) => {
         (SELECT COUNT(*) FROM drivers WHERE medical_cert_expiry <= CURRENT_DATE) as expired_med_certs,
         (SELECT COUNT(*) FROM drivers WHERE medical_cert_expiry > CURRENT_DATE 
          AND medical_cert_expiry <= CURRENT_DATE + INTERVAL '30 days') as upcoming_expirations,
-        (SELECT COUNT(*) FROM vehicles) as total_vehicles,
-        (SELECT COUNT(*) FROM vehicles WHERE status = 'in-service') as vehicles_in_service,
-        (SELECT COUNT(*) FROM vehicles WHERE status = 'out-of-service') as vehicles_oos,
-        (SELECT COUNT(*) FROM vehicles WHERE next_pm_due <= CURRENT_DATE) as maintenance_overdue,
+        (SELECT COUNT(*) FROM all_vehicles) as total_vehicles,
+        (SELECT COUNT(*) FROM all_vehicles WHERE status = 'in-service') as vehicles_in_service,
+        (SELECT COUNT(*) FROM all_vehicles WHERE status = 'out-of-service') as vehicles_oos,
+        (SELECT COUNT(*) FROM all_vehicles WHERE next_pm_due <= CURRENT_DATE) as maintenance_overdue,
         (SELECT COUNT(*) FROM hos_records) as total_hos_records,
         (SELECT COUNT(*) FROM hos_records WHERE array_length(violations, 1) > 0) as hos_violations,
         (SELECT COUNT(*) FROM hos_records WHERE status = 'warning') as hos_warnings,

@@ -1,6 +1,7 @@
 exports.up = function(knex) {
   return knex.schema.createTable('customer_vehicles', function(table) {
     table.increments('id').primary();
+    table.uuid('vehicle_uuid').defaultTo(knex.raw('gen_random_uuid()')).unique();
     table.string('unit_number');
     table.string('vin').notNullable();
     table.string('make');

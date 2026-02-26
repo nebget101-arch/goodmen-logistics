@@ -7,6 +7,9 @@ import { ApiService } from '../../services/api.service';
   styleUrls: ['./user-create.component.css']
 })
 export class UserCreateComponent {
+  firstName = '';
+  lastName = '';
+  email = '';
   username = '';
   password = '';
   role = 'admin';
@@ -16,13 +19,30 @@ export class UserCreateComponent {
 
   constructor(private api: ApiService) {}
 
+  get generatedUsername(): string {
+    const first = this.firstName.trim().toLowerCase();
+    const last = this.lastName.trim().toLowerCase();
+    if (!first || !last) return '';
+    return `${first}.${last}`;
+  }
+
   createUser() {
     this.message = '';
     this.error = '';
-    this.api.createUser({ username: this.username, password: this.password, role: this.role })
+    this.api.createUser({
+      username: this.username,
+      password: this.password,
+      role: this.role,
+      firstName: this.firstName,
+      lastName: this.lastName,
+      email: this.email
+    })
       .subscribe({
         next: () => {
           this.message = 'User created successfully.';
+          this.firstName = '';
+          this.lastName = '';
+          this.email = '';
           this.username = '';
           this.password = '';
           this.role = 'admin';

@@ -2,6 +2,7 @@
   <h2>{{ customerId ? 'Edit Customer' : 'New Customer' }}</h2>
 
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+  <div *ngIf="success" class="alert alert-success">{{ success }}</div>
 
   <form [formGroup]="form">
     <div class="section">

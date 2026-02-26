@@ -10,8 +10,9 @@ const router = express.Router();
 
 function requireRole(allowedRoles) {
   return (req, res, next) => {
-    const role = req.user?.role || 'technician';
-    if (!allowedRoles.includes(role)) {
+    const role = (req.user?.role || 'technician').toString().trim().toLowerCase();
+    const allowed = allowedRoles.map(r => r.toString().trim().toLowerCase());
+    if (!allowed.includes(role)) {
       return res.status(403).json({ error: 'Forbidden: insufficient role' });
     }
     next();
@@ -65,7 +66,7 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor']), as
     payload.locationId = normalizeUuidInput(payload.locationId);
     payload.assignedMechanicUserId = normalizeUuidInput(payload.assignedMechanicUserId);
 
-    const workOrder = await workOrdersService.updateWorkOrder(req.params.id, payload);
+    const workOrder = await workOrdersService.updateWorkOrder(req.params.id, payload, req.user?.id);
     res.json({ success: true, data: workOrder });
   } catch (error) {
     dtLogger.error('work_orders_update_failed', error);
@@ -159,7 +160,7 @@ router.put('/:id/charges', authMiddleware, requireRole(['admin', 'service_adviso
 // Invoice integration
 router.post('/:id/generate-invoice', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting']), async (req, res) => {
   try {
-    const invoice = await workOrdersService.generateInvoiceForWorkOrder(req.params.id, req.user?.id);
+    const invoice = await workOrdersService.generateInvoiceForWorkOrder(req.params.id, req.user?.id, req.body);
     res.status(201).json({ success: true, data: invoice });
   } catch (error) {
     dtLogger.error('work_orders_invoice_failed', error);

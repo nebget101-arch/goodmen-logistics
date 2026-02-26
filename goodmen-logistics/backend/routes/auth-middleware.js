@@ -11,8 +11,12 @@ function authMiddleware(roles = []) {
     try {
       const payload = jwt.verify(token, JWT_SECRET);
       req.user = payload;
-      if (roles.length && !roles.includes(payload.role)) {
-        return res.status(403).json({ error: 'Forbidden: insufficient role' });
+      if (roles.length) {
+        const role = (payload.role || '').toString().trim().toLowerCase();
+        const allowed = roles.map(r => r.toString().trim().toLowerCase());
+        if (!allowed.includes(role)) {
+          return res.status(403).json({ error: 'Forbidden: insufficient role' });
+        }
       }
       next();
     } catch (err) {

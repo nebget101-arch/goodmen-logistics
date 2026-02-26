@@ -83,4 +83,16 @@ export class CustomerService {
     }
     return this.http.get(`${this.baseUrl}/customers/${customerId}/service-history`, { params: httpParams });
   }
+
+  getVehicles(customerId: string, params?: any): Observable<any> {
+    let httpParams = new HttpParams();
+    if (params) {
+      Object.keys(params).forEach(key => {
+        if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+          httpParams = httpParams.set(key, params[key]);
+        }
+      });
+    }
+    return this.http.get(`${this.baseUrl}/customers/${customerId}/vehicles`, { params: httpParams });
+  }
 }

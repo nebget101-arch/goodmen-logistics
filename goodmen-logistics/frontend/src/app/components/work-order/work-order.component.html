@@ -21,6 +21,33 @@
         <a *ngIf="invoiceInfo" class="btn btn-outline-primary" [routerLink]="['/invoices', invoiceInfo.id]">View Invoice</a>
       </div>
     </div>
+
+    <!-- Credit Information Section -->
+    <div *ngIf="customerCreditLimit > 0" class="row" style="margin: 12px 0; padding: 12px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
+      <div class="col-md-8">
+        <strong style="color: #495057;">💳 Customer Credit Limit: ${{ customerCreditLimit | number:'1.2-2' }}</strong>
+        <span *ngIf="creditCheckLoading" style="margin-left: 8px; color: #6c757d;">Loading credit info...</span>
+        <span *ngIf="availableCredit > 0" style="margin-left: 12px; color: #28a745; font-weight: 500;">
+          Available: ${{ availableCredit | number:'1.2-2' }}
+        </span>
+        <span *ngIf="availableCredit <= 0" style="margin-left: 12px; color: #dc3545;">
+          No available credit (used: ${{ (customerCreditLimit - availableCredit) | number:'1.2-2' }})
+        </span>
+      </div>
+      <div class="col-md-4" style="display: flex; align-items: center; justify-content: flex-end; margin-top: 20px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0;">
+          <input type="checkbox" [(ngModel)]="useCustomerCredit" [disabled]="availableCredit <= 0" name="useCustomerCredit">
+          <span>Use Credit</span>
+          <span *ngIf="availableCredit <= 0" style="color: #dc3545; font-size: 0.9em;">(Insufficient)</span>
+        </label>
+      </div>
+      <div *ngIf="creditCheckError" class="col-md-12" style="margin-top: 8px;">
+        <div class="alert alert-danger" style="margin: 0; padding: 8px 12px;">
+          ⚠️ {{ creditCheckError }}
+        </div>
+      </div>
+    </div>
+
     <form (ngSubmit)="submitWorkOrder()" #workOrderForm="ngForm">
       <!-- Customer Section -->
       <div class="section">
@@ -34,11 +61,15 @@
             <button type="button" class="btn btn-secondary" (click)="searchCustomerByDot()">Search</button>
           </div>
           <div class="col">
-            <label for="customerId">Or select customer</label>
-            <select id="customerId" class="form-control" [(ngModel)]="workOrder.customerId" name="customerId">
-              <option [ngValue]="null">-- Select --</option>
-              <option *ngFor="let c of customers" [ngValue]="c.id">{{c.company_name}} (DOT: {{c.dot_number}})</option>
-            </select>
+            <label for="customerSearch">Or search and select customer by name</label>
+            <div style="position: relative;">
+              <input id="customerSearch" type="text" class="form-control" [(ngModel)]="customerSearch" (ngModelChange)="onCustomerSearchChange()" (blur)="onCustomerBlur()" name="customerSearch" placeholder="Type customer name or DOT...">
+              <div *ngIf="showCustomerDropdown && filteredCustomers.length > 0" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
+                <div *ngFor="let c of filteredCustomers" (click)="selectCustomer(c)" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f5f5f5'" onmouseout="this.style.backgroundColor='white'">
+                  {{ c.displayName || c.company_name || c.name }} <span *ngIf="c.dot_number" style="color: #999;">(DOT: {{ c.dot_number }})</span>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="col">
             <button type="button" class="btn btn-outline-primary" (click)="showNewCustomerModal = true">Add New Customer</button>
@@ -46,7 +77,7 @@
         </div>
         <div *ngIf="customerSearchError" class="alert alert-danger mt-2">{{customerSearchError}}</div>
         <div *ngIf="selectedCustomer">
-          <div class="mt-2"><strong>Selected:</strong> {{selectedCustomer.company_name}} (DOT: {{selectedCustomer.dot_number}})</div>
+          <div class="mt-2"><strong>Selected:</strong> {{ selectedCustomer.displayName || selectedCustomer.company_name || selectedCustomer.name }} (DOT: {{selectedCustomer.dot_number}})</div>
         </div>
       </div>
       <!-- New Customer Modal -->
@@ -145,11 +176,11 @@
         <div class="row">
           <div class="col">
             <label for="workOrderRequestedBy">Requested By</label>
-            <input id="workOrderRequestedBy" type="text" class="form-control" [(ngModel)]="workOrder.requestedBy" name="requestedBy">
+            <input id="workOrderRequestedBy" type="text" class="form-control" [(ngModel)]="workOrder.requestedBy" name="requestedBy" readonly>
           </div>
           <div class="col">
             <label for="workOrderAssignedTo">Assigned To</label>
-            <input id="workOrderAssignedTo" type="text" class="form-control" [(ngModel)]="workOrder.assignedTo" name="assignedTo">
+            <input id="workOrderAssignedTo" type="text" class="form-control" [(ngModel)]="workOrder.assignedTo" name="assignedTo" readonly>
           </div>
           <div class="col">
             <label for="workOrderVendor">Vendor</label>
@@ -187,15 +218,20 @@
         <h3>Vehicle Info</h3>
         <div class="row">
           <div class="col">
-            <label for="vehicleVinSearch">Search Last 4 of VIN</label>
-            <input id="vehicleVinSearch" type="text" class="form-control mb-2" [(ngModel)]="vehicleVinSearch" name="vehicleVinSearch" maxlength="4" placeholder="Last 4 of VIN" (input)="onVehicleVinSearchChange()">
+            <label for="vehicleSearch">Search Vehicle (Unit, VIN, Make, Model)</label>
+            <div style="position: relative;">
+              <input id="vehicleSearch" type="text" class="form-control mb-2" [(ngModel)]="vehicleSearch" name="vehicleSearch" placeholder="Type to search vehicles..." (ngModelChange)="onVehicleSearchChange()" (blur)="onVehicleBlur()">
+              <div *ngIf="showVehicleDropdown && filteredVehicles.length > 0" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000; margin-top: -8px;">
+                <div *ngFor="let vehicle of filteredVehicles" (click)="selectVehicle(vehicle)" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f5f5f5'" onmouseout="this.style.backgroundColor='white'">
+                  <strong>{{ vehicle.unit_number || vehicle.unitNumber }}</strong> - {{ vehicle.vin }} 
+                  <span style="color: #666;">({{ vehicle.make }} {{ vehicle.model }} {{ vehicle.year }})</span>
+                  <span class="badge" [ngClass]="vehicle.source === 'customer' || vehicle.company_owned === false ? 'badge-info' : 'badge-secondary'" style="margin-left: 8px;">
+                    {{ vehicle.source === 'customer' || vehicle.company_owned === false ? 'Customer' : 'Internal' }}
+                  </span>
+                </div>
+              </div>
+            </div>
             <button type="button" class="btn btn-outline-primary mb-2" (click)="openAddVehicleModal()">Add Vehicle</button>
-            <label for="vehicleId">Vehicle</label>
-            <select id="vehicleId" class="form-control" [(ngModel)]="workOrder.vehicleId" name="vehicleId" (ngModelChange)="onVehicleSelect()" required>
-              <option *ngFor="let vehicle of filteredVehicles" [ngValue]="vehicle.id">
-                {{ vehicle.unit_number || vehicle.unitNumber }} - {{ vehicle.vin }} ({{ vehicle.company_owned === false ? 'Customer' : 'Company' }})
-              </option>
-            </select>
             <!-- Add Customer Vehicle Modal -->
             <div class="modal" tabindex="-1" [ngClass]="{show: showNewCustomerVehicleModal}" style="display: block;" *ngIf="showNewCustomerVehicleModal">
               <div class="modal-dialog">
@@ -415,10 +451,12 @@
               </thead>
               <tbody>
                 <tr *ngFor="let part of workOrder.parts; let i = index">
-                  <td><input type="text" class="form-control" [(ngModel)]="part.partName" name="partName{{i}}"></td>
+                  <td>
+                    <input type="text" class="form-control" list="partOptions" [(ngModel)]="part.partName" name="partName{{i}}" (input)="onPartLookup(i, part.partName)" (change)="onPartLookup(i, part.partName)">
+                  </td>
                   <td><input type="text" class="form-control" [(ngModel)]="part.partNumber" name="partNumber{{i}}"></td>
-                  <td><input type="number" class="form-control" [(ngModel)]="part.quantity" name="quantity{{i}}"></td>
-                  <td><input type="number" class="form-control" [(ngModel)]="part.unitCost" name="unitCost{{i}}"></td>
+                  <td><input type="number" class="form-control" [(ngModel)]="part.quantity" name="quantity{{i}}" (input)="updatePartTotals(i)"></td>
+                  <td><input type="number" class="form-control" [(ngModel)]="part.unitCost" name="unitCost{{i}}" (input)="updatePartTotals(i)"></td>
                   <td><input type="number" class="form-control" [(ngModel)]="part.totalCost" name="totalCost{{i}}" readonly></td>
                   <td><input type="text" class="form-control" [(ngModel)]="part.vendor" name="vendor{{i}}"></td>
                   <td>
@@ -432,14 +470,27 @@
               </tbody>
             </table>
 
+            <datalist id="partOptions">
+              <option *ngFor="let p of partsCatalog" [value]="p.sku + ' - ' + p.name"></option>
+            </datalist>
+
             <div class="row" style="margin-top: 12px;">
               <div class="col">
                 <label>Reserve Part from Inventory</label>
                 <div style="display:flex; gap:8px; flex-wrap: wrap;">
-                  <select class="form-control" [(ngModel)]="reservePartForm.partId" name="reservePartPartId" style="max-width: 260px;">
-                    <option [ngValue]="''">Select Part</option>
-                    <option *ngFor="let p of partsCatalog" [ngValue]="p.id">{{ p.sku }} - {{ p.name }}</option>
-                  </select>
+                  <div style="position: relative; max-width: 260px;">
+                    <input type="text" class="form-control" placeholder="Search by SKU, name, or part number..." [(ngModel)]="partSearch" name="partSearch" (ngModelChange)="onPartSearchChange()" (blur)="onPartBlur()" autocomplete="off">
+                    <div *ngIf="showPartDropdown && filteredParts.length > 0" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
+                      <div *ngFor="let p of filteredParts" (click)="selectPart(p)" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; border-left: 3px solid; transition: background-color 0.2s;" [ngStyle]="{'border-left-color': (p.quantity_on_hand > 0) ? '#28a745' : '#dc3545', 'background-color': 'white'}" (mouseenter)="onPartHover($event, true)" (mouseleave)="onPartHover($event, false)">
+                        <strong>{{ p.sku }}</strong> - {{ p.name }}
+                        <div style="font-size: 0.85em; color: #666;">
+                          {{ p.part_number }} | 
+                          <span [ngStyle]="{'color': (p.quantity_on_hand > 0) ? '#28a745' : '#dc3545', 'font-weight': '600'}">Stock: {{ p.quantity_on_hand || 0 }}</span> | 
+                          Price: ${{ p.unit_price | number:'1.2-2' }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <input type="number" class="form-control" placeholder="Qty" [(ngModel)]="reservePartForm.qtyRequested" name="reservePartQty" style="max-width: 120px;">
                   <input type="number" class="form-control" placeholder="Unit Price" [(ngModel)]="reservePartForm.unitPrice" name="reservePartPrice" style="max-width: 140px;">
                   <select class="form-control" [(ngModel)]="reservePartForm.locationId" name="reservePartLocation" style="max-width: 220px;">
@@ -468,15 +519,24 @@
                   </thead>
                   <tbody>
                     <tr *ngFor="let line of workOrderParts">
-                      <td>{{ line.part_sku || line.part_name || line.part_id }}</td>
+                      <td>
+                        <div>{{ line.part_sku || line.part_id }}</div>
+                        <small class="text-muted" *ngIf="line.part_name">{{ line.part_name }}</small>
+                      </td>
                       <td>{{ line.qty_requested }}</td>
                       <td>{{ line.qty_reserved }}</td>
                       <td>{{ line.qty_issued }}</td>
-                      <td>{{ line.status }}</td>
+                      <td>
+                        <span [ngStyle]="line.status === 'BACKORDERED' ? {'background-color': '#ffc107', 'color': '#000', 'padding': '4px 8px', 'border-radius': '3px', 'font-size': '0.85em', 'font-weight': '600'} : {'background-color': '#17a2b8', 'color': 'white', 'padding': '4px 8px', 'border-radius': '3px', 'font-size': '0.85em', 'font-weight': '600'}">
+                          {{ line.status }}
+                        </span>
+                        <span *ngIf="line.status === 'BACKORDERED'" style="font-size: 0.8em; color: #ff9800; margin-left: 4px; cursor: help;" title="Click Issue to check if stock is now available">ℹ️</span>
+                      </td>
                       <td>${{ line.unit_price | number:'1.2-2' }}</td>
                       <td>${{ line.line_total | number:'1.2-2' }}</td>
                       <td style="display:flex; gap:6px;">
-                        <button type="button" class="btn btn-sm btn-outline-success" (click)="issuePart(line)">Issue</button>
+                        <button type="button" class="btn btn-sm btn-outline-success" (click)="issuePart(line)" [disabled]="(line.qty_reserved || 0) - (line.qty_issued || 0) <= 0" [title]="(line.qty_reserved || 0) - (line.qty_issued || 0) <= 0 ? 'Reserve quantity before issuing' : 'Issue reserved quantity'">Issue</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" *ngIf="(line.qty_reserved || 0) - (line.qty_issued || 0) <= 0" (click)="reserveFromLine(line)">Reserve</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" (click)="returnPart(line)">Return</button>
                       </td>
                     </tr>
@@ -502,14 +562,41 @@
               </thead>
               <tbody>
                 <tr *ngFor="let labor of workOrder.labor; let j = index">
-                  <td><input type="text" class="form-control" [(ngModel)]="labor.mechanicName" name="mechanicName{{j}}"></td>
-                  <td><input type="number" class="form-control" [(ngModel)]="labor.hours" name="hours{{j}}"></td>
-                  <td><input type="number" class="form-control" [(ngModel)]="labor.rate" name="rate{{j}}"></td>
+                  <td>
+                    <div class="technician-input-wrap">
+                      <input
+                        type="text"
+                        class="form-control"
+                        [(ngModel)]="labor.mechanicName"
+                        name="mechanicName{{j}}"
+                        (input)="onMechanicLookup(j, labor.mechanicName)"
+                        (focus)="showTechnicianDropdown(j, true)"
+                        (blur)="showTechnicianDropdown(j, false)"
+                        autocomplete="off"
+                      >
+                      <div class="technician-dropdown" *ngIf="activeMechanicIndex === j">
+                        <button
+                          type="button"
+                          class="technician-option"
+                          *ngFor="let tech of filterTechnicians(labor.mechanicName)"
+                          (mousedown)="selectTechnician(j, tech)"
+                        >
+                          {{ tech.username }}
+                        </button>
+                        <div class="technician-empty" *ngIf="filterTechnicians(labor.mechanicName).length === 0">
+                          No matches
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><input type="number" class="form-control" [(ngModel)]="labor.hours" name="hours{{j}}" (input)="updateLaborTotals(j)"></td>
+                  <td><input type="number" class="form-control" [(ngModel)]="labor.rate" name="rate{{j}}" (input)="updateLaborTotals(j)"></td>
                   <td><input type="number" class="form-control" [(ngModel)]="labor.cost" name="cost{{j}}" readonly></td>
                   <td><button type="button" class="btn btn-danger" (click)="removeLabor(j)">Remove</button></td>
                 </tr>
               </tbody>
             </table>
+
           </div>
         </div>
       </div>
