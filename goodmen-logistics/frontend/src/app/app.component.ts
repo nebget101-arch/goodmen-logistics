@@ -17,6 +17,7 @@ export class AppComponent implements OnInit {
   safetyExpanded = true;
   fleetExpanded = true;
   accountingExpanded = true;
+  inventoryExpanded = true;
   sidebarOpen = false;
 
   constructor(private router: Router) {}
@@ -87,5 +88,9 @@ export class AppComponent implements OnInit {
 
   toggleAccounting(): void {
     this.accountingExpanded = !this.accountingExpanded;
+  }
+
+  toggleInventory(): void {
+    this.inventoryExpanded = !this.inventoryExpanded;
   }
 }
