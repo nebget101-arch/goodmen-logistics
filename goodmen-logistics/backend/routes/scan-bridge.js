@@ -194,13 +194,14 @@ router.get('/mobile', (req, res) => {
     <div class="code-display">${sessionId}</div>
   </div>
 
-  <button id="start">📷 Start Camera Scan</button>
+  <button id="start">📷 Start Camera (optional)</button>
   
   <video id="video" playsinline autoplay muted></video>
 
   <div class="row">
-    <label>Manual Input (Fallback)</label>
-    <input id="manual" placeholder="Type or paste barcode" autocomplete="off" />
+    <label><strong>📝 Enter Barcode Number</strong></label>
+    <p style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Type the numbers shown under the barcode (e.g., for SKU: TRK-001, use that as your barcode)</p>
+    <input id="manual" placeholder="e.g., TRK-001" autocomplete="off" />
     <button id="sendManual">✓ Send Barcode</button>
   </div>
 
@@ -237,6 +238,7 @@ document.getElementById('sendManual').addEventListener('click', async () => {
     if (!v) return;
     await postBarcode(v);
     document.getElementById('manual').value = '';
+    document.getElementById('manual').focus();
   } catch (e) {
     setStatus(e.message || String(e), 'err');
   }
@@ -250,28 +252,44 @@ async function startScan() {
   try {
     // Always request camera access first
     stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: 'environment' } 
+      video: { facingMode: 'environment', focusMode: 'continuous' } 
     });
     videoEl.srcObject = stream;
-    setStatus('Camera started. Point at barcode...', 'ok');
+    
+    let hasDetector = false;
+    let supportedFormats = [];
 
-    // If BarcodeDetector is available, use it
+    // If BarcodeDetector is available, try to use it
     if ('BarcodeDetector' in window) {
-      detector = new BarcodeDetector({ formats: ['code_128','ean_13','ean_8','upc_a','upc_e','qr_code'] });
-      timer = setInterval(async () => {
-        try {
-          const barcodes = await detector.detect(videoEl);
-          if (barcodes && barcodes.length > 0) {
-            const raw = (barcodes[0].rawValue || '').trim();
-            if (!raw) return;
-            await postBarcode(raw);
-          }
-        } catch (_) {}
-      }, 700);
-      setStatus('Camera scanning active (auto-detect)', 'ok');
-    } else {
-      // Fallback: let user scan manually while camera is open for reference
-      setStatus('Camera open. Use manual input below to send barcode.', 'ok');
+      try {
+        // Check which formats are actually supported on this device
+        supportedFormats = await BarcodeDetector.getSupportedFormats();
+        hasDetector = supportedFormats && supportedFormats.length > 0;
+      } catch (e) {
+        hasDetector = false;
+      }
+      
+      if (hasDetector) {
+        detector = new BarcodeDetector({ formats: supportedFormats });
+        timer = setInterval(async () => {
+          try {
+            const barcodes = await detector.detect(videoEl);
+            if (barcodes && barcodes.length > 0) {
+              const raw = (barcodes[0].rawValue || '').trim();
+              if (!raw) return;
+              await postBarcode(raw);
+            }
+          } catch (_) {}
+        }, 700);
+        setStatus('✓ Camera scanning active (auto-detect). Formats: ' + supportedFormats.join(', '), 'ok');
+      }
+    }
+    
+    if (!hasDetector) {
+      // Fallback: camera open, manual input primary
+      setStatus('📷 Camera ready. Type barcode number below or try manual input (iOS doesn\'t support auto-detect)', 'ok');
+      // Auto-focus the manual input field on iOS
+      setTimeout(() => document.getElementById('manual').focus(), 500);
     }
   } catch (e) {
     throw new Error('Camera access denied or unavailable: ' + (e.message || String(e)));
