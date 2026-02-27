@@ -3,5 +3,7 @@
 
 export const environment = {
   production: false,
-  apiUrl: 'http://localhost:3000/api'
+  // Use production API so phone can connect
+  apiUrl: 'https://safetyapp-ln58.onrender.com/api'
+  // For local backend testing, use: 'http://localhost:3000/api'
 };
