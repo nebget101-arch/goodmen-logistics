@@ -8,17 +8,15 @@ import { Router } from '@angular/router';
     .app {
       min-height: 100vh;
     }
-    main {
-      padding: 20px;
-    }
-    .active {
-      border-bottom: 2px solid white;
-    }
   `]
 })
 export class AppComponent implements OnInit {
   title = 'Goodmen Logistics';
   userRole: string | null = null;
+  equipmentExpanded = true;
+  safetyExpanded = true;
+  fleetExpanded = true;
+  accountingExpanded = true;
 
   constructor(private router: Router) {}
 
@@ -55,5 +53,21 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     this.userRole = this.getRole();
+  }
+
+  toggleEquipment(): void {
+    this.equipmentExpanded = !this.equipmentExpanded;
+  }
+
+  toggleSafety(): void {
+    this.safetyExpanded = !this.safetyExpanded;
+  }
+
+  toggleFleet(): void {
+    this.fleetExpanded = !this.fleetExpanded;
+  }
+
+  toggleAccounting(): void {
+    this.accountingExpanded = !this.accountingExpanded;
   }
 }

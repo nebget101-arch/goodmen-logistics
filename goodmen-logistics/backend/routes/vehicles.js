@@ -179,24 +179,27 @@ router.post('/', async (req, res) => {
       next_pm_mileage,
       insurance_expiry, 
       registration_expiry,
-      oos_reason
+      oos_reason,
+      vehicle_type
     } = req.body;
 
     const finalVin = (vin && vin.trim()) ? vin.trim() : (unit_number ? unit_number.slice(-4) : null);
     const finalUnitNumber = (unit_number && unit_number.trim()) ? unit_number.trim() : (finalVin ? finalVin.slice(-4) : null);
     
+    const finalVehicleType = (vehicle_type && vehicle_type.trim()) ? vehicle_type.trim() : 'truck';
+
     const result = await query(
       `INSERT INTO vehicles (
         unit_number, vin, make, model, year, license_plate, state, mileage, 
         inspection_expiry, next_pm_due, next_pm_mileage,
-        insurance_expiry, registration_expiry, oos_reason, status
+        insurance_expiry, registration_expiry, oos_reason, status, vehicle_type
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'in-service') 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'in-service', $15) 
        RETURNING *`,
       [
         finalUnitNumber, finalVin, make, model, year, license_plate, state, mileage || 0,
         inspection_expiry, next_pm_due, next_pm_mileage,
-        insurance_expiry, registration_expiry, oos_reason
+        insurance_expiry, registration_expiry, oos_reason, finalVehicleType
       ]
     );
     await query('UPDATE vehicles SET is_company_owned = true WHERE id = $1', [result.rows[0].id]);
@@ -223,7 +226,7 @@ router.put('/:id', async (req, res) => {
   const startTime = Date.now();
   try {
     // Fields that should not be updated
-    const excludedFields = ['id', 'created_at', 'updated_at'];
+    const excludedFields = ['id', 'created_at', 'updated_at', 'customer_id'];
     
     const fields = [];
     const values = [];

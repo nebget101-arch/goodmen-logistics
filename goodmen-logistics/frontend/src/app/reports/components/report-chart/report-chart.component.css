@@ -1,0 +1,16 @@
+.chart-card {
+  background: #fff;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.chart-card canvas {
+  width: 100% !important;
+  height: 280px !important;
+}
+
+.chart-card h4 {
+  margin-bottom: 8px;
+  color: #1a237e;
+}
