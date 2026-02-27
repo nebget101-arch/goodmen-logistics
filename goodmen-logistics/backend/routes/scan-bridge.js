@@ -210,15 +210,17 @@ router.get('/mobile', (req, res) => {
 <script>
 const sessionId = ${JSON.stringify(sessionId)};
 const writeToken = ${JSON.stringify(writeToken)};
-const statusEl = document.getElementById('status');
-const videoEl = document.getElementById('video');
 let detector = null;
 let stream = null;
 let timer = null;
+let statusEl = null;
+let videoEl = null;
 
 function setStatus(msg, cls) {
-  statusEl.className = cls || '';
-  statusEl.textContent = msg;
+  if (statusEl) {
+    statusEl.className = cls || '';
+    statusEl.textContent = msg;
+  }
 }
 
 async function postBarcode(barcode) {
@@ -231,22 +233,6 @@ async function postBarcode(barcode) {
   if (!res.ok) throw new Error(data.error || 'Failed to send barcode');
   setStatus('Sent: ' + barcode, 'ok');
 }
-
-document.getElementById('sendManual').addEventListener('click', async () => {
-  try {
-    const v = document.getElementById('manual').value.trim();
-    if (!v) return;
-    await postBarcode(v);
-    document.getElementById('manual').value = '';
-    document.getElementById('manual').focus();
-  } catch (e) {
-    setStatus(e.message || String(e), 'err');
-  }
-});
-
-document.getElementById('manual').addEventListener('keyup', async (e) => {
-  if (e.key === 'Enter') document.getElementById('sendManual').click();
-});
 
 async function startScan() {
   try {
@@ -296,18 +282,64 @@ async function startScan() {
   }
 }
 
-document.getElementById('start').addEventListener('click', async () => {
-  try {
-    await startScan();
-  } catch (e) {
-    setStatus(e.message || String(e), 'err');
-  }
-});
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeButtons);
+} else {
+  initializeButtons();
+}
 
-window.addEventListener('beforeunload', () => {
-  if (timer) clearInterval(timer);
-  if (stream) stream.getTracks().forEach(t => t.stop());
-});
+function initializeButtons() {
+  statusEl = document.getElementById('status');
+  videoEl = document.getElementById('video');
+  
+  const sendBtn = document.getElementById('sendManual');
+  const startBtn = document.getElementById('start');
+  const manualInput = document.getElementById('manual');
+  
+  if (sendBtn) {
+    sendBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        const v = manualInput.value.trim();
+        if (!v) {
+          setStatus('Please enter a barcode number', 'err');
+          return;
+        }
+        await postBarcode(v);
+        manualInput.value = '';
+        manualInput.focus();
+      } catch (e) {
+        setStatus(e.message || String(e), 'err');
+      }
+    });
+  }
+  
+  if (manualInput) {
+    manualInput.addEventListener('keyup', async (e) => {
+      if (e.key === 'Enter') {
+        const sendBtn = document.getElementById('sendManual');
+        if (sendBtn) sendBtn.click();
+      }
+    });
+  }
+  
+  if (startBtn) {
+    startBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        await startScan();
+      } catch (e) {
+        setStatus(e.message || String(e), 'err');
+      }
+    });
+  }
+  
+  window.addEventListener('beforeunload', () => {
+    if (timer) clearInterval(timer);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+  });
+}
 </script>
 </body>
 </html>`;
