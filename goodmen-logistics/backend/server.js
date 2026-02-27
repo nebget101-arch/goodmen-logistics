@@ -263,6 +263,7 @@ const adjustmentsRouter = require('./routes/adjustments');
 const cycleCountsRouter = require('./routes/cycle-counts');
 const reportsRouter = require('./routes/reports');
 const creditRouter = require('./routes/credit');
+const scanBridgeRouter = require('./routes/scan-bridge');
 
 const locationsRouter = require('./routes/locations');
 const customersRouter = require('./routes/customers');
@@ -286,6 +287,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/work-orders', workOrdersRouter);
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/credit', creditRouter);
+app.use('/api/scan-bridge', scanBridgeRouter);
 // Inventory Management Routes (Phase 2)
 app.use('/api/parts', partsRouter);
 app.use('/api/barcodes', barcodesRouter);
