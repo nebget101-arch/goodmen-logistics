@@ -140,24 +140,68 @@ router.get('/mobile', (req, res) => {
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Scan Bridge</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; }
-    input, button, select { font-size: 16px; padding: 10px; width: 100%; margin-top: 8px; }
-    video { width: 100%; max-height: 50vh; background: #000; margin-top: 10px; }
-    .ok { color: #0a7d2b; margin-top: 8px; }
-    .err { color: #b42318; margin-top: 8px; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+      padding: 16px; 
+      max-width: 100%;
+      background: #f5f5f5;
+    }
+    h3 { margin: 0 0 16px 0; color: #333; }
+    .code-display { 
+      background: #f0f0f0; 
+      padding: 8px 12px; 
+      font-family: monospace; 
+      font-size: 12px; 
+      border-radius: 4px; 
+      word-break: break-all;
+    }
+    input, button { 
+      font-size: 16px; 
+      padding: 12px; 
+      width: 100%; 
+      box-sizing: border-box;
+      margin-top: 8px; 
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    button {
+      background: #0066cc;
+      color: white;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:active { background: #0052a3; }
+    video { 
+      width: 100%; 
+      max-height: 60vh; 
+      background: #000; 
+      margin-top: 10px;
+      border-radius: 4px;
+      display: block;
+    }
+    .ok { color: #0a7d2b; margin-top: 8px; font-weight: 500; }
+    .err { color: #b42318; margin-top: 8px; font-weight: 500; }
     .row { margin-bottom: 12px; }
+    label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 14px; }
   </style>
 </head>
 <body>
-  <h3>Phone Scanner Bridge</h3>
-  <div class="row">Session: <code>${sessionId}</code></div>
-  <button id="start">Start Camera Scan</button>
+  <h3>📱 Phone Scanner Bridge</h3>
+  
+  <div class="row">
+    <strong>Session:</strong><br />
+    <div class="code-display">${sessionId}</div>
+  </div>
+
+  <button id="start">📷 Start Camera Scan</button>
+  
   <video id="video" playsinline autoplay muted></video>
 
   <div class="row">
-    <label>Manual barcode (fallback)</label>
-    <input id="manual" placeholder="Type or paste barcode" />
-    <button id="sendManual">Send Barcode</button>
+    <label>Manual Input (Fallback)</label>
+    <input id="manual" placeholder="Type or paste barcode" autocomplete="off" />
+    <button id="sendManual">✓ Send Barcode</button>
   </div>
 
   <div id="status"></div>
@@ -203,27 +247,35 @@ document.getElementById('manual').addEventListener('keyup', async (e) => {
 });
 
 async function startScan() {
-  if (!('BarcodeDetector' in window)) {
-    setStatus('BarcodeDetector not available. Use manual input.', 'err');
-    return;
+  try {
+    // Always request camera access first
+    stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: 'environment' } 
+    });
+    videoEl.srcObject = stream;
+    setStatus('Camera started. Point at barcode...', 'ok');
+
+    // If BarcodeDetector is available, use it
+    if ('BarcodeDetector' in window) {
+      detector = new BarcodeDetector({ formats: ['code_128','ean_13','ean_8','upc_a','upc_e','qr_code'] });
+      timer = setInterval(async () => {
+        try {
+          const barcodes = await detector.detect(videoEl);
+          if (barcodes && barcodes.length > 0) {
+            const raw = (barcodes[0].rawValue || '').trim();
+            if (!raw) return;
+            await postBarcode(raw);
+          }
+        } catch (_) {}
+      }, 700);
+      setStatus('Camera scanning active (auto-detect)', 'ok');
+    } else {
+      // Fallback: let user scan manually while camera is open for reference
+      setStatus('Camera open. Use manual input below to send barcode.', 'ok');
+    }
+  } catch (e) {
+    throw new Error('Camera access denied or unavailable: ' + (e.message || String(e)));
   }
-
-  detector = new BarcodeDetector({ formats: ['code_128','ean_13','ean_8','upc_a','upc_e','qr_code'] });
-  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-  videoEl.srcObject = stream;
-
-  timer = setInterval(async () => {
-    try {
-      const barcodes = await detector.detect(videoEl);
-      if (barcodes && barcodes.length > 0) {
-        const raw = (barcodes[0].rawValue || '').trim();
-        if (!raw) return;
-        await postBarcode(raw);
-      }
-    } catch (_) {}
-  }, 700);
-
-  setStatus('Camera scanning started', 'ok');
 }
 
 document.getElementById('start').addEventListener('click', async () => {
