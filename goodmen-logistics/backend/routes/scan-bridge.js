@@ -5,6 +5,7 @@ const authMiddleware = require('../middleware/auth-middleware');
 
 const SESSION_TTL_MS = 1000 * 60 * 30;
 const sessions = new Map();
+const sessionIdByWriteToken = new Map();
 
 function randToken() {
   return crypto.randomBytes(16).toString('hex');
@@ -14,30 +15,44 @@ function now() {
   return Date.now();
 }
 
+function closeSession(id, session) {
+  try {
+    for (const client of session.clients) {
+      client.end();
+    }
+  } catch (_) {}
+  sessions.delete(id);
+  if (session?.writeToken) {
+    sessionIdByWriteToken.delete(session.writeToken);
+  }
+}
+
 function getSession(id) {
   const session = sessions.get(id);
   if (!session) return null;
-  if (now() - session.createdAt > SESSION_TTL_MS) {
-    try {
-      for (const client of session.clients) {
-        client.end();
-      }
-    } catch (_) {}
-    sessions.delete(id);
+  if (now() - (session.lastSeenAt || session.createdAt) > SESSION_TTL_MS) {
+    closeSession(id, session);
     return null;
   }
+  session.lastSeenAt = now();
   return session;
+}
+
+function getSessionForWrite(writeToken, idHint) {
+  if (idHint) {
+    const byId = getSession(idHint);
+    if (byId) return byId;
+  }
+
+  const sid = sessionIdByWriteToken.get(writeToken || '');
+  if (!sid) return null;
+  return getSession(sid);
 }
 
 setInterval(() => {
   for (const [id, session] of sessions.entries()) {
-    if (now() - session.createdAt > SESSION_TTL_MS) {
-      try {
-        for (const client of session.clients) {
-          client.end();
-        }
-      } catch (_) {}
-      sessions.delete(id);
+    if (now() - (session.lastSeenAt || session.createdAt) > SESSION_TTL_MS) {
+      closeSession(id, session);
     }
   }
 }, 60_000).unref();
@@ -52,10 +67,12 @@ router.post('/session', authMiddleware, (req, res) => {
     writeToken,
     readToken,
     createdAt: now(),
+    lastSeenAt: now(),
     clients: new Set()
   };
 
   sessions.set(id, session);
+  sessionIdByWriteToken.set(writeToken, id);
 
   const origin = `${req.protocol}://${req.get('host')}`;
   const mobileUrl = `${origin}/api/scan-bridge/mobile?session=${encodeURIComponent(id)}&writeToken=${encodeURIComponent(writeToken)}`;
@@ -100,10 +117,15 @@ router.get('/session/:id/events', (req, res) => {
 });
 
 router.post('/session/:id/scan', (req, res) => {
-  const session = getSession(req.params.id);
-  if (!session) return res.status(404).json({ error: 'Session not found' });
-
   const writeToken = req.body?.writeToken || req.query.writeToken;
+  const session = getSessionForWrite(writeToken, req.params.id);
+  if (!session) {
+    return res.status(404).json({
+      error: 'Session not found',
+      hint: 'Session expired or invalid. Create a new phone bridge session from desktop and scan the new QR code.'
+    });
+  }
+
   if ((writeToken || '') !== session.writeToken) {
     return res.status(403).json({ error: 'Invalid write token' });
   }
