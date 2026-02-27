@@ -206,6 +206,11 @@ router.get('/mobile', (req, res) => {
   </div>
 
   <div id="status"></div>
+  
+  <div style="margin-top: 20px; padding: 12px; background: #f0f0f0; border-radius: 4px; border: 1px solid #999; font-size: 12px; font-family: monospace; max-height: 200px; overflow-y: auto;">
+    <strong>Debug Log:</strong>
+    <div id="debug-log" style="margin-top: 8px; line-height: 1.4; color: #333;"></div>
+  </div>
 
 <script>
 const sessionId = ${JSON.stringify(sessionId)};
@@ -213,132 +218,202 @@ const writeToken = ${JSON.stringify(writeToken)};
 let detector = null;
 let stream = null;
 let timer = null;
-let statusEl = null;
-let videoEl = null;
+let logLines = [];
+
+function addLog(msg, type = 'info') {
+  const timestamp = new Date().toLocaleTimeString();
+  const line = timestamp + ' [' + type.toUpperCase() + '] ' + msg;
+  logLines.push(line);
+  
+  // Keep only last 50 lines
+  if (logLines.length > 50) {
+    logLines.shift();
+  }
+  
+  const debugLog = document.getElementById('debug-log');
+  if (debugLog) {
+    debugLog.textContent = logLines.join('\n');
+    // Auto-scroll to bottom
+    debugLog.parentElement.scrollTop = debugLog.parentElement.scrollHeight;
+  }
+  
+  console.log('[' + type + ']', msg);
+}
+
+addLog('Script loaded, sessionId: ' + sessionId.substring(0, 8) + '...');
 
 function setStatus(msg, cls) {
+  const statusEl = document.getElementById('status');
   if (statusEl) {
     statusEl.className = cls || '';
     statusEl.textContent = msg;
   }
+  addLog(msg, cls || 'status');
 }
 
 async function postBarcode(barcode) {
-  const res = await fetch('/api/scan-bridge/session/' + encodeURIComponent(sessionId) + '/scan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ writeToken, barcode })
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Failed to send barcode');
-  setStatus('Sent: ' + barcode, 'ok');
+  addLog('📤 Sending barcode: ' + barcode, 'info');
+  try {
+    const url = '/api/scan-bridge/session/' + encodeURIComponent(sessionId) + '/scan';
+    const payload = { writeToken, barcode };
+    
+    addLog('POST to: ' + url, 'debug');
+    
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    addLog('Response status: ' + res.status, 'debug');
+    const data = await res.json().catch(err => {
+      addLog('JSON parse error: ' + err.message, 'error');
+      return {};
+    });
+    
+    if (!res.ok) {
+      const errMsg = data.error || 'Failed to send barcode (status ' + res.status + ')';
+      throw new Error(errMsg);
+    }
+    setStatus('✅ Barcode sent successfully: ' + barcode, 'ok');
+    return true;
+  } catch (e) {
+    const errMsg = e.message || String(e);
+    addLog('Send error: ' + errMsg, 'error');
+    setStatus('❌ Error: ' + errMsg, 'err');
+    throw e;
+  }
 }
 
 async function startScan() {
   try {
-    // Always request camera access first
+    addLog('📷 Start camera button pressed', 'info');
+    setStatus('Requesting camera access...', 'ok');
+    
     stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: 'environment', focusMode: 'continuous' } 
+      video: { facingMode: 'environment' } 
     });
+    addLog('✅ Camera stream obtained', 'success');
+    
+    const videoEl = document.getElementById('video');
+    if (!videoEl) {
+      throw new Error('Video element not found');
+    }
     videoEl.srcObject = stream;
     
     let hasDetector = false;
-    let supportedFormats = [];
-
-    // If BarcodeDetector is available, try to use it
     if ('BarcodeDetector' in window) {
       try {
-        // Check which formats are actually supported on this device
-        supportedFormats = await BarcodeDetector.getSupportedFormats();
+        const supportedFormats = await BarcodeDetector.getSupportedFormats();
+        addLog('BarcodeDetector supported formats: ' + supportedFormats.join(', '), 'debug');
         hasDetector = supportedFormats && supportedFormats.length > 0;
-      } catch (e) {
-        hasDetector = false;
-      }
-      
-      if (hasDetector) {
-        detector = new BarcodeDetector({ formats: supportedFormats });
-        timer = setInterval(async () => {
-          try {
-            const barcodes = await detector.detect(videoEl);
-            if (barcodes && barcodes.length > 0) {
-              const raw = (barcodes[0].rawValue || '').trim();
-              if (!raw) return;
-              await postBarcode(raw);
+        
+        if (hasDetector) {
+          detector = new BarcodeDetector({ formats: supportedFormats });
+          timer = setInterval(async () => {
+            try {
+              const barcodes = await detector.detect(videoEl);
+              if (barcodes && barcodes.length > 0) {
+                const raw = (barcodes[0].rawValue || '').trim();
+                if (raw) {
+                  addLog('🔍 Barcode auto-detected: ' + raw, 'success');
+                  await postBarcode(raw);
+                }
+              }
+            } catch (err) {
+              addLog('Detection error: ' + err.message, 'debug');
             }
-          } catch (_) {}
-        }, 700);
-        setStatus('✓ Camera scanning active (auto-detect). Formats: ' + supportedFormats.join(', '), 'ok');
+          }, 700);
+          setStatus('✓ Camera active (auto-detect enabled)', 'ok');
+        }
+      } catch (e) {
+        addLog('BarcodeDetector not available: ' + e.message, 'debug');
       }
+    } else {
+      addLog('⚠️ BarcodeDetector API not supported on this device', 'info');
     }
     
     if (!hasDetector) {
-      // Fallback: camera open, manual input primary
-      setStatus('📷 Camera ready. Type barcode number below or try manual input (iOS doesn\'t support auto-detect)', 'ok');
-      // Auto-focus the manual input field on iOS
-      setTimeout(() => document.getElementById('manual').focus(), 500);
+      setStatus('📷 Camera ready. Type barcode below.', 'ok');
+      addLog('Use manual input to send barcodes', 'info');
     }
   } catch (e) {
-    throw new Error('Camera access denied or unavailable: ' + (e.message || String(e)));
+    const errMsg = e.message || String(e);
+    addLog('Camera error: ' + errMsg, 'error');
+    setStatus('Camera error: ' + errMsg, 'err');
   }
 }
 
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeButtons);
-} else {
-  initializeButtons();
-}
-
-function initializeButtons() {
-  statusEl = document.getElementById('status');
-  videoEl = document.getElementById('video');
+function setupButtons() {
+  addLog('Setting up button listeners...', 'info');
   
   const sendBtn = document.getElementById('sendManual');
   const startBtn = document.getElementById('start');
   const manualInput = document.getElementById('manual');
   
+  addLog('Elements found - send: ' + !!sendBtn + ', start: ' + !!startBtn + ', input: ' + !!manualInput, 'debug');
+  
   if (sendBtn) {
-    sendBtn.addEventListener('click', async (e) => {
+    sendBtn.addEventListener('click', function(e) {
+      addLog('🖱️ Send button clicked', 'info');
       e.preventDefault();
-      try {
-        const v = manualInput.value.trim();
-        if (!v) {
-          setStatus('Please enter a barcode number', 'err');
-          return;
-        }
-        await postBarcode(v);
+      e.stopPropagation();
+      
+      const v = manualInput.value.trim();
+      addLog('Input value: "' + v + '"', 'debug');
+      
+      if (!v) {
+        setStatus('Please enter a barcode', 'err');
+        addLog('Input was empty', 'warn');
+        return;
+      }
+      
+      postBarcode(v).then(() => {
         manualInput.value = '';
         manualInput.focus();
-      } catch (e) {
-        setStatus(e.message || String(e), 'err');
-      }
+      }).catch(err => {
+        addLog('Send error: ' + (err.message || String(err)), 'error');
+      });
     });
+    addLog('✅ Send button listener attached', 'success');
   }
   
   if (manualInput) {
-    manualInput.addEventListener('keyup', async (e) => {
+    manualInput.addEventListener('keypress', function(e) {
       if (e.key === 'Enter') {
+        addLog('⌨️ Enter key pressed in input', 'info');
+        e.preventDefault();
         const sendBtn = document.getElementById('sendManual');
         if (sendBtn) sendBtn.click();
       }
     });
+    addLog('✅ Input listener attached', 'success');
   }
   
   if (startBtn) {
-    startBtn.addEventListener('click', async (e) => {
+    startBtn.addEventListener('click', function(e) {
+      addLog('🖱️ Start camera button clicked', 'info');
       e.preventDefault();
-      try {
-        await startScan();
-      } catch (e) {
-        setStatus(e.message || String(e), 'err');
-      }
+      e.stopPropagation();
+      startScan();
     });
+    addLog('✅ Start button listener attached', 'success');
   }
   
   window.addEventListener('beforeunload', () => {
     if (timer) clearInterval(timer);
     if (stream) stream.getTracks().forEach(t => t.stop());
   });
+  
+  addLog('✅ All listeners setup complete. Ready!', 'success');
+  setStatus('Ready! Type a barcode or tap camera.', 'ok');
+}
+
+addLog('Checking DOM ready state: ' + document.readyState, 'debug');
+document.addEventListener('DOMContentLoaded', setupButtons);
+if (document.readyState !== 'loading') {
+  addLog('DOM already loaded, running setup immediately', 'debug');
+  setupButtons();
 }
 </script>
 </body>
