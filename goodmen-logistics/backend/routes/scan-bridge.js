@@ -138,307 +138,172 @@ router.get('/mobile', (req, res) => {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Scan Bridge</title>
+  <title>Phone Scanner Bridge</title>
+  <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
   <style>
-    body { 
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
-      padding: 16px; 
-      max-width: 100%;
-      background: #f5f5f5;
-    }
-    h3 { margin: 0 0 16px 0; color: #333; }
-    .code-display { 
-      background: #f0f0f0; 
-      padding: 8px 12px; 
-      font-family: monospace; 
-      font-size: 12px; 
-      border-radius: 4px; 
-      word-break: break-all;
-    }
-    input, button { 
-      font-size: 16px; 
-      padding: 12px; 
-      width: 100%; 
-      box-sizing: border-box;
-      margin-top: 8px; 
-      border: 1px solid #ddd;
-      border-radius: 4px;
-    }
-    button {
-      background: #0066cc;
-      color: white;
-      border: none;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    button:active { background: #0052a3; }
-    video { 
-      width: 100%; 
-      max-height: 60vh; 
-      background: #000; 
-      margin-top: 10px;
-      border-radius: 4px;
-      display: block;
-    }
-    .ok { color: #0a7d2b; margin-top: 8px; font-weight: 500; }
-    .err { color: #b42318; margin-top: 8px; font-weight: 500; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; background: #f5f5f5; }
     .row { margin-bottom: 12px; }
-    label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 14px; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:#ececec; padding:8px; border-radius:4px; }
+    #scanner { width:100%; min-height:260px; background:#000; border-radius:6px; overflow:hidden; }
+    input, button { width:100%; padding:12px; margin-top:8px; font-size:16px; box-sizing:border-box; }
+    button { border:0; border-radius:6px; background:#1565c0; color:#fff; font-weight:600; }
+    #status.ok { color:#0a7d2b; }
+    #status.err { color:#b42318; }
+    #log { margin-top:10px; padding:8px; background:#efefef; border:1px solid #ccc; min-height:70px; max-height:180px; overflow:auto; font:12px ui-monospace, SFMono-Regular, Menlo, monospace; }
   </style>
 </head>
 <body>
-  <h3>📱 Phone Scanner Bridge</h3>
-  
-  <div class="row">
-    <strong>Session:</strong><br />
-    <div class="code-display">${sessionId}</div>
-  </div>
+  <h3>Phone Scanner Bridge</h3>
+  <div class="row"><strong>Session</strong><div class="code">${sessionId}</div></div>
 
-  <button id="start">📷 Start Camera (optional)</button>
-  
-  <video id="video" playsinline autoplay muted></video>
+  <button id="startBtn" type="button">Start Camera</button>
+  <div id="scanner"></div>
 
   <div class="row">
-    <label><strong>📝 Enter Barcode Number</strong></label>
-    <p style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Type the numbers shown under the barcode (e.g., for SKU: TRK-001, use that as your barcode)</p>
-    <input id="manual" placeholder="e.g., TRK-001" autocomplete="off" />
-    <button id="sendManual">✓ Send Barcode</button>
+    <label for="manualInput"><strong>Manual barcode</strong></label>
+    <input id="manualInput" placeholder="e.g. TRK-001" autocomplete="off" />
+    <button id="sendBtn" type="button">Send Barcode</button>
   </div>
 
   <div id="status"></div>
-  
-  <div style="margin-top: 20px; padding: 12px; background: #f0f0f0; border-radius: 4px; border: 1px solid #999; font-size: 12px; font-family: monospace; max-height: 200px; overflow-y: auto;">
-    <strong>Debug Log:</strong>
-    <div id="debug-log" style="margin-top: 8px; line-height: 1.4; color: #333;"></div>
-  </div>
+  <div id="log"></div>
 
-<script>
-const sessionId = ${JSON.stringify(sessionId)};
-const writeToken = ${JSON.stringify(writeToken)};
-let detector = null;
-let stream = null;
-let timer = null;
-let logLines = [];
+  <script>
+    (function () {
+      var SESSION_ID = ${JSON.stringify(sessionId)};
+      var WRITE_TOKEN = ${JSON.stringify(writeToken)};
+      var quaggaRunning = false;
+      var onDetectedHandler = null;
 
-// Don't try to log until DOM is ready
-function addLog(msg, type = 'info') {
-  const timestamp = new Date().toLocaleTimeString();
-  const line = timestamp + ' [' + type.toUpperCase() + '] ' + msg;
-  logLines.push(line);
-  
-  // Keep only last 50 lines
-  if (logLines.length > 50) {
-    logLines.shift();
-  }
-  
-  // Find the debug log element - it might not exist yet
-  const debugLog = document.getElementById('debug-log');
-  if (debugLog) {
-    debugLog.textContent = logLines.join('\n');
-    // Auto-scroll to bottom
-    try {
-      debugLog.parentElement.scrollTop = debugLog.parentElement.scrollHeight;
-    } catch (_) {}
-  }
-  
-  console.log('[' + type + ']', msg);
-}
+      var startBtn = document.getElementById('startBtn');
+      var sendBtn = document.getElementById('sendBtn');
+      var manualInput = document.getElementById('manualInput');
+      var statusEl = document.getElementById('status');
+      var logEl = document.getElementById('log');
 
-function setStatus(msg, cls) {
-  const statusEl = document.getElementById('status');
-  if (statusEl) {
-    statusEl.className = cls || '';
-    statusEl.textContent = msg;
-  }
-  addLog(msg, cls || 'status');
-}
+      function log(msg) {
+        if (!logEl) return;
+        var row = document.createElement('div');
+        row.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+        logEl.appendChild(row);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
 
-async function postBarcode(barcode) {
-  addLog('📤 Sending barcode: ' + barcode, 'info');
-  try {
-    const url = '/api/scan-bridge/session/' + encodeURIComponent(sessionId) + '/scan';
-    const payload = { writeToken, barcode };
-    
-    addLog('POST to: ' + url, 'debug');
-    
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    
-    addLog('Response status: ' + res.status, 'debug');
-    const data = await res.json().catch(err => {
-      addLog('JSON parse error: ' + err.message, 'error');
-      return {};
-    });
-    
-    if (!res.ok) {
-      const errMsg = data.error || 'Failed to send barcode (status ' + res.status + ')';
-      throw new Error(errMsg);
-    }
-    setStatus('✅ Barcode sent successfully: ' + barcode, 'ok');
-    return true;
-  } catch (e) {
-    const errMsg = e.message || String(e);
-    addLog('Send error: ' + errMsg, 'error');
-    setStatus('❌ Error: ' + errMsg, 'err');
-    throw e;
-  }
-}
+      function setStatus(msg, cls) {
+        if (!statusEl) return;
+        statusEl.className = cls || '';
+        statusEl.textContent = msg;
+      }
 
-async function startScan() {
-  try {
-    addLog('📷 Start camera button pressed', 'info');
-    setStatus('Requesting camera access...', 'ok');
-    
-    stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: 'environment' } 
-    });
-    addLog('✅ Camera stream obtained', 'success');
-    
-    const videoEl = document.getElementById('video');
-    if (!videoEl) {
-      throw new Error('Video element not found');
-    }
-    videoEl.srcObject = stream;
-    
-    let hasDetector = false;
-    if ('BarcodeDetector' in window) {
-      try {
-        const supportedFormats = await BarcodeDetector.getSupportedFormats();
-        addLog('BarcodeDetector supported formats: ' + supportedFormats.join(', '), 'debug');
-        hasDetector = supportedFormats && supportedFormats.length > 0;
-        
-        if (hasDetector) {
-          detector = new BarcodeDetector({ formats: supportedFormats });
-          timer = setInterval(async () => {
-            try {
-              const barcodes = await detector.detect(videoEl);
-              if (barcodes && barcodes.length > 0) {
-                const raw = (barcodes[0].rawValue || '').trim();
-                if (raw) {
-                  addLog('🔍 Barcode auto-detected: ' + raw, 'success');
-                  await postBarcode(raw);
-                }
-              }
-            } catch (err) {
-              addLog('Detection error: ' + err.message, 'debug');
-            }
-          }, 700);
-          setStatus('✓ Camera active (auto-detect enabled)', 'ok');
+      function postBarcode(barcode) {
+        var value = (barcode || '').trim();
+        if (!value) {
+          setStatus('Barcode is empty', 'err');
+          return;
         }
-      } catch (e) {
-        addLog('BarcodeDetector not available: ' + e.message, 'debug');
-      }
-    } else {
-      addLog('⚠️ BarcodeDetector API not supported on this device', 'info');
-    }
-    
-    if (!hasDetector) {
-      setStatus('📷 Camera ready. Type barcode below.', 'ok');
-      addLog('Use manual input to send barcodes', 'info');
-    }
-  } catch (e) {
-    const errMsg = e.message || String(e);
-    addLog('Camera error: ' + errMsg, 'error');
-    setStatus('Camera error: ' + errMsg, 'err');
-  }
-}
 
-function setupButtons() {
-  addLog('Setting up button listeners...', 'info');
-  
-  const sendBtn = document.getElementById('sendManual');
-  const startBtn = document.getElementById('start');
-  const manualInput = document.getElementById('manual');
-  const debugLog = document.getElementById('debug-log');
-  
-  addLog('Elements found - send: ' + !!sendBtn + ', start: ' + !!startBtn + ', input: ' + !!manualInput + ', debug: ' + !!debugLog, 'debug');
-  
-  if (sendBtn) {
-    sendBtn.addEventListener('click', function(e) {
-      addLog('🖱️ Send button clicked', 'info');
-      e.preventDefault();
-      e.stopPropagation();
-      
-      const v = manualInput.value.trim();
-      addLog('Input value: "' + v + '"', 'debug');
-      
-      if (!v) {
-        setStatus('Please enter a barcode', 'err');
-        addLog('Input was empty', 'warn');
-        return;
+        log('Sending: ' + value);
+        fetch('/api/scan-bridge/session/' + encodeURIComponent(SESSION_ID) + '/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ writeToken: WRITE_TOKEN, barcode: value })
+        })
+          .then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (body) { return { ok: r.ok, status: r.status, body: body }; });
+          })
+          .then(function (result) {
+            if (!result.ok) {
+              var err = (result.body && result.body.error) ? result.body.error : ('HTTP ' + result.status);
+              throw new Error(err);
+            }
+            setStatus('Sent: ' + value, 'ok');
+            log('Sent OK');
+            manualInput.value = '';
+          })
+          .catch(function (e) {
+            setStatus('Send failed: ' + e.message, 'err');
+            log('Send failed: ' + e.message);
+          });
       }
-      
-      postBarcode(v).then(() => {
-        manualInput.value = '';
-        manualInput.focus();
-      }).catch(err => {
-        addLog('Send error: ' + (err.message || String(err)), 'error');
-      });
-    });
-    addLog('✅ Send button listener attached', 'success');
-  } else {
-    addLog('❌ Send button NOT FOUND', 'error');
-  }
-  
-  if (manualInput) {
-    manualInput.addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        addLog('⌨️ Enter key pressed in input', 'info');
+
+      function startCamera() {
+        if (typeof Quagga === 'undefined') {
+          setStatus('Scanner library not loaded; use manual input.', 'err');
+          log('Quagga not loaded');
+          return;
+        }
+
+        if (quaggaRunning) {
+          setStatus('Camera already running', 'ok');
+          return;
+        }
+
+        setStatus('Starting camera...', 'ok');
+        log('Initializing camera');
+
+        Quagga.init({
+          inputStream: {
+            name: 'Live',
+            type: 'LiveStream',
+            target: document.getElementById('scanner'),
+            constraints: { facingMode: 'environment' }
+          },
+          decoder: {
+            readers: ['code_128_reader', 'ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader', 'code_39_reader']
+          },
+          locate: true
+        }, function (err) {
+          if (err) {
+            setStatus('Camera failed: ' + err.message, 'err');
+            log('Camera failed: ' + err.message);
+            return;
+          }
+
+          onDetectedHandler = function (result) {
+            var code = result && result.codeResult && result.codeResult.code ? result.codeResult.code.trim() : '';
+            if (!code) return;
+            log('Detected: ' + code);
+            postBarcode(code);
+          };
+
+          Quagga.onDetected(onDetectedHandler);
+          Quagga.start();
+          quaggaRunning = true;
+          setStatus('Camera started. Point at barcode.', 'ok');
+          log('Camera started');
+        });
+      }
+
+      startBtn.addEventListener('click', function (e) {
         e.preventDefault();
-        const sendBtn = document.getElementById('sendManual');
-        if (sendBtn) sendBtn.click();
-      }
-    });
-    addLog('✅ Input listener attached', 'success');
-  } else {
-    addLog('❌ Input NOT FOUND', 'error');
-  }
-  
-  if (startBtn) {
-    startBtn.addEventListener('click', function(e) {
-      addLog('🖱️ Start camera button clicked', 'info');
-      e.preventDefault();
-      e.stopPropagation();
-      startScan();
-    });
-    addLog('✅ Start button listener attached', 'success');
-  } else {
-    addLog('❌ Start button NOT FOUND', 'error');
-  }
-  
-  window.addEventListener('beforeunload', () => {
-    if (timer) clearInterval(timer);
-    if (stream) stream.getTracks().forEach(t => t.stop());
-  });
-  
-  addLog('✅ All listeners setup complete. Ready!', 'success');
-  setStatus('Ready! Type a barcode or tap camera.', 'ok');
-}
+        startCamera();
+      });
 
-// Wait for DOM to be fully ready before setting up
-function initializeWhenReady() {
-  // Give the DOM a moment to fully render
-  setTimeout(() => {
-    try {
-      addLog('Script initialized!', 'success');
-      setupButtons();
-    } catch (err) {
-      console.error('Initialization error:', err);
-      alert('Error: ' + err.message);
-    }
-  }, 100);
-}
+      sendBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        postBarcode(manualInput.value);
+      });
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeWhenReady);
-} else {
-  initializeWhenReady();
-}
-</script>
-</script>
+      manualInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          postBarcode(manualInput.value);
+        }
+      });
+
+      window.addEventListener('beforeunload', function () {
+        try {
+          if (quaggaRunning) {
+            if (onDetectedHandler) Quagga.offDetected(onDetectedHandler);
+            Quagga.stop();
+          }
+        } catch (_) {}
+      });
+
+      log('Ready');
+      setStatus('Ready. Tap Start Camera or use manual input.', 'ok');
+    })();
+  </script>
 </body>
 </html>`;
 
