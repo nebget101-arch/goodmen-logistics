@@ -74,6 +74,7 @@ CREATE TABLE vehicles (
     year INTEGER NOT NULL,
     license_plate VARCHAR(20),
     state VARCHAR(2),
+    vehicle_type VARCHAR(20) DEFAULT 'truck',
     status VARCHAR(20) DEFAULT 'in-service',
     mileage INTEGER DEFAULT 0,
     inspection_expiry DATE,

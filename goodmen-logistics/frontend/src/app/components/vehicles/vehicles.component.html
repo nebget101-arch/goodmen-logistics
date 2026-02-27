@@ -3,14 +3,14 @@
     <!-- Card Header -->
     <div class="card-header">
       <h2 class="card-title" id="vehicles-title">
-        <span aria-label="truck" role="img">🚛</span> Vehicle Fleet Management
+        <span aria-label="truck" role="img">🚛</span> {{ pageTitle }} Management
       </h2>
       <button 
         class="btn btn-primary" 
         (click)="openAddVehicleForm()"
         aria-label="Add new vehicle"
         type="button">
-        + Add Vehicle
+        + {{ addLabel }}
       </button>
     </div>
 
@@ -126,9 +126,9 @@
     <!-- Empty State -->
     <div *ngIf="!loading && !error && filteredVehicles.length === 0" class="empty-state">
       <div class="empty-icon" aria-hidden="true">🚛</div>
-      <h3 class="empty-title">{{ hasActiveFilters ? 'No Vehicles Match Your Search' : 'No Vehicles Found' }}</h3>
+      <h3 class="empty-title">{{ hasActiveFilters ? 'No ' + pageTitle + ' Match Your Search' : 'No ' + pageTitle + ' Found' }}</h3>
       <p class="empty-message">
-        {{ hasActiveFilters ? 'Try adjusting your search or filter criteria.' : 'Your vehicle fleet is empty. Add your first vehicle to get started.' }}
+        {{ hasActiveFilters ? 'Try adjusting your search or filter criteria.' : 'Your ' + emptyLabel + ' list is empty. Add your first one to get started.' }}
       </p>
       <button 
         *ngIf="hasActiveFilters"
@@ -143,7 +143,7 @@
         class="btn btn-primary" 
         type="button"
         aria-label="Add your first vehicle">
-        + Add Your First Vehicle
+        + Add Your First {{ singularLabel }}
       </button>
     </div>
 
@@ -293,6 +293,7 @@
 <app-vehicle-form
   [isOpen]="showVehicleForm"
   [vehicle]="selectedVehicle"
+  [vehicleType]="vehicleType"
   (close)="closeVehicleForm()"
   (save)="onVehicleSaved($event)">
 </app-vehicle-form>

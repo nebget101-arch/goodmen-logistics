@@ -18,6 +18,7 @@ interface VehicleFormData {
   insurance_expiry: string;
   registration_expiry: string;
   oos_reason?: string;
+  vehicle_type?: 'truck' | 'trailer';
 }
 
 interface Document {
@@ -38,6 +39,7 @@ interface Document {
 export class VehicleFormComponent implements OnInit, OnChanges {
   @Input() vehicle: any = null;
   @Input() isOpen = false;
+  @Input() vehicleType: 'truck' | 'trailer' = 'truck';
   @Output() close = new EventEmitter<void>();
   @Output() save = new EventEmitter<any>();
 
@@ -59,7 +61,8 @@ export class VehicleFormComponent implements OnInit, OnChanges {
     next_pm_mileage: 0,
     insurance_expiry: '',
     registration_expiry: '',
-    oos_reason: ''
+    oos_reason: '',
+    vehicle_type: 'truck'
   };
 
   documents: Document[] = [];
@@ -105,6 +108,9 @@ export class VehicleFormComponent implements OnInit, OnChanges {
     if (this.vehicle) {
       this.isEditMode = true;
       this.formData = { ...this.vehicle };
+      if (!this.formData.vehicle_type) {
+        this.formData.vehicle_type = this.vehicleType;
+      }
     } else {
       this.isEditMode = false;
       this.formData = {
@@ -122,7 +128,8 @@ export class VehicleFormComponent implements OnInit, OnChanges {
         next_pm_mileage: 0,
         insurance_expiry: '',
         registration_expiry: '',
-        oos_reason: ''
+        oos_reason: '',
+        vehicle_type: this.vehicleType
       };
     }
   }
@@ -131,8 +138,13 @@ export class VehicleFormComponent implements OnInit, OnChanges {
     if (this.formData.vin && this.formData.vin.length >= 4) {
       const last4 = this.formData.vin.slice(-4);
       const nextNumber = this.getNextUnitNumber();
-      this.formData.unit_number = `TRK-${nextNumber}`;
+      const prefix = (this.formData.vehicle_type || this.vehicleType) === 'trailer' ? 'TRL' : 'TRK';
+      this.formData.unit_number = `${prefix}-${nextNumber}`;
     }
+  }
+
+  get formTitle(): string {
+    return (this.formData.vehicle_type || this.vehicleType) === 'trailer' ? 'Trailer' : 'Truck';
   }
 
   getNextUnitNumber(): string {

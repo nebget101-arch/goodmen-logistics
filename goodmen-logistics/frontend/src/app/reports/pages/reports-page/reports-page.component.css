@@ -1,0 +1,19 @@
+.reports-page .header {
+  margin-bottom: 12px;
+}
+
+.nav-tabs {
+  margin-bottom: 16px;
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+.tab-pane.admin-visible {
+  display: block;
+}

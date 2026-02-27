@@ -1,0 +1,39 @@
+<div class="report-table">
+  <div class="table-header" *ngIf="title">
+    <h4>{{ title }}</h4>
+    <button class="btn btn-secondary" type="button" (click)="exportCsv()">Export CSV</button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th *ngFor="let col of columns" style="cursor:pointer;">
+            <button type="button" class="btn btn-link" style="text-decoration:none; color:inherit; padding:0;" (click)="sortBy(col.key)">
+              {{ col.label }}
+              <span *ngIf="sortKey === col.key">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+            </button>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of pagedRows">
+          <td *ngFor="let col of columns">
+            {{ col.format ? col.format(row[col.key]) : row[col.key] }}
+          </td>
+        </tr>
+        <tr *ngIf="!pagedRows || pagedRows.length === 0">
+          <td [attr.colspan]="columns?.length || 1" class="text-center text-muted" style="padding: 16px;">
+            No data for the selected filters.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination" *ngIf="totalPages > 1">
+    <button class="btn btn-outline-secondary" type="button" (click)="prevPage()">Prev</button>
+    <span>Page {{ page }} / {{ totalPages }}</span>
+    <button class="btn btn-outline-secondary" type="button" (click)="nextPage()">Next</button>
+  </div>
+</div>

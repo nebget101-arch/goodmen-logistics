@@ -1,0 +1,141 @@
+<div class="reports-page">
+  <div class="header">
+    <h2>Reports & Analytics</h2>
+  </div>
+
+  <div *ngIf="isLoading" class="alert alert-info" style="margin: 15px 0;">
+    <span class="spinner-border spinner-border-sm" style="margin-right: 10px;"></span>
+    {{ loadingMessage || 'Loading data...' }}
+  </div>
+
+  <app-report-filters
+    [filters]="filters"
+    [locations]="locations"
+    (apply)="applyFilters($event)"
+    (clear)="clearFilters()">
+  </app-report-filters>
+
+  <ul class="nav nav-tabs">
+    <li class="nav-item" *ngFor="let tab of tabs">
+      <a class="nav-link" [class.active]="activeTab === tab.key" (click)="setTab(tab.key)" *ngIf="canSeeTab(tab.key)">
+        {{ tab.label }}
+      </a>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <div class="tab-pane" [class.active]="activeTab === 'dashboard' || showAllTabs" [class.admin-visible]="showAllTabs" *ngIf="canSeeTab('dashboard')">
+      <app-kpi-cards [kpis]="dashboardKpis"></app-kpi-cards>
+
+      <div class="row">
+        <div class="col">
+          <app-report-chart
+            title="Revenue Trend"
+            [type]="'line'"
+            [labels]="revenueTrendLabels"
+            [data]="revenueTrendData">
+          </app-report-chart>
+        </div>
+        <div class="col">
+          <app-report-chart
+            title="WOs by Type"
+            [type]="'bar'"
+            [labels]="workOrderTypeLabels"
+            [data]="workOrderTypeData">
+          </app-report-chart>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane" [class.active]="activeTab === 'financial' || showAllTabs" [class.admin-visible]="showAllTabs" *ngIf="canSeeTab('financial')">
+      <app-kpi-cards [kpis]="financialKpis"></app-kpi-cards>
+
+      <app-report-table
+        title="Revenue by Location"
+        [rows]="revenueByLocation"
+        [columns]="financialRevenueColumns"
+        [exportFileName]="'financial-revenue-by-location.csv'">
+      </app-report-table>
+    </div>
+
+    <div class="tab-pane" [class.active]="activeTab === 'workOrders' || showAllTabs" [class.admin-visible]="showAllTabs" *ngIf="canSeeTab('workOrders')">
+      <app-kpi-cards [kpis]="workOrderKpis"></app-kpi-cards>
+
+      <app-report-table
+        title="Work Orders by Status"
+        [rows]="workOrderStatus"
+        [columns]="workOrderStatusColumns"
+        [exportFileName]="'work-orders-by-status.csv'">
+      </app-report-table>
+    </div>
+
+    <div class="tab-pane" [class.active]="activeTab === 'inventory' || showAllTabs" [class.admin-visible]="showAllTabs" *ngIf="canSeeTab('inventory')">
+      <app-report-table
+        title="Inventory Status"
+        [rows]="inventoryStatusRows"
+        [columns]="inventoryStatusColumns"
+        [exportFileName]="'inventory-status.csv'">
+      </app-report-table>
+
+      <app-report-table
+        title="Low Stock"
+        [rows]="lowStockRows"
+        [columns]="lowStockColumns"
+        [exportFileName]="'inventory-low-stock.csv'">
+      </app-report-table>
+
+      <app-report-table
+        title="Inventory Valuation"
+        [rows]="inventoryValuationRows"
+        [columns]="inventoryValuationColumns"
+        [exportFileName]="'inventory-valuation.csv'">
+      </app-report-table>
+    </div>
+
+    <div class="tab-pane" [class.active]="activeTab === 'vehicles' || showAllTabs" [class.admin-visible]="showAllTabs" *ngIf="canSeeTab('vehicles')">
+      <app-report-table
+        title="Vehicle Summary"
+        [rows]="vehicleSummaryRows"
+        [columns]="vehicleSummaryColumns"
+        [exportFileName]="'vehicles-summary.csv'">
+      </app-report-table>
+
+      <app-report-table
+        title="Vehicle Status"
+        [rows]="vehicleStatusRows"
+        [columns]="vehicleStatusColumns"
+        [exportFileName]="'vehicles-status.csv'">
+      </app-report-table>
+
+      <app-report-table
+        title="Upcoming Maintenance"
+        [rows]="vehicleMaintenanceRows"
+        [columns]="vehicleMaintenanceColumns"
+        [exportFileName]="'vehicles-maintenance.csv'">
+      </app-report-table>
+    </div>
+
+    <div class="tab-pane" [class.active]="activeTab === 'customers' || showAllTabs" [class.admin-visible]="showAllTabs" *ngIf="canSeeTab('customers')">
+      <app-report-table
+        title="Customer Summary"
+        [rows]="customerSummaryRows"
+        [columns]="customerSummaryColumns"
+        [exportFileName]="'customers-summary.csv'">
+      </app-report-table>
+
+      <app-report-table
+        title="Customer Activity"
+        [rows]="customerActivityRows"
+        [columns]="customerActivityColumns"
+        [exportFileName]="'customers-activity.csv'">
+      </app-report-table>
+
+      <app-report-table
+        title="Customer Aging"
+        [rows]="customerAgingRows"
+        [columns]="customerAgingColumns"
+        [exportFileName]="'customers-aging.csv'">
+      </app-report-table>
+    </div>
+  </div>
+</div>

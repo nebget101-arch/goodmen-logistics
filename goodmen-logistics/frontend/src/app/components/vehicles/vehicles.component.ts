@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { debounceTime, Subject } from 'rxjs';
 
@@ -18,6 +19,8 @@ interface Vehicle {
   next_pm_mileage: number;
   oos_reason?: string;
   registration_expiry?: string;
+  vehicle_type?: string;
+  company_owned?: boolean;
 }
 
 type SortField = 'unit_number' | 'inspection_expiry';
@@ -52,9 +55,9 @@ export class VehiclesComponent implements OnInit {
 
   // Pagination state
   currentPage = 1;
-  itemsPerPage = 10;
+  itemsPerPage = 100;
   totalPages = 1;
-  pageSizeOptions = [5, 10, 25, 50];
+  pageSizeOptions = [25, 50, 100];
 
   // Modal state
   showVehicleForm = false;
@@ -62,16 +65,21 @@ export class VehiclesComponent implements OnInit {
 
   // Status filter options
   statusOptions = [
-    { value: 'all', label: 'All Vehicles' },
+    { value: 'all', label: 'All' },
     { value: 'in-service', label: 'In Service' },
     { value: 'out-of-service', label: 'Out of Service' }
   ];
 
-  constructor(private apiService: ApiService) { }
+  vehicleType: 'truck' | 'trailer' = 'truck';
+
+  constructor(private apiService: ApiService, private route: ActivatedRoute) { }
 
   ngOnInit(): void {
-    this.loadVehicles();
-    
+    this.route.data.subscribe(data => {
+      this.vehicleType = (data['vehicleType'] || 'truck') as 'truck' | 'trailer';
+      this.loadVehicles();
+    });
+
     // Debounce search input to reduce API calls
     this.searchSubject.pipe(
       debounceTime(300)
@@ -128,6 +136,10 @@ export class VehiclesComponent implements OnInit {
   applyFiltersAndSort(): void {
     let result = [...this.allVehicles];
 
+    // Filter to company-owned equipment and selected type
+    result = result.filter(vehicle => vehicle.company_owned !== false);
+    result = result.filter(vehicle => (vehicle.vehicle_type || 'truck') === this.vehicleType);
+
     // Apply search filter
     if (this.searchQuery.trim()) {
       const query = this.searchQuery.toLowerCase();
@@ -172,6 +184,22 @@ export class VehiclesComponent implements OnInit {
     this.updatePagination();
   }
 
+  get pageTitle(): string {
+    return this.vehicleType === 'trailer' ? 'Trailers' : 'Trucks';
+  }
+
+  get addLabel(): string {
+    return this.vehicleType === 'trailer' ? 'Add Trailer' : 'Add Truck';
+  }
+
+  get emptyLabel(): string {
+    return this.vehicleType === 'trailer' ? 'trailers' : 'trucks';
+  }
+
+  get singularLabel(): string {
+    return this.vehicleType === 'trailer' ? 'Trailer' : 'Truck';
+  }
+
   updatePagination(): void {
     const startIndex = (this.currentPage - 1) * this.itemsPerPage;
     const endIndex = startIndex + this.itemsPerPage;
@@ -199,7 +227,7 @@ export class VehiclesComponent implements OnInit {
     this.sortField = 'unit_number';
     this.sortOrder = 'asc';
     this.currentPage = 1;
-    this.itemsPerPage = 10;
+    this.itemsPerPage = 100;
     this.applyFiltersAndSort();
   }
 
