@@ -220,6 +220,7 @@ let stream = null;
 let timer = null;
 let logLines = [];
 
+// Don't try to log until DOM is ready
 function addLog(msg, type = 'info') {
   const timestamp = new Date().toLocaleTimeString();
   const line = timestamp + ' [' + type.toUpperCase() + '] ' + msg;
@@ -230,17 +231,18 @@ function addLog(msg, type = 'info') {
     logLines.shift();
   }
   
+  // Find the debug log element - it might not exist yet
   const debugLog = document.getElementById('debug-log');
   if (debugLog) {
     debugLog.textContent = logLines.join('\n');
     // Auto-scroll to bottom
-    debugLog.parentElement.scrollTop = debugLog.parentElement.scrollHeight;
+    try {
+      debugLog.parentElement.scrollTop = debugLog.parentElement.scrollHeight;
+    } catch (_) {}
   }
   
   console.log('[' + type + ']', msg);
 }
-
-addLog('Script loaded, sessionId: ' + sessionId.substring(0, 8) + '...');
 
 function setStatus(msg, cls) {
   const statusEl = document.getElementById('status');
@@ -350,8 +352,9 @@ function setupButtons() {
   const sendBtn = document.getElementById('sendManual');
   const startBtn = document.getElementById('start');
   const manualInput = document.getElementById('manual');
+  const debugLog = document.getElementById('debug-log');
   
-  addLog('Elements found - send: ' + !!sendBtn + ', start: ' + !!startBtn + ', input: ' + !!manualInput, 'debug');
+  addLog('Elements found - send: ' + !!sendBtn + ', start: ' + !!startBtn + ', input: ' + !!manualInput + ', debug: ' + !!debugLog, 'debug');
   
   if (sendBtn) {
     sendBtn.addEventListener('click', function(e) {
@@ -376,6 +379,8 @@ function setupButtons() {
       });
     });
     addLog('✅ Send button listener attached', 'success');
+  } else {
+    addLog('❌ Send button NOT FOUND', 'error');
   }
   
   if (manualInput) {
@@ -388,6 +393,8 @@ function setupButtons() {
       }
     });
     addLog('✅ Input listener attached', 'success');
+  } else {
+    addLog('❌ Input NOT FOUND', 'error');
   }
   
   if (startBtn) {
@@ -398,6 +405,8 @@ function setupButtons() {
       startScan();
     });
     addLog('✅ Start button listener attached', 'success');
+  } else {
+    addLog('❌ Start button NOT FOUND', 'error');
   }
   
   window.addEventListener('beforeunload', () => {
@@ -409,12 +418,26 @@ function setupButtons() {
   setStatus('Ready! Type a barcode or tap camera.', 'ok');
 }
 
-addLog('Checking DOM ready state: ' + document.readyState, 'debug');
-document.addEventListener('DOMContentLoaded', setupButtons);
-if (document.readyState !== 'loading') {
-  addLog('DOM already loaded, running setup immediately', 'debug');
-  setupButtons();
+// Wait for DOM to be fully ready before setting up
+function initializeWhenReady() {
+  // Give the DOM a moment to fully render
+  setTimeout(() => {
+    try {
+      addLog('Script initialized!', 'success');
+      setupButtons();
+    } catch (err) {
+      console.error('Initialization error:', err);
+      alert('Error: ' + err.message);
+    }
+  }, 100);
 }
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeWhenReady);
+} else {
+  initializeWhenReady();
+}
+</script>
 </script>
 </body>
 </html>`;
