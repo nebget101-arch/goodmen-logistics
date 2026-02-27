@@ -440,7 +440,7 @@
               <thead>
                 <tr>
                   <th>Part Name</th>
-                  <th>Part Number</th>
+                  <th>SKU</th>
                   <th>Quantity</th>
                   <th>Unit Cost</th>
                   <th>Total Cost</th>
@@ -479,13 +479,14 @@
                 <label>Reserve Part from Inventory</label>
                 <div style="display:flex; gap:8px; flex-wrap: wrap;">
                   <div style="position: relative; max-width: 260px;">
-                    <input type="text" class="form-control" placeholder="Search by SKU, name, or part number..." [(ngModel)]="partSearch" name="partSearch" (ngModelChange)="onPartSearchChange()" (blur)="onPartBlur()" autocomplete="off">
+                    <input type="text" class="form-control" placeholder="Search by name or SKU..." [(ngModel)]="partSearch" name="partSearch" (ngModelChange)="onPartSearchChange()" (blur)="onPartBlur()" autocomplete="off">
                     <div *ngIf="showPartDropdown && filteredParts.length > 0" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
                       <div *ngFor="let p of filteredParts" (click)="selectPart(p)" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; border-left: 3px solid; transition: background-color 0.2s;" [ngStyle]="{'border-left-color': (p.quantity_on_hand > 0) ? '#28a745' : '#dc3545', 'background-color': 'white'}" (mouseenter)="onPartHover($event, true)" (mouseleave)="onPartHover($event, false)">
-                        <strong>{{ p.sku }}</strong> - {{ p.name }}
+                        <strong>{{ p.name }}</strong>
                         <div style="font-size: 0.85em; color: #666;">
-                          {{ p.part_number }} | 
-                          <span [ngStyle]="{'color': (p.quantity_on_hand > 0) ? '#28a745' : '#dc3545', 'font-weight': '600'}">Stock: {{ p.quantity_on_hand || 0 }}</span> | 
+                          SKU: {{ p.sku }}
+                          <span *ngIf="p.part_number"> | Part #: {{ p.part_number }}</span>
+                          | <span [ngStyle]="{'color': (p.quantity_on_hand > 0) ? '#28a745' : '#dc3545', 'font-weight': '600'}">Stock: {{ p.quantity_on_hand || 0 }}</span> | 
                           Price: ${{ p.unit_price | number:'1.2-2' }}
                         </div>
                       </div>
@@ -520,8 +521,8 @@
                   <tbody>
                     <tr *ngFor="let line of workOrderParts">
                       <td>
-                        <div>{{ line.part_sku || line.part_id }}</div>
-                        <small class="text-muted" *ngIf="line.part_name">{{ line.part_name }}</small>
+                        <div>{{ line.part_name || line.part_sku || line.part_id }}</div>
+                        <small class="text-muted" *ngIf="line.part_sku && line.part_name">SKU: {{ line.part_sku }}</small>
                       </td>
                       <td>{{ line.qty_requested }}</td>
                       <td>{{ line.qty_reserved }}</td>

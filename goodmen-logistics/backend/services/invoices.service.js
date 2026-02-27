@@ -265,6 +265,94 @@ async function getInvoiceById(id) {
   const invoice = await db('invoices').where({ id, is_deleted: false }).first();
   if (!invoice) return null;
   const lineItems = await db('invoice_line_items').where({ invoice_id: id });
+
+  // Enrich PART line items with part name/SKU when possible.
+  // This prevents showing raw UUIDs like "Part <uuid>" in the UI.
+  try {
+    const unknownPartDescription = 'Part (unknown)';
+    const partItems = lineItems.filter(li => (li.line_type || '').toString().toUpperCase() === 'PART');
+
+    const byWorkOrderPartLineId = new Map();
+    const workOrderPartLineIds = partItems
+      .filter(li => li.source_ref_type === 'work_order_part' && li.source_ref_id)
+      .map(li => li.source_ref_id);
+
+    if (workOrderPartLineIds.length) {
+      const rows = await db('work_order_part_items as wopi')
+        .leftJoin('parts as p', 'wopi.part_id', 'p.id')
+        .select(
+          'wopi.id as work_order_part_line_id',
+          'wopi.part_id as part_id',
+          'p.name as part_name',
+          'p.sku as part_sku'
+        )
+        .whereIn('wopi.id', workOrderPartLineIds);
+
+      rows.forEach(r => {
+        byWorkOrderPartLineId.set(String(r.work_order_part_line_id), r);
+      });
+    }
+
+    const legacyPartIdRegex = /^Part\s+([0-9a-f\-]{36})$/i;
+    const legacyPartIds = partItems
+      .map(li => {
+        const desc = (li.description || '').toString().trim();
+        const match = desc.match(legacyPartIdRegex);
+        return match ? match[1] : null;
+      })
+      .filter(Boolean);
+
+    const legacyPartsById = new Map();
+    if (legacyPartIds.length) {
+      const parts = await db('parts')
+        .select('id', 'name', 'sku')
+        .whereIn('id', legacyPartIds);
+      parts.forEach(p => {
+        legacyPartsById.set(String(p.id), p);
+      });
+    }
+
+    for (const li of lineItems) {
+      if ((li.line_type || '').toString().toUpperCase() !== 'PART') continue;
+
+      const wopi = li.source_ref_type === 'work_order_part' && li.source_ref_id
+        ? byWorkOrderPartLineId.get(String(li.source_ref_id))
+        : null;
+
+      if (wopi?.part_name) {
+        li.part_name = wopi.part_name;
+        li.part_sku = wopi.part_sku || null;
+        li.part_id = wopi.part_id || null;
+        li.description = wopi.part_name;
+        continue;
+      }
+
+      // If we found the work order part line but cannot resolve it to a parts row,
+      // avoid leaking raw UUIDs into the user-facing description.
+      if (wopi && !wopi.part_name) {
+        li.part_sku = wopi.part_sku || null;
+        li.part_id = wopi.part_id || null;
+      }
+
+      const desc = (li.description || '').toString().trim();
+      const match = desc.match(legacyPartIdRegex);
+      if (match) {
+        const legacy = legacyPartsById.get(match[1]);
+        if (legacy?.name) {
+          li.part_name = legacy.name;
+          li.part_sku = legacy.sku || null;
+          li.part_id = legacy.id || null;
+          li.description = legacy.name;
+        } else {
+          li.description = unknownPartDescription;
+        }
+      }
+    }
+  } catch (e) {
+    // Non-fatal: invoice can still render with stored descriptions.
+    dtLogger.warn('invoice_line_items_enrich_failed', { invoiceId: id, error: e?.message || String(e) });
+  }
+
   const payments = await db('invoice_payments').where({ invoice_id: id }).orderBy('payment_date', 'desc');
   const documents = await db('invoice_documents').where({ invoice_id: id }).orderBy('created_at', 'desc');
   return { invoice, lineItems, payments, documents };
