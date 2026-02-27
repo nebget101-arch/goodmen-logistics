@@ -1,7 +1,18 @@
 const db = require('../config/knex');
 
+function normalizeScanCode(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^sku\s*[:#-]?\s*/i, '')
+    .trim();
+}
+
 async function getBarcodeByCode(code) {
-  return db('part_barcodes as pb')
+  const rawCode = String(code || '').trim();
+  const normalizedCode = normalizeScanCode(rawCode);
+  if (!rawCode && !normalizedCode) return null;
+
+  const barcode = await db('part_barcodes as pb')
     .join('parts as p', 'pb.part_id', 'p.id')
     .select(
       'pb.id',
@@ -16,8 +27,48 @@ async function getBarcodeByCode(code) {
       'p.default_cost',
       'p.taxable'
     )
-    .where({ 'pb.barcode_value': code, 'pb.is_active': true })
+    .where({ 'pb.is_active': true })
+    .andWhere(function () {
+      if (rawCode) {
+        this.orWhereRaw('LOWER(TRIM(pb.barcode_value)) = LOWER(?)', [rawCode]);
+      }
+      if (normalizedCode && normalizedCode !== rawCode) {
+        this.orWhereRaw('LOWER(TRIM(pb.barcode_value)) = LOWER(?)', [normalizedCode]);
+      }
+    })
     .first();
+
+  if (barcode) return barcode;
+
+  // Fallback: allow scanning SKU directly (e.g. "TRK-001" or "SKU: TRK-001")
+  const part = await db('parts as p')
+    .select(
+      'p.id as part_id',
+      'p.sku',
+      'p.name',
+      'p.category',
+      'p.default_retail_price',
+      'p.default_cost',
+      'p.taxable'
+    )
+    .whereRaw('LOWER(TRIM(p.sku)) = LOWER(?)', [normalizedCode])
+    .first();
+
+  if (!part) return null;
+
+  return {
+    id: null,
+    barcode_value: normalizedCode,
+    pack_qty: 1,
+    vendor: null,
+    part_id: part.part_id,
+    sku: part.sku,
+    name: part.name,
+    category: part.category,
+    default_retail_price: part.default_retail_price,
+    default_cost: part.default_cost,
+    taxable: part.taxable
+  };
 }
 
 async function assignBarcodeToPart(partId, { barcodeValue, packQty = 1, vendor = null }) {
