@@ -21,6 +21,16 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
   message = '';
   error = '';
   submitting = false;
+  bridgeMobileUrl = '';
+  bridgeSessionId = '';
+  bridgeConnected = false;
+  showBridgeQr = false;
+  private bridgeEvents?: EventSource;
+
+  get bridgeQrUrl(): string {
+    if (!this.bridgeMobileUrl) return '';
+    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(this.bridgeMobileUrl)}`;
+  }
 
   constructor(private api: ApiService) {}
 
@@ -76,6 +86,51 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
         this.focusScan();
       }
     });
+  }
+
+  startPhoneBridge(): void {
+    this.clearMessages();
+    this.stopPhoneBridge();
+    this.api.createScanBridgeSession().subscribe({
+      next: (res: any) => {
+        const data = res?.data || {};
+        this.bridgeMobileUrl = data.mobileUrl || '';
+        this.bridgeSessionId = data.sessionId || '';
+        const base = this.api.getBaseUrl();
+        const eventsUrl = `${base}/scan-bridge/session/${encodeURIComponent(data.sessionId)}/events?readToken=${encodeURIComponent(data.readToken)}`;
+        this.bridgeEvents = new EventSource(eventsUrl);
+        this.bridgeEvents.addEventListener('ready', () => { this.bridgeConnected = true; });
+        this.bridgeEvents.addEventListener('scan', (evt: MessageEvent) => {
+          try {
+            const payload = JSON.parse(evt.data || '{}');
+            const barcode = (payload.barcode || '').toString().trim();
+            if (!barcode) return;
+            this.scanCode = barcode;
+            this.addByScan();
+          } catch {}
+        });
+        this.bridgeEvents.onerror = () => { this.bridgeConnected = false; };
+      },
+      error: (err: any) => {
+        this.error = err?.error?.error || err?.message || 'Failed to start phone bridge';
+      }
+    });
+  }
+
+  openPhoneBridge(): void {
+    if (!this.bridgeMobileUrl) return;
+    window.open(this.bridgeMobileUrl, '_blank');
+  }
+
+  stopPhoneBridge(): void {
+    if (this.bridgeEvents) {
+      this.bridgeEvents.close();
+      this.bridgeEvents = undefined;
+    }
+    this.bridgeConnected = false;
+    this.bridgeMobileUrl = '';
+    this.bridgeSessionId = '';
+    this.showBridgeQr = false;
   }
 
   createTransfer(): void {

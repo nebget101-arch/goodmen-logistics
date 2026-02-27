@@ -11,6 +11,10 @@ export class ApiService {
 
   constructor(private http: HttpClient) { }
 
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   // Locations
   getLocations(): Observable<any> {
     return this.http.get(`${this.baseUrl}/locations`);
@@ -497,6 +501,17 @@ export class ApiService {
     const query = params.toString();
     const url = query ? `${this.baseUrl}/inventory/transactions?${query}` : `${this.baseUrl}/inventory/transactions`;
     return this.http.get(url);
+  }
+
+  createScanBridgeSession(): Observable<any> {
+    return this.http.post(`${this.baseUrl}/scan-bridge/session`, {});
+  }
+
+  sendScanBridgeBarcode(sessionId: string, writeToken: string, barcode: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/scan-bridge/session/${sessionId}/scan`, {
+      writeToken,
+      barcode
+    });
   }
 }
 

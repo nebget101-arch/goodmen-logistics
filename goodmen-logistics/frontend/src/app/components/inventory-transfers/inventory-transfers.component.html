@@ -25,6 +25,18 @@
     </div>
   </div>
 
+  <div class="bridge">
+    <button type="button" (click)="startPhoneBridge()">Start Phone Bridge</button>
+    <button type="button" (click)="openPhoneBridge()" [disabled]="!bridgeMobileUrl">Open Phone Link</button>
+    <button type="button" (click)="showBridgeQr = !showBridgeQr" [disabled]="!bridgeMobileUrl">{{ showBridgeQr ? 'Hide QR' : 'Show QR' }}</button>
+    <button type="button" (click)="stopPhoneBridge()" [disabled]="!bridgeSessionId">Stop Bridge</button>
+    <span *ngIf="bridgeSessionId">Session: {{ bridgeSessionId }} | {{ bridgeConnected ? 'Connected' : 'Waiting' }}</span>
+    <div *ngIf="bridgeMobileUrl" class="hint">Open this on phone: {{ bridgeMobileUrl }}</div>
+    <div *ngIf="bridgeMobileUrl && showBridgeQr" class="qr-wrap">
+      <img [src]="bridgeQrUrl" alt="Phone bridge QR code" />
+    </div>
+  </div>
+
   <table *ngIf="lines.length > 0">
     <thead>
       <tr><th>SKU</th><th>Name</th><th>Qty</th><th></th></tr>
