@@ -17,6 +17,7 @@ export class AppComponent implements OnInit {
   safetyExpanded = true;
   fleetExpanded = true;
   accountingExpanded = true;
+  sidebarOpen = false;
 
   constructor(private router: Router) {}
 
@@ -53,6 +54,23 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     this.userRole = this.getRole();
+  }
+
+  toggleSidebar(): void {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  closeSidebar(): void {
+    this.sidebarOpen = false;
+  }
+
+  onSidebarNavClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    // Close the sidebar on mobile when a nav link is clicked.
+    if (target.closest('a')) {
+      this.closeSidebar();
+    }
   }
 
   toggleEquipment(): void {

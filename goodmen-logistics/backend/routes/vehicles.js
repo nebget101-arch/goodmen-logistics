@@ -226,7 +226,7 @@ router.put('/:id', async (req, res) => {
   const startTime = Date.now();
   try {
     // Fields that should not be updated
-    const excludedFields = ['id', 'created_at', 'updated_at', 'customer_id'];
+    const excludedFields = ['id', 'created_at', 'updated_at', 'customer_id', 'source'];
     
     const fields = [];
     const values = [];

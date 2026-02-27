@@ -1,5 +1,7 @@
 <div class="app-shell">
-  <aside class="sidebar" *ngIf="isLoggedIn()">
+  <div class="sidebar-backdrop" *ngIf="isLoggedIn() && sidebarOpen" (click)="closeSidebar()" aria-hidden="true"></div>
+
+  <aside class="sidebar" *ngIf="isLoggedIn()" [class.mobile-open]="sidebarOpen">
     <div class="sidebar-header">
       <img src="assets/goodmen-logo-simple.svg" alt="Goodmen Logistics Logo">
       <div class="brand">
@@ -7,7 +9,7 @@
         <div class="brand-subtitle">Logistics</div>
       </div>
     </div>
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav" (click)="onSidebarNavClick($event)">
       <ul class="nav-links">
         <li *ngIf="canSee('dashboard')"><a routerLink="/dashboard" routerLinkActive="active"><span class="nav-icon">📊</span>Dashboard</a></li>
         <li *ngIf="canSee('loads')"><a routerLink="/loads" routerLinkActive="active"><span class="nav-icon">📦</span>Loads</a></li>
@@ -57,6 +59,19 @@
   </aside>
 
   <main class="content">
+    <div class="mobile-topbar" *ngIf="isLoggedIn()">
+      <button class="mobile-menu-btn" type="button" (click)="toggleSidebar()" [attr.aria-expanded]="sidebarOpen" aria-label="Toggle menu">
+        ☰
+      </button>
+
+      <div class="mobile-topbar-brand">
+        <img src="assets/goodmen-logo-simple.svg" alt="Goodmen Logistics Logo">
+        <span class="mobile-topbar-title">GOODMEN</span>
+      </div>
+
+      <button (click)="logout()" class="btn btn-ghost mobile-logout">Logout</button>
+    </div>
+
     <div class="topbar" *ngIf="!isLoggedIn()">
       <div class="topbar-brand">
         <img src="assets/goodmen-logo-simple.svg" alt="Goodmen Logistics Logo">
