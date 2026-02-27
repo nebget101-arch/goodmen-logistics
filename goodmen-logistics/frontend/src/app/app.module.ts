@@ -18,6 +18,11 @@ import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { UserCreateComponent } from './components/user-create/user-create.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
+import { BarcodeManagementComponent } from './components/barcode-management/barcode-management.component';
+import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
+import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
+import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
+import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
 
 // Dynatrace Error Handler
 import { DynatraceErrorHandler } from './dynatrace-error-handler';
@@ -38,7 +43,12 @@ import { CacheBustingInterceptor } from './cache-busting.interceptor';
     LoginComponent,
     UserCreateComponent,
     WorkOrderComponent,
-    PartsCatalogComponent
+    PartsCatalogComponent,
+    BarcodeManagementComponent,
+    WarehouseReceivingComponent,
+    InventoryTransfersComponent,
+    DirectSalesComponent,
+    InventoryReportsComponent
   ],
   imports: [
     BrowserModule,

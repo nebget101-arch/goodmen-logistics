@@ -447,5 +447,56 @@ export class ApiService {
     if (locationId) url += `?locationId=${locationId}`;
     return this.http.get(url);
   }
+
+  // Step 2/3 - Barcode + Inventory Ops
+  lookupBarcode(code: string, locationId?: string): Observable<any> {
+    let url = `${this.baseUrl}/barcodes/${encodeURIComponent(code)}`;
+    if (locationId) {
+      url += `?locationId=${encodeURIComponent(locationId)}`;
+    }
+    return this.http.get(url);
+  }
+
+  assignPartBarcode(partId: string, payload: { barcodeValue: string; packQty?: number; vendor?: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/parts/${partId}/barcodes`, payload);
+  }
+
+  getPartBarcodes(partId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/parts/${partId}/barcodes`);
+  }
+
+  receiveInventory(payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/inventory/receive`, payload);
+  }
+
+  createTransfer(payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/inventory/transfer`, payload);
+  }
+
+  receiveTransfer(transferId: string, payload?: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/inventory/transfer/${transferId}/receive`, payload || {});
+  }
+
+  consumeInventory(payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/inventory/consume`, payload);
+  }
+
+  createDirectSale(payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/inventory/sale`, payload);
+  }
+
+  getInventoryTransactions(filters?: any): Observable<any> {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.set(key, String(value));
+        }
+      });
+    }
+    const query = params.toString();
+    const url = query ? `${this.baseUrl}/inventory/transactions?${query}` : `${this.baseUrl}/inventory/transactions`;
+    return this.http.get(url);
+  }
 }
 

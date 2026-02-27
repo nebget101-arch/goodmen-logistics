@@ -3,6 +3,7 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/dynatrace-logger');
 const partsService = require('../services/parts.service');
+const barcodesService = require('../services/barcodes.service');
 const db = require('../config/knex');
 
 /**
@@ -74,6 +75,45 @@ router.get('/manufacturers', authMiddleware, async (req, res) => {
 		});
 	} catch (error) {
 		dtLogger.error('manufacturers_get_failed', { error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * POST /api/parts/:partId/barcodes
+ * Assign a barcode to a part (supports pack qty)
+ * Requires: Admin or Parts Manager role
+ */
+router.post('/:partId/barcodes', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
+	try {
+		const { barcodeValue, packQty, vendor } = req.body || {};
+		const created = await barcodesService.assignBarcodeToPart(req.params.partId, {
+			barcodeValue,
+			packQty,
+			vendor
+		});
+
+		res.status(201).json({
+			success: true,
+			data: created,
+			message: 'Barcode assigned successfully'
+		});
+	} catch (error) {
+		dtLogger.error('part_barcode_assign_failed', { partId: req.params.partId, error: error.message });
+		res.status(400).json({ error: error.message });
+	}
+});
+
+/**
+ * GET /api/parts/:partId/barcodes
+ * List barcodes assigned to a part
+ */
+router.get('/:partId/barcodes', authMiddleware, async (req, res) => {
+	try {
+		const rows = await barcodesService.getBarcodesByPart(req.params.partId);
+		res.json({ success: true, data: rows });
+	} catch (error) {
+		dtLogger.error('part_barcodes_get_failed', { partId: req.params.partId, error: error.message });
 		res.status(500).json({ error: error.message });
 	}
 });

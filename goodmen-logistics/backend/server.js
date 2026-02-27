@@ -256,6 +256,7 @@ const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
 const workOrdersRouter = require('./routes/work-orders-hub');
 const partsRouter = require('./routes/parts');
+const barcodesRouter = require('./routes/barcodes');
 const inventoryRouter = require('./routes/inventory');
 const receivingRouter = require('./routes/receiving');
 const adjustmentsRouter = require('./routes/adjustments');
@@ -287,6 +288,7 @@ app.use('/api/invoices', invoicesRouter);
 app.use('/api/credit', creditRouter);
 // Inventory Management Routes (Phase 2)
 app.use('/api/parts', partsRouter);
+app.use('/api/barcodes', barcodesRouter);
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/receiving', receivingRouter);
 app.use('/api/adjustments', adjustmentsRouter);

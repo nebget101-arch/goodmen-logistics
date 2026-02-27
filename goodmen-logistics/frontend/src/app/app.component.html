@@ -41,7 +41,7 @@
         </li>
         <li *ngIf="canSee('maintenance') && fleetExpanded" class="nav-subsection"><a routerLink="/maintenance" routerLinkActive="active">Maintenance</a></li>
         <li *ngIf="canSee('customers') && fleetExpanded" class="nav-subsection"><a routerLink="/customers" routerLinkActive="active">Customers</a></li>
-        <li *ngIf="canSee('parts')" class="nav-section">
+        <li *ngIf="canSee('parts') || canSee('barcodes') || canSee('receiving') || canSee('transfers') || canSee('sales') || canSee('inventory_reports')" class="nav-section">
           <button class="section-toggle" (click)="toggleInventory()" type="button" [attr.aria-expanded]="inventoryExpanded">
             <span class="section-icon">📦</span>
             <span class="section-label">Inventory</span>
@@ -49,6 +49,11 @@
           </button>
         </li>
         <li *ngIf="canSee('parts') && inventoryExpanded" class="nav-subsection"><a routerLink="/parts" routerLinkActive="active">Parts</a></li>
+        <li *ngIf="canSee('barcodes') && inventoryExpanded" class="nav-subsection"><a routerLink="/barcodes" routerLinkActive="active">Barcode Management</a></li>
+        <li *ngIf="canSee('receiving') && inventoryExpanded" class="nav-subsection"><a routerLink="/receiving" routerLinkActive="active">Warehouse Receiving</a></li>
+        <li *ngIf="canSee('transfers') && inventoryExpanded" class="nav-subsection"><a routerLink="/inventory-transfers" routerLinkActive="active">Transfers</a></li>
+        <li *ngIf="canSee('sales') && inventoryExpanded" class="nav-subsection"><a routerLink="/direct-sales" routerLinkActive="active">Direct Sales</a></li>
+        <li *ngIf="canSee('inventory_reports') && inventoryExpanded" class="nav-subsection"><a routerLink="/inventory-reports" routerLinkActive="active">Reports</a></li>
         <li *ngIf="canSee('invoices')" class="nav-section">
           <button class="section-toggle" (click)="toggleAccounting()" type="button" [attr.aria-expanded]="accountingExpanded">
             <span class="section-icon">💰</span>

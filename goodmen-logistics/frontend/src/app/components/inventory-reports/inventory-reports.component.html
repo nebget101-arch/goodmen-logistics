@@ -1,0 +1,72 @@
+<div class="page">
+  <h2>Inventory Reports</h2>
+  <div class="err" *ngIf="error">{{ error }}</div>
+
+  <div class="filters">
+    <div>
+      <label>Location</label>
+      <select [(ngModel)]="locationId" (change)="loadOnHand(); loadTransactions();">
+        <option value="">-- Select --</option>
+        <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+      </select>
+    </div>
+    <div>
+      <label>Tx Type</label>
+      <select [(ngModel)]="filters.txType" (change)="loadTransactions()">
+        <option value="">All</option>
+        <option value="RECEIVE">RECEIVE</option>
+        <option value="TRANSFER_OUT">TRANSFER_OUT</option>
+        <option value="TRANSFER_IN">TRANSFER_IN</option>
+        <option value="CONSUME">CONSUME</option>
+        <option value="SALE">SALE</option>
+        <option value="RETURN">RETURN</option>
+        <option value="ADJUST">ADJUST</option>
+      </select>
+    </div>
+    <div>
+      <label>From</label>
+      <input type="date" [(ngModel)]="filters.dateFrom" (change)="loadTransactions()" />
+    </div>
+    <div>
+      <label>To</label>
+      <input type="date" [(ngModel)]="filters.dateTo" (change)="loadTransactions()" />
+    </div>
+  </div>
+
+  <h3>On-hand by Location</h3>
+  <div *ngIf="loadingOnHand">Loading...</div>
+  <table *ngIf="!loadingOnHand">
+    <thead>
+      <tr><th>SKU</th><th>Name</th><th>On Hand</th><th>Reserved</th><th>Available</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let r of onHandRows">
+        <td>{{ r.sku }}</td>
+        <td>{{ r.name }}</td>
+        <td>{{ r.on_hand_qty }}</td>
+        <td>{{ r.reserved_qty }}</td>
+        <td>{{ r.available_qty }}</td>
+        <td>{{ r.status }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Transaction History</h3>
+  <div *ngIf="loadingTx">Loading...</div>
+  <table *ngIf="!loadingTx">
+    <thead>
+      <tr><th>When</th><th>Type</th><th>Part</th><th>Location</th><th>Qty Change</th><th>Ref Type</th><th>Ref ID</th></tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let t of txRows">
+        <td>{{ t.created_at | date:'short' }}</td>
+        <td>{{ t.tx_type_effective || t.tx_type || t.transaction_type }}</td>
+        <td>{{ t.part_sku }} - {{ t.part_name }}</td>
+        <td>{{ t.location_name }}</td>
+        <td>{{ t.qty_change }}</td>
+        <td>{{ t.reference_type }}</td>
+        <td>{{ t.reference_id }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

@@ -41,15 +41,27 @@ export class AppComponent implements OnInit {
     const role = this.getRole();
     if (!role) return false;
     if (role === 'admin') return true;
-    if (role === 'safety') return ['dashboard','drivers', 'vehicles', 'hos', 'audit'].includes(tab);
+
+    if (role === 'safety') return ['dashboard', 'drivers', 'vehicles', 'hos', 'audit'].includes(tab);
     if (role === 'fleet') return ['maintenance'].includes(tab);
     if (role === 'dispatch') return ['loads'].includes(tab);
-    if (role === 'service_advisor') return ['customers', 'invoices'].includes(tab);
-    if (role === 'accounting') return ['customers', 'invoices'].includes(tab);
-    if (role === 'technician') return ['customers', 'parts'].includes(tab);
-    if (role === 'parts_manager' || role === 'shop_manager' || role === 'technician') {
-      return ['parts'].includes(tab);
+
+    if (role === 'service_advisor') {
+      return ['customers', 'invoices', 'sales', 'inventory_reports'].includes(tab);
     }
+
+    if (role === 'accounting') {
+      return ['customers', 'invoices', 'sales', 'inventory_reports'].includes(tab);
+    }
+
+    if (role === 'technician') {
+      return ['customers', 'parts', 'receiving', 'transfers', 'inventory_reports'].includes(tab);
+    }
+
+    if (role === 'parts_manager' || role === 'shop_manager') {
+      return ['parts', 'barcodes', 'receiving', 'transfers', 'sales', 'inventory_reports'].includes(tab);
+    }
+
     return false;
   }
 

@@ -1,0 +1,57 @@
+<div class="page">
+  <h2>Direct Sales (No Work Order)</h2>
+  <div class="hint">Scan-to-cart mode: keep scan input focused and press Enter.</div>
+
+  <div class="ok" *ngIf="message">{{ message }}</div>
+  <div class="err" *ngIf="error">{{ error }}</div>
+
+  <div class="toolbar">
+    <div>
+      <label>Customer</label>
+      <select [(ngModel)]="customerId">
+        <option value="">-- Select --</option>
+        <option *ngFor="let c of customers" [value]="c.id">{{ c.company_name || c.name }}</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Location</label>
+      <select [(ngModel)]="locationId">
+        <option value="">-- Select --</option>
+        <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Tax Rate %</label>
+      <input type="number" step="0.01" [(ngModel)]="taxRatePercent" />
+    </div>
+
+    <div class="scan">
+      <label>Scan Barcode</label>
+      <input #scanInput [(ngModel)]="scanCode" (keyup.enter)="addScan()" placeholder="Scan and Enter" />
+    </div>
+  </div>
+
+  <table *ngIf="lines.length > 0">
+    <thead>
+      <tr><th>SKU</th><th>Name</th><th>Qty</th><th>Unit Price</th><th>Line Total</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let line of lines; let i = index">
+        <td>{{ line.sku }}</td>
+        <td>{{ line.name }}</td>
+        <td><input type="number" min="1" [(ngModel)]="line.qty" /></td>
+        <td><input type="number" step="0.01" [(ngModel)]="line.unitPrice" /></td>
+        <td>{{ (line.qty * line.unitPrice) | number:'1.2-2' }}</td>
+        <td><button (click)="removeLine(i)">Remove</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="summary">Subtotal: {{ total | number:'1.2-2' }}</div>
+
+  <button class="btn" [disabled]="submitting || lines.length===0" (click)="submitSale()">
+    {{ submitting ? 'Processing...' : 'Complete Sale' }}
+  </button>
+</div>

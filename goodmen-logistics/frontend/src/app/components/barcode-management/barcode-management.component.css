@@ -1,0 +1,11 @@
+.card { padding: 16px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+label { display: block; margin: 8px 0 4px; font-weight: 600; }
+input, select { width: 100%; padding: 8px; }
+.btn { margin-top: 12px; padding: 8px 12px; }
+.ok { color: #0a7d2b; }
+.err { color: #b42318; }
+.subhead { margin: 16px 0 8px; font-weight: 700; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #ddd; padding: 8px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
