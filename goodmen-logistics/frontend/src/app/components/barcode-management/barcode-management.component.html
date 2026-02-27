@@ -1,0 +1,55 @@
+<div class="card">
+  <h2>Parts + Barcode Management</h2>
+
+  <div class="alerts">
+    <div class="ok" *ngIf="message">{{ message }}</div>
+    <div class="err" *ngIf="error">{{ error }}</div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <label>Search parts</label>
+      <input type="text" [(ngModel)]="search" (input)="onSearchChange()" placeholder="SKU or name" />
+
+      <label>Select part</label>
+      <select [ngModel]="selectedPartId" (ngModelChange)="onSelectPart($event)">
+        <option value="">-- Select --</option>
+        <option *ngFor="let p of filteredParts" [value]="p.id">{{ p.sku }} - {{ p.name }}</option>
+      </select>
+    </div>
+
+    <div>
+      <label>Barcode value</label>
+      <input type="text" [(ngModel)]="barcodeValue" placeholder="Scan or type barcode" />
+
+      <label>Pack Qty</label>
+      <input type="number" min="1" [(ngModel)]="packQty" />
+
+      <label>Vendor (optional)</label>
+      <input type="text" [(ngModel)]="vendor" />
+
+      <button class="btn" (click)="assignBarcode()">Assign Barcode</button>
+    </div>
+  </div>
+
+  <div *ngIf="selectedPart" class="subhead">Assigned barcodes for {{ selectedPart.sku }} - {{ selectedPart.name }}</div>
+
+  <table *ngIf="barcodes.length > 0">
+    <thead>
+      <tr>
+        <th>Barcode</th>
+        <th>Pack Qty</th>
+        <th>Vendor</th>
+        <th>Active</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let b of barcodes">
+        <td>{{ b.barcode_value }}</td>
+        <td>{{ b.pack_qty }}</td>
+        <td>{{ b.vendor || '-' }}</td>
+        <td>{{ b.is_active ? 'Yes' : 'No' }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

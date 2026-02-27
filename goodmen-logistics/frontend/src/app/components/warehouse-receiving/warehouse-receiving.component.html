@@ -1,0 +1,46 @@
+<div class="page">
+  <h2>Warehouse Receiving</h2>
+  <div class="hint">Scanner optimized: keep cursor in scan box and press Enter.</div>
+
+  <div class="alerts">
+    <div class="ok" *ngIf="message">{{ message }}</div>
+    <div class="err" *ngIf="error">{{ error }}</div>
+  </div>
+
+  <div class="toolbar">
+    <div>
+      <label>Location</label>
+      <select [(ngModel)]="locationId">
+        <option value="">-- Select --</option>
+        <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+      </select>
+    </div>
+    <div>
+      <label>Qty Multiplier</label>
+      <input type="number" min="1" [(ngModel)]="qtyMultiplier" />
+    </div>
+    <div class="scan">
+      <label>Scan Barcode</label>
+      <input #scanInput type="text" [(ngModel)]="scanCode" (keyup.enter)="onScanEnter()" placeholder="Scan and press Enter" />
+    </div>
+  </div>
+
+  <table *ngIf="lines.length > 0">
+    <thead>
+      <tr><th>SKU</th><th>Name</th><th>Qty</th><th>Unit Cost</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let line of lines; let i = index">
+        <td>{{ line.sku }}</td>
+        <td>{{ line.name }}</td>
+        <td>{{ line.qty }}</td>
+        <td><input type="number" step="0.01" [(ngModel)]="line.unitCostAtTime" /></td>
+        <td><button (click)="removeLine(i)">Remove</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <button class="btn" [disabled]="submitting || lines.length===0" (click)="postReceive()">
+    {{ submitting ? 'Posting...' : 'Post Receiving' }}
+  </button>
+</div>

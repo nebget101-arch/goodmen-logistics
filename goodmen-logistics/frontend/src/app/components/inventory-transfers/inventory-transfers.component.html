@@ -1,0 +1,53 @@
+<div class="page">
+  <h2>Warehouse → Shop Transfers</h2>
+
+  <div class="ok" *ngIf="message">{{ message }}</div>
+  <div class="err" *ngIf="error">{{ error }}</div>
+
+  <div class="toolbar">
+    <div>
+      <label>From</label>
+      <select [(ngModel)]="fromLocationId">
+        <option value="">-- Select --</option>
+        <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+      </select>
+    </div>
+    <div>
+      <label>To</label>
+      <select [(ngModel)]="toLocationId">
+        <option value="">-- Select --</option>
+        <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+      </select>
+    </div>
+    <div>
+      <label>Scan Barcode</label>
+      <input #scanInput [(ngModel)]="scanCode" (keyup.enter)="addByScan()" placeholder="Scan and Enter" />
+    </div>
+  </div>
+
+  <table *ngIf="lines.length > 0">
+    <thead>
+      <tr><th>SKU</th><th>Name</th><th>Qty</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let line of lines; let i = index">
+        <td>{{ line.sku }}</td>
+        <td>{{ line.name }}</td>
+        <td><input type="number" min="1" [(ngModel)]="line.qty" /></td>
+        <td><button (click)="removeLine(i)">Remove</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <button class="btn" [disabled]="submitting || lines.length===0" (click)="createTransfer()">
+    {{ submitting ? 'Creating...' : 'Create + Send Transfer' }}
+  </button>
+
+  <hr />
+
+  <h3>Receive Transfer</h3>
+  <div class="receive-row">
+    <input [(ngModel)]="receiveTransferId" placeholder="Transfer ID" />
+    <button (click)="receiveTransfer()">Receive</button>
+  </div>
+</div>

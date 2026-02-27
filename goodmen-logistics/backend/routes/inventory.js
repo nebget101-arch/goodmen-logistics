@@ -167,4 +167,153 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'parts_manager']), asyn
 	}
 });
 
+/**
+ * POST /api/inventory/receive
+ * Add stock to inventory and write RECEIVE transaction
+ */
+router.post('/receive', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager']), async (req, res) => {
+	try {
+		const { locationId, partId, qty, unitCostAtTime, referenceType, referenceId, notes } = req.body || {};
+		if (!locationId || !partId || !qty) {
+			return res.status(400).json({ error: 'locationId, partId and qty are required' });
+		}
+
+		const result = await inventoryService.receiveInventory({
+			locationId,
+			partId,
+			qty,
+			unitCostAtTime,
+			referenceType,
+			referenceId,
+			performedBy: req.user?.id,
+			notes
+		});
+
+		res.status(201).json({ success: true, data: result });
+	} catch (error) {
+		dtLogger.error('inventory_receive_failed', { error: error.message });
+		res.status(400).json({ error: error.message });
+	}
+});
+
+/**
+ * POST /api/inventory/transfer
+ * Create + send a transfer (TRANSFER_OUT posted immediately)
+ */
+router.post('/transfer', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager']), async (req, res) => {
+	try {
+		const { fromLocationId, toLocationId, lines, notes } = req.body || {};
+		const result = await inventoryService.createTransfer({
+			fromLocationId,
+			toLocationId,
+			lines,
+			performedBy: req.user?.id,
+			notes
+		});
+
+		res.status(201).json({ success: true, data: result });
+	} catch (error) {
+		dtLogger.error('inventory_transfer_create_failed', { error: error.message });
+		res.status(400).json({ error: error.message });
+	}
+});
+
+/**
+ * POST /api/inventory/transfer/:id/receive
+ * Confirm transfer receipt (posts TRANSFER_IN)
+ */
+router.post('/transfer/:id/receive', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager']), async (req, res) => {
+	try {
+		const result = await inventoryService.receiveTransfer({
+			transferId: req.params.id,
+			receivedBy: req.user?.id,
+			notes: req.body?.notes
+		});
+
+		res.json({ success: true, data: result });
+	} catch (error) {
+		dtLogger.error('inventory_transfer_receive_failed', { transferId: req.params.id, error: error.message });
+		res.status(400).json({ error: error.message });
+	}
+});
+
+/**
+ * POST /api/inventory/consume
+ * Deduct stock for work order usage (CONSUME)
+ */
+router.post('/consume', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager', 'technician']), async (req, res) => {
+	try {
+		const { locationId, partId, qty, workOrderId, notes } = req.body || {};
+		if (!locationId || !partId || !qty || !workOrderId) {
+			return res.status(400).json({ error: 'locationId, partId, qty and workOrderId are required' });
+		}
+
+		const result = await inventoryService.consumeInventory({
+			locationId,
+			partId,
+			qty,
+			referenceType: 'WORK_ORDER',
+			referenceId: workOrderId,
+			performedBy: req.user?.id,
+			notes
+		});
+
+		res.status(201).json({ success: true, data: result });
+	} catch (error) {
+		dtLogger.error('inventory_consume_failed', { error: error.message });
+		res.status(400).json({ error: error.message });
+	}
+});
+
+/**
+ * POST /api/inventory/sale
+ * Direct customer sale (no work order): deduct stock + create invoice
+ */
+router.post('/sale', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager', 'service_advisor', 'accounting']), async (req, res) => {
+	try {
+		const { customerId, locationId, items, notes, taxRatePercent } = req.body || {};
+		if (!customerId || !locationId || !Array.isArray(items) || items.length === 0) {
+			return res.status(400).json({ error: 'customerId, locationId and items[] are required' });
+		}
+
+		const result = await inventoryService.createDirectSale({
+			customerId,
+			locationId,
+			items,
+			notes,
+			taxRatePercent,
+			performedBy: req.user?.id
+		});
+
+		res.status(201).json({ success: true, data: result });
+	} catch (error) {
+		dtLogger.error('inventory_sale_failed', { error: error.message });
+		res.status(400).json({ error: error.message });
+	}
+});
+
+/**
+ * GET /api/inventory/transactions
+ * Audit trail filters: date, location, user, tx type, reference
+ */
+router.get('/transactions', authMiddleware, async (req, res) => {
+	try {
+		const data = await inventoryService.listTransactions({
+			locationId: req.query.locationId,
+			userId: req.query.userId,
+			txType: req.query.txType,
+			referenceType: req.query.referenceType,
+			referenceId: req.query.referenceId,
+			dateFrom: req.query.dateFrom,
+			dateTo: req.query.dateTo,
+			limit: req.query.limit
+		});
+
+		res.json({ success: true, data });
+	} catch (error) {
+		dtLogger.error('inventory_transactions_get_failed', { error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
 module.exports = router;
