@@ -152,6 +152,10 @@ export class PartsCatalogComponent implements OnInit {
     this.errorMessage = '';
   }
 
+  openFormModal(part?: any): void {
+    this.openForm(part);
+  }
+
   closeForm(): void {
     this.showForm = false;
     this.editingPartId = null;
