@@ -115,6 +115,10 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'parts_manager
 			return res.status(400).json({ error: 'file is required' });
 		}
 
+		// Check if reorder_level column exists in the database
+		const partsColumns = await db('parts').columnInfo();
+		const hasReorderLevel = 'reorder_level' in partsColumns;
+
 		const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
 		const firstSheetName = workbook.SheetNames[0];
 		if (!firstSheetName) {
@@ -164,35 +168,41 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'parts_manager
 
 				let part;
 				if (existing) {
+					const updateData = {
+						sku,
+						name,
+						category,
+						manufacturer,
+						description,
+						unit_cost: unitCost,
+						unit_price: unitPrice,
+						status
+					};
+					if (hasReorderLevel) {
+						updateData.reorder_level = reorderLevel;
+					}
 					const [updated] = await db('parts')
 						.where({ id: existing.id })
-						.update({
-							sku,
-							name,
-							category,
-							manufacturer,
-							description,
-							unit_cost: unitCost,
-							unit_price: unitPrice,
-							reorder_level: reorderLevel,
-							status
-						})
+						.update(updateData)
 						.returning('*');
 					part = updated;
 					summary.updated += 1;
 				} else {
+					const insertData = {
+						sku,
+						name,
+						category,
+						manufacturer,
+						description,
+						unit_cost: unitCost,
+						unit_price: unitPrice,
+						status
+					};
+					if (hasReorderLevel) {
+						insertData.reorder_level = reorderLevel;
+					}
 					const [created] = await db('parts')
-						.insert({
-							sku,
-							name,
-							category,
-							manufacturer,
-							description,
-							unit_cost: unitCost,
-							unit_price: unitPrice,
-							reorder_level: reorderLevel,
-							status
-						})
+						.insert(insertData)
 						.returning('*');
 					part = created;
 					summary.created += 1;
