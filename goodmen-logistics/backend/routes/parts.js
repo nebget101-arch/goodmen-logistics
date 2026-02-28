@@ -1,10 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const XLSX = require('xlsx');
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/dynatrace-logger');
 const partsService = require('../services/parts.service');
 const barcodesService = require('../services/barcodes.service');
 const db = require('../config/knex');
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 /**
  * Permission helpers
@@ -18,6 +22,232 @@ function requireRole(allowedRoles) {
 		next();
 	};
 }
+
+function toNumberOrDefault(v, fallback = 0) {
+	if (v === null || v === undefined || String(v).trim() === '') return fallback;
+	const n = Number(v);
+	return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeHeader(key) {
+	return String(key || '')
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, '_')
+		.replace(/-/g, '_');
+}
+
+function pick(row, keys = []) {
+	const normalized = {};
+	for (const [k, v] of Object.entries(row || {})) {
+		normalized[normalizeHeader(k)] = v;
+	}
+	for (const key of keys) {
+		const val = normalized[normalizeHeader(key)];
+		if (val !== undefined && val !== null && String(val).trim() !== '') {
+			return String(val).trim();
+		}
+	}
+	return '';
+}
+
+/**
+ * GET /api/parts/template
+ * Download Excel template for bulk parts upload
+ */
+router.get('/template', authMiddleware, requireRole(['admin', 'parts_manager']), async (_req, res) => {
+	try {
+		const workbook = XLSX.utils.book_new();
+		const rows = [
+			[
+				'sku',
+				'name',
+				'category',
+				'manufacturer',
+				'uom',
+				'unit_cost',
+				'unit_price',
+				'reorder_level',
+				'description',
+				'barcode',
+				'pack_qty',
+				'vendor',
+				'status'
+			],
+			[
+				'TRK-001',
+				'Oil Filter - Cummins ISX',
+				'Engine',
+				'Fleetguard',
+				'each',
+				'12.50',
+				'19.99',
+				'5',
+				'Heavy duty oil filter',
+				'TRK-001',
+				'1',
+				'Fleetguard',
+				'ACTIVE'
+			]
+		];
+
+		const worksheet = XLSX.utils.aoa_to_sheet(rows);
+		XLSX.utils.book_append_sheet(workbook, worksheet, 'Parts');
+
+		const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+		res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+		res.setHeader('Content-Disposition', 'attachment; filename="parts-upload-template.xlsx"');
+		return res.send(buffer);
+	} catch (error) {
+		dtLogger.error('parts_template_download_failed', { error: error.message });
+		return res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * POST /api/parts/bulk-upload
+ * Upload parts from Excel file (.xlsx/.xls/.csv)
+ */
+router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'parts_manager']), upload.single('file'), async (req, res) => {
+	try {
+		if (!req.file?.buffer) {
+			return res.status(400).json({ error: 'file is required' });
+		}
+
+		const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+		const firstSheetName = workbook.SheetNames[0];
+		if (!firstSheetName) {
+			return res.status(400).json({ error: 'No worksheet found in file' });
+		}
+
+		const worksheet = workbook.Sheets[firstSheetName];
+		const records = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+		if (!records.length) {
+			return res.status(400).json({ error: 'No data rows found in worksheet' });
+		}
+
+		const summary = {
+			totalRows: records.length,
+			created: 0,
+			updated: 0,
+			skipped: 0,
+			errors: []
+		};
+
+		for (let i = 0; i < records.length; i += 1) {
+			const row = records[i];
+			const rowNumber = i + 2; // header row is 1
+
+			const sku = pick(row, ['sku', 'part_sku']).toUpperCase();
+			const name = pick(row, ['name', 'part_name']);
+			const category = pick(row, ['category']);
+			const manufacturer = pick(row, ['manufacturer']);
+			const description = pick(row, ['description']);
+			const barcodeValue = pick(row, ['barcode', 'barcode_value']);
+			const vendor = pick(row, ['vendor']);
+			const status = (pick(row, ['status']) || 'ACTIVE').toUpperCase();
+			const unitCost = toNumberOrDefault(pick(row, ['unit_cost', 'cost']), 0);
+			const unitPrice = toNumberOrDefault(pick(row, ['unit_price', 'price', 'default_retail_price']), 0);
+			const reorderLevel = toNumberOrDefault(pick(row, ['reorder_level', 'min_stock_level']), 5);
+			const packQty = Math.max(1, Math.floor(toNumberOrDefault(pick(row, ['pack_qty']), 1)));
+
+			if (!sku || !name) {
+				summary.skipped += 1;
+				summary.errors.push({ row: rowNumber, sku, error: 'sku and name are required' });
+				continue;
+			}
+
+			try {
+				const existing = await db('parts').whereRaw('LOWER(sku) = LOWER(?)', [sku]).first();
+
+				let part;
+				if (existing) {
+					const [updated] = await db('parts')
+						.where({ id: existing.id })
+						.update({
+							sku,
+							name,
+							category,
+							manufacturer,
+							description,
+							unit_cost: unitCost,
+							unit_price: unitPrice,
+							reorder_level: reorderLevel,
+							status
+						})
+						.returning('*');
+					part = updated;
+					summary.updated += 1;
+				} else {
+					const [created] = await db('parts')
+						.insert({
+							sku,
+							name,
+							category,
+							manufacturer,
+							description,
+							unit_cost: unitCost,
+							unit_price: unitPrice,
+							reorder_level: reorderLevel,
+							status
+						})
+						.returning('*');
+					part = created;
+					summary.created += 1;
+				}
+
+				if (barcodeValue) {
+					const existingBarcode = await db('part_barcodes')
+						.whereRaw('LOWER(barcode_value) = LOWER(?)', [barcodeValue])
+						.first();
+
+					if (!existingBarcode) {
+						await db('part_barcodes').insert({
+							barcode_value: barcodeValue,
+							part_id: part.id,
+							pack_qty: packQty,
+							vendor: vendor || null,
+							is_active: true
+						});
+					} else if (existingBarcode.part_id === part.id) {
+						await db('part_barcodes')
+							.where({ id: existingBarcode.id })
+							.update({
+								pack_qty: packQty,
+								vendor: vendor || existingBarcode.vendor,
+								is_active: true
+							});
+					} else {
+						summary.errors.push({ row: rowNumber, sku, error: `Barcode ${barcodeValue} already assigned to another part` });
+					}
+				}
+			} catch (rowErr) {
+				summary.skipped += 1;
+				summary.errors.push({ row: rowNumber, sku, error: rowErr.message });
+			}
+		}
+
+		dtLogger.info('parts_bulk_upload_completed', {
+			userId: req.user?.id,
+			totalRows: summary.totalRows,
+			created: summary.created,
+			updated: summary.updated,
+			skipped: summary.skipped,
+			errorCount: summary.errors.length
+		});
+
+		return res.status(201).json({
+			success: true,
+			data: summary,
+			message: `Bulk upload complete. Created ${summary.created}, updated ${summary.updated}, skipped ${summary.skipped}.`
+		});
+	} catch (error) {
+		dtLogger.error('parts_bulk_upload_failed', { error: error.message });
+		return res.status(500).json({ error: error.message });
+	}
+});
 
 /**
  * GET /api/parts
@@ -122,7 +352,7 @@ router.get('/:partId/barcodes', authMiddleware, async (req, res) => {
  * GET /api/parts/:id
  * Get a single part by ID
  */
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id([0-9a-fA-F-]{36})', authMiddleware, async (req, res) => {
 	try {
 		const part = await partsService.getPartById(req.params.id);
 
@@ -163,7 +393,7 @@ router.post('/', authMiddleware, requireRole(['admin', 'parts_manager']), async 
  * Update an existing part
  * Requires: Admin or Parts Manager role
  */
-router.put('/:id', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
+router.put('/:id([0-9a-fA-F-]{36})', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
 		const part = await partsService.updatePart(req.params.id, req.body);
 
@@ -183,7 +413,7 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'parts_manager']), asyn
  * Deactivate a part (soft delete)
  * Requires: Admin or Parts Manager role
  */
-router.patch('/:id/deactivate', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
+router.patch('/:id([0-9a-fA-F-]{36})/deactivate', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
 		const part = await partsService.deactivatePart(req.params.id);
 

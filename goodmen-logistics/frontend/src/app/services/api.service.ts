@@ -297,6 +297,16 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/parts`, part);
   }
 
+  downloadPartsTemplate(): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/parts/template`, { responseType: 'blob' });
+  }
+
+  bulkUploadParts(file: File): Observable<any> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post(`${this.baseUrl}/parts/bulk-upload`, form);
+  }
+
   updatePart(id: string, part: any): Observable<any> {
     return this.http.put(`${this.baseUrl}/parts/${id}`, part);
   }
