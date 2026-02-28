@@ -21,20 +21,40 @@
     </div>
     <div>
       <label>Scan Barcode</label>
-      <input #scanInput [(ngModel)]="scanCode" (keyup.enter)="addByScan()" placeholder="Scan and Enter" />
+      <div class="scan-input-group">
+        <input #scanInput [(ngModel)]="scanCode" (keyup.enter)="addByScan()" placeholder="Scan and Enter" />
+        <button
+          type="button"
+          *ngIf="!bridgeConnected"
+          class="btn-scan"
+          (click)="startPhoneBridge()"
+          title="Start phone scanner"
+        >
+          📱 Scan
+        </button>
+        <button
+          type="button"
+          *ngIf="bridgeConnected"
+          class="btn-scan connected"
+          (click)="stopPhoneBridge()"
+          title="Stop phone scanner"
+        >
+          ✓ Connected
+        </button>
+      </div>
     </div>
   </div>
 
-  <div class="bridge">
-    <button type="button" (click)="startPhoneBridge()">Start Phone Bridge</button>
-    <button type="button" (click)="openPhoneBridge()" [disabled]="!bridgeMobileUrl">Open Phone Link</button>
-    <button type="button" (click)="showBridgeQr = !showBridgeQr" [disabled]="!bridgeMobileUrl">{{ showBridgeQr ? 'Hide QR' : 'Show QR' }}</button>
-    <button type="button" (click)="stopPhoneBridge()" [disabled]="!bridgeSessionId">Stop Bridge</button>
-    <span *ngIf="bridgeSessionId">Session: {{ bridgeSessionId }} | {{ bridgeConnected ? 'Connected' : 'Waiting' }}</span>
-    <div *ngIf="bridgeMobileUrl" class="hint">Open this on phone: {{ bridgeMobileUrl }}</div>
-    <div *ngIf="bridgeMobileUrl && showBridgeQr" class="qr-wrap">
-      <img [src]="bridgeQrUrl" alt="Phone bridge QR code" />
-    </div>
+  <div *ngIf="bridgeMobileUrl" class="qr-section">
+    <p>Scan this QR code with your phone:</p>
+    <img [src]="bridgeQrUrl" alt="Phone bridge QR code" class="qr-code-image" />
+    <p class="qr-link"><a [href]="bridgeMobileUrl" target="_blank">Or open this link</a></p>
+    <p class="bridge-status">{{ bridgeConnected ? 'Phone scanner connected' : 'Waiting for phone connection...' }}</p>
+  </div>
+
+  <div class="bridge" *ngIf="bridgeMobileUrl">
+    <button type="button" (click)="openPhoneBridge()">Open Phone Link</button>
+    <button type="button" (click)="stopPhoneBridge()">Stop Bridge</button>
   </div>
 
   <table *ngIf="lines.length > 0">
