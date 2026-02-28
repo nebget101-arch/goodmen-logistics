@@ -26,6 +26,8 @@ export class PartsCatalogComponent implements OnInit {
   successMessage = '';
   errorMessage = '';
   loading = false;
+  bulkUploading = false;
+  bulkUploadSummary: { created?: number; updated?: number; skipped?: number; errors?: Array<{ row?: number; sku?: string; error?: string }> } | null = null;
 
   constructor(private apiService: ApiService, private fb: FormBuilder) {
     this.partForm = this.fb.group({
@@ -216,5 +218,107 @@ export class PartsCatalogComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  downloadTemplate(): void {
+    this.errorMessage = '';
+    this.apiService.downloadPartsTemplate().subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'parts-upload-template.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (_error: any) => {
+        // Fallback: generate CSV template in browser (works even if API is unreachable)
+        const headers = [
+          'sku',
+          'name',
+          'category',
+          'manufacturer',
+          'uom',
+          'unit_cost',
+          'unit_price',
+          'reorder_level',
+          'description',
+          'barcode',
+          'pack_qty',
+          'vendor',
+          'status'
+        ];
+        const sample = [
+          'TRK-001',
+          'Oil Filter - Cummins ISX',
+          'Engine',
+          'Fleetguard',
+          'each',
+          '12.50',
+          '19.99',
+          '5',
+          'Heavy duty oil filter',
+          'TRK-001',
+          '1',
+          'Fleetguard',
+          'ACTIVE'
+        ];
+
+        const escapeCsv = (value: string) => {
+          const v = String(value ?? '');
+          return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+        };
+
+        const csv = [headers, sample]
+          .map(row => row.map(escapeCsv).join(','))
+          .join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'parts-upload-template.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        this.successMessage = 'Template downloaded as CSV (fallback mode).';
+      }
+    });
+  }
+
+  onBulkFileSelected(event: Event): void {
+    const target = event.target as HTMLInputElement | null;
+    const file = target?.files?.[0];
+    if (!file) return;
+
+    this.bulkUploading = true;
+    this.bulkUploadSummary = null;
+    this.errorMessage = '';
+    this.successMessage = '';
+
+    this.apiService.bulkUploadParts(file).subscribe({
+      next: (response: any) => {
+        this.bulkUploadSummary = response?.data || null;
+        this.successMessage = response?.message || 'Bulk upload completed successfully';
+        this.loadParts();
+        this.loadCategories();
+        this.loadManufacturers();
+        this.bulkUploading = false;
+        if (target) target.value = '';
+      },
+      error: (error: any) => {
+        this.errorMessage = `Bulk upload failed: ${error.error?.error || error.message}`;
+        this.bulkUploading = false;
+        if (target) target.value = '';
+      }
+    });
+  }
+
+  getBulkUploadErrors(): Array<{ row?: number; sku?: string; error?: string }> {
+    return Array.isArray(this.bulkUploadSummary?.errors) ? this.bulkUploadSummary!.errors! : [];
   }
 }

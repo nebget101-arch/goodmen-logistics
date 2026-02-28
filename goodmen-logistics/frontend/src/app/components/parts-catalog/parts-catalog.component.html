@@ -1,14 +1,37 @@
 <div class="parts-catalog-container">
   <div class="header">
     <h2>Parts Catalog</h2>
-    <button class="btn btn-primary" (click)="openForm()" *ngIf="userRole === 'admin' || userRole === 'parts_manager'">
-      + Add New Part
-    </button>
+    <div class="header-actions" *ngIf="userRole === 'admin' || userRole === 'parts_manager'">
+      <button class="btn btn-outline-primary" (click)="downloadTemplate()">Download Excel Template</button>
+      <label class="btn btn-outline-success mb-0" [class.disabled]="bulkUploading">
+        {{ bulkUploading ? 'Uploading...' : 'Upload Excel' }}
+        <input type="file" accept=".xlsx,.xls,.csv" (change)="onBulkFileSelected($event)" [disabled]="bulkUploading" hidden />
+      </label>
+      <button class="btn btn-primary" (click)="openForm()">+ Add New Part</button>
+    </div>
   </div>
 
   <!-- Success/Error Messages -->
   <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
   <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <div *ngIf="bulkUploadSummary" class="alert alert-info">
+    <strong>Bulk Upload Result:</strong>
+    Created {{ bulkUploadSummary.created || 0 }},
+    Updated {{ bulkUploadSummary.updated || 0 }},
+    Skipped {{ bulkUploadSummary.skipped || 0 }}
+    <div *ngIf="getBulkUploadErrors().length > 0" class="mt-2">
+      <div><strong>Row Errors:</strong></div>
+      <ul class="mb-0">
+        <li *ngFor="let e of getBulkUploadErrors() | slice:0:10">
+          Row {{ e.row }} {{ e.sku ? ('(' + e.sku + ')') : '' }}: {{ e.error }}
+        </li>
+      </ul>
+      <small *ngIf="getBulkUploadErrors().length > 10">
+        Showing first 10 of {{ getBulkUploadErrors().length }} errors.
+      </small>
+    </div>
+  </div>
 
   <!-- Filters -->
   <div class="filters-section">
