@@ -6,10 +6,22 @@ const dtLogger = require('../utils/dynatrace-logger');
  */
 async function getParts(filters = {}) {
 	try {
-		let query = db('parts').where('status', 'ACTIVE');
+		const inventoryAgg = db('inventory')
+			.select('part_id')
+			.sum({ quantity_on_hand: 'on_hand_qty' })
+			.groupBy('part_id')
+			.as('inv');
+
+		let query = db('parts as p')
+			.leftJoin(inventoryAgg, 'p.id', 'inv.part_id')
+			.select('p.*', db.raw('COALESCE(inv.quantity_on_hand, 0) as quantity_on_hand'))
+			.where('p.status', 'ACTIVE');
 
 		if (filters.category) {
-			query = query.where('category', filters.category);
+			query = query.where('p.category', filters.category);
+		}
+		if (filters.manufacturer) {
+			query = query.where('p.manufacturer', filters.manufacturer);
 		}
 		if (filters.search) {
 			query = query.where(function() {
@@ -18,7 +30,7 @@ async function getParts(filters = {}) {
 			});
 		}
 
-		const parts = await query.orderBy('sku', 'asc');
+		const parts = await query.orderBy('p.sku', 'asc');
 
 		dtLogger.info('parts_retrieved', { count: parts.length });
 
@@ -34,7 +46,17 @@ async function getParts(filters = {}) {
  */
 async function getPartById(id) {
 	try {
-		const part = await db('parts').where({ id }).first();
+		const inventoryAgg = db('inventory')
+			.select('part_id')
+			.sum({ quantity_on_hand: 'on_hand_qty' })
+			.groupBy('part_id')
+			.as('inv');
+
+		const part = await db('parts as p')
+			.leftJoin(inventoryAgg, 'p.id', 'inv.part_id')
+			.select('p.*', db.raw('COALESCE(inv.quantity_on_hand, 0) as quantity_on_hand'))
+			.where('p.id', id)
+			.first();
 
 		if (!part) {
 			throw new Error(`Part ${id} not found`);
@@ -52,7 +74,17 @@ async function getPartById(id) {
  */
 async function getPartBySku(sku) {
 	try {
-		const part = await db('parts').where({ sku }).first();
+		const inventoryAgg = db('inventory')
+			.select('part_id')
+			.sum({ quantity_on_hand: 'on_hand_qty' })
+			.groupBy('part_id')
+			.as('inv');
+
+		const part = await db('parts as p')
+			.leftJoin(inventoryAgg, 'p.id', 'inv.part_id')
+			.select('p.*', db.raw('COALESCE(inv.quantity_on_hand, 0) as quantity_on_hand'))
+			.where('p.sku', sku)
+			.first();
 
 		if (!part) {
 			throw new Error(`Part with SKU ${sku} not found`);
