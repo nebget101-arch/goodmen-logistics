@@ -20,7 +20,29 @@
 
     <div>
       <label>Barcode value</label>
-      <input type="text" [(ngModel)]="barcodeValue" placeholder="Scan or type barcode" />
+      <div class="scan-input-group">
+        <input type="text" [(ngModel)]="barcodeValue" placeholder="Scan or type barcode" />
+        <button 
+          *ngIf="!bridgeConnected" 
+          class="btn-scan" 
+          (click)="startPhoneBridge()"
+          title="Start phone scanner">
+          📱 Scan
+        </button>
+        <button 
+          *ngIf="bridgeConnected" 
+          class="btn-scan connected" 
+          (click)="stopPhoneBridge()"
+          title="Stop phone scanner">
+          ✓ Connected
+        </button>
+      </div>
+      
+      <div *ngIf="qrCodeDataUrl" class="qr-section">
+        <p>Scan this QR code with your phone:</p>
+        <img [src]="qrCodeDataUrl" alt="QR Code" class="qr-code-image" />
+        <p class="qr-link"><a [href]="bridgeMobileUrl" target="_blank">Or open this link</a></p>
+      </div>
 
       <label>Pack Qty</label>
       <input type="number" min="1" [(ngModel)]="packQty" />
