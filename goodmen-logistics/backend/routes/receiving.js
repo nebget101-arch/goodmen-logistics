@@ -328,6 +328,14 @@ router.post('/:id/post', authMiddleware, requireRole(['admin', 'parts_manager'])
 					.where({ location_id: ticket.location_id, part_id: line.part_id })
 					.increment('on_hand_qty', line.qty_received);
 
+				// Also update parts.quantity_on_hand if column exists
+				const partsColumns = await trx('parts').columnInfo();
+				if ('quantity_on_hand' in partsColumns) {
+					await trx('parts')
+						.where({ id: line.part_id })
+						.increment('quantity_on_hand', line.qty_received);
+				}
+
 				// Update bin location if override provided
 				if (binLocation) {
 					await trx('inventory')

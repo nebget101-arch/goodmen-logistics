@@ -89,6 +89,7 @@
           <th>Category</th>
           <th>Manufacturer</th>
           <th>UOM</th>
+          <th>Qty On Hand</th>
           <th>Cost</th>
           <th>Retail Price</th>
           <th>Status</th>
@@ -102,6 +103,7 @@
           <td>{{ part.category }}</td>
           <td>{{ part.manufacturer }}</td>
           <td>{{ part.uom }}</td>
+          <td>{{ part.quantity_on_hand || 0 }}</td>
           <td>${{ part.unit_cost | number: '1.2-2' }}</td>
           <td>${{ part.unit_price | number: '1.2-2' }}</td>
           <td>
@@ -112,7 +114,7 @@
           <td>
             <button
               class="btn btn-sm btn-info"
-              (click)="openForm(part)"
+              (click)="openFormModal(part)"
               *ngIf="userRole === 'admin' || userRole === 'parts_manager'"
             >
               Edit
