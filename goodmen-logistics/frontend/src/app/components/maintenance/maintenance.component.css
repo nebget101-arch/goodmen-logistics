@@ -1,1 +1,171 @@
-/* Maintenance component styles */
+.hub-container {
+	max-width: 1700px;
+	width: 96vw;
+}
+
+.hub-card {
+	margin-top: 1.25rem;
+	border-radius: 12px;
+	box-shadow: 0 2px 14px rgba(15, 23, 42, 0.06);
+	overflow: hidden;
+}
+
+.hub-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	padding: 16px 20px;
+}
+
+.card-title {
+	margin: 0;
+}
+
+.subtitle {
+	color: #64748b;
+	font-size: 13px;
+	margin-top: 2px;
+}
+
+.quick-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 0 20px 14px;
+	border-bottom: 1px solid #eef2f7;
+}
+
+.chip {
+	border: 1px solid #d0d7e2;
+	background: #fff;
+	color: #334155;
+	border-radius: 999px;
+	padding: 6px 12px;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.chip.active {
+	border-color: #2563eb;
+	background: #eff6ff;
+	color: #1d4ed8;
+}
+
+.filters-panel {
+	padding: 16px 20px;
+}
+
+.filters-grid {
+	display: grid;
+	grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+	gap: 12px;
+}
+
+.filter-item label {
+	display: block;
+	font-size: 12px;
+	font-weight: 700;
+	color: #64748b;
+	margin-bottom: 6px;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.filters-actions {
+	margin-top: 12px;
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 8px;
+}
+
+.active-count {
+	margin-right: auto;
+	color: #64748b;
+	font-size: 12px;
+}
+
+.table-wrap {
+	overflow-x: auto;
+}
+
+.table {
+	width: 100%;
+	margin: 0;
+	border-collapse: collapse;
+}
+
+.table thead th {
+	background: #f8fafc;
+	border-bottom: 1px solid #e2e8f0;
+	color: #334155;
+	font-size: 12px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	white-space: nowrap;
+}
+
+.table td,
+.table th {
+	padding: 10px 12px;
+	border-bottom: 1px solid #eef2f7;
+}
+
+.actions-cell {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.empty-row {
+	text-align: center;
+	color: #64748b;
+	padding: 18px !important;
+}
+
+.loading {
+	padding: 24px;
+	display: flex;
+	justify-content: center;
+}
+
+.spinner {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	border: 3px solid #dbeafe;
+	border-top-color: #2563eb;
+	animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1400px) {
+	.filters-grid {
+		grid-template-columns: 1fr 1fr 1fr;
+	}
+}
+
+@media (max-width: 900px) {
+	.hub-container {
+		width: 100%;
+	}
+
+	.hub-header {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.filters-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.filters-actions {
+		flex-wrap: wrap;
+	}
+}
