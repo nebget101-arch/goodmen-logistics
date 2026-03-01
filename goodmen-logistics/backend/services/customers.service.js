@@ -323,10 +323,13 @@ async function getCustomerServiceHistory(customerId, { from, to, page = 1, pageS
   // Query both maintenance_records AND completed work_orders for comprehensive service history
   const countResult = await db.raw(`
     SELECT COUNT(*) as count FROM (
-      SELECT id, date_performed FROM maintenance_records 
-      WHERE customer_id = ? AND status = 'completed'
+      SELECT mr.id, mr.date_performed
+      FROM maintenance_records mr
+      JOIN work_orders wo ON wo.id = mr.work_order_id
+      WHERE wo.customer_id = ? AND mr.status = 'completed'
       UNION ALL
-      SELECT id, COALESCE(completion_date, updated_at) as date_performed FROM work_orders 
+      SELECT id, COALESCE(completion_date, updated_at) as date_performed
+      FROM work_orders
       WHERE customer_id = ? AND status IN ('completed', 'closed')
     ) combined
   `, [customerId, customerId]);
@@ -336,16 +339,17 @@ async function getCustomerServiceHistory(customerId, { from, to, page = 1, pageS
   const rows = await db.raw(`
     SELECT * FROM (
       SELECT 
-        id,
-        NULL as work_order_id,
+        mr.id,
+        mr.work_order_id,
         'maintenance_record' as source_type,
-        date_performed,
-        status,
-        description,
-        cost,
-        NULL as work_order_number
-      FROM maintenance_records 
-      WHERE customer_id = ? AND status = 'completed'
+        mr.date_performed,
+        mr.status,
+        mr.description,
+        mr.cost,
+        wo.work_order_number
+      FROM maintenance_records mr
+      JOIN work_orders wo ON wo.id = mr.work_order_id
+      WHERE wo.customer_id = ? AND mr.status = 'completed'
       UNION ALL
       SELECT 
         id,

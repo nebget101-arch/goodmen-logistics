@@ -44,28 +44,56 @@ router.get('/bulk-upload/template', authMiddleware, (req, res) => {
         'Contact Name': 'John Smith',
         'Email': 'john@abctrucking.com',
         'Phone': '555-0123',
-        'Type': 'individual',
+        'Secondary Phone': '555-0144',
+        'Type': 'FLEET',
         'DOT Number': '123456',
         'Address': '123 Main St',
         'City': 'Springfield',
         'State': 'IL',
         'Zip Code': '62701',
-        'Payment Terms': 'net30',
-        'Status': 'active'
+        'Billing Address Line 1': '123 Main St',
+        'Billing Address Line 2': 'Suite 200',
+        'Billing City': 'Springfield',
+        'Billing State': 'IL',
+        'Billing Zip': '62701',
+        'Billing Country': 'USA',
+        'Billing Notes': 'Send invoices via email',
+        'Payment Terms': 'NET_30',
+        'Payment Terms Days': '',
+        'Credit Limit': '5000',
+        'Tax Exempt': 'No',
+        'Tax ID': '12-3456789',
+        'Default Location ID': '',
+        'Status': 'ACTIVE',
+        'Website': 'https://abctrucking.com'
       },
       {
         'Company Name': 'XYZ Logistics',
         'Contact Name': 'Jane Doe',
         'Email': 'jane@xyzlogistics.com',
         'Phone': '555-9876',
-        'Type': 'company',
+        'Secondary Phone': '',
+        'Type': 'WALK_IN',
         'DOT Number': '789012',
         'Address': '456 Oak Ave',
         'City': 'Chicago',
         'State': 'IL',
         'Zip Code': '60601',
-        'Payment Terms': 'net15',
-        'Status': 'active'
+        'Billing Address Line 1': '456 Oak Ave',
+        'Billing Address Line 2': '',
+        'Billing City': 'Chicago',
+        'Billing State': 'IL',
+        'Billing Zip': '60601',
+        'Billing Country': 'USA',
+        'Billing Notes': '',
+        'Payment Terms': 'DUE_ON_RECEIPT',
+        'Payment Terms Days': '',
+        'Credit Limit': '',
+        'Tax Exempt': 'No',
+        'Tax ID': '',
+        'Default Location ID': '',
+        'Status': 'ACTIVE',
+        'Website': ''
       }
     ];
 
@@ -74,18 +102,34 @@ router.get('/bulk-upload/template', authMiddleware, (req, res) => {
     
     // Set column widths
     ws['!cols'] = [
+      { wch: 22 },
       { wch: 20 },
-      { wch: 20 },
-      { wch: 25 },
-      { wch: 15 },
+      { wch: 26 },
+      { wch: 16 },
+      { wch: 18 },
       { wch: 12 },
       { wch: 12 },
-      { wch: 25 },
-      { wch: 15 },
+      { wch: 24 },
+      { wch: 14 },
       { wch: 12 },
       { wch: 10 },
+      { wch: 26 },
+      { wch: 22 },
+      { wch: 16 },
       { wch: 12 },
-      { wch: 10 }
+      { wch: 12 },
+      { wch: 24 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 10 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 14 }
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Customers');
@@ -96,14 +140,28 @@ router.get('/bulk-upload/template', authMiddleware, (req, res) => {
       { Field: 'Contact Name', Required: 'Yes', Description: 'Primary contact person name' },
       { Field: 'Email', Required: 'Yes', Description: 'Valid email address' },
       { Field: 'Phone', Required: 'Yes', Description: 'Phone number (format: XXX-XXX-XXXX)' },
-      { Field: 'Type', Required: 'No', Description: 'individual or company (default: individual)' },
+      { Field: 'Secondary Phone', Required: 'No', Description: 'Optional secondary phone' },
+      { Field: 'Type', Required: 'No', Description: 'FLEET, WALK_IN, INTERNAL, WARRANTY (default: WALK_IN)' },
       { Field: 'DOT Number', Required: 'No', Description: 'Department of Transportation number' },
       { Field: 'Address', Required: 'No', Description: 'Street address' },
       { Field: 'City', Required: 'No', Description: 'City name' },
       { Field: 'State', Required: 'No', Description: 'State abbreviation (e.g., IL)' },
       { Field: 'Zip Code', Required: 'No', Description: 'Postal code' },
-      { Field: 'Payment Terms', Required: 'No', Description: 'net15, net30, net60, or COD (default: net30)' },
-      { Field: 'Status', Required: 'No', Description: 'active or inactive (default: active)' }
+      { Field: 'Billing Address Line 1', Required: 'No', Description: 'Billing address line 1' },
+      { Field: 'Billing Address Line 2', Required: 'No', Description: 'Billing address line 2' },
+      { Field: 'Billing City', Required: 'No', Description: 'Billing city' },
+      { Field: 'Billing State', Required: 'No', Description: 'Billing state' },
+      { Field: 'Billing Zip', Required: 'No', Description: 'Billing zip code' },
+      { Field: 'Billing Country', Required: 'No', Description: 'Billing country' },
+      { Field: 'Billing Notes', Required: 'No', Description: 'Billing notes' },
+      { Field: 'Payment Terms', Required: 'No', Description: 'DUE_ON_RECEIPT, NET_15, NET_30, NET_60, CUSTOM (default: NET_30)' },
+      { Field: 'Payment Terms Days', Required: 'No', Description: 'If Payment Terms is CUSTOM, enter number of days' },
+      { Field: 'Credit Limit', Required: 'No', Description: 'Credit limit amount' },
+      { Field: 'Tax Exempt', Required: 'No', Description: 'Yes/No (default: No)' },
+      { Field: 'Tax ID', Required: 'No', Description: 'Tax identification number' },
+      { Field: 'Default Location ID', Required: 'No', Description: 'UUID of default location' },
+      { Field: 'Status', Required: 'No', Description: 'ACTIVE or INACTIVE (default: ACTIVE)' },
+      { Field: 'Website', Required: 'No', Description: 'Customer website URL' }
     ];
 
     const wsInstructions = XLSX.utils.json_to_sheet(instructionsData);
@@ -188,20 +246,37 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advis
         const normalizedTerms = normalizePaymentTerms(row['Payment Terms']);
         const normalizedCustomerType = normalizeCustomerType(row['Type']);
 
+        const customDays = row['Payment Terms Days'] ? Number(row['Payment Terms Days']) : null;
+        const taxExemptValue = (row['Tax Exempt'] || '').toString().trim().toLowerCase();
+
         const customerData = {
           company_name: companyName,
-          name: contactName,
+          name: contactName || companyName,
+          primary_contact_name: contactName,
           email,
           phone,
+          secondary_phone: (row['Secondary Phone'] ? row['Secondary Phone'].toString().trim() : null) || null,
           customer_type: normalizedCustomerType,
           dot_number: (row['DOT Number'] ? row['DOT Number'].toString().trim() : null) || null,
           address: (row['Address'] ? row['Address'].toString().trim() : null) || null,
           city: (row['City'] ? row['City'].toString().trim() : null) || null,
           state: (row['State'] ? row['State'].toString().trim() : null) || null,
-          zip_code: (row['Zip Code'] ? row['Zip Code'].toString().trim() : null) || null,
+          zip: (row['Zip Code'] ? row['Zip Code'].toString().trim() : null) || null,
+          billing_address_line1: (row['Billing Address Line 1'] ? row['Billing Address Line 1'].toString().trim() : null) || null,
+          billing_address_line2: (row['Billing Address Line 2'] ? row['Billing Address Line 2'].toString().trim() : null) || null,
+          billing_city: (row['Billing City'] ? row['Billing City'].toString().trim() : null) || null,
+          billing_state: (row['Billing State'] ? row['Billing State'].toString().trim() : null) || null,
+          billing_zip: (row['Billing Zip'] ? row['Billing Zip'].toString().trim() : null) || null,
+          billing_country: (row['Billing Country'] ? row['Billing Country'].toString().trim() : null) || null,
+          billing_notes: (row['Billing Notes'] ? row['Billing Notes'].toString().trim() : null) || null,
           payment_terms: normalizedTerms.payment_terms,
-          payment_terms_custom_days: normalizedTerms.payment_terms_custom_days,
-          status: normalizedStatus
+          payment_terms_custom_days: normalizedTerms.payment_terms_custom_days ?? (Number.isFinite(customDays) ? customDays : null),
+          credit_limit: row['Credit Limit'] ? Number(row['Credit Limit']) : null,
+          tax_exempt: taxExemptValue === 'yes' || taxExemptValue === 'true',
+          tax_id: (row['Tax ID'] ? row['Tax ID'].toString().trim() : null) || null,
+          default_location_id: (row['Default Location ID'] ? row['Default Location ID'].toString().trim() : null) || null,
+          status: normalizedStatus,
+          website: (row['Website'] ? row['Website'].toString().trim() : null) || null
         };
 
         // Check if customer already exists

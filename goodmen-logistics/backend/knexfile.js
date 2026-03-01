@@ -8,11 +8,11 @@ module.exports = {
   development: {
     client: 'postgresql',
     connection: {
-      database: process.env.PG_DATABASE || 'goodmen_logistics',
-      user: process.env.PG_USER || 'postgres',
-      password: process.env.PG_PASSWORD || '',
-      host: process.env.PG_HOST || 'localhost',
-      port: process.env.PG_PORT ? parseInt(process.env.PG_PORT) : 5432
+      database: process.env.PG_DATABASE || process.env.DB_NAME || 'goodmen_logistics',
+      user: process.env.PG_USER || process.env.DB_USER || 'postgres',
+      password: process.env.PG_PASSWORD || process.env.DB_PASSWORD || '',
+      host: process.env.PG_HOST || process.env.DB_HOST || 'localhost',
+      port: process.env.PG_PORT ? parseInt(process.env.PG_PORT) : (process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432)
     },
     pool: {
       min: 2,
@@ -26,11 +26,11 @@ module.exports = {
   staging: {
     client: 'postgresql',
     connection: {
-      database: process.env.PG_DATABASE,
-      user: process.env.PG_USER,
-      password: process.env.PG_PASSWORD,
-      host: process.env.PG_HOST,
-      port: process.env.PG_PORT ? parseInt(process.env.PG_PORT) : 5432
+      database: process.env.PG_DATABASE || process.env.DB_NAME,
+      user: process.env.PG_USER || process.env.DB_USER,
+      password: process.env.PG_PASSWORD || process.env.DB_PASSWORD,
+      host: process.env.PG_HOST || process.env.DB_HOST,
+      port: process.env.PG_PORT ? parseInt(process.env.PG_PORT) : (process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432)
     },
     pool: {
       min: 2,
@@ -44,11 +44,11 @@ module.exports = {
   production: {
     client: 'postgresql',
     connection: {
-      database: process.env.PG_DATABASE,
-      user: process.env.PG_USER,
-      password: process.env.PG_PASSWORD,
-      host: process.env.PG_HOST,
-      port: process.env.PG_PORT ? parseInt(process.env.PG_PORT) : 5432
+      database: process.env.PG_DATABASE || process.env.DB_NAME,
+      user: process.env.PG_USER || process.env.DB_USER,
+      password: process.env.PG_PASSWORD || process.env.DB_PASSWORD,
+      host: process.env.PG_HOST || process.env.DB_HOST,
+      port: process.env.PG_PORT ? parseInt(process.env.PG_PORT) : (process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432)
     },
     pool: {
       min: 2,

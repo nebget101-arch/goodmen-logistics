@@ -326,6 +326,8 @@ export class WorkOrderComponent implements OnInit {
     this.workOrder.customerId = customer.id;
     this.customerSearch = customer.displayName || customer.company_name || customer.name;
     this.showCustomerDropdown = false;
+    this.selectedCustomer = customer;
+    this.applyCustomerVehicleFilter();
     
     // Check credit availability for this customer
     this.checkCustomerCredit(customer.id);
@@ -348,6 +350,9 @@ export class WorkOrderComponent implements OnInit {
         if (rows && rows.length > 0) {
           this.selectedCustomer = rows[0];
           this.workOrder.customerId = rows[0].id;
+          this.customerSearch = rows[0].company_name || rows[0].name || '';
+          this.applyCustomerVehicleFilter();
+          this.checkCustomerCredit(rows[0].id);
         } else {
           this.fetchFmcsadot(this.customerDotSearch);
         }
@@ -391,6 +396,8 @@ export class WorkOrderComponent implements OnInit {
         this.workOrder.customerId = customer.id;
         this.selectedCustomer = customer;
         this.showNewCustomerModal = false;
+        this.customerSearch = customer.company_name || customer.name || '';
+        this.applyCustomerVehicleFilter();
         this.newCustomer = { name: '', dot_number: '', address: '', city: '', state: '', zip: '', phone: '', email: '' };
       },
       error: () => {
@@ -414,12 +421,14 @@ export class WorkOrderComponent implements OnInit {
 
   onVehicleSearchChange(): void {
     if (!this.vehicleSearch) {
-      this.filteredVehicles = [];
-      this.showVehicleDropdown = false;
+      const pool = this.getVehicleSearchPool();
+      this.filteredVehicles = pool;
+      this.showVehicleDropdown = pool.length > 0;
       return;
     }
     const search = this.vehicleSearch.toLowerCase();
-    this.filteredVehicles = this.vehicles.filter(v => {
+    const pool = this.getVehicleSearchPool();
+    this.filteredVehicles = pool.filter(v => {
       const unit = (v.unit_number || v.unitNumber || '').toLowerCase();
       const vin = (v.vin || '').toLowerCase();
       const make = (v.make || '').toLowerCase();
@@ -427,6 +436,12 @@ export class WorkOrderComponent implements OnInit {
       return unit.includes(search) || vin.includes(search) || make.includes(search) || model.includes(search);
     });
     this.showVehicleDropdown = this.filteredVehicles.length > 0;
+  }
+
+  showVehicleDropdownForCustomer(): void {
+    const pool = this.getVehicleSearchPool();
+    this.filteredVehicles = pool;
+    this.showVehicleDropdown = pool.length > 0;
   }
 
   selectVehicle(vehicle: any): void {
@@ -646,6 +661,44 @@ export class WorkOrderComponent implements OnInit {
         }
       }
     }
+  }
+
+  private getVehicleSearchPool(): any[] {
+    if (!this.workOrder.customerId) {
+      return this.vehicles;
+    }
+    return this.vehicles.filter(v => String(v.customer_id) === String(this.workOrder.customerId));
+  }
+
+  private applyCustomerVehicleFilter(): void {
+    if (!this.workOrder.customerId) {
+      return;
+    }
+
+    const selectedVehicleId = this.workOrder.vehicleId;
+    if (selectedVehicleId) {
+      const selectedVehicle = this.vehicles.find(v => String(v.id) === String(selectedVehicleId));
+      if (selectedVehicle && String(selectedVehicle.customer_id) !== String(this.workOrder.customerId)) {
+        this.workOrder.vehicleId = null;
+        this.vehicleSearch = '';
+        this.resetVehicleDetails();
+      }
+    }
+  }
+
+  private resetVehicleDetails(): void {
+    this.workOrder.unitNumber = '';
+    this.workOrder.vin = '';
+    this.workOrder.licensePlate = '';
+    this.workOrder.make = '';
+    this.workOrder.model = '';
+    this.workOrder.year = '';
+    this.workOrder.vehicleType = '';
+    this.workOrder.currentOdometer = '';
+    this.workOrder.engineHours = '';
+    this.workOrder.fleetTerminal = '';
+    this.workOrder.driverAssigned = '';
+    this.workOrder.vehicleStatus = '';
   }
 
   addPart(): void {

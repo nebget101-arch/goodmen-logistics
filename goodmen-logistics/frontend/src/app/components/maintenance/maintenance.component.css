@@ -81,6 +81,71 @@
 	gap: 8px;
 }
 
+.bulk-upload-panel {
+	border-top: 1px solid #eef2f7;
+	background: #fbfdff;
+}
+
+.bulk-upload-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+}
+
+.bulk-upload-header h4 {
+	margin: 0;
+}
+
+.bulk-upload-header p {
+	margin: 4px 0 0;
+	color: #64748b;
+	font-size: 13px;
+}
+
+.bulk-upload-controls {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	margin-top: 12px;
+	flex-wrap: wrap;
+}
+
+.bulk-upload-controls .form-control {
+	max-width: 360px;
+}
+
+.bulk-upload-results {
+	margin-top: 12px;
+	background: #fff;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 12px;
+}
+
+.bulk-upload-results .summary {
+	display: flex;
+	gap: 16px;
+	font-weight: 600;
+	color: #334155;
+	flex-wrap: wrap;
+}
+
+.bulk-upload-results .failures {
+	margin-top: 10px;
+	display: grid;
+	gap: 6px;
+}
+
+.bulk-upload-results .failure-row {
+	font-size: 13px;
+	color: #b91c1c;
+	background: #fff1f2;
+	border: 1px solid #fecdd3;
+	border-radius: 6px;
+	padding: 6px 8px;
+}
+
 .active-count {
 	margin-right: auto;
 	color: #64748b;

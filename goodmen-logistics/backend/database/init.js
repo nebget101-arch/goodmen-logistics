@@ -89,10 +89,17 @@ async function runSeedScript() {
     console.log('✅ Sample data inserted successfully');
 
     // Display counts
+    const vehiclesSource = await client.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.views WHERE table_name = 'all_vehicles'
+      ) AS has_view
+    `);
+    const vehiclesTable = vehiclesSource.rows?.[0]?.has_view ? 'all_vehicles' : 'vehicles';
+
     const counts = await client.query(`
       SELECT 
         (SELECT COUNT(*) FROM drivers) as drivers,
-        (SELECT COUNT(*) FROM all_vehicles) as vehicles,
+        (SELECT COUNT(*) FROM ${vehiclesTable}) as vehicles,
         (SELECT COUNT(*) FROM hos_records) as hos_records,
         (SELECT COUNT(*) FROM maintenance_records) as maintenance,
         (SELECT COUNT(*) FROM drug_alcohol_tests) as drug_tests,

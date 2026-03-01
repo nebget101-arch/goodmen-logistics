@@ -10,11 +10,11 @@ const poolConfig = process.env.DATABASE_URL
       ssl: { rejectUnauthorized: false }
     }
   : {
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT || 5432,
-      database: process.env.DB_NAME || 'goodmen_logistics',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres'
+      host: process.env.DB_HOST || process.env.PG_HOST || 'localhost',
+      port: process.env.DB_PORT || process.env.PG_PORT || 5432,
+      database: process.env.DB_NAME || process.env.PG_DATABASE || 'goodmen_logistics',
+      user: process.env.DB_USER || process.env.PG_USER || 'postgres',
+      password: process.env.DB_PASSWORD || process.env.PG_PASSWORD || 'postgres'
     };
 
 const pool = new Pool({

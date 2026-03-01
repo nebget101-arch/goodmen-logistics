@@ -1,4 +1,7 @@
 exports.up = async function(knex) {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DESTRUCTIVE_MIGRATIONS !== 'true') {
+    return;
+  }
   await knex.raw('CREATE EXTENSION IF NOT EXISTS pgcrypto');
   const hasCompanyOwned = await knex.schema.hasColumn('vehicles', 'company_owned');
   if (!hasCompanyOwned) {

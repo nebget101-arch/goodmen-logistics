@@ -1,7 +1,11 @@
+/**
+ * Recreate all_vehicles view.
+ */
 exports.up = async function(knex) {
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DESTRUCTIVE_MIGRATIONS !== 'true') {
     return;
   }
+  await knex.raw('CREATE EXTENSION IF NOT EXISTS pgcrypto');
   await knex.raw('DROP VIEW IF EXISTS all_vehicles');
   await knex.raw(`
     CREATE VIEW all_vehicles AS
@@ -26,7 +30,6 @@ exports.up = async function(knex) {
       v.updated_at,
       v.location_id,
       v.company_owned,
-      COALESCE(v.vehicle_type, 'truck') AS vehicle_type,
       NULL::uuid AS customer_id,
       'internal'::text AS source
     FROM vehicles v
@@ -52,7 +55,6 @@ exports.up = async function(knex) {
       cv.updated_at,
       NULL::uuid AS location_id,
       false AS company_owned,
-      'truck'::text AS vehicle_type,
       cv.customer_id,
       'customer'::text AS source
     FROM customer_vehicles cv

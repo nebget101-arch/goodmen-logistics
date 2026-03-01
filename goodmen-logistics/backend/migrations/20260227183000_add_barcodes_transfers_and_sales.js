@@ -11,6 +11,9 @@
  * @returns { Promise<void> }
  */
 exports.up = async function up(knex) {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DESTRUCTIVE_MIGRATIONS !== 'true') {
+    return;
+  }
   const hasUsers = await knex.schema.hasTable('users');
   const hasInvoices = await knex.schema.hasTable('invoices');
 
