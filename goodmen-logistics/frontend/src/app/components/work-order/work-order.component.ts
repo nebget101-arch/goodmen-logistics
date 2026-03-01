@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { CreditService } from '../../services/credit.service';
+import { lastValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-work-order',
@@ -54,6 +55,10 @@ export class WorkOrderComponent implements OnInit {
   activeMechanicIndex: number | null = null;
   workOrderParts: any[] = [];
   reservePartForm: any = { partId: '', qtyRequested: 1, unitPrice: null, locationId: '' };
+  scanBatchInput: string = '';
+  scanBatchProcessing = false;
+  scanBatchErrors: string[] = [];
+  scanBatchSuccess: string = '';
 
   // Credit management
   availableCredit: number = 0;
@@ -1106,6 +1111,55 @@ export class WorkOrderComponent implements OnInit {
         this.loadParts();
       }
     });
+  }
+
+  async processScannedParts(): Promise<void> {
+    if (!this.workOrderId) return;
+    this.scanBatchErrors = [];
+    this.scanBatchSuccess = '';
+
+    const codes = this.extractScanCodes(this.scanBatchInput);
+    if (!codes.length) return;
+
+    const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
+    this.scanBatchProcessing = true;
+    try {
+      const response = await lastValueFrom(this.apiService.reserveWorkOrderPartsByScan(this.workOrderId, {
+        codes,
+        locationId: locationId || undefined,
+        taxable: true
+      }));
+      const payload = response?.data || response;
+      const lines = Array.isArray(payload?.lines) ? payload.lines : [];
+      const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+
+      if (errors.length) {
+        errors.forEach((err: any) => {
+          const label = err?.code || err?.partId || 'Unknown';
+          const msg = err?.error || 'Failed';
+          this.scanBatchErrors.push(`${label}: ${msg}`);
+        });
+      }
+
+      if (lines.length) {
+        this.scanBatchSuccess = `Added ${lines.length} part${lines.length === 1 ? '' : 's'} from scan.`;
+        this.loadWorkOrder(this.workOrderId as string);
+        this.loadParts();
+      }
+    } catch (error: any) {
+      const msg = error?.error?.error || error?.message || 'Scan failed';
+      this.scanBatchErrors.push(msg);
+    } finally {
+      this.scanBatchInput = '';
+      this.scanBatchProcessing = false;
+    }
+  }
+
+  private extractScanCodes(input: string): string[] {
+    return (input || '')
+      .split(/[\s,]+/)
+      .map(value => value.trim())
+      .filter(Boolean);
   }
 
   issuePart(line: any): void {

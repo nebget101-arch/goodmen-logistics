@@ -3,6 +3,7 @@ const dtLogger = require('../utils/dynatrace-logger');
 const { generateInvoiceNumber } = require('../utils/invoice-number');
 const { recomputeInvoiceTotals } = require('./invoices.service');
 const creditService = require('./credit.service');
+const barcodesService = require('./barcodes.service');
 
 const STATUS_TRANSITIONS = {
   DRAFT: ['IN_PROGRESS', 'CANCELED'],
@@ -601,6 +602,69 @@ async function reservePart(workOrderId, payload, userId) {
   });
 }
 
+async function reservePartsFromBarcodes(workOrderId, payload, userId) {
+  const codes = Array.isArray(payload?.codes) ? payload.codes : [];
+  if (!codes.length) {
+    throw new Error('codes array is required');
+  }
+
+  const locationId = payload.locationId;
+  const taxable = payload.taxable !== undefined ? payload.taxable === true : true;
+  const buckets = new Map();
+  const errors = [];
+  const lines = [];
+
+  const counts = new Map();
+  codes.forEach(code => {
+    const normalized = String(code || '').trim();
+    if (!normalized) return;
+    counts.set(normalized, (counts.get(normalized) || 0) + 1);
+  });
+
+  for (const [code, count] of counts.entries()) {
+    try {
+      const barcode = await barcodesService.getBarcodeByCode(code);
+      if (!barcode || !barcode.part_id) {
+        throw new Error('Barcode not linked to a part');
+      }
+      const packQty = Number(barcode.pack_qty) || 1;
+      const qtyRequested = count * packQty;
+      const unitPrice = Number(
+        payload.unitPrice ??
+        barcode.default_cost ??
+        barcode.default_retail_price ??
+        0
+      );
+      const bucketKey = `${barcode.part_id}|${unitPrice}`;
+      const existing = buckets.get(bucketKey);
+      if (existing) {
+        existing.qtyRequested += qtyRequested;
+      } else {
+        buckets.set(bucketKey, { partId: barcode.part_id, qtyRequested, unitPrice });
+      }
+    } catch (error) {
+      errors.push({ code, error: error.message || 'Lookup failed' });
+    }
+  }
+
+  for (const bucket of buckets.values()) {
+    try {
+      const line = await reservePart(workOrderId, {
+        partId: bucket.partId,
+        qtyRequested: bucket.qtyRequested,
+        unitPrice: bucket.unitPrice,
+        locationId,
+        taxable
+      }, userId);
+      lines.push(line);
+    } catch (error) {
+      errors.push({ partId: bucket.partId, error: error.message || 'Reserve failed' });
+    }
+  }
+
+  return { lines, errors };
+}
+
 async function issuePart(workOrderId, partLineId, payload, userId) {
   return db.transaction(async trx => {
     const line = await trx('work_order_part_items').where({ id: partLineId, work_order_id: workOrderId }).first();
@@ -1054,6 +1118,7 @@ module.exports = {
   updateWorkOrder,
   updateWorkOrderStatus,
   reservePart,
+  reservePartsFromBarcodes,
   issuePart,
   returnPart,
   updateCharges,
