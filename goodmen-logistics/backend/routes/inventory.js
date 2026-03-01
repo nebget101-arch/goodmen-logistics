@@ -134,6 +134,32 @@ router.get('/status/:locationId', authMiddleware, async (req, res) => {
 });
 
 /**
+ * GET /api/inventory/location-summary
+ * Get inventory totals grouped by location.
+ */
+router.get('/location-summary', authMiddleware, async (_req, res) => {
+	try {
+		const summary = await db
+			.select(
+				'locations.id',
+				'locations.name',
+				db.raw('COALESCE(SUM(inventory_by_location.on_hand_qty), 0) as on_hand_qty'),
+				db.raw('COALESCE(SUM(inventory_by_location.reserved_qty), 0) as reserved_qty'),
+				db.raw('COUNT(*) as row_count')
+			)
+			.from('inventory_by_location')
+			.join('locations', 'locations.id', 'inventory_by_location.location_id')
+			.groupBy('locations.id', 'locations.name')
+			.orderBy('locations.name', 'asc');
+
+		res.json({ success: true, data: summary });
+	} catch (error) {
+		dtLogger.error('inventory_location_summary_failed', { error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
  * PUT /api/inventory/:id
  * Update inventory min level and bin location
  * Requires: Admin or Parts Manager role

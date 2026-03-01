@@ -190,7 +190,7 @@ async function listWorkOrders(filters = {}) {
       'wo.updated_at',
       'v.unit_number as vehicle_unit',
       'v.vin as vehicle_vin',
-      db.raw('COALESCE(c.company_name, c.name) as customer_name'),
+      db.raw('c.company_name as customer_name'),
       'l.name as location_name',
       'i.status as invoice_status',
       'i.id as invoice_id'
@@ -307,6 +307,7 @@ async function createWorkOrder(payload, userId) {
       resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedBy || payload.requestedByUsername);
     }
 
+    const resolvedDescription = payload.description || payload.title || 'Work order';
     const [workOrder] = await trx('work_orders').insert({
       work_order_number: workOrderNumber,
       vehicle_id: normalizeUuid(payload.vehicleId),
@@ -315,7 +316,7 @@ async function createWorkOrder(payload, userId) {
       type: payload.type || 'REPAIR',
       priority: payload.priority || 'NORMAL',
       status: normalizeStatus(payload.status, 'open'),
-      description: payload.description || null,
+      description: resolvedDescription,
       odometer_miles: payload.odometerMiles || null,
       assigned_mechanic_user_id: normalizeUuid(payload.assignedMechanicUserId),
       requested_by_user_id: resolvedUserId,

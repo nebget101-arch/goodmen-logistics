@@ -9,6 +9,7 @@ import { ApiService } from '../../services/api.service';
 export class InventoryReportsComponent implements OnInit {
   locations: any[] = [];
   locationId = '';
+  private readonly preferredLocationName = 'garland main warehouse';
 
   onHandRows: any[] = [];
   txRows: any[] = [];
@@ -29,11 +30,44 @@ export class InventoryReportsComponent implements OnInit {
     this.api.getLocations().subscribe({
       next: (res: any) => {
         this.locations = res?.data || res || [];
-        if (this.locations.length > 0) this.locationId = this.locations[0].id;
+        this.pickDefaultLocation();
+      },
+      error: (err: any) => this.error = err?.error?.error || err?.message || 'Failed to load locations'
+    });
+  }
+
+  private pickDefaultLocation(): void {
+    if (!this.locations.length) {
+      return;
+    }
+
+    this.api.getInventoryLocationSummary().subscribe({
+      next: (res: any) => {
+        const summary = res?.data || [];
+        if (summary.length > 0) {
+          const preferred = summary.reduce((best: any, item: any) => {
+            const bestQty = Number(best?.on_hand_qty || 0);
+            const itemQty = Number(item?.on_hand_qty || 0);
+            return itemQty >= bestQty ? item : best;
+          }, summary[0]);
+          this.locationId = preferred?.id || this.locations[0].id;
+        } else {
+          const preferred = this.locations.find(
+            l => (l.name || '').toString().trim().toLowerCase() === this.preferredLocationName
+          );
+          this.locationId = (preferred || this.locations[0]).id;
+        }
         this.loadOnHand();
         this.loadTransactions();
       },
-      error: (err: any) => this.error = err?.error?.error || err?.message || 'Failed to load locations'
+      error: () => {
+        const preferred = this.locations.find(
+          l => (l.name || '').toString().trim().toLowerCase() === this.preferredLocationName
+        );
+        this.locationId = (preferred || this.locations[0]).id;
+        this.loadOnHand();
+        this.loadTransactions();
+      }
     });
   }
 

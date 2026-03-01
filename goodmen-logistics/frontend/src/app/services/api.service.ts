@@ -219,6 +219,16 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/work-orders/${id}/generate-invoice`, payload || {});
   }
 
+  downloadWorkOrderUploadTemplate(): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/work-orders/bulk-upload/template`, { responseType: 'blob' });
+  }
+
+  bulkUploadWorkOrders(file: File): Observable<any> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post(`${this.baseUrl}/work-orders/bulk-upload`, form);
+  }
+
   uploadWorkOrderDocument(id: string, file: File): Observable<any> {
     const form = new FormData();
     form.append('file', file);
@@ -321,6 +331,10 @@ export class ApiService {
     if (filters?.category) url += `&category=${filters.category}`;
     if (filters?.search) url += `&search=${encodeURIComponent(filters.search)}`;
     return this.http.get(url);
+  }
+
+  getInventoryLocationSummary(): Observable<any> {
+    return this.http.get(`${this.baseUrl}/inventory/location-summary`);
   }
 
   getInventoryAlerts(locationId: string, severity?: string): Observable<any> {

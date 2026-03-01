@@ -70,6 +70,51 @@
       </div>
     </div>
 
+    <div class="card-body bulk-upload-panel">
+      <div class="bulk-upload-header">
+        <div>
+          <h4>Bulk Work Order Upload</h4>
+          <p>Upload multiple work orders at once using an Excel spreadsheet.</p>
+        </div>
+        <button class="btn btn-outline-primary" type="button" (click)="downloadWorkOrderTemplate()">
+          📥 Download Template
+        </button>
+      </div>
+
+      <div *ngIf="bulkUploadMessage" class="alert alert-success mt-2">{{ bulkUploadMessage }}</div>
+      <div *ngIf="bulkUploadError" class="alert alert-danger mt-2">{{ bulkUploadError }}</div>
+
+      <div class="bulk-upload-controls">
+        <input
+          id="workOrderBulkUpload"
+          type="file"
+          class="form-control"
+          (change)="onBulkFileSelected($event)"
+          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        >
+        <button class="btn btn-primary" type="button" (click)="uploadBulkWorkOrders()" [disabled]="!bulkUploadFile || bulkUploading">
+          {{ bulkUploading ? 'Uploading...' : '🚀 Upload & Process' }}
+        </button>
+        <button class="btn btn-outline-secondary" type="button" (click)="clearBulkUpload()" [disabled]="bulkUploading">
+          Clear
+        </button>
+      </div>
+
+      <div class="bulk-upload-results" *ngIf="bulkUploadResults">
+        <div class="summary">
+          <span>Successful: {{ bulkUploadResults.successful?.length || 0 }}</span>
+          <span>Failed: {{ bulkUploadResults.failed?.length || 0 }}</span>
+          <span>Total: {{ bulkUploadResults.total || 0 }}</span>
+        </div>
+        <div class="failures" *ngIf="bulkUploadResults.failed?.length">
+          <div class="failure-row" *ngFor="let failure of bulkUploadResults.failed">
+            <strong>Row {{ failure.row }}:</strong>
+            <span>{{ failure.errors?.join(', ') }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div *ngIf="loading" class="loading">
       <div class="spinner"></div>
     </div>

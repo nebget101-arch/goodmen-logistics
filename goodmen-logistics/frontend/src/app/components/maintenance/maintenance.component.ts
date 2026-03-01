@@ -21,6 +21,11 @@ export class MaintenanceComponent implements OnInit {
   statuses = ['DRAFT', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'CLOSED', 'CANCELED'];
   types = ['REPAIR', 'PM', 'INSPECTION', 'TIRE', 'OTHER'];
   invoiceStatuses = ['DRAFT', 'SENT', 'PARTIAL', 'PAID', 'VOID'];
+  bulkUploadFile: File | null = null;
+  bulkUploading = false;
+  bulkUploadMessage = '';
+  bulkUploadError = '';
+  bulkUploadResults: any = null;
 
   constructor(private apiService: ApiService, private router: Router) { }
 
@@ -96,6 +101,60 @@ export class MaintenanceComponent implements OnInit {
     if (!record?.id) return;
     this.apiService.generateInvoiceFromWorkOrder(record.id).subscribe({
       next: () => this.loadWorkOrders()
+    });
+  }
+
+  downloadWorkOrderTemplate(): void {
+    this.bulkUploadError = '';
+    this.apiService.downloadWorkOrderUploadTemplate().subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'work-order-upload-template.xlsx';
+        link.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (error) => {
+        this.bulkUploadError = error?.error?.error || error?.message || 'Failed to download template';
+      }
+    });
+  }
+
+  onBulkFileSelected(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    const file = target?.files?.[0] || null;
+    this.bulkUploadFile = file;
+    this.bulkUploadMessage = '';
+    this.bulkUploadError = '';
+    this.bulkUploadResults = null;
+  }
+
+  clearBulkUpload(): void {
+    this.bulkUploadFile = null;
+    this.bulkUploadMessage = '';
+    this.bulkUploadError = '';
+    this.bulkUploadResults = null;
+  }
+
+  uploadBulkWorkOrders(): void {
+    if (!this.bulkUploadFile || this.bulkUploading) return;
+    this.bulkUploading = true;
+    this.bulkUploadMessage = '';
+    this.bulkUploadError = '';
+    this.bulkUploadResults = null;
+
+    this.apiService.bulkUploadWorkOrders(this.bulkUploadFile).subscribe({
+      next: (res: any) => {
+        this.bulkUploadMessage = res?.message || 'Bulk upload completed';
+        this.bulkUploadResults = res?.results || null;
+        this.bulkUploading = false;
+        this.loadWorkOrders();
+      },
+      error: (error) => {
+        this.bulkUploadError = error?.error?.error || error?.message || 'Bulk upload failed';
+        this.bulkUploading = false;
+      }
     });
   }
 }

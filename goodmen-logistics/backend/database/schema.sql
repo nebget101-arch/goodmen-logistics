@@ -23,8 +23,7 @@ DROP TABLE IF EXISTS locations CASCADE;
 -- Customers Table
 CREATE TABLE customers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL,
-    company_name VARCHAR(255),
+    company_name VARCHAR(255) NOT NULL,
     dot_number VARCHAR(32) UNIQUE,
     address VARCHAR(255),
     city VARCHAR(100),
@@ -74,7 +73,7 @@ CREATE TABLE vehicles (
     year INTEGER NOT NULL,
     license_plate VARCHAR(20),
     state VARCHAR(2),
-    psql -U postgres -d goodmen_logistics -c "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS vehicle_type VARCHAR(20) DEFAULT 'truck';"    vehicle_type VARCHAR(20) DEFAULT 'truck',
+    vehicle_type VARCHAR(20) DEFAULT 'truck',
     status VARCHAR(20) DEFAULT 'in-service',
     mileage INTEGER DEFAULT 0,
     inspection_expiry DATE,
@@ -309,6 +308,7 @@ CREATE TABLE IF NOT EXISTS locations (
 -- Customer Vehicles Table (for customer-owned vehicles)
 CREATE TABLE IF NOT EXISTS customer_vehicles (
     id SERIAL PRIMARY KEY,
+    vehicle_uuid UUID DEFAULT gen_random_uuid() UNIQUE,
     unit_number VARCHAR(255),
     vin VARCHAR(17),
     make VARCHAR(100),
