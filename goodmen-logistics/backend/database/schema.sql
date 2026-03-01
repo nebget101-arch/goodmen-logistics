@@ -335,7 +335,7 @@ ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS location_id UUID REFERENCES locati
 -- Work Orders Table
 CREATE TABLE IF NOT EXISTS work_orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    vehicle_id UUID NOT NULL REFERENCES vehicles(id),
+    vehicle_id UUID REFERENCES customer_vehicles(vehicle_uuid) ON DELETE SET NULL,
     customer_id UUID REFERENCES customers(id),
     location_id UUID REFERENCES locations(id),
     description TEXT NOT NULL,
