@@ -1,15 +1,16 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { CreditService } from '../../services/credit.service';
 import { lastValueFrom } from 'rxjs';
+import * as QRCode from 'qrcode';
 
 @Component({
   selector: 'app-work-order',
   templateUrl: './work-order.component.html',
   styleUrls: ['./work-order.component.css']
 })
-export class WorkOrderComponent implements OnInit {
+export class WorkOrderComponent implements OnInit, OnDestroy {
   private readonly partsTaxRate = 8.5;
   vehicles: any[] = [];
   files: File[] = [];
@@ -59,6 +60,12 @@ export class WorkOrderComponent implements OnInit {
   scanBatchProcessing = false;
   scanBatchErrors: string[] = [];
   scanBatchSuccess: string = '';
+  bridgeMobileUrl = '';
+  bridgeSessionId = '';
+  bridgeConnected = false;
+  bridgeEvents: EventSource | null = null;
+  qrCodeDataUrl = '';
+  scanBridgeError = '';
 
   // Credit management
   availableCredit: number = 0;
@@ -85,6 +92,10 @@ export class WorkOrderComponent implements OnInit {
         this.loadWorkOrder(id);
       }
     });
+  }
+
+  ngOnDestroy(): void {
+    this.stopPhoneBridge();
   }
 
   loadWorkOrder(id: string): void {
@@ -1153,6 +1164,69 @@ export class WorkOrderComponent implements OnInit {
       this.scanBatchInput = '';
       this.scanBatchProcessing = false;
     }
+  }
+
+  startPhoneBridge(): void {
+    this.scanBridgeError = '';
+    this.stopPhoneBridge();
+    this.apiService.createScanBridgeSession().subscribe({
+      next: (res: any) => {
+        const data = res?.data || {};
+        this.bridgeMobileUrl = data.mobileUrl || '';
+        this.bridgeSessionId = data.sessionId || '';
+
+        if (this.bridgeMobileUrl) {
+          QRCode.toDataURL(this.bridgeMobileUrl, {
+            width: 250,
+            margin: 2,
+            color: { dark: '#000000', light: '#ffffff' }
+          }).then((url: string) => {
+            this.qrCodeDataUrl = url;
+          }).catch(() => {
+            this.scanBridgeError = 'Failed to generate QR code';
+          });
+        }
+
+        const base = this.apiService.getBaseUrl();
+        const eventsUrl = `${base}/scan-bridge/session/${encodeURIComponent(data.sessionId)}/events?readToken=${encodeURIComponent(data.readToken)}`;
+        this.bridgeEvents = new EventSource(eventsUrl);
+        this.bridgeEvents.addEventListener('ready', () => {
+          this.bridgeConnected = true;
+        });
+        this.bridgeEvents.addEventListener('scan', (evt: MessageEvent) => {
+          try {
+            const payload = JSON.parse(evt.data || '{}');
+            const barcode = (payload.barcode || '').toString().trim();
+            if (!barcode) return;
+            this.appendScanCode(barcode);
+          } catch {}
+        });
+        this.bridgeEvents.onerror = () => {
+          this.bridgeConnected = false;
+          this.scanBridgeError = 'Phone scanner disconnected';
+        };
+      },
+      error: (err: any) => {
+        this.scanBridgeError = err?.error?.error || err?.message || 'Failed to start phone bridge';
+      }
+    });
+  }
+
+  stopPhoneBridge(): void {
+    if (this.bridgeEvents) {
+      this.bridgeEvents.close();
+      this.bridgeEvents = null;
+    }
+    this.bridgeConnected = false;
+    this.bridgeMobileUrl = '';
+    this.bridgeSessionId = '';
+    this.qrCodeDataUrl = '';
+  }
+
+  private appendScanCode(code: string): void {
+    if (!code) return;
+    const existing = this.scanBatchInput ? `${this.scanBatchInput.trim()}\n` : '';
+    this.scanBatchInput = `${existing}${code}`.trim();
   }
 
   private extractScanCodes(input: string): string[] {

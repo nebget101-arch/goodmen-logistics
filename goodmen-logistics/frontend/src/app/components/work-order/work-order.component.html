@@ -493,6 +493,13 @@
                   </select>
                   <button
                     type="button"
+                    class="btn btn-outline-secondary"
+                    (click)="bridgeConnected ? stopPhoneBridge() : startPhoneBridge()"
+                  >
+                    {{ bridgeConnected ? 'Phone Connected' : 'Scan with Phone' }}
+                  </button>
+                  <button
+                    type="button"
                     class="btn btn-outline-primary"
                     (click)="processScannedParts()"
                     [disabled]="scanBatchProcessing || !scanBatchInput"
@@ -501,6 +508,16 @@
                   </button>
                 </div>
                 <small class="text-muted">Tip: scanning a barcode multiple times increases quantity.</small>
+                <div *ngIf="scanBridgeError" class="text-danger" style="margin-top: 6px;">
+                  {{ scanBridgeError }}
+                </div>
+                <div *ngIf="qrCodeDataUrl" style="margin-top: 8px;">
+                  <div>Scan this QR code with your phone:</div>
+                  <img [src]="qrCodeDataUrl" alt="QR Code" style="width: 220px; max-width: 100%; border: 1px solid #eee; border-radius: 4px;" />
+                  <div style="margin-top: 6px;">
+                    <a [href]="bridgeMobileUrl" target="_blank" rel="noopener">Open on phone</a>
+                  </div>
+                </div>
                 <div *ngIf="scanBatchSuccess" class="text-success" style="margin-top: 6px;">
                   {{ scanBatchSuccess }}
                 </div>
