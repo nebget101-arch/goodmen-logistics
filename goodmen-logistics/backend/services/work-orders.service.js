@@ -68,6 +68,13 @@ function normalizeUuid(value) {
   return value;
 }
 
+function normalizeOdometer(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const num = Number(value);
+  return Number.isNaN(num) ? null : Math.trunc(num);
+}
+
 function computeDueDate(issuedDate, paymentTerms, customDays) {
   if (!issuedDate) return null;
   const base = new Date(issuedDate);
@@ -317,7 +324,7 @@ async function createWorkOrder(payload, userId) {
       priority: payload.priority || 'NORMAL',
       status: normalizeStatus(payload.status, 'open'),
       description: resolvedDescription,
-      odometer_miles: payload.odometerMiles || null,
+      odometer_miles: normalizeOdometer(payload.odometerMiles),
       assigned_mechanic_user_id: normalizeUuid(payload.assignedMechanicUserId),
       requested_by_user_id: resolvedUserId,
       discount_type: payload.discountType || 'NONE',
@@ -376,6 +383,7 @@ async function updateWorkOrder(workOrderId, payload, userId) {
     const customerId = normalizeUuid(payload.customerId ?? workOrder.customer_id);
     const locationId = normalizeUuid(payload.locationId ?? workOrder.location_id);
     const assignedMechanicId = normalizeUuid(payload.assignedMechanicUserId ?? workOrder.assigned_mechanic_user_id);
+    const odometerMiles = normalizeOdometer(payload.odometerMiles ?? workOrder.odometer_miles);
 
     let resolvedUserId = normalizeUuid(userId);
     if (!resolvedUserId) {
@@ -390,7 +398,7 @@ async function updateWorkOrder(workOrderId, payload, userId) {
       priority: payload.priority ?? workOrder.priority,
       status: normalizeStatus(payload.status, workOrder.status),
       description: payload.description ?? workOrder.description,
-      odometer_miles: payload.odometerMiles ?? workOrder.odometer_miles,
+      odometer_miles: odometerMiles,
       assigned_mechanic_user_id: assignedMechanicId,
       requested_by_user_id: workOrder.requested_by_user_id || resolvedUserId,
       discount_type: payload.discountType ?? workOrder.discount_type,
