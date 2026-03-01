@@ -1,7 +1,10 @@
 <div class="customers-list">
   <div class="header">
     <h2>Customers</h2>
-    <button class="btn btn-primary" (click)="goToNew()">+ New Customer</button>
+    <div class="header-buttons">
+      <button class="btn btn-secondary" (click)="goToBulkUpload()">📊 Bulk Upload</button>
+      <button class="btn btn-primary" (click)="goToNew()">+ New Customer</button>
+    </div>
   </div>
 
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
