@@ -189,6 +189,10 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/work-orders/${id}/parts`, payload);
   }
 
+  reserveWorkOrderPartsByScan(id: string, payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/work-orders/${id}/parts/scan`, payload);
+  }
+
   issueWorkOrderPart(id: string, partLineId: string, qtyToIssue: number): Observable<any> {
     return this.http.post(`${this.baseUrl}/work-orders/${id}/parts/${partLineId}/issue`, { qtyToIssue });
   }

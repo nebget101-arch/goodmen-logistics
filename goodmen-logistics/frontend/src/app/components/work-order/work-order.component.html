@@ -476,6 +476,42 @@
 
             <div class="row" style="margin-top: 12px;">
               <div class="col">
+                <label for="scanBatchInput">Scan Parts (barcodes)</label>
+                <div style="display:flex; gap:8px; flex-wrap: wrap;">
+                  <textarea
+                    id="scanBatchInput"
+                    class="form-control"
+                    placeholder="Scan or paste barcodes here (one per line)."
+                    [(ngModel)]="scanBatchInput"
+                    name="scanBatchInput"
+                    rows="3"
+                    style="min-width: 260px; flex: 1;"
+                  ></textarea>
+                  <select class="form-control" [(ngModel)]="reservePartForm.locationId" name="scanPartLocation" style="max-width: 220px;">
+                    <option [ngValue]="''">WO Location</option>
+                    <option *ngFor="let loc of locations" [ngValue]="loc.id">{{ loc.name }}</option>
+                  </select>
+                  <button
+                    type="button"
+                    class="btn btn-outline-primary"
+                    (click)="processScannedParts()"
+                    [disabled]="scanBatchProcessing || !scanBatchInput"
+                  >
+                    {{ scanBatchProcessing ? 'Adding...' : 'Add Scanned Parts' }}
+                  </button>
+                </div>
+                <small class="text-muted">Tip: scanning a barcode multiple times increases quantity.</small>
+                <div *ngIf="scanBatchSuccess" class="text-success" style="margin-top: 6px;">
+                  {{ scanBatchSuccess }}
+                </div>
+                <div *ngIf="scanBatchErrors.length" class="text-danger" style="margin-top: 6px;">
+                  <div *ngFor="let err of scanBatchErrors">{{ err }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 12px;">
+              <div class="col">
                 <label>Reserve Part from Inventory</label>
                 <div style="display:flex; gap:8px; flex-wrap: wrap;">
                   <div style="position: relative; max-width: 260px;">

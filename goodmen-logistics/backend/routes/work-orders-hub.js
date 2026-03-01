@@ -406,6 +406,16 @@ router.post('/:id/parts', authMiddleware, requireRole(['admin', 'service_advisor
   }
 });
 
+router.post('/:id/parts/scan', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
+  try {
+    const result = await workOrdersService.reservePartsFromBarcodes(req.params.id, req.body || {}, req.user?.id);
+    res.status(201).json({ success: true, data: result });
+  } catch (error) {
+    dtLogger.error('work_orders_part_scan_failed', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
 router.post('/:id/parts/:partLineId/issue', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
   try {
     const updated = await workOrdersService.issuePart(req.params.id, req.params.partLineId, req.body || {}, req.user?.id);
