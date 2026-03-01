@@ -63,9 +63,19 @@ export class MaintenanceComponent implements OnInit {
     this.loadWorkOrders();
   }
 
+  setStatusFilter(status: string): void {
+    this.filters.status = status;
+    this.applyFilters();
+  }
+
   clearFilters(): void {
     this.filters = { status: '', locationId: '', type: '', invoiceStatus: '', search: '' };
     this.loadWorkOrders();
+  }
+
+  getActiveFilterCount(): number {
+    return ['status', 'locationId', 'type', 'invoiceStatus', 'search']
+      .reduce((count, key) => (this.filters[key] ? count + 1 : count), 0);
   }
 
   getStatusBadge(status: string): string {

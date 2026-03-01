@@ -1,43 +1,72 @@
-<div class="container">
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">🔧 Work Orders Hub</h2>
+<div class="container hub-container">
+  <div class="card hub-card">
+    <div class="card-header hub-header">
+      <div>
+        <h2 class="card-title">🔧 Work Orders Hub</h2>
+        <div class="subtitle">Track, filter, and invoice work orders faster</div>
+      </div>
       <button class="btn btn-primary" (click)="goToWorkOrder()">+ New Work Order</button>
     </div>
 
-    <div class="card-body" style="padding-bottom: 0;">
-      <div class="row">
-        <div class="col">
-          <input type="text" class="form-control" placeholder="Search WO #, unit, VIN, customer" [(ngModel)]="filters.search" (keyup.enter)="applyFilters()">
+    <div class="quick-filters">
+      <button class="chip" [class.active]="!filters.status" (click)="setStatusFilter('')">All</button>
+      <button class="chip" [class.active]="filters.status === 'IN_PROGRESS'" (click)="setStatusFilter('IN_PROGRESS')">In Progress</button>
+      <button class="chip" [class.active]="filters.status === 'WAITING_PARTS'" (click)="setStatusFilter('WAITING_PARTS')">Waiting Parts</button>
+      <button class="chip" [class.active]="filters.status === 'COMPLETED'" (click)="setStatusFilter('COMPLETED')">Completed</button>
+      <button class="chip" [class.active]="filters.status === 'CLOSED'" (click)="setStatusFilter('CLOSED')">Closed</button>
+      <button class="chip" [class.active]="filters.status === 'CANCELED'" (click)="setStatusFilter('CANCELED')">Canceled</button>
+    </div>
+
+    <div class="card-body filters-panel">
+      <div class="filters-grid">
+        <div class="filter-item filter-search">
+          <label>Search</label>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="WO #, unit, VIN, customer"
+            [(ngModel)]="filters.search"
+            (keyup.enter)="applyFilters()"
+          >
         </div>
-        <div class="col">
+
+        <div class="filter-item">
+          <label>Status</label>
           <select class="form-control" [(ngModel)]="filters.status">
             <option value="">All Statuses</option>
             <option *ngFor="let status of statuses" [value]="status">{{ status }}</option>
           </select>
         </div>
-        <div class="col">
+
+        <div class="filter-item">
+          <label>Type</label>
           <select class="form-control" [(ngModel)]="filters.type">
             <option value="">All Types</option>
             <option *ngFor="let type of types" [value]="type">{{ type }}</option>
           </select>
         </div>
-        <div class="col">
+
+        <div class="filter-item">
+          <label>Location</label>
           <select class="form-control" [(ngModel)]="filters.locationId">
             <option value="">All Locations</option>
             <option *ngFor="let loc of locations" [value]="loc.id">{{ loc.name }}</option>
           </select>
         </div>
-        <div class="col">
+
+        <div class="filter-item">
+          <label>Invoice</label>
           <select class="form-control" [(ngModel)]="filters.invoiceStatus">
             <option value="">All Invoice Statuses</option>
             <option *ngFor="let status of invoiceStatuses" [value]="status">{{ status }}</option>
           </select>
         </div>
-        <div class="col" style="display: flex; gap: 8px;">
-          <button class="btn btn-secondary" (click)="applyFilters()">Apply</button>
-          <button class="btn btn-outline-secondary" (click)="clearFilters()">Clear</button>
-        </div>
+      </div>
+
+      <div class="filters-actions">
+        <span class="active-count">{{ getActiveFilterCount() }} filter(s) active</span>
+        <button class="btn btn-secondary" (click)="applyFilters()">Apply Filters</button>
+        <button class="btn btn-outline-secondary" (click)="clearFilters()">Reset</button>
       </div>
     </div>
 
@@ -45,49 +74,52 @@
       <div class="spinner"></div>
     </div>
 
-    <table class="table" *ngIf="!loading">
-      <thead>
-        <tr>
-          <th>WO #</th>
-          <th>Vehicle</th>
-          <th>Customer</th>
-          <th>Location</th>
-          <th>Type</th>
-          <th>Totals</th>
-          <th>Status</th>
-          <th>Invoice</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let record of workOrders">
-          <td><strong>{{ record.work_order_number }}</strong></td>
-          <td>{{ record.vehicle_unit }}</td>
-          <td>{{ record.customer_name || 'Internal' }}</td>
-          <td>{{ record.location_name }}</td>
-          <td>{{ record.type }}</td>
-          <td>
-            ${{ record.total_amount | number:'1.2-2' }}
-          </td>
-          <td>
-            <span [class]="'badge ' + getStatusBadge(record.status)">
-              {{ record.status }}
-            </span>
-          </td>
-          <td>
-            <span *ngIf="record.invoice_status" [class]="'badge ' + getInvoiceBadge(record.invoice_status)">
-              {{ record.invoice_status }}
-            </span>
-            <span *ngIf="!record.invoice_status">—</span>
-          </td>
-          <td style="display:flex; gap:6px; flex-wrap: wrap;">
-            <button type="button" class="btn btn-sm btn-outline-primary" (click)="editWorkOrder(record)">View</button>
-            <button type="button" class="btn btn-sm btn-outline-success" (click)="generateInvoice(record)" [disabled]="record.status !== 'COMPLETED' || record.invoice_id">
-              Generate Invoice
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-wrap" *ngIf="!loading">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>WO #</th>
+            <th>Vehicle</th>
+            <th>Customer</th>
+            <th>Location</th>
+            <th>Type</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th>Invoice</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let record of workOrders">
+            <td><strong>{{ record.work_order_number }}</strong></td>
+            <td>{{ record.vehicle_unit }}</td>
+            <td>{{ record.customer_name || 'Internal' }}</td>
+            <td>{{ record.location_name }}</td>
+            <td>{{ record.type }}</td>
+            <td>${{ record.total_amount | number:'1.2-2' }}</td>
+            <td>
+              <span [class]="'badge ' + getStatusBadge(record.status)">
+                {{ record.status }}
+              </span>
+            </td>
+            <td>
+              <span *ngIf="record.invoice_status" [class]="'badge ' + getInvoiceBadge(record.invoice_status)">
+                {{ record.invoice_status }}
+              </span>
+              <span *ngIf="!record.invoice_status">—</span>
+            </td>
+            <td class="actions-cell">
+              <button type="button" class="btn btn-sm btn-outline-primary" (click)="editWorkOrder(record)">View</button>
+              <button type="button" class="btn btn-sm btn-outline-success" (click)="generateInvoice(record)" [disabled]="record.status !== 'COMPLETED' || record.invoice_id">
+                Generate Invoice
+              </button>
+            </td>
+          </tr>
+          <tr *ngIf="workOrders.length === 0">
+            <td colspan="9" class="empty-row">No work orders found with the selected filters.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
