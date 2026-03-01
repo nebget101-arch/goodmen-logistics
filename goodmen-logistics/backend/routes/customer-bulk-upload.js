@@ -22,8 +22,9 @@ const upload = multer({
 
 function requireRole(allowedRoles) {
   return (req, res, next) => {
-    const role = req.user?.role || 'technician';
-    if (!allowedRoles.includes(role)) {
+    const role = (req.user?.role || 'technician').toString().trim().toLowerCase();
+    const allowed = allowedRoles.map(r => r.toString().trim().toLowerCase());
+    if (!allowed.includes(role)) {
       return res.status(403).json({ error: 'Forbidden: insufficient role' });
     }
     next();
@@ -183,19 +184,24 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advis
         }
 
         // Prepare customer object
+        const normalizedStatus = normalizeStatus(row['Status']);
+        const normalizedTerms = normalizePaymentTerms(row['Payment Terms']);
+        const normalizedCustomerType = normalizeCustomerType(row['Type']);
+
         const customerData = {
           company_name: companyName,
           name: contactName,
           email,
           phone,
-          type: (row['Type'] ? row['Type'].toString().toLowerCase() : 'individual') || 'individual',
+          customer_type: normalizedCustomerType,
           dot_number: (row['DOT Number'] ? row['DOT Number'].toString().trim() : null) || null,
           address: (row['Address'] ? row['Address'].toString().trim() : null) || null,
           city: (row['City'] ? row['City'].toString().trim() : null) || null,
           state: (row['State'] ? row['State'].toString().trim() : null) || null,
           zip_code: (row['Zip Code'] ? row['Zip Code'].toString().trim() : null) || null,
-          payment_terms: (row['Payment Terms'] ? row['Payment Terms'].toString().toLowerCase() : 'net30') || 'net30',
-          status: (row['Status'] ? row['Status'].toString().toLowerCase() : 'active') || 'active'
+          payment_terms: normalizedTerms.payment_terms,
+          payment_terms_custom_days: normalizedTerms.payment_terms_custom_days,
+          status: normalizedStatus
         };
 
         // Check if customer already exists
@@ -280,6 +286,52 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advis
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
+}
+
+function normalizeStatus(value) {
+  if (value === undefined || value === null || value === '') return 'ACTIVE';
+  const normalized = value.toString().trim().toLowerCase();
+  if (normalized === 'active') return 'ACTIVE';
+  if (normalized === 'inactive') return 'INACTIVE';
+  return normalized.toUpperCase();
+}
+
+function normalizePaymentTerms(value) {
+  if (value === undefined || value === null || value === '') {
+    return { payment_terms: 'NET_30', payment_terms_custom_days: null };
+  }
+  const raw = value.toString().trim().toLowerCase();
+  const compact = raw.replace(/[\s_-]/g, '');
+
+  if (compact === 'net15') return { payment_terms: 'NET_15', payment_terms_custom_days: null };
+  if (compact === 'net30') return { payment_terms: 'NET_30', payment_terms_custom_days: null };
+  if (compact === 'net60') return { payment_terms: 'CUSTOM', payment_terms_custom_days: 60 };
+  if (compact === 'cod' || compact === 'dueonreceipt') {
+    return { payment_terms: 'DUE_ON_RECEIPT', payment_terms_custom_days: null };
+  }
+  if (compact === 'custom') {
+    return { payment_terms: 'CUSTOM', payment_terms_custom_days: null };
+  }
+
+  const daysMatch = raw.match(/(\d+)/);
+  if (daysMatch) {
+    const days = Number(daysMatch[1]);
+    if (!Number.isNaN(days) && days > 0) {
+      return { payment_terms: 'CUSTOM', payment_terms_custom_days: days };
+    }
+  }
+
+  return { payment_terms: raw.toUpperCase(), payment_terms_custom_days: null };
+}
+
+function normalizeCustomerType(value) {
+  if (value === undefined || value === null || value === '') return 'WALK_IN';
+  const normalized = value.toString().trim().toLowerCase();
+  if (normalized === 'individual' || normalized === 'walkin' || normalized === 'walk_in') return 'WALK_IN';
+  if (normalized === 'company' || normalized === 'fleet') return 'FLEET';
+  if (normalized === 'internal') return 'INTERNAL';
+  if (normalized === 'warranty') return 'WARRANTY';
+  return normalized.toUpperCase();
 }
 
 module.exports = router;
