@@ -95,4 +95,15 @@ export class CustomerService {
     }
     return this.http.get(`${this.baseUrl}/customers/${customerId}/vehicles`, { params: httpParams });
   }
+
+  // Bulk Upload Methods
+  downloadUploadTemplate(): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/customers/bulk-upload/template`, { responseType: 'blob' });
+  }
+
+  bulkUploadCustomers(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post(`${this.baseUrl}/customers/bulk-upload`, formData);
+  }
 }

@@ -1,0 +1,139 @@
+<div class="bulk-upload-container">
+  <div class="header">
+    <h3>Bulk Customer Upload</h3>
+    <p class="subtitle">Upload multiple customers at once using an Excel spreadsheet</p>
+  </div>
+
+  <!-- Messages -->
+  <div *ngIf="successMessage" class="message success">
+    {{ successMessage }}
+  </div>
+  <div *ngIf="errorMessage" class="message error">
+    {{ errorMessage }}
+  </div>
+
+  <!-- Upload Section -->
+  <div class="upload-section">
+    <div class="template-download">
+      <p>Start with our template:</p>
+      <button type="button" (click)="downloadTemplate()" class="btn btn-secondary">
+        📥 Download Upload Template
+      </button>
+      <span class="hint">Excel file with sample data and instructions</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="file-upload">
+      <p>Upload your completed spreadsheet:</p>
+      <div class="file-input-wrapper">
+        <input 
+          type="file" 
+          #fileInput
+          (change)="onFileSelected($event)" 
+          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          class="file-input"
+        />
+        <label for="fileInput" class="file-label">
+          <span class="icon">📋</span>
+          <span *ngIf="!selectedFile" class="text">Choose Excel file...</span>
+          <span *ngIf="selectedFile" class="text">✓ {{ selectedFile.name }}</span>
+        </label>
+      </div>
+
+      <div class="file-info" *ngIf="selectedFile">
+        <p>Selected: <strong>{{ selectedFile.name }}</strong></p>
+        <p>Size: {{ (selectedFile.size / 1024).toFixed(2) }} KB</p>
+      </div>
+
+      <div class="button-group">
+        <button 
+          type="button" 
+          (click)="uploadFile()" 
+          [disabled]="!selectedFile || uploading"
+          class="btn btn-primary"
+        >
+          <span *ngIf="!uploading">🚀 Upload & Process</span>
+          <span *ngIf="uploading">⏳ Processing...</span>
+        </button>
+        <button 
+          type="button" 
+          (click)="clearFile()" 
+          *ngIf="selectedFile && !uploading"
+          class="btn btn-outline"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results Modal -->
+  <div *ngIf="showResults" class="modal-overlay" (click)="closeResults()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h4>Upload Results</h4>
+        <button type="button" (click)="closeResults()" class="close-btn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Summary -->
+        <div class="results-summary">
+          <div class="summary-stat success">
+            <div class="stat-number">{{ successCount }}</div>
+            <div class="stat-label">Successfully Uploaded</div>
+          </div>
+          <div class="summary-stat" [class.error]="failureCount > 0" [class.neutral]="failureCount === 0">
+            <div class="stat-number">{{ failureCount }}</div>
+            <div class="stat-label">Failed Uploads</div>
+          </div>
+          <div class="summary-stat">
+            <div class="stat-number">{{ totalProcessed }}</div>
+            <div class="stat-label">Total Processed</div>
+          </div>
+        </div>
+
+        <!-- Successful uploads -->
+        <div *ngIf="successCount > 0" class="results-section">
+          <h5 class="section-title success">✓ Successful Uploads ({{ successCount }})</h5>
+          <div class="results-table">
+            <div class="table-header">
+              <div class="col-row">Row</div>
+              <div class="col-company">Company</div>
+              <div class="col-id">Customer ID</div>
+            </div>
+            <div class="table-body">
+              <div *ngFor="let success of uploadResults?.successful" class="table-row">
+                <div class="col-row">{{ success.row }}</div>
+                <div class="col-company">{{ success.company }}</div>
+                <div class="col-id">{{ success.id }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Failed uploads -->
+        <div *ngIf="failureCount > 0" class="results-section">
+          <h5 class="section-title error">✗ Failed Uploads ({{ failureCount }})</h5>
+          <div class="results-failures">
+            <div *ngFor="let failure of uploadResults?.failed" class="failure-item">
+              <div class="failure-header">
+                <span class="row-number">Row {{ failure.row }}</span>
+                <span class="company-name">{{ failure.company }}</span>
+              </div>
+              <ul class="error-list">
+                <li *ngFor="let error of failure.errors">{{ error }}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" (click)="closeResults()" class="btn btn-primary">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

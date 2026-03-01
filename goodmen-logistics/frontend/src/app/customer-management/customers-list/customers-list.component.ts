@@ -86,6 +86,10 @@ export class CustomersListComponent implements OnInit {
     this.router.navigate(['/customers/new']);
   }
 
+  goToBulkUpload(): void {
+    this.router.navigate(['/customers/bulk-upload']);
+  }
+
   viewCustomer(id: string): void {
     this.router.navigate(['/customers', id]);
   }

@@ -267,9 +267,11 @@ const scanBridgeRouter = require('./routes/scan-bridge');
 
 const locationsRouter = require('./routes/locations');
 const customersRouter = require('./routes/customers');
+const customerBulkUploadRouter = require('./routes/customer-bulk-upload');
 
 // Use routes
 
+app.use('/api/customers', customerBulkUploadRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/locations', locationsRouter);
