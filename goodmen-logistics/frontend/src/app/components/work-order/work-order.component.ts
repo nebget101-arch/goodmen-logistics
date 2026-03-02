@@ -1283,7 +1283,12 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     if (existing) {
       return;
     }
-    const unitPrice = Number(part.unit_price ?? part.default_retail_price ?? 0);
+    const unitPrice = Number(
+      part.unit_price ??
+      part.default_retail_price ??
+      part.default_cost ??
+      0
+    );
     this.scannedParts.push({
       partId: part.id,
       sku: part.sku || '',
@@ -1316,6 +1321,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
       this.loadParts();
       const idx = this.scannedParts.indexOf(line);
       if (idx >= 0) this.removeScannedPart(idx);
+      this.scanBatchSuccess = `Reserved ${line.sku || line.partId}.`;
     } catch (error: any) {
       const msg = error?.error?.error || error?.message || 'Reserve failed';
       this.scanBatchErrors.push(`${line.sku || line.partId}: ${msg}`);
