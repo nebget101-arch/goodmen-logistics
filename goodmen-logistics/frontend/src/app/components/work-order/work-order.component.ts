@@ -60,6 +60,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   scanBatchProcessing = false;
   scanBatchErrors: string[] = [];
   scanBatchSuccess: string = '';
+  scanCounts: Record<string, number> = {};
   bridgeMobileUrl = '';
   bridgeSessionId = '';
   bridgeConnected = false;
@@ -1129,7 +1130,8 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     this.scanBatchErrors = [];
     this.scanBatchSuccess = '';
 
-    const codes = this.extractScanCodes(this.scanBatchInput);
+    this.rebuildScanCountsFromInput();
+    const codes = Object.keys(this.scanCounts);
     if (!codes.length) return;
 
     const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
@@ -1137,6 +1139,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     try {
       const response = await lastValueFrom(this.apiService.reserveWorkOrderPartsByScan(this.workOrderId, {
         codes,
+        codeCounts: this.scanCounts,
         locationId: locationId || undefined,
         taxable: true
       }));
@@ -1162,6 +1165,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
       this.scanBatchErrors.push(msg);
     } finally {
       this.scanBatchInput = '';
+      this.scanCounts = {};
       this.scanBatchProcessing = false;
     }
   }
@@ -1225,8 +1229,24 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
 
   private appendScanCode(code: string): void {
     if (!code) return;
-    const existing = this.scanBatchInput ? `${this.scanBatchInput.trim()}\n` : '';
-    this.scanBatchInput = `${existing}${code}`.trim();
+    const current = this.scanCounts[code] || 0;
+    this.scanCounts[code] = current + 1;
+    if (current === 0) {
+      const existing = this.scanBatchInput ? `${this.scanBatchInput.trim()}\n` : '';
+      this.scanBatchInput = `${existing}${code}`.trim();
+    }
+  }
+
+  private rebuildScanCountsFromInput(): void {
+    this.scanCounts = {};
+    const codes = this.extractScanCodes(this.scanBatchInput);
+    codes.forEach(code => {
+      this.scanCounts[code] = (this.scanCounts[code] || 0) + 1;
+    });
+  }
+
+  get scanCountKeys(): string[] {
+    return Object.keys(this.scanCounts || {});
   }
 
   private extractScanCodes(input: string): string[] {

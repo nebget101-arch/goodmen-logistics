@@ -604,7 +604,10 @@ async function reservePart(workOrderId, payload, userId) {
 
 async function reservePartsFromBarcodes(workOrderId, payload, userId) {
   const codes = Array.isArray(payload?.codes) ? payload.codes : [];
-  if (!codes.length) {
+  const codeCounts = payload?.codeCounts && typeof payload.codeCounts === 'object'
+    ? payload.codeCounts
+    : null;
+  if (!codes.length && (!codeCounts || !Object.keys(codeCounts).length)) {
     throw new Error('codes array is required');
   }
 
@@ -615,11 +618,20 @@ async function reservePartsFromBarcodes(workOrderId, payload, userId) {
   const lines = [];
 
   const counts = new Map();
-  codes.forEach(code => {
-    const normalized = String(code || '').trim();
-    if (!normalized) return;
-    counts.set(normalized, (counts.get(normalized) || 0) + 1);
-  });
+  if (codeCounts) {
+    Object.entries(codeCounts).forEach(([code, count]) => {
+      const normalized = String(code || '').trim();
+      const qty = Number(count) || 0;
+      if (!normalized || qty <= 0) return;
+      counts.set(normalized, (counts.get(normalized) || 0) + qty);
+    });
+  } else {
+    codes.forEach(code => {
+      const normalized = String(code || '').trim();
+      if (!normalized) return;
+      counts.set(normalized, (counts.get(normalized) || 0) + 1);
+    });
+  }
 
   for (const [code, count] of counts.entries()) {
     try {
