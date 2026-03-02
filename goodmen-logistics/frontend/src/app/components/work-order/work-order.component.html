@@ -508,6 +508,11 @@
                   </button>
                 </div>
                 <small class="text-muted">Tip: scanning a barcode multiple times increases quantity.</small>
+                <div *ngIf="scanCountKeys.length > 0" style="margin-top: 6px;">
+                  <div *ngFor="let code of scanCountKeys">
+                    {{ code }} × {{ scanCounts[code] }}
+                  </div>
+                </div>
                 <div *ngIf="scanBridgeError" class="text-danger" style="margin-top: 6px;">
                   {{ scanBridgeError }}
                 </div>
