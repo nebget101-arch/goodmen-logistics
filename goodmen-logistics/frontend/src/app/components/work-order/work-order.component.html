@@ -532,6 +532,7 @@
                         <th>SKU</th>
                         <th>Qty</th>
                         <th>Unit Price</th>
+                        <th>Reserve</th>
                         <th>Remove</th>
                       </tr>
                     </thead>
@@ -544,6 +545,11 @@
                         </td>
                         <td style="max-width: 140px;">
                           <input type="number" class="form-control" [(ngModel)]="part.unitPrice" min="0" />
+                        </td>
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-primary" (click)="reserveSingleScannedPart(part)">
+                            Reserve
+                          </button>
                         </td>
                         <td>
                           <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeScannedPart(i)">Remove</button>

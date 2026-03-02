@@ -1278,32 +1278,48 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     }
   }
 
-  private upsertScannedPart(part: any, barcode: any, packQty: number): void {
+  private upsertScannedPart(part: any, barcode: any, _packQty: number): void {
     const existing = this.scannedParts.find(p => p.partId === part.id);
     if (existing) {
-      existing.qty += packQty;
       return;
     }
-    const unitPrice = Number(
-      part.default_cost ??
-      part.default_retail_price ??
-      part.unit_cost ??
-      part.unit_price ??
-      0
-    );
+    const unitPrice = Number(part.unit_price ?? part.default_retail_price ?? 0);
     this.scannedParts.push({
       partId: part.id,
       sku: part.sku || '',
       name: part.name || '',
-      qty: packQty,
+      qty: 1,
       unitPrice,
-      packQty,
+      packQty: 1,
       barcodeValue: barcode?.barcode_value
     });
   }
 
   removeScannedPart(index: number): void {
     this.scannedParts.splice(index, 1);
+  }
+
+  async reserveSingleScannedPart(line: any): Promise<void> {
+    if (!this.workOrderId || !line?.partId) return;
+    const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
+    const qty = Number(line.qty) || 1;
+    if (qty <= 0) return;
+    try {
+      await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
+        partId: line.partId,
+        qtyRequested: qty,
+        unitPrice: Number(line.unitPrice) || 0,
+        locationId: locationId || undefined,
+        taxable: true
+      }));
+      this.loadWorkOrder(this.workOrderId as string);
+      this.loadParts();
+      const idx = this.scannedParts.indexOf(line);
+      if (idx >= 0) this.removeScannedPart(idx);
+    } catch (error: any) {
+      const msg = error?.error?.error || error?.message || 'Reserve failed';
+      this.scanBatchErrors.push(`${line.sku || line.partId}: ${msg}`);
+    }
   }
 
   private extractScanCodes(input: string): string[] {
