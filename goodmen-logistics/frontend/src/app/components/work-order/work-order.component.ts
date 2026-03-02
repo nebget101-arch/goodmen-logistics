@@ -60,7 +60,16 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   scanBatchProcessing = false;
   scanBatchErrors: string[] = [];
   scanBatchSuccess: string = '';
-  scanCounts: Record<string, number> = {};
+  scannedParts: Array<{
+    partId: string;
+    sku: string;
+    name: string;
+    qty: number;
+    unitPrice: number;
+    packQty: number;
+    barcodeValue?: string;
+  }> = [];
+  scanCache: Record<string, any> = {};
   bridgeMobileUrl = '';
   bridgeSessionId = '';
   bridgeConnected = false;
@@ -1130,33 +1139,34 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     this.scanBatchErrors = [];
     this.scanBatchSuccess = '';
 
-    this.rebuildScanCountsFromInput();
-    const codes = Object.keys(this.scanCounts);
-    if (!codes.length) return;
+    if (!this.scannedParts.length && this.scanBatchInput.trim()) {
+      await this.buildScannedPartsFromText();
+    }
+    if (!this.scannedParts.length) return;
 
     const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
     this.scanBatchProcessing = true;
     try {
-      const response = await lastValueFrom(this.apiService.reserveWorkOrderPartsByScan(this.workOrderId, {
-        codes,
-        codeCounts: this.scanCounts,
-        locationId: locationId || undefined,
-        taxable: true
-      }));
-      const payload = response?.data || response;
-      const lines = Array.isArray(payload?.lines) ? payload.lines : [];
-      const errors = Array.isArray(payload?.errors) ? payload.errors : [];
-
-      if (errors.length) {
-        errors.forEach((err: any) => {
-          const label = err?.code || err?.partId || 'Unknown';
-          const msg = err?.error || 'Failed';
-          this.scanBatchErrors.push(`${label}: ${msg}`);
-        });
+      let successCount = 0;
+      for (const line of this.scannedParts) {
+        if (!line.partId || line.qty <= 0) continue;
+        try {
+          await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
+            partId: line.partId,
+            qtyRequested: line.qty,
+            unitPrice: line.unitPrice,
+            locationId: locationId || undefined,
+            taxable: true
+          }));
+          successCount += 1;
+        } catch (error: any) {
+          const msg = error?.error?.error || error?.message || 'Reserve failed';
+          this.scanBatchErrors.push(`${line.sku || line.partId}: ${msg}`);
+        }
       }
 
-      if (lines.length) {
-        this.scanBatchSuccess = `Added ${lines.length} part${lines.length === 1 ? '' : 's'} from scan.`;
+      if (successCount > 0) {
+        this.scanBatchSuccess = `Added ${successCount} part${successCount === 1 ? '' : 's'} from scan.`;
         this.loadWorkOrder(this.workOrderId as string);
         this.loadParts();
       }
@@ -1165,8 +1175,9 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
       this.scanBatchErrors.push(msg);
     } finally {
       this.scanBatchInput = '';
-      this.scanCounts = {};
+      this.scannedParts = [];
       this.scanBatchProcessing = false;
+      this.stopPhoneBridge();
     }
   }
 
@@ -1229,24 +1240,70 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
 
   private appendScanCode(code: string): void {
     if (!code) return;
-    const current = this.scanCounts[code] || 0;
-    this.scanCounts[code] = current + 1;
-    if (current === 0) {
-      const existing = this.scanBatchInput ? `${this.scanBatchInput.trim()}\n` : '';
-      this.scanBatchInput = `${existing}${code}`.trim();
+    const existing = this.scanBatchInput ? `${this.scanBatchInput.trim()}\n` : '';
+    this.scanBatchInput = `${existing}${code}`.trim();
+    this.handleBarcodeScan(code);
+  }
+
+  private async buildScannedPartsFromText(): Promise<void> {
+    const codes = this.extractScanCodes(this.scanBatchInput);
+    for (const code of codes) {
+      await this.handleBarcodeScan(code);
     }
   }
 
-  private rebuildScanCountsFromInput(): void {
-    this.scanCounts = {};
-    const codes = this.extractScanCodes(this.scanBatchInput);
-    codes.forEach(code => {
-      this.scanCounts[code] = (this.scanCounts[code] || 0) + 1;
+  private async handleBarcodeScan(code: string): Promise<void> {
+    const normalized = String(code || '').trim();
+    if (!normalized) return;
+
+    const cached = this.scanCache[normalized];
+    if (cached?.part) {
+      this.upsertScannedPart(cached.part, cached.barcode, cached.packQty);
+      return;
+    }
+
+    try {
+      const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
+      const response = await lastValueFrom(this.apiService.lookupBarcode(normalized, locationId || undefined));
+      const payload = response?.data || response;
+      const barcode = payload?.barcode || {};
+      const part = payload?.part || {};
+      if (!part?.id) throw new Error('Barcode not linked to a part');
+      const packQty = Number(barcode.pack_qty) || 1;
+      this.scanCache[normalized] = { part, barcode, packQty };
+      this.upsertScannedPart(part, barcode, packQty);
+    } catch (error: any) {
+      const msg = error?.error?.error || error?.message || 'Lookup failed';
+      this.scanBatchErrors.push(`${normalized}: ${msg}`);
+    }
+  }
+
+  private upsertScannedPart(part: any, barcode: any, packQty: number): void {
+    const existing = this.scannedParts.find(p => p.partId === part.id);
+    if (existing) {
+      existing.qty += packQty;
+      return;
+    }
+    const unitPrice = Number(
+      part.default_cost ??
+      part.default_retail_price ??
+      part.unit_cost ??
+      part.unit_price ??
+      0
+    );
+    this.scannedParts.push({
+      partId: part.id,
+      sku: part.sku || '',
+      name: part.name || '',
+      qty: packQty,
+      unitPrice,
+      packQty,
+      barcodeValue: barcode?.barcode_value
     });
   }
 
-  get scanCountKeys(): string[] {
-    return Object.keys(this.scanCounts || {});
+  removeScannedPart(index: number): void {
+    this.scannedParts.splice(index, 1);
   }
 
   private extractScanCodes(input: string): string[] {
