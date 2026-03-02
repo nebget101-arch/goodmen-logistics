@@ -502,17 +502,12 @@
                     type="button"
                     class="btn btn-outline-primary"
                     (click)="processScannedParts()"
-                    [disabled]="scanBatchProcessing || !scanBatchInput"
+                    [disabled]="scanBatchProcessing || (!scannedParts.length && !scanBatchInput)"
                   >
-                    {{ scanBatchProcessing ? 'Adding...' : 'Add Scanned Parts' }}
+                    {{ scanBatchProcessing ? 'Reserving...' : 'Reserve Scanned Parts' }}
                   </button>
                 </div>
                 <small class="text-muted">Tip: scanning a barcode multiple times increases quantity.</small>
-                <div *ngIf="scanCountKeys.length > 0" style="margin-top: 6px;">
-                  <div *ngFor="let code of scanCountKeys">
-                    {{ code }} × {{ scanCounts[code] }}
-                  </div>
-                </div>
                 <div *ngIf="scanBridgeError" class="text-danger" style="margin-top: 6px;">
                   {{ scanBridgeError }}
                 </div>
@@ -528,6 +523,34 @@
                 </div>
                 <div *ngIf="scanBatchErrors.length" class="text-danger" style="margin-top: 6px;">
                   <div *ngFor="let err of scanBatchErrors">{{ err }}</div>
+                </div>
+                <div *ngIf="scannedParts.length" style="margin-top: 10px;">
+                  <table class="table table-sm">
+                    <thead>
+                      <tr>
+                        <th>Part</th>
+                        <th>SKU</th>
+                        <th>Qty</th>
+                        <th>Unit Price</th>
+                        <th>Remove</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let part of scannedParts; let i = index">
+                        <td>{{ part.name }}</td>
+                        <td>{{ part.sku }}</td>
+                        <td style="max-width: 120px;">
+                          <input type="number" class="form-control" [(ngModel)]="part.qty" min="1" />
+                        </td>
+                        <td style="max-width: 140px;">
+                          <input type="number" class="form-control" [(ngModel)]="part.unitPrice" min="0" />
+                        </td>
+                        <td>
+                          <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeScannedPart(i)">Remove</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
