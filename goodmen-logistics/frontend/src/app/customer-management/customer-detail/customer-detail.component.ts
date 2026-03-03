@@ -52,6 +52,7 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
   newVehicleError = '';
   newVehicleSuccess = '';
   vinDecodeLoading = false;
+  showAddVehicleForm = false;
 
   vinBridgeMobileUrl = '';
   vinBridgeSessionId = '';
@@ -211,6 +212,7 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
         };
         this.loadVehicles(this.customer.id);
         this.stopVinBridge();
+        this.showAddVehicleForm = false;
       },
       error: (err) => {
         this.newVehicleError = err?.error?.error || err?.message || 'Failed to add vehicle.';
@@ -276,6 +278,15 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
     this.vinBridgeMobileUrl = '';
     this.vinBridgeSessionId = '';
     this.vinQrCodeDataUrl = '';
+  }
+
+  toggleAddVehicleForm(): void {
+    this.showAddVehicleForm = !this.showAddVehicleForm;
+    if (!this.showAddVehicleForm) {
+      this.stopVinBridge();
+      this.newVehicleError = '';
+      this.newVehicleSuccess = '';
+    }
   }
 
   private fallbackQrUrl(data: string): string {
