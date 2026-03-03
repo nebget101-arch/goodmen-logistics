@@ -53,6 +53,13 @@ export class DriversComponent implements OnInit {
     this.loadDrivers();
   }
 
+  private normalizeDate(value: any): string {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toISOString().slice(0, 10);
+  }
+
   toggleAddForm(): void {
     this.showAddForm = !this.showAddForm;
     if (!this.showAddForm) {
@@ -133,7 +140,13 @@ export class DriversComponent implements OnInit {
   }
 
   editDriver(driver: any): void {
-    this.editingDriver = { ...driver };
+    this.editingDriver = {
+      ...driver,
+      cdlExpiry: this.normalizeDate(driver.cdlExpiry),
+      medicalCertExpiry: this.normalizeDate(driver.medicalCertExpiry),
+      hireDate: this.normalizeDate(driver.hireDate),
+      dateOfBirth: this.normalizeDate(driver.dateOfBirth)
+    };
     this.showAddForm = false;
     this.showDQFForm = false;
   }

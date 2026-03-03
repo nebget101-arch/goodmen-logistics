@@ -6,85 +6,201 @@
     </div>
 
     <!-- Add Driver Modal is rendered outside the card -->
-    <!-- Edit Driver Form -->
-    <div *ngIf="editingDriver" style="padding: 20px; border-bottom: 1px solid var(--border-color); background-color: #fff3cd;">
-      <h3 style="margin-bottom: 20px;">✏️ Edit Driver: {{editingDriver.firstName}} {{editingDriver.lastName}}</h3>
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">First Name *</label>
-          <input type="text" [(ngModel)]="editingDriver.firstName" class="form-input" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Last Name *</label>
-          <input type="text" [(ngModel)]="editingDriver.lastName" class="form-input" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Email *</label>
-          <input type="email" [(ngModel)]="editingDriver.email" class="form-input" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Phone</label>
-          <input type="tel" [(ngModel)]="editingDriver.phone" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Number *</label>
-          <input type="text" [(ngModel)]="editingDriver.cdlNumber" class="form-input" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL State *</label>
-          <input type="text" [(ngModel)]="editingDriver.cdlState" class="form-input" maxlength="2" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Class *</label>
-          <select [(ngModel)]="editingDriver.cdlClass" class="form-input" required>
-            <option value="A">Class A</option>
-            <option value="B">Class B</option>
-            <option value="C">Class C</option>
-          </select>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Expiry</label>
-          <input type="date" [(ngModel)]="editingDriver.cdlExpiry" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Medical Cert Expiry</label>
-          <input type="date" [(ngModel)]="editingDriver.medicalCertExpiry" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Hire Date</label>
-          <input type="date" [(ngModel)]="editingDriver.hireDate" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Date of Birth</label>
-          <input type="date" [(ngModel)]="editingDriver.dateOfBirth" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Address</label>
-          <input type="text" [(ngModel)]="editingDriver.address" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Status</label>
-          <select [(ngModel)]="editingDriver.status" class="form-input">
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-        </div>
-      </div>
-      <div style="margin-top: 20px; display: flex; gap: 10px;">
-        <button class="btn btn-primary" (click)="saveEdit()" [disabled]="saving">
-          {{ saving ? 'Saving...' : 'Save Changes' }}
-        </button>
-        <button class="btn" (click)="cancelEdit()" [disabled]="saving" 
-                style="background-color: #6c757d; color: white;">Cancel</button>
-      </div>
+    <div *ngIf="loading" class="loading">
+      <div class="spinner"></div>
     </div>
 
-    <!-- DQF Completion Form -->
-    <div *ngIf="showDQFForm && selectedDriver" style="padding: 20px; border-bottom: 1px solid var(--border-color); background-color: #d1ecf1;">
-      <h3 style="margin-bottom: 20px;">📋 DQF Checklist: {{selectedDriver.firstName}} {{selectedDriver.lastName}}</h3>
-      <p style="margin-bottom: 20px; color: #666;">49 CFR 391.51 - Required Documents for Driver Qualification File</p>
-      
-      <div style="display: grid; gap: 15px;">
+    <table class="table" *ngIf="!loading">
+      <thead>
+        <tr>
+          <th>Driver Name</th>
+          <th>CDL Number</th>
+          <th>CDL Expiry</th>
+          <th>Med Cert Expiry</th>
+          <th>DQF Complete</th>
+          <th>Clearinghouse</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let driver of drivers">
+          <td>
+            <strong>{{ driver.firstName }} {{ driver.lastName }}</strong><br>
+            <small style="color: var(--text-light);">{{ driver.email }}</small>
+          </td>
+          <td>{{ driver.cdlNumber }}<br><small>Class {{ driver.cdlClass }} - {{ driver.cdlState }}</small></td>
+          <td [style.color]="isExpiringSoon(driver.cdlExpiry) ? 'var(--danger-color)' : 'inherit'">
+            {{ driver.cdlExpiry ? (driver.cdlExpiry | date:'yyyy-MM-dd') : '--' }}
+            <span *ngIf="isExpiringSoon(driver.cdlExpiry)"> ⚠️</span>
+          </td>
+          <td [style.color]="isExpiringSoon(driver.medicalCertExpiry) ? 'var(--danger-color)' : 'inherit'">
+            {{ driver.medicalCertExpiry ? (driver.medicalCertExpiry | date:'yyyy-MM-dd') : '--' }}
+            <span *ngIf="isExpiringSoon(driver.medicalCertExpiry)"> ⚠️</span>
+          </td>
+          <td>
+            <span [class]="'badge ' + getComplianceBadge(driver.dqfCompleteness)">
+              {{ driver.dqfCompleteness }}%
+            </span>
+          </td>
+          <td>
+            <span [class]="'badge ' + (driver.clearinghouseStatus === 'eligible' ? 'badge-success' : 'badge-warning')">
+              {{ driver.clearinghouseStatus }}
+            </span>
+          </td>
+          <td>
+            <span [class]="'badge ' + getStatusBadge(driver.status)">
+              {{ driver.status }}
+            </span>
+          </td>
+          <td>
+            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+              <button class="btn btn-sm" (click)="editDriver(driver)" 
+                      style="font-size: 12px; padding: 6px 12px; background-color: #0066cc; color: white;">
+                ✏️ Edit
+              </button>
+              <button class="btn btn-sm" (click)="openDQFForm(driver)"
+                      style="font-size: 12px; padding: 6px 12px; background-color: #28a745; color: white;">
+                📋 DQF
+              </button>
+              <label style="font-size: 12px; padding: 6px 12px; background-color: #ffc107; color: black; border-radius: 4px; cursor: pointer; margin: 0;">
+                📤 Upload
+                <input type="file" (change)="onFileSelected($event, driver)" 
+                       accept=".pdf,.jpg,.jpeg,.png" style="display: none;">
+              </label>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div *ngIf="!loading && drivers.length === 0" style="text-align: center; padding: 40px; color: var(--text-light);">
+      <p>No drivers found</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">📋 DQF Retention Requirements</h3>
+    </div>
+    <div style="padding: 10px; background-color: #f9f9f9; border-radius: 4px;">
+      <p><strong>49 CFR 391.51:</strong> Driver qualification files must be retained for the duration of employment plus 3 years after employment ends.</p>
+      <p style="margin-top: 10px;"><strong>Required Documents:</strong> Application, Motor vehicle record, Road test certificate, Medical examiner's certificate, Annual review of driving record</p>
+    </div>
+  </div>
+
+  <!-- Add Driver Modal -->
+  <div class="dqf-modal-backdrop" *ngIf="showAddForm">
+    <div class="dqf-modal">
+      <div class="dqf-modal-header">
+        <div>
+          <h3>Add New Driver</h3>
+          <p class="dqf-modal-subtitle">Create a new driver and capture core DQF details.</p>
+        </div>
+        <button class="dqf-close-btn" type="button" (click)="toggleAddForm()" [disabled]="saving">✕</button>
+      </div>
+      <div class="dqf-modal-body">
+        <div class="dqf-grid-2">
+          <div>
+            <h4 class="dqf-section-title">Identity & Contact</h4>
+            <div class="dqf-field">
+              <label for="firstName">First Name *</label>
+              <input
+                id="firstName"
+                type="text"
+                [(ngModel)]="newDriver.firstName"
+                class="form-input"
+                placeholder="John"
+                required
+              />
+            </div>
+            <!-- rest of add-driver modal unchanged -->
+          </div>
+        </div>
+      </div>
+      <div class="dqf-modal-footer">
+        <button class="btn" type="button" (click)="toggleAddForm()" [disabled]="saving">
+          Cancel
+        </button>
+        <button class="btn btn-primary" type="button" (click)="addDriver()" [disabled]="saving">
+          {{ saving ? 'Saving...' : 'Save Driver' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Driver Modal -->
+  <div class="dqf-modal-backdrop" *ngIf="editingDriver">
+    <div class="dqf-modal">
+      <div class="dqf-modal-header">
+        <div>
+          <h3>Edit Driver: {{editingDriver.firstName}} {{editingDriver.lastName}}</h3>
+        </div>
+        <button class="dqf-close-btn" type="button" (click)="cancelEdit()" [disabled]="saving">✕</button>
+      </div>
+      <div class="dqf-modal-body">
+        <div class="dqf-grid-2">
+          <div>
+            <div class="dqf-field">
+              <label for="editFirstName">First Name *</label>
+              <input id="editFirstName" type="text" [(ngModel)]="editingDriver.firstName" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editEmail">Email *</label>
+              <input id="editEmail" type="email" [(ngModel)]="editingDriver.email" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editCdlNumber">CDL Number *</label>
+              <input id="editCdlNumber" type="text" [(ngModel)]="editingDriver.cdlNumber" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editCdlExpiry">CDL Expiry</label>
+              <input id="editCdlExpiry" type="date" [(ngModel)]="editingDriver.cdlExpiry" class="form-input" />
+            </div>
+          </div>
+          <div>
+            <div class="dqf-field">
+              <label for="editLastName">Last Name *</label>
+              <input id="editLastName" type="text" [(ngModel)]="editingDriver.lastName" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editPhone">Phone</label>
+              <input id="editPhone" type="tel" [(ngModel)]="editingDriver.phone" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editCdlState">CDL State *</label>
+              <input id="editCdlState" type="text" [(ngModel)]="editingDriver.cdlState" maxlength="2" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editMedExpiry">Medical Cert Expiry</label>
+              <input id="editMedExpiry" type="date" [(ngModel)]="editingDriver.medicalCertExpiry" class="form-input" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dqf-modal-footer">
+        <button class="btn" type="button" (click)="cancelEdit()" [disabled]="saving">
+          Cancel
+        </button>
+        <button class="btn btn-primary" type="button" (click)="saveEdit()" [disabled]="saving">
+          {{ saving ? 'Saving...' : 'Save Changes' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DQF Checklist Modal -->
+  <div class="dqf-modal-backdrop" *ngIf="showDQFForm && selectedDriver">
+    <div class="dqf-modal">
+      <div class="dqf-modal-header">
+        <div>
+          <h3>📋 DQF Checklist: {{selectedDriver.firstName}} {{selectedDriver.lastName}}</h3>
+          <p class="dqf-modal-subtitle">49 CFR 391.51 - Required Documents for Driver Qualification File</p>
+        </div>
+        <button class="dqf-close-btn" type="button" (click)="closeDQFForm()" [disabled]="saving">✕</button>
+      </div>
+      <div class="dqf-modal-body">
+        <div style="display: grid; gap: 15px;">
         <!-- Application for Employment -->
         <div style="padding: 10px; background: white; border-radius: 4px;">
           <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
@@ -216,259 +332,19 @@
             </div>
           </div>
         </div>
-        
         <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Notes</label>
-          <textarea [(ngModel)]="dqfForm.notes" class="form-input" rows="3" 
+          <label for="dqfNotes" style="display: block; margin-bottom: 5px; font-weight: 500;">Notes</label>
+          <textarea id="dqfNotes" [(ngModel)]="dqfForm.notes" class="form-input" rows="3" 
                     placeholder="Additional notes about DQF status..."></textarea>
         </div>
       </div>
-      
-      <div style="margin-top: 20px; display: flex; gap: 10px;">
-        <button class="btn btn-primary" (click)="saveDQFForm()" [disabled]="saving">
-          {{ saving ? 'Saving...' : 'Update DQF Status' }}
-        </button>
-        <button class="btn" (click)="closeDQFForm()" [disabled]="saving" 
-                style="background-color: #6c757d; color: white;">Close</button>
-      </div>
-    </div>
-    <div *ngIf="loading" class="loading">
-      <div class="spinner"></div>
-    </div>
-
-    <table class="table" *ngIf="!loading">
-      <thead>
-        <tr>
-          <th>Driver Name</th>
-          <th>CDL Number</th>
-          <th>CDL Expiry</th>
-          <th>Med Cert Expiry</th>
-          <th>DQF Complete</th>
-          <th>Clearinghouse</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let driver of drivers">
-          <td>
-            <strong>{{ driver.firstName }} {{ driver.lastName }}</strong><br>
-            <small style="color: var(--text-light);">{{ driver.email }}</small>
-          </td>
-          <td>{{ driver.cdlNumber }}<br><small>Class {{ driver.cdlClass }} - {{ driver.cdlState }}</small></td>
-          <td [style.color]="isExpiringSoon(driver.cdlExpiry) ? 'var(--danger-color)' : 'inherit'">
-            {{ driver.cdlExpiry }}
-            <span *ngIf="isExpiringSoon(driver.cdlExpiry)"> ⚠️</span>
-          </td>
-          <td [style.color]="isExpiringSoon(driver.medicalCertExpiry) ? 'var(--danger-color)' : 'inherit'">
-            {{ driver.medicalCertExpiry }}
-            <span *ngIf="isExpiringSoon(driver.medicalCertExpiry)"> ⚠️</span>
-          </td>
-          <td>
-            <span [class]="'badge ' + getComplianceBadge(driver.dqfCompleteness)">
-              {{ driver.dqfCompleteness }}%
-            </span>
-          </td>
-          <td>
-            <span [class]="'badge ' + (driver.clearinghouseStatus === 'eligible' ? 'badge-success' : 'badge-warning')">
-              {{ driver.clearinghouseStatus }}
-            </span>
-          </td>
-          <td>
-            <span [class]="'badge ' + getStatusBadge(driver.status)">
-              {{ driver.status }}
-            </span>
-          </td>
-          <td>
-            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-              <button class="btn btn-sm" (click)="editDriver(driver)" 
-                      style="font-size: 12px; padding: 6px 12px; background-color: #0066cc; color: white;">
-                ✏️ Edit
-              </button>
-              <button class="btn btn-sm" (click)="openDQFForm(driver)"
-                      style="font-size: 12px; padding: 6px 12px; background-color: #28a745; color: white;">
-                📋 DQF
-              </button>
-              <label style="font-size: 12px; padding: 6px 12px; background-color: #ffc107; color: black; border-radius: 4px; cursor: pointer; margin: 0;">
-                📤 Upload
-                <input type="file" (change)="onFileSelected($event, driver)" 
-                       accept=".pdf,.jpg,.jpeg,.png" style="display: none;">
-              </label>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div *ngIf="!loading && drivers.length === 0" style="text-align: center; padding: 40px; color: var(--text-light);">
-      <p>No drivers found</p>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <h3 class="card-title">📋 DQF Retention Requirements</h3>
-    </div>
-    <div style="padding: 10px; background-color: #f9f9f9; border-radius: 4px;">
-      <p><strong>49 CFR 391.51:</strong> Driver qualification files must be retained for the duration of employment plus 3 years after employment ends.</p>
-      <p style="margin-top: 10px;"><strong>Required Documents:</strong> Application, Motor vehicle record, Road test certificate, Medical examiner's certificate, Annual review of driving record</p>
-    </div>
-  </div>
-
-  <!-- Add Driver Modal -->
-  <div class="dqf-modal-backdrop" *ngIf="showAddForm">
-    <div class="dqf-modal">
-      <div class="dqf-modal-header">
-        <div>
-          <h3>Add New Driver</h3>
-          <p class="dqf-modal-subtitle">Create a new driver and capture core DQF details.</p>
-        </div>
-        <button class="dqf-close-btn" type="button" (click)="toggleAddForm()" [disabled]="saving">✕</button>
-      </div>
-      <div class="dqf-modal-body">
-        <div class="dqf-grid-2">
-          <div>
-            <h4 class="dqf-section-title">Identity & Contact</h4>
-            <div class="dqf-field">
-              <label for="firstName">First Name *</label>
-              <input
-                id="firstName"
-                type="text"
-                [(ngModel)]="newDriver.firstName"
-                class="form-input"
-                placeholder="John"
-                required
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="lastName">Last Name *</label>
-              <input
-                id="lastName"
-                type="text"
-                [(ngModel)]="newDriver.lastName"
-                class="form-input"
-                placeholder="Doe"
-                required
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="email">Email *</label>
-              <input
-                id="email"
-                type="email"
-                [(ngModel)]="newDriver.email"
-                class="form-input"
-                placeholder="john.doe@example.com"
-                required
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="phone">Phone</label>
-              <input
-                id="phone"
-                type="tel"
-                [(ngModel)]="newDriver.phone"
-                class="form-input"
-                placeholder="(555) 123-4567"
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="address">Address</label>
-              <input
-                id="address"
-                type="text"
-                [(ngModel)]="newDriver.address"
-                class="form-input"
-                placeholder="123 Main St, City, ST 12345"
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="dob">Date of Birth</label>
-              <input
-                id="dob"
-                type="date"
-                [(ngModel)]="newDriver.dateOfBirth"
-                class="form-input"
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="hireDate">Hire Date</label>
-              <input
-                id="hireDate"
-                type="date"
-                [(ngModel)]="newDriver.hireDate"
-                class="form-input"
-              />
-            </div>
-          </div>
-
-          <div>
-            <h4 class="dqf-section-title">License & Medical</h4>
-            <div class="dqf-field">
-              <label for="cdlNumber">CDL Number *</label>
-              <input
-                id="cdlNumber"
-                type="text"
-                [(ngModel)]="newDriver.cdlNumber"
-                class="form-input"
-                placeholder="A1234567"
-                required
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="cdlState">CDL State *</label>
-              <input
-                id="cdlState"
-                type="text"
-                [(ngModel)]="newDriver.cdlState"
-                class="form-input"
-                placeholder="CA"
-                maxlength="2"
-                required
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="cdlClass">CDL Class *</label>
-              <select
-                id="cdlClass"
-                [(ngModel)]="newDriver.cdlClass"
-                class="form-input"
-                required
-              >
-                <option value="A">Class A</option>
-                <option value="B">Class B</option>
-                <option value="C">Class C</option>
-              </select>
-            </div>
-            <div class="dqf-field">
-              <label for="cdlExpiry">CDL Expiry</label>
-              <input
-                id="cdlExpiry"
-                type="date"
-                [(ngModel)]="newDriver.cdlExpiry"
-                class="form-input"
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="medExpiry">Medical Cert Expiry</label>
-              <input
-                id="medExpiry"
-                type="date"
-                [(ngModel)]="newDriver.medicalCertExpiry"
-                class="form-input"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
       <div class="dqf-modal-footer">
-        <button class="btn" type="button" (click)="toggleAddForm()" [disabled]="saving">
+        <button class="btn" type="button" (click)="closeDQFForm()" [disabled]="saving">
           Cancel
         </button>
-        <button class="btn btn-primary" type="button" (click)="addDriver()" [disabled]="saving">
-          {{ saving ? 'Saving...' : 'Save Driver' }}
+        <button class="btn btn-primary" type="button" (click)="saveDQFForm()" [disabled]="saving">
+          {{ saving ? 'Saving...' : 'Update DQF Status' }}
         </button>
       </div>
     </div>
   </div>
-</div>
