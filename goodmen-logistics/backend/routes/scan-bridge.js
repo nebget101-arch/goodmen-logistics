@@ -189,9 +189,10 @@ router.get('/mobile', (req, res) => {
   </div>
 
   <div class="row">
-    <label for="vinImage"><strong>VIN OCR (photo)</strong></label>
-    <input id="vinImage" type="file" accept="image/*" capture="environment" />
-    <button id="vinBtn" type="button">Read VIN</button>
+    <label><strong>VIN OCR (camera)</strong></label>
+    <button id="vinCamBtn" type="button">Start VIN OCR Camera</button>
+    <video id="vinVideo" autoplay playsinline muted style="width:100%; max-width:360px; border-radius:6px; margin-top:8px; background:#000;"></video>
+    <canvas id="vinCanvas" style="display:none;"></canvas>
   </div>
 
   <div id="status"></div>
@@ -207,8 +208,9 @@ router.get('/mobile', (req, res) => {
       var startBtn = document.getElementById('startBtn');
       var sendBtn = document.getElementById('sendBtn');
       var manualInput = document.getElementById('manualInput');
-      var vinImage = document.getElementById('vinImage');
-      var vinBtn = document.getElementById('vinBtn');
+      var vinCamBtn = document.getElementById('vinCamBtn');
+      var vinVideo = document.getElementById('vinVideo');
+      var vinCanvas = document.getElementById('vinCanvas');
       var statusEl = document.getElementById('status');
       var logEl = document.getElementById('log');
 
@@ -322,29 +324,77 @@ router.get('/mobile', (req, res) => {
         return '';
       }
 
-      function readVinFromImage(file) {
-        if (!file || typeof Tesseract === 'undefined') {
-          setStatus('OCR library not loaded', 'err');
+      var vinStream = null;
+      var vinTimer = null;
+      var vinBusy = false;
+
+      function startVinCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setStatus('Camera not supported', 'err');
           return;
         }
-        setStatus('Reading VIN...', 'ok');
-        log('OCR started');
-        Tesseract.recognize(file, 'eng', {
-          tessedit_char_whitelist: 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
-        })
-          .then(function (result) {
-            var text = (result && result.data && result.data.text) ? result.data.text : '';
-            var vin = extractVin(text);
-            if (!vin) {
-              throw new Error('VIN not found');
+        if (vinStream) return;
+        setStatus('Starting VIN OCR camera...', 'ok');
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+          .then(function (stream) {
+            vinStream = stream;
+            if (vinVideo) {
+              vinVideo.srcObject = stream;
+              vinVideo.play();
             }
-            manualInput.value = vin;
-            postBarcode(vin);
+            startVinOcrLoop();
+            setStatus('VIN OCR camera started. Hold VIN steady.', 'ok');
+            log('VIN OCR camera started');
           })
           .catch(function (e) {
-            setStatus('VIN OCR failed: ' + e.message, 'err');
-            log('VIN OCR failed: ' + e.message);
+            setStatus('Camera failed: ' + e.message, 'err');
           });
+      }
+
+      function stopVinCamera() {
+        if (vinTimer) {
+          clearInterval(vinTimer);
+          vinTimer = null;
+        }
+        if (vinStream) {
+          vinStream.getTracks().forEach(function (t) { t.stop(); });
+          vinStream = null;
+        }
+        if (vinVideo) {
+          vinVideo.srcObject = null;
+        }
+      }
+
+      function startVinOcrLoop() {
+        if (vinTimer) return;
+        vinTimer = setInterval(function () {
+          if (vinBusy || !vinVideo || !vinCanvas) return;
+          var w = vinVideo.videoWidth || 0;
+          var h = vinVideo.videoHeight || 0;
+          if (!w || !h) return;
+          vinCanvas.width = w;
+          vinCanvas.height = h;
+          var ctx = vinCanvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(vinVideo, 0, 0, w, h);
+          vinBusy = true;
+          Tesseract.recognize(vinCanvas, 'eng', {
+            tessedit_char_whitelist: 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
+          })
+            .then(function (result) {
+              var text = (result && result.data && result.data.text) ? result.data.text : '';
+              var vin = extractVin(text);
+              if (vin) {
+                manualInput.value = vin;
+                postBarcode(vin);
+                stopVinCamera();
+              }
+            })
+            .catch(function () {})
+            .finally(function () {
+              vinBusy = false;
+            });
+        }, 2500);
       }
 
       startBtn.addEventListener('click', function (e) {
@@ -357,20 +407,14 @@ router.get('/mobile', (req, res) => {
         postBarcode(manualInput.value);
       });
 
-      vinBtn.addEventListener('click', function (e) {
+      vinCamBtn.addEventListener('click', function (e) {
         e.preventDefault();
-        var file = vinImage && vinImage.files && vinImage.files[0] ? vinImage.files[0] : null;
-        if (!file) {
-          setStatus('Select a photo first', 'err');
+        if (vinStream) {
+          stopVinCamera();
+          setStatus('VIN OCR camera stopped', 'ok');
           return;
         }
-        readVinFromImage(file);
-      });
-
-      vinImage.addEventListener('change', function () {
-        var file = vinImage && vinImage.files && vinImage.files[0] ? vinImage.files[0] : null;
-        if (!file) return;
-        readVinFromImage(file);
+        startVinCamera();
       });
 
       manualInput.addEventListener('keydown', function (e) {
@@ -386,6 +430,7 @@ router.get('/mobile', (req, res) => {
             if (onDetectedHandler) Quagga.offDetected(onDetectedHandler);
             Quagga.stop();
           }
+          stopVinCamera();
         } catch (_) {}
       });
 

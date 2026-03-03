@@ -250,7 +250,15 @@
 
   <div class="tab-content" *ngIf="activeTab === 'vehicles'">
     <div class="vehicle-add">
-      <h4>Add Customer Vehicle</h4>
+      <div style="display:flex; align-items:center; justify-content: space-between;">
+        <h4>Add Customer Vehicle</h4>
+        <button class="btn btn-outline-primary" type="button" (click)="toggleAddVehicleForm()">
+          {{ showAddVehicleForm ? 'Cancel' : 'Add Vehicle' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="vehicle-add" *ngIf="showAddVehicleForm">
       <div *ngIf="vinBridgeMobileUrl" style="margin-top: 10px;">
         <div>Scan this QR code with your phone:</div>
         <img *ngIf="vinQrCodeDataUrl" [src]="vinQrCodeDataUrl" alt="QR Code" style="width: 200px; max-width: 100%; border: 1px solid #eee; border-radius: 4px;" />
@@ -308,7 +316,7 @@
       <div *ngIf="newVehicleError" class="text-danger" style="margin-top: 6px;">{{ newVehicleError }}</div>
       <div *ngIf="newVehicleSuccess" class="text-success" style="margin-top: 6px;">{{ newVehicleSuccess }}</div>
 
-      <button class="btn btn-primary" style="margin-top: 10px;" (click)="addCustomerVehicle()">Add Vehicle</button>
+      <button class="btn btn-primary" style="margin-top: 10px;" (click)="addCustomerVehicle()">Save Vehicle</button>
       <hr />
     </div>
     <div *ngIf="vehicles && vehicles.length > 0">
