@@ -299,17 +299,17 @@ async function getCustomerWorkOrders(customerId, { status, from, to, page = 1, p
   const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
 
   let query = db('work_orders')
-    .where({ customer_id: customerId, is_deleted: false })
+    .where({ customer_id: customerId })
     .modify(qb => {
       if (status) qb.andWhere('status', status);
-      if (from) qb.andWhere('start_date', '>=', from);
-      if (to) qb.andWhere('completion_date', '<=', to);
+      if (from) qb.andWhere('created_at', '>=', from);
+      if (to) qb.andWhere('completed_at', '<=', to);
     });
 
   const [{ count }] = await query.clone().count();
   const rows = await query
-    .select('id', 'work_order_number', 'status', 'start_date', 'completion_date', 'total_amount as cost', 'description')
-    .orderBy('start_date', 'desc')
+    .select('id', 'work_order_number', 'status', 'created_at', 'completed_at', 'total_amount as cost', 'description')
+    .orderBy('created_at', 'desc')
     .limit(limit)
     .offset(offset);
 
@@ -328,7 +328,7 @@ async function getCustomerServiceHistory(customerId, { from, to, page = 1, pageS
       JOIN work_orders wo ON wo.id = mr.work_order_id
       WHERE wo.customer_id = ? AND mr.status = 'completed'
       UNION ALL
-      SELECT id, COALESCE(completion_date, updated_at) as date_performed
+      SELECT id, COALESCE(completed_at, updated_at) as date_performed
       FROM work_orders
       WHERE customer_id = ? AND status IN ('completed', 'closed')
     ) combined
@@ -355,7 +355,7 @@ async function getCustomerServiceHistory(customerId, { from, to, page = 1, pageS
         id,
         id as work_order_id,
         'work_order' as source_type,
-        COALESCE(completion_date, updated_at) as date_performed,
+        COALESCE(completed_at, updated_at) as date_performed,
         status,
         description,
         total_amount as cost,
