@@ -1,5 +1,8 @@
-exports.up = function(knex) {
-  return knex.schema.createTable('customer_vehicles', function(table) {
+exports.up = async function(knex) {
+  const hasTable = await knex.schema.hasTable('customer_vehicles');
+  if (hasTable) return;
+
+  return knex.schema.createTable('customer_vehicles', table => {
     table.increments('id').primary();
     table.uuid('vehicle_uuid').defaultTo(knex.raw('gen_random_uuid()')).unique();
     table.string('unit_number');
@@ -19,6 +22,8 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = async function(knex) {
+  const hasTable = await knex.schema.hasTable('customer_vehicles');
+  if (!hasTable) return;
   return knex.schema.dropTable('customer_vehicles');
 };

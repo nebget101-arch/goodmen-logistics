@@ -74,6 +74,18 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/drivers`);
   }
 
+  getDispatchDrivers(status?: string): Observable<any> {
+    const params: any = { view: 'dispatch' };
+    if (status) params.status = status;
+    return this.http.get(`${this.baseUrl}/drivers`, { params });
+  }
+
+  getDqfDrivers(status?: string): Observable<any> {
+    const params: any = { view: 'dqf' };
+    if (status) params.status = status;
+    return this.http.get(`${this.baseUrl}/drivers`, { params });
+  }
+
   getDriver(id: string): Observable<any> {
     return this.http.get(`${this.baseUrl}/drivers/${id}`);
   }

@@ -4,7 +4,9 @@
 exports.up = async function(knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
 
-  await knex.schema.createTable('invoices', table => {
+  const hasInvoices = await knex.schema.hasTable('invoices');
+  if (!hasInvoices) {
+    await knex.schema.createTable('invoices', table => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
     table.text('invoice_number').notNullable().unique();
     table.uuid('work_order_id').references('id').inTable('work_orders').onDelete('SET NULL');
@@ -30,9 +32,12 @@ exports.up = async function(knex) {
     table.uuid('created_by_user_id').references('id').inTable('users').onDelete('SET NULL');
     table.boolean('is_deleted').defaultTo(false);
     table.timestamps(true, true);
-  });
+    });
+  }
 
-  await knex.schema.createTable('invoice_line_items', table => {
+  const hasInvoiceLineItems = await knex.schema.hasTable('invoice_line_items');
+  if (!hasInvoiceLineItems) {
+    await knex.schema.createTable('invoice_line_items', table => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
     table.uuid('invoice_id').notNullable().references('id').inTable('invoices').onDelete('CASCADE');
     table.enu('line_type', ['LABOR','PART','FEE','ADJUSTMENT']).notNullable();
@@ -44,9 +49,12 @@ exports.up = async function(knex) {
     table.boolean('taxable').defaultTo(false);
     table.decimal('line_total', 12, 2).defaultTo(0);
     table.timestamps(true, true);
-  });
+    });
+  }
 
-  await knex.schema.createTable('invoice_payments', table => {
+  const hasInvoicePayments = await knex.schema.hasTable('invoice_payments');
+  if (!hasInvoicePayments) {
+    await knex.schema.createTable('invoice_payments', table => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
     table.uuid('invoice_id').notNullable().references('id').inTable('invoices').onDelete('CASCADE');
     table.date('payment_date').notNullable();
@@ -56,9 +64,12 @@ exports.up = async function(knex) {
     table.text('memo');
     table.uuid('received_by_user_id').references('id').inTable('users').onDelete('SET NULL');
     table.timestamp('created_at').defaultTo(knex.fn.now());
-  });
+    });
+  }
 
-  await knex.schema.createTable('invoice_documents', table => {
+  const hasInvoiceDocuments = await knex.schema.hasTable('invoice_documents');
+  if (!hasInvoiceDocuments) {
+    await knex.schema.createTable('invoice_documents', table => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
     table.uuid('invoice_id').notNullable().references('id').inTable('invoices').onDelete('CASCADE');
     table.enu('doc_type', ['INVOICE_PDF','SUPPORTING']).notNullable();
@@ -68,9 +79,12 @@ exports.up = async function(knex) {
     table.text('storage_key').notNullable();
     table.uuid('uploaded_by_user_id').references('id').inTable('users').onDelete('SET NULL');
     table.timestamp('created_at').defaultTo(knex.fn.now());
-  });
+    });
+  }
 
-  await knex.schema.createTable('invoice_events', table => {
+  const hasInvoiceEvents = await knex.schema.hasTable('invoice_events');
+  if (!hasInvoiceEvents) {
+    await knex.schema.createTable('invoice_events', table => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
     table.uuid('invoice_id').notNullable().references('id').inTable('invoices').onDelete('CASCADE');
     table.text('event_type').notNullable();
@@ -79,7 +93,8 @@ exports.up = async function(knex) {
     table.jsonb('data_json');
     table.uuid('created_by_user_id').references('id').inTable('users').onDelete('SET NULL');
     table.timestamp('created_at').defaultTo(knex.fn.now());
-  });
+    });
+  }
 
   await knex.raw('CREATE INDEX IF NOT EXISTS idx_invoices_customer_status ON invoices (customer_id, status)');
   await knex.raw('CREATE INDEX IF NOT EXISTS idx_invoices_location_issued ON invoices (location_id, issued_date)');

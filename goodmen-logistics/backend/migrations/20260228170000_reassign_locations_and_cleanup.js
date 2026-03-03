@@ -17,8 +17,12 @@ exports.up = async function(knex) {
   const existing = await knex('locations').whereIn('id', requiredIds).select('id');
   const existingIds = new Set(existing.map(row => row.id));
   const missing = requiredIds.filter(id => !existingIds.has(id));
+
+  // If the specific target locations don't exist in this environment,
+  // safely skip this cleanup migration instead of failing.
   if (missing.length) {
-    throw new Error(`Missing target locations: ${missing.join(', ')}`);
+    console.warn(`Skipping reassign_locations_and_cleanup migration; missing target locations: ${missing.join(', ')}`);
+    return;
   }
 
   const applyMapping = async (table, column) => {

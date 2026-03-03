@@ -1,14 +1,108 @@
 const express = require('express');
 const router = express.Router();
-const { query } = require('../config/database');
+const { query, getClient } = require('../config/database');
 const { transformRows, transformRow, toSnakeCase } = require('../utils/case-converter');
 const dtLogger = require('../utils/dynatrace-logger');
 
-// GET all drivers
+function normalizeCdlState(raw) {
+  if (!raw && raw !== 0) return null;
+  const s = raw.toString().trim();
+  if (!s) return null;
+  return s.toUpperCase();
+}
+
+function normalizeCdlNumber(raw) {
+  if (!raw && raw !== 0) return null;
+  const s = raw.toString().trim();
+  if (!s) return null;
+  // Remove internal spaces for comparison / storage
+  return s.replace(/\s+/g, '');
+}
+
+async function findDriverByCdl(client, state, number) {
+  if (!state || !number) return null;
+  const result = await client.query(
+    'SELECT driver_id FROM driver_licenses WHERE cdl_state = $1 AND cdl_number = $2',
+    [state, number]
+  );
+  return result.rows[0] || null;
+}
+
+// GET all drivers (supports view=dispatch|dqf and optional status filter)
 router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
-    const result = await query('SELECT * FROM drivers ORDER BY created_at DESC');
+    const view = (req.query.view || '').toString().trim().toLowerCase();
+    const status = (req.query.status || '').toString().trim().toLowerCase();
+    const hasStatus = !!status;
+
+    let result;
+
+    if (view === 'dqf') {
+      const params = [];
+      let sql = `
+        SELECT
+          d.id,
+          d.first_name,
+          d.last_name,
+          d.email,
+          d.phone,
+          d.status,
+          d.hire_date,
+          d.termination_date,
+          dl.cdl_number,
+          dl.cdl_state,
+          dl.cdl_expiry,
+          dc.medical_cert_expiry,
+          dc.clearinghouse_status,
+          COALESCE(
+            d.dqf_completeness,
+            (
+              (CASE WHEN dl.cdl_number IS NOT NULL THEN 25 ELSE 0 END) +
+              (CASE WHEN dl.cdl_expiry IS NOT NULL THEN 25 ELSE 0 END) +
+              (CASE WHEN dc.medical_cert_expiry IS NOT NULL THEN 25 ELSE 0 END) +
+              (CASE WHEN dc.clearinghouse_status = 'eligible' THEN 25 ELSE 0 END)
+            )
+          ) AS dqf_completeness
+        FROM drivers d
+        LEFT JOIN driver_licenses dl ON dl.driver_id = d.id
+        LEFT JOIN driver_compliance dc ON dc.driver_id = d.id
+      `;
+      if (hasStatus) {
+        params.push(status);
+        sql += ` WHERE LOWER(d.status) = $${params.length}`;
+      }
+      sql += ' ORDER BY d.created_at DESC';
+      result = await query(sql, params);
+    } else if (view === 'dispatch') {
+      const params = [];
+      let sql = `
+        SELECT
+          d.*,
+          t.unit_number AS truck_unit_number,
+          tr.unit_number AS trailer_unit_number
+        FROM drivers d
+        LEFT JOIN all_vehicles t ON t.id = d.truck_id
+        LEFT JOIN all_vehicles tr ON tr.id = d.trailer_id
+      `;
+      if (hasStatus) {
+        params.push(status);
+        sql += ` WHERE LOWER(d.status) = $${params.length}`;
+      }
+      sql += ' ORDER BY d.created_at DESC';
+      result = await query(sql, params);
+    } else {
+      // Legacy/default view – keep existing behaviour for backward compatibility
+      const params = [];
+      let sql = 'SELECT * FROM drivers';
+      if (hasStatus) {
+        params.push(status);
+        sql += ` WHERE LOWER(status) = $${params.length}`;
+      }
+      sql += ' ORDER BY created_at DESC';
+      result = await query(sql, params);
+    }
+
     const duration = Date.now() - startTime;
     
     dtLogger.trackDatabase('SELECT', 'drivers', duration, true, { count: result.rows.length });
@@ -54,62 +148,390 @@ router.get('/:id', async (req, res) => {
 // POST create new driver
 router.post('/', async (req, res) => {
   const startTime = Date.now();
+  const client = await getClient();
   try {
-    const { firstName, lastName, email, phone, cdlNumber, cdlState, cdlClass, endorsements, cdlExpiry, medicalCertExpiry, hireDate, address, dateOfBirth, clearinghouseStatus } = req.body;
-    const result = await query(
-      `INSERT INTO drivers (first_name, last_name, email, phone, cdl_number, cdl_state, cdl_class, endorsements, cdl_expiry, medical_cert_expiry, hire_date, address, date_of_birth, clearinghouse_status, dqf_completeness, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, 'active') RETURNING *`,
-      [firstName, lastName, email, phone, cdlNumber, cdlState, cdlClass, endorsements || [], cdlExpiry || null, medicalCertExpiry || null, hireDate || null, address, dateOfBirth || null, clearinghouseStatus || 'eligible']
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      cdlNumber,
+      cdlState,
+      cdlClass,
+      endorsements,
+      cdlExpiry,
+      medicalCertExpiry,
+      hireDate,
+      address,
+      dateOfBirth,
+      clearinghouseStatus,
+      driverType,
+      payBasis,
+      payRate,
+      payPercentage,
+      terminationDate,
+      truckId,
+      trailerId,
+      coDriverId
+    } = req.body;
+
+    const normState = normalizeCdlState(cdlState);
+    const normNumber = normalizeCdlNumber(cdlNumber);
+
+    if (!normState || !normNumber) {
+      return res.status(400).json({ message: 'CDL state and CDL number are required' });
+    }
+
+    await client.query('BEGIN');
+
+    const existing = await findDriverByCdl(client, normState, normNumber);
+    if (existing) {
+      await client.query('ROLLBACK');
+      const duration = Date.now() - startTime;
+      dtLogger.trackRequest('POST', '/api/drivers', 409, duration, {
+        existingDriverId: existing.driver_id,
+        cdlState: normState,
+        cdlNumber: normNumber
+      });
+      return res.status(409).json({
+        code: 'DRIVER_EXISTS',
+        message: 'Driver already exists for this CDL number and state',
+        existingDriverId: existing.driver_id,
+        cdlState: normState,
+        cdlNumber: normNumber
+      });
+    }
+
+    const insertDriver = await client.query(
+      `INSERT INTO drivers (
+        first_name,
+        last_name,
+        email,
+        phone,
+        cdl_number,
+        cdl_state,
+        cdl_class,
+        endorsements,
+        cdl_expiry,
+        medical_cert_expiry,
+        hire_date,
+        address,
+        date_of_birth,
+        clearinghouse_status,
+        dqf_completeness,
+        status,
+        driver_type,
+        pay_basis,
+        pay_rate,
+        pay_percentage,
+        termination_date,
+        truck_id,
+        trailer_id,
+        co_driver_id
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, 0, 'active',
+        COALESCE($15, 'company'),
+        $16,
+        $17,
+        $18,
+        $19,
+        $20,
+        $21,
+        $22
+      )
+      RETURNING *`,
+      [
+        firstName,
+        lastName,
+        email,
+        phone,
+        normNumber,
+        normState,
+        cdlClass,
+        endorsements || [],
+        cdlExpiry || null,
+        medicalCertExpiry || null,
+        hireDate || null,
+        address,
+        dateOfBirth || null,
+        clearinghouseStatus || 'eligible',
+        driverType,
+        payBasis || null,
+        payRate || null,
+        payPercentage || null,
+        terminationDate || null,
+        truckId || null,
+        trailerId || null,
+        coDriverId || null
+      ]
     );
+
+    const driverId = insertDriver.rows[0].id;
+
+    // Upsert into driver_licenses
+    await client.query(
+      `
+      INSERT INTO driver_licenses (
+        driver_id,
+        cdl_state,
+        cdl_number,
+        cdl_class,
+        endorsements,
+        cdl_expiry
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (driver_id) DO UPDATE SET
+        cdl_state = EXCLUDED.cdl_state,
+        cdl_number = EXCLUDED.cdl_number,
+        cdl_class = EXCLUDED.cdl_class,
+        endorsements = EXCLUDED.endorsements,
+        cdl_expiry = EXCLUDED.cdl_expiry
+      `,
+      [
+        driverId,
+        normState,
+        normNumber,
+        cdlClass || null,
+        (endorsements || []).join ? (endorsements || []).join(',') : endorsements || null,
+        cdlExpiry || null
+      ]
+    );
+
+    // Upsert into driver_compliance
+    await client.query(
+      `
+      INSERT INTO driver_compliance (
+        driver_id,
+        medical_cert_expiry,
+        last_mvr_check,
+        clearinghouse_status
+      )
+      VALUES ($1, $2, NULL, $3)
+      ON CONFLICT (driver_id) DO UPDATE SET
+        medical_cert_expiry = EXCLUDED.medical_cert_expiry,
+        clearinghouse_status = EXCLUDED.clearinghouse_status,
+        updated_at = NOW()
+      `,
+      [
+        driverId,
+        medicalCertExpiry || null,
+        clearinghouseStatus || 'eligible'
+      ]
+    );
+
+    await client.query('COMMIT');
+
     const duration = Date.now() - startTime;
-    
-    dtLogger.trackDatabase('INSERT', 'drivers', duration, true, { driverId: result.rows[0].id });
-    dtLogger.trackEvent('driver.created', { driverId: result.rows[0].id, name: `${firstName} ${lastName}` });
+
+    dtLogger.trackDatabase('INSERT', 'drivers', duration, true, { driverId });
+    dtLogger.trackEvent('driver.created', { driverId, name: `${firstName} ${lastName}` });
     dtLogger.trackRequest('POST', '/api/drivers', 201, duration);
-    dtLogger.info('Driver created successfully', { driverId: result.rows[0].id, name: `${firstName} ${lastName}` });
+    dtLogger.info('Driver created successfully', { driverId, name: `${firstName} ${lastName}` });
     
-    res.status(201).json(transformRow(result.rows[0]));
+    res.status(201).json(transformRow(insertDriver.rows[0]));
   } catch (error) {
     const duration = Date.now() - startTime;
+    await client.query('ROLLBACK');
+
+    // Handle unique CDL constraint gracefully
+    if (error && error.code === '23505' && error.constraint && error.constraint.includes('driver_licenses')) {
+      const normState = normalizeCdlState(req.body.cdlState);
+      const normNumber = normalizeCdlNumber(req.body.cdlNumber);
+      const existing = await findDriverByCdl(client, normState, normNumber);
+      dtLogger.trackRequest('POST', '/api/drivers', 409, duration, {
+        existingDriverId: existing?.driver_id,
+        cdlState: normState,
+        cdlNumber: normNumber
+      });
+      return res.status(409).json({
+        code: 'DRIVER_EXISTS',
+        message: 'Driver already exists for this CDL number and state',
+        existingDriverId: existing?.driver_id || null,
+        cdlState: normState,
+        cdlNumber: normNumber
+      });
+    }
+
     dtLogger.error('Failed to create driver', error, { body: req.body });
     dtLogger.trackRequest('POST', '/api/drivers', 500, duration);
     
     console.error('Error creating driver:', error);
     res.status(500).json({ message: 'Failed to create driver' });
+  } finally {
+    client.release();
   }
 });
 
 // PUT update driver
 router.put('/:id', async (req, res) => {
+  const client = await getClient();
   try {
+    const body = req.body || {};
     const fields = [];
     const values = [];
     let paramCount = 1;
-    
+
     // Skip system fields that shouldn't be updated directly
     const skipFields = ['id', 'createdAt', 'updatedAt', 'created_at', 'updated_at'];
-    
-    Object.keys(req.body).forEach(key => {
-      if (req.body[key] !== undefined && !skipFields.includes(key)) {
+    // Only allow updating known driver columns during this phase
+    const allowedDriverFields = new Set([
+      'firstName',
+      'lastName',
+      'email',
+      'phone',
+      'status',
+      'hireDate',
+      'address',
+      'dateOfBirth',
+      'driverType',
+      'payBasis',
+      'payRate',
+      'payPercentage',
+      'terminationDate',
+      'truckId',
+      'trailerId',
+      'coDriverId',
+      // legacy / dqf-related fields
+      'dqfCompleteness',
+      'clearinghouseStatus'
+    ]);
+
+    Object.keys(body).forEach((key) => {
+      if (
+        body[key] !== undefined &&
+        !skipFields.includes(key) &&
+        allowedDriverFields.has(key)
+      ) {
         const snakeKey = toSnakeCase(key);
-        const value = req.body[key] === '' ? null : req.body[key]; // Convert empty strings to null
+        const value = body[key] === '' ? null : body[key]; // Convert empty strings to null
         fields.push(`${snakeKey} = $${paramCount}`);
         values.push(value);
-        paramCount++;
+        paramCount += 1;
       }
     });
-    
-    if (fields.length === 0) return res.status(400).json({ message: 'No fields to update' });
+
+    if (fields.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+
+    await client.query('BEGIN');
+
+    // Handle CDL license updates (normalized)
+    const rawCdlState = body.cdlState || body.cdl_state;
+    const rawCdlNumber = body.cdlNumber || body.cdl_number;
+    const rawCdlClass = body.cdlClass || body.cdl_class;
+    const rawEndorsements = body.endorsements;
+    const rawCdlExpiry = body.cdlExpiry || body.cdl_expiry;
+
+    const normState = normalizeCdlState(rawCdlState);
+    const normNumber = normalizeCdlNumber(rawCdlNumber);
+
+    if (normState && normNumber) {
+      // Check for duplicates in other drivers
+      const existing = await client.query(
+        `
+        SELECT driver_id
+        FROM driver_licenses
+        WHERE cdl_state = $1
+          AND cdl_number = $2
+          AND driver_id <> $3
+        `,
+        [normState, normNumber, req.params.id]
+      );
+
+      if (existing.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          code: 'DRIVER_EXISTS',
+          message: 'Driver already exists for this CDL number and state',
+          existingDriverId: existing.rows[0].driver_id,
+          cdlState: normState,
+          cdlNumber: normNumber
+        });
+      }
+
+      await client.query(
+        `
+        INSERT INTO driver_licenses (
+          driver_id,
+          cdl_state,
+          cdl_number,
+          cdl_class,
+          endorsements,
+          cdl_expiry
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (driver_id) DO UPDATE SET
+          cdl_state = EXCLUDED.cdl_state,
+          cdl_number = EXCLUDED.cdl_number,
+          cdl_class = EXCLUDED.cdl_class,
+          endorsements = EXCLUDED.endorsements,
+          cdl_expiry = EXCLUDED.cdl_expiry
+        `,
+        [
+          req.params.id,
+          normState,
+          normNumber,
+          rawCdlClass || null,
+          (rawEndorsements || []).join ? (rawEndorsements || []).join(',') : rawEndorsements || null,
+          rawCdlExpiry || null
+        ]
+      );
+    }
+
+    // Handle compliance updates
+    const medicalCertExpiry = body.medicalCertExpiry || body.medical_cert_expiry;
+    const lastMvrCheck = body.lastMvrCheck || body.last_mvr_check;
+    const clearinghouseStatus =
+      body.clearinghouseStatus || body.clearinghouse_status;
+
+    if (medicalCertExpiry || lastMvrCheck || clearinghouseStatus) {
+      await client.query(
+        `
+        INSERT INTO driver_compliance (
+          driver_id,
+          medical_cert_expiry,
+          last_mvr_check,
+          clearinghouse_status
+        )
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (driver_id) DO UPDATE SET
+          medical_cert_expiry = COALESCE(EXCLUDED.medical_cert_expiry, driver_compliance.medical_cert_expiry),
+          last_mvr_check = COALESCE(EXCLUDED.last_mvr_check, driver_compliance.last_mvr_check),
+          clearinghouse_status = COALESCE(EXCLUDED.clearinghouse_status, driver_compliance.clearinghouse_status),
+          updated_at = NOW()
+        `,
+        [
+          req.params.id,
+          medicalCertExpiry || null,
+          lastMvrCheck || null,
+          clearinghouseStatus || null
+        ]
+      );
+    }
+
+    // Keep legacy drivers table in sync (dual-write)
     values.push(req.params.id);
-    const result = await query(`UPDATE drivers SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`, values);
+    const result = await client.query(
+      `UPDATE drivers SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`,
+      values
+    );
+
+    await client.query('COMMIT');
+
     if (result.rows.length > 0) {
       res.json(transformRow(result.rows[0]));
     } else {
       res.status(404).json({ message: 'Driver not found' });
     }
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error updating driver:', error);
     res.status(500).json({ message: 'Failed to update driver' });
+  } finally {
+    client.release();
   }
 });
 

@@ -1,27 +1,27 @@
-exports.up = async function(knex) {
-  await knex.schema.createTable('customers', function(table) {
+exports.up = async function (knex) {
+  const hasCustomers = await knex.schema.hasTable('customers');
+  if (hasCustomers) {
+    // Table already exists (from schema.sql/init), skip this migration.
+    return;
+  }
+
+  return knex.schema.createTable('customers', table => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
-    table.string('name').notNullable();
-    table.string('dot_number').unique();
-    table.string('address');
-    table.string('city');
-    table.string('state');
-    table.string('zip');
-    table.string('phone');
-    table.string('email');
+    table.string('name', 255).notNullable();
+    table.string('dot_number', 255);
+    table.string('address', 255);
+    table.string('city', 255);
+    table.string('state', 255);
+    table.string('zip', 255);
+    table.string('phone', 255);
+    table.string('email', 255);
     table.timestamp('created_at').defaultTo(knex.fn.now());
     table.timestamp('updated_at').defaultTo(knex.fn.now());
   });
-
-  // Add customer_id to maintenance_records (work orders)
-  await knex.schema.alterTable('maintenance_records', function(table) {
-    table.uuid('customer_id').references('id').inTable('customers').onDelete('SET NULL');
-  });
 };
 
-exports.down = async function(knex) {
-  await knex.schema.alterTable('maintenance_records', function(table) {
-    table.dropColumn('customer_id');
-  });
-  await knex.schema.dropTableIfExists('customers');
+exports.down = async function (knex) {
+  const hasCustomers = await knex.schema.hasTable('customers');
+  if (!hasCustomers) return;
+  await knex.schema.dropTable('customers');
 };

@@ -2,11 +2,13 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { DriversComponent } from './components/drivers/drivers.component';
+import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
 import { HosComponent } from './components/hos/hos.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { WorkOrderComponent } from './components/work-order/work-order.component';
 import { LoadsComponent } from './components/loads/loads.component';
+import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { AuthGuard } from './auth.guard';
@@ -21,14 +23,15 @@ import { InventoryReportsComponent } from './components/inventory-reports/invent
 const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard] },
-  { path: 'drivers', component: DriversComponent, canActivate: [AuthGuard] },
+  { path: 'drivers', component: DispatchDriversComponent, canActivate: [AuthGuard] },
+  { path: 'drivers/dqf', component: DriversComponent, canActivate: [AuthGuard] },
   { path: 'vehicles', component: VehiclesComponent, canActivate: [AuthGuard], data: { vehicleType: 'truck' } },
   { path: 'trailers', component: VehiclesComponent, canActivate: [AuthGuard], data: { vehicleType: 'trailer' } },
   { path: 'hos', component: HosComponent, canActivate: [AuthGuard] },
   { path: 'maintenance', component: MaintenanceComponent, canActivate: [AuthGuard] },
   { path: 'work-order', component: WorkOrderComponent, canActivate: [AuthGuard] },
   { path: 'work-order/:id', component: WorkOrderComponent, canActivate: [AuthGuard] },
-  { path: 'loads', component: LoadsComponent, canActivate: [AuthGuard] },
+  { path: 'loads', component: LoadsDashboardComponent, canActivate: [AuthGuard] },
   { path: 'audit', component: AuditComponent, canActivate: [AuthGuard] },
   { path: 'parts', component: PartsCatalogComponent, canActivate: [AuthGuard] },
   { path: 'barcodes', component: BarcodeManagementComponent, canActivate: [AuthGuard] },

@@ -4,32 +4,45 @@
  */
 exports.up = async function(knex) {
 	// Parts table (master data for parts catalog)
-	await knex.schema.createTable('parts', table => {
-		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
-		table.string('sku').notNullable().unique();
-		table.string('name').notNullable();
-		table.string('category').notNullable();
-		table.string('manufacturer');
-		table.string('uom').defaultTo('each'); // each, box, gallon, set, etc.
-		table.decimal('default_cost', 10, 2).defaultTo(0);
-		table.decimal('default_retail_price', 10, 2).defaultTo(0);
-		table.boolean('taxable').defaultTo(false);
-		table.boolean('is_active').defaultTo(true);
-		table.text('description');
-		table.string('barcode');
-		table.string('image_url');
-		table.boolean('core_item').defaultTo(false);
-		table.boolean('hazmat').defaultTo(false);
-		table.integer('warranty_days');
-		table.integer('reorder_point_default');
-		table.integer('reorder_qty_default');
-		table.string('preferred_vendor_name');
-		table.text('notes');
-		table.timestamps(true, true);
-	});
+	const hasParts = await knex.schema.hasTable('parts');
+	if (!hasParts) {
+		await knex.schema.createTable('parts', table => {
+			table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
+			table.string('sku').notNullable().unique();
+			table.string('name').notNullable();
+			table.string('category').notNullable();
+			table.string('manufacturer');
+			table.string('uom').defaultTo('each'); // each, box, gallon, set, etc.
+			table.decimal('default_cost', 10, 2).defaultTo(0);
+			table.decimal('default_retail_price', 10, 2).defaultTo(0);
+			table.boolean('taxable').defaultTo(false);
+			table.boolean('is_active').defaultTo(true);
+			table.text('description');
+			table.string('barcode');
+			table.string('image_url');
+			table.boolean('core_item').defaultTo(false);
+			table.boolean('hazmat').defaultTo(false);
+			table.integer('warranty_days');
+			table.integer('reorder_point_default');
+			table.integer('reorder_qty_default');
+			table.string('preferred_vendor_name');
+			table.text('notes');
+			table.timestamps(true, true);
+		});
+	} else {
+		// If parts table already exists but is missing uom, add it
+		const hasUom = await knex.schema.hasColumn('parts', 'uom');
+		if (!hasUom) {
+			await knex.schema.alterTable('parts', table => {
+				table.string('uom').defaultTo('each');
+			});
+		}
+	}
 
 	// Inventory table (per-location inventory levels)
-	await knex.schema.createTable('inventory', table => {
+	const hasInventory = await knex.schema.hasTable('inventory');
+	if (!hasInventory) {
+		await knex.schema.createTable('inventory', table => {
 		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
 		table.uuid('location_id').notNullable().references('id').inTable('locations').onDelete('CASCADE');
 		table.uuid('part_id').notNullable().references('id').inTable('parts').onDelete('CASCADE');
@@ -44,10 +57,13 @@ exports.up = async function(knex) {
 		table.timestamps(true, true);
 		// Unique constraint: one inventory record per location-part combo
 		table.unique(['location_id', 'part_id']);
-	});
+		});
+	}
 
 	// Receiving tickets
-	await knex.schema.createTable('receiving_tickets', table => {
+	const hasReceivingTickets = await knex.schema.hasTable('receiving_tickets');
+	if (!hasReceivingTickets) {
+		await knex.schema.createTable('receiving_tickets', table => {
 		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
 		table.uuid('location_id').notNullable().references('id').inTable('locations').onDelete('CASCADE');
 		table.string('ticket_number').notNullable().unique();
@@ -58,10 +74,13 @@ exports.up = async function(knex) {
 		table.uuid('posted_by').references('id').inTable('users').onDelete('SET NULL');
 		table.timestamp('posted_at');
 		table.timestamps(true, true);
-	});
+		});
+	}
 
 	// Receiving ticket line items
-	await knex.schema.createTable('receiving_ticket_lines', table => {
+	const hasReceivingTicketLines = await knex.schema.hasTable('receiving_ticket_lines');
+	if (!hasReceivingTicketLines) {
+		await knex.schema.createTable('receiving_ticket_lines', table => {
 		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
 		table.uuid('ticket_id').notNullable().references('id').inTable('receiving_tickets').onDelete('CASCADE');
 		table.uuid('part_id').notNullable().references('id').inTable('parts').onDelete('CASCADE');
@@ -69,10 +88,13 @@ exports.up = async function(knex) {
 		table.decimal('unit_cost', 10, 2);
 		table.string('bin_location_override');
 		table.timestamps(true, true);
-	});
+		});
+	}
 
 	// Inventory adjustments
-	await knex.schema.createTable('inventory_adjustments', table => {
+	const hasInventoryAdjustments = await knex.schema.hasTable('inventory_adjustments');
+	if (!hasInventoryAdjustments) {
+		await knex.schema.createTable('inventory_adjustments', table => {
 		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
 		table.uuid('location_id').notNullable().references('id').inTable('locations').onDelete('CASCADE');
 		table.uuid('part_id').notNullable().references('id').inTable('parts').onDelete('CASCADE');
@@ -87,10 +109,13 @@ exports.up = async function(knex) {
 		table.uuid('posted_by').references('id').inTable('users').onDelete('SET NULL');
 		table.timestamp('posted_at');
 		table.timestamps(true, true);
-	});
+		});
+	}
 
 	// Cycle counts
-	await knex.schema.createTable('cycle_counts', table => {
+	const hasCycleCounts = await knex.schema.hasTable('cycle_counts');
+	if (!hasCycleCounts) {
+		await knex.schema.createTable('cycle_counts', table => {
 		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
 		table.uuid('location_id').notNullable().references('id').inTable('locations').onDelete('CASCADE');
 		table.enu('method', ['CATEGORY', 'BIN_RANGE', 'SELECTED_PARTS']).notNullable();
@@ -102,10 +127,13 @@ exports.up = async function(knex) {
 		table.uuid('approved_by').references('id').inTable('users').onDelete('SET NULL');
 		table.timestamp('approved_at');
 		table.timestamps(true, true);
-	});
+		});
+	}
 
 	// Cycle count line items
-	await knex.schema.createTable('cycle_count_lines', table => {
+	const hasCycleCountLines = await knex.schema.hasTable('cycle_count_lines');
+	if (!hasCycleCountLines) {
+		await knex.schema.createTable('cycle_count_lines', table => {
 		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
 		table.uuid('cycle_count_id').notNullable().references('id').inTable('cycle_counts').onDelete('CASCADE');
 		table.uuid('part_id').notNullable().references('id').inTable('parts').onDelete('CASCADE');
@@ -113,10 +141,13 @@ exports.up = async function(knex) {
 		table.integer('counted_qty');
 		table.text('notes');
 		table.timestamps(true, true);
-	});
+		});
+	}
 
 	// Inventory transactions (append-only audit log)
-	await knex.schema.createTable('inventory_transactions', table => {
+	const hasInventoryTransactions = await knex.schema.hasTable('inventory_transactions');
+	if (!hasInventoryTransactions) {
+		await knex.schema.createTable('inventory_transactions', table => {
 		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
 		table.uuid('location_id').notNullable().references('id').inTable('locations').onDelete('CASCADE');
 		table.uuid('part_id').notNullable().references('id').inTable('parts').onDelete('CASCADE');
@@ -134,35 +165,52 @@ exports.up = async function(knex) {
 		table.index('transaction_type');
 		table.index('created_at');
 		table.index(['location_id', 'created_at']);
-	});
+		});
+	}
 
 	// Create index on parts table for common queries
-	await knex.schema.table('parts', table => {
-		table.index('sku');
-		table.index('is_active');
-		table.index('category');
-	});
+	if (hasParts) {
+		const hasIsActiveCol = await knex.schema.hasColumn('parts', 'is_active');
+		if (hasIsActiveCol) {
+			await knex.schema.table('parts', table => {
+				table.index('sku');
+				table.index('is_active');
+				table.index('category');
+			});
+		} else {
+			await knex.schema.table('parts', table => {
+				table.index('sku');
+				table.index('category');
+			});
+		}
+	}
 
 	// Create index on inventory for common queries
-	await knex.schema.table('inventory', table => {
+	if (hasInventory) {
+		await knex.schema.table('inventory', table => {
 		table.index('location_id');
 		table.index('part_id');
 		table.index(['location_id', 'part_id']);
-	});
+		});
+	}
 
 	// Create index on receiving_tickets
-	await knex.schema.table('receiving_tickets', table => {
+	if (hasReceivingTickets) {
+		await knex.schema.table('receiving_tickets', table => {
 		table.index('location_id');
 		table.index('status');
 		table.index('created_at');
-	});
+		});
+	}
 
 	// Create index on cycle_counts
-	await knex.schema.table('cycle_counts', table => {
+	if (hasCycleCounts) {
+		await knex.schema.table('cycle_counts', table => {
 		table.index('location_id');
 		table.index('status');
 		table.index('created_at');
-	});
+		});
+	}
 };
 
 /**

@@ -138,7 +138,7 @@ export class VehiclesComponent implements OnInit {
 
     // Filter to company-owned equipment and selected type
     result = result.filter(vehicle => vehicle.company_owned !== false);
-    result = result.filter(vehicle => (vehicle.vehicle_type || 'truck') === this.vehicleType);
+    result = result.filter(vehicle => this.normalizeVehicleType(vehicle.vehicle_type) === this.vehicleType);
 
     // Apply search filter
     if (this.searchQuery.trim()) {
@@ -155,7 +155,7 @@ export class VehiclesComponent implements OnInit {
 
     // Apply status filter
     if (this.selectedStatus !== 'all') {
-      result = result.filter(vehicle => vehicle.status === this.selectedStatus);
+      result = result.filter(vehicle => this.normalizeStatus(vehicle.status) === this.selectedStatus);
     }
 
     // Apply sorting
@@ -236,11 +236,21 @@ export class VehiclesComponent implements OnInit {
   }
 
   getStatusBadge(status: string): string {
-    return status === 'in-service' ? 'badge-success' : 'badge-danger';
+    return this.normalizeStatus(status) === 'in-service' ? 'badge-success' : 'badge-danger';
   }
 
   getStatusLabel(status: string): string {
-    return status === 'in-service' ? 'In Service' : 'Out of Service';
+    return this.normalizeStatus(status) === 'in-service' ? 'In Service' : 'Out of Service';
+  }
+
+  private normalizeStatus(status: string | null | undefined): string {
+    return (status || '').toString().trim().toLowerCase().replace(/[_\s]+/g, '-');
+  }
+
+  private normalizeVehicleType(value: string | null | undefined): 'truck' | 'trailer' {
+    const normalized = (value || '').toString().trim().toLowerCase();
+    if (normalized.includes('trailer')) return 'trailer';
+    return 'truck';
   }
 
   trackByVehicleId(index: number, vehicle: Vehicle): string {

@@ -103,7 +103,8 @@ export class DriversComponent implements OnInit {
   }
 
   loadDrivers(): void {
-    this.apiService.getDrivers().subscribe({
+    // Use the DQF view so we pull from the unified driver_licenses / driver_compliance tables
+    this.apiService.getDqfDrivers().subscribe({
       next: (data) => {
         this.drivers = data;
         this.loading = false;

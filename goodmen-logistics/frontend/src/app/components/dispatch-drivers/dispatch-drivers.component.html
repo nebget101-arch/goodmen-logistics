@@ -1,0 +1,420 @@
+<div class="drivers-page">
+  <div class="drivers-header">
+    <div>
+      <h2>Drivers</h2>
+      <p class="subtitle">Dispatch view - core assignments and pay</p>
+    </div>
+    <div class="header-actions">
+      <input
+        type="text"
+        class="form-input search-input"
+        placeholder="Search drivers"
+        [(ngModel)]="search"
+      />
+      <button class="btn btn-primary" (click)="openNew()">+ New Driver</button>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading">
+    <div class="spinner"></div>
+  </div>
+
+  <table class="table" *ngIf="!loading">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Hire Date</th>
+        <th>Term Date</th>
+        <th>Phone</th>
+        <th>Email</th>
+        <th>Truck</th>
+        <th>Trailer</th>
+        <th>Pay Basis</th>
+        <th>Pay Rate / %</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let d of filteredDrivers">
+        <td>
+          <strong>{{ d.firstName }} {{ d.lastName }}</strong><br />
+          <small class="muted">CDL {{ d.cdlClass || 'A' }} - {{ d.cdlState }} {{ d.cdlNumber }}</small>
+        </td>
+        <td>{{ d.driverType || 'company' }}</td>
+        <td>{{ d.status }}</td>
+        <td>{{ d.hireDate || '--' }}</td>
+        <td>{{ d.terminationDate || '--' }}</td>
+        <td>{{ d.phone || '--' }}</td>
+        <td>{{ d.email || '--' }}</td>
+        <td>{{ d.truckUnitNumber || '--' }}</td>
+        <td>{{ d.trailerUnitNumber || '--' }}</td>
+        <td>{{ d.payBasis || '--' }}</td>
+        <td>
+          <ng-container [ngSwitch]="d.payBasis">
+            <span *ngSwitchCase="'per_mile'">{{ d.payRate || 0 }} / mile</span>
+            <span *ngSwitchCase="'percentage'">{{ d.payPercentage || 0 }}%</span>
+            <span *ngSwitchCase="'flatpay'">\${{ d.payRate || 0 }} flat</span>
+            <span *ngSwitchCase="'hourly'">\${{ d.payRate || 0 }} / hr</span>
+            <span *ngSwitchDefault>--</span>
+          </ng-container>
+        </td>
+        <td>
+          <button class="btn btn-sm" type="button" (click)="startEdit(d)">
+            Edit
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div *ngIf="!loading && filteredDrivers.length === 0" class="empty-state">
+    <p>No drivers found</p>
+  </div>
+
+  <!-- New Driver Modal -->
+  <div class="modal-backdrop" *ngIf="showNewModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>{{ editingDriverId ? 'Edit Driver' : 'New Driver' }}</h3>
+        <button class="close-btn" type="button" (click)="closeNew()" [disabled]="saving">✕</button>
+      </div>
+      <div class="modal-banner">
+        <span class="banner-icon">ℹ</span>
+        <span class="banner-text">
+          Need help? Watch our tutorial on how to manage drivers. (Placeholder)
+        </span>
+      </div>
+      <div class="modal-body">
+        <div class="driver-layout">
+          <div class="driver-left">
+            <div class="avatar-circle">
+              <span class="avatar-initials">DR</span>
+            </div>
+            <button class="btn btn-secondary btn-xs" type="button">
+              Update photo
+            </button>
+          </div>
+          <div class="driver-main">
+            <div class="grid-3">
+              <div class="field">
+                <label for="firstName">First Name *</label>
+                <input
+                  id="firstName"
+                  class="form-input"
+                  [(ngModel)]="newDriver.firstName"
+                />
+              </div>
+              <div class="field">
+                <label for="lastName">Last Name *</label>
+                <input
+                  id="lastName"
+                  class="form-input"
+                  [(ngModel)]="newDriver.lastName"
+                />
+              </div>
+              <div class="field">
+                <label for="status">Status</label>
+                <input
+                  id="status"
+                  class="form-input"
+                  [(ngModel)]="newDriver.status"
+                  placeholder="Applicant"
+                />
+              </div>
+              <div class="field">
+                <label for="dob">Date of Birth</label>
+                <input
+                  id="dob"
+                  type="date"
+                  class="form-input"
+                  [(ngModel)]="newDriver.dateOfBirth"
+                />
+              </div>
+              <div class="field">
+                <label for="applicationDate">Application date</label>
+                <input
+                  id="applicationDate"
+                  type="date"
+                  class="form-input"
+                  [(ngModel)]="newDriver.applicationDate"
+                />
+              </div>
+              <div class="field">
+                <label for="hireDate">Hire date</label>
+                <input
+                  id="hireDate"
+                  type="date"
+                  class="form-input"
+                  [(ngModel)]="newDriver.hireDate"
+                />
+              </div>
+              <div class="field">
+                <label for="phone">Phone</label>
+                <input
+                  id="phone"
+                  class="form-input"
+                  [(ngModel)]="newDriver.phone"
+                />
+              </div>
+              <div class="field">
+                <label for="email">Email</label>
+                <input
+                  id="email"
+                  type="email"
+                  class="form-input"
+                  [(ngModel)]="newDriver.email"
+                />
+              </div>
+              <div class="field">
+                <label for="payableTo">Payable to</label>
+                <input
+                  id="payableTo"
+                  class="form-input"
+                  [(ngModel)]="newDriver.payableTo"
+                />
+              </div>
+              <div class="field field-wide">
+                <label for="address">Address</label>
+                <input
+                  id="address"
+                  class="form-input"
+                  [(ngModel)]="newDriver.address"
+                />
+              </div>
+              <div class="field field-wide">
+                <label for="address2">Address line 2</label>
+                <input
+                  id="address2"
+                  class="form-input"
+                  [(ngModel)]="newDriver.address2"
+                />
+              </div>
+              <div class="field">
+                <label for="city">City</label>
+                <input
+                  id="city"
+                  class="form-input"
+                  [(ngModel)]="newDriver.city"
+                />
+              </div>
+              <div class="field">
+                <label for="state">State</label>
+                <input
+                  id="state"
+                  class="form-input"
+                  maxlength="2"
+                  [(ngModel)]="newDriver.state"
+                />
+              </div>
+              <div class="field">
+                <label for="zip">Zip</label>
+                <input
+                  id="zip"
+                  class="form-input"
+                  [(ngModel)]="newDriver.zip"
+                />
+              </div>
+              <div class="field">
+                <label for="coDriver">Co-Driver</label>
+                <input
+                  id="coDriver"
+                  class="form-input"
+                  [(ngModel)]="newDriver.coDriverId"
+                />
+              </div>
+              <div class="field">
+                <label for="truck">Truck</label>
+                <select
+                  id="truck"
+                  class="form-input"
+                  [(ngModel)]="newDriver.truckId"
+                >
+                  <option value="">-- Select truck --</option>
+                  <option *ngFor="let t of trucks" [value]="t.id">
+                    {{ t.unit_number }} - {{ t.make }} {{ t.model }}
+                  </option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="trailer">Trailer</label>
+                <select
+                  id="trailer"
+                  class="form-input"
+                  [(ngModel)]="newDriver.trailerId"
+                >
+                  <option value="">-- Select trailer --</option>
+                  <option *ngFor="let tr of trailers" [value]="tr.id">
+                    {{ tr.unit_number }} - {{ tr.make }} {{ tr.model }}
+                  </option>
+                </select>
+              </div>
+              <div class="field field-wide">
+                <label for="fuelCard">Fuel card #</label>
+                <input
+                  id="fuelCard"
+                  class="form-input"
+                  [(ngModel)]="newDriver.fuelCardNumber"
+                />
+              </div>
+              <div class="field">
+                <label for="cdlNumber">CDL Number *</label>
+                <input
+                  id="cdlNumber"
+                  class="form-input"
+                  [(ngModel)]="newDriver.cdlNumber"
+                />
+              </div>
+              <div class="field">
+                <label for="cdlState">CDL State *</label>
+                <input
+                  id="cdlState"
+                  class="form-input"
+                  maxlength="2"
+                  [(ngModel)]="newDriver.cdlState"
+                />
+              </div>
+              <div class="field">
+                <label for="cdlClass">CDL Class</label>
+                <select
+                  id="cdlClass"
+                  class="form-input"
+                  [(ngModel)]="newDriver.cdlClass"
+                >
+                  <option value="A">Class A</option>
+                  <option value="B">Class B</option>
+                  <option value="C">Class C</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="cdlExpiry">CDL Expiry</label>
+                <input
+                  id="cdlExpiry"
+                  type="date"
+                  class="form-input"
+                  [(ngModel)]="newDriver.cdlExpiry"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pay section -->
+        <div class="pay-section">
+          <div class="pay-tabs">
+            <button class="pay-tab active" type="button">Pay rates</button>
+            <button class="pay-tab disabled" type="button">Scheduled payments/deductions</button>
+            <button class="pay-tab disabled" type="button">Additional payee</button>
+            <button class="pay-tab disabled" type="button">Notes</button>
+          </div>
+          <div class="pay-content">
+            <div class="pay-row">
+              <div class="pay-col">
+                <div class="pay-label">Driver type</div>
+                <div class="pay-radio-row">
+                  <label>
+                    <input
+                      type="radio"
+                      name="driverType"
+                      value="company"
+                      [(ngModel)]="newDriver.driverType"
+                      (change)="onDriverTypeChange()"
+                    />
+                    Company driver
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="driverType"
+                      value="owner_operator"
+                      [(ngModel)]="newDriver.driverType"
+                      (change)="onDriverTypeChange()"
+                    />
+                    Owner operator
+                  </label>
+                </div>
+              </div>
+              <div class="pay-col">
+                <div class="pay-label">Pay basis</div>
+                <div class="pay-radio-row">
+                  <label>
+                    <input
+                      type="radio"
+                      name="payBasis"
+                      value="per_mile"
+                      [(ngModel)]="newDriver.payBasis"
+                      [disabled]="newDriver.driverType === 'owner_operator'"
+                    />
+                    Per mile
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="payBasis"
+                      value="percentage"
+                      [(ngModel)]="newDriver.payBasis"
+                    />
+                    Freight percentage
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="payBasis"
+                      value="flatpay"
+                      [(ngModel)]="newDriver.payBasis"
+                    />
+                    Flatpay
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="payBasis"
+                      value="hourly"
+                      [(ngModel)]="newDriver.payBasis"
+                    />
+                    Hourly
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="pay-row">
+              <div class="pay-col">
+                <label for="perMile">Per mile</label>
+                <input
+                  id="perMile"
+                  type="number"
+                  class="form-input"
+                  [(ngModel)]="newDriver.payRate"
+                />
+              </div>
+              <div class="pay-col">
+                <label for="payPercentage">Pay percentage</label>
+                <input
+                  id="payPercentage"
+                  type="number"
+                  class="form-input"
+                  [(ngModel)]="newDriver.payPercentage"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div *ngIf="duplicateError" class="duplicate-alert">
+          {{ duplicateError }}
+          <div *ngIf="existingDriverId" class="duplicate-actions">
+            <span>Use the DQF page to open the existing driver.</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" type="button" (click)="closeNew()" [disabled]="saving">Cancel</button>
+        <button class="btn btn-primary" type="button" (click)="saveDriver()" [disabled]="saving">
+          {{ saving ? 'Saving...' : 'Save Driver' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+

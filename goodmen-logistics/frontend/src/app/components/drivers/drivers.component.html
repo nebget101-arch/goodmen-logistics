@@ -5,71 +5,7 @@
       <button class="btn btn-primary" (click)="toggleAddForm()">+ Add Driver</button>
     </div>
 
-    <!-- Add Driver Form -->
-    <div *ngIf="showAddForm" style="padding: 20px; border-bottom: 1px solid var(--border-color); background-color: #f9f9f9;">
-      <h3 style="margin-bottom: 20px;">Add New Driver</h3>
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">First Name *</label>
-          <input type="text" [(ngModel)]="newDriver.firstName" class="form-input" placeholder="John" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Last Name *</label>
-          <input type="text" [(ngModel)]="newDriver.lastName" class="form-input" placeholder="Doe" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Email *</label>
-          <input type="email" [(ngModel)]="newDriver.email" class="form-input" placeholder="john.doe@example.com" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Phone</label>
-          <input type="tel" [(ngModel)]="newDriver.phone" class="form-input" placeholder="(555) 123-4567">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Number *</label>
-          <input type="text" [(ngModel)]="newDriver.cdlNumber" class="form-input" placeholder="A1234567" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL State *</label>
-          <input type="text" [(ngModel)]="newDriver.cdlState" class="form-input" placeholder="CA" maxlength="2" required>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Class *</label>
-          <select [(ngModel)]="newDriver.cdlClass" class="form-input" required>
-            <option value="A">Class A</option>
-            <option value="B">Class B</option>
-            <option value="C">Class C</option>
-          </select>
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">CDL Expiry</label>
-          <input type="date" [(ngModel)]="newDriver.cdlExpiry" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Medical Cert Expiry</label>
-          <input type="date" [(ngModel)]="newDriver.medicalCertExpiry" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Hire Date</label>
-          <input type="date" [(ngModel)]="newDriver.hireDate" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Date of Birth</label>
-          <input type="date" [(ngModel)]="newDriver.dateOfBirth" class="form-input">
-        </div>
-        <div>
-          <label style="display: block; margin-bottom: 5px; font-weight: 500;">Address</label>
-          <input type="text" [(ngModel)]="newDriver.address" class="form-input" placeholder="123 Main St, City, ST 12345">
-        </div>
-      </div>
-      <div style="margin-top: 20px; display: flex; gap: 10px;">
-        <button class="btn btn-primary" (click)="addDriver()" [disabled]="saving">
-          {{ saving ? 'Saving...' : 'Save Driver' }}
-        </button>
-        <button class="btn" (click)="toggleAddForm()" [disabled]="saving" 
-                style="background-color: #6c757d; color: white;">Cancel</button>
-      </div>
-    </div>
+    <!-- Add Driver Modal is rendered outside the card -->
     <!-- Edit Driver Form -->
     <div *ngIf="editingDriver" style="padding: 20px; border-bottom: 1px solid var(--border-color); background-color: #fff3cd;">
       <h3 style="margin-bottom: 20px;">✏️ Edit Driver: {{editingDriver.firstName}} {{editingDriver.lastName}}</h3>
@@ -376,6 +312,163 @@
     <div style="padding: 10px; background-color: #f9f9f9; border-radius: 4px;">
       <p><strong>49 CFR 391.51:</strong> Driver qualification files must be retained for the duration of employment plus 3 years after employment ends.</p>
       <p style="margin-top: 10px;"><strong>Required Documents:</strong> Application, Motor vehicle record, Road test certificate, Medical examiner's certificate, Annual review of driving record</p>
+    </div>
+  </div>
+
+  <!-- Add Driver Modal -->
+  <div class="dqf-modal-backdrop" *ngIf="showAddForm">
+    <div class="dqf-modal">
+      <div class="dqf-modal-header">
+        <div>
+          <h3>Add New Driver</h3>
+          <p class="dqf-modal-subtitle">Create a new driver and capture core DQF details.</p>
+        </div>
+        <button class="dqf-close-btn" type="button" (click)="toggleAddForm()" [disabled]="saving">✕</button>
+      </div>
+      <div class="dqf-modal-body">
+        <div class="dqf-grid-2">
+          <div>
+            <h4 class="dqf-section-title">Identity & Contact</h4>
+            <div class="dqf-field">
+              <label for="firstName">First Name *</label>
+              <input
+                id="firstName"
+                type="text"
+                [(ngModel)]="newDriver.firstName"
+                class="form-input"
+                placeholder="John"
+                required
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="lastName">Last Name *</label>
+              <input
+                id="lastName"
+                type="text"
+                [(ngModel)]="newDriver.lastName"
+                class="form-input"
+                placeholder="Doe"
+                required
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="email">Email *</label>
+              <input
+                id="email"
+                type="email"
+                [(ngModel)]="newDriver.email"
+                class="form-input"
+                placeholder="john.doe@example.com"
+                required
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="phone">Phone</label>
+              <input
+                id="phone"
+                type="tel"
+                [(ngModel)]="newDriver.phone"
+                class="form-input"
+                placeholder="(555) 123-4567"
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="address">Address</label>
+              <input
+                id="address"
+                type="text"
+                [(ngModel)]="newDriver.address"
+                class="form-input"
+                placeholder="123 Main St, City, ST 12345"
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="dob">Date of Birth</label>
+              <input
+                id="dob"
+                type="date"
+                [(ngModel)]="newDriver.dateOfBirth"
+                class="form-input"
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="hireDate">Hire Date</label>
+              <input
+                id="hireDate"
+                type="date"
+                [(ngModel)]="newDriver.hireDate"
+                class="form-input"
+              />
+            </div>
+          </div>
+
+          <div>
+            <h4 class="dqf-section-title">License & Medical</h4>
+            <div class="dqf-field">
+              <label for="cdlNumber">CDL Number *</label>
+              <input
+                id="cdlNumber"
+                type="text"
+                [(ngModel)]="newDriver.cdlNumber"
+                class="form-input"
+                placeholder="A1234567"
+                required
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="cdlState">CDL State *</label>
+              <input
+                id="cdlState"
+                type="text"
+                [(ngModel)]="newDriver.cdlState"
+                class="form-input"
+                placeholder="CA"
+                maxlength="2"
+                required
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="cdlClass">CDL Class *</label>
+              <select
+                id="cdlClass"
+                [(ngModel)]="newDriver.cdlClass"
+                class="form-input"
+                required
+              >
+                <option value="A">Class A</option>
+                <option value="B">Class B</option>
+                <option value="C">Class C</option>
+              </select>
+            </div>
+            <div class="dqf-field">
+              <label for="cdlExpiry">CDL Expiry</label>
+              <input
+                id="cdlExpiry"
+                type="date"
+                [(ngModel)]="newDriver.cdlExpiry"
+                class="form-input"
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="medExpiry">Medical Cert Expiry</label>
+              <input
+                id="medExpiry"
+                type="date"
+                [(ngModel)]="newDriver.medicalCertExpiry"
+                class="form-input"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dqf-modal-footer">
+        <button class="btn" type="button" (click)="toggleAddForm()" [disabled]="saving">
+          Cancel
+        </button>
+        <button class="btn btn-primary" type="button" (click)="addDriver()" [disabled]="saving">
+          {{ saving ? 'Saving...' : 'Save Driver' }}
+        </button>
+      </div>
     </div>
   </div>
 </div>

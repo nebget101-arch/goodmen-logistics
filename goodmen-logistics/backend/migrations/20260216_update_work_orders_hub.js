@@ -79,18 +79,25 @@ exports.up = async function(knex) {
       });
     }
 
-    const hasDiscountType = await knex.schema.hasColumn('work_orders', 'discount_type');
-    if (!hasDiscountType) {
-      await knex.schema.table('work_orders', table => {
-        table.enu('discount_type', ['NONE', 'PERCENT', 'AMOUNT']).defaultTo('NONE');
-        table.decimal('discount_value', 12, 2).defaultTo(0);
-        table.decimal('tax_rate_percent', 6, 3).defaultTo(0);
-        table.decimal('tax_amount', 12, 2).defaultTo(0);
-        table.decimal('labor_subtotal', 12, 2).defaultTo(0);
-        table.decimal('parts_subtotal', 12, 2).defaultTo(0);
-        table.decimal('fees_subtotal', 12, 2).defaultTo(0);
-        table.decimal('total_amount', 12, 2).defaultTo(0);
-      });
+    // Financial columns – add individually if missing
+    const financialColumns = [
+      { name: 'discount_type',  add: (table) => table.enu('discount_type', ['NONE', 'PERCENT', 'AMOUNT']).defaultTo('NONE') },
+      { name: 'discount_value', add: (table) => table.decimal('discount_value', 12, 2).defaultTo(0) },
+      { name: 'tax_rate_percent', add: (table) => table.decimal('tax_rate_percent', 6, 3).defaultTo(0) },
+      { name: 'tax_amount', add: (table) => table.decimal('tax_amount', 12, 2).defaultTo(0) },
+      { name: 'labor_subtotal', add: (table) => table.decimal('labor_subtotal', 12, 2).defaultTo(0) },
+      { name: 'parts_subtotal', add: (table) => table.decimal('parts_subtotal', 12, 2).defaultTo(0) },
+      { name: 'fees_subtotal', add: (table) => table.decimal('fees_subtotal', 12, 2).defaultTo(0) },
+      { name: 'total_amount', add: (table) => table.decimal('total_amount', 12, 2).defaultTo(0) }
+    ];
+
+    for (const col of financialColumns) {
+      const exists = await knex.schema.hasColumn('work_orders', col.name);
+      if (!exists) {
+        await knex.schema.table('work_orders', table => {
+          col.add(table);
+        });
+      }
     }
 
     const statusTypeResult = await knex.raw(`

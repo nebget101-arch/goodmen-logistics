@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
 const authMiddleware = require('./auth-middleware');
+const baseAuth = require('../middleware/auth-middleware');
 
 const router = express.Router();
 
@@ -26,6 +27,23 @@ async function generateUniqueUsername(base, dbClient) {
   }
   return `${normalized}.${Date.now()}`;
 }
+
+// Get current user (from JWT payload, no DB dependency)
+router.get('/me', baseAuth, (req, res) => {
+  const payload = req.user || {};
+  if (!payload || (!payload.id && !payload.sub)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const data = {
+    id: payload.id || payload.sub || null,
+    username: payload.username || '',
+    first_name: payload.first_name || null,
+    last_name: payload.last_name || null,
+    email: payload.email || null,
+    role: payload.role || null
+  };
+  res.json({ success: true, data });
+});
 
 // Get all technicians (for dropdown selection)
 router.get('/technicians', async (req, res) => {

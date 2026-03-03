@@ -4,6 +4,7 @@ const path = require('path');
 const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads');
 const INVOICE_DIR = path.join(UPLOAD_ROOT, 'invoices');
 const WORK_ORDER_DIR = path.join(UPLOAD_ROOT, 'work-orders');
+const LOADS_DIR = path.join(UPLOAD_ROOT, 'loads');
 
 function resolveStorageKey(fileName) {
   if (fileName.includes('/') || fileName.includes('\\')) {
@@ -21,6 +22,9 @@ function ensureDirs() {
   }
   if (!fs.existsSync(WORK_ORDER_DIR)) {
     fs.mkdirSync(WORK_ORDER_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(LOADS_DIR)) {
+    fs.mkdirSync(LOADS_DIR, { recursive: true });
   }
 }
 
@@ -46,9 +50,20 @@ function saveStream(readStream, fileName) {
   });
 }
 
+function saveBufferToDir(buffer, fileName, dirName) {
+  ensureDirs();
+  const safeDir = (dirName || '').toString().trim();
+  const storageKey = safeDir ? path.join(safeDir, fileName) : resolveStorageKey(fileName);
+  const fullPath = path.join(UPLOAD_ROOT, storageKey);
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  fs.writeFileSync(fullPath, buffer);
+  return { storageKey, fullPath };
+}
+
 module.exports = {
   ensureDirs,
   saveBuffer,
   saveStream,
+  saveBufferToDir,
   UPLOAD_ROOT
 };

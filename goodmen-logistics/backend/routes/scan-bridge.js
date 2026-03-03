@@ -307,6 +307,26 @@ router.get('/mobile', (req, res) => {
         });
       }
 
+      function vinChecksumValid(vin) {
+        if (!vin || vin.length !== 17) return false;
+        var map = {
+          A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8,
+          J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9,
+          S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9
+        };
+        var weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+        var sum = 0;
+        for (var i = 0; i < 17; i++) {
+          var ch = vin[i];
+          var value = (ch >= '0' && ch <= '9') ? parseInt(ch, 10) : map[ch];
+          if (value === undefined) return false;
+          sum += value * weights[i];
+        }
+        var check = sum % 11;
+        var expected = check === 10 ? 'X' : String(check);
+        return vin[8] === expected;
+      }
+
       function extractVin(text) {
         var upper = String(text || '').toUpperCase();
         var cleaned = upper
@@ -315,13 +335,17 @@ router.get('/mobile', (req, res) => {
           .replace(/I/g, '1')
           .replace(/Q/g, '0');
         if (cleaned.length < 17) return '';
+        var candidates = [];
         for (var i = 0; i <= cleaned.length - 17; i++) {
           var candidate = cleaned.slice(i, i + 17);
           if (/^[A-HJ-NPR-Z0-9]{17}$/.test(candidate)) {
-            return candidate;
+            candidates.push(candidate);
           }
         }
-        return '';
+        for (var c = 0; c < candidates.length; c++) {
+          if (vinChecksumValid(candidates[c])) return candidates[c];
+        }
+        return candidates.length ? candidates[0] : '';
       }
 
       var vinStream = null;
@@ -379,7 +403,9 @@ router.get('/mobile', (req, res) => {
           ctx.drawImage(vinVideo, 0, 0, w, h);
           vinBusy = true;
           Tesseract.recognize(vinCanvas, 'eng', {
-            tessedit_char_whitelist: 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
+            tessedit_char_whitelist: 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789',
+            tessedit_pageseg_mode: '7',
+            preserve_interword_spaces: '1'
           })
             .then(function (result) {
               var text = (result && result.data && result.data.text) ? result.data.text : '';
