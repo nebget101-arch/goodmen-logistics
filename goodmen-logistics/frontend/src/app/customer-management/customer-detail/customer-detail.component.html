@@ -249,6 +249,68 @@
   </div>
 
   <div class="tab-content" *ngIf="activeTab === 'vehicles'">
+    <div class="vehicle-add">
+      <h4>Add Customer Vehicle</h4>
+      <div *ngIf="vinBridgeMobileUrl" style="margin-top: 10px;">
+        <div>Scan this QR code with your phone:</div>
+        <img *ngIf="vinQrCodeDataUrl" [src]="vinQrCodeDataUrl" alt="QR Code" style="width: 200px; max-width: 100%; border: 1px solid #eee; border-radius: 4px;" />
+        <div style="margin-top: 6px;">
+          <a [href]="vinBridgeMobileUrl" target="_blank" rel="noopener">Open on phone</a>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-4">
+          <label for="newVehicleVin">VIN</label>
+          <input id="newVehicleVin" type="text" class="form-control" [(ngModel)]="newVehicle.vin" placeholder="Scan or enter VIN">
+        </div>
+        <div class="col-md-2" style="display:flex; gap:8px; align-items:flex-end;">
+          <button type="button" class="btn btn-outline-secondary" (click)="vinBridgeConnected ? stopVinBridge() : startVinBridge()">
+            {{ vinBridgeConnected ? 'Phone Connected' : 'Scan VIN' }}
+          </button>
+          <button type="button" class="btn btn-outline-primary" (click)="decodeVin()" [disabled]="vinDecodeLoading">
+            {{ vinDecodeLoading ? 'Decoding...' : 'Decode VIN' }}
+          </button>
+        </div>
+        <div class="col-md-3">
+          <label for="newVehicleUnit">Unit #</label>
+          <input id="newVehicleUnit" type="text" class="form-control" [(ngModel)]="newVehicle.unit_number">
+        </div>
+        <div class="col-md-3">
+          <label for="newVehiclePlate">License Plate</label>
+          <input id="newVehiclePlate" type="text" class="form-control" [(ngModel)]="newVehicle.license_plate">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top: 10px;">
+        <div class="col-md-3">
+          <label for="newVehicleMake">Make</label>
+          <input id="newVehicleMake" type="text" class="form-control" [(ngModel)]="newVehicle.make">
+        </div>
+        <div class="col-md-3">
+          <label for="newVehicleModel">Model</label>
+          <input id="newVehicleModel" type="text" class="form-control" [(ngModel)]="newVehicle.model">
+        </div>
+        <div class="col-md-2">
+          <label for="newVehicleYear">Year</label>
+          <input id="newVehicleYear" type="number" class="form-control" [(ngModel)]="newVehicle.year">
+        </div>
+        <div class="col-md-2">
+          <label for="newVehicleState">State</label>
+          <input id="newVehicleState" type="text" class="form-control" [(ngModel)]="newVehicle.state">
+        </div>
+        <div class="col-md-2">
+          <label for="newVehicleMileage">Mileage</label>
+          <input id="newVehicleMileage" type="number" class="form-control" [(ngModel)]="newVehicle.mileage">
+        </div>
+      </div>
+
+      <div *ngIf="vinScanError" class="text-danger" style="margin-top: 6px;">{{ vinScanError }}</div>
+      <div *ngIf="newVehicleError" class="text-danger" style="margin-top: 6px;">{{ newVehicleError }}</div>
+      <div *ngIf="newVehicleSuccess" class="text-success" style="margin-top: 6px;">{{ newVehicleSuccess }}</div>
+
+      <button class="btn btn-primary" style="margin-top: 10px;" (click)="addCustomerVehicle()">Add Vehicle</button>
+      <hr />
+    </div>
     <div *ngIf="vehicles && vehicles.length > 0">
       <table class="table table-striped">
         <thead>

@@ -1189,6 +1189,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
         const data = res?.data || {};
         this.bridgeMobileUrl = data.mobileUrl || '';
         this.bridgeSessionId = data.sessionId || '';
+        this.qrCodeDataUrl = '';
 
         if (this.bridgeMobileUrl) {
           QRCode.toDataURL(this.bridgeMobileUrl, {
@@ -1198,7 +1199,8 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
           }).then((url: string) => {
             this.qrCodeDataUrl = url;
           }).catch(() => {
-            this.scanBridgeError = 'Failed to generate QR code';
+            this.qrCodeDataUrl = this.fallbackQrUrl(this.bridgeMobileUrl);
+            this.scanBridgeError = 'Failed to generate QR code locally; using fallback.';
           });
         }
 
@@ -1243,6 +1245,11 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     const existing = this.scanBatchInput ? `${this.scanBatchInput.trim()}\n` : '';
     this.scanBatchInput = `${existing}${code}`.trim();
     this.handleBarcodeScan(code);
+  }
+
+  private fallbackQrUrl(data: string): string {
+    const encoded = encodeURIComponent(data || '');
+    return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encoded}`;
   }
 
   private async buildScannedPartsFromText(): Promise<void> {
