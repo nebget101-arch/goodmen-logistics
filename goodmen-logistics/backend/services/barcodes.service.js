@@ -23,6 +23,8 @@ async function getBarcodeByCode(code) {
       'p.sku',
       'p.name',
       'p.category',
+      'p.unit_price',
+      'p.unit_cost',
       'p.default_retail_price',
       'p.default_cost',
       'p.taxable'
@@ -47,6 +49,8 @@ async function getBarcodeByCode(code) {
       'p.sku',
       'p.name',
       'p.category',
+      'p.unit_price',
+      'p.unit_cost',
       'p.default_retail_price',
       'p.default_cost',
       'p.taxable'
@@ -65,6 +69,8 @@ async function getBarcodeByCode(code) {
     sku: part.sku,
     name: part.name,
     category: part.category,
+      unit_price: part.unit_price,
+      unit_cost: part.unit_cost,
     default_retail_price: part.default_retail_price,
     default_cost: part.default_cost,
     taxable: part.taxable

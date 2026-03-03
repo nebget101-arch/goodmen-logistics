@@ -1285,6 +1285,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     }
     const unitPrice = Number(
       part.unit_price ??
+      part.unit_cost ??
       part.default_retail_price ??
       part.default_cost ??
       0
@@ -1307,7 +1308,8 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   async reserveSingleScannedPart(line: any): Promise<void> {
     if (!this.workOrderId || !line?.partId) return;
     const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
-    const qty = Number(line.qty) || 1;
+    const qty = Math.max(1, Number(line.qty) || 1);
+    line.qty = qty;
     if (qty <= 0) return;
     try {
       await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
