@@ -58,6 +58,8 @@ router.get('/:code', authMiddleware, async (req, res) => {
           sku: barcode.sku,
           name: barcode.name,
           category: barcode.category,
+          unit_price: barcode.unit_price,
+          unit_cost: barcode.unit_cost,
           default_retail_price: barcode.default_retail_price,
           default_cost: barcode.default_cost,
           taxable: barcode.taxable
