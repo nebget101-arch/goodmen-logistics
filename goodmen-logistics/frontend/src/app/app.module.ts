@@ -8,6 +8,7 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { DriversComponent } from './components/drivers/drivers.component';
+import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
 import { VehicleFormComponent } from './components/vehicles/vehicle-form/vehicle-form.component';
 import { HosComponent } from './components/hos/hos.component';
@@ -37,6 +38,7 @@ import { CacheBustingInterceptor } from './cache-busting.interceptor';
     AppComponent,
     DashboardComponent,
     DriversComponent,
+    DispatchDriversComponent,
     VehiclesComponent,
     VehicleFormComponent,
     HosComponent,

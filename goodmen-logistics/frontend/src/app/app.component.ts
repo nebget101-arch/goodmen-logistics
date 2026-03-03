@@ -44,7 +44,7 @@ export class AppComponent implements OnInit {
 
     if (role === 'safety') return ['dashboard', 'drivers', 'vehicles', 'hos', 'audit'].includes(tab);
     if (role === 'fleet') return ['maintenance'].includes(tab);
-    if (role === 'dispatch') return ['loads'].includes(tab);
+    if (role === 'dispatch') return ['loads', 'drivers'].includes(tab);
 
     if (role === 'service_advisor') {
       return ['customers', 'invoices', 'sales', 'inventory_reports'].includes(tab);

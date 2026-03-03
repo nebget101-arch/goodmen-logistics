@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { DriversComponent } from './components/drivers/drivers.component';
+import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
 import { HosComponent } from './components/hos/hos.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
@@ -22,7 +23,8 @@ import { InventoryReportsComponent } from './components/inventory-reports/invent
 const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard] },
-  { path: 'drivers', component: DriversComponent, canActivate: [AuthGuard] },
+  { path: 'drivers', component: DispatchDriversComponent, canActivate: [AuthGuard] },
+  { path: 'drivers/dqf', component: DriversComponent, canActivate: [AuthGuard] },
   { path: 'vehicles', component: VehiclesComponent, canActivate: [AuthGuard], data: { vehicleType: 'truck' } },
   { path: 'trailers', component: VehiclesComponent, canActivate: [AuthGuard], data: { vehicleType: 'trailer' } },
   { path: 'hos', component: HosComponent, canActivate: [AuthGuard] },

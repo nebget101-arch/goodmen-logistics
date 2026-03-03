@@ -13,7 +13,10 @@
       <ul class="nav-links">
         <li *ngIf="canSee('dashboard')"><a routerLink="/dashboard" routerLinkActive="active"><span class="nav-icon">📊</span>Dashboard</a></li>
         <li *ngIf="canSee('loads')"><a routerLink="/loads" routerLinkActive="active"><span class="nav-icon">📦</span>Loads</a></li>
-        <li *ngIf="canSee('drivers')"><a routerLink="/drivers" routerLinkActive="active"><span class="nav-icon">👤</span>Drivers</a></li>
+        <!-- Dispatch / Admin drivers view -->
+        <li *ngIf="canSee('drivers') && (userRole === 'dispatch' || userRole === 'admin')">
+          <a routerLink="/drivers" routerLinkActive="active"><span class="nav-icon">👤</span>Drivers</a>
+        </li>
         <li class="nav-section" *ngIf="canSee('vehicles')">
           <button class="section-toggle" (click)="toggleEquipment()" type="button" [attr.aria-expanded]="equipmentExpanded">
             <span class="section-icon">🚛</span>
@@ -31,6 +34,9 @@
           </button>
         </li>
         <li *ngIf="canSee('hos') && safetyExpanded" class="nav-subsection"><a routerLink="/hos" routerLinkActive="active">HOS</a></li>
+        <li *ngIf="canSee('drivers') && safetyExpanded && (userRole === 'safety' || userRole === 'admin')" class="nav-subsection">
+          <a routerLink="/drivers/dqf" routerLinkActive="active">DQF</a>
+        </li>
         <li *ngIf="canSee('audit') && safetyExpanded" class="nav-subsection"><a routerLink="/audit" routerLinkActive="active">Audit</a></li>
         <li *ngIf="canSee('maintenance') || canSee('parts') || canSee('customers')" class="nav-section">
           <button class="section-toggle" (click)="toggleFleet()" type="button" [attr.aria-expanded]="fleetExpanded">

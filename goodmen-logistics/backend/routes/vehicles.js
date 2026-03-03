@@ -6,8 +6,8 @@ const axios = require('axios');
 const dtLogger = require('../utils/dynatrace-logger');
 const { query } = require('../config/database');
 
-// Protect all vehicles routes: admin, safety
-router.use(auth(['admin', 'safety']));
+// Protect all vehicles routes: admin, safety, and dispatch (dispatch needs read access for driver assignments)
+router.use(auth(['admin', 'safety', 'dispatch']));
 
 // GET decode VIN using NHTSA vPIC
 router.get('/decode-vin/:vin', async (req, res) => {
@@ -101,8 +101,8 @@ router.post('/customer', async (req, res) => {
 
 
 
-// Protect all vehicles routes: admin, safety
-router.use(auth(['admin', 'safety']));
+// Protect all vehicles routes: admin, safety, and dispatch (duplicate guard for older code paths)
+router.use(auth(['admin', 'safety', 'dispatch']));
 
 
 
