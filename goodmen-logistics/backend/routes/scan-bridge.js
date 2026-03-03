@@ -162,6 +162,7 @@ router.get('/mobile', (req, res) => {
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Phone Scanner Bridge</title>
   <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; background: #f5f5f5; }
     .row { margin-bottom: 12px; }
@@ -187,6 +188,12 @@ router.get('/mobile', (req, res) => {
     <button id="sendBtn" type="button">Send Barcode</button>
   </div>
 
+  <div class="row">
+    <label for="vinImage"><strong>VIN OCR (photo)</strong></label>
+    <input id="vinImage" type="file" accept="image/*" capture="environment" />
+    <button id="vinBtn" type="button">Read VIN</button>
+  </div>
+
   <div id="status"></div>
   <div id="log"></div>
 
@@ -200,6 +207,8 @@ router.get('/mobile', (req, res) => {
       var startBtn = document.getElementById('startBtn');
       var sendBtn = document.getElementById('sendBtn');
       var manualInput = document.getElementById('manualInput');
+      var vinImage = document.getElementById('vinImage');
+      var vinBtn = document.getElementById('vinBtn');
       var statusEl = document.getElementById('status');
       var logEl = document.getElementById('log');
 
@@ -296,6 +305,48 @@ router.get('/mobile', (req, res) => {
         });
       }
 
+      function extractVin(text) {
+        var upper = String(text || '').toUpperCase();
+        var cleaned = upper
+          .replace(/[^A-Z0-9]/g, '')
+          .replace(/O/g, '0')
+          .replace(/I/g, '1')
+          .replace(/Q/g, '0');
+        if (cleaned.length < 17) return '';
+        for (var i = 0; i <= cleaned.length - 17; i++) {
+          var candidate = cleaned.slice(i, i + 17);
+          if (/^[A-HJ-NPR-Z0-9]{17}$/.test(candidate)) {
+            return candidate;
+          }
+        }
+        return '';
+      }
+
+      function readVinFromImage(file) {
+        if (!file || typeof Tesseract === 'undefined') {
+          setStatus('OCR library not loaded', 'err');
+          return;
+        }
+        setStatus('Reading VIN...', 'ok');
+        log('OCR started');
+        Tesseract.recognize(file, 'eng', {
+          tessedit_char_whitelist: 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789'
+        })
+          .then(function (result) {
+            var text = (result && result.data && result.data.text) ? result.data.text : '';
+            var vin = extractVin(text);
+            if (!vin) {
+              throw new Error('VIN not found');
+            }
+            manualInput.value = vin;
+            postBarcode(vin);
+          })
+          .catch(function (e) {
+            setStatus('VIN OCR failed: ' + e.message, 'err');
+            log('VIN OCR failed: ' + e.message);
+          });
+      }
+
       startBtn.addEventListener('click', function (e) {
         e.preventDefault();
         startCamera();
@@ -304,6 +355,22 @@ router.get('/mobile', (req, res) => {
       sendBtn.addEventListener('click', function (e) {
         e.preventDefault();
         postBarcode(manualInput.value);
+      });
+
+      vinBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var file = vinImage && vinImage.files && vinImage.files[0] ? vinImage.files[0] : null;
+        if (!file) {
+          setStatus('Select a photo first', 'err');
+          return;
+        }
+        readVinFromImage(file);
+      });
+
+      vinImage.addEventListener('change', function () {
+        var file = vinImage && vinImage.files && vinImage.files[0] ? vinImage.files[0] : null;
+        if (!file) return;
+        readVinFromImage(file);
       });
 
       manualInput.addEventListener('keydown', function (e) {
