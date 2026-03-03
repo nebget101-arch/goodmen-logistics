@@ -3,14 +3,17 @@
  * @returns { Promise<void> }
  */
 exports.up = async function(knex) {
-	// Locations table
-	await knex.schema.createTable('locations', table => {
-		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
-		table.string('name').notNullable();
-		table.string('address');
-		table.jsonb('settings');
-		table.timestamps(true, true);
-	});
+	// Locations table (idempotent)
+	const hasLocations = await knex.schema.hasTable('locations');
+	if (!hasLocations) {
+		await knex.schema.createTable('locations', table => {
+			table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
+			table.string('name').notNullable();
+			table.string('address');
+			table.jsonb('settings');
+			table.timestamps(true, true);
+		});
+	}
 
 	// Add location_id and status to vehicles if not exist
 	const hasLocationId = await knex.schema.hasColumn('vehicles', 'location_id');
@@ -26,16 +29,19 @@ exports.up = async function(knex) {
 		});
 	}
 
-	// Work orders table
-	await knex.schema.createTable('work_orders', table => {
-		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
-		table.uuid('vehicle_id').notNullable().references('id').inTable('vehicles');
-		table.uuid('location_id').references('id').inTable('locations');
-		table.string('description').notNullable();
-		table.enu('status', ['open', 'in_progress', 'completed', 'closed']).defaultTo('open');
-		table.timestamp('created_at').defaultTo(knex.fn.now());
-		table.timestamp('updated_at').defaultTo(knex.fn.now());
-	});
+	// Work orders table (idempotent)
+	const hasWorkOrders = await knex.schema.hasTable('work_orders');
+	if (!hasWorkOrders) {
+		await knex.schema.createTable('work_orders', table => {
+			table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
+			table.uuid('vehicle_id').notNullable().references('id').inTable('vehicles');
+			table.uuid('location_id').references('id').inTable('locations');
+			table.string('description').notNullable();
+			table.enu('status', ['open', 'in_progress', 'completed', 'closed']).defaultTo('open');
+			table.timestamp('created_at').defaultTo(knex.fn.now());
+			table.timestamp('updated_at').defaultTo(knex.fn.now());
+		});
+	}
 
 	// Work order notes table
 	await knex.schema.createTable('work_order_notes', table => {

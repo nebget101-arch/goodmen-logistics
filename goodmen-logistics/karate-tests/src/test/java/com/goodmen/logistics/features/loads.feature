@@ -10,17 +10,25 @@ Feature: Loads API - Dispatch Management
     Given path 'loads'
     When method GET
     Then status 200
-    And match response == '#array'
-    And match each response == 
+    And match response.success == true
+    And match response.data == '#array'
+    And match each response.data == 
       """
       {
-        id: '#number',
-        loadNumber: '#string',
+        id: '#string',
+        load_number: '#string',
         status: '#string',
-        origin: '#string',
-        destination: '#string',
-        pickupDate: '#string',
-        deliveryDate: '#string'
+        billing_status: '#string',
+        pickup_city: '#string',
+        pickup_state: '#string',
+        delivery_city: '#string',
+        delivery_state: '#string',
+        rate: '#number',
+        completed_date: '##string',
+        driver_name: '##string',
+        broker_name: '##string',
+        attachment_count: '#number',
+        attachment_types: '#array'
       }
       """
 
@@ -29,7 +37,7 @@ Feature: Loads API - Dispatch Management
     Given path 'loads'
     When method GET
     Then status 200
-    * def activeLoads = karate.filter(response, function(x){ return x.status == 'In Transit' || x.status == 'Dispatched' })
+    * def activeLoads = karate.filter(response.data, function(x){ return x.status == 'IN_TRANSIT' || x.status == 'DISPATCHED' })
     * print 'Active loads count:', activeLoads.length
 
   @positive
@@ -37,21 +45,22 @@ Feature: Loads API - Dispatch Management
     Given path 'loads'
     When method GET
     Then status 200
-    * def loadId = response[0].id
+    * def loadId = response.data[0].id
     
     Given path 'loads', loadId
     When method GET
     Then status 200
-    And match response.id == loadId
-    And match response.loadNumber == '#string'
+    And match response.success == true
+    And match response.data.id == loadId
+    And match response.data.load_number == '#string'
 
   @dataValidation
   Scenario: Verify load status values
     Given path 'loads'
     When method GET
     Then status 200
-    * def validStatuses = ['Available', 'Dispatched', 'In Transit', 'Delivered', 'Cancelled']
-    And match each response.status contains validStatuses
+    * def validStatuses = ['NEW', 'DISPATCHED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED']
+    And match each response.data.status contains validStatuses
 
   @performance
   Scenario: Loads list response time

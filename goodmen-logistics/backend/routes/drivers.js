@@ -4,11 +4,20 @@ const { query } = require('../config/database');
 const { transformRows, transformRow, toSnakeCase } = require('../utils/case-converter');
 const dtLogger = require('../utils/dynatrace-logger');
 
-// GET all drivers
+// GET all drivers (optional status filter)
 router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
-    const result = await query('SELECT * FROM drivers ORDER BY created_at DESC');
+    const status = (req.query.status || '').toString().trim().toLowerCase();
+    const hasStatus = !!status;
+    const params = [];
+    let sql = 'SELECT * FROM drivers';
+    if (hasStatus) {
+      params.push(status);
+      sql += ` WHERE LOWER(status) = $${params.length}`;
+    }
+    sql += ' ORDER BY created_at DESC';
+    const result = await query(sql, params);
     const duration = Date.now() - startTime;
     
     dtLogger.trackDatabase('SELECT', 'drivers', duration, true, { count: result.rows.length });

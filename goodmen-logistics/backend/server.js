@@ -2,6 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
+
+// Load base environment variables from .env (includes OPENAI_*)
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+// Then load Dynatrace-specific overrides from .env.dynatrace (if present)
 require('dotenv').config({ path: path.join(__dirname, '.env.dynatrace') });
 
 // Debug: Print loaded Dynatrace environment variables
@@ -247,6 +251,9 @@ const hosRouter = require('./routes/hos');
 const maintenanceRouter = require('./routes/maintenance');
 const drugAlcoholRouter = require('./routes/drug-alcohol');
 const loadsRouter = require('./routes/loads');
+const brokersRouter = require('./routes/brokers');
+const equipmentRouter = require('./routes/equipment');
+const geoRouter = require('./routes/geo');
 const dashboardRouter = require('./routes/dashboard');
 const auditRouter = require('./routes/audit');
 const dbExampleRouter = require('./routes/db-example');
@@ -281,6 +288,9 @@ app.use('/api/hos', hosRouter);
 app.use('/api/maintenance', maintenanceRouter);
 app.use('/api/drug-alcohol', drugAlcoholRouter);
 app.use('/api/loads', loadsRouter);
+app.use('/api/brokers', brokersRouter);
+app.use('/api/equipment', equipmentRouter);
+app.use('/api/geo', geoRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/db-example', dbExampleRouter);

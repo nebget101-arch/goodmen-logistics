@@ -14,6 +14,7 @@ import { HosComponent } from './components/hos/hos.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { WorkOrderComponent } from './components/work-order/work-order.component';
 import { LoadsComponent } from './components/loads/loads.component';
+import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { UserCreateComponent } from './components/user-create/user-create.component';
@@ -23,6 +24,8 @@ import { WarehouseReceivingComponent } from './components/warehouse-receiving/wa
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
+import { StatusPillComponent } from './components/shared/status-pill/status-pill.component';
+import { AttachmentChipComponent } from './components/shared/attachment-chip/attachment-chip.component';
 
 // Dynatrace Error Handler
 import { DynatraceErrorHandler } from './dynatrace-error-handler';
@@ -39,6 +42,7 @@ import { CacheBustingInterceptor } from './cache-busting.interceptor';
     HosComponent,
     MaintenanceComponent,
     LoadsComponent,
+    LoadsDashboardComponent,
     AuditComponent,
     LoginComponent,
     UserCreateComponent,
@@ -48,7 +52,9 @@ import { CacheBustingInterceptor } from './cache-busting.interceptor';
     WarehouseReceivingComponent,
     InventoryTransfersComponent,
     DirectSalesComponent,
-    InventoryReportsComponent
+    InventoryReportsComponent,
+    StatusPillComponent,
+    AttachmentChipComponent
   ],
   imports: [
     BrowserModule,
