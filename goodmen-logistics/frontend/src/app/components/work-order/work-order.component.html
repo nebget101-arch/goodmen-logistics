@@ -547,7 +547,7 @@
                           <input type="number" class="form-control" [(ngModel)]="part.unitPrice" min="0" />
                         </td>
                         <td>
-                          <button type="button" class="btn btn-sm btn-outline-primary" (click)="reserveSingleScannedPart(part)" [disabled]="!part.qty || part.qty <= 0">
+                          <button type="button" class="btn btn-sm btn-outline-primary" (click)="reserveSingleScannedPart(part)" [disabled]="!workOrderId || !part.qty || part.qty <= 0">
                             Reserve
                           </button>
                         </td>

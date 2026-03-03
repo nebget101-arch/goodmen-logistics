@@ -1306,12 +1306,18 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   }
 
   async reserveSingleScannedPart(line: any): Promise<void> {
-    if (!this.workOrderId || !line?.partId) return;
+    if (!this.workOrderId || !line?.partId) {
+      if (!this.workOrderId) {
+        this.scanBatchErrors.push('Save the work order before reserving scanned parts.');
+      }
+      return;
+    }
     const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
     const qty = Math.max(1, Number(line.qty) || 1);
     line.qty = qty;
     if (qty <= 0) return;
     try {
+      this.scanBatchSuccess = 'Reserving...';
       const response = await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
         partId: line.partId,
         qtyRequested: qty,
