@@ -1312,13 +1312,22 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     line.qty = qty;
     if (qty <= 0) return;
     try {
-      await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
+      const response = await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
         partId: line.partId,
         qtyRequested: qty,
         unitPrice: Number(line.unitPrice) || 0,
         locationId: locationId || undefined,
         taxable: true
       }));
+      const savedLine = response?.data || response;
+      if (savedLine) {
+        const existingIndex = (this.workOrderParts || []).findIndex(p => String(p.id) === String(savedLine.id));
+        if (existingIndex >= 0) {
+          this.workOrderParts[existingIndex] = savedLine;
+        } else {
+          this.workOrderParts = [savedLine, ...(this.workOrderParts || [])];
+        }
+      }
       this.loadWorkOrder(this.workOrderId as string);
       this.loadParts();
       const idx = this.scannedParts.indexOf(line);
