@@ -1,16 +1,18 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, FormGroup } from '@angular/forms';
 import { CustomerService } from '../../services/customer.service';
 import { InvoiceService } from '../../services/invoice.service';
 import { CreditService } from '../../services/credit.service';
+import { ApiService } from '../../services/api.service';
+import * as QRCode from 'qrcode';
 
 @Component({
   selector: 'app-customer-detail',
   templateUrl: './customer-detail.component.html',
   styleUrls: ['./customer-detail.component.css']
 })
-export class CustomerDetailComponent implements OnInit {
+export class CustomerDetailComponent implements OnInit, OnDestroy {
   customer: any;
   pricing: any;
   alerts: any;
@@ -37,13 +39,35 @@ export class CustomerDetailComponent implements OnInit {
     note: ''
   };
 
+  newVehicle: any = {
+    unit_number: '',
+    vin: '',
+    make: '',
+    model: '',
+    year: '',
+    license_plate: '',
+    state: '',
+    mileage: ''
+  };
+  newVehicleError = '';
+  newVehicleSuccess = '';
+  vinDecodeLoading = false;
+
+  vinBridgeMobileUrl = '';
+  vinBridgeSessionId = '';
+  vinBridgeConnected = false;
+  vinBridgeEvents: EventSource | null = null;
+  vinQrCodeDataUrl = '';
+  vinScanError = '';
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
     private customerService: CustomerService,
     private invoiceService: InvoiceService,
     private creditService: CreditService,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private apiService: ApiService
   ) {
     this.pricingForm = this.fb.group({
       labor_rate_multiplier: [null],
@@ -58,6 +82,10 @@ export class CustomerDetailComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) return;
     this.loadCustomer(id);
+  }
+
+  ngOnDestroy(): void {
+    this.stopVinBridge();
   }
 
   loadCustomer(id: string): void {
@@ -132,6 +160,127 @@ export class CustomerDetailComponent implements OnInit {
         this.vehicles = [];
       }
     });
+  }
+
+  decodeVin(): void {
+    const vin = (this.newVehicle.vin || '').trim();
+    if (!vin) {
+      this.newVehicleError = 'VIN is required to decode.';
+      return;
+    }
+    this.newVehicleError = '';
+    this.vinDecodeLoading = true;
+    this.apiService.decodeVin(vin).subscribe({
+      next: (decoded: any) => {
+        this.newVehicle.make = decoded.make || this.newVehicle.make;
+        this.newVehicle.model = decoded.model || this.newVehicle.model;
+        this.newVehicle.year = decoded.year || this.newVehicle.year;
+        this.vinDecodeLoading = false;
+      },
+      error: () => {
+        this.newVehicleError = 'Failed to decode VIN.';
+        this.vinDecodeLoading = false;
+      }
+    });
+  }
+
+  addCustomerVehicle(): void {
+    if (!this.customer?.id) return;
+    this.newVehicleError = '';
+    this.newVehicleSuccess = '';
+    const payload = {
+      ...this.newVehicle,
+      customer_id: this.customer.id
+    };
+    if (!payload.vin) {
+      this.newVehicleError = 'VIN is required.';
+      return;
+    }
+    this.apiService.createCustomerVehicle(payload).subscribe({
+      next: () => {
+        this.newVehicleSuccess = 'Vehicle added successfully.';
+        this.newVehicle = {
+          unit_number: '',
+          vin: '',
+          make: '',
+          model: '',
+          year: '',
+          license_plate: '',
+          state: '',
+          mileage: ''
+        };
+        this.loadVehicles(this.customer.id);
+        this.stopVinBridge();
+      },
+      error: (err) => {
+        this.newVehicleError = err?.error?.error || err?.message || 'Failed to add vehicle.';
+      }
+    });
+  }
+
+  startVinBridge(): void {
+    this.vinScanError = '';
+    this.stopVinBridge();
+    this.apiService.createScanBridgeSession().subscribe({
+      next: (res: any) => {
+        const data = res?.data || {};
+        this.vinBridgeMobileUrl = data.mobileUrl || '';
+        this.vinBridgeSessionId = data.sessionId || '';
+        this.vinQrCodeDataUrl = '';
+
+        if (this.vinBridgeMobileUrl) {
+          QRCode.toDataURL(this.vinBridgeMobileUrl, {
+            width: 250,
+            margin: 2,
+            color: { dark: '#000000', light: '#ffffff' }
+          }).then((url: string) => {
+            this.vinQrCodeDataUrl = url;
+          }).catch(() => {
+            this.vinQrCodeDataUrl = this.fallbackQrUrl(this.vinBridgeMobileUrl);
+            this.vinScanError = 'Failed to generate QR code locally; using fallback.';
+          });
+        }
+
+        const base = this.apiService.getBaseUrl();
+        const eventsUrl = `${base}/scan-bridge/session/${encodeURIComponent(data.sessionId)}/events?readToken=${encodeURIComponent(data.readToken)}`;
+        this.vinBridgeEvents = new EventSource(eventsUrl);
+        this.vinBridgeEvents.addEventListener('ready', () => {
+          this.vinBridgeConnected = true;
+        });
+        this.vinBridgeEvents.addEventListener('scan', (evt: MessageEvent) => {
+          try {
+            const payload = JSON.parse(evt.data || '{}');
+            const barcode = (payload.barcode || '').toString().trim();
+            if (!barcode) return;
+            this.newVehicle.vin = barcode;
+            this.decodeVin();
+          } catch {}
+        });
+        this.vinBridgeEvents.onerror = () => {
+          this.vinBridgeConnected = false;
+          this.vinScanError = 'Phone scanner disconnected';
+        };
+      },
+      error: (err: any) => {
+        this.vinScanError = err?.error?.error || err?.message || 'Failed to start phone scanner';
+      }
+    });
+  }
+
+  stopVinBridge(): void {
+    if (this.vinBridgeEvents) {
+      this.vinBridgeEvents.close();
+      this.vinBridgeEvents = null;
+    }
+    this.vinBridgeConnected = false;
+    this.vinBridgeMobileUrl = '';
+    this.vinBridgeSessionId = '';
+    this.vinQrCodeDataUrl = '';
+  }
+
+  private fallbackQrUrl(data: string): string {
+    const encoded = encodeURIComponent(data || '');
+    return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encoded}`;
   }
 
   loadInvoices(id: string): void {
