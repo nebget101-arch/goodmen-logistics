@@ -4,7 +4,7 @@
  *
  * Env vars (optional – if missing, methods no-op and return { sent: false, error: '...' }):
  *   Twilio: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
- *   SendGrid: SENDGRID_API_KEY, ONBOARDING_FROM_EMAIL (e.g. "Goodmen Logistics <onboarding@yourdomain.com>")
+ *   SendGrid: SENDGRID_API_KEY, ONBOARDING_FROM_EMAIL (e.g. "FleetNeuron AI <onboarding@fleetneuron.ai>")
  */
 
 const twilio = require('twilio');
@@ -15,7 +15,7 @@ const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM = process.env.TWILIO_PHONE_NUMBER;
 const SENDGRID_KEY = process.env.SENDGRID_API_KEY;
-const FROM_EMAIL = process.env.ONBOARDING_FROM_EMAIL || 'Goodmen Logistics <noreply@goodmenlogistics.com>';
+const FROM_EMAIL = process.env.ONBOARDING_FROM_EMAIL || 'FleetNeuron AI <noreply@fleetneuron.ai>';
 
 let twilioClient = null;
 if (TWILIO_SID && TWILIO_TOKEN) {
@@ -141,9 +141,9 @@ async function getConsent(phoneE164, emailNorm) {
  */
 async function sendOnboardingLink({ publicUrl, phone, email, via, driverName }) {
   const driverLabel = driverName ? ` ${driverName}` : '';
-  const smsBody = `Goodmen Logistics: Complete your driver onboarding${driverLabel}. ${publicUrl}`;
-  const emailSubject = 'Complete your Goodmen Logistics driver onboarding';
-  const emailText = `Hello${driverLabel},\n\nPlease complete your driver onboarding by opening this link (valid 7 days):\n\n${publicUrl}\n\n— Goodmen Logistics`;
+  const smsBody = `FleetNeuron AI: Complete your driver onboarding${driverLabel}. ${publicUrl}`;
+  const emailSubject = 'Complete your FleetNeuron AI driver onboarding';
+  const emailText = `Hello${driverLabel},\n\nPlease complete your driver onboarding by opening this link (valid 7 days):\n\n${publicUrl}\n\n— FleetNeuron AI`;
 
   const result = { sms: { sent: false }, email: { sent: false } };
 
@@ -173,7 +173,7 @@ async function sendOnboardingLink({ publicUrl, phone, email, via, driverName }) 
           to: email,
           subject: emailSubject,
           text: emailText,
-          html: `<p>Hello${driverLabel},</p><p>Please complete your driver onboarding by opening this link (valid 7 days):</p><p><a href="${publicUrl}">${publicUrl}</a></p><p>— Goodmen Logistics</p>`
+          html: `<p>Hello${driverLabel},</p><p>Please complete your driver onboarding by opening this link (valid 7 days):</p><p><a href="${publicUrl}">${publicUrl}</a></p><p>— FleetNeuron AI</p>`
         });
         result.email = emailResult;
       }

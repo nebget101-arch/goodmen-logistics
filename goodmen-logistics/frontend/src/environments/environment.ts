@@ -3,6 +3,6 @@
 
 export const environment = {
   production: false,
-  // Local backend testing
-  apiUrl: 'http://localhost:3000/api'
+  // Local API Gateway (FleetNeuron)
+  apiUrl: 'http://localhost:4000/api'
 };

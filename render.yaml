@@ -51,6 +51,23 @@ services:
     startCommand: npm run start
 
   - type: web
+    name: goodmen-logistics-gateway
+    runtime: node
+    plan: starter
+    rootDir: goodmen-logistics/gateway
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TARGET_BACKEND_URL
+        value: https://safetyapp-ln58.onrender.com
+      - key: CORS_ORIGIN
+        value: https://safetyapp-ln58.onrender.com
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10002
+
+  - type: web
     name: mcp-http-gateway
     runtime: node
     plan: starter

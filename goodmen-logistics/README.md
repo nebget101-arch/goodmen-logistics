@@ -14,6 +14,10 @@ This application provides centralized management for:
 
 ## 🏗️ Architecture
 
+### API Gateway (Node.js + Express)
+- Proxies `/api/*` to the backend; use in front of the backend in production.
+- Located in `/gateway` directory; Port: 4000 (configurable via `PORT`).
+
 ### Backend (Node.js + Express)
 - RESTful API with mock data
 - Located in `/backend` directory
@@ -56,7 +60,18 @@ The API will be available at `http://localhost:3000`
 
 Test the API: `http://localhost:3000/api/health`
 
-### 4. Start the Frontend Application
+### 4. (Optional) Start the API Gateway
+
+```bash
+cd gateway
+cp .env.example .env
+npm install
+npm start
+```
+
+The gateway will listen on `http://localhost:4000` and proxy `/api` to the backend. The frontend default config uses this URL.
+
+### 5. Start the Frontend Application
 
 ```bash
 cd frontend
@@ -65,7 +80,7 @@ npm start
 
 The application will be available at `http://localhost:4200`
 
-**Note**: The frontend is configured to connect to the hosted backend API at `https://safetyapp-ln58.onrender.com/api`. To use a local backend instead, update `src/environments/environment.ts` with `apiUrl: 'http://localhost:3000/api'`.
+**Note**: The frontend is configured to connect to the API via the local gateway at `http://localhost:4000/api`. To use the backend directly, use `apiUrl: 'http://localhost:3000/api'`. For the hosted API, use `https://safetyapp-ln58.onrender.com/api`.
 
 ## 🔧 Configuration
 
@@ -74,13 +89,12 @@ The application will be available at `http://localhost:4200`
 The frontend uses environment files to configure the backend API URL:
 
 - **Development**: `src/environments/environment.ts`
-  - Default: `https://safetyapp-ln58.onrender.com/api` (hosted backend)
-  - For local backend: Change to `http://localhost:3000/api`
+  - Default: `http://localhost:4000/api` (local gateway). For backend only: `http://localhost:3000/api`.
 
 - **Production**: `src/environments/environment.prod.ts`
-  - Points to: `https://safetyapp-ln58.onrender.com/api`
+  - Set to your API gateway URL + `/api` (e.g. `https://api.yourdomain.com/api`) or your backend URL.
 
-To switch between local and hosted backend, edit the `apiUrl` in the environment file.
+To switch between local gateway, local backend, or hosted API, edit the `apiUrl` in the environment file.
 
 ### Onboarding link delivery (SMS & email)
 
@@ -95,6 +109,20 @@ When sending a driver onboarding packet (`POST /api/onboarding/packets/:id/send`
 | `ONBOARDING_FROM_EMAIL` | From address for emails (e.g. `Goodmen Logistics <onboarding@yourdomain.com>`) |
 
 If these are not set, the send endpoint still returns the `publicUrl` in the response so you can copy or share it manually; SMS/email will report `sent: false` with a short reason.
+
+### Production deployment (Gateway + Backend + Frontend)
+
+1. **Gateway** (`/gateway`): Copy `gateway/.env.example` to `gateway/.env` and set for production:
+   - `PORT` – e.g. `4000`
+   - `TARGET_BACKEND_URL` – your backend base URL (e.g. `https://your-backend.onrender.com`)
+   - `CORS_ORIGIN` – your frontend origin (e.g. `https://your-app.example.com`)
+   - `NODE_ENV=production` – reduces log noise and uses `warn` for proxy logs.
+
+2. **Backend**: Ensure it is reachable from the gateway (same VPC or public URL). Set `NODE_ENV=production` and any production DB/env vars.
+
+3. **Frontend**: Set `apiUrl` in `frontend/src/environments/environment.prod.ts` to your **API gateway** URL + `/api` (e.g. `https://api.yourdomain.com/api`) so all requests go through the gateway. If the frontend is served from the same host as the gateway (reverse proxy), use `apiUrl: '/api'`.
+
+4. **Run order**: Start backend first, then gateway; frontend can be static (e.g. built and served by the same host as the gateway or a CDN).
 
 ## 📚 API Endpoints
 
