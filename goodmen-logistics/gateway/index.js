@@ -9,6 +9,10 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 const TARGET_BACKEND_URL =
   process.env.TARGET_BACKEND_URL || 'http://localhost:3000';
+const REPORTING_SERVICE_URL =
+  process.env.REPORTING_SERVICE_URL || TARGET_BACKEND_URL;
+const INTEGRATIONS_SERVICE_URL =
+  process.env.INTEGRATIONS_SERVICE_URL || TARGET_BACKEND_URL;
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(
@@ -36,12 +40,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Proxy ALL /api/* calls directly to backend /api/*
-// Express strips the /api prefix when mounting, so we rewrite path back to /api/...
-app.use(
-  '/api',
-  createProxyMiddleware({
-    target: TARGET_BACKEND_URL,
+function buildProxy(target, label) {
+  return createProxyMiddleware({
+    target,
     changeOrigin: true,
     xfwd: true,
     pathRewrite: (path) => '/api' + (path.startsWith('/') ? path : '/' + path),
@@ -51,7 +52,7 @@ app.use(
       : (proxyReq, req) => {
           // eslint-disable-next-line no-console
           console.log(
-            `[gateway->backend] ${req.method} ${req.originalUrl} -> ${proxyReq.path}`
+            `[gateway->${label}] ${req.method} ${req.originalUrl} -> ${proxyReq.path}`
           );
         },
     onError: (err, req, res) => {
@@ -62,8 +63,17 @@ app.use(
         message: 'Unable to reach the API. Please try again later.'
       });
     }
-  })
-);
+  });
+}
+
+// Microservice routes (override before monolith fallback)
+app.use('/api/dashboard', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
+app.use('/api/reports', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
+app.use('/api/audit', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
+app.use('/api/scan-bridge', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
+
+// Fallback: proxy all /api/* calls to monolith
+app.use('/api', buildProxy(TARGET_BACKEND_URL, 'backend'));
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
