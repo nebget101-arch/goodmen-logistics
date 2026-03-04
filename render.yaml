@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: starter
     rootDir: goodmen-logistics
-    buildCommand: cd frontend && npm install --include=dev && npm run build && cd ../backend && npm install && npm run postdeploy
+    buildCommand: cd backend && npm install && npm run postdeploy
     startCommand: node backend/server.js
     envVars:
       - key: DATABASE_URL
@@ -49,6 +49,24 @@ services:
     rootDir: goodmen-logs-mcp-server
     buildCommand: npm install && npm run build
     startCommand: npm run start
+    envVars:
+      - key: BACKEND_PATH
+        value: https://goodmen-logistics-gateway.onrender.com
+      - key: CONFLUENCE_BASE_URL
+        sync: false
+      - key: CONFLUENCE_EMAIL
+        sync: false
+      - key: CONFLUENCE_API_TOKEN
+        sync: false
+      - key: CONFLUENCE_SPACE_KEY
+        sync: false
+
+  - type: static_site
+    name: goodmen-logistics-ui
+    plan: starter
+    rootDir: goodmen-logistics/frontend
+    buildCommand: npm install --include=dev && npm run build
+    publishDir: dist/goodmen-logistics
 
   - type: web
     name: goodmen-logistics-gateway
@@ -61,7 +79,7 @@ services:
       - key: TARGET_BACKEND_URL
         value: https://safetyapp-ln58.onrender.com
       - key: CORS_ORIGIN
-        value: https://safetyapp-ln58.onrender.com
+        sync: false
       - key: NODE_ENV
         value: production
       - key: PORT
@@ -102,7 +120,7 @@ services:
       - key: JIRA_PROJECT_KEY
         value: KAN
       - key: BACKEND_PATH
-        value: https://safetyapp-ln58.onrender.com
+        value: https://goodmen-logistics-gateway.onrender.com
       - key: PORT
         value: 10001
 
