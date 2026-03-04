@@ -61,12 +61,13 @@ services:
       - key: CONFLUENCE_SPACE_KEY
         sync: false
 
-  - type: static
+  - type: web
     name: goodmen-logistics-ui
+    runtime: static
     plan: starter
     rootDir: goodmen-logistics/frontend
     buildCommand: npm install --include=dev && npm run build
-    publishDir: dist/goodmen-logistics
+    staticPublishPath: dist/goodmen-logistics
 
   - type: web
     name: goodmen-logistics-gateway
