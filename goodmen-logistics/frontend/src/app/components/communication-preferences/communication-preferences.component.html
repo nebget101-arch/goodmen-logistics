@@ -1,0 +1,46 @@
+<div class="policy-page">
+  <div class="policy-card comm-pref-card">
+    <h1>Communication Preferences</h1>
+    <p class="policy-subtitle">Choose how you want to hear from Goodmen Logistics (email and SMS). You can opt in or opt out at any time.</p>
+
+    <form (ngSubmit)="save()" class="comm-pref-form">
+      <div class="form-group">
+        <label for="commEmail">Email address</label>
+        <input id="commEmail" type="email" class="form-input" [(ngModel)]="email" name="email" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label for="commPhone">Phone number</label>
+        <input id="commPhone" type="tel" class="form-input" [(ngModel)]="phone" name="phone" placeholder="(555) 123-4567" />
+      </div>
+      <p class="form-hint">Enter at least one so we can find your record and update your preferences.</p>
+
+      <div class="pref-options">
+        <h3>Email</h3>
+        <label class="pref-toggle">
+          <input type="checkbox" [(ngModel)]="optInEmail" name="optInEmail" />
+          <span>I agree to receive email from Goodmen Logistics.</span>
+        </label>
+
+        <h3>SMS / Text</h3>
+        <label class="pref-toggle">
+          <input type="checkbox" [(ngModel)]="optInSms" name="optInSms" />
+          <span>I agree to receive SMS from Goodmen Logistics. Message and data rates may apply.</span>
+        </label>
+      </div>
+
+      <p *ngIf="message" class="comm-message" [class.error]="isError">{{ message }}</p>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" [disabled]="saving">
+          {{ saving ? 'Saving...' : 'Save preferences' }}
+        </button>
+      </div>
+    </form>
+
+    <div class="policy-footer-links">
+      <a routerLink="/privacy">Privacy Policy</a>
+      <a routerLink="/terms">Terms and Conditions</a>
+      <a routerLink="/login">Back to Login</a>
+    </div>
+  </div>
+</div>

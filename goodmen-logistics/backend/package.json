@@ -31,9 +31,12 @@
     "jsonwebtoken": "^9.0.3",
     "knex": "^3.1.0",
     "multer": "^2.0.2",
+    "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.16.0",
     "pg": "^8.18.0",
+    "@sendgrid/mail": "^8.1.0",
+    "twilio": "^5.0.0",
     "uuid": "^9.0.0",
     "xlsx": "^0.18.5"
   },

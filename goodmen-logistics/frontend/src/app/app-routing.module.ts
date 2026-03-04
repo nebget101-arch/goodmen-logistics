@@ -19,6 +19,10 @@ import { WarehouseReceivingComponent } from './components/warehouse-receiving/wa
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
+import { OnboardingPacketComponent } from './components/onboarding-packet/onboarding-packet.component';
+import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-policy.component';
+import { TermsComponent } from './components/terms/terms.component';
+import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
@@ -39,10 +43,15 @@ const routes: Routes = [
   { path: 'inventory-transfers', component: InventoryTransfersComponent, canActivate: [AuthGuard] },
   { path: 'direct-sales', component: DirectSalesComponent, canActivate: [AuthGuard] },
   { path: 'inventory-reports', component: InventoryReportsComponent, canActivate: [AuthGuard] },
+  // Public driver onboarding packet link (no AuthGuard)
+  { path: 'onboard/:packetId', component: OnboardingPacketComponent },
   { path: 'customers', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
   { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
   { path: 'users/create', component: UserCreateComponent, canActivate: [AuthGuard] },
-  { path: 'login', component: LoginComponent }
+  { path: 'login', component: LoginComponent },
+  { path: 'privacy', component: PrivacyPolicyComponent },
+  { path: 'terms', component: TermsComponent },
+  { path: 'communication-preferences', component: CommunicationPreferencesComponent }
 ];
 
 @NgModule({

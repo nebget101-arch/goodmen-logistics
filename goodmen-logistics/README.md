@@ -82,6 +82,20 @@ The frontend uses environment files to configure the backend API URL:
 
 To switch between local and hosted backend, edit the `apiUrl` in the environment file.
 
+### Onboarding link delivery (SMS & email)
+
+When sending a driver onboarding packet (`POST /api/onboarding/packets/:id/send`), the backend can deliver the link via **Twilio** (SMS) and/or **SendGrid** (email). Set these in the backend `.env` (all optional):
+
+| Variable | Description |
+|----------|-------------|
+| `TWILIO_ACCOUNT_SID` | Twilio account SID |
+| `TWILIO_AUTH_TOKEN` | Twilio auth token |
+| `TWILIO_PHONE_NUMBER` | Twilio from number (E.164, e.g. `+15551234567`) |
+| `SENDGRID_API_KEY` | SendGrid API key |
+| `ONBOARDING_FROM_EMAIL` | From address for emails (e.g. `Goodmen Logistics <onboarding@yourdomain.com>`) |
+
+If these are not set, the send endpoint still returns the `publicUrl` in the response so you can copy or share it manually; SMS/email will report `sent: false` with a short reason.
+
 ## 📚 API Endpoints
 
 ### Dashboard

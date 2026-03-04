@@ -101,5 +101,64 @@
       <button routerLink="/login" class="btn btn-primary">Login</button>
     </div>
     <router-outlet></router-outlet>
+
+    <footer class="app-footer">
+      <a routerLink="/privacy">Privacy Policy</a>
+      <span class="footer-sep">|</span>
+      <a routerLink="/terms">Terms &amp; Conditions</a>
+      <span class="footer-sep">|</span>
+      <a routerLink="/communication-preferences">Communication preferences</a>
+    </footer>
   </main>
+
+  <!-- Send Packet modal - rendered at app root so it always displays above content -->
+  <div class="onboarding-modal-backdrop" *ngIf="onboardingModal.isOpen" (click)="closeOnboardingModal()">
+    <div class="onboarding-modal" (click)="$event.stopPropagation()">
+      <div class="onboarding-modal-header">
+        <div>
+          <h3>Send Driver Packet</h3>
+          <p class="onboarding-modal-subtitle">
+            Send onboarding packet to {{ (onboardingModal.driver?.firstName ?? onboardingModal.driver?.first_name) || '' }} {{ (onboardingModal.driver?.lastName ?? onboardingModal.driver?.last_name) || '' }}.
+          </p>
+        </div>
+        <button class="dqf-close-btn" type="button" (click)="closeOnboardingModal()" [disabled]="onboardingModal.sending">✕</button>
+      </div>
+      <div class="onboarding-modal-body">
+        <div class="onboarding-modal-grid">
+          <div>
+            <h4 class="onboarding-modal-section">Contact</h4>
+            <div class="onboarding-modal-field">
+              <label for="onboardPhone">Phone</label>
+              <input id="onboardPhone" type="tel" class="form-input" [(ngModel)]="onboardingModal.phone" placeholder="(555) 123-4567" />
+            </div>
+            <div class="onboarding-modal-field">
+              <label for="onboardEmail">Email</label>
+              <input id="onboardEmail" type="email" class="form-input" [(ngModel)]="onboardingModal.email" placeholder="driver@example.com" />
+            </div>
+          </div>
+          <div>
+            <h4 class="onboarding-modal-section">Send via</h4>
+            <div class="onboarding-modal-field">
+              <label><input type="radio" name="onboardingVia" value="sms" [(ngModel)]="onboardingModal.via" /> SMS</label>
+            </div>
+            <div class="onboarding-modal-field">
+              <label><input type="radio" name="onboardingVia" value="email" [(ngModel)]="onboardingModal.via" /> Email</label>
+            </div>
+            <div class="onboarding-modal-field">
+              <label><input type="radio" name="onboardingVia" value="both" [(ngModel)]="onboardingModal.via" /> Both</label>
+            </div>
+          </div>
+        </div>
+        <div *ngIf="onboardingModal.resultUrl" style="margin-top: 12px; font-size: 13px;">
+          <strong>Public link:</strong> <span>{{ onboardingModal.resultUrl }}</span>
+        </div>
+      </div>
+      <div class="onboarding-modal-footer">
+        <button class="btn" type="button" (click)="closeOnboardingModal()" [disabled]="onboardingModal.sending">Cancel</button>
+        <button class="btn btn-primary" type="button" (click)="sendOnboardingPacket()" [disabled]="onboardingModal.sending">
+          {{ onboardingModal.sending ? 'Sending...' : 'Send Packet' }}
+        </button>
+      </div>
+    </div>
+  </div>
 </div>

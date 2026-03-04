@@ -1,0 +1,112 @@
+.policy-page {
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--background);
+}
+
+.policy-card.comm-pref-card {
+  max-width: 560px;
+}
+
+.policy-subtitle {
+  font-size: 15px;
+  color: var(--text-light);
+  margin-bottom: 24px;
+}
+
+.comm-pref-form .form-group {
+  margin-bottom: 16px;
+}
+
+.comm-pref-form label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.comm-pref-form .form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.form-hint {
+  font-size: 13px;
+  color: var(--text-light);
+  margin-bottom: 20px;
+}
+
+.pref-options {
+  margin: 24px 0;
+}
+
+.pref-options h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
+  color: var(--text-dark);
+}
+
+.pref-options h3:not(:first-child) {
+  margin-top: 20px;
+}
+
+.pref-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pref-toggle input {
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.comm-message {
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.comm-message:not(.error) {
+  background: rgba(46, 125, 50, 0.1);
+  color: var(--success-color);
+}
+
+.comm-message.error {
+  background: rgba(198, 40, 40, 0.1);
+  color: var(--danger-color);
+}
+
+.form-actions {
+  margin-top: 8px;
+}
+
+.form-actions .btn {
+  min-width: 160px;
+}
+
+.policy-footer-links {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.policy-footer-links a {
+  font-size: 14px;
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.policy-footer-links a:hover {
+  color: var(--secondary-color);
+}

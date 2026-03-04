@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { OnboardingModalService } from './services/onboarding-modal.service';
+import { ApiService } from './services/api.service';
 
 @Component({
   selector: 'app-root',
@@ -7,6 +9,12 @@ import { Router } from '@angular/router';
   styles: [`
     .app {
       min-height: 100vh;
+    }
+    .dqf-close-btn {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 18px;
     }
   `]
 })
@@ -20,7 +28,11 @@ export class AppComponent implements OnInit {
   inventoryExpanded = true;
   sidebarOpen = false;
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    public onboardingModal: OnboardingModalService,
+    private apiService: ApiService
+  ) {}
 
   isLoggedIn(): boolean {
     return !!localStorage.getItem('token');
@@ -104,5 +116,52 @@ export class AppComponent implements OnInit {
 
   toggleInventory(): void {
     this.inventoryExpanded = !this.inventoryExpanded;
+  }
+
+  closeOnboardingModal(): void {
+    this.onboardingModal.close();
+  }
+
+  sendOnboardingPacket(): void {
+    const m = this.onboardingModal;
+    if (!m.driver) return;
+    if (!m.via) {
+      alert('Please select how to send the packet (SMS, Email, or Both).');
+      return;
+    }
+    if ((m.via === 'sms' || m.via === 'both') && !m.phone) {
+      alert('Phone number is required for SMS.');
+      return;
+    }
+    if ((m.via === 'email' || m.via === 'both') && !m.email) {
+      alert('Email is required for Email.');
+      return;
+    }
+
+    m.setSending(true);
+    const driverId = m.driver.id;
+
+    this.apiService.createOnboardingPacket(driverId).subscribe({
+      next: (packetResp: any) => {
+        const packetId = packetResp.packetId;
+        this.apiService
+          .sendOnboardingPacket(packetId, { via: m.via, phone: m.phone, email: m.email })
+          .subscribe({
+            next: (sendResp: any) => {
+              m.setSending(false);
+              m.setResultUrl(sendResp.publicUrl || packetResp.publicUrl || null);
+              alert('Onboarding packet sent successfully.');
+            },
+            error: () => {
+              alert('Failed to send onboarding packet.');
+              m.setSending(false);
+            }
+          });
+      },
+      error: () => {
+        alert('Failed to create onboarding packet.');
+        m.setSending(false);
+      }
+    });
   }
 }

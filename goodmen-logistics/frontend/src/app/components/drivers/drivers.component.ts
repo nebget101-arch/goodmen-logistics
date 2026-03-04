@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../services/api.service';
+import { OnboardingModalService } from '../../services/onboarding-modal.service';
 
 @Component({
   selector: 'app-drivers',
@@ -47,7 +48,10 @@ export class DriversComponent implements OnInit {
   
   saving = false;
 
-  constructor(private apiService: ApiService) { }
+  constructor(
+    private apiService: ApiService,
+    private onboardingModal: OnboardingModalService
+  ) { }
 
   ngOnInit(): void {
     this.loadDrivers();
@@ -217,9 +221,44 @@ export class DriversComponent implements OnInit {
   }
 
   loadDriverDocuments(driverId: string): void {
+    // Legacy / uploaded DQF docs
     this.apiService.getDriverDocuments(driverId).subscribe({
       next: (docs) => {
-        this.driverDocuments = docs;
+        this.driverDocuments = docs || [];
+
+        // Also include generated onboarding PDFs from driver_documents
+        this.apiService.getDqfDriver(driverId).subscribe({
+          next: (dqfResp) => {
+            const generated = (dqfResp?.dqf?.documents || [])
+              .map((doc: any) => {
+                let mappedType: string | null = null;
+                if (doc.doc_type === 'employment_application_pdf') {
+                  mappedType = 'application';
+                } else if (doc.doc_type === 'mvr_authorization_pdf') {
+                  mappedType = 'mvr';
+                }
+                if (!mappedType) return null;
+                return {
+                  id: doc.id,
+                  document_type: mappedType,
+                  file_name: doc.file_name,
+                  mime_type: doc.mime_type,
+                  size_bytes: doc.size_bytes,
+                  created_at: doc.created_at,
+                  // mark as generated so we know which download route to use
+                  source: 'generated',
+                  doc_type: doc.doc_type
+                };
+              })
+              .filter((x: any) => !!x);
+
+            this.driverDocuments = this.driverDocuments.concat(generated);
+          },
+          error: (err) => {
+            // eslint-disable-next-line no-console
+            console.error('Error loading generated driver documents', err);
+          }
+        });
       },
       error: (error) => {
         console.error('Error loading documents:', error);
@@ -229,6 +268,35 @@ export class DriversComponent implements OnInit {
 
   getDocumentsByType(documentType: string): any[] {
     return this.driverDocuments.filter(doc => doc.document_type === documentType);
+  }
+
+  downloadDoc(doc: any): void {
+    if (!doc || !doc.id) return;
+
+    const isGenerated =
+      doc.doc_type === 'employment_application_pdf' ||
+      doc.doc_type === 'mvr_authorization_pdf' ||
+      doc.source === 'generated';
+
+    const download$ = isGenerated
+      ? this.apiService.downloadDriverGeneratedDocumentBlob(doc.id)
+      : this.apiService.downloadDQFDocumentBlob(doc.id);
+
+    download$.subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = doc.file_name || 'document.pdf';
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (error) => {
+        // eslint-disable-next-line no-console
+        console.error('Error downloading document:', error);
+        alert('Failed to download document. Please try again.');
+      }
+    });
   }
 
   onDQFFileSelected(event: any, documentType: string): void {
@@ -268,8 +336,12 @@ export class DriversComponent implements OnInit {
     });
   }
 
-  getDownloadUrl(documentId: string): string {
-    return this.apiService.downloadDQFDocument(documentId);
+  getDownloadUrl(doc: any): string {
+    // Fallback: keep URL-based download if ever needed elsewhere
+    if (doc && (doc.doc_type === 'employment_application_pdf' || doc.doc_type === 'mvr_authorization_pdf' || doc.source === 'generated')) {
+      return `${this.apiService.getBaseUrl()}/dqf/documents/${doc.id}/download`;
+    }
+    return `${this.apiService.getBaseUrl()}/dqf-documents/download/${doc.id}`;
   }
 
   closeDQFForm(): void {
@@ -388,5 +460,14 @@ export class DriversComponent implements OnInit {
         }
       });
     }, 1000);
+  }
+
+  // ========== Onboarding packet (modal rendered at app root via OnboardingModalService) ==========
+  openOnboardingModal(driver: any): void {
+    this.showAddForm = false;
+    this.editingDriver = null;
+    this.showDQFForm = false;
+    this.selectedDriver = null;
+    this.onboardingModal.open(driver);
   }
 }
