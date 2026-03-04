@@ -64,7 +64,7 @@ services:
   - type: web
     name: goodmen-logistics-ui
     runtime: static
-    plan: starter
+    plan: free
     rootDir: goodmen-logistics/frontend
     buildCommand: npm install --include=dev && npm run build
     staticPublishPath: dist/goodmen-logistics
