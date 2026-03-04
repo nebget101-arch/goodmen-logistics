@@ -61,7 +61,7 @@ services:
       - key: CONFLUENCE_SPACE_KEY
         sync: false
 
-  - type: static_site
+  - type: static
     name: goodmen-logistics-ui
     plan: starter
     rootDir: goodmen-logistics/frontend
