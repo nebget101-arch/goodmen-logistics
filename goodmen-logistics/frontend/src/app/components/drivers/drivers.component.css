@@ -55,6 +55,11 @@ textarea.form-input {
   z-index: 1000;
 }
 
+/* Send Packet modal: above sidebar (1000) and other modals */
+.dqf-modal-onboarding {
+  z-index: 9999 !important;
+}
+
 .dqf-modal {
   background: #fff;
   border-radius: 8px;

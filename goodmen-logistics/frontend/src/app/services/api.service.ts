@@ -128,6 +128,19 @@ export class ApiService {
     return `${this.baseUrl}/dqf-documents/download/${documentId}`;
   }
 
+  // Blob download helpers for authenticated file downloads
+  downloadDQFDocumentBlob(documentId: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/dqf-documents/download/${documentId}`, {
+      responseType: 'blob'
+    });
+  }
+
+  downloadDriverGeneratedDocumentBlob(documentId: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/dqf/documents/${documentId}/download`, {
+      responseType: 'blob'
+    });
+  }
+
   // Vehicles
   // Search vehicles by (partial) VIN
   getVehiclesByVin(vin: string): Observable<any> {
@@ -287,6 +300,80 @@ export class ApiService {
       url += `?startDate=${startDate}&endDate=${endDate}`;
     }
     return this.http.get(url);
+  }
+
+  // DQF / Driver onboarding
+  getDqfDriver(driverId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/dqf/drivers/${driverId}`);
+  }
+
+  createOnboardingPacket(driverId: string, driverPayload?: any): Observable<any> {
+    const body: any = {};
+    if (driverId) {
+      body.driverId = driverId;
+    }
+    if (driverPayload) {
+      body.driver = driverPayload;
+    }
+    return this.http.post(`${this.baseUrl}/onboarding/packets`, body);
+  }
+
+  sendOnboardingPacket(
+    packetId: string,
+    payload: { via: 'sms' | 'email' | 'both'; phone?: string; email?: string }
+  ): Observable<any> {
+    return this.http.post(`${this.baseUrl}/onboarding/packets/${packetId}/send`, payload);
+  }
+
+  // Public driver onboarding (packet link the driver opens)
+  getPublicOnboardingPacket(packetId: string, token: string): Observable<any> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    return this.http.get(`${publicBase}/${encodeURIComponent(packetId)}`, {
+      params: { token }
+    });
+  }
+
+  saveOnboardingSection(
+    packetId: string,
+    sectionKey: 'employment_application' | 'mvr_authorization' | 'uploads',
+    data: any,
+    status: 'not_started' | 'in_progress' | 'completed',
+    token: string
+  ): Observable<any> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    return this.http.post(
+      `${publicBase}/${encodeURIComponent(packetId)}/sections/${encodeURIComponent(sectionKey)}`,
+      { data, status },
+      { params: { token } }
+    );
+  }
+
+  saveOnboardingEsignature(
+    packetId: string,
+    payload: {
+      sectionKey: 'employment_application' | 'mvr_authorization';
+      signerName: string;
+      signatureValue: string;
+      signatureType?: string;
+      consentTextVersion?: string;
+    },
+    token: string
+  ): Observable<any> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    return this.http.post(
+      `${publicBase}/${encodeURIComponent(packetId)}/esignatures`,
+      payload,
+      { params: { token } }
+    );
+  }
+
+  updateCommunicationPreferences(payload: {
+    email?: string;
+    phone?: string;
+    optInEmail: boolean;
+    optInSms: boolean;
+  }): Observable<any> {
+    return this.http.put(`${this.baseUrl}/communication-preferences`, payload);
   }
 
   // Auth

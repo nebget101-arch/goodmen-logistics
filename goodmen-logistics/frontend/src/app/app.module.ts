@@ -27,6 +27,10 @@ import { DirectSalesComponent } from './components/direct-sales/direct-sales.com
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
 import { StatusPillComponent } from './components/shared/status-pill/status-pill.component';
 import { AttachmentChipComponent } from './components/shared/attachment-chip/attachment-chip.component';
+import { OnboardingPacketComponent } from './components/onboarding-packet/onboarding-packet.component';
+import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-policy.component';
+import { TermsComponent } from './components/terms/terms.component';
+import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 
 // Dynatrace Error Handler
 import { DynatraceErrorHandler } from './dynatrace-error-handler';
@@ -56,7 +60,11 @@ import { CacheBustingInterceptor } from './cache-busting.interceptor';
     DirectSalesComponent,
     InventoryReportsComponent,
     StatusPillComponent,
-    AttachmentChipComponent
+    AttachmentChipComponent,
+    OnboardingPacketComponent,
+    PrivacyPolicyComponent,
+    TermsComponent,
+    CommunicationPreferencesComponent
   ],
   imports: [
     BrowserModule,

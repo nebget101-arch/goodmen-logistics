@@ -1,0 +1,358 @@
+<div class="onboard-container">
+  <div class="onboard-card">
+    <h1>Driver Onboarding Packet</h1>
+
+    <p *ngIf="packetId">
+      Packet ID:
+      <strong>{{ packetId }}</strong>
+    </p>
+
+    <div *ngIf="loading">Loading your packet…</div>
+    <div *ngIf="!loading && errorMessage" class="onboard-warning">
+      {{ errorMessage }}
+    </div>
+    <div *ngIf="saveSuccess" class="onboard-success">
+      {{ saveSuccess }}
+    </div>
+
+    <ng-container *ngIf="!loading && !errorMessage">
+      <div class="onboard-header" *ngIf="driver">
+        <div class="onboard-driver-name">
+          {{ driver.first_name }} {{ driver.last_name }}
+        </div>
+        <div class="onboard-driver-meta">
+          <span *ngIf="driver.email">📧 {{ driver.email }}</span>
+          <span *ngIf="driver.phone">📞 {{ driver.phone }}</span>
+        </div>
+      </div>
+
+      <div class="onboard-layout">
+        <aside class="onboard-sidebar">
+          <div class="onboard-step"
+               [class.active]="currentStep === 'employment_application'"
+               (click)="setStep('employment_application')">
+            <div class="onboard-step-title">
+              1. Employment Application
+            </div>
+            <div class="onboard-step-status">
+              {{ isSectionCompleted('employment_application') ? 'Completed' : 'In progress' }}
+            </div>
+          </div>
+          <div class="onboard-step"
+               [class.active]="currentStep === 'mvr_authorization'"
+               (click)="setStep('mvr_authorization')">
+            <div class="onboard-step-title">
+              2. MVR Authorization
+            </div>
+            <div class="onboard-step-status">
+              {{ isSectionCompleted('mvr_authorization') ? 'Completed' : 'In progress' }}
+            </div>
+          </div>
+        </aside>
+
+        <section class="onboard-content">
+          <!-- Employment application step -->
+          <form *ngIf="currentStep === 'employment_application'"
+                (ngSubmit)="submitEmploymentApplication()"
+                novalidate>
+            <h2>Employment Application</h2>
+            <p class="onboard-subtitle">
+              Complete this application in full so we can process your driver file.
+            </p>
+
+            <div class="onboard-grid-2">
+              <div>
+                <h3 class="onboard-section-title">Applicant Information</h3>
+                <div class="onboard-field">
+                  <label for="eaFirstName">First Name *</label>
+                  <input id="eaFirstName" class="form-input" [(ngModel)]="employment.firstName" name="eaFirstName" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaMiddleName">Middle Name</label>
+                  <input id="eaMiddleName" class="form-input" [(ngModel)]="employment.middleName" name="eaMiddleName" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaLastName">Last Name *</label>
+                  <input id="eaLastName" class="form-input" [(ngModel)]="employment.lastName" name="eaLastName" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaPhone">Phone</label>
+                  <input id="eaPhone" class="form-input" [(ngModel)]="employment.phone" name="eaPhone" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaEmail">Email</label>
+                  <input id="eaEmail" type="email" class="form-input" [(ngModel)]="employment.email" name="eaEmail" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaDob">Date of Birth</label>
+                  <input id="eaDob" type="date" class="form-input" [(ngModel)]="employment.dateOfBirth" name="eaDob" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaSsnLast4">SSN (last 4)</label>
+                  <input id="eaSsnLast4" maxlength="4" class="form-input" [(ngModel)]="employment.ssnLast4" name="eaSsnLast4" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaPosition">Position applied for</label>
+                  <input id="eaPosition" class="form-input" [(ngModel)]="employment.positionAppliedFor" name="eaPosition" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaAvailable">Date available for work</label>
+                  <input id="eaAvailable" type="date" class="form-input" [(ngModel)]="employment.dateAvailable" name="eaAvailable" />
+                </div>
+                <div class="onboard-field">
+                  <label>Legal right to work in the U.S.?</label>
+                  <div class="onboard-radio-group">
+                    <label>
+                      <input type="radio" name="eaCanWork" [value]="true" [(ngModel)]="employment.canWorkInUs" />
+                      Yes
+                    </label>
+                    <label>
+                      <input type="radio" name="eaCanWork" [value]="false" [(ngModel)]="employment.canWorkInUs" />
+                      No
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="onboard-section-title">Current Address</h3>
+                <div class="onboard-field">
+                  <label for="eaStreet">Street</label>
+                  <input id="eaStreet" class="form-input" [(ngModel)]="employment.addressStreet" name="eaStreet" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaCity">City</label>
+                  <input id="eaCity" class="form-input" [(ngModel)]="employment.addressCity" name="eaCity" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaState">State</label>
+                  <input id="eaState" maxlength="2" class="form-input" [(ngModel)]="employment.addressState" name="eaState" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaZip">ZIP</label>
+                  <input id="eaZip" class="form-input" [(ngModel)]="employment.addressZip" name="eaZip" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaYearsAt">Years at address</label>
+                  <input id="eaYearsAt" class="form-input" [(ngModel)]="employment.yearsAtAddress" name="eaYearsAt" />
+                </div>
+
+                <h3 class="onboard-section-title">License Information</h3>
+                <div class="onboard-field">
+                  <label for="eaLicState">CDL State</label>
+                  <input id="eaLicState" maxlength="2" class="form-input" [(ngModel)]="employment.licenseState" name="eaLicState" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaLicNumber">CDL Number</label>
+                  <input id="eaLicNumber" class="form-input" [(ngModel)]="employment.licenseNumber" name="eaLicNumber" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaLicClass">CDL Class</label>
+                  <input id="eaLicClass" class="form-input" [(ngModel)]="employment.licenseClass" name="eaLicClass" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaLicEndorse">Endorsements</label>
+                  <input id="eaLicEndorse" class="form-input" [(ngModel)]="employment.licenseEndorsements" name="eaLicEndorse" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaLicExp">CDL Expiration</label>
+                  <input id="eaLicExp" type="date" class="form-input" [(ngModel)]="employment.licenseExpiry" name="eaLicExp" />
+                </div>
+              </div>
+            </div>
+
+            <h3 class="onboard-section-title">Driving Experience (summary)</h3>
+            <div class="onboard-field">
+              <textarea
+                class="form-input"
+                rows="3"
+                [(ngModel)]="employment.drivingExperienceSummary"
+                name="eaDrivingExperience"
+                placeholder="List the types of equipment you’ve driven, approximate miles, and dates."
+              ></textarea>
+            </div>
+
+            <h3 class="onboard-section-title">Employment History (last 2 employers)</h3>
+            <div class="onboard-grid-2">
+              <div>
+                <div class="onboard-field">
+                  <label for="eaCurEmpName">Current / most recent employer</label>
+                  <input id="eaCurEmpName" class="form-input" [(ngModel)]="employment.currentEmployerName" name="eaCurEmpName" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaCurEmpPhone">Employer phone</label>
+                  <input id="eaCurEmpPhone" class="form-input" [(ngModel)]="employment.currentEmployerPhone" name="eaCurEmpPhone" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaCurEmpFrom">From (month/year)</label>
+                  <input id="eaCurEmpFrom" class="form-input" [(ngModel)]="employment.currentEmployerFrom" name="eaCurEmpFrom" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaCurEmpTo">To (month/year)</label>
+                  <input id="eaCurEmpTo" class="form-input" [(ngModel)]="employment.currentEmployerTo" name="eaCurEmpTo" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaCurEmpReason">Reason for leaving</label>
+                  <input id="eaCurEmpReason" class="form-input" [(ngModel)]="employment.currentEmployerReasonForLeaving" name="eaCurEmpReason" />
+                </div>
+              </div>
+              <div>
+                <div class="onboard-field">
+                  <label for="eaPrevEmpName">Previous employer</label>
+                  <input id="eaPrevEmpName" class="form-input" [(ngModel)]="employment.previousEmployerName" name="eaPrevEmpName" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaPrevEmpPhone">Employer phone</label>
+                  <input id="eaPrevEmpPhone" class="form-input" [(ngModel)]="employment.previousEmployerPhone" name="eaPrevEmpPhone" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaPrevEmpFrom">From (month/year)</label>
+                  <input id="eaPrevEmpFrom" class="form-input" [(ngModel)]="employment.previousEmployerFrom" name="eaPrevEmpFrom" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaPrevEmpTo">To (month/year)</label>
+                  <input id="eaPrevEmpTo" class="form-input" [(ngModel)]="employment.previousEmployerTo" name="eaPrevEmpTo" />
+                </div>
+                <div class="onboard-field">
+                  <label for="eaPrevEmpReason">Reason for leaving</label>
+                  <input id="eaPrevEmpReason" class="form-input" [(ngModel)]="employment.previousEmployerReasonForLeaving" name="eaPrevEmpReason" />
+                </div>
+              </div>
+            </div>
+
+            <h3 class="onboard-section-title">Education & Other Qualifications</h3>
+            <div class="onboard-field">
+              <label for="eaEdu">Education summary</label>
+              <textarea
+                id="eaEdu"
+                class="form-input"
+                rows="2"
+                [(ngModel)]="employment.educationSummary"
+                name="eaEdu"
+              ></textarea>
+            </div>
+            <div class="onboard-field">
+              <label for="eaOther">Other qualifications</label>
+              <textarea
+                id="eaOther"
+                class="form-input"
+                rows="2"
+                [(ngModel)]="employment.otherQualifications"
+                name="eaOther"
+              ></textarea>
+            </div>
+
+            <h3 class="onboard-section-title">Acknowledgment & Signature</h3>
+            <p class="onboard-small">
+              By signing below, you certify that the information provided is true and complete to the best of your knowledge and you
+              authorize Goodmen Logistics LLC to verify your employment and safety performance history as required by 49 CFR 391.21
+              and 391.23.
+            </p>
+            <div class="onboard-grid-2">
+              <div class="onboard-field">
+                <label for="eaSigName">Applicant signature (type full name) *</label>
+                <input id="eaSigName" class="form-input" [(ngModel)]="employment.applicationSignatureName" name="eaSigName" />
+              </div>
+              <div class="onboard-field">
+                <label for="eaSigDate">Date</label>
+                <input id="eaSigDate" type="date" class="form-input" [(ngModel)]="employment.applicationSignatureDate" name="eaSigDate" />
+              </div>
+            </div>
+
+            <div class="onboard-actions">
+              <button class="btn btn-primary" type="submit" [disabled]="saving">
+                {{ saving ? 'Saving…' : 'Submit Employment Application' }}
+              </button>
+            </div>
+          </form>
+
+          <!-- MVR Authorization step -->
+          <form *ngIf="currentStep === 'mvr_authorization'"
+                (ngSubmit)="submitMvrAuthorization()"
+                novalidate>
+            <h2>MVR Authorization</h2>
+            <p class="onboard-subtitle">
+              Authorize Goodmen Logistics LLC to obtain your Motor Vehicle Record (MVR) for employment screening.
+            </p>
+
+            <div class="onboard-grid-2">
+              <div>
+                <h3 class="onboard-section-title">Applicant</h3>
+                <div class="onboard-field">
+                  <label for="mvrFirstName">First Name *</label>
+                  <input id="mvrFirstName" class="form-input" [(ngModel)]="mvr.firstName" name="mvrFirstName" />
+                </div>
+                <div class="onboard-field">
+                  <label for="mvrMiddleName">Middle Name</label>
+                  <input id="mvrMiddleName" class="form-input" [(ngModel)]="mvr.middleName" name="mvrMiddleName" />
+                </div>
+                <div class="onboard-field">
+                  <label for="mvrLastName">Last Name *</label>
+                  <input id="mvrLastName" class="form-input" [(ngModel)]="mvr.lastName" name="mvrLastName" />
+                </div>
+                <div class="onboard-field">
+                  <label for="mvrAka">Maiden / AKA / previous names</label>
+                  <input id="mvrAka" class="form-input" [(ngModel)]="mvr.akaNames" name="mvrAka" />
+                </div>
+                <div class="onboard-field">
+                  <label for="mvrDob">Date of Birth</label>
+                  <input id="mvrDob" type="date" class="form-input" [(ngModel)]="mvr.dateOfBirth" name="mvrDob" />
+                </div>
+              </div>
+
+              <div>
+                <h3 class="onboard-section-title">License & Contact</h3>
+                <div class="onboard-field">
+                  <label for="mvrLicNumber">Driver License Number</label>
+                  <input id="mvrLicNumber" class="form-input" [(ngModel)]="mvr.driverLicenseNumber" name="mvrLicNumber" />
+                </div>
+                <div class="onboard-field">
+                  <label for="mvrLicState">Driver License State</label>
+                  <input id="mvrLicState" maxlength="2" class="form-input" [(ngModel)]="mvr.driverLicenseState" name="mvrLicState" />
+                </div>
+                <div class="onboard-field">
+                  <label for="mvrEmailCopy">Email (to receive a copy of your report, if applicable)</label>
+                  <input id="mvrEmailCopy" type="email" class="form-input" [(ngModel)]="mvr.emailForReportCopy" name="mvrEmailCopy" />
+                </div>
+              </div>
+            </div>
+
+            <h3 class="onboard-section-title">Disclosure & Authorization</h3>
+            <p class="onboard-small">
+              I hereby authorize Goodmen Logistics LLC and its designated agents and representatives to obtain my motor vehicle record
+              (MVR) and other background information for employment screening, promotion, reassignment, or retention as an employee, as
+              described in the Goodmen Logistics LLC MVR Authorization form provided to me.
+            </p>
+            <div class="onboard-field">
+              <label>
+                <input type="checkbox" [(ngModel)]="mvr.acknowledgesRights" name="mvrAck" />
+                I have read and understand this disclosure, and I authorize Goodmen Logistics LLC to obtain my MVR.
+              </label>
+            </div>
+
+            <div class="onboard-grid-2">
+              <div class="onboard-field">
+                <label for="mvrSigName">Applicant signature (type full name) *</label>
+                <input id="mvrSigName" class="form-input" [(ngModel)]="mvr.mvrSignatureName" name="mvrSigName" />
+              </div>
+              <div class="onboard-field">
+                <label for="mvrSigDate">Date</label>
+                <input id="mvrSigDate" type="date" class="form-input" [(ngModel)]="mvr.mvrSignatureDate" name="mvrSigDate" />
+              </div>
+            </div>
+
+            <div class="onboard-actions">
+              <button class="btn" type="button" (click)="setStep('employment_application')" [disabled]="saving">
+                Back to Employment Application
+              </button>
+              <button class="btn btn-primary" type="submit" [disabled]="saving">
+                {{ saving ? 'Saving…' : 'Submit MVR Authorization' }}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </ng-container>
+  </div>
+</div>
+
