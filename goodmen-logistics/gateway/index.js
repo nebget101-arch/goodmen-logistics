@@ -45,7 +45,14 @@ function buildProxy(target, label) {
     target,
     changeOrigin: true,
     xfwd: true,
-    pathRewrite: (path) => '/api' + (path.startsWith('/') ? path : '/' + path),
+    pathRewrite: (path, req) => {
+      const baseUrl = req.baseUrl || '';
+      const fullPath = `${baseUrl}${path}`;
+      if (fullPath.startsWith('/api')) {
+        return fullPath;
+      }
+      return '/api' + (fullPath.startsWith('/') ? fullPath : '/' + fullPath);
+    },
     logLevel: isProd ? 'warn' : 'debug',
     onProxyReq: isProd
       ? undefined
