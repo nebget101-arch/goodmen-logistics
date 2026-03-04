@@ -317,6 +317,11 @@ app.use('/api/adjustments', adjustmentsRouter);
 app.use('/api/cycle-counts', cycleCountsRouter);
 app.use('/api/reports', reportsRouter);
 
+// Root -> work orders (so visiting / shows work orders)
+app.get('/', (req, res) => {
+  res.redirect(302, '/api/work-orders');
+});
+
 // Health check
 app.get('/api/health', async (req, res) => {
   const healthStatus = {

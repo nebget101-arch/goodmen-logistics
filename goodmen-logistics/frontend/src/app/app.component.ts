@@ -19,7 +19,7 @@ import { ApiService } from './services/api.service';
   `]
 })
 export class AppComponent implements OnInit {
-  title = 'Goodmen Logistics';
+  title = 'FleetNeuron AI';
   userRole: string | null = null;
   equipmentExpanded = true;
   safetyExpanded = true;
