@@ -13,6 +13,16 @@ const REPORTING_SERVICE_URL =
   process.env.REPORTING_SERVICE_URL || TARGET_BACKEND_URL;
 const INTEGRATIONS_SERVICE_URL =
   process.env.INTEGRATIONS_SERVICE_URL || TARGET_BACKEND_URL;
+const AUTH_USERS_SERVICE_URL =
+  process.env.AUTH_USERS_SERVICE_URL || TARGET_BACKEND_URL;
+const DRIVERS_COMPLIANCE_SERVICE_URL =
+  process.env.DRIVERS_COMPLIANCE_SERVICE_URL || TARGET_BACKEND_URL;
+const VEHICLES_MAINTENANCE_SERVICE_URL =
+  process.env.VEHICLES_MAINTENANCE_SERVICE_URL || TARGET_BACKEND_URL;
+const LOGISTICS_SERVICE_URL =
+  process.env.LOGISTICS_SERVICE_URL || TARGET_BACKEND_URL;
+const INVENTORY_SERVICE_URL =
+  process.env.INVENTORY_SERVICE_URL || TARGET_BACKEND_URL;
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(
@@ -48,7 +58,7 @@ function buildProxy(target, label) {
     pathRewrite: (path, req) => {
       const baseUrl = req.baseUrl || '';
       const fullPath = `${baseUrl}${path}`;
-      if (fullPath.startsWith('/api')) {
+      if (fullPath.startsWith('/api') || fullPath.startsWith('/public')) {
         return fullPath;
       }
       return '/api' + (fullPath.startsWith('/') ? fullPath : '/' + fullPath);
@@ -78,6 +88,61 @@ app.use('/api/dashboard', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/reports', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/audit', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/scan-bridge', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
+app.use('/api/auth', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
+app.use('/api/users', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
+app.use(
+  '/api/communication-preferences',
+  buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users')
+);
+app.use('/api/drivers', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
+app.use('/api/dqf', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
+app.use(
+  '/api/dqf-documents',
+  buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
+);
+app.use('/api/hos', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
+app.use(
+  '/api/drug-alcohol',
+  buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
+);
+app.use(
+  '/api/onboarding',
+  buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
+);
+app.use(
+  '/public/onboarding',
+  buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
+);
+app.use(
+  '/api/vehicles',
+  buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
+);
+app.use(
+  '/api/maintenance',
+  buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
+);
+app.use(
+  '/api/equipment',
+  buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
+);
+app.use(
+  '/api/work-orders',
+  buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
+);
+app.use('/api/parts', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
+app.use('/api/loads', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/brokers', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/locations', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/geo', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/invoices', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/credit', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/db-example', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/inventory', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
+app.use('/api/adjustments', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
+app.use('/api/cycle-counts', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
+app.use('/api/receiving', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
+app.use('/api/barcodes', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
+app.use('/api/customers', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 
 // Fallback: proxy all /api/* calls to monolith
 app.use('/api', buildProxy(TARGET_BACKEND_URL, 'backend'));
