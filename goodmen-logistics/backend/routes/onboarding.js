@@ -9,6 +9,26 @@ const dtLogger = require('../utils/dynatrace-logger');
 // Admin / safety only for now
 router.use(auth(['admin', 'safety']));
 
+/** Get base URL for onboarding links. In production, localhost is not allowed. */
+function getOnboardingBaseUrl(res) {
+  const base =
+    process.env.FRONTEND_ONBOARDING_BASE_URL ||
+    (process.env.PUBLIC_APP_URL ? `${process.env.PUBLIC_APP_URL.replace(/\/$/, '')}/onboard` : 'http://localhost:4200/onboard');
+  const basePublicUrl = base.replace(/\/$/, '');
+  if (process.env.NODE_ENV === 'production' && (basePublicUrl.includes('localhost') || basePublicUrl.startsWith('http://127.'))) {
+    dtLogger.error('Onboarding URL would be localhost in production', null, {
+      hint: 'Set FRONTEND_ONBOARDING_BASE_URL or PUBLIC_APP_URL to your production frontend URL'
+    });
+    if (res) {
+      res.status(500).json({
+        message: 'Server misconfiguration: production frontend URL not set. Set FRONTEND_ONBOARDING_BASE_URL or PUBLIC_APP_URL.'
+      });
+    }
+    return null;
+  }
+  return basePublicUrl;
+}
+
 async function findOrCreateDriverFromPayload(payload) {
   const {
     firstName,
@@ -108,9 +128,8 @@ router.post('/packets', async (req, res) => {
 
     await client.query('COMMIT');
 
-    const basePublicUrl =
-      process.env.FRONTEND_ONBOARDING_BASE_URL ||
-      `${process.env.PUBLIC_APP_URL || 'http://localhost:4200'}/onboard`;
+    const basePublicUrl = getOnboardingBaseUrl(res);
+    if (!basePublicUrl) return;
     const publicUrl = `${basePublicUrl}/${packetId}?token=${encodeURIComponent(token)}`;
 
     const duration = Date.now() - start;
@@ -186,9 +205,8 @@ router.post('/packets/:id/send', async (req, res) => {
 
     await client.query('COMMIT');
 
-    const basePublicUrl =
-      process.env.FRONTEND_ONBOARDING_BASE_URL ||
-      `${process.env.PUBLIC_APP_URL || 'http://localhost:4200'}/onboard`;
+    const basePublicUrl = getOnboardingBaseUrl(res);
+    if (!basePublicUrl) return;
     const publicUrl = `${basePublicUrl}/${packetId}?token=${encodeURIComponent(token)}`;
 
     // Resolve driver name for message body (optional)

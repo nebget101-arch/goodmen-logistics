@@ -4,11 +4,70 @@ const { query, getClient } = require('../config/database');
 const { transformRows, transformRow, toSnakeCase } = require('../utils/case-converter');
 const dtLogger = require('../utils/dynatrace-logger');
 
+// Basic mapping of common CDL state inputs to 2‑letter codes.
+// This keeps the API forgiving (e.g. 'Texas', 'texas', 'tx' → 'TX')
+// while enforcing the underlying VARCHAR(2) constraint.
+const CDL_STATE_MAP = {
+  AL: 'AL', ALABAMA: 'AL',
+  AK: 'AK', ALASKA: 'AK',
+  AZ: 'AZ', ARIZONA: 'AZ',
+  AR: 'AR', ARKANSAS: 'AR',
+  CA: 'CA', CALIFORNIA: 'CA',
+  CO: 'CO', COLORADO: 'CO',
+  CT: 'CT', CONNECTICUT: 'CT',
+  DE: 'DE', DELAWARE: 'DE',
+  FL: 'FL', FLORIDA: 'FL',
+  GA: 'GA', GEORGIA: 'GA',
+  HI: 'HI', HAWAII: 'HI',
+  ID: 'ID', IDAHO: 'ID',
+  IL: 'IL', ILLINOIS: 'IL',
+  IN: 'IN', INDIANA: 'IN',
+  IA: 'IA', IOWA: 'IA',
+  KS: 'KS', KANSAS: 'KS',
+  KY: 'KY', KENTUCKY: 'KY',
+  LA: 'LA', LOUISIANA: 'LA',
+  ME: 'ME', MAINE: 'ME',
+  MD: 'MD', MARYLAND: 'MD',
+  MA: 'MA', MASSACHUSETTS: 'MA',
+  MI: 'MI', MICHIGAN: 'MI',
+  MN: 'MN', MINNESOTA: 'MN',
+  MS: 'MS', MISSISSIPPI: 'MS',
+  MO: 'MO', MISSOURI: 'MO',
+  MT: 'MT', MONTANA: 'MT',
+  NE: 'NE', NEBRASKA: 'NE',
+  NV: 'NV', NEVADA: 'NV',
+  NH: 'NH', NEW_HAMPSHIRE: 'NH', 'NEW HAMPSHIRE': 'NH',
+  NJ: 'NJ', NEW_JERSEY: 'NJ', 'NEW JERSEY': 'NJ',
+  NM: 'NM', NEW_MEXICO: 'NM', 'NEW MEXICO': 'NM',
+  NY: 'NY', NEW_YORK: 'NY', 'NEW YORK': 'NY',
+  NC: 'NC', NORTH_CAROLINA: 'NC', 'NORTH CAROLINA': 'NC',
+  ND: 'ND', NORTH_DAKOTA: 'ND', 'NORTH DAKOTA': 'ND',
+  OH: 'OH', OHIO: 'OH',
+  OK: 'OK', OKLAHOMA: 'OK',
+  OR: 'OR', OREGON: 'OR',
+  PA: 'PA', PENNSYLVANIA: 'PA',
+  RI: 'RI', RHODE_ISLAND: 'RI', 'RHODE ISLAND': 'RI',
+  SC: 'SC', SOUTH_CAROLINA: 'SC', 'SOUTH CAROLINA': 'SC',
+  SD: 'SD', SOUTH_DAKOTA: 'SD', 'SOUTH DAKOTA': 'SD',
+  TN: 'TN', TENNESSEE: 'TN',
+  TX: 'TX', TEXAS: 'TX',
+  UT: 'UT', UTAH: 'UT',
+  VT: 'VT', VERMONT: 'VT',
+  VA: 'VA', VIRGINIA: 'VA',
+  WA: 'WA', WASHINGTON: 'WA',
+  WV: 'WV', WEST_VIRGINIA: 'WV', 'WEST VIRGINIA': 'WV',
+  WI: 'WI', WISCONSIN: 'WI',
+  WY: 'WY', WYOMING: 'WY',
+  DC: 'DC', 'DISTRICT OF COLUMBIA': 'DC', DISTRICT_OF_COLUMBIA: 'DC'
+};
+
 function normalizeCdlState(raw) {
   if (!raw && raw !== 0) return null;
-  const s = raw.toString().trim();
+  const s = raw.toString().trim().toUpperCase();
   if (!s) return null;
-  return s.toUpperCase();
+  if (CDL_STATE_MAP[s]) return CDL_STATE_MAP[s];
+  // Fallback: best‑effort 2‑letter code from first two characters
+  return s.slice(0, 2);
 }
 
 function normalizeCdlNumber(raw) {
