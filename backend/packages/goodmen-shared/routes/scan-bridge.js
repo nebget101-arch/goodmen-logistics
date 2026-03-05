@@ -58,6 +58,19 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
+/**
+ * @openapi
+ * /api/scan-bridge/session:
+ *   post:
+ *     summary: Create scan bridge session
+ *     tags:
+ *       - ScanBridge
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Session created
+ */
 router.post('/session', authMiddleware, (req, res) => {
   const id = crypto.randomUUID();
   const writeToken = randToken();

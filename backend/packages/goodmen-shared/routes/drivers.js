@@ -87,6 +87,32 @@ async function findDriverByCdl(client, state, number) {
   return result.rows[0] || null;
 }
 
+/**
+ * @openapi
+ * /api/drivers:
+ *   get:
+ *     summary: List drivers
+ *     tags:
+ *       - Drivers
+ *     responses:
+ *       200:
+ *         description: Drivers returned
+ *   post:
+ *     summary: Create driver
+ *     tags:
+ *       - Drivers
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Driver payload
+ *             additionalProperties: true
+ *     responses:
+ *       201:
+ *         description: Driver created
+ */
 // GET all drivers (supports view=dispatch|dqf and optional status filter)
 router.get('/', async (req, res) => {
   const startTime = Date.now();
