@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, ElementRef, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { ApiService } from '../../services/api.service';
 import * as QRCode from 'qrcode';
 
@@ -8,6 +8,8 @@ import * as QRCode from 'qrcode';
   styleUrls: ['./barcode-management.component.css']
 })
 export class BarcodeManagementComponent implements OnInit, OnDestroy {
+  @ViewChild('decodeFileInput') decodeFileInput?: ElementRef<HTMLInputElement>;
+
   parts: any[] = [];
   filteredParts: any[] = [];
   selectedPartId = '';
@@ -30,6 +32,10 @@ export class BarcodeManagementComponent implements OnInit, OnDestroy {
   qrCodeDataUrl = '';
 
   constructor(private api: ApiService) {}
+
+  triggerDecodeImage(): void {
+    this.decodeFileInput?.nativeElement?.click();
+  }
 
   ngOnInit(): void {
     this.loadParts();
@@ -164,6 +170,29 @@ export class BarcodeManagementComponent implements OnInit, OnDestroy {
     this.bridgeMobileUrl = '';
     this.bridgeSessionId = '';
     this.qrCodeDataUrl = '';
+  }
+
+  onDecodeImage(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input?.files?.[0];
+    if (!file) return;
+    this.clearMessages();
+    this.api.decodeBarcodeFromImage(file).subscribe({
+      next: (res: any) => {
+        const barcode = res?.data?.barcode;
+        if (barcode) {
+          this.barcodeValue = barcode;
+          this.message = `Decoded: ${barcode}`;
+        } else {
+          this.error = 'No barcode found in image';
+        }
+        input.value = '';
+      },
+      error: (err: any) => {
+        this.error = err?.error?.error || err?.message || 'Failed to decode barcode from image';
+        input.value = '';
+      }
+    });
   }
 
   private fallbackQrUrl(data: string): string {

@@ -588,6 +588,13 @@ export class ApiService {
     return this.http.get(url);
   }
 
+  /** Desktop: decode barcode from uploaded image. See docs/API-BARCODE-SCAN-PHONE-BRIDGE.md §2.1. POST /api/barcodes/decode-image (JWT). Body: multipart/form-data, field "image". */
+  decodeBarcodeFromImage(file: File): Observable<any> {
+    const form = new FormData();
+    form.append('image', file);
+    return this.http.post(`${this.baseUrl}/barcodes/decode-image`, form);
+  }
+
   assignPartBarcode(partId: string, payload: { barcodeValue: string; packQty?: number; vendor?: string }): Observable<any> {
     return this.http.post(`${this.baseUrl}/parts/${partId}/barcodes`, payload);
   }

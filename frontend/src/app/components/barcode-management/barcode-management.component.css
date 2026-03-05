@@ -110,6 +110,31 @@
   flex: 1;
 }
 
+.barcode-dashboard .input-file-hidden {
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.barcode-dashboard .btn-upload {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-dark);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.barcode-dashboard .btn-upload:hover {
+  background: rgba(148, 163, 184, 0.25);
+  border-color: rgba(148, 163, 184, 0.7);
+}
+
 .barcode-dashboard .btn-phone {
   padding: 10px 16px;
   border-radius: 10px;
@@ -169,6 +194,23 @@
 
 .barcode-dashboard .qr-link a:hover {
   text-decoration: underline;
+}
+
+.barcode-dashboard .link-camera-this-device {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.barcode-dashboard .link-camera-this-device:hover {
+  background: rgba(59, 130, 246, 0.35);
+  border-color: rgba(59, 130, 246, 0.8);
 }
 
 .barcode-dashboard .qr-status {
