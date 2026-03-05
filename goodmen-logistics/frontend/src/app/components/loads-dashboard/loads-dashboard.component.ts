@@ -751,6 +751,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   /** Build full URL for attachment download (backend serves /uploads). */
   getAttachmentUrl(att: { file_url?: string | null }): string {
     if (!att?.file_url) return '';
+    if (att.file_url.startsWith('http://') || att.file_url.startsWith('https://')) {
+      return att.file_url;
+    }
     const base = environment.apiUrl.replace(/\/api\/?$/, '');
     return base + (att.file_url.startsWith('/') ? att.file_url : '/' + att.file_url);
   }

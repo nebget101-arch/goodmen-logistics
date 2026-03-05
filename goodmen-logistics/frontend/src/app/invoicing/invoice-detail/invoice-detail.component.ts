@@ -113,8 +113,8 @@ export class InvoiceDetailComponent implements OnInit {
   }
 
   getDocumentUrl(doc: any): string {
-    if (doc?.storage_key) {
-      return this.getDownloadUrl(`/uploads/${doc.storage_key}`);
+    if (doc?.downloadUrl) {
+      return this.getDownloadUrl(doc.downloadUrl);
     }
     if (doc?.id && this.invoice?.id) {
       return this.getDownloadUrl(`/api/invoices/${this.invoice.id}/documents/${doc.id}/download`);
