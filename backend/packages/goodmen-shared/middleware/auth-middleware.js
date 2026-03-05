@@ -1,4 +1,5 @@
-const jwt = require('jsonwebtoken');
+const requireFromRoot = require('../internal/require-from-root');
+const jwt = requireFromRoot('jsonwebtoken');
 const dtLogger = require('../utils/logger');
 
 /**
