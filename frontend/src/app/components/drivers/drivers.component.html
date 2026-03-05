@@ -1,13 +1,18 @@
-<div class="container drivers-page">
-  <header class="drivers-page-header">
+<div class="drivers-dashboard">
+  <div class="header">
     <div>
       <h1>Driver qualification & safety</h1>
-      <p>Track DQF completeness, expirations, and clearinghouse status in one AI view.</p>
+      <p class="subtitle">Track DQF completeness, expirations, and clearinghouse status in one AI view.</p>
     </div>
-    <button class="btn btn-primary drivers-header-cta" (click)="toggleAddForm()">+ Add Driver</button>
-  </header>
+    <div class="header-actions">
+      <button class="btn btn-primary" (click)="toggleAddForm()">
+        <span class="material-symbols-outlined">person_add</span>
+        Add Driver
+      </button>
+    </div>
+  </div>
 
-  <div class="card drivers-card">
+  <div class="drivers-card table-card">
     <div class="card-header drivers-card-header">
       <div>
         <h2 class="card-title">Driver roster</h2>
@@ -15,7 +20,6 @@
       </div>
     </div>
 
-    <!-- Add Driver Modal is rendered outside the card -->
     <div *ngIf="loading" class="loading">
       <div class="spinner"></div>
     </div>
@@ -32,41 +36,21 @@
           <th>Status</th>
           <th>Actions</th>
         </tr>
-        <tr class="drivers-header-filters">
+        <tr class="header-filters drivers-header-filters">
           <th>
-            <input
-              type="text"
-              placeholder="Name / email"
-              [(ngModel)]="driverFilters.name"
-            />
+            <input type="text" placeholder="Name / email" [(ngModel)]="driverFilters.name" />
           </th>
           <th>
-            <input
-              type="text"
-              placeholder="CDL #"
-              [(ngModel)]="driverFilters.cdlNumber"
-            />
+            <input type="text" placeholder="CDL #" [(ngModel)]="driverFilters.cdlNumber" />
           </th>
           <th>
-            <input
-              type="text"
-              placeholder="YYYY-MM-DD"
-              [(ngModel)]="driverFilters.cdlExpiry"
-            />
+            <input type="text" placeholder="YYYY-MM-DD" [(ngModel)]="driverFilters.cdlExpiry" />
           </th>
           <th>
-            <input
-              type="text"
-              placeholder="YYYY-MM-DD"
-              [(ngModel)]="driverFilters.medicalExpiry"
-            />
+            <input type="text" placeholder="YYYY-MM-DD" [(ngModel)]="driverFilters.medicalExpiry" />
           </th>
           <th>
-            <input
-              type="text"
-              placeholder="Min %"
-              [(ngModel)]="driverFilters.dqfMin"
-            />
+            <input type="text" placeholder="Min %" [(ngModel)]="driverFilters.dqfMin" />
           </th>
           <th>
             <select [(ngModel)]="driverFilters.clearinghouseStatus">
@@ -117,23 +101,18 @@
           </td>
           <td>
             <div class="drivers-actions">
-              <button class="btn btn-sm drivers-btn-edit" (click)="editDriver(driver)">
-                <span class="material-symbols-outlined">edit</span>
-                <span>Edit</span>
+              <button type="button" class="btn-action btn-edit" (click)="editDriver(driver)">
+                <span class="material-symbols-outlined">edit</span> Edit
               </button>
-              <button class="btn btn-sm drivers-btn-dqf" (click)="openDQFForm(driver)">
-                <span class="material-symbols-outlined">rule_folder</span>
-                <span>DQF</span>
+              <button type="button" class="btn-action btn-dqf" (click)="openDQFForm(driver)">
+                <span class="material-symbols-outlined">rule_folder</span> DQF
               </button>
-              <button class="btn btn-sm drivers-btn-onboard" (click)="openOnboardingModal(driver)">
-                <span class="material-symbols-outlined">forward_to_inbox</span>
-                <span>Send Packet</span>
+              <button type="button" class="btn-action btn-onboard" (click)="openOnboardingModal(driver)">
+                <span class="material-symbols-outlined">forward_to_inbox</span> Send Packet
               </button>
-              <label class="btn btn-sm drivers-btn-upload">
-                <span class="material-symbols-outlined">upload_file</span>
-                <span>Upload</span>
-                <input type="file" (change)="onFileSelected($event, driver)" 
-                       accept=".pdf,.jpg,.jpeg,.png" style="display: none;">
+              <label class="btn-action btn-upload">
+                <span class="material-symbols-outlined">upload_file</span> Upload
+                <input type="file" (change)="onFileSelected($event, driver)" accept=".pdf,.jpg,.jpeg,.png" hidden>
               </label>
             </div>
           </td>
@@ -146,7 +125,7 @@
     </div>
   </div>
 
-  <div class="card drivers-card">
+  <div class="drivers-card drivers-info-card">
     <div class="card-header drivers-card-header">
       <div>
         <h3 class="card-title">DQF retention requirements</h3>
@@ -160,9 +139,9 @@
   </div>
 
   <!-- Add Driver Modal -->
-  <div class="dqf-modal-backdrop" *ngIf="showAddForm">
-    <div class="dqf-modal">
-      <div class="dqf-modal-header">
+  <div class="modal-backdrop dqf-modal-backdrop" *ngIf="showAddForm" (click)="toggleAddForm()">
+    <div class="modal dqf-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header dqf-modal-header">
         <div>
           <h3>Add New Driver</h3>
           <p class="dqf-modal-subtitle">Create a new driver and capture core DQF details.</p>
@@ -317,9 +296,9 @@
   </div>
 
   <!-- Edit Driver Modal -->
-  <div class="dqf-modal-backdrop" *ngIf="editingDriver">
-    <div class="dqf-modal">
-      <div class="dqf-modal-header">
+  <div class="modal-backdrop dqf-modal-backdrop" *ngIf="editingDriver" (click)="cancelEdit()">
+    <div class="modal dqf-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header dqf-modal-header">
         <div>
           <h3>Edit Driver: {{editingDriver.firstName}} {{editingDriver.lastName}}</h3>
         </div>
@@ -377,9 +356,9 @@
   </div>
 
   <!-- DQF Checklist Modal -->
-  <div class="dqf-modal-backdrop" *ngIf="showDQFForm && selectedDriver">
-    <div class="dqf-modal">
-      <div class="dqf-modal-header">
+  <div class="modal-backdrop dqf-modal-backdrop" *ngIf="showDQFForm && selectedDriver" (click)="closeDQFForm()">
+    <div class="modal dqf-modal dqf-modal-wide" (click)="$event.stopPropagation()">
+      <div class="modal-header dqf-modal-header">
         <div>
           <h3>
             <span class="material-symbols-outlined">checklist</span>
@@ -390,9 +369,9 @@
         <button class="dqf-close-btn" type="button" (click)="closeDQFForm()" [disabled]="saving">✕</button>
       </div>
       <div class="dqf-modal-body">
-        <div style="display: grid; gap: 15px;">
+        <div class="dqf-checklist">
         <!-- Application for Employment -->
-        <div style="padding: 10px; background: white; border-radius: 4px;">
+        <div class="dqf-checklist-item">
           <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
             <input type="checkbox" [(ngModel)]="dqfForm.applicationComplete" style="margin-right: 10px; width: 18px; height: 18px;">
             <span style="font-weight: 500;">Application for Employment (§391.21)</span>
@@ -418,7 +397,7 @@
         </div>
 
         <!-- Motor Vehicle Record -->
-        <div style="padding: 10px; background: white; border-radius: 4px;">
+        <div class="dqf-checklist-item">
           <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
             <input type="checkbox" [(ngModel)]="dqfForm.mvrComplete" style="margin-right: 10px; width: 18px; height: 18px;">
             <span style="font-weight: 500;">Motor Vehicle Record (MVR) - Past 3 Years</span>
@@ -444,7 +423,7 @@
         </div>
 
         <!-- Road Test Certificate -->
-        <div style="padding: 10px; background: white; border-radius: 4px;">
+        <div class="dqf-checklist-item">
           <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
             <input type="checkbox" [(ngModel)]="dqfForm.roadTestComplete" style="margin-right: 10px; width: 18px; height: 18px;">
             <span style="font-weight: 500;">Road Test Certificate or Equivalent (§391.31)</span>
@@ -467,7 +446,7 @@
         </div>
 
         <!-- Medical Certificate -->
-        <div style="padding: 10px; background: white; border-radius: 4px;">
+        <div class="dqf-checklist-item">
           <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
             <input type="checkbox" [(ngModel)]="dqfForm.medicalCertComplete" style="margin-right: 10px; width: 18px; height: 18px;">
             <span style="font-weight: 500;">Medical Examiner's Certificate (§391.43)</span>
@@ -490,7 +469,7 @@
         </div>
 
         <!-- Annual Review -->
-        <div style="padding: 10px; background: white; border-radius: 4px;">
+        <div class="dqf-checklist-item">
           <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
             <input type="checkbox" [(ngModel)]="dqfForm.annualReviewComplete" style="margin-right: 10px; width: 18px; height: 18px;">
             <span style="font-weight: 500;">Annual Review of Driving Record (§391.25)</span>
@@ -513,7 +492,7 @@
         </div>
 
         <!-- Clearinghouse Consent -->
-        <div style="padding: 10px; background: white; border-radius: 4px;">
+        <div class="dqf-checklist-item">
           <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
             <input type="checkbox" [(ngModel)]="dqfForm.clearinghouseConsentComplete" style="margin-right: 10px; width: 18px; height: 18px;">
             <span style="font-weight: 500;">FMCSA Clearinghouse Consent (§382.701)</span>
