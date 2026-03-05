@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('./auth-middleware');
 const axios = require('axios');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 const { query } = require('../config/database');
 const { getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 

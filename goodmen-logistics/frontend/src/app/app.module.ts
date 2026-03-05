@@ -1,4 +1,4 @@
-import { NgModule, ErrorHandler } from '@angular/core';
+import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
@@ -32,8 +32,6 @@ import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-poli
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 
-// Dynatrace Error Handler
-import { DynatraceErrorHandler } from './dynatrace-error-handler';
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
 
@@ -75,8 +73,6 @@ import { CacheBustingInterceptor } from './cache-busting.interceptor';
     ReactiveFormsModule
   ],
   providers: [
-    // Enable Dynatrace error reporting
-    // Uncomment to enable: { provide: ErrorHandler, useClass: DynatraceErrorHandler },
     {
       provide: HTTP_INTERCEPTORS,
       useClass: CacheBustingInterceptor,

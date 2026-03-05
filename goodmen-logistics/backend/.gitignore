@@ -2,8 +2,6 @@
 .env
 .env.local
 .env.*.local
-.env.dynatrace
-.env.dynatrace.local
 
 # Dependencies
 node_modules/

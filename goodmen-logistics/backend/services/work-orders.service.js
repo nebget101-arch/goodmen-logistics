@@ -1,5 +1,5 @@
 const db = require('../config/knex');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 const { generateInvoiceNumber } = require('../utils/invoice-number');
 const { recomputeInvoiceTotals } = require('./invoices.service');
 const creditService = require('./credit.service');

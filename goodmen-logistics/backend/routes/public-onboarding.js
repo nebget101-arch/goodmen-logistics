@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query, getClient } = require('../config/database');
 const { hashToken } = require('../services/token-service');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 const { createDriverDocument } = require('../services/driver-storage-service');
 const {
   buildEmploymentApplicationPdf,

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { query, getClient } = require('../config/database');
 const { transformRows, transformRow, toSnakeCase } = require('../utils/case-converter');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 
 // Basic mapping of common CDL state inputs to 2‑letter codes.
 // This keeps the API forgiving (e.g. 'Texas', 'texas', 'tx' → 'TX')

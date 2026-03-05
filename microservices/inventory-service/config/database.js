@@ -1,9 +1,6 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Import database monitoring
-const { initializeDatabaseMonitoring } = require('../utils/db-monitor');
-
 const poolConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
@@ -33,11 +30,6 @@ pool.on('error', (err) => {
   console.error('❌ Unexpected error on idle client', err);
   process.exit(-1);
 });
-
-// Initialize database monitoring (only if Dynatrace is enabled)
-if (process.env.DYNATRACE_ENABLED === 'true') {
-  initializeDatabaseMonitoring(pool);
-}
 
 // Helper function to execute queries
 const query = (text, params) => pool.query(text, params);

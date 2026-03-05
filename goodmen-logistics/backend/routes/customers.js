@@ -2,7 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 const customersService = require('../services/customers.service');
 
 function requireRole(allowedRoles) {

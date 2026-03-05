@@ -1,5 +1,5 @@
 const db = require('../config/knex');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 
 /**
  * Get all active parts with optional filters

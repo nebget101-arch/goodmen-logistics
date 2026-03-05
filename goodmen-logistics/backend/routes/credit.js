@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
 const creditService = require('../services/credit.service');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 
 function requireRole(allowedRoles) {
   return (req, res, next) => {

@@ -4,7 +4,7 @@ const path = require('path');
 const XLSX = require('xlsx');
 const db = require('../config/knex');
 const authMiddleware = require('../middleware/auth-middleware');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 const workOrdersService = require('../services/work-orders.service');
 const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 

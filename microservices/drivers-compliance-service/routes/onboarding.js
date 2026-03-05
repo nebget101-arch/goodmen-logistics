@@ -4,7 +4,7 @@ const auth = require('./auth-middleware');
 const { query, getClient } = require('../config/database');
 const { generateToken, hashToken } = require('../services/token-service');
 const { sendOnboardingLink } = require('../services/notification-service');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 
 // Admin / safety only for now
 router.use(auth(['admin', 'safety']));

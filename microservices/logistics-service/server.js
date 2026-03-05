@@ -5,13 +5,10 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 
-const { dynatraceMiddleware, sendLog } = require('./config/dynatrace-sdk');
-
 const app = express();
 const PORT = process.env.PORT || 5006;
 
 app.use(cors());
-app.use(dynatraceMiddleware);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -34,18 +31,15 @@ app.use('/api/invoices', invoicesRouter);
 app.use('/api/credit', creditRouter);
 app.use('/api/db-example', dbExampleRouter);
 
-app.get('/health', async (req, res) => {
+app.get('/health', (req, res) => {
   const healthStatus = {
     status: 'ok',
     service: 'goodmen-logistics-service',
     timestamp: new Date().toISOString()
   };
-
-  await sendLog('INFO', 'Health check requested', healthStatus);
   res.json(healthStatus);
 });
 
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`🚚 Logistics service running on http://localhost:${PORT}`);
-  await sendLog('INFO', 'Logistics service started successfully', { port: PORT });
 });

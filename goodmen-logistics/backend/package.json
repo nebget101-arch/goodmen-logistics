@@ -11,7 +11,8 @@
     "db:schema": "node database/run-schema.js",
     "db:seed": "node database/run-seed.js",
     "db:status": "node database/status.js",
-    "postdeploy": "npx knex migrate:latest --env production"
+    "migrate:dev": "npx knex migrate:latest --env development",
+    "migrate:prod": "npx knex migrate:latest --env production"
   },
   "keywords": [
     "logistics",
@@ -23,7 +24,6 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.967.0",
     "@aws-sdk/s3-request-presigner": "^3.967.0",
-    "@dynatrace/oneagent-sdk": "^1.5.0",
     "@sendgrid/mail": "^8.1.0",
     "axios": "^1.13.4",
     "bcrypt": "^6.0.0",

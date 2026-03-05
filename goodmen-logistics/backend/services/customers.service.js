@@ -1,5 +1,5 @@
 const db = require('../config/knex');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 
 const CUSTOMER_TYPES = ['FLEET', 'WALK_IN', 'INTERNAL', 'WARRANTY'];
 const STATUS_TYPES = ['ACTIVE', 'INACTIVE'];

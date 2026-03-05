@@ -1,5 +1,5 @@
 const db = require('../config/knex');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 const { generateInvoiceNumber } = require('../utils/invoice-number');
 
 function toPositiveInt(value, fieldName) {

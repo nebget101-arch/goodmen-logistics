@@ -4,13 +4,10 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 
-const { dynatraceMiddleware, sendLog } = require('./config/dynatrace-sdk');
-
 const app = express();
 const PORT = process.env.PORT || 5004;
 
 app.use(cors());
-app.use(dynatraceMiddleware);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -30,18 +27,15 @@ app.use('/api/drug-alcohol', drugAlcoholRouter);
 app.use('/api/onboarding', onboardingRouter);
 app.use('/public/onboarding', publicOnboardingRouter);
 
-app.get('/health', async (req, res) => {
+app.get('/health', (req, res) => {
   const healthStatus = {
     status: 'ok',
     service: 'goodmen-drivers-compliance-service',
     timestamp: new Date().toISOString()
   };
-
-  await sendLog('INFO', 'Health check requested', healthStatus);
   res.json(healthStatus);
 });
 
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`🧑‍✈️ Drivers compliance service running on http://localhost:${PORT}`);
-  await sendLog('INFO', 'Drivers compliance service started successfully', { port: PORT });
 });

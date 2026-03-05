@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('./auth-middleware');
 const { query } = require('../config/database');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 
 // Admin / safety only
 router.use(auth(['admin', 'safety']));

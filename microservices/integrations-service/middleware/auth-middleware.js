@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 
 /**
  * Authentication middleware

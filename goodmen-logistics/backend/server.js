@@ -5,25 +5,6 @@ const path = require('path');
 
 // Load base environment variables from .env (includes OPENAI_*)
 require('dotenv').config({ path: path.join(__dirname, '.env') });
-// Then load Dynatrace-specific overrides from .env.dynatrace (if present)
-require('dotenv').config({ path: path.join(__dirname, '.env.dynatrace') });
-
-// Debug: Print loaded Dynatrace environment variables
-console.log('DYNATRACE_ENVIRONMENT_URL:', process.env.DYNATRACE_ENVIRONMENT_URL);
-console.log('DYNATRACE_API_TOKEN:', process.env.DYNATRACE_API_TOKEN ? 'set' : 'not set');
-console.log('DYNATRACE_ENABLED:', process.env.DYNATRACE_ENABLED);
-
-const { sendTestMetricLine } = require('./config/dynatrace-sdk');
-sendTestMetricLine();
-// Initialize Dynatrace SDK (must be first)
-const { 
-  initializeDynatrace, 
-  dynatraceMiddleware,
-  sendLog 
-} = require('./config/dynatrace-sdk');
-
-// Initialize Dynatrace
-initializeDynatrace();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -237,9 +218,6 @@ async function ensureWorkOrderTables() {
 // Middleware
 app.use(cors());
 
-// Dynatrace request tracking middleware (add before other routes)
-app.use(dynatraceMiddleware);
-
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -327,13 +305,9 @@ app.get('/api/health', async (req, res) => {
   const healthStatus = {
     status: 'ok',
     message: 'Goodmen Logistics API is running',
-    dynatrace: process.env.DYNATRACE_ENABLED === 'true' ? 'enabled' : 'disabled',
     timestamp: new Date().toISOString()
   };
-  
-  // Track health check in Dynatrace
-  await sendLog('INFO', 'Health check requested', healthStatus);
-  
+
   res.json(healthStatus);
 });
 
@@ -354,7 +328,4 @@ app.listen(PORT, async () => {
   console.log(`🚛 Goodmen Logistics Backend running on http://localhost:${PORT}`);
   console.log(`📊 API Health: http://localhost:${PORT}/api/health`);
   console.log(`🗄️  Database Examples: http://localhost:${PORT}/api/db-example/drivers`);
-  
-  // Log startup event to Dynatrace
-  await sendLog('INFO', 'Server started successfully', { port: PORT });
 });

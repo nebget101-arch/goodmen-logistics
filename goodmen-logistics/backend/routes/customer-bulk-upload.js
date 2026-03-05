@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const XLSX = require('xlsx');
 const authMiddleware = require('../middleware/auth-middleware');
-const dtLogger = require('../utils/dynatrace-logger');
+const dtLogger = require('../utils/logger');
 const customersService = require('../services/customers.service');
 const db = require('../config/knex');
 

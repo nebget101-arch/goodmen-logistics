@@ -5,13 +5,10 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 
-const { dynatraceMiddleware, sendLog } = require('./config/dynatrace-sdk');
-
 const app = express();
 const PORT = process.env.PORT || 5005;
 
 app.use(cors());
-app.use(dynatraceMiddleware);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -28,18 +25,15 @@ app.use('/api/equipment', equipmentRouter);
 app.use('/api/work-orders', workOrdersRouter);
 app.use('/api/parts', partsRouter);
 
-app.get('/health', async (req, res) => {
+app.get('/health', (req, res) => {
   const healthStatus = {
     status: 'ok',
     service: 'goodmen-vehicles-maintenance-service',
     timestamp: new Date().toISOString()
   };
-
-  await sendLog('INFO', 'Health check requested', healthStatus);
   res.json(healthStatus);
 });
 
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`🛠️ Vehicles maintenance service running on http://localhost:${PORT}`);
-  await sendLog('INFO', 'Vehicles maintenance service started successfully', { port: PORT });
 });

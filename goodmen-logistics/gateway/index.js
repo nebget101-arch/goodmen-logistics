@@ -7,22 +7,22 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 
 const PORT = process.env.PORT || 4000;
-const TARGET_BACKEND_URL =
-  process.env.TARGET_BACKEND_URL || 'http://localhost:3000';
-const REPORTING_SERVICE_URL =
-  process.env.REPORTING_SERVICE_URL || TARGET_BACKEND_URL;
-const INTEGRATIONS_SERVICE_URL =
-  process.env.INTEGRATIONS_SERVICE_URL || TARGET_BACKEND_URL;
-const AUTH_USERS_SERVICE_URL =
-  process.env.AUTH_USERS_SERVICE_URL || TARGET_BACKEND_URL;
-const DRIVERS_COMPLIANCE_SERVICE_URL =
-  process.env.DRIVERS_COMPLIANCE_SERVICE_URL || TARGET_BACKEND_URL;
-const VEHICLES_MAINTENANCE_SERVICE_URL =
-  process.env.VEHICLES_MAINTENANCE_SERVICE_URL || TARGET_BACKEND_URL;
-const LOGISTICS_SERVICE_URL =
-  process.env.LOGISTICS_SERVICE_URL || TARGET_BACKEND_URL;
-const INVENTORY_SERVICE_URL =
-  process.env.INVENTORY_SERVICE_URL || TARGET_BACKEND_URL;
+
+function requireEnv(key) {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Missing required env var: ${key}`);
+  }
+  return value;
+}
+
+const REPORTING_SERVICE_URL = requireEnv('REPORTING_SERVICE_URL');
+const INTEGRATIONS_SERVICE_URL = requireEnv('INTEGRATIONS_SERVICE_URL');
+const AUTH_USERS_SERVICE_URL = requireEnv('AUTH_USERS_SERVICE_URL');
+const DRIVERS_COMPLIANCE_SERVICE_URL = requireEnv('DRIVERS_COMPLIANCE_SERVICE_URL');
+const VEHICLES_MAINTENANCE_SERVICE_URL = requireEnv('VEHICLES_MAINTENANCE_SERVICE_URL');
+const LOGISTICS_SERVICE_URL = requireEnv('LOGISTICS_SERVICE_URL');
+const INVENTORY_SERVICE_URL = requireEnv('INVENTORY_SERVICE_URL');
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(
@@ -144,13 +144,10 @@ app.use('/api/receiving', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/barcodes', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/customers', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 
-// Fallback: proxy all /api/* calls to monolith
-app.use('/api', buildProxy(TARGET_BACKEND_URL, 'backend'));
-
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(
-    `FleetNeuron API Gateway listening on port ${PORT}, proxying /api to ${TARGET_BACKEND_URL}`
+    `FleetNeuron API Gateway listening on port ${PORT}`
   );
 });
 

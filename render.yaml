@@ -1,60 +1,5 @@
 services:
   - type: web
-    name: safetyapp
-    runtime: node
-    plan: starter
-    rootDir: goodmen-logistics
-    buildCommand: cd backend && npm install && npm run postdeploy
-    startCommand: node backend/server.js
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: safetyapp-db
-          property: connectionString
-      - key: PG_DATABASE
-        fromDatabase:
-          name: safetyapp-db
-          property: database
-      - key: PG_USER
-        fromDatabase:
-          name: safetyapp-db
-          property: user
-      - key: PG_PASSWORD
-        fromDatabase:
-          name: safetyapp-db
-          property: password
-      - key: PG_HOST
-        fromDatabase:
-          name: safetyapp-db
-          property: host
-      - key: PG_PORT
-        fromDatabase:
-          name: safetyapp-db
-          property: port
-      - key: R2_ACCOUNT_ID
-        sync: false
-      - key: R2_ACCESS_KEY_ID
-        sync: false
-      - key: R2_SECRET_ACCESS_KEY
-        sync: false
-      - key: R2_BUCKET
-        sync: false
-      - key: R2_REGION
-        value: auto
-      - key: R2_SIGNED_URL_EXPIRES_SECONDS
-        value: 900
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 10000
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
-
-  - type: web
     name: goodmen-logs-mcp
     runtime: node
     plan: starter
@@ -92,8 +37,6 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: TARGET_BACKEND_URL
-        value: https://safetyapp-ln58.onrender.com
       - key: REPORTING_SERVICE_URL
         value: https://goodmen-reporting-service.onrender.com
       - key: INTEGRATIONS_SERVICE_URL
@@ -151,12 +94,6 @@ services:
         value: production
       - key: PORT
         value: 10003
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-integrations-service
@@ -209,12 +146,6 @@ services:
         value: production
       - key: PORT
         value: 10005
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-drivers-compliance-service
@@ -266,12 +197,6 @@ services:
         value: production
       - key: PORT
         value: 10006
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-vehicles-maintenance-service
@@ -323,12 +248,6 @@ services:
         value: production
       - key: PORT
         value: 10007
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-logistics-service
@@ -380,12 +299,6 @@ services:
         value: production
       - key: PORT
         value: 10008
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-inventory-service
@@ -425,12 +338,6 @@ services:
         value: production
       - key: PORT
         value: 10009
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: mcp-http-gateway
@@ -440,8 +347,6 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
       - key: GITHUB_TOKEN
         sync: false
       - key: GITHUB_OWNER
