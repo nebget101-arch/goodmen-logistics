@@ -1,82 +1,8 @@
 services:
   - type: web
-    name: safetyapp
-    runtime: node
-    plan: starter
-    rootDir: goodmen-logistics
-    buildCommand: cd backend && npm install && npm run postdeploy
-    startCommand: node backend/server.js
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: safetyapp-db
-          property: connectionString
-      - key: PG_DATABASE
-        fromDatabase:
-          name: safetyapp-db
-          property: database
-      - key: PG_USER
-        fromDatabase:
-          name: safetyapp-db
-          property: user
-      - key: PG_PASSWORD
-        fromDatabase:
-          name: safetyapp-db
-          property: password
-      - key: PG_HOST
-        fromDatabase:
-          name: safetyapp-db
-          property: host
-      - key: PG_PORT
-        fromDatabase:
-          name: safetyapp-db
-          property: port
-      - key: R2_ACCOUNT_ID
-        sync: false
-      - key: R2_ACCESS_KEY_ID
-        sync: false
-      - key: R2_SECRET_ACCESS_KEY
-        sync: false
-      - key: R2_BUCKET
-        sync: false
-      - key: R2_REGION
-        value: auto
-      - key: R2_SIGNED_URL_EXPIRES_SECONDS
-        value: 900
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 10000
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
-
-  - type: web
-    name: goodmen-logs-mcp
-    runtime: node
-    plan: starter
-    rootDir: goodmen-logs-mcp-server
-    buildCommand: npm install && npm run build
-    startCommand: npm run start
-    envVars:
-      - key: BACKEND_PATH
-        value: https://goodmen-logistics-gateway.onrender.com
-      - key: CONFLUENCE_BASE_URL
-        sync: false
-      - key: CONFLUENCE_EMAIL
-        sync: false
-      - key: CONFLUENCE_API_TOKEN
-        sync: false
-      - key: CONFLUENCE_SPACE_KEY
-        sync: false
-
-  - type: web
     name: goodmen-logistics-ui
     runtime: static
-    rootDir: goodmen-logistics/frontend
+    rootDir: frontend
     buildCommand: npm install --include=dev && npm run build
     staticPublishPath: dist/goodmen-logistics
     routes:
@@ -88,12 +14,10 @@ services:
     name: goodmen-logistics-gateway
     runtime: node
     plan: starter
-    rootDir: goodmen-logistics/gateway
+    rootDir: backend/gateway
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: TARGET_BACKEND_URL
-        value: https://safetyapp-ln58.onrender.com
       - key: REPORTING_SERVICE_URL
         value: https://goodmen-reporting-service.onrender.com
       - key: INTEGRATIONS_SERVICE_URL
@@ -119,7 +43,7 @@ services:
     name: goodmen-reporting-service
     runtime: node
     plan: starter
-    rootDir: microservices/reporting-service
+    rootDir: backend/microservices/reporting-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -151,18 +75,12 @@ services:
         value: production
       - key: PORT
         value: 10003
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-integrations-service
     runtime: node
     plan: starter
-    rootDir: microservices/integrations-service
+    rootDir: backend/microservices/integrations-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -175,12 +93,12 @@ services:
     name: goodmen-auth-users-service
     runtime: node
     plan: starter
-    rootDir: microservices/auth-users-service
+    rootDir: backend/microservices/auth-users-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/auth-users-service/node_modules
+        value: /opt/render/project/src/backend/microservices/auth-users-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -209,23 +127,17 @@ services:
         value: production
       - key: PORT
         value: 10005
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-drivers-compliance-service
     runtime: node
     plan: starter
-    rootDir: microservices/drivers-compliance-service
+    rootDir: backend/microservices/drivers-compliance-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/drivers-compliance-service/node_modules
+        value: /opt/render/project/src/backend/microservices/drivers-compliance-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -266,23 +178,17 @@ services:
         value: production
       - key: PORT
         value: 10006
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-vehicles-maintenance-service
     runtime: node
     plan: starter
-    rootDir: microservices/vehicles-maintenance-service
+    rootDir: backend/microservices/vehicles-maintenance-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/vehicles-maintenance-service/node_modules
+        value: /opt/render/project/src/backend/microservices/vehicles-maintenance-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -323,23 +229,17 @@ services:
         value: production
       - key: PORT
         value: 10007
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-logistics-service
     runtime: node
     plan: starter
-    rootDir: microservices/logistics-service
+    rootDir: backend/microservices/logistics-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/logistics-service/node_modules
+        value: /opt/render/project/src/backend/microservices/logistics-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -380,23 +280,17 @@ services:
         value: production
       - key: PORT
         value: 10008
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
   - type: web
     name: goodmen-inventory-service
     runtime: node
     plan: starter
-    rootDir: microservices/inventory-service
+    rootDir: backend/microservices/inventory-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/inventory-service/node_modules
+        value: /opt/render/project/src/backend/microservices/inventory-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -425,51 +319,7 @@ services:
         value: production
       - key: PORT
         value: 10009
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: DYNATRACE_ENVIRONMENT_URL
-        sync: false
-      - key: DYNATRACE_API_TOKEN
-        sync: false
 
-  - type: web
-    name: mcp-http-gateway
-    runtime: node
-    plan: starter
-    rootDir: mcp-http-gateway
-    buildCommand: npm install && npm run build
-    startCommand: npm start
-    envVars:
-      - key: DYNATRACE_PAAS_TOKEN
-        sync: false
-      - key: GITHUB_TOKEN
-        sync: false
-      - key: GITHUB_OWNER
-        value: nebget101-arch
-      - key: GITHUB_REPO
-        value: goodmen-logistics
-      - key: WORKFLOW_FILE
-        value: test-and-deploy.yml
-      - key: CONFLUENCE_BASE_URL
-        value: https://nebget101.atlassian.net/wiki
-      - key: CONFLUENCE_EMAIL
-        sync: false
-      - key: CONFLUENCE_API_TOKEN
-        sync: false
-      - key: CONFLUENCE_SPACE_KEY
-        value: SA
-      - key: JIRA_BASE_URL
-        value: https://nebget101.atlassian.net
-      - key: JIRA_EMAIL
-        sync: false
-      - key: JIRA_API_TOKEN
-        sync: false
-      - key: JIRA_PROJECT_KEY
-        value: KAN
-      - key: BACKEND_PATH
-        value: https://goodmen-logistics-gateway.onrender.com
-      - key: PORT
-        value: 10001
 
 databases:
   - name: safetyapp-db
