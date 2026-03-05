@@ -31,6 +31,18 @@ services:
         fromDatabase:
           name: safetyapp-db
           property: port
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: R2_SIGNED_URL_EXPIRES_SECONDS
+        value: 900
       - key: NODE_ENV
         value: production
       - key: PORT
@@ -234,6 +246,18 @@ services:
         fromDatabase:
           name: safetyapp-db
           property: port
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: R2_SIGNED_URL_EXPIRES_SECONDS
+        value: 900
       - key: NODE_ENV
         value: production
       - key: PORT
@@ -279,6 +303,18 @@ services:
         fromDatabase:
           name: safetyapp-db
           property: port
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: R2_SIGNED_URL_EXPIRES_SECONDS
+        value: 900
       - key: NODE_ENV
         value: production
       - key: PORT
@@ -324,6 +360,18 @@ services:
         fromDatabase:
           name: safetyapp-db
           property: port
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: R2_SIGNED_URL_EXPIRES_SECONDS
+        value: 900
       - key: NODE_ENV
         value: production
       - key: PORT

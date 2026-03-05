@@ -2,28 +2,12 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 const { query } = require('../config/database');
+const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../uploads/dqf-documents');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
+// Configure multer for file uploads (memory storage for R2)
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB limit
   },
@@ -50,10 +34,19 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const { driverId, documentType, uploadedBy } = req.body;
 
     if (!driverId || !documentType) {
-      // Delete uploaded file if validation fails
-      fs.unlinkSync(req.file.path);
       return res.status(400).json({ message: 'Driver ID and document type are required' });
     }
+
+    const fileExt = path.extname(req.file.originalname || '').toLowerCase();
+    const safeName = req.file.originalname
+      ? req.file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '_')
+      : `dqf-${driverId}${fileExt}`;
+    const { key: storageKey } = await uploadBuffer({
+      buffer: req.file.buffer,
+      contentType: req.file.mimetype,
+      prefix: `dqf-documents/${driverId}`,
+      fileName: safeName
+    });
 
     // Save file metadata to database
     const result = await query(
@@ -63,7 +56,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         driverId,
         documentType,
         req.file.originalname,
-        req.file.path,
+        storageKey,
         req.file.size,
         req.file.mimetype,
         uploadedBy || 'system'
@@ -72,14 +65,11 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
     res.status(201).json({
       message: 'File uploaded successfully',
-      document: result.rows[0]
+      document: result.rows[0],
+      downloadUrl: await getSignedDownloadUrl(storageKey)
     });
   } catch (error) {
     console.error('Error uploading file:', error);
-    // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
     res.status(500).json({ message: 'Failed to upload file' });
   }
 });
@@ -91,7 +81,13 @@ router.get('/driver/:driverId', async (req, res) => {
       `SELECT * FROM dqf_documents WHERE driver_id = $1 ORDER BY created_at DESC`,
       [req.params.driverId]
     );
-    res.json(result.rows);
+    const data = await Promise.all(
+      result.rows.map(async row => ({
+        ...row,
+        downloadUrl: row.file_path ? await getSignedDownloadUrl(row.file_path) : null
+      }))
+    );
+    res.json(data);
   } catch (error) {
     console.error('Error fetching documents:', error);
     res.status(500).json({ message: 'Failed to fetch documents' });
@@ -107,7 +103,13 @@ router.get('/driver/:driverId/type/:documentType', async (req, res) => {
        ORDER BY created_at DESC`,
       [req.params.driverId, req.params.documentType]
     );
-    res.json(result.rows);
+    const data = await Promise.all(
+      result.rows.map(async row => ({
+        ...row,
+        downloadUrl: row.file_path ? await getSignedDownloadUrl(row.file_path) : null
+      }))
+    );
+    res.json(data);
   } catch (error) {
     console.error('Error fetching documents:', error);
     res.status(500).json({ message: 'Failed to fetch documents' });
@@ -128,10 +130,7 @@ router.delete('/:id', async (req, res) => {
 
     const document = result.rows[0];
 
-    // Delete file from filesystem
-    if (fs.existsSync(document.file_path)) {
-      fs.unlinkSync(document.file_path);
-    }
+    await deleteObject(document.file_path);
 
     // Delete from database
     await query('DELETE FROM dqf_documents WHERE id = $1', [req.params.id]);
@@ -157,11 +156,8 @@ router.get('/download/:id', async (req, res) => {
 
     const document = result.rows[0];
 
-    if (!fs.existsSync(document.file_path)) {
-      return res.status(404).json({ message: 'File not found on server' });
-    }
-
-    res.download(document.file_path, document.file_name);
+    const downloadUrl = await getSignedDownloadUrl(document.file_path);
+    res.json({ downloadUrl });
   } catch (error) {
     console.error('Error downloading document:', error);
     res.status(500).json({ message: 'Failed to download document' });

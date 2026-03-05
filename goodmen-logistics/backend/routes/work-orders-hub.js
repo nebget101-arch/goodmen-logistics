@@ -6,7 +6,7 @@ const db = require('../config/knex');
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/dynatrace-logger');
 const workOrdersService = require('../services/work-orders.service');
-const { saveStream, ensureDirs } = require('../storage/local-storage');
+const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 
 const router = express.Router();
 
@@ -21,8 +21,7 @@ function requireRole(allowedRoles) {
   };
 }
 
-ensureDirs();
-const upload = multer({ dest: path.join(__dirname, '..', 'uploads', 'work-orders') });
+const upload = multer({ storage: multer.memoryStorage() });
 const bulkUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
@@ -476,8 +475,12 @@ router.post('/:id/documents', authMiddleware, requireRole(['admin', 'service_adv
     if (!file) return res.status(400).json({ error: 'File is required' });
 
     const safeName = file.originalname ? file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '_') : file.filename;
-    const fileStream = require('fs').createReadStream(file.path);
-    const { storageKey } = await saveStream(fileStream, path.join('work-orders', safeName));
+    const { key: storageKey } = await uploadBuffer({
+      buffer: file.buffer,
+      contentType: file.mimetype,
+      prefix: `work-orders/${req.params.id}`,
+      fileName: safeName
+    });
 
     const doc = await workOrdersService.uploadDocument(req.params.id, {
       originalname: safeName,
@@ -486,7 +489,8 @@ router.post('/:id/documents', authMiddleware, requireRole(['admin', 'service_adv
       storage_key: storageKey
     }, req.user?.id);
 
-    res.status(201).json({ success: true, data: doc, downloadUrl: `/uploads/${storageKey}` });
+    const downloadUrl = await getSignedDownloadUrl(storageKey);
+    res.status(201).json({ success: true, data: doc, downloadUrl });
   } catch (error) {
     dtLogger.error('work_orders_document_upload_failed', error);
     res.status(500).json({ error: error.message });
@@ -497,7 +501,14 @@ router.get('/:id/documents', authMiddleware, async (req, res) => {
   try {
     const data = await workOrdersService.getWorkOrderById(req.params.id);
     if (!data) return res.status(404).json({ error: 'Work order not found' });
-    res.json({ success: true, data: data.documents || [] });
+    const documents = data.documents || [];
+    const withUrls = await Promise.all(
+      documents.map(async doc => ({
+        ...doc,
+        downloadUrl: doc.storage_key ? await getSignedDownloadUrl(doc.storage_key) : null
+      }))
+    );
+    res.json({ success: true, data: withUrls });
   } catch (error) {
     dtLogger.error('work_orders_document_list_failed', error);
     res.status(500).json({ error: error.message });
@@ -512,8 +523,8 @@ router.get('/:id/documents/:docId/download', authMiddleware, async (req, res) =>
     const doc = (data.documents || []).find(d => String(d.id) === String(req.params.docId));
     if (!doc) return res.status(404).json({ error: 'Document not found' });
 
-    const fullPath = path.join(__dirname, '..', 'uploads', doc.storage_key);
-    res.download(fullPath, doc.file_name);
+    const downloadUrl = await getSignedDownloadUrl(doc.storage_key);
+    res.json({ success: true, downloadUrl });
   } catch (error) {
     dtLogger.error('work_orders_document_download_failed', error);
     res.status(500).json({ error: error.message });
