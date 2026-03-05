@@ -5,6 +5,7 @@ const auth = require('./auth-middleware');
 const axios = require('axios');
 const dtLogger = require('../utils/dynatrace-logger');
 const { query } = require('../config/database');
+const { getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 
 // Protect all vehicles routes: admin, safety, and dispatch (dispatch needs read access for driver assignments)
 router.use(auth(['admin', 'safety', 'dispatch']));
@@ -117,7 +118,13 @@ router.get('/search', async (req, res) => {
       `SELECT * FROM all_vehicles WHERE LOWER(vin) LIKE LOWER($1) ORDER BY unit_number`,
       [`%${vin}%`]
     );
-    res.json(result.rows);
+    const data = await Promise.all(
+      result.rows.map(async row => ({
+        ...row,
+        downloadUrl: row.file_path ? await getSignedDownloadUrl(row.file_path) : null
+      }))
+    );
+    res.json(data);
   } catch (error) {
     console.error('Error searching vehicles by VIN:', error);
     res.status(500).json({ message: 'Failed to search vehicles by VIN' });
@@ -370,6 +377,9 @@ router.post('/:id/documents', async (req, res) => {
   const startTime = Date.now();
   try {
     const { document_type, file_name, file_path, file_size, mime_type, expiry_date, uploaded_by, notes } = req.body;
+    if (!file_path) {
+      return res.status(400).json({ message: 'file_path (R2 object key) is required' });
+    }
     
     const result = await query(
       `INSERT INTO vehicle_documents (
@@ -389,7 +399,9 @@ router.post('/:id/documents', async (req, res) => {
     });
     dtLogger.trackRequest('POST', `/api/vehicles/${req.params.id}/documents`, 201, duration);
     
-    res.status(201).json(result.rows[0]);
+    const doc = result.rows[0];
+    const downloadUrl = await getSignedDownloadUrl(doc.file_path);
+    res.status(201).json({ ...doc, downloadUrl });
   } catch (error) {
     const duration = Date.now() - startTime;
     dtLogger.error('Failed to upload vehicle document', error, { vehicleId: req.params.id });
@@ -409,6 +421,10 @@ router.delete('/:id/documents/:documentId', async (req, res) => {
     );
     
     if (result.rows.length > 0) {
+      const deletedDoc = result.rows[0];
+      if (deletedDoc?.file_path) {
+        await deleteObject(deletedDoc.file_path);
+      }
       dtLogger.trackEvent('vehicle.document.deleted', { 
         vehicleId: req.params.id, 
         documentId: req.params.documentId 

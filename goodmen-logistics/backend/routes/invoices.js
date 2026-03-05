@@ -1,14 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/dynatrace-logger');
 const db = require('../config/knex');
 const invoicesService = require('../services/invoices.service');
 const { buildInvoicePdf } = require('../utils/invoice-pdf');
-const { saveBuffer, ensureDirs } = require('../storage/local-storage');
+const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 
 function requireRole(allowedRoles) {
   return (req, res, next) => {
@@ -20,8 +18,7 @@ function requireRole(allowedRoles) {
   };
 }
 
-ensureDirs();
-const upload = multer({ dest: path.join(__dirname, '..', 'uploads', 'invoices') });
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.post('/from-work-order/:workOrderId', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
   try {
@@ -164,7 +161,12 @@ router.post('/:id/pdf', authMiddleware, requireRole(['admin', 'accounting', 'ser
     });
 
     const fileName = `${data.invoice.invoice_number}.pdf`;
-    const { storageKey } = saveBuffer(pdfBuffer, fileName);
+    const { key: storageKey } = await uploadBuffer({
+      buffer: pdfBuffer,
+      contentType: 'application/pdf',
+      prefix: `invoices/${data.invoice.id}`,
+      fileName
+    });
 
     const [doc] = await db('invoice_documents').insert({
       invoice_id: data.invoice.id,
@@ -176,7 +178,8 @@ router.post('/:id/pdf', authMiddleware, requireRole(['admin', 'accounting', 'ser
       uploaded_by_user_id: req.user?.id || null
     }).returning('*');
 
-    res.json({ success: true, data: doc, downloadUrl: `/uploads/${storageKey}` });
+    const downloadUrl = await getSignedDownloadUrl(storageKey);
+    res.json({ success: true, data: doc, downloadUrl });
   } catch (error) {
     dtLogger.error('invoice_pdf_failed', error);
     res.status(500).json({ error: error.message });
@@ -191,7 +194,8 @@ router.get('/:id/pdf', authMiddleware, async (req, res) => {
       .first();
 
     if (!doc) return res.status(404).json({ error: 'PDF not found' });
-    res.json({ success: true, data: doc, downloadUrl: `/uploads/${doc.storage_key}` });
+    const downloadUrl = await getSignedDownloadUrl(doc.storage_key);
+    res.json({ success: true, data: doc, downloadUrl });
   } catch (error) {
     dtLogger.error('invoice_pdf_get_failed', error);
     res.status(500).json({ error: error.message });
@@ -204,7 +208,13 @@ router.post('/:id/documents', authMiddleware, requireRole(['admin', 'accounting'
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'File is required' });
 
-    const storageKey = path.join('invoices', file.filename);
+    const safeName = file.originalname ? file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '_') : file.originalname;
+    const { key: storageKey } = await uploadBuffer({
+      buffer: file.buffer,
+      contentType: file.mimetype,
+      prefix: `invoices/${req.params.id}`,
+      fileName: safeName
+    });
     const [doc] = await db('invoice_documents').insert({
       invoice_id: req.params.id,
       doc_type: 'SUPPORTING',
@@ -215,7 +225,8 @@ router.post('/:id/documents', authMiddleware, requireRole(['admin', 'accounting'
       uploaded_by_user_id: req.user?.id || null
     }).returning('*');
 
-    res.status(201).json({ success: true, data: doc, downloadUrl: `/uploads/${storageKey}` });
+    const downloadUrl = await getSignedDownloadUrl(storageKey);
+    res.status(201).json({ success: true, data: doc, downloadUrl });
   } catch (error) {
     dtLogger.error('invoice_document_upload_failed', error);
     res.status(500).json({ error: error.message });
@@ -225,7 +236,13 @@ router.post('/:id/documents', authMiddleware, requireRole(['admin', 'accounting'
 router.get('/:id/documents', authMiddleware, async (req, res) => {
   try {
     const docs = await db('invoice_documents').where({ invoice_id: req.params.id }).orderBy('created_at', 'desc');
-    res.json({ success: true, data: docs });
+    const data = await Promise.all(
+      docs.map(async doc => ({
+        ...doc,
+        downloadUrl: doc.storage_key ? await getSignedDownloadUrl(doc.storage_key) : null
+      }))
+    );
+    res.json({ success: true, data });
   } catch (error) {
     dtLogger.error('invoice_documents_get_failed', error);
     res.status(500).json({ error: error.message });
@@ -236,9 +253,8 @@ router.get('/:id/documents/:docId/download', authMiddleware, async (req, res) =>
   try {
     const doc = await db('invoice_documents').where({ id: req.params.docId, invoice_id: req.params.id }).first();
     if (!doc) return res.status(404).json({ error: 'Document not found' });
-    const fullPath = path.join(__dirname, '..', 'uploads', doc.storage_key);
-    if (!fs.existsSync(fullPath)) return res.status(404).json({ error: 'File missing' });
-    res.download(fullPath, doc.file_name);
+    const downloadUrl = await getSignedDownloadUrl(doc.storage_key);
+    res.json({ success: true, downloadUrl });
   } catch (error) {
     dtLogger.error('invoice_document_download_failed', error);
     res.status(500).json({ error: error.message });

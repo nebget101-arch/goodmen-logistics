@@ -6,7 +6,7 @@ const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/dynatrace-logger');
 const { query, getClient } = require('../config/database');
 const { extractLoadFromPdf } = require('../services/load-ai-extractor');
-const { saveBufferToDir, ensureDirs } = require('../storage/local-storage');
+const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 
 const LOAD_STATUSES = ['NEW', 'DISPATCHED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'];
 const BILLING_STATUSES = ['PENDING', 'FUNDED', 'INVOICED', 'PAID'];
@@ -28,7 +28,6 @@ function requireRole(allowedRoles) {
 router.use(authMiddleware);
 router.use(requireRole(['admin', 'dispatch']));
 
-ensureDirs();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
@@ -550,7 +549,12 @@ router.post('/:id/attachments', upload.single('file'), async (req, res) => {
     const notes = normalizeNullable(req.body.notes);
     const fileExt = path.extname(req.file.originalname || '').toLowerCase();
     const safeName = `load-${req.params.id}-${Date.now()}${fileExt || ''}`;
-    const { storageKey } = saveBufferToDir(req.file.buffer, safeName, 'loads');
+    const { key: storageKey } = await uploadBuffer({
+      buffer: req.file.buffer,
+      contentType: req.file.mimetype,
+      prefix: `loads/${req.params.id}`,
+      fileName: safeName
+    });
 
     const result = await query(
       `INSERT INTO load_attachments (
@@ -569,11 +573,12 @@ router.post('/:id/attachments', upload.single('file'), async (req, res) => {
       ]
     );
 
+    const downloadUrl = await getSignedDownloadUrl(storageKey);
     res.status(201).json({
       success: true,
       data: {
         ...result.rows[0],
-        file_url: `/uploads/${storageKey}`
+        file_url: downloadUrl
       }
     });
   } catch (error) {
@@ -589,10 +594,12 @@ router.get('/:id/attachments', async (req, res) => {
       `SELECT * FROM load_attachments WHERE load_id = $1 ORDER BY created_at DESC`,
       [req.params.id]
     );
-    const data = result.rows.map(row => ({
-      ...row,
-      file_url: row.storage_key ? `/uploads/${row.storage_key}` : null
-    }));
+    const data = await Promise.all(
+      result.rows.map(async row => ({
+        ...row,
+        file_url: row.storage_key ? await getSignedDownloadUrl(row.storage_key) : null
+      }))
+    );
     res.json({ success: true, data });
   } catch (error) {
     dtLogger.error('load_attachment_list_failed', error, { loadId: req.params.id });
