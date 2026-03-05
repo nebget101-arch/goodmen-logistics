@@ -46,7 +46,8 @@ export class AppComponent implements OnInit {
   }
 
   getRole(): string | null {
-    return localStorage.getItem('role');
+    const role = localStorage.getItem('role');
+    return role ? role.toLowerCase().trim() : null;
   }
 
   canSee(tab: string): boolean {

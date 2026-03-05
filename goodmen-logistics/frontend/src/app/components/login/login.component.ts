@@ -18,7 +18,9 @@ export class LoginComponent {
     this.api.login(this.username, this.password).subscribe({
       next: (res) => {
         localStorage.setItem('token', res.token);
-        localStorage.setItem('role', res.role);
+        if (res.role) {
+          localStorage.setItem('role', String(res.role).toLowerCase().trim());
+        }
         if (res.username) {
           localStorage.setItem('username', res.username);
         }
