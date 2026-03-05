@@ -1,258 +1,572 @@
-/* Driver component styles - AI console theme */
-
-.drivers-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+/* Drivers dashboard – AI design (matches Loads) */
+.drivers-dashboard {
+  padding: 8px 16px 16px;
+  width: 100%;
 }
 
-.drivers-page-header {
+.drivers-dashboard .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 4px;
+  gap: 20px;
+  margin-bottom: 16px;
 }
 
-.drivers-page-header h1 {
+.drivers-dashboard .header h1 {
+  font-size: 28px;
   margin: 0 0 4px;
-  font-size: 1.3rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
-.drivers-page-header p {
-  margin: 0;
-  font-size: 0.9rem;
+.drivers-dashboard .header .subtitle {
   color: var(--text-light);
+  font-size: 14px;
+  margin: 0;
 }
 
-.drivers-header-cta {
-  white-space: nowrap;
+.drivers-dashboard .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.drivers-card {
+.drivers-dashboard .header-actions .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.6);
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.4), transparent 55%),
+    rgba(22, 101, 52, 0.7);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.25);
+}
+
+.drivers-dashboard .header-actions .btn-primary .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.drivers-dashboard .header-actions .btn-primary:hover {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.5), transparent 55%),
+    rgba(22, 101, 52, 0.85);
+  border-color: rgba(34, 197, 94, 0.9);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.35);
+}
+
+/* Card */
+.drivers-dashboard .drivers-card {
   border-radius: 16px;
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.12), transparent 50%),
+    rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.9), 0 0 0 1px rgba(15, 23, 42, 1);
+  padding: 0;
+  margin-bottom: 16px;
 }
 
-.drivers-card-header {
+.drivers-dashboard .table-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.drivers-dashboard .drivers-card-header {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
   align-items: flex-start;
 }
 
-.drivers-card-header .card-subtitle {
+.drivers-dashboard .drivers-card-header .card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.drivers-dashboard .drivers-card-header .card-subtitle {
   margin: 4px 0 0;
   font-size: 0.83rem;
   color: var(--text-light);
 }
 
-.drivers-cell-primary {
-  font-weight: 500;
+/* Table */
+.drivers-dashboard .table {
+  width: 100%;
+  border-collapse: collapse;
 }
 
-.drivers-cell-secondary {
-  font-size: 0.8rem;
+.drivers-dashboard .table th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--text-light);
+  padding: 10px 12px;
 }
 
-.drivers-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.drivers-btn-edit {
-  background-color: #0369a1;
-  color: white;
-}
-
-.drivers-btn-dqf {
-  background-color: #16a34a;
-  color: white;
-}
-
-.drivers-btn-onboard {
-  background-color: #7c3aed;
-  color: white;
-}
-
-.drivers-btn-upload {
-  background-color: #facc15;
-  color: #111827;
-  border-radius: 4px;
-  cursor: pointer;
-  margin: 0;
-}
-
-.drivers-empty {
-  text-align: center;
-  padding: 40px;
-  color: var(--text-light);
-}
-
-.drivers-info-panel {
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: radial-gradient(circle at 0 0, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.98));
-  border: 1px solid var(--border-color);
-  font-size: 0.9rem;
+.drivers-dashboard .table td {
+  padding: 12px 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  vertical-align: top;
+  font-size: 13px;
   color: var(--text-dark);
 }
 
-.drivers-info-panel p {
-  margin: 4px 0;
+.drivers-dashboard .drivers-header-filters th {
+  padding: 6px 8px 10px;
 }
 
-.drivers-header-filters th {
-  padding: 4px 6px 8px;
-}
-
-.drivers-header-filters input,
-.drivers-header-filters select {
+.drivers-dashboard .drivers-header-filters input,
+.drivers-dashboard .drivers-header-filters select {
   width: 100%;
-  padding: 4px 6px;
-  font-size: 11px;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: rgba(15, 23, 42, 0.96);
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.25), transparent 55%),
+    rgba(15, 23, 42, 0.98);
   color: var(--text-dark);
   box-sizing: border-box;
 }
 
-.form-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+.drivers-dashboard .drivers-header-filters input:focus,
+.drivers-dashboard .drivers-header-filters select:focus {
+  outline: none;
+  border-color: rgba(34, 197, 94, 0.9);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.5);
+}
+
+.drivers-dashboard .drivers-cell-primary {
+  font-weight: 500;
+  color: #f1f5f9;
+}
+
+.drivers-dashboard .drivers-cell-secondary {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+/* Action buttons – AI pill style */
+.drivers-dashboard .drivers-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.drivers-dashboard .btn-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.drivers-dashboard .btn-action .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.drivers-dashboard .btn-edit {
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.35), transparent 55%),
+    rgba(30, 58, 138, 0.5);
+  color: rgba(226, 232, 240, 0.98);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+}
+
+.drivers-dashboard .btn-edit:hover {
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.5), transparent 55%),
+    rgba(30, 58, 138, 0.7);
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+}
+
+.drivers-dashboard .btn-dqf {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.4), transparent 55%),
+    rgba(22, 101, 52, 0.6);
+  color: #fff;
+  border: 1px solid rgba(34, 197, 94, 0.6);
+}
+
+.drivers-dashboard .btn-dqf:hover {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.5), transparent 55%),
+    rgba(22, 101, 52, 0.8);
+  border-color: rgba(34, 197, 94, 0.9);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
+.drivers-dashboard .btn-onboard {
+  background: radial-gradient(circle at 0 0, rgba(139, 92, 246, 0.35), transparent 55%),
+    rgba(76, 29, 149, 0.5);
+  color: rgba(243, 232, 255, 0.98);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+}
+
+.drivers-dashboard .btn-onboard:hover {
+  background: radial-gradient(circle at 0 0, rgba(139, 92, 246, 0.5), transparent 55%),
+    rgba(76, 29, 149, 0.7);
+  border-color: rgba(139, 92, 246, 0.8);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.25);
+}
+
+.drivers-dashboard .btn-upload {
+  background: transparent;
+  color: rgba(148, 163, 184, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.6);
+}
+
+.drivers-dashboard .btn-upload:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.8);
+  color: #fff;
+}
+
+/* Badges */
+.drivers-dashboard .badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.drivers-dashboard .badge-success {
+  background: rgba(34, 197, 94, 0.25);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  color: #86efac;
+}
+
+.drivers-dashboard .badge-warning {
+  background: rgba(245, 158, 11, 0.25);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fcd34d;
+}
+
+.drivers-dashboard .badge-danger,
+.drivers-dashboard .badge-error {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.drivers-dashboard .drivers-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-light);
   font-size: 14px;
-  font-family: inherit;
-  background: rgba(15, 23, 42, 0.98);
+}
+
+/* Info panel */
+.drivers-dashboard .drivers-info-card {
+  background: radial-gradient(circle at 0 0, rgba(45, 212, 191, 0.1), transparent 55%),
+    rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.drivers-dashboard .drivers-info-panel {
+  padding: 14px 18px;
+  border-radius: 0 0 16px 16px;
+  font-size: 0.9rem;
   color: var(--text-dark);
 }
 
-.form-input:focus {
-  outline: none;
-  border-color: #0ea5e9;
-  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.3);
+.drivers-dashboard .drivers-info-panel p {
+  margin: 6px 0;
 }
 
-.form-input:disabled {
-  background-color: rgba(15, 23, 42, 0.8);
-  cursor: not-allowed;
+/* Loading */
+.drivers-dashboard .loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
 }
 
-.btn-sm {
-  font-size: 12px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: opacity 0.2s;
+.drivers-dashboard .spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(59, 130, 246, 0.3);
+  border-top-color: rgba(59, 130, 246, 0.9);
+  border-radius: 50%;
+  animation: drivers-spin 0.8s linear infinite;
 }
 
-.btn-sm:hover {
-  opacity: 0.9;
+@keyframes drivers-spin {
+  to { transform: rotate(360deg); }
 }
 
-.btn-sm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-textarea.form-input {
-  resize: vertical;
-  min-height: 60px;
-}
-
-/* Add Driver modal styling for DQF page */
-.dqf-modal-backdrop {
+/* ---------- Modals (AI theme) ---------- */
+.drivers-dashboard .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(2, 6, 23, 0.85);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
 }
 
-/* Send Packet modal: above sidebar (1000) and other modals */
-.dqf-modal-onboarding {
-  z-index: 9999 !important;
-}
-
-.dqf-modal {
-  background: #fff;
-  border-radius: 8px;
-  max-width: 1000px;
+.drivers-dashboard .modal.dqf-modal {
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.15), transparent 50%),
+    rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  border-radius: 16px;
+  max-width: 560px;
   width: 100%;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.9), 0 0 0 1px rgba(15, 23, 42, 0.8);
 }
 
-.dqf-modal-header {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border-color);
+.drivers-dashboard .modal.dqf-modal-wide {
+  max-width: 720px;
+}
+
+.drivers-dashboard .modal-header.dqf-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(30, 41, 59, 0.4);
+  border-radius: 16px 16px 0 0;
+}
+
+.drivers-dashboard .modal-header.dqf-modal-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #f1f5f9;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.dqf-modal-header h3 {
-  margin: 0;
-}
-
-.dqf-modal-subtitle {
-  margin: 2px 0 0;
-  font-size: 13px;
-  color: var(--text-light);
-}
-
-.dqf-modal-body {
-  padding: 16px 18px 12px;
-  overflow: auto;
-}
-
-.dqf-modal-footer {
-  padding: 10px 18px;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  justify-content: flex-end;
   gap: 8px;
 }
 
-.dqf-close-btn {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 18px;
+.drivers-dashboard .modal-header.dqf-modal-header .material-symbols-outlined {
+  font-size: 22px;
+  color: rgba(34, 197, 94, 0.9);
 }
 
-.dqf-grid-2 {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 20px;
-}
-
-.dqf-section-title {
-  margin: 0 0 8px;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+.drivers-dashboard .dqf-modal-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
   color: var(--text-light);
 }
 
-.dqf-field {
-  margin-bottom: 10px;
+.drivers-dashboard .dqf-close-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 20px;
+  padding: 4px;
+  line-height: 1;
 }
 
-.dqf-field label {
+.drivers-dashboard .dqf-close-btn:hover {
+  color: #f1f5f9;
+}
+
+.drivers-dashboard .dqf-modal-body {
+  padding: 18px 20px;
+  overflow: auto;
+}
+
+.drivers-dashboard .dqf-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.drivers-dashboard .dqf-section-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.drivers-dashboard .dqf-field {
+  margin-bottom: 12px;
+}
+
+.drivers-dashboard .dqf-field label {
   display: block;
   margin-bottom: 4px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
+  color: rgba(203, 213, 225, 0.9);
 }
 
+.drivers-dashboard .form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.25), transparent 55%),
+    rgba(15, 23, 42, 0.98);
+  color: var(--text-dark);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.drivers-dashboard .form-input:focus {
+  outline: none;
+  border-color: rgba(34, 197, 94, 0.95);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.6);
+}
+
+.drivers-dashboard .form-input::placeholder {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.drivers-dashboard textarea.form-input {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.drivers-dashboard .dqf-modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: rgba(30, 41, 59, 0.3);
+  border-radius: 0 0 16px 16px;
+}
+
+.drivers-dashboard .dqf-modal-footer .btn {
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: transparent;
+  color: var(--text-dark);
+  cursor: pointer;
+}
+
+.drivers-dashboard .dqf-modal-footer .btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.7);
+}
+
+.drivers-dashboard .dqf-modal-footer .btn-primary {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.4), transparent 55%),
+    rgba(22, 101, 52, 0.7);
+  border-color: rgba(34, 197, 94, 0.6);
+  color: #fff;
+}
+
+.drivers-dashboard .dqf-modal-footer .btn-primary:hover {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.5), transparent 55%),
+    rgba(22, 101, 52, 0.85);
+  border-color: rgba(34, 197, 94, 0.9);
+}
+
+/* DQF Checklist items */
+.drivers-dashboard .dqf-checklist {
+  display: grid;
+  gap: 12px;
+}
+
+.drivers-dashboard .dqf-checklist-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.drivers-dashboard .dqf-checklist-item label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.drivers-dashboard .dqf-checklist-item input[type="checkbox"] {
+  margin-right: 10px;
+  width: 18px;
+  height: 18px;
+  accent-color: rgba(34, 197, 94, 0.9);
+}
+
+.drivers-dashboard .dqf-checklist-item > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-left: 28px;
+  flex-wrap: wrap;
+}
+
+.drivers-dashboard .dqf-checklist-item > div > label {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.35), transparent 55%),
+    rgba(30, 58, 138, 0.5);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.drivers-dashboard .dqf-checklist-item > div > label:hover {
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.5), transparent 55%),
+    rgba(30, 58, 138, 0.7);
+  border-color: rgba(59, 130, 246, 0.8);
+}
+
+.drivers-dashboard .dqf-checklist-item .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.drivers-dashboard .dqf-checklist-item a {
+  color: rgba(96, 165, 250, 0.95);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.drivers-dashboard .dqf-checklist-item a:hover {
+  text-decoration: underline;
+}
+
+.drivers-dashboard .dqf-checklist-item button {
+  background: none;
+  border: none;
+  color: rgba(248, 113, 113, 0.95);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+}
+
+.drivers-dashboard .dqf-checklist-item > div > div {
+  font-size: 12px;
+  background: rgba(30, 41, 59, 0.8);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 768px) {
+  .drivers-dashboard .dqf-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
