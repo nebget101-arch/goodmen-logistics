@@ -29,6 +29,8 @@
           <label for="bc-barcode">Barcode (scan or type)</label>
           <div class="scan-input-group">
             <input id="bc-barcode" type="text" class="form-control scan-input" [(ngModel)]="barcodeValue" placeholder="Focus here and scan, or paste" />
+            <input #decodeFileInput type="file" accept="image/*" class="input-file-hidden" (change)="onDecodeImage($event)" />
+            <button type="button" class="btn-upload" (click)="triggerDecodeImage()" title="Decode barcode from photo">Upload photo</button>
             <button type="button" *ngIf="!bridgeConnected" class="btn-phone" (click)="startPhoneBridge()" title="Use phone as scanner">Scan with phone</button>
             <button type="button" *ngIf="bridgeConnected" class="btn-phone connected" (click)="stopPhoneBridge()" title="Disconnect phone">Connected</button>
           </div>
@@ -50,6 +52,7 @@
         <p class="qr-title">Scan this QR code with your phone to use it as a barcode scanner:</p>
         <img [src]="qrCodeDataUrl" alt="QR Code" class="qr-code-image" />
         <p class="qr-link"><a [href]="bridgeMobileUrl" target="_blank" rel="noopener">Or open this link on your phone</a></p>
+        <p class="qr-link"><a [href]="bridgeMobileUrl" target="_self" class="link-camera-this-device">Open camera on this device (tablet)</a></p>
         <p class="qr-status">{{ bridgeConnected ? 'Phone connected' : 'Waiting for phone...' }}</p>
       </div>
     </div>

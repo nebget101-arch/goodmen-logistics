@@ -10,6 +10,7 @@ import * as QRCode from 'qrcode';
 })
 export class WarehouseReceivingComponent implements OnInit, AfterViewInit {
   @ViewChild('scanInput') scanInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('decodeFileInput') decodeFileInput?: ElementRef<HTMLInputElement>;
 
   locations: any[] = [];
   locationId = '';
@@ -153,6 +154,33 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit {
 
   openPhoneBridge(): void {
     if (this.bridgeMobileUrl) window.open(this.bridgeMobileUrl, '_blank');
+  }
+
+  triggerDecodeImage(): void {
+    this.decodeFileInput?.nativeElement?.click();
+  }
+
+  onDecodeImage(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input?.files?.[0];
+    if (!file) return;
+    this.clearMessages();
+    this.api.decodeBarcodeFromImage(file).subscribe({
+      next: (res: any) => {
+        const barcode = res?.data?.barcode;
+        if (barcode) {
+          this.scanCode = barcode;
+          this.onScanEnter();
+        } else {
+          this.error = 'No barcode found in image';
+        }
+        input.value = '';
+      },
+      error: (err: any) => {
+        this.error = err?.error?.error || err?.message || 'Failed to decode barcode from image';
+        input.value = '';
+      }
+    });
   }
 
   removeLine(index: number): void {

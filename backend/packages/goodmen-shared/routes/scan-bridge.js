@@ -235,11 +235,15 @@ router.get('/mobile', (req, res) => {
   </style>
 </head>
 <body>
-  <h3>Phone Scanner Bridge</h3>
+  <h3>Phone / Tablet Scanner</h3>
   <div class="row"><strong>Session</strong><div class="code">${sessionId}</div></div>
 
-  <button id="startBtn" type="button">Start Camera</button>
-  <div id="scanner"></div>
+  <div class="row">
+    <label><strong>Open camera &amp; scan barcode</strong></label>
+    <p class="text-muted" style="font-size:14px; margin:4px 0;">Live scan: point your camera at a barcode; it will be sent to the desktop automatically.</p>
+    <button id="startBtn" type="button">Open camera &amp; scan barcode</button>
+    <div id="scanner"></div>
+  </div>
 
   <div class="row">
     <label for="manualInput"><strong>Manual barcode</strong></label>
@@ -569,7 +573,7 @@ router.get('/mobile', (req, res) => {
       });
 
       log('Ready');
-      setStatus('Ready. Tap Start Camera or use manual input.', 'ok');
+      setStatus('Ready. Tap "Open camera & scan barcode" or enter a barcode below.', 'ok');
     })();
   </script>
 </body>
