@@ -1,90 +1,141 @@
-<div class="container">
-  <h2 style="margin-bottom: 30px; color: var(--primary-color);">📊 Compliance Dashboard</h2>
+<div class="dashboard-shell">
+  <header class="dashboard-header">
+    <div>
+      <h1>FleetNeuron Control Center</h1>
+      <p>AI-augmented visibility into compliance, assets, and operations.</p>
+    </div>
+    <div class="dashboard-header-pill">
+      <span class="status-dot"></span>
+      Live compliance signal
+    </div>
+  </header>
 
-  <div *ngIf="loading" class="loading">
-    <div class="spinner"></div>
+  <div *ngIf="loading" class="dashboard-loading">
+    <div class="orbital-loader">
+      <div class="loader-ring ring-1"></div>
+      <div class="loader-ring ring-2"></div>
+      <div class="loader-core"></div>
+    </div>
+    <p>Analyzing fleet telemetry…</p>
   </div>
 
-  <div *ngIf="!loading">
-    <!-- Stats Grid -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Active Drivers</div>
-        <div class="stat-value">{{ stats.activeDrivers }}/{{ stats.totalDrivers }}</div>
-        <div class="stat-subtext">Total drivers in fleet</div>
+  <section *ngIf="!loading" class="dashboard-grid">
+    <!-- Metrics Column -->
+    <div class="dashboard-column">
+      <div class="panel panel-metrics">
+        <div class="panel-header">
+          <h2>Fleet health overview</h2>
+          <span class="panel-tag">AI summarized</span>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Active Drivers</div>
+            <div class="metric-value">{{ stats.activeDrivers }}/{{ stats.totalDrivers }}</div>
+            <div class="metric-sub">Total drivers in fleet</div>
+          </div>
+
+          <div class="metric-card" [ngClass]="stats.oosVehicles > 0 ? 'metric-critical' : 'metric-good'">
+            <div class="metric-label">Vehicle Status</div>
+            <div class="metric-value">{{ stats.activeVehicles }}/{{ stats.totalVehicles }}</div>
+            <div class="metric-sub">{{ stats.oosVehicles }} out of service</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-label">Active Loads</div>
+            <div class="metric-value">{{ stats.activeLoads }}</div>
+            <div class="metric-sub">{{ stats.pendingLoads }} pending assignment</div>
+          </div>
+
+          <div class="metric-card" [ngClass]="stats.hosViolations > 0 ? 'metric-warn' : 'metric-good'">
+            <div class="metric-label">HOS Compliance</div>
+            <div class="metric-value">{{ stats.hosViolations }}</div>
+            <div class="metric-sub">Violations / warnings today</div>
+          </div>
+
+          <div class="metric-card" [ngClass]="stats.dqfComplianceRate < 90 ? 'metric-warn' : 'metric-good'">
+            <div class="metric-label">DQF Compliance</div>
+            <div class="metric-value">{{ stats.dqfComplianceRate }}%</div>
+            <div class="metric-sub">Average record completeness</div>
+          </div>
+
+          <div class="metric-card" [ngClass]="stats.expiredMedCerts > 0 ? 'metric-critical' : (stats.upcomingMedCerts > 0 ? 'metric-warn' : 'metric-good')">
+            <div class="metric-label">Medical Certificates</div>
+            <div class="metric-value">{{ stats.expiredMedCerts }}</div>
+            <div class="metric-sub">{{ stats.upcomingMedCerts }} expiring soon</div>
+          </div>
+
+          <div class="metric-card" [ngClass]="stats.vehiclesNeedingMaintenance > 0 ? 'metric-warn' : 'metric-good'">
+            <div class="metric-label">Maintenance Due</div>
+            <div class="metric-value">{{ stats.vehiclesNeedingMaintenance }}</div>
+            <div class="metric-sub">Vehicles needing service</div>
+          </div>
+
+          <div class="metric-card" [ngClass]="stats.clearinghouseIssues > 0 ? 'metric-critical' : 'metric-good'">
+            <div class="metric-label">Clearinghouse</div>
+            <div class="metric-value">{{ stats.clearinghouseIssues }}</div>
+            <div class="metric-sub">Queries pending / issues</div>
+          </div>
+        </div>
       </div>
 
-      <div class="stat-card" [ngClass]="stats.oosVehicles > 0 ? 'danger' : 'success'">
-        <div class="stat-label">Vehicle Status</div>
-        <div class="stat-value">{{ stats.activeVehicles }}/{{ stats.totalVehicles }}</div>
-        <div class="stat-subtext">{{ stats.oosVehicles }} out of service</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-label">Active Loads</div>
-        <div class="stat-value">{{ stats.activeLoads }}</div>
-        <div class="stat-subtext">{{ stats.pendingLoads }} pending assignment</div>
-      </div>
-
-      <div class="stat-card" [ngClass]="stats.hosViolations > 0 ? 'warning' : 'success'">
-        <div class="stat-label">HOS Compliance</div>
-        <div class="stat-value">{{ stats.hosViolations }}</div>
-        <div class="stat-subtext">Violations/warnings today</div>
-      </div>
-
-      <div class="stat-card" [ngClass]="stats.dqfComplianceRate < 90 ? 'warning' : 'success'">
-        <div class="stat-label">DQF Compliance</div>
-        <div class="stat-value">{{ stats.dqfComplianceRate }}%</div>
-        <div class="stat-subtext">Average completeness</div>
-      </div>
-
-      <div class="stat-card" [ngClass]="stats.expiredMedCerts > 0 ? 'danger' : (stats.upcomingMedCerts > 0 ? 'warning' : 'success')">
-        <div class="stat-label">Medical Certificates</div>
-        <div class="stat-value">{{ stats.expiredMedCerts }}</div>
-        <div class="stat-subtext">{{ stats.upcomingMedCerts }} expiring soon</div>
-      </div>
-
-      <div class="stat-card" [ngClass]="stats.vehiclesNeedingMaintenance > 0 ? 'warning' : 'success'">
-        <div class="stat-label">Maintenance Due</div>
-        <div class="stat-value">{{ stats.vehiclesNeedingMaintenance }}</div>
-        <div class="stat-subtext">Vehicles needing service</div>
-      </div>
-
-      <div class="stat-card" [ngClass]="stats.clearinghouseIssues > 0 ? 'danger' : 'success'">
-        <div class="stat-label">Clearinghouse</div>
-        <div class="stat-value">{{ stats.clearinghouseIssues }}</div>
-        <div class="stat-subtext">Queries pending/issues</div>
+      <div class="panel panel-actions">
+        <div class="panel-header">
+          <h2>Quick actions</h2>
+          <span class="panel-tag">Operator shortcuts</span>
+        </div>
+        <div class="actions-grid">
+          <button class="action-chip" routerLink="/drivers">
+            <span class="chip-title">Manage Drivers</span>
+            <span class="chip-sub">Qualifications & DQF</span>
+          </button>
+          <button class="action-chip" routerLink="/vehicles">
+            <span class="chip-title">Manage Vehicles</span>
+            <span class="chip-sub">Status & maintenance</span>
+          </button>
+          <button class="action-chip" routerLink="/loads">
+            <span class="chip-title">Dispatch Load</span>
+            <span class="chip-sub">Assign drivers & assets</span>
+          </button>
+          <button class="action-chip" routerLink="/hos">
+            <span class="chip-title">View HOS Records</span>
+            <span class="chip-sub">Hours-of-service insights</span>
+          </button>
+          <button class="action-chip action-chip-emphasis" routerLink="/audit">
+            <span class="chip-title">Generate Audit Report</span>
+            <span class="chip-sub">Export-ready compliance packet</span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Alerts Section -->
-    <div class="card">
-      <div class="card-header">
-        <h3 class="card-title">⚠️ Compliance Alerts</h3>
-      </div>
+    <!-- Alerts Column -->
+    <aside class="dashboard-column dashboard-column-narrow">
+      <div class="panel panel-alerts">
+        <div class="panel-header">
+          <h2>Compliance alerts</h2>
+          <span class="panel-tag panel-tag-warn">Real-time</span>
+        </div>
 
-      <div *ngIf="alerts.length === 0" style="text-align: center; padding: 40px; color: var(--text-light);">
-        <p>✅ No compliance alerts at this time</p>
-      </div>
+        <div *ngIf="alerts.length === 0" class="alerts-empty">
+          <div class="alerts-ok-icon">✓</div>
+          <p>No active compliance alerts.</p>
+          <span>FleetNeuron is not detecting any anomalies right now.</span>
+        </div>
 
-      <div *ngFor="let alert of alerts" [class]="'alert ' + getAlertClass(alert.type)">
-        <strong>{{ alert.category | uppercase }}:</strong> {{ alert.message }}
-        <span *ngIf="alert.date" style="margin-left: 10px; font-size: 12px;">({{ alert.date }})</span>
+        <div *ngFor="let alert of alerts" [class]="'alert-row ' + getAlertClass(alert.type)">
+          <div class="alert-pip"></div>
+          <div class="alert-content">
+            <div class="alert-top">
+              <span class="alert-category">{{ alert.category | uppercase }}</span>
+              <span *ngIf="alert.date" class="alert-date">{{ alert.date }}</span>
+            </div>
+            <div class="alert-message">
+              {{ alert.message }}
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-
-    <!-- Quick Actions -->
-    <div class="card">
-      <div class="card-header">
-        <h3 class="card-title">🔧 Quick Actions</h3>
-      </div>
-      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <button class="btn btn-primary" routerLink="/drivers">Manage Drivers</button>
-        <button class="btn btn-primary" routerLink="/vehicles">Manage Vehicles</button>
-        <button class="btn btn-primary" routerLink="/loads">Dispatch Load</button>
-        <button class="btn btn-primary" routerLink="/hos">View HOS Records</button>
-        <button class="btn btn-success" routerLink="/audit">Generate Audit Report</button>
-      </div>
-    </div>
-  </div>
+    </aside>
+  </section>
 </div>
