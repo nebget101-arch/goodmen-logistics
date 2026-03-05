@@ -1,4 +1,107 @@
-/* Driver component styles */
+/* Driver component styles - AI console theme */
+
+.drivers-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.drivers-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.drivers-page-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.drivers-page-header p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-light);
+}
+
+.drivers-header-cta {
+  white-space: nowrap;
+}
+
+.drivers-card {
+  border-radius: 16px;
+}
+
+.drivers-card-header {
+  align-items: flex-start;
+}
+
+.drivers-card-header .card-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.83rem;
+  color: var(--text-light);
+}
+
+.drivers-cell-primary {
+  font-weight: 500;
+}
+
+.drivers-cell-secondary {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+.drivers-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.drivers-btn-edit {
+  background-color: #0369a1;
+  color: white;
+}
+
+.drivers-btn-dqf {
+  background-color: #16a34a;
+  color: white;
+}
+
+.drivers-btn-onboard {
+  background-color: #7c3aed;
+  color: white;
+}
+
+.drivers-btn-upload {
+  background-color: #facc15;
+  color: #111827;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.drivers-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-light);
+}
+
+.drivers-info-panel {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 0 0, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.98));
+  border: 1px solid var(--border-color);
+  font-size: 0.9rem;
+  color: var(--text-dark);
+}
+
+.drivers-info-panel p {
+  margin: 4px 0;
+}
 
 .form-input {
   width: 100%;
@@ -7,16 +110,18 @@
   border-radius: 4px;
   font-size: 14px;
   font-family: inherit;
+  background: rgba(15, 23, 42, 0.98);
+  color: var(--text-dark);
 }
 
 .form-input:focus {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.3);
 }
 
 .form-input:disabled {
-  background-color: #f5f5f5;
+  background-color: rgba(15, 23, 42, 0.8);
   cursor: not-allowed;
 }
 

@@ -3,13 +3,7 @@
 
   <aside class="sidebar" *ngIf="isLoggedIn()" [class.mobile-open]="sidebarOpen">
     <div class="sidebar-header">
-      <div class="sidebar-brand">
-        <img src="assets/fleetneuron-logo-sidebar.png" alt="FleetNeuron Logo">
-        <div class="sidebar-brand-copy">
-          <span class="sidebar-brand-title">FleetNeuron</span>
-          <span class="sidebar-brand-subtitle">AI Fleet Console</span>
-        </div>
-      </div>
+      <img src="assets/fleetneuron-logo-sidebar.png" alt="FleetNeuron Logo">
     </div>
     <nav class="sidebar-nav" (click)="onSidebarNavClick($event)">
       <ul class="nav-links">
