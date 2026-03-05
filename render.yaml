@@ -1,5 +1,3 @@
-name: fleetneuron-platform
-
 services:
   - type: web
     name: fleetneuron-logistics-ui
