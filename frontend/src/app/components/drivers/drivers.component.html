@@ -1,8 +1,18 @@
-<div class="container">
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">👥 Driver Qualification Files (DQF)</h2>
-      <button class="btn btn-primary" (click)="toggleAddForm()">+ Add Driver</button>
+<div class="container drivers-page">
+  <header class="drivers-page-header">
+    <div>
+      <h1>Driver qualification & safety</h1>
+      <p>Track DQF completeness, expirations, and clearinghouse status in one AI view.</p>
+    </div>
+    <button class="btn btn-primary drivers-header-cta" (click)="toggleAddForm()">+ Add Driver</button>
+  </header>
+
+  <div class="card drivers-card">
+    <div class="card-header drivers-card-header">
+      <div>
+        <h2 class="card-title">Driver roster</h2>
+        <p class="card-subtitle">License, medical, and DQF status by driver.</p>
+      </div>
     </div>
 
     <!-- Add Driver Modal is rendered outside the card -->
@@ -26,8 +36,8 @@
       <tbody>
         <tr *ngFor="let driver of drivers">
           <td>
-            <strong>{{ driver.firstName }} {{ driver.lastName }}</strong><br>
-            <small style="color: var(--text-light);">{{ driver.email }}</small>
+            <div class="drivers-cell-primary">{{ driver.firstName }} {{ driver.lastName }}</div>
+            <div class="drivers-cell-secondary">{{ driver.email }}</div>
           </td>
           <td>{{ driver.cdlNumber }}<br><small>Class {{ driver.cdlClass }} - {{ driver.cdlState }}</small></td>
           <td [style.color]="isExpiringSoon(driver.cdlExpiry) ? 'var(--danger-color)' : 'inherit'">
@@ -54,20 +64,11 @@
             </span>
           </td>
           <td>
-            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-              <button class="btn btn-sm" (click)="editDriver(driver)" 
-                      style="font-size: 12px; padding: 6px 12px; background-color: #0066cc; color: white;">
-                ✏️ Edit
-              </button>
-              <button class="btn btn-sm" (click)="openDQFForm(driver)"
-                      style="font-size: 12px; padding: 6px 12px; background-color: #28a745; color: white;">
-                📋 DQF
-              </button>
-              <button class="btn btn-sm" (click)="openOnboardingModal(driver)"
-                      style="font-size: 12px; padding: 6px 12px; background-color: #6f42c1; color: white;">
-                ✉ Send Packet
-              </button>
-              <label style="font-size: 12px; padding: 6px 12px; background-color: #ffc107; color: black; border-radius: 4px; cursor: pointer; margin: 0;">
+            <div class="drivers-actions">
+              <button class="btn btn-sm drivers-btn-edit" (click)="editDriver(driver)">✏️ Edit</button>
+              <button class="btn btn-sm drivers-btn-dqf" (click)="openDQFForm(driver)">📋 DQF</button>
+              <button class="btn btn-sm drivers-btn-onboard" (click)="openOnboardingModal(driver)">✉ Send Packet</button>
+              <label class="btn btn-sm drivers-btn-upload">
                 📤 Upload
                 <input type="file" (change)="onFileSelected($event, driver)" 
                        accept=".pdf,.jpg,.jpeg,.png" style="display: none;">
@@ -78,18 +79,21 @@
       </tbody>
     </table>
 
-    <div *ngIf="!loading && drivers.length === 0" style="text-align: center; padding: 40px; color: var(--text-light);">
+    <div *ngIf="!loading && drivers.length === 0" class="drivers-empty">
       <p>No drivers found</p>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-header">
-      <h3 class="card-title">📋 DQF Retention Requirements</h3>
+  <div class="card drivers-card">
+    <div class="card-header drivers-card-header">
+      <div>
+        <h3 class="card-title">DQF retention requirements</h3>
+        <p class="card-subtitle">Key regulations to stay audit-ready.</p>
+      </div>
     </div>
-    <div style="padding: 10px; background-color: #f9f9f9; border-radius: 4px;">
+    <div class="drivers-info-panel">
       <p><strong>49 CFR 391.51:</strong> Driver qualification files must be retained for the duration of employment plus 3 years after employment ends.</p>
-      <p style="margin-top: 10px;"><strong>Required Documents:</strong> Application, Motor vehicle record, Road test certificate, Medical examiner's certificate, Annual review of driving record</p>
+      <p><strong>Required documents:</strong> Application, motor vehicle record, road test certificate, medical examiner's certificate, annual review of driving record.</p>
     </div>
   </div>
 

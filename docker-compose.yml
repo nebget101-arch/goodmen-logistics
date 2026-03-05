@@ -10,6 +10,8 @@ services:
       - "4200:4200"
     environment:
       - NODE_ENV=development
+    volumes:
+      - ./frontend:/usr/src/app/frontend
     depends_on:
       - gateway
 
@@ -34,6 +36,8 @@ services:
       - INVENTORY_SERVICE_URL=http://inventory-service:5007
       # Browser hits http://localhost:4200, so allow that origin
       - CORS_ORIGIN=http://localhost:4200
+    volumes:
+      - ./backend:/usr/src/app/backend
     depends_on:
       - reporting-service
       - integrations-service
@@ -58,6 +62,8 @@ services:
       - PG_DATABASE=goodmen_logistics
       - PG_USER=postgres
       - PG_PASSWORD=postgres
+    volumes:
+      - ./backend:/usr/src/app/backend
     ports:
       - "5001:5001"
 
@@ -71,6 +77,8 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=5002
+    volumes:
+      - ./backend:/usr/src/app/backend
     ports:
       - "5002:5002"
 
@@ -89,6 +97,8 @@ services:
       - PG_DATABASE=goodmen_logistics
       - PG_USER=postgres
       - PG_PASSWORD=postgres
+    volumes:
+      - ./backend:/usr/src/app/backend
     ports:
       - "5003:5003"
 
@@ -107,6 +117,8 @@ services:
       - PG_DATABASE=goodmen_logistics
       - PG_USER=postgres
       - PG_PASSWORD=postgres
+    volumes:
+      - ./backend:/usr/src/app/backend
     ports:
       - "5004:5004"
 
@@ -125,6 +137,8 @@ services:
       - PG_DATABASE=goodmen_logistics
       - PG_USER=postgres
       - PG_PASSWORD=postgres
+    volumes:
+      - ./backend:/usr/src/app/backend
     ports:
       - "5005:5005"
 
@@ -143,6 +157,8 @@ services:
       - PG_DATABASE=goodmen_logistics
       - PG_USER=postgres
       - PG_PASSWORD=postgres
+    volumes:
+      - ./backend:/usr/src/app/backend
     ports:
       - "5006:5006"
 
@@ -161,6 +177,8 @@ services:
       - PG_DATABASE=goodmen_logistics
       - PG_USER=postgres
       - PG_PASSWORD=postgres
+    volumes:
+      - ./backend:/usr/src/app/backend
     ports:
       - "5007:5007"
 

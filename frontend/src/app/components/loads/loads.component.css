@@ -1,1 +1,102 @@
-/* Loads component styles */
+/* Loads component styles - AI console theme */
+
+.loads-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.loads-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.loads-page-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.loads-page-header p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-light);
+}
+
+.loads-header-cta {
+  white-space: nowrap;
+}
+
+.loads-card {
+  border-radius: 16px;
+}
+
+.loads-card-header {
+  align-items: flex-start;
+}
+
+.loads-card-header .card-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.83rem;
+  color: var(--text-light);
+}
+
+.loads-cell-primary {
+  font-weight: 500;
+}
+
+.loads-cell-secondary {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+.loads-route {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.route-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-light);
+}
+
+.route-value {
+  font-size: 0.9rem;
+}
+
+.loads-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn-xs {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.loads-info-panel {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 0 0, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.98));
+  border: 1px solid var(--border-color);
+  font-size: 0.9rem;
+  color: var(--text-dark);
+}
+
+.loads-info-panel ul {
+  margin: 8px 0 0 18px;
+  padding: 0;
+}
+
+.loads-info-panel li {
+  margin-bottom: 4px;
+}

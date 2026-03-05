@@ -1,8 +1,18 @@
-<div class="container">
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">📦 Load Dispatch & Tracking</h2>
-      <button class="btn btn-primary" (click)="openCreateModal()">+ Create Load</button>
+<div class="container loads-page">
+  <header class="loads-page-header">
+    <div>
+      <h1>Load dispatch & tracking</h1>
+      <p>Monitor active freight, assignments, and revenue in real time.</p>
+    </div>
+    <button class="btn btn-primary loads-header-cta" (click)="openCreateModal()">+ Create Load</button>
+  </header>
+
+  <div class="card loads-card">
+    <div class="card-header loads-card-header">
+      <div>
+        <h2 class="card-title">Current loads</h2>
+        <p class="card-subtitle">Driver, asset, route, and billing status at a glance.</p>
+      </div>
     </div>
 
     <div *ngIf="loading" class="loading">
@@ -27,12 +37,18 @@
         <tr *ngFor="let load of loads">
           <td><strong>{{ load.loadNumber }}</strong></td>
           <td>
-            {{ load.driverName }}<br>
-            <small style="color: var(--text-light);">{{ load.vehicleUnit }}</small>
+            <div class="loads-cell-primary">{{ load.driverName }}</div>
+            <div class="loads-cell-secondary">{{ load.vehicleUnit }}</div>
           </td>
           <td>
-            <strong>From:</strong> {{ load.pickupLocation }}<br>
-            <strong>To:</strong> {{ load.deliveryLocation }}
+            <div class="loads-route">
+              <span class="route-label">From</span>
+              <span class="route-value">{{ load.pickupLocation }}</span>
+            </div>
+            <div class="loads-route">
+              <span class="route-label">To</span>
+              <span class="route-value">{{ load.deliveryLocation }}</span>
+            </div>
           </td>
           <td>{{ load.commodity }}</td>
           <td>{{ load.weight?.toLocaleString() }} lbs</td>
@@ -44,8 +60,10 @@
             </span>
           </td>
           <td>
-            <button class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;" (click)="openDetails(load)">View</button>
-            <button class="btn btn-warning" style="font-size: 12px; padding: 6px 12px; margin-left: 4px;" (click)="openEditModal(load)">Edit</button>
+            <div class="loads-actions">
+              <button class="btn btn-primary btn-xs" (click)="openDetails(load)">View</button>
+              <button class="btn btn-warning btn-xs" (click)="openEditModal(load)">Edit</button>
+            </div>
           <!-- Create Load Modal (Redesigned) -->
           <div class="modal-backdrop" *ngIf="showCreateModal">
             <div class="modal" style="max-width: 900px;">
@@ -238,14 +256,17 @@
     </table>
   </div>
 
-  <div class="card">
-    <div class="card-header">
-      <h3 class="card-title">📋 Compliance Notes</h3>
+  <div class="card loads-card">
+    <div class="card-header loads-card-header">
+      <div>
+        <h3 class="card-title">Compliance checklist</h3>
+        <p class="card-subtitle">AI-highlighted items to verify before dispatch.</p>
+      </div>
     </div>
-    <div style="padding: 10px; background-color: #f9f9f9; border-radius: 4px;">
-      <p><strong>Dispatch Compliance Check:</strong> Before assigning a load, verify:</p>
-      <ul style="margin-left: 20px; margin-top: 10px;">
-        <li>Driver has valid medical certificate</li>
+    <div class="loads-info-panel">
+      <p><strong>Dispatch compliance check:</strong> Before assigning a load, verify:</p>
+      <ul>
+        <li>Driver has a valid medical certificate</li>
         <li>Driver is not approaching HOS limits</li>
         <li>Vehicle is in-service and not overdue for maintenance</li>
         <li>Driver is eligible per Clearinghouse</li>
