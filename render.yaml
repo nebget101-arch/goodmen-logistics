@@ -1,27 +1,8 @@
 services:
   - type: web
-    name: goodmen-logs-mcp
-    runtime: node
-    plan: starter
-    rootDir: goodmen-logs-mcp-server
-    buildCommand: npm install && npm run build
-    startCommand: npm run start
-    envVars:
-      - key: BACKEND_PATH
-        value: https://goodmen-logistics-gateway.onrender.com
-      - key: CONFLUENCE_BASE_URL
-        sync: false
-      - key: CONFLUENCE_EMAIL
-        sync: false
-      - key: CONFLUENCE_API_TOKEN
-        sync: false
-      - key: CONFLUENCE_SPACE_KEY
-        sync: false
-
-  - type: web
     name: goodmen-logistics-ui
     runtime: static
-    rootDir: goodmen-logistics/frontend
+    rootDir: frontend
     buildCommand: npm install --include=dev && npm run build
     staticPublishPath: dist/goodmen-logistics
     routes:
@@ -33,7 +14,7 @@ services:
     name: goodmen-logistics-gateway
     runtime: node
     plan: starter
-    rootDir: goodmen-logistics/gateway
+    rootDir: backend/gateway
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -62,7 +43,7 @@ services:
     name: goodmen-reporting-service
     runtime: node
     plan: starter
-    rootDir: microservices/reporting-service
+    rootDir: backend/microservices/reporting-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -99,7 +80,7 @@ services:
     name: goodmen-integrations-service
     runtime: node
     plan: starter
-    rootDir: microservices/integrations-service
+    rootDir: backend/microservices/integrations-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -112,12 +93,12 @@ services:
     name: goodmen-auth-users-service
     runtime: node
     plan: starter
-    rootDir: microservices/auth-users-service
+    rootDir: backend/microservices/auth-users-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/auth-users-service/node_modules
+        value: /opt/render/project/src/backend/microservices/auth-users-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -151,12 +132,12 @@ services:
     name: goodmen-drivers-compliance-service
     runtime: node
     plan: starter
-    rootDir: microservices/drivers-compliance-service
+    rootDir: backend/microservices/drivers-compliance-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/drivers-compliance-service/node_modules
+        value: /opt/render/project/src/backend/microservices/drivers-compliance-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -202,12 +183,12 @@ services:
     name: goodmen-vehicles-maintenance-service
     runtime: node
     plan: starter
-    rootDir: microservices/vehicles-maintenance-service
+    rootDir: backend/microservices/vehicles-maintenance-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/vehicles-maintenance-service/node_modules
+        value: /opt/render/project/src/backend/microservices/vehicles-maintenance-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -253,12 +234,12 @@ services:
     name: goodmen-logistics-service
     runtime: node
     plan: starter
-    rootDir: microservices/logistics-service
+    rootDir: backend/microservices/logistics-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/logistics-service/node_modules
+        value: /opt/render/project/src/backend/microservices/logistics-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -304,12 +285,12 @@ services:
     name: goodmen-inventory-service
     runtime: node
     plan: starter
-    rootDir: microservices/inventory-service
+    rootDir: backend/microservices/inventory-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_PATH
-        value: /opt/render/project/src/microservices/inventory-service/node_modules
+        value: /opt/render/project/src/backend/microservices/inventory-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -339,42 +320,6 @@ services:
       - key: PORT
         value: 10009
 
-  - type: web
-    name: mcp-http-gateway
-    runtime: node
-    plan: starter
-    rootDir: mcp-http-gateway
-    buildCommand: npm install && npm run build
-    startCommand: npm start
-    envVars:
-      - key: GITHUB_TOKEN
-        sync: false
-      - key: GITHUB_OWNER
-        value: nebget101-arch
-      - key: GITHUB_REPO
-        value: goodmen-logistics
-      - key: WORKFLOW_FILE
-        value: test-and-deploy.yml
-      - key: CONFLUENCE_BASE_URL
-        value: https://nebget101.atlassian.net/wiki
-      - key: CONFLUENCE_EMAIL
-        sync: false
-      - key: CONFLUENCE_API_TOKEN
-        sync: false
-      - key: CONFLUENCE_SPACE_KEY
-        value: SA
-      - key: JIRA_BASE_URL
-        value: https://nebget101.atlassian.net
-      - key: JIRA_EMAIL
-        sync: false
-      - key: JIRA_API_TOKEN
-        sync: false
-      - key: JIRA_PROJECT_KEY
-        value: KAN
-      - key: BACKEND_PATH
-        value: https://goodmen-logistics-gateway.onrender.com
-      - key: PORT
-        value: 10001
 
 databases:
   - name: safetyapp-db

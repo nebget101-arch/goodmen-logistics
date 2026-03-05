@@ -1,0 +1,23 @@
+{
+  "name": "@goodmen/database",
+  "version": "1.0.0",
+  "description": "Goodmen Logistics database schema, migrations, and seeds",
+  "private": true,
+  "scripts": {
+    "db:init": "node init.js",
+    "db:reset": "node reset.js",
+    "db:schema": "node run-schema.js",
+    "db:seed": "node run-seed.js",
+    "db:status": "node status.js",
+    "migrate:latest": "knex migrate:latest",
+    "migrate:dev": "knex migrate:latest --env development",
+    "migrate:prod": "knex migrate:latest --env production",
+    "seed:run": "knex seed:run"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.4",
+    "knex": "^3.1.0",
+    "pg": "^8.18.0",
+    "bcrypt": "^6.0.0"
+  }
+}
