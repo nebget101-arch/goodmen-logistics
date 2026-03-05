@@ -73,6 +73,23 @@ const swaggerDocument = {
       post: {
         summary: 'Create or update inventory',
         description: 'Create or update inventory records.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Inventory item or bulk inventory payload',
+                additionalProperties: true,
+                example: {
+                  sku: 'PART-001',
+                  location: 'WH1',
+                  quantity: 10
+                }
+              }
+            }
+          }
+        },
         responses: {
           '200': {
             description: 'Inventory record created or updated'
@@ -93,6 +110,24 @@ const swaggerDocument = {
       post: {
         summary: 'Create adjustment',
         description: 'Create a new inventory adjustment.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Inventory adjustment payload',
+                additionalProperties: true,
+                example: {
+                  sku: 'PART-001',
+                  location: 'WH1',
+                  delta: -2,
+                  reason: 'Cycle count'
+                }
+              }
+            }
+          }
+        },
         responses: {
           '201': {
             description: 'Adjustment created'
@@ -146,6 +181,26 @@ const swaggerDocument = {
       post: {
         summary: 'Create or bulk upload customers',
         description: 'Create customers or upload them in bulk.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Customer or bulk customer payload',
+                additionalProperties: true,
+                example: {
+                  customers: [
+                    {
+                      name: 'Customer A',
+                      email: 'customer.a@example.com'
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
         responses: {
           '201': {
             description: 'Customers created or uploaded'
