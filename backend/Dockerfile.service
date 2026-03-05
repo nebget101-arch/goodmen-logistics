@@ -1,0 +1,24 @@
+FROM node:20-alpine
+
+WORKDIR /usr/src/app
+
+# Build argument to select which service directory to run
+ARG SERVICE_DIR=backend/microservices/auth-users-service
+
+# Install system dependencies (if needed later)
+RUN apk add --no-cache bash
+
+# Copy the entire backend so file: dependencies and shared packages work
+COPY backend ./backend
+
+# Move into the selected service directory and install dependencies
+WORKDIR /usr/src/app/${SERVICE_DIR}
+
+RUN npm install
+
+ENV NODE_ENV=development
+
+EXPOSE 5000 5001 5002 5003 5004 5005 5006 5007
+
+CMD ["npm", "run", "start"]
+

@@ -1,0 +1,166 @@
+version: "3.9"
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: fleetneuron-frontend
+    ports:
+      - "4200:4200"
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      - gateway
+
+  gateway:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/gateway
+    container_name: fleetneuron-gateway
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - REPORTING_SERVICE_URL=http://reporting-service:5001
+      - INTEGRATIONS_SERVICE_URL=http://integrations-service:5002
+      - AUTH_USERS_SERVICE_URL=http://auth-users-service:5003
+      - DRIVERS_COMPLIANCE_SERVICE_URL=http://drivers-compliance-service:5004
+      - VEHICLES_MAINTENANCE_SERVICE_URL=http://vehicles-maintenance-service:5005
+      - LOGISTICS_SERVICE_URL=http://logistics-service:5006
+      - INVENTORY_SERVICE_URL=http://inventory-service:5007
+      # Browser hits http://localhost:4200, so allow that origin
+      - CORS_ORIGIN=http://localhost:4200
+    depends_on:
+      - reporting-service
+      - integrations-service
+      - auth-users-service
+      - drivers-compliance-service
+      - vehicles-maintenance-service
+      - logistics-service
+      - inventory-service
+
+  reporting-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/reporting-service
+    container_name: fleetneuron-reporting-service
+    environment:
+      - NODE_ENV=development
+      - PORT=5001
+      - PG_HOST=host.docker.internal
+      - PG_PORT=5432
+      - PG_DATABASE=goodmen_logistics
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+    ports:
+      - "5001:5001"
+
+  integrations-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/integrations-service
+    container_name: fleetneuron-integrations-service
+    environment:
+      - NODE_ENV=development
+      - PORT=5002
+    ports:
+      - "5002:5002"
+
+  auth-users-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/auth-users-service
+    container_name: fleetneuron-auth-users-service
+    environment:
+      - NODE_ENV=development
+      - PORT=5003
+      - PG_HOST=host.docker.internal
+      - PG_PORT=5432
+      - PG_DATABASE=goodmen_logistics
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+    ports:
+      - "5003:5003"
+
+  drivers-compliance-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/drivers-compliance-service
+    container_name: fleetneuron-drivers-compliance-service
+    environment:
+      - NODE_ENV=development
+      - PORT=5004
+      - PG_HOST=host.docker.internal
+      - PG_PORT=5432
+      - PG_DATABASE=goodmen_logistics
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+    ports:
+      - "5004:5004"
+
+  vehicles-maintenance-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/vehicles-maintenance-service
+    container_name: fleetneuron-vehicles-maintenance-service
+    environment:
+      - NODE_ENV=development
+      - PORT=5005
+      - PG_HOST=host.docker.internal
+      - PG_PORT=5432
+      - PG_DATABASE=goodmen_logistics
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+    ports:
+      - "5005:5005"
+
+  logistics-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/logistics-service
+    container_name: fleetneuron-logistics-service
+    environment:
+      - NODE_ENV=development
+      - PORT=5006
+      - PG_HOST=host.docker.internal
+      - PG_PORT=5432
+      - PG_DATABASE=goodmen_logistics
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+    ports:
+      - "5006:5006"
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/inventory-service
+    container_name: fleetneuron-inventory-service
+    environment:
+      - NODE_ENV=development
+      - PORT=5007
+      - PG_HOST=host.docker.internal
+      - PG_PORT=5432
+      - PG_DATABASE=goodmen_logistics
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+    ports:
+      - "5007:5007"
+
