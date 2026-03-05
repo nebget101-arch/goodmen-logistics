@@ -79,6 +79,10 @@ services:
     rootDir: goodmen-logistics/frontend
     buildCommand: npm install --include=dev && npm run build
     staticPublishPath: dist/goodmen-logistics
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
 
   - type: web
     name: goodmen-logistics-gateway
