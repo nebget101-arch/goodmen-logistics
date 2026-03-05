@@ -2,31 +2,45 @@
   <div class="sidebar-backdrop" *ngIf="isLoggedIn() && sidebarOpen" (click)="closeSidebar()" aria-hidden="true"></div>
 
   <aside class="sidebar" *ngIf="isLoggedIn()" [class.mobile-open]="sidebarOpen">
-    <div class="sidebar-header">
-      <img src="assets/fleetneuron-logo-sidebar.png" alt="FleetNeuron Logo">
+    <div class="sidebar-header brand-block">
+      <span class="brand-wordmark">FleetNeuron</span>
+      <span class="brand-tagline">AI fleet intelligence</span>
     </div>
     <nav class="sidebar-nav" (click)="onSidebarNavClick($event)">
       <ul class="nav-links">
-        <li *ngIf="canSee('dashboard')"><a routerLink="/dashboard" routerLinkActive="active"><span class="nav-icon">📊</span>Dashboard</a></li>
-        <li *ngIf="canSee('loads')"><a routerLink="/loads" routerLinkActive="active"><span class="nav-icon">📦</span>Loads</a></li>
+        <li *ngIf="canSee('dashboard')">
+          <a routerLink="/dashboard" routerLinkActive="active">
+            <span class="nav-icon material-symbols-outlined">dashboard</span>
+            Dashboard
+          </a>
+        </li>
+        <li *ngIf="canSee('loads')">
+          <a routerLink="/loads" routerLinkActive="active">
+            <span class="nav-icon material-symbols-outlined">route</span>
+            Loads
+          </a>
+        </li>
         <!-- Dispatch / Admin drivers view -->
         <li *ngIf="canSee('drivers') && (getRole() === 'dispatch' || getRole() === 'admin')">
-          <a routerLink="/drivers" routerLinkActive="active"><span class="nav-icon">👤</span>Drivers</a>
+          <a routerLink="/drivers" routerLinkActive="active">
+            <span class="nav-icon material-symbols-outlined">badge</span>
+            Drivers
+          </a>
         </li>
         <li class="nav-section" *ngIf="canSee('vehicles')">
           <button class="section-toggle" (click)="toggleEquipment()" type="button" [attr.aria-expanded]="equipmentExpanded">
-            <span class="section-icon">🚛</span>
+            <span class="section-icon material-symbols-outlined">deployed_code</span>
             <span class="section-label">Equipment</span>
-            <span class="toggle-chevron" [class.rotated]="equipmentExpanded">▶</span>
+            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="equipmentExpanded">chevron_right</span>
           </button>
         </li>
         <li *ngIf="canSee('vehicles') && equipmentExpanded" class="nav-subsection"><a routerLink="/vehicles" routerLinkActive="active">Trucks</a></li>
         <li *ngIf="canSee('vehicles') && equipmentExpanded" class="nav-subsection"><a routerLink="/trailers" routerLinkActive="active">Trailers</a></li>
         <li *ngIf="canSee('hos') || canSee('audit')" class="nav-section">
           <button class="section-toggle" (click)="toggleSafety()" type="button" [attr.aria-expanded]="safetyExpanded">
-            <span class="section-icon">🛡️</span>
+            <span class="section-icon material-symbols-outlined">shield_person</span>
             <span class="section-label">Safety</span>
-            <span class="toggle-chevron" [class.rotated]="safetyExpanded">▶</span>
+            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="safetyExpanded">chevron_right</span>
           </button>
         </li>
         <li *ngIf="canSee('hos') && safetyExpanded" class="nav-subsection"><a routerLink="/hos" routerLinkActive="active">HOS</a></li>
@@ -36,18 +50,18 @@
         <li *ngIf="canSee('audit') && safetyExpanded" class="nav-subsection"><a routerLink="/audit" routerLinkActive="active">Audit</a></li>
         <li *ngIf="canSee('maintenance') || canSee('parts') || canSee('customers')" class="nav-section">
           <button class="section-toggle" (click)="toggleFleet()" type="button" [attr.aria-expanded]="fleetExpanded">
-            <span class="section-icon">🚚</span>
+            <span class="section-icon material-symbols-outlined">precision_manufacturing</span>
             <span class="section-label">Fleet</span>
-            <span class="toggle-chevron" [class.rotated]="fleetExpanded">▶</span>
+            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="fleetExpanded">chevron_right</span>
           </button>
         </li>
         <li *ngIf="canSee('maintenance') && fleetExpanded" class="nav-subsection"><a routerLink="/maintenance" routerLinkActive="active">Maintenance</a></li>
         <li *ngIf="canSee('customers') && fleetExpanded" class="nav-subsection"><a routerLink="/customers" routerLinkActive="active">Customers</a></li>
         <li *ngIf="canSee('parts') || canSee('barcodes') || canSee('receiving') || canSee('transfers') || canSee('sales') || canSee('inventory_reports')" class="nav-section">
           <button class="section-toggle" (click)="toggleInventory()" type="button" [attr.aria-expanded]="inventoryExpanded">
-            <span class="section-icon">📦</span>
+            <span class="section-icon material-symbols-outlined">inventory_2</span>
             <span class="section-label">Inventory</span>
-            <span class="toggle-chevron" [class.rotated]="inventoryExpanded">▶</span>
+            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="inventoryExpanded">chevron_right</span>
           </button>
         </li>
         <li *ngIf="canSee('parts') && inventoryExpanded" class="nav-subsection"><a routerLink="/parts" routerLinkActive="active">Parts</a></li>
@@ -58,13 +72,18 @@
         <li *ngIf="canSee('inventory_reports') && inventoryExpanded" class="nav-subsection"><a routerLink="/inventory-reports" routerLinkActive="active">Reports</a></li>
         <li *ngIf="canSee('invoices')" class="nav-section">
           <button class="section-toggle" (click)="toggleAccounting()" type="button" [attr.aria-expanded]="accountingExpanded">
-            <span class="section-icon">💰</span>
+            <span class="section-icon material-symbols-outlined">account_balance</span>
             <span class="section-label">Accounting</span>
-            <span class="toggle-chevron" [class.rotated]="accountingExpanded">▶</span>
+            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="accountingExpanded">chevron_right</span>
           </button>
         </li>
         <li *ngIf="canSee('invoices') && accountingExpanded" class="nav-subsection"><a routerLink="/invoices" routerLinkActive="active">Invoices</a></li>
-        <li *ngIf="userRole === 'admin'"><a routerLink="/users/create" routerLinkActive="active"><span class="nav-icon">➕</span>Add User</a></li>
+        <li *ngIf="userRole === 'admin'">
+          <a routerLink="/users/create" routerLinkActive="active">
+            <span class="nav-icon material-symbols-outlined">person_add</span>
+            Add User
+          </a>
+        </li>
       </ul>
     </nav>
     <div class="sidebar-actions">
@@ -78,20 +97,18 @@
         ☰
       </button>
 
-      <div class="mobile-topbar-brand">
-        <img src="assets/fleetneuron-logo-header.png" alt="FleetNeuron Logo">
+      <div class="mobile-topbar-brand brand-block brand-block-inline">
+        <span class="brand-wordmark">FleetNeuron</span>
+        <span class="brand-tagline">AI fleet intelligence</span>
       </div>
 
       <button (click)="logout()" class="btn btn-ghost mobile-logout">Logout</button>
     </div>
 
     <div class="topbar" *ngIf="!isLoggedIn()">
-      <div class="topbar-brand">
-        <img src="assets/fleetneuron-logo-header.png" alt="FleetNeuron Logo">
-        <div class="topbar-copy">
-          <h1>FleetNeuron</h1>
-          <p>AI‑powered fleet, safety, and inventory intelligence.</p>
-        </div>
+      <div class="topbar-brand brand-block brand-block-topbar">
+        <span class="brand-wordmark">FleetNeuron</span>
+        <span class="brand-tagline">AI‑powered fleet, safety & inventory intelligence</span>
       </div>
       <button routerLink="/login" class="btn btn-primary topbar-login-btn">
         <span>Open AI Console</span>

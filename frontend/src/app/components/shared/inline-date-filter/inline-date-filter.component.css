@@ -1,0 +1,126 @@
+.inline-date-filter {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.inline-date-filter__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text-dark);
+  cursor: pointer;
+}
+
+.inline-date-filter__icon {
+  font-size: 14px;
+}
+
+.inline-date-filter__label {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-date-filter__panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.9),
+    0 0 0 1px rgba(15, 23, 42, 1);
+  z-index: 40;
+  min-width: 180px;
+}
+
+.inline-date-filter__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-dark);
+}
+
+.inline-date-filter__header .nav-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dark);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.inline-date-filter__header .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.year-nav {
+  display: flex;
+  gap: 2px;
+}
+
+.inline-date-filter__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.year-cell {
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  border-radius: 999px;
+  padding: 4px 0;
+  font-size: 11px;
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text-dark);
+  cursor: pointer;
+}
+
+.year-cell:hover {
+  border-color: rgba(34, 197, 94, 0.9);
+}
+
+.year-cell--active {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.3), rgba(14, 165, 233, 0.9));
+  border-color: rgba(34, 197, 94, 0.9);
+  color: #e5f9ff;
+}
+
+.month-cell,
+.day-cell {
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  border-radius: 999px;
+  padding: 4px 0;
+  font-size: 11px;
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text-dark);
+  cursor: pointer;
+}
+
+.month-cell:hover,
+.day-cell:hover {
+  border-color: rgba(34, 197, 94, 0.9);
+}
+
+.month-cell--active {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.3), rgba(14, 165, 233, 0.9));
+  border-color: rgba(34, 197, 94, 0.9);
+  color: #e5f9ff;
+}
+
+.inline-date-filter__grid--days {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+

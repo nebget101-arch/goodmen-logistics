@@ -32,9 +32,61 @@
           <th>Status</th>
           <th>Actions</th>
         </tr>
+        <tr class="drivers-header-filters">
+          <th>
+            <input
+              type="text"
+              placeholder="Name / email"
+              [(ngModel)]="driverFilters.name"
+            />
+          </th>
+          <th>
+            <input
+              type="text"
+              placeholder="CDL #"
+              [(ngModel)]="driverFilters.cdlNumber"
+            />
+          </th>
+          <th>
+            <input
+              type="text"
+              placeholder="YYYY-MM-DD"
+              [(ngModel)]="driverFilters.cdlExpiry"
+            />
+          </th>
+          <th>
+            <input
+              type="text"
+              placeholder="YYYY-MM-DD"
+              [(ngModel)]="driverFilters.medicalExpiry"
+            />
+          </th>
+          <th>
+            <input
+              type="text"
+              placeholder="Min %"
+              [(ngModel)]="driverFilters.dqfMin"
+            />
+          </th>
+          <th>
+            <select [(ngModel)]="driverFilters.clearinghouseStatus">
+              <option value="">All</option>
+              <option value="eligible">eligible</option>
+              <option value="query-pending">query-pending</option>
+            </select>
+          </th>
+          <th>
+            <select [(ngModel)]="driverFilters.status">
+              <option value="">All</option>
+              <option value="active">active</option>
+              <option value="inactive">inactive</option>
+            </select>
+          </th>
+          <th></th>
+        </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let driver of drivers">
+        <tr *ngFor="let driver of filteredDrivers">
           <td>
             <div class="drivers-cell-primary">{{ driver.firstName }} {{ driver.lastName }}</div>
             <div class="drivers-cell-secondary">{{ driver.email }}</div>
@@ -65,11 +117,21 @@
           </td>
           <td>
             <div class="drivers-actions">
-              <button class="btn btn-sm drivers-btn-edit" (click)="editDriver(driver)">✏️ Edit</button>
-              <button class="btn btn-sm drivers-btn-dqf" (click)="openDQFForm(driver)">📋 DQF</button>
-              <button class="btn btn-sm drivers-btn-onboard" (click)="openOnboardingModal(driver)">✉ Send Packet</button>
+              <button class="btn btn-sm drivers-btn-edit" (click)="editDriver(driver)">
+                <span class="material-symbols-outlined">edit</span>
+                <span>Edit</span>
+              </button>
+              <button class="btn btn-sm drivers-btn-dqf" (click)="openDQFForm(driver)">
+                <span class="material-symbols-outlined">rule_folder</span>
+                <span>DQF</span>
+              </button>
+              <button class="btn btn-sm drivers-btn-onboard" (click)="openOnboardingModal(driver)">
+                <span class="material-symbols-outlined">forward_to_inbox</span>
+                <span>Send Packet</span>
+              </button>
               <label class="btn btn-sm drivers-btn-upload">
-                📤 Upload
+                <span class="material-symbols-outlined">upload_file</span>
+                <span>Upload</span>
                 <input type="file" (change)="onFileSelected($event, driver)" 
                        accept=".pdf,.jpg,.jpeg,.png" style="display: none;">
               </label>
@@ -79,7 +141,7 @@
       </tbody>
     </table>
 
-    <div *ngIf="!loading && drivers.length === 0" class="drivers-empty">
+    <div *ngIf="!loading && filteredDrivers.length === 0" class="drivers-empty">
       <p>No drivers found</p>
     </div>
   </div>
@@ -319,7 +381,10 @@
     <div class="dqf-modal">
       <div class="dqf-modal-header">
         <div>
-          <h3>📋 DQF Checklist: {{selectedDriver.firstName}} {{selectedDriver.lastName}}</h3>
+          <h3>
+            <span class="material-symbols-outlined">checklist</span>
+            DQF Checklist: {{selectedDriver.firstName}} {{selectedDriver.lastName}}
+          </h3>
           <p class="dqf-modal-subtitle">49 CFR 391.51 - Required Documents for Driver Qualification File</p>
         </div>
         <button class="dqf-close-btn" type="button" (click)="closeDQFForm()" [disabled]="saving">✕</button>
@@ -333,8 +398,9 @@
             <span style="font-weight: 500;">Application for Employment (§391.21)</span>
           </label>
           <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
-              📤 Upload
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
+              Upload
               <input type="file" (change)="onDQFFileSelected($event, 'application')" 
                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
             </label>
@@ -358,8 +424,9 @@
             <span style="font-weight: 500;">Motor Vehicle Record (MVR) - Past 3 Years</span>
           </label>
           <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
-              📤 Upload
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
+              Upload
               <input type="file" (change)="onDQFFileSelected($event, 'mvr')" 
                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
             </label>
@@ -383,8 +450,9 @@
             <span style="font-weight: 500;">Road Test Certificate or Equivalent (§391.31)</span>
           </label>
           <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
-              📤 Upload
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
+              Upload
               <input type="file" (change)="onDQFFileSelected($event, 'road_test')" 
                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
             </label>
@@ -405,8 +473,9 @@
             <span style="font-weight: 500;">Medical Examiner's Certificate (§391.43)</span>
           </label>
           <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
-              📤 Upload
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
+              Upload
               <input type="file" (change)="onDQFFileSelected($event, 'medical_cert')" 
                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
             </label>
@@ -427,8 +496,9 @@
             <span style="font-weight: 500;">Annual Review of Driving Record (§391.25)</span>
           </label>
           <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
-              📤 Upload
+            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
+              Upload
               <input type="file" (change)="onDQFFileSelected($event, 'annual_review')" 
                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
             </label>

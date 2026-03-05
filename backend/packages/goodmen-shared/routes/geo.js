@@ -12,6 +12,26 @@ async function zipTableExists() {
   }
 }
 
+// GET /api/geo/route?waypoints=lon1,lat1;lon2,lat2 (proxies OSRM for browser CORS)
+router.get('/route', async (req, res) => {
+  const waypoints = (req.query.waypoints || '').toString().trim();
+  if (!waypoints) {
+    return res.status(400).json({ success: false, error: 'waypoints query is required (lon1,lat1;lon2,lat2)' });
+  }
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${encodeURIComponent(waypoints)}?overview=full&geometries=geojson`;
+    const response = await axios.get(url);
+    const coords = response.data?.routes?.[0]?.geometry?.coordinates;
+    if (!coords || !Array.isArray(coords)) {
+      return res.json({ success: true, data: null });
+    }
+    return res.json({ success: true, data: { coordinates: coords } });
+  } catch (err) {
+    console.error('OSRM route proxy error:', err.message || err);
+    return res.status(502).json({ success: false, error: 'Route service unavailable' });
+  }
+});
+
 router.get('/zip/:zip', async (req, res) => {
   const zip = (req.params.zip || '').toString().trim();
   if (!zip) {
@@ -21,9 +41,36 @@ router.get('/zip/:zip', async (req, res) => {
   try {
     const hasZipTable = await zipTableExists();
     if (hasZipTable) {
-      const cached = await query('SELECT city, state FROM zip_codes WHERE zip = $1', [zip]);
+      const cached = await query(
+        'SELECT city, state, latitude, longitude FROM zip_codes WHERE zip = $1',
+        [zip]
+      );
       if (cached.rows.length > 0) {
-        return res.json({ success: true, data: { zip, ...cached.rows[0] } });
+        const row = cached.rows[0];
+        let lat = row.latitude != null ? parseFloat(row.latitude) : null;
+        let lon = row.longitude != null ? parseFloat(row.longitude) : null;
+        if ((lat == null || Number.isNaN(lat) || lon == null || Number.isNaN(lon))) {
+          try {
+            const zippo = await axios.get(`https://api.zippopotam.us/us/${encodeURIComponent(zip)}`);
+            const place = zippo.data?.places?.[0];
+            if (place?.latitude != null && place?.longitude != null) {
+              lat = parseFloat(place.latitude);
+              lon = parseFloat(place.longitude);
+              await query(
+                'UPDATE zip_codes SET latitude = $2, longitude = $3 WHERE zip = $1',
+                [zip, lat, lon]
+              );
+            }
+          } catch (_) {
+            /* keep lat/lon null */
+          }
+        }
+        const data = { zip, city: row.city, state: row.state };
+        if (lat != null && !Number.isNaN(lat) && lon != null && !Number.isNaN(lon)) {
+          data.lat = lat;
+          data.lon = lon;
+        }
+        return res.json({ success: true, data });
       }
     }
 
@@ -35,17 +82,28 @@ router.get('/zip/:zip', async (req, res) => {
 
     const city = place['place name'];
     const state = place['state abbreviation'];
+    const lat = place.latitude != null ? parseFloat(place.latitude) : null;
+    const lon = place.longitude != null ? parseFloat(place.longitude) : null;
 
     if (hasZipTable) {
       await query(
-        `INSERT INTO zip_codes (zip, city, state)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (zip) DO NOTHING`,
-        [zip, city, state]
+        `INSERT INTO zip_codes (zip, city, state, latitude, longitude)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (zip) DO UPDATE SET
+           city = EXCLUDED.city,
+           state = EXCLUDED.state,
+           latitude = COALESCE(EXCLUDED.latitude, zip_codes.latitude),
+           longitude = COALESCE(EXCLUDED.longitude, zip_codes.longitude)`,
+        [zip, city, state, lat, lon]
       );
     }
 
-    res.json({ success: true, data: { zip, city, state } });
+    const data = { zip, city, state };
+    if (lat != null && !Number.isNaN(lat) && lon != null && !Number.isNaN(lon)) {
+      data.lat = lat;
+      data.lon = lon;
+    }
+    res.json({ success: true, data });
   } catch (error) {
     if (error.response?.status === 404) {
       return res.status(404).json({ success: false, error: 'ZIP not found' });

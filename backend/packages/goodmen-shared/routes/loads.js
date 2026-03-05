@@ -2,16 +2,109 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const axios = require('axios');
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const { query, getClient } = require('../internal/db');
 const { extractLoadFromPdf } = require('../services/load-ai-extractor');
-const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
+const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 
 const LOAD_STATUSES = ['NEW', 'DISPATCHED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'];
 const BILLING_STATUSES = ['PENDING', 'FUNDED', 'INVOICED', 'PAID'];
 const STOP_TYPES = ['PICKUP', 'DELIVERY'];
 const ATTACHMENT_TYPES = ['RATE_CONFIRMATION', 'BOL', 'LUMPER', 'OTHER', 'CONFIRMATION'];
+
+async function lookupZipLatLon(zip) {
+  const trimmed = (zip || '').toString().trim();
+  if (!trimmed) return null;
+  try {
+    const response = await axios.get(`https://api.zippopotam.us/us/${encodeURIComponent(trimmed)}`);
+    const place = response.data?.places?.[0];
+    if (!place) return null;
+    const lat = parseFloat(place.latitude);
+    const lon = parseFloat(place.longitude);
+    if (Number.isNaN(lat) || Number.isNaN(lon)) return null;
+    return { lat, lon };
+  } catch (err) {
+    // Treat lookup failures as "no data" so the rest of the load still returns
+    console.error('lookupZipLatLon failed for', trimmed, err.message || err);
+    return null;
+  }
+}
+
+async function getDrivingDistanceMiles(fromZip, toZip) {
+  const from = await lookupZipLatLon(fromZip);
+  const to = await lookupZipLatLon(toZip);
+  if (!from || !to) return 0;
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false`;
+    const response = await axios.get(url);
+    const meters = response.data?.routes?.[0]?.distance;
+    if (typeof meters !== 'number' || meters <= 0) return 0;
+    const miles = meters / 1609.34;
+    return Math.round(miles);
+  } catch (err) {
+    console.error('getDrivingDistanceMiles failed for', { fromZip, toZip }, err.message || err);
+    return 0;
+  }
+}
+
+async function computeTripMetrics(exec, loadId, loadRow, stops) {
+  const pickupStop = (stops || []).find(
+    (s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'PICKUP'
+  );
+  const deliveryStop = (stops || []).find(
+    (s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'DELIVERY'
+  );
+
+  const pickupZip = (pickupStop?.zip || '').toString().trim() || null;
+  const deliveryZip = (deliveryStop?.zip || '').toString().trim() || null;
+
+  let prevZip = null;
+  if (loadRow?.driver_id) {
+    try {
+      const prevResult = await exec(
+        `SELECT s.zip
+         FROM loads l
+         JOIN load_stops s ON s.load_id = l.id
+         WHERE l.driver_id = $1
+           AND l.id <> $2
+           AND s.stop_type = 'DELIVERY'
+         ORDER BY COALESCE(s.stop_date, l.delivery_date, l.completed_date, l.created_at) DESC
+         LIMIT 1`,
+        [loadRow.driver_id, loadId]
+      );
+      prevZip = (prevResult.rows[0]?.zip || '').toString().trim() || null;
+    } catch (err) {
+      console.error('computeTripMetrics prevZip lookup failed', err.message || err);
+      prevZip = null;
+    }
+  }
+
+  let emptyMiles = 0;
+  let loadedMiles = 0;
+
+  if (pickupZip && deliveryZip) {
+    loadedMiles = await getDrivingDistanceMiles(pickupZip, deliveryZip);
+  }
+  if (prevZip && pickupZip && prevZip !== pickupZip) {
+    emptyMiles = await getDrivingDistanceMiles(prevZip, pickupZip);
+  }
+
+  const totalMiles = (emptyMiles || 0) + (loadedMiles || 0);
+  const rateValue = loadRow && loadRow.rate != null ? Number(loadRow.rate) : null;
+  const ratePerMile = totalMiles > 0 && rateValue != null ? Number(rateValue) / totalMiles : null;
+
+  return {
+    prev_zip: prevZip,
+    pickup_zip: pickupZip,
+    delivery_zip: deliveryZip,
+    empty_miles: emptyMiles,
+    loaded_miles: loadedMiles,
+    total_miles: totalMiles,
+    rate_per_mile: ratePerMile
+  };
+}
 
 function requireRole(allowedRoles) {
   return (req, res, next) => {
@@ -141,8 +234,20 @@ async function getLoadDetail(clientOrQuery, loadId) {
       file_url: row.storage_key ? await getSignedDownloadUrl(row.storage_key) : null
     }))
   );
+  const tripMetrics = await computeTripMetrics(exec, loadId, loadRow, stopsResult.rows || []);
+  const pickupStop = (stopsResult.rows || []).find(
+    (s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'PICKUP'
+  );
+  const deliveryStop = (stopsResult.rows || []).find(
+    (s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'DELIVERY'
+  );
+  const pickupDate = pickupStop?.stop_date ?? loadRow.pickup_date ?? null;
+  const deliveryDate = deliveryStop?.stop_date ?? loadRow.delivery_date ?? null;
   return {
     ...loadRow,
+    ...tripMetrics,
+    pickup_date: pickupDate,
+    delivery_date: deliveryDate,
     stops: stopsResult.rows,
     attachments
   };
@@ -632,6 +737,103 @@ router.get('/:id/attachments', async (req, res) => {
   } catch (error) {
     dtLogger.error('load_attachment_list_failed', error, { loadId: req.params.id });
     res.status(500).json({ success: false, error: 'Failed to fetch attachments' });
+  }
+});
+
+// DELETE /api/loads/:id/attachments/:attachmentId
+router.delete('/:id/attachments/:attachmentId', async (req, res) => {
+  const { id: loadId, attachmentId } = req.params;
+  try {
+    const existing = await query(
+      'SELECT id, storage_key FROM load_attachments WHERE id = $1 AND load_id = $2',
+      [attachmentId, loadId]
+    );
+    if (!existing.rows.length) {
+      return res.status(404).json({ success: false, error: 'Attachment not found' });
+    }
+    const row = existing.rows[0];
+    const storageKey = row.storage_key;
+
+    // Delete DB row first so the document is always removed from the app even if R2 cleanup fails
+    await query('DELETE FROM load_attachments WHERE id = $1 AND load_id = $2', [attachmentId, loadId]);
+
+    if (storageKey) {
+      try {
+        await deleteObject(storageKey);
+      } catch (r2Err) {
+        dtLogger.error('load_attachment_r2_delete_failed', r2Err, { loadId, attachmentId, storageKey });
+        // Still return success; the DB row is already gone
+      }
+    }
+
+    res.json({ success: true, message: 'Attachment deleted' });
+  } catch (error) {
+    dtLogger.error('load_attachment_delete_failed', error, { loadId, attachmentId });
+    res.status(500).json({ success: false, error: 'Failed to delete attachment' });
+  }
+});
+
+// PUT /api/loads/:id/attachments/:attachmentId (replace file and/or metadata on R2)
+router.put('/:id/attachments/:attachmentId', upload.single('file'), async (req, res) => {
+  const { id: loadId, attachmentId } = req.params;
+  try {
+    const existing = await query(
+      'SELECT * FROM load_attachments WHERE id = $1 AND load_id = $2',
+      [attachmentId, loadId]
+    );
+    if (!existing.rows.length) {
+      return res.status(404).json({ success: false, error: 'Attachment not found' });
+    }
+    const oldRow = existing.rows[0];
+    const type = req.body.type ? normalizeEnum(req.body.type) : oldRow.type;
+    if (!ATTACHMENT_TYPES.includes(type)) {
+      return res.status(400).json({ success: false, error: 'Invalid attachment type' });
+    }
+    const notes = req.body.notes !== undefined ? normalizeNullable(req.body.notes) : oldRow.notes;
+
+    let file_name = oldRow.file_name;
+    let storage_key = oldRow.storage_key;
+    let mime_type = oldRow.mime_type;
+    let size_bytes = oldRow.size_bytes;
+
+    if (req.file) {
+      const fileExt = path.extname(req.file.originalname || '').toLowerCase();
+      const safeName = `load-${loadId}-${Date.now()}${fileExt || ''}`;
+      const { key: newKey } = await uploadBuffer({
+        buffer: req.file.buffer,
+        contentType: req.file.mimetype,
+        prefix: `loads/${loadId}`,
+        fileName: safeName
+      });
+      file_name = req.file.originalname || safeName;
+      storage_key = newKey;
+      mime_type = req.file.mimetype;
+      size_bytes = req.file.size;
+      if (oldRow.storage_key && oldRow.storage_key !== newKey) {
+        await deleteObject(oldRow.storage_key);
+      }
+    }
+
+    await query(
+      `UPDATE load_attachments SET
+        type = $1, file_name = $2, storage_key = $3, mime_type = $4, size_bytes = $5, notes = $6
+       WHERE id = $7 AND load_id = $8`,
+      [type, file_name, storage_key, mime_type, size_bytes, notes, attachmentId, loadId]
+    );
+
+    const updated = await query(
+      'SELECT * FROM load_attachments WHERE id = $1 AND load_id = $2',
+      [attachmentId, loadId]
+    );
+    const row = updated.rows[0];
+    const downloadUrl = row.storage_key ? await getSignedDownloadUrl(row.storage_key) : null;
+    res.json({
+      success: true,
+      data: { ...row, file_url: downloadUrl }
+    });
+  } catch (error) {
+    dtLogger.error('load_attachment_update_failed', error, { loadId, attachmentId });
+    res.status(500).json({ success: false, error: 'Failed to update attachment' });
   }
 });
 

@@ -25,10 +25,6 @@
   align-items: center;
 }
 
-.search-input {
-  min-width: 220px;
-}
-
 .loading {
   padding: 40px;
   text-align: center;
@@ -43,6 +39,20 @@
 .muted {
   color: var(--text-light);
   font-size: 12px;
+}
+
+.drivers-header-filters th {
+  padding: 4px 6px 8px;
+}
+
+.drivers-header-filters input,
+.drivers-header-filters select {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 11px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  box-sizing: border-box;
 }
 
 .modal-backdrop {

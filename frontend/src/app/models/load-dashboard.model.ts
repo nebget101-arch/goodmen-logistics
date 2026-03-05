@@ -51,6 +51,13 @@ export interface LoadAttachment {
   created_at: string;
 }
 
+/** Audit log entry for load history tab. */
+export interface LoadHistoryEntry {
+  date: string;
+  description: string;
+  author?: string | null;
+}
+
 export interface LoadDetail extends LoadListItem {
   dispatcher_user_id?: string | null;
   driver_id?: string | null;
@@ -58,8 +65,18 @@ export interface LoadDetail extends LoadListItem {
   trailer_id?: string | null;
   broker_id?: string | null;
   broker_display_name?: string | null;
+  /** Driver position before picking up this load (from loads API). */
+  driver_position_city?: string | null;
+  driver_position_state?: string | null;
   stops: LoadStop[];
   attachments: LoadAttachment[];
+  /** Audit log for the load (optional until backend supports it). */
+  history?: LoadHistoryEntry[];
+  // Optional trip metrics – can be populated by backend
+  total_miles?: number | null;
+  loaded_miles?: number | null;
+  empty_miles?: number | null;
+  rate_per_mile?: number | null;
 }
 
 export interface LoadsListResponse {

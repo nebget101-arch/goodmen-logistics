@@ -1,0 +1,76 @@
+<div class="inline-date-filter" (click)="$event.stopPropagation()">
+  <button type="button" class="inline-date-filter__trigger" (click)="toggle($event)">
+    <span class="inline-date-filter__icon material-symbols-outlined">calendar_month</span>
+    <span class="inline-date-filter__label">{{ displayLabel }}</span>
+  </button>
+
+  <div class="inline-date-filter__panel" *ngIf="open">
+    <header class="inline-date-filter__header">
+      <button
+        type="button"
+        class="nav-btn"
+        *ngIf="view !== 'year'"
+        (click)="goUp($event)"
+      >
+        <span class="material-symbols-outlined">arrow_back</span>
+      </button>
+
+      <span class="range-label" [ngSwitch]="view">
+        <span *ngSwitchCase="'year'">{{ baseYear }} - {{ baseYear + 9 }}</span>
+        <span *ngSwitchCase="'month'">{{ selectedYear || 'Select year' }}</span>
+        <span *ngSwitchCase="'day'">
+          {{ selectedYear }} •
+          {{
+            selectedMonth !== null
+              ? months()[selectedMonth].label
+              : ''
+          }}
+        </span>
+      </span>
+
+      <div class="year-nav" *ngIf="view === 'year'">
+        <button type="button" class="nav-btn" (click)="prevRange($event)">&lt;</button>
+        <button type="button" class="nav-btn" (click)="nextRange($event)">&gt;</button>
+      </div>
+    </header>
+
+    <!-- Year grid -->
+    <div class="inline-date-filter__grid" *ngIf="view === 'year'">
+      <button
+        type="button"
+        class="year-cell"
+        *ngFor="let y of years()"
+        (click)="selectYear(y, $event)"
+        [class.year-cell--active]="selectedYear === y"
+      >
+        {{ y }}
+      </button>
+    </div>
+
+    <!-- Month grid -->
+    <div class="inline-date-filter__grid" *ngIf="view === 'month'">
+      <button
+        type="button"
+        class="month-cell"
+        *ngFor="let m of months()"
+        (click)="selectMonth(m.index, $event)"
+        [class.month-cell--active]="selectedMonth === m.index"
+      >
+        {{ m.label }}
+      </button>
+    </div>
+
+    <!-- Day grid -->
+    <div class="inline-date-filter__grid inline-date-filter__grid--days" *ngIf="view === 'day'">
+      <button
+        type="button"
+        class="day-cell"
+        *ngFor="let d of days()"
+        (click)="selectDay(d, $event)"
+      >
+        {{ d }}
+      </button>
+    </div>
+  </div>
+</div>
+

@@ -103,6 +103,22 @@
   margin: 4px 0;
 }
 
+.drivers-header-filters th {
+  padding: 4px 6px 8px;
+}
+
+.drivers-header-filters input,
+.drivers-header-filters select {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 11px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text-dark);
+  box-sizing: border-box;
+}
+
 .form-input {
   width: 100%;
   padding: 8px 12px;
