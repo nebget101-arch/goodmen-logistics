@@ -8,6 +8,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@goodmen/shared": "file:../../packages/goodmen-shared",
     "@aws-sdk/client-s3": "^3.967.0",
     "@aws-sdk/s3-request-presigner": "^3.967.0",
     "@sendgrid/mail": "^8.1.0",

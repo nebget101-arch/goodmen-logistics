@@ -4,6 +4,15 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 
+const dbConfig = require('./config/database');
+const knex = require('./config/knex');
+require('@goodmen/shared').setDatabase({
+  pool: dbConfig.pool,
+  query: dbConfig.query,
+  getClient: dbConfig.getClient,
+  knex
+});
+
 const app = express();
 const PORT = process.env.PORT || 5007;
 
@@ -11,13 +20,13 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const inventoryRouter = require('./routes/inventory');
-const adjustmentsRouter = require('./routes/adjustments');
-const cycleCountsRouter = require('./routes/cycle-counts');
-const receivingRouter = require('./routes/receiving');
-const barcodesRouter = require('./routes/barcodes');
-const customersRouter = require('./routes/customers');
-const customerBulkUploadRouter = require('./routes/customer-bulk-upload');
+const inventoryRouter = require('@goodmen/shared/routes/inventory');
+const adjustmentsRouter = require('@goodmen/shared/routes/adjustments');
+const cycleCountsRouter = require('@goodmen/shared/routes/cycle-counts');
+const receivingRouter = require('@goodmen/shared/routes/receiving');
+const barcodesRouter = require('@goodmen/shared/routes/barcodes');
+const customersRouter = require('@goodmen/shared/routes/customers');
+const customerBulkUploadRouter = require('@goodmen/shared/routes/customer-bulk-upload');
 
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/adjustments', adjustmentsRouter);

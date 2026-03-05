@@ -11,7 +11,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const scanBridgeRouter = require('./routes/scan-bridge');
+const scanBridgeRouter = require('@goodmen/shared/routes/scan-bridge');
 
 app.use('/api/scan-bridge', scanBridgeRouter);
 

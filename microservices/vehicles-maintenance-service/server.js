@@ -5,6 +5,15 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 
+const dbConfig = require('./config/database');
+const knex = require('./config/knex');
+require('@goodmen/shared').setDatabase({
+  pool: dbConfig.pool,
+  query: dbConfig.query,
+  getClient: dbConfig.getClient,
+  knex
+});
+
 const app = express();
 const PORT = process.env.PORT || 5005;
 
@@ -13,11 +22,11 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const vehiclesRouter = require('./routes/vehicles');
-const maintenanceRouter = require('./routes/maintenance');
-const equipmentRouter = require('./routes/equipment');
-const workOrdersRouter = require('./routes/work-orders-hub');
-const partsRouter = require('./routes/parts');
+const vehiclesRouter = require('@goodmen/shared/routes/vehicles');
+const maintenanceRouter = require('@goodmen/shared/routes/maintenance');
+const equipmentRouter = require('@goodmen/shared/routes/equipment');
+const workOrdersRouter = require('@goodmen/shared/routes/work-orders-hub');
+const partsRouter = require('@goodmen/shared/routes/parts');
 
 app.use('/api/vehicles', vehiclesRouter);
 app.use('/api/maintenance', maintenanceRouter);

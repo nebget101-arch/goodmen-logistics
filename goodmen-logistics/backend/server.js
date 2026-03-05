@@ -10,7 +10,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Test database connection on startup
-const { pool } = require('./config/database');
+const dbConfig = require('./config/database');
+const { pool } = dbConfig;
+const knex = require('./config/knex');
+
+// Wire shared package to this app's database (must be before requiring any shared route/service)
+require('@goodmen/shared').setDatabase({
+  pool: dbConfig.pool,
+  query: dbConfig.query,
+  getClient: dbConfig.getClient,
+  knex
+});
 
 // Function to create missing work order tables
 async function ensureWorkOrderTables() {
@@ -222,41 +232,40 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Import routes
-const driversRouter = require('./routes/drivers');
-const vehiclesRouter = require('./routes/vehicles');
-const hosRouter = require('./routes/hos');
-const maintenanceRouter = require('./routes/maintenance');
-const drugAlcoholRouter = require('./routes/drug-alcohol');
-const loadsRouter = require('./routes/loads');
-const brokersRouter = require('./routes/brokers');
-const equipmentRouter = require('./routes/equipment');
-const geoRouter = require('./routes/geo');
-const dashboardRouter = require('./routes/dashboard');
-const auditRouter = require('./routes/audit');
-const dbExampleRouter = require('./routes/db-example');
-const dqfDocumentsRouter = require('./routes/dqf-documents');
-const dqfRouter = require('./routes/dqf');
-const invoicesRouter = require('./routes/invoices');
-const authRouter = require('./routes/auth');
-const usersRouter = require('./routes/users');
-const workOrdersRouter = require('./routes/work-orders-hub');
-const partsRouter = require('./routes/parts');
-const barcodesRouter = require('./routes/barcodes');
-const inventoryRouter = require('./routes/inventory');
-const receivingRouter = require('./routes/receiving');
-const adjustmentsRouter = require('./routes/adjustments');
-const cycleCountsRouter = require('./routes/cycle-counts');
-const reportsRouter = require('./routes/reports');
-const creditRouter = require('./routes/credit');
-const scanBridgeRouter = require('./routes/scan-bridge');
-const onboardingRouter = require('./routes/onboarding');
-const publicOnboardingRouter = require('./routes/public-onboarding');
-const communicationPreferencesRouter = require('./routes/communication-preferences');
-
-const locationsRouter = require('./routes/locations');
-const customersRouter = require('./routes/customers');
-const customerBulkUploadRouter = require('./routes/customer-bulk-upload');
+// Import routes from shared package
+const driversRouter = require('@goodmen/shared/routes/drivers');
+const vehiclesRouter = require('@goodmen/shared/routes/vehicles');
+const hosRouter = require('@goodmen/shared/routes/hos');
+const maintenanceRouter = require('@goodmen/shared/routes/maintenance');
+const drugAlcoholRouter = require('@goodmen/shared/routes/drug-alcohol');
+const loadsRouter = require('@goodmen/shared/routes/loads');
+const brokersRouter = require('@goodmen/shared/routes/brokers');
+const equipmentRouter = require('@goodmen/shared/routes/equipment');
+const geoRouter = require('@goodmen/shared/routes/geo');
+const dashboardRouter = require('@goodmen/shared/routes/dashboard');
+const auditRouter = require('@goodmen/shared/routes/audit');
+const dbExampleRouter = require('@goodmen/shared/routes/db-example');
+const dqfDocumentsRouter = require('@goodmen/shared/routes/dqf-documents');
+const dqfRouter = require('@goodmen/shared/routes/dqf');
+const invoicesRouter = require('@goodmen/shared/routes/invoices');
+const authRouter = require('@goodmen/shared/routes/auth');
+const usersRouter = require('@goodmen/shared/routes/users');
+const workOrdersRouter = require('@goodmen/shared/routes/work-orders-hub');
+const partsRouter = require('@goodmen/shared/routes/parts');
+const barcodesRouter = require('@goodmen/shared/routes/barcodes');
+const inventoryRouter = require('@goodmen/shared/routes/inventory');
+const receivingRouter = require('@goodmen/shared/routes/receiving');
+const adjustmentsRouter = require('@goodmen/shared/routes/adjustments');
+const cycleCountsRouter = require('@goodmen/shared/routes/cycle-counts');
+const reportsRouter = require('@goodmen/shared/routes/reports');
+const creditRouter = require('@goodmen/shared/routes/credit');
+const scanBridgeRouter = require('@goodmen/shared/routes/scan-bridge');
+const onboardingRouter = require('@goodmen/shared/routes/onboarding');
+const publicOnboardingRouter = require('@goodmen/shared/routes/public-onboarding');
+const communicationPreferencesRouter = require('@goodmen/shared/routes/communication-preferences');
+const locationsRouter = require('@goodmen/shared/routes/locations');
+const customersRouter = require('@goodmen/shared/routes/customers');
+const customerBulkUploadRouter = require('@goodmen/shared/routes/customer-bulk-upload');
 
 // Use routes
 

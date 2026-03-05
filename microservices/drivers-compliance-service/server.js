@@ -4,6 +4,15 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 
+const dbConfig = require('./config/database');
+const knex = require('./config/knex');
+require('@goodmen/shared').setDatabase({
+  pool: dbConfig.pool,
+  query: dbConfig.query,
+  getClient: dbConfig.getClient,
+  knex
+});
+
 const app = express();
 const PORT = process.env.PORT || 5004;
 
@@ -11,13 +20,13 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const driversRouter = require('./routes/drivers');
-const dqfRouter = require('./routes/dqf');
-const dqfDocumentsRouter = require('./routes/dqf-documents');
-const hosRouter = require('./routes/hos');
-const drugAlcoholRouter = require('./routes/drug-alcohol');
-const onboardingRouter = require('./routes/onboarding');
-const publicOnboardingRouter = require('./routes/public-onboarding');
+const driversRouter = require('@goodmen/shared/routes/drivers');
+const dqfRouter = require('@goodmen/shared/routes/dqf');
+const dqfDocumentsRouter = require('@goodmen/shared/routes/dqf-documents');
+const hosRouter = require('@goodmen/shared/routes/hos');
+const drugAlcoholRouter = require('@goodmen/shared/routes/drug-alcohol');
+const onboardingRouter = require('@goodmen/shared/routes/onboarding');
+const publicOnboardingRouter = require('@goodmen/shared/routes/public-onboarding');
 
 app.use('/api/drivers', driversRouter);
 app.use('/api/dqf', dqfRouter);
