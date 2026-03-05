@@ -8,11 +8,38 @@
         <div class="search-box">
         <input type="text" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
       </div>
-      <div class="dropdown" (click)="$event.stopPropagation()">
-        <button class="btn btn-primary" (click)="showNewLoadMenu = !showNewLoadMenu">New Load ▾</button>
-        <div class="dropdown-menu" *ngIf="showNewLoadMenu">
-          <button type="button" (click)="openAutoCreate()">Auto-Create from PDF</button>
-          <button type="button" (click)="openManualEntry()">Manual Load Entry</button>
+      <div class="dropdown new-load-dropdown" (click)="$event.stopPropagation()">
+        <button class="btn btn-primary" (click)="showNewLoadMenu = !showNewLoadMenu">
+          New Load
+          <span class="material-symbols-outlined">expand_more</span>
+        </button>
+        <div class="dropdown-menu new-load-menu" *ngIf="showNewLoadMenu">
+          <button
+            type="button"
+            class="new-load-item"
+            (click)="openAutoCreate()"
+          >
+            <span class="new-load-icon ai">
+              <span class="material-symbols-outlined">auto_awesome</span>
+            </span>
+            <span class="new-load-text">
+              <span class="title">Auto-Create from PDF</span>
+              <span class="subtitle">Automatically extract load details from a PDF using AI.</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="new-load-item"
+            (click)="openManualEntry()"
+          >
+            <span class="new-load-icon">
+              <span class="material-symbols-outlined">edit_note</span>
+            </span>
+            <span class="new-load-text">
+              <span class="title">Manual Load Entry</span>
+              <span class="subtitle">Enter load information yourself with full control.</span>
+            </span>
+          </button>
         </div>
       </div>
     </div>
@@ -58,6 +85,209 @@
     </div>
   </div>
 
+  <!-- Active filters summary -->
+  <div class="active-filters" *ngIf="activeFilterChips.length">
+    <span class="active-filters__label">Filters</span>
+    <div class="active-filters__chips">
+      <button
+        type="button"
+        class="active-filter-chip"
+        *ngFor="let chip of activeFilterChips"
+        (click)="clearFilterChip(chip)"
+      >
+        <span class="chip-key">{{ chip.label }}</span>
+        <span class="chip-value">{{ chip.value }}</span>
+        <span class="chip-close material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <button
+      type="button"
+      class="active-filters__clear"
+      *ngIf="activeFilterChips.length > 1"
+      (click)="clearAllFilters()"
+    >
+      Clear all
+    </button>
+  </div>
+
+  <!-- Inline New Load entry bar -->
+  <form
+    class="inline-new-load"
+    *ngIf="showInlineNewLoad"
+    [formGroup]="manualLoadForm"
+    (ngSubmit)="createLoad()"
+  >
+    <div class="inline-new-load__grid">
+      <section class="inline-new-load__col">
+        <h4>New Load</h4>
+        <label>Status
+          <select formControlName="status">
+            <option *ngFor="let s of statusOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+          </select>
+        </label>
+        <label>Billing
+          <select formControlName="billingStatus">
+            <option *ngFor="let s of billingOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+          </select>
+        </label>
+        <label>Dispatcher
+          <input formControlName="dispatcher" readonly>
+        </label>
+      </section>
+
+      <section class="inline-new-load__col">
+        <h4>Pickup</h4>
+        <label>Date
+          <input type="date" formControlName="pickupDate">
+        </label>
+        <label>City
+          <input formControlName="pickupCity" (input)="markPickupCityEdited()">
+        </label>
+        <label>State
+          <input formControlName="pickupState" (input)="markPickupStateEdited()">
+        </label>
+        <label>Zip
+          <input formControlName="pickupZip" (blur)="lookupPickupZip()">
+        </label>
+      </section>
+
+      <section class="inline-new-load__col">
+        <h4>Delivery</h4>
+        <label>Date
+          <input type="date" formControlName="deliveryDate">
+        </label>
+        <label>City
+          <input formControlName="deliveryCity" (input)="markDeliveryCityEdited()">
+        </label>
+        <label>State
+          <input formControlName="deliveryState" (input)="markDeliveryStateEdited()">
+        </label>
+        <label>Zip
+          <input formControlName="deliveryZip" (blur)="lookupDeliveryZip()">
+        </label>
+      </section>
+
+      <section class="inline-new-load__col">
+        <h4>Broker</h4>
+        <label>Broker
+          <div class="broker-combo" (click)="$event.stopPropagation()">
+            <input
+              formControlName="brokerName"
+              (focus)="onBrokerInputFocus()"
+              placeholder="Search or type broker name"
+            >
+            <div class="broker-dropdown" *ngIf="brokerDropdownOpen && filteredBrokers.length">
+              <button type="button" *ngFor="let b of filteredBrokers" (click)="selectBroker(b)">{{ b.name }}</button>
+            </div>
+          </div>
+        </label>
+        <label>PO #
+          <input formControlName="poNumber" placeholder="PO number">
+        </label>
+        <label>Rate ($)
+          <input formControlName="rate" type="number" step="0.01" placeholder="0.00">
+        </label>
+      </section>
+
+      <section class="inline-new-load__col">
+        <h4>Driver</h4>
+        <label>Driver
+          <div class="broker-combo inline-combo" (click)="$event.stopPropagation()">
+            <input
+              [(ngModel)]="driverSearch"
+              [ngModelOptions]="{standalone: true}"
+              (focus)="driverDropdownOpen = true"
+              (input)="driverDropdownOpen = true"
+              placeholder="Search driver"
+            >
+            <div class="broker-dropdown" *ngIf="driverDropdownOpen && inlineFilteredDrivers.length">
+              <button
+                type="button"
+                *ngFor="let d of inlineFilteredDrivers"
+                (click)="selectInlineDriver(d); driverDropdownOpen = false"
+              >
+                {{ d.name }}
+              </button>
+            </div>
+          </div>
+        </label>
+        <label>Truck
+          <div class="broker-combo inline-combo" (click)="$event.stopPropagation()">
+            <input
+              [(ngModel)]="truckSearch"
+              [ngModelOptions]="{standalone: true}"
+              (focus)="truckDropdownOpen = true"
+              (input)="truckDropdownOpen = true"
+              placeholder="Search truck"
+            >
+            <div class="broker-dropdown" *ngIf="truckDropdownOpen && inlineFilteredTrucks.length">
+              <button
+                type="button"
+                *ngFor="let t of inlineFilteredTrucks"
+                (click)="selectInlineTruck(t); truckDropdownOpen = false"
+              >
+                {{ t.label }}
+              </button>
+            </div>
+          </div>
+        </label>
+        <label>Trailer
+          <div class="broker-combo inline-combo" (click)="$event.stopPropagation()">
+            <input
+              [(ngModel)]="trailerSearch"
+              [ngModelOptions]="{standalone: true}"
+              (focus)="trailerDropdownOpen = true"
+              (input)="trailerDropdownOpen = true"
+              placeholder="Search trailer"
+            >
+            <div class="broker-dropdown" *ngIf="trailerDropdownOpen && inlineFilteredTrailers.length">
+              <button
+                type="button"
+                *ngFor="let t of inlineFilteredTrailers"
+                (click)="selectInlineTrailer(t); trailerDropdownOpen = false"
+              >
+                {{ t.label }}
+              </button>
+            </div>
+          </div>
+        </label>
+      </section>
+
+      <section class="inline-new-load__col">
+        <h4>Notes / Attachments</h4>
+        <label>Notes
+          <textarea formControlName="notes" rows="3" placeholder="Notes"></textarea>
+        </label>
+        <button
+          type="button"
+          class="btn btn-outline btn-sm inline-new-load__upload-btn"
+          (click)="showUploadModal = true"
+        >
+          <span class="material-symbols-outlined">upload_file</span>
+          <span>Upload attachments</span>
+        </button>
+      </section>
+    </div>
+
+    <div class="inline-new-load__footer">
+      <button
+        class="btn btn-primary"
+        type="submit"
+        [disabled]="creatingLoad"
+      >
+        {{ creatingLoad ? 'Creating...' : 'Create Load' }}
+      </button>
+      <button
+        class="btn btn-secondary"
+        type="button"
+        (click)="showInlineNewLoad = false"
+        [disabled]="creatingLoad"
+      >
+        Cancel
+      </button>
+    </div>
+  </form>
+
   <div class="table-card">
     <table class="table" *ngIf="!loading">
       <thead>
@@ -88,11 +318,9 @@
           </th>
           <!-- Date (pickup or completed) -->
           <th>
-            <input
-              type="text"
-              placeholder="Date"
-              [(ngModel)]="headerFilters.date"
-            />
+            <app-inline-date-filter
+              [(value)]="headerFilters.date"
+            ></app-inline-date-filter>
           </th>
           <!-- Driver -->
           <th>
@@ -203,10 +431,30 @@
           </td>
           <td>
             <div class="dropdown actions-dropdown" (click)="$event.stopPropagation()">
-              <button class="btn btn-outline btn-sm" (click)="actionsOpenLoadId = actionsOpenLoadId === load.id ? null : load.id">⋮</button>
-              <div class="dropdown-menu" *ngIf="actionsOpenLoadId === load.id">
-                <button type="button" (click)="openDetails(load); actionsOpenLoadId = null">View</button>
-                <button type="button" (click)="openDetails(load); actionsOpenLoadId = null">Attachments</button>
+              <button
+                class="actions-trigger"
+                type="button"
+                (click)="actionsOpenLoadId = actionsOpenLoadId === load.id ? null : load.id"
+              >
+                <span class="material-symbols-outlined">more_vert</span>
+              </button>
+              <div class="dropdown-menu actions-menu" *ngIf="actionsOpenLoadId === load.id">
+                <button
+                  type="button"
+                  class="actions-menu-item"
+                  (click)="openDetails(load); actionsOpenLoadId = null"
+                >
+                  <span class="material-symbols-outlined">visibility</span>
+                  <span>View</span>
+                </button>
+                <button
+                  type="button"
+                  class="actions-menu-item"
+                  (click)="openDetails(load); actionsOpenLoadId = null"
+                >
+                  <span class="material-symbols-outlined">attach_file</span>
+                  <span>Attachments</span>
+                </button>
               </div>
             </div>
           </td>
@@ -220,22 +468,155 @@
   </div>
 
   <div class="pagination">
-    <button class="btn btn-outline" (click)="goToPage(page - 1)" [disabled]="page === 1">Previous</button>
-    <span>Page {{ page }} of {{ maxPage }}</span>
-    <button class="btn btn-outline" (click)="goToPage(page + 1)" [disabled]="page * pageSize >= total">Next</button>
+    <button
+      class="pagination-btn"
+      (click)="goToPage(page - 1)"
+      [disabled]="page === 1"
+    >
+      <span class="material-symbols-outlined">chevron_left</span>
+      <span>Previous</span>
+    </button>
+    <span class="pagination-page">Page {{ page }} of {{ maxPage }}</span>
+    <button
+      class="pagination-btn"
+      (click)="goToPage(page + 1)"
+      [disabled]="page * pageSize >= total"
+    >
+      <span>Next</span>
+      <span class="material-symbols-outlined">chevron_right</span>
+    </button>
   </div>
 
   <!-- Manual Load Entry Modal -->
   <div class="modal-backdrop" *ngIf="showManualModal">
     <div class="modal">
+      <!-- Edit header summary -->
+      <div class="edit-load-header" *ngIf="editingLoadDetail">
+        <div class="edit-load-header__row">
+          <div class="edit-load-card">
+            <h4>Load #{{ editingLoadDetail.load_number }}</h4>
+            <div class="edit-load-card__line">
+              <span>Status</span>
+              <app-status-pill [status]="editingLoadDetail.status"></app-status-pill>
+            </div>
+            <div class="edit-load-card__line">
+              <span>Billing</span>
+              <app-status-pill [status]="editingLoadDetail.billing_status"></app-status-pill>
+            </div>
+            <div class="edit-load-card__meta">
+              Dispatcher · {{ dispatcherName || '—' }}
+            </div>
+          </div>
+
+          <div class="edit-load-card">
+            <h4>Trip</h4>
+            <div class="trip-timeline" *ngIf="sortedStops.length">
+              <div class="trip-driver">
+                <div class="trip-driver-label">
+                  Driver position
+                </div>
+                <div class="trip-driver-location">
+                  <span class="material-symbols-outlined trip-driver-icon">location_on</span>
+                  <span class="trip-driver-link">{{ driverPositionDisplay }}</span>
+                </div>
+              </div>
+              <div class="trip-arrow">
+                <span class="material-symbols-outlined">trending_flat</span>
+              </div>
+              <ng-container *ngFor="let stop of sortedStops; let i = index">
+                <div class="trip-stop-card trip-stop-card--clickable" (click)="openEditStopModal(stop, i)" role="button" tabindex="0" (keydown.enter)="openEditStopModal(stop, i)" (keydown.space)="openEditStopModal(stop, i); $event.preventDefault()">
+                  <div class="trip-stop-card__header">
+                    #{{ i + 1 }} {{ (stop.stop_type || '').toLowerCase() }}
+                  </div>
+                  <div class="trip-stop-card__city">
+                    <span class="material-symbols-outlined trip-stop-card__icon"
+                      >location_on</span
+                    >
+                    <span>{{ stop.city || '--' }}, {{ stop.state || '' }}</span>
+                  </div>
+                  <div class="trip-stop-card__meta" *ngIf="getStopDisplayDate(stop, i)">
+                    <span class="material-symbols-outlined trip-stop-card__icon">schedule</span>
+                    <span>{{ getStopDisplayDate(stop, i) | date:'MM/dd/yy' }}</span>
+                  </div>
+                  <div class="trip-stop-card__meta muted" *ngIf="!getStopDisplayDate(stop, i)">
+                    No date set
+                  </div>
+                </div>
+                <div class="trip-arrow" *ngIf="i < sortedStops.length - 1">
+                  <span class="material-symbols-outlined">trending_flat</span>
+                </div>
+              </ng-container>
+            </div>
+            <div *ngIf="!sortedStops.length" class="muted">No stops configured yet.</div>
+          </div>
+        </div>
+
+        <div class="edit-load-secondary" *ngIf="editingLoadDetail">
+          <div class="edit-load-card">
+            <h4>Trip info</h4>
+            <div class="metric-row">
+              <span>Total trip</span>
+              <strong>{{ editingLoadDetail.total_miles != null ? (editingLoadDetail.total_miles + ' mi') : '--' }}</strong>
+            </div>
+            <div class="metric-row">
+              <span>Loaded</span>
+              <strong>{{ editingLoadDetail.loaded_miles != null ? (editingLoadDetail.loaded_miles + ' mi') : '--' }}</strong>
+            </div>
+            <div class="metric-row">
+              <span>Empty</span>
+              <strong>{{ editingLoadDetail.empty_miles != null ? (editingLoadDetail.empty_miles + ' mi') : '--' }}</strong>
+            </div>
+            <div class="metric-row">
+              <span>Rate / mi</span>
+              <strong>
+                {{ ratePerMileDisplay }}
+              </strong>
+            </div>
+          </div>
+
+          <div class="edit-load-card">
+            <h4>Driver & Broker</h4>
+            <div class="edit-load-card__meta">
+              Driver · {{ editingLoadDetail.driver_name || '--' }}
+            </div>
+            <div class="edit-load-card__meta">
+              Broker · {{ editingLoadDetail.broker_display_name || editingLoadDetail.broker_name || '--' }}
+            </div>
+            <div class="edit-load-card__meta">
+              Rate · {{ editingLoadDetail.rate != null ? ('$' + (editingLoadDetail.rate | number:'1.2-2')) : '--' }}
+            </div>
+          </div>
+        </div>
+        <!-- Trip action links above Edit Load -->
+        <div class="trip-actions-row" *ngIf="editingLoadDetail">
+          <button type="button" class="trip-action-link" (click)="openRouteModal()">
+            <span class="material-symbols-outlined trip-action-icon">map</span>
+            <span>Map</span>
+          </button>
+          <button type="button" class="trip-action-link" (click)="openNewStopModal()">
+            <span class="material-symbols-outlined trip-action-icon">add_circle</span>
+            <span>Add stop</span>
+          </button>
+          <button type="button" class="trip-action-link" (click)="recalculateDistance()">
+            <span class="material-symbols-outlined trip-action-icon">refresh</span>
+            <span>Recalculate distance</span>
+          </button>
+          <button type="button" class="trip-action-link trip-action-link--disabled" (click)="dispatchInfoToDriver()" title="Coming later">
+            <span class="material-symbols-outlined trip-action-icon">send</span>
+            <span>Dispatch info to driver</span>
+          </button>
+        </div>
+      </div>
+
       <div class="modal-header">
         <h3>{{ editingLoadId ? 'Edit Load' : 'Manual Load Entry' }}</h3>
         <button class="close" (click)="closeManualModal()">×</button>
       </div>
       <form [formGroup]="manualLoadForm" (ngSubmit)="createLoad()" class="modal-body">
-        <div class="modal-grid">
-          <section>
-            <h4>New Load</h4>
+        <!-- Edit Load: only status, billing, dispatcher, broker, PO, rate, driver, truck/trailer -->
+        <div class="modal-grid edit-load-fields" *ngIf="editingLoadId">
+          <section class="edit-load-section">
+            <h4>Status & Billing</h4>
             <label>Status
               <select formControlName="status">
                 <option *ngFor="let s of statusOptions" [value]="s">{{ s.replace('_',' ') }}</option>
@@ -250,7 +631,59 @@
               <input formControlName="dispatcher" readonly>
             </label>
           </section>
+          <section class="edit-load-section">
+            <h4>Broker / PO / Rate</h4>
+            <label>Broker
+              <div class="broker-combo" (click)="$event.stopPropagation()">
+                <input formControlName="brokerName" (focus)="onBrokerInputFocus()" placeholder="Search or type broker name">
+                <div class="broker-dropdown" *ngIf="brokerDropdownOpen && filteredBrokers.length">
+                  <button type="button" *ngFor="let b of filteredBrokers" (click)="selectBroker(b)">{{ b.name }}</button>
+                </div>
+              </div>
+            </label>
+            <label>PO # <input formControlName="poNumber" placeholder="PO number"></label>
+            <label>Rate ($) <input formControlName="rate" type="number" step="0.01" placeholder="0.00"></label>
+          </section>
+          <section class="edit-load-section">
+            <h4>Driver / Equipment</h4>
+            <label>Driver
+              <select formControlName="driverId">
+                <option value="">Select driver</option>
+                <option *ngFor="let d of drivers" [value]="d.id">{{ d.name }}</option>
+              </select>
+            </label>
+            <label>Truck
+              <select formControlName="truckId">
+                <option value="">Select truck</option>
+                <option *ngFor="let t of trucks" [value]="t.id">{{ t.label }}</option>
+              </select>
+            </label>
+            <label>Trailer
+              <select formControlName="trailerId">
+                <option value="">Select trailer</option>
+                <option *ngFor="let t of trailers" [value]="t.id">{{ t.label }}</option>
+              </select>
+            </label>
+          </section>
+        </div>
 
+        <!-- Manual Load Entry (new load): full form with pickup/delivery -->
+        <div class="modal-grid" *ngIf="!editingLoadId">
+          <section>
+            <label>Status
+              <select formControlName="status">
+                <option *ngFor="let s of statusOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+              </select>
+            </label>
+            <label>Billing Status
+              <select formControlName="billingStatus">
+                <option *ngFor="let s of billingOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+              </select>
+            </label>
+            <label>Dispatcher
+              <input formControlName="dispatcher" readonly>
+            </label>
+          </section>
           <section>
             <h4>Pickup</h4>
             <label>Date <input type="date" formControlName="pickupDate"></label>
@@ -258,7 +691,6 @@
             <label>State <input formControlName="pickupState" (input)="markPickupStateEdited()"></label>
             <label>Zip <input formControlName="pickupZip" (blur)="lookupPickupZip()"></label>
           </section>
-
           <section>
             <h4>Delivery</h4>
             <label>Date <input type="date" formControlName="deliveryDate"></label>
@@ -266,7 +698,6 @@
             <label>State <input formControlName="deliveryState" (input)="markDeliveryStateEdited()"></label>
             <label>Zip <input formControlName="deliveryZip" (blur)="lookupDeliveryZip()"></label>
           </section>
-
           <section>
             <h4>Driver</h4>
             <label>Driver
@@ -276,7 +707,6 @@
               </select>
             </label>
           </section>
-
           <section>
             <h4>Truck / Trailer</h4>
             <label>Truck
@@ -292,7 +722,6 @@
               </select>
             </label>
           </section>
-
           <section>
             <h4>Broker / PO / Rate</h4>
             <label>Broker
@@ -306,12 +735,10 @@
             <label>PO # <input formControlName="poNumber" placeholder="PO number"></label>
             <label>Rate ($) <input formControlName="rate" type="number" step="0.01" placeholder="0.00"></label>
           </section>
-
           <section>
             <h4>Notes</h4>
             <textarea formControlName="notes" rows="4" placeholder="Notes"></textarea>
           </section>
-
         </div>
 
         <div class="attachments-card">
@@ -322,45 +749,216 @@
             <button type="button" [class.active]="attachmentTab === 'history'" (click)="attachmentTab = 'history'">History</button>
           </div>
 
-          <div class="attachments-content" *ngIf="attachmentTab === 'services'">
-            <p class="muted">Services and driver pay will be available here in a later phase.</p>
+          <!-- Services tab: table + action buttons (logic wired later) -->
+          <div class="attachments-content services-pane" *ngIf="attachmentTab === 'services'">
+            <div class="attachments-header">
+              <h4>Services</h4>
+              <div class="services-actions">
+                <button type="button" class="btn btn-success btn-sm" (click)="onNewLumper()">New lumper</button>
+                <button type="button" class="btn btn-success btn-sm" (click)="onNewDetention()">New detention</button>
+                <button type="button" class="btn btn-success btn-sm" (click)="onOtherAdditions()">Other additions/deductions</button>
+              </div>
+            </div>
+            <div class="services-table-wrapper">
+              <table class="services-table">
+                <thead>
+                  <tr>
+                    <th>Added</th>
+                    <th>Invoice amount</th>
+                    <th>Drivers payable</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="4" class="muted text-center">No records</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div class="attachments-content" *ngIf="attachmentTab === 'documents'">
+          <!-- Documents tab: uploaded docs table + merge / upload actions -->
+          <div class="attachments-content documents-pane" *ngIf="attachmentTab === 'documents'">
             <div class="attachments-header">
               <h4>Documents</h4>
-              <button type="button" class="btn btn-outline btn-sm" (click)="showUploadModal = true">Upload Attachment</button>
-            </div>
-
-            <!-- New load: show pending attachments -->
-            <div *ngIf="!editingLoadId && pendingAttachments.length" class="pending-list">
-              <div *ngFor="let item of pendingAttachments; let i = index" class="pending-item">
-                <span>{{ item.file.name }}</span>
-                <app-attachment-chip [type]="item.type"></app-attachment-chip>
-                <span class="muted" *ngIf="item.notes">· {{ item.notes }}</span>
-                <button type="button" class="link" (click)="removeAttachment(i)">Remove</button>
+              <div class="documents-actions">
+                <button
+                  type="button"
+                  class="btn btn-success btn-sm"
+                  *ngIf="hasMultipleDocuments()"
+                  (click)="mergeDocuments()"
+                >
+                  Merge documents
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" (click)="showUploadModal = true">
+                  Upload document
+                </button>
               </div>
             </div>
-            <p *ngIf="!editingLoadId && !pendingAttachments.length" class="muted">No attachments added yet.</p>
 
-            <!-- Edit load: show existing attachments -->
-            <div *ngIf="editingLoadId && editingLoadDetail?.attachments?.length" class="attachments-list">
-              <div *ngFor="let att of (editingLoadDetail?.attachments || [])" class="attachment-row">
-                <app-attachment-chip [type]="att.type"></app-attachment-chip>
-                <span class="attachment-name">{{ att.file_name }}</span>
-                <span class="muted">{{ att.created_at | date:'short' }}</span>
-                <a *ngIf="getAttachmentUrl(att)" [href]="getAttachmentUrl(att)" target="_blank" rel="noopener" class="link">Open</a>
+            <!-- Edit load: existing documents -->
+            <table class="documents-table" *ngIf="editingLoadId">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let att of (editingLoadDetail?.attachments || [])">
+                  <td>{{ att.created_at | date: 'MM/dd/yy hh:mm a' }}</td>
+                  <td>
+                    <app-attachment-chip [type]="att.type"></app-attachment-chip>
+                  </td>
+                  <td>
+                    <span class="attachment-name">
+                      <a
+                        *ngIf="getAttachmentUrl(att)"
+                        [href]="getAttachmentUrl(att)"
+                        target="_blank"
+                        rel="noopener"
+                        class="link"
+                      >
+                        {{ att.file_name }}
+                      </a>
+                    </span>
+                  </td>
+                  <td class="documents-actions-cell">
+                    <button type="button" class="btn-doc-action btn-doc-edit" (click)="editAttachment(att)" title="Edit / replace document">
+                      <span class="material-symbols-outlined">edit</span> Edit
+                    </button>
+                    <button type="button" class="btn-doc-action btn-doc-delete" (click)="deleteAttachment(att)" title="Delete document">
+                      <span class="material-symbols-outlined">delete</span> Delete
+                    </button>
+                  </td>
+                </tr>
+                <tr *ngIf="!(editingLoadDetail?.attachments?.length)">
+                  <td colspan="4" class="muted text-center">No documents uploaded yet.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- New load: pending attachments before save -->
+            <table class="documents-table" *ngIf="!editingLoadId">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let item of pendingAttachments; let i = index">
+                  <td class="attachment-name">{{ item.file.name }}</td>
+                  <td><app-attachment-chip [type]="item.type"></app-attachment-chip></td>
+                  <td>{{ item.notes || '—' }}</td>
+                  <td class="documents-actions-cell">
+                    <button type="button" class="link danger" (click)="removeAttachment(i)">Remove</button>
+                  </td>
+                </tr>
+                <tr *ngIf="!pendingAttachments.length">
+                  <td colspan="4" class="muted text-center">No attachments added yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Billing tab: invoice / driver pay / other payable shell -->
+          <div class="attachments-content billing-pane" *ngIf="attachmentTab === 'billing'">
+            <div class="billing-section">
+              <div class="billing-section-header">
+                <h4>Invoice</h4>
+                <div class="billing-actions">
+                  <button type="button" class="btn btn-success btn-sm">Create invoice</button>
+                  <button type="button" class="btn btn-outline btn-sm">Recalculate</button>
+                </div>
               </div>
+              <table class="billing-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th class="amount-col">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="3" class="muted text-center">No invoice created yet.</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <p *ngIf="editingLoadId && !(editingLoadDetail?.attachments?.length)" class="muted">No documents uploaded yet.</p>
+
+            <div class="billing-section">
+              <div class="billing-section-header">
+                <h4>Drivers payable</h4>
+                <button type="button" class="btn btn-outline btn-sm">Additions/deductions</button>
+              </div>
+              <table class="billing-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th class="amount-col">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="3" class="muted text-center">No driver pay records yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="billing-section">
+              <div class="billing-section-header">
+                <h4>Other payable</h4>
+              </div>
+              <table class="billing-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th class="amount-col">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="3" class="muted text-center">No other payables.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div class="attachments-content" *ngIf="attachmentTab === 'billing'">
-            <p class="muted">Billing and invoice summaries will be shown here later.</p>
-          </div>
-
-          <div class="attachments-content" *ngIf="attachmentTab === 'history'">
-            <p class="muted">Load history and audit log will be shown here later.</p>
+          <!-- History tab: audit log shell -->
+          <div class="attachments-content history-pane" *ngIf="attachmentTab === 'history'">
+            <div class="attachments-header">
+              <h4>History</h4>
+            </div>
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Author</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let item of (editingLoadDetail?.history || [])">
+                  <td>{{ item.date | date: 'MM/dd/yy hh:mm a' }}</td>
+                  <td>{{ item.description }}</td>
+                  <td>{{ item.author }}</td>
+                </tr>
+                <tr *ngIf="!(editingLoadDetail?.history?.length)">
+                  <td colspan="3" class="muted text-center">No history records yet.</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -371,6 +969,40 @@
           <button class="btn btn-secondary" type="button" (click)="closeManualModal()" [disabled]="creatingLoad">Close</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Replace Document Modal -->
+  <div class="modal-backdrop" *ngIf="showReplaceModal" (click)="closeReplaceModal()">
+    <div class="modal upload-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Edit / Replace document</h3>
+        <button class="close" type="button" (click)="closeReplaceModal()">×</button>
+      </div>
+      <div class="modal-body" *ngIf="editingAttachment">
+        <p class="muted">Current: {{ editingAttachment.file_name }}</p>
+        <div class="attachment-types">
+          <label *ngFor="let t of attachmentTypeOptions">
+            <input type="radio" name="replaceType" [(ngModel)]="replaceAttachmentType" [ngModelOptions]="{standalone: true}" [value]="t">
+            {{ t.replace('_',' ') }}
+          </label>
+        </div>
+        <div class="dropzone" (drop)="handleReplaceDrop($event)" (dragover)="allowDrop($event)">
+          <p>Optional: drag a new file to replace the document</p>
+          <input type="file" (change)="setReplaceAttachmentFile($any($event.target).files)">
+          <span class="muted" *ngIf="replaceAttachmentFile">{{ replaceAttachmentFile.name }}</span>
+        </div>
+        <label>Notes
+          <input [(ngModel)]="replaceAttachmentNotes" [ngModelOptions]="{standalone: true}" placeholder="Optional notes">
+        </label>
+        <div *ngIf="attachmentError" class="alert alert-error">{{ attachmentError }}</div>
+      </div>
+      <div class="modal-footer" *ngIf="editingAttachment">
+        <button class="btn btn-primary" type="button" (click)="saveReplaceAttachment()" [disabled]="replacingAttachment">
+          {{ replacingAttachment ? 'Saving...' : 'Save changes' }}
+        </button>
+        <button class="btn btn-secondary" type="button" (click)="closeReplaceModal()" [disabled]="replacingAttachment">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -402,6 +1034,194 @@
         <button class="btn btn-primary" type="button" (click)="saveAttachment()" [disabled]="creatingLoad">Save</button>
         <button class="btn btn-secondary" type="button" (click)="showUploadModal = false" [disabled]="creatingLoad">Close</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Route (Map) modal -->
+  <div class="modal-backdrop" *ngIf="showRouteModal" (click)="closeRouteModal()">
+    <div class="modal route-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Route</h3>
+        <button class="close" type="button" (click)="closeRouteModal()">×</button>
+      </div>
+      <div class="modal-body route-modal-body">
+        <div class="route-map-tabs" *ngIf="!routeMapLoading && !routeMapError">
+          <button type="button" class="route-tab" [class.active]="routeMapLayer === 'map'" (click)="setRouteMapLayer('map')">Map</button>
+          <button type="button" class="route-tab" [class.active]="routeMapLayer === 'satellite'" (click)="setRouteMapLayer('satellite')">Satellite</button>
+        </div>
+        <div id="route-map-container" class="route-map-container" *ngIf="!routeMapError"></div>
+        <div class="route-map-loading" *ngIf="routeMapLoading">
+          <span class="material-symbols-outlined">progress_activity</span>
+          Loading route…
+        </div>
+        <p class="route-map-error" *ngIf="routeMapError">{{ routeMapError }}</p>
+        <p class="route-summary muted" *ngIf="routeSummary && !routeMapLoading">{{ routeSummary }}</p>
+        <a [href]="routeMapUrl" target="_blank" rel="noopener" class="route-open-link" *ngIf="routeMapUrl && !routeMapLoading">
+          Open in Google Maps
+        </a>
+        <p class="muted" *ngIf="!routeMapUrl && !routeMapLoading && !routeMapError">Add pickup and delivery stops with zip codes to view the route.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" type="button" (click)="closeRouteModal()">✖ Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Stop modal -->
+  <div class="modal-backdrop" *ngIf="showNewStopModal" (click)="closeNewStopModal()">
+    <div class="modal new-stop-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>New Stop</h3>
+        <button class="close" type="button" (click)="closeNewStopModal()">×</button>
+      </div>
+      <form [formGroup]="newStopForm" (ngSubmit)="saveNewStop()" class="modal-body">
+        <div class="new-stop-form">
+          <div class="new-stop-field">
+            <label>Stop type</label>
+            <div class="radio-group">
+              <label class="radio-option"><input type="radio" formControlName="stopType" value="PICKUP"> <span>Pickup</span></label>
+              <label class="radio-option"><input type="radio" formControlName="stopType" value="DELIVERY"> <span>Delivery</span></label>
+            </div>
+          </div>
+          <div class="new-stop-field" *ngIf="sortedStops.length">
+            <label>Order (after)</label>
+            <select formControlName="orderAfterIndex">
+              <option *ngFor="let stop of sortedStops; let i = index" [value]="i">
+                #{{ i + 1 }} {{ stop.stop_type }}: {{ stop.city || '--' }}, {{ stop.state || '' }}
+              </option>
+            </select>
+          </div>
+          <div class="new-stop-field">
+            <label>Date *</label>
+            <input type="date" formControlName="stopDate">
+          </div>
+          <div class="new-stop-field">
+            <label>Company</label>
+            <input formControlName="company" placeholder="Search by name or MC number">
+          </div>
+          <div class="new-stop-field">
+            <label>Street</label>
+            <input formControlName="address1" placeholder="Street address">
+          </div>
+          <div class="new-stop-row">
+            <div class="new-stop-field">
+              <label>City *</label>
+              <input formControlName="city" placeholder="City">
+            </div>
+            <div class="new-stop-field">
+              <label>State *</label>
+              <input formControlName="state" placeholder="State">
+            </div>
+            <div class="new-stop-field">
+              <label>Zip</label>
+              <input formControlName="zip" placeholder="Zip">
+            </div>
+          </div>
+          <div class="new-stop-field">
+            <label>Phone</label>
+            <input formControlName="phone" type="tel" placeholder="Phone">
+          </div>
+          <div class="new-stop-field">
+            <label>Notes</label>
+            <textarea formControlName="notes" rows="2" placeholder="Notes"></textarea>
+          </div>
+        </div>
+        <div *ngIf="newStopError" class="alert alert-error">{{ newStopError }}</div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" (click)="closeNewStopModal()">Close</button>
+          <button class="btn btn-primary" type="submit" [disabled]="savingNewStop">
+            {{ savingNewStop ? 'Saving...' : 'Save' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Stop modal -->
+  <div class="modal-backdrop" *ngIf="showEditStopModal" (click)="closeEditStopModal()">
+    <div class="modal edit-stop-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Edit Stop</h3>
+        <button class="close" type="button" (click)="closeEditStopModal()">×</button>
+      </div>
+      <form [formGroup]="editStopForm" (ngSubmit)="saveEditStop()" class="modal-body">
+        <div class="new-stop-form">
+          <div class="new-stop-field">
+            <label>Stop type</label>
+            <div class="radio-group">
+              <label class="radio-option"><input type="radio" formControlName="stopType" value="PICKUP" (change)="onEditStopTypeChange('PICKUP')"> <span>Pickup</span></label>
+              <label class="radio-option"><input type="radio" formControlName="stopType" value="DELIVERY" (change)="onEditStopTypeChange('DELIVERY')"> <span>Delivery</span></label>
+              <label class="radio-option"><input type="radio" formControlName="stopType" value="OTHER" (change)="onEditStopTypeChange('OTHER')"> <span>Other</span></label>
+            </div>
+          </div>
+          <div class="new-stop-field" *ngIf="sortedStops.length">
+            <label>Order (after)</label>
+            <select formControlName="orderAfterIndex">
+              <option [value]="-1">Driver position: {{ driverPositionDisplay }}</option>
+              <option *ngFor="let stop of sortedStops; let i = index" [value]="i">
+                #{{ i + 1 }} {{ stop.stop_type }}: {{ stop.city || '--' }}, {{ stop.state || '' }}
+              </option>
+            </select>
+          </div>
+          <div class="new-stop-field">
+            <label>Appointment</label>
+            <div class="radio-group">
+              <label class="radio-option"><input type="radio" formControlName="appointmentType" value="FCFS"> <span>FCFS</span></label>
+              <label class="radio-option"><input type="radio" formControlName="appointmentType" value="Appt"> <span>Appt</span></label>
+            </div>
+          </div>
+          <div class="new-stop-row">
+            <div class="new-stop-field">
+              <label>Date *</label>
+              <input type="date" formControlName="stopDate">
+            </div>
+            <div class="new-stop-field" *ngIf="editStopForm.get('appointmentType')?.value === 'Appt'">
+              <label>Appt time</label>
+              <input type="time" formControlName="apptTime" placeholder="08:30 AM">
+            </div>
+          </div>
+          <div class="new-stop-field">
+            <label>Company</label>
+            <input formControlName="company" placeholder="Search by name or MC number">
+          </div>
+          <div class="new-stop-field">
+            <label>Street</label>
+            <input formControlName="address1" placeholder="Street address">
+          </div>
+          <div class="new-stop-row">
+            <div class="new-stop-field">
+              <label>City *</label>
+              <input formControlName="city" placeholder="City">
+            </div>
+            <div class="new-stop-field">
+              <label>State *</label>
+              <input formControlName="state" placeholder="State">
+            </div>
+            <div class="new-stop-field">
+              <label>Zip</label>
+              <input formControlName="zip" placeholder="Zip" (blur)="lookupZipForEditStop()">
+            </div>
+          </div>
+          <div class="new-stop-field">
+            <label>Phone</label>
+            <input formControlName="phone" type="tel" placeholder="Phone">
+          </div>
+          <div class="new-stop-field">
+            <label>Notes</label>
+            <textarea formControlName="notes" rows="3" placeholder="Notes"></textarea>
+          </div>
+        </div>
+        <div *ngIf="editStopError" class="alert alert-error">{{ editStopError }}</div>
+        <div class="modal-footer edit-stop-footer">
+          <button type="button" class="link link-danger" (click)="removeEditStop()" [disabled]="savingEditStop">Remove Stop</button>
+          <div class="edit-stop-actions">
+            <button class="btn btn-secondary" type="button" (click)="closeEditStopModal()" [disabled]="savingEditStop">✖ Close</button>
+            <button class="btn btn-primary" type="submit" [disabled]="savingEditStop">
+              {{ savingEditStop ? 'Saving...' : 'Save' }}
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   </div>
 

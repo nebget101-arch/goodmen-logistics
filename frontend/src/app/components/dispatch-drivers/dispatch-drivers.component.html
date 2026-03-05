@@ -5,12 +5,6 @@
       <p class="subtitle">Dispatch view - core assignments and pay</p>
     </div>
     <div class="header-actions">
-      <input
-        type="text"
-        class="form-input search-input"
-        placeholder="Search drivers"
-        [(ngModel)]="search"
-      />
       <button class="btn btn-primary" (click)="openNew()">+ New Driver</button>
     </div>
   </div>
@@ -34,6 +28,89 @@
         <th>Pay Basis</th>
         <th>Pay Rate / %</th>
         <th>Actions</th>
+      </tr>
+      <tr class="drivers-header-filters">
+        <th>
+          <input
+            type="text"
+            placeholder="Name / email / phone"
+            [(ngModel)]="driverFilters.name"
+          />
+        </th>
+        <th>
+          <select [(ngModel)]="driverFilters.type">
+            <option value="">All</option>
+            <option value="company">company</option>
+            <option value="owner_operator">owner_operator</option>
+          </select>
+        </th>
+        <th>
+          <select [(ngModel)]="driverFilters.status">
+            <option value="">All</option>
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+            <option value="applicant">applicant</option>
+          </select>
+        </th>
+        <th>
+          <input
+            type="text"
+            placeholder="YYYY-MM-DD"
+            [(ngModel)]="driverFilters.hireDate"
+          />
+        </th>
+        <th>
+          <input
+            type="text"
+            placeholder="YYYY-MM-DD"
+            [(ngModel)]="driverFilters.termDate"
+          />
+        </th>
+        <th>
+          <input
+            type="text"
+            placeholder="Phone"
+            [(ngModel)]="driverFilters.phone"
+          />
+        </th>
+        <th>
+          <input
+            type="text"
+            placeholder="Email"
+            [(ngModel)]="driverFilters.email"
+          />
+        </th>
+        <th>
+          <input
+            type="text"
+            placeholder="Truck"
+            [(ngModel)]="driverFilters.truck"
+          />
+        </th>
+        <th>
+          <input
+            type="text"
+            placeholder="Trailer"
+            [(ngModel)]="driverFilters.trailer"
+          />
+        </th>
+        <th>
+          <select [(ngModel)]="driverFilters.payBasis">
+            <option value="">All</option>
+            <option value="per_mile">per_mile</option>
+            <option value="percentage">percentage</option>
+            <option value="flatpay">flatpay</option>
+            <option value="hourly">hourly</option>
+          </select>
+        </th>
+        <th>
+          <input
+            type="text"
+            placeholder="Rate / %"
+            [(ngModel)]="driverFilters.payRate"
+          />
+        </th>
+        <th></th>
       </tr>
     </thead>
     <tbody>

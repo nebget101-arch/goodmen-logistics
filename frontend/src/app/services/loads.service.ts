@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import {
   LoadsListResponse,
@@ -98,6 +99,27 @@ export class LoadsService {
     return this.http.get<{ success: boolean; data: LoadAttachment[] }>(`${this.baseUrl}/loads/${loadId}/attachments`);
   }
 
+  deleteAttachment(loadId: string, attachmentId: string): Observable<{ success: boolean }> {
+    return this.http.delete<{ success: boolean }>(`${this.baseUrl}/loads/${loadId}/attachments/${attachmentId}`);
+  }
+
+  updateAttachment(
+    loadId: string,
+    attachmentId: string,
+    file?: File,
+    type?: LoadAttachmentType,
+    notes?: string | null
+  ): Observable<{ success: boolean; data: LoadAttachment }> {
+    const form = new FormData();
+    if (file) form.append('file', file);
+    if (type) form.append('type', type);
+    if (notes !== undefined) form.append('notes', notes ?? '');
+    return this.http.put<{ success: boolean; data: LoadAttachment }>(
+      `${this.baseUrl}/loads/${loadId}/attachments/${attachmentId}`,
+      form
+    );
+  }
+
   getActiveDrivers(): Observable<DriverOption[]> {
     return this.http.get<DriverOption[]>(`${this.baseUrl}/drivers`, { params: { status: 'active' } });
   }
@@ -110,8 +132,20 @@ export class LoadsService {
     return this.http.get<{ success: boolean; data: UserProfile }>(`${this.baseUrl}/users/me`);
   }
 
-  lookupZip(zip: string): Observable<{ success: boolean; data: { zip: string; city: string; state: string } }> {
-    return this.http.get<{ success: boolean; data: { zip: string; city: string; state: string } }>(`${this.baseUrl}/geo/zip/${encodeURIComponent(zip)}`);
+  lookupZip(zip: string): Observable<{ success: boolean; data: { zip: string; city: string; state: string; lat?: number; lon?: number } }> {
+    return this.http.get<{ success: boolean; data: { zip: string; city: string; state: string; lat?: number; lon?: number } }>(`${this.baseUrl}/geo/zip/${encodeURIComponent(zip)}`);
+  }
+
+  /** Get route geometry (GeoJSON coordinates) between waypoints via backend OSRM proxy. */
+  getRouteGeometry(waypoints: { lat: number; lon: number }[]): Observable<{ coordinates: [number, number][] } | null> {
+    if (waypoints.length < 2) return of(null);
+    const waypointsParam = waypoints.map((w) => `${w.lon},${w.lat}`).join(';');
+    return this.http.get<{ success: boolean; data?: { coordinates: [number, number][] } }>(`${this.baseUrl}/geo/route`, {
+      params: { waypoints: waypointsParam }
+    }).pipe(
+      map((res) => (res?.data?.coordinates?.length ? res.data : null)),
+      catchError(() => of(null))
+    );
   }
 
   getBrokers(search?: string): Observable<{ success: boolean; data: BrokerOption[] }> {

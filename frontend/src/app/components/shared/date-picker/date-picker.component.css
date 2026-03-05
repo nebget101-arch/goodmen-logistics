@@ -1,0 +1,27 @@
+.ai-date-field {
+  width: 100%;
+  font-size: 14px;
+}
+
+.ai-date-field .mat-mdc-text-field-wrapper {
+  background: radial-gradient(circle at 0 0, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 1));
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+}
+
+.ai-date-field .mat-mdc-form-field-flex {
+  color: var(--text-dark);
+}
+
+.ai-date-field .mat-mdc-input-element {
+  color: var(--text-dark);
+}
+
+.ai-date-field .mat-mdc-form-field-outline {
+  display: none;
+}
+
+.ai-date-field .material-symbols-outlined {
+  font-size: 18px;
+}
+

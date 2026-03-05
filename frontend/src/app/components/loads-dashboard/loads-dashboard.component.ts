@@ -1,7 +1,10 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Subject, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, takeUntil, forkJoin, of } from 'rxjs';
+import { map, catchError, switchMap } from 'rxjs/operators';
+import * as L from 'leaflet';
 import {
+  LoadAttachment,
   LoadAttachmentType,
   LoadDetail,
   LoadListItem,
@@ -30,6 +33,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   showManualModal = false;
   showAutoModal = false;
   showDetailsModal = false;
+  showInlineNewLoad = false;
+  showRouteModal = false;
+  showNewStopModal = false;
   selectedLoad: LoadDetail | null = null;
   /** ID of load whose row actions menu is open (for click-outside close). */
   actionsOpenLoadId: string | null = null;
@@ -47,6 +53,16 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   uploadAttachmentType: LoadAttachmentType = 'RATE_CONFIRMATION';
   uploadAttachmentNotes = '';
   uploadSelectedFiles: FileList | null = null;
+
+  /** Replace (edit) attachment modal state. */
+  showReplaceModal = false;
+  editingAttachment: LoadAttachment | null = null;
+  replaceAttachmentType: LoadAttachmentType = 'RATE_CONFIRMATION';
+  replaceAttachmentNotes = '';
+  replaceAttachmentFile: File | null = null;
+  replacingAttachment = false;
+
+  readonly attachmentTypeOptions: LoadAttachmentType[] = ['RATE_CONFIRMATION', 'BOL', 'LUMPER', 'OTHER', 'CONFIRMATION'];
 
   // Auto-create from PDF state
   autoPdfFile: File | null = null;
@@ -72,6 +88,31 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   search$ = new Subject<string>();
   private destroy$ = new Subject<void>();
+
+  // Inline searchable combos for driver / truck / trailer
+  driverSearch = '';
+  truckSearch = '';
+  trailerSearch = '';
+  driverDropdownOpen = false;
+  truckDropdownOpen = false;
+  trailerDropdownOpen = false;
+  sortedStops: LoadStop[] = [];
+  newStopForm: FormGroup;
+  newStopError = '';
+  savingNewStop = false;
+  showEditStopModal = false;
+  editingStopIndex: number | null = null;
+  editStopForm: FormGroup;
+  editStopError = '';
+  savingEditStop = false;
+
+  routeMap: L.Map | null = null;
+  routeMapLayer: 'map' | 'satellite' = 'map';
+  routeMapLoading = false;
+  routeMapError = '';
+  private routeWaypoints: { lat: number; lon: number }[] = [];
+  private routeGeometry: { coordinates: [number, number][] } | null = null;
+  private routeTileLayers: { map: L.TileLayer; satellite: L.TileLayer } | null = null;
 
   page = 1;
   pageSize = 25;
@@ -136,6 +177,113 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   statusOptions: LoadStatus[] = ['NEW', 'DISPATCHED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'];
   billingOptions: BillingStatus[] = ['PENDING', 'FUNDED', 'INVOICED', 'PAID'];
 
+  private headerFilterLabels: { [K in keyof typeof this.headerFilters]: string } = {
+    date: 'Date',
+    broker: 'Broker',
+    po: 'PO #',
+    pickup: 'Pickup',
+    delivery: 'Delivery',
+    rate: 'Rate',
+    notes: 'Notes',
+    attachmentType: 'Attachment'
+  };
+
+  // Convenience getters/setters for binding custom date picker to reactive form
+  get pickupDateValue(): string {
+    return (this.manualLoadForm.get('pickupDate')?.value as string) || '';
+  }
+
+  set pickupDateValue(value: string) {
+    this.manualLoadForm.get('pickupDate')?.setValue(value);
+  }
+
+  get deliveryDateValue(): string {
+    return (this.manualLoadForm.get('deliveryDate')?.value as string) || '';
+  }
+
+  set deliveryDateValue(value: string) {
+    this.manualLoadForm.get('deliveryDate')?.setValue(value);
+  }
+
+  // Human-readable rate per mile for edit header
+  get ratePerMileDisplay(): string {
+    const d = this.editingLoadDetail;
+    if (!d) return '--';
+
+    let value: number | null = null;
+    if (d.rate_per_mile != null) {
+      value = d.rate_per_mile;
+    } else if (d.rate != null && d.total_miles) {
+      value = d.total_miles > 0 ? d.rate / d.total_miles : null;
+    }
+
+    if (value == null || !isFinite(value)) return '--';
+    return value.toFixed(2);
+  }
+
+  /** Google Maps directions URL from first to last stop (when viewing route). */
+  get routeMapUrl(): string {
+    const stops = this.sortedStops;
+    if (!stops || stops.length < 2) return '';
+    const origin = stops[0];
+    const dest = stops[stops.length - 1];
+    const o = [origin.city, origin.state, origin.zip].filter(Boolean).join(', ');
+    const d = [dest.city, dest.state, dest.zip].filter(Boolean).join(', ');
+    if (!o || !d) return '';
+    const params = new URLSearchParams({ api: '1', origin: o, destination: d });
+    return `https://www.google.com/maps/dir/?${params.toString()}`;
+  }
+
+  get routeSummary(): string {
+    const stops = this.sortedStops;
+    if (!stops || stops.length < 2) return '';
+    const origin = stops[0];
+    const dest = stops[stops.length - 1];
+    const o = [origin.city, origin.state].filter(Boolean).join(', ');
+    const d = [dest.city, dest.state].filter(Boolean).join(', ');
+    return o && d ? `${o} → ${d}` : '';
+  }
+
+  /** Driver position = from loads API (position before picking up this load), else fallback to last delivery. */
+  get driverPositionDisplay(): string {
+    const load = this.editingLoadDetail;
+    const city = (load?.driver_position_city || '').toString().trim();
+    const state = (load?.driver_position_state || '').toString().trim();
+    if (city || state) return [city || '--', state].filter(Boolean).join(', ');
+    const stops = this.sortedStops || [];
+    if (!stops.length) return '--';
+    const lastDelivery = [...stops].reverse().find(
+      (s) => (s.stop_type || '').toString().toUpperCase() === 'DELIVERY'
+    );
+    const stop = lastDelivery || stops[stops.length - 1];
+    return [stop.city || '--', stop.state || ''].filter(Boolean).join(', ');
+  }
+
+  /** True if the datetime has a non‑midnight time component; otherwise treat it as date‑only. */
+  hasTimePart(value: unknown): boolean {
+    if (!value) return false;
+    const d = value instanceof Date ? value : new Date(value as any);
+    if (Number.isNaN(d.getTime())) return false;
+    return d.getHours() !== 0 || d.getMinutes() !== 0 || d.getSeconds() !== 0;
+  }
+
+  /** Pickup/delivery date for a stop: match Edit Load form (form value first), then stop date, then load from API. */
+  getStopDisplayDate(stop: LoadStop, _index: number): string | null {
+    const load = this.editingLoadDetail;
+    const type = (stop?.stop_type || '').toString().toUpperCase();
+    const formPickup = this.manualLoadForm.get('pickupDate')?.value;
+    const formDelivery = this.manualLoadForm.get('deliveryDate')?.value;
+    if (type === 'PICKUP') {
+      const v = (formPickup ?? stop?.stop_date ?? load?.pickup_date) ?? null;
+      return v ? String(v).trim() || null : null;
+    }
+    if (type === 'DELIVERY') {
+      const v = (formDelivery ?? stop?.stop_date ?? load?.delivery_date) ?? null;
+      return v ? String(v).trim() || null : null;
+    }
+    return (stop?.stop_date as string) || null;
+  }
+
   constructor(private loadsService: LoadsService, private fb: FormBuilder) {
     this.manualLoadForm = this.fb.group({
       status: ['NEW', Validators.required],
@@ -158,6 +306,39 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       rate: ['', [Validators.required, Validators.pattern(/^\d+(\.\d{1,2})?$/)]],
       notes: ['']
     });
+    this.newStopForm = this.fb.group({
+      stopType: ['DELIVERY'],
+      orderAfterIndex: [0],
+      stopDate: ['', Validators.required],
+      company: [''],
+      address1: [''],
+      city: ['', Validators.required],
+      state: ['', Validators.required],
+      zip: [''],
+      phone: [''],
+      notes: ['']
+    });
+    this.editStopForm = this.fb.group({
+      stopType: ['PICKUP'],
+      orderAfterIndex: [0],
+      appointmentType: ['FCFS'],
+      stopDate: ['', Validators.required],
+      apptTime: [''],
+      company: [''],
+      address1: [''],
+      city: ['', Validators.required],
+      state: ['', Validators.required],
+      zip: [''],
+      phone: [''],
+      notes: ['']
+    });
+  }
+
+  private normalizeDate(value: any): string {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toISOString().slice(0, 10);
   }
 
   ngOnInit(): void {
@@ -252,6 +433,42 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.brokerDropdownOpen = true;
   }
 
+  get inlineFilteredDrivers(): { id: string; name: string }[] {
+    const q = this.driverSearch.trim().toLowerCase();
+    if (!q) return this.drivers.slice(0, 50);
+    return this.drivers.filter((d) => d.name.toLowerCase().includes(q)).slice(0, 50);
+  }
+
+  get inlineFilteredTrucks(): { id: string; label: string }[] {
+    const q = this.truckSearch.trim().toLowerCase();
+    if (!q) return this.trucks.slice(0, 50);
+    return this.trucks.filter((t) => t.label.toLowerCase().includes(q)).slice(0, 50);
+  }
+
+  get inlineFilteredTrailers(): { id: string; label: string }[] {
+    const q = this.trailerSearch.trim().toLowerCase();
+    if (!q) return this.trailers.slice(0, 50);
+    return this.trailers.filter((t) => t.label.toLowerCase().includes(q)).slice(0, 50);
+  }
+
+  selectInlineDriver(driver: { id: string; name: string }): void {
+    this.manualLoadForm.patchValue({ driverId: driver.id });
+    this.driverSearch = driver.name;
+    this.driverDropdownOpen = false;
+  }
+
+  selectInlineTruck(truck: { id: string; label: string }): void {
+    this.manualLoadForm.patchValue({ truckId: truck.id });
+    this.truckSearch = truck.label;
+    this.truckDropdownOpen = false;
+  }
+
+  selectInlineTrailer(trailer: { id: string; label: string }): void {
+    this.manualLoadForm.patchValue({ trailerId: trailer.id });
+    this.trailerSearch = trailer.label;
+    this.trailerDropdownOpen = false;
+  }
+
   loadLoads(): void {
     this.loading = true;
     this.errorMessage = '';
@@ -331,7 +548,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.selectedAttachmentFiles = null;
     this.resetManualForm();
     this.loadBrokers();
-    this.showManualModal = true;
+    this.showManualModal = false;
+    this.showInlineNewLoad = true;
     this.showNewLoadMenu = false;
   }
 
@@ -349,6 +567,466 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showUploadModal = false;
     this.editingLoadId = null;
     this.editingLoadDetail = null;
+  }
+
+  openRouteModal(): void {
+    this.destroyRouteMap();
+    this.showRouteModal = true;
+    this.routeMapError = '';
+    this.routeMapLoading = true;
+    this.routeWaypoints = [];
+    this.routeGeometry = null;
+    const allStops = this.sortedStops || [];
+    if (allStops.length < 2) {
+      this.routeMapLoading = false;
+      this.routeMapError = 'Add at least two stops to view the route.';
+      return;
+    }
+    const stopsWithZip = allStops.filter((stop) => (stop.zip || '').toString().trim());
+    if (stopsWithZip.length < 2) {
+      this.routeMapLoading = false;
+      this.routeMapError = 'Add zip codes to at least pickup and delivery to show the route on the map.';
+      return;
+    }
+    const zipLookups = stopsWithZip.map((stop) => {
+      const zip = (stop.zip || '').toString().trim();
+      return this.loadsService.lookupZip(zip).pipe(
+        map((res) => {
+          const d = res?.data;
+          if (d?.lat != null && d?.lon != null) return { lat: d.lat, lon: d.lon };
+          return null;
+        }),
+        catchError(() => of(null))
+      );
+    });
+    forkJoin(zipLookups).pipe(
+      switchMap((waypoints) => {
+        const validWaypoints = (waypoints.filter((w) => !!w) as { lat: number; lon: number }[]);
+        if (validWaypoints.length < 2) {
+          this.routeMapError = 'Could not resolve enough locations to draw the route.';
+          this.routeMapLoading = false;
+          return of(null);
+        }
+        this.routeWaypoints = validWaypoints;
+        return this.loadsService.getRouteGeometry(this.routeWaypoints).pipe(
+          map((geom) => {
+            this.routeGeometry = geom;
+            this.routeMapLoading = false;
+            setTimeout(() => this.initRouteMap(), 350);
+            return null;
+          }),
+          catchError(() => {
+            this.routeMapLoading = false;
+            this.routeGeometry = null;
+            setTimeout(() => this.initRouteMap(), 350);
+            return of(null);
+          })
+        );
+      }),
+      catchError(() => {
+        this.routeMapLoading = false;
+        this.routeMapError = 'Could not load route.';
+        return of(null);
+      }),
+      takeUntil(this.destroy$)
+    ).subscribe();
+  }
+
+  closeRouteModal(): void {
+    this.showRouteModal = false;
+    this.destroyRouteMap();
+  }
+
+  setRouteMapLayer(layer: 'map' | 'satellite'): void {
+    this.routeMapLayer = layer;
+    if (!this.routeMap || !this.routeTileLayers) return;
+    if (layer === 'map') {
+      this.routeMap.removeLayer(this.routeTileLayers.satellite);
+      this.routeMap.addLayer(this.routeTileLayers.map);
+    } else {
+      this.routeMap.removeLayer(this.routeTileLayers.map);
+      this.routeMap.addLayer(this.routeTileLayers.satellite);
+    }
+  }
+
+  private destroyRouteMap(): void {
+    if (this.routeMap) {
+      this.routeMap.remove();
+      this.routeMap = null;
+    }
+    this.routeTileLayers = null;
+  }
+
+  private initRouteMap(): void {
+    const container = document.getElementById('route-map-container');
+    if (!container || container.children.length > 0) return;
+    const waypoints = this.routeWaypoints;
+    if (waypoints.length === 0) return;
+
+    // Force container size so Leaflet gets correct dimensions (modal may not have laid out yet)
+    container.style.height = '360px';
+    container.style.width = '100%';
+    container.style.minHeight = '360px';
+
+    const map = L.map(container, { center: [waypoints[0].lat, waypoints[0].lon], zoom: 6 });
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    });
+    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '© Esri'
+    });
+    this.routeTileLayers = { map: osm, satellite };
+    if (this.routeMapLayer === 'satellite') {
+      satellite.addTo(map);
+    } else {
+      osm.addTo(map);
+    }
+
+    if (this.routeGeometry?.coordinates?.length) {
+      const latLngs: L.LatLngExpression[] = this.routeGeometry.coordinates.map(([lon, lat]) => [lat, lon]);
+      L.polyline(latLngs, { color: '#22c55e', weight: 5, opacity: 0.9 }).addTo(map);
+    }
+
+    waypoints.forEach((wp, i) => {
+      const isFirst = i === 0;
+      const marker = L.marker([wp.lat, wp.lon], {
+        icon: L.divIcon({
+          className: 'route-marker',
+          html: `<span class="route-marker-num ${isFirst ? 'route-marker-pickup' : 'route-marker-delivery'}">#${i + 1}</span>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14]
+        })
+      }).addTo(map);
+    });
+
+    const bounds = L.latLngBounds(waypoints.map((w) => [w.lat, w.lon]));
+    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 10 });
+
+    // Leaflet needs the container to have final size; modal may still be laying out
+    setTimeout(() => {
+      map.invalidateSize();
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 10 });
+    }, 100);
+    setTimeout(() => {
+      if (this.routeMap === map) {
+        map.invalidateSize();
+        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 10 });
+      }
+    }, 400);
+
+    this.routeMap = map;
+  }
+
+  openNewStopModal(): void {
+    this.newStopError = '';
+    this.newStopForm.reset({
+      stopType: 'DELIVERY',
+      orderAfterIndex: 0,
+      stopDate: '',
+      company: '',
+      address1: '',
+      city: '',
+      state: '',
+      zip: '',
+      phone: '',
+      notes: ''
+    });
+    this.showNewStopModal = true;
+  }
+
+  closeNewStopModal(): void {
+    this.showNewStopModal = false;
+    this.newStopError = '';
+  }
+
+  openEditStopModal(stop: LoadStop, index: number): void {
+    this.editingStopIndex = index;
+    this.editStopError = '';
+    const type = (stop?.stop_type || 'PICKUP').toString().toUpperCase();
+    let dateVal = stop?.stop_date ? this.normalizeDate(stop.stop_date) : '';
+    if (!dateVal) {
+      const load = this.editingLoadDetail;
+      const formPickup = this.manualLoadForm.get('pickupDate')?.value;
+      const formDelivery = this.manualLoadForm.get('deliveryDate')?.value;
+      if (type === 'PICKUP') dateVal = this.normalizeDate(load?.pickup_date || formPickup);
+      else if (type === 'DELIVERY') dateVal = this.normalizeDate(load?.delivery_date || formDelivery);
+    }
+    this.editStopForm.reset({
+      stopType: type,
+      orderAfterIndex: Math.max(0, index - 1),
+      appointmentType: 'FCFS',
+      stopDate: dateVal,
+      apptTime: '',
+      company: '',
+      address1: stop?.address1 || '',
+      city: stop?.city || '',
+      state: stop?.state || '',
+      zip: stop?.zip || '',
+      phone: '',
+      notes: (stop as any)?.address2 || ''
+    });
+    this.showEditStopModal = true;
+  }
+
+  closeEditStopModal(): void {
+    this.showEditStopModal = false;
+    this.editingStopIndex = null;
+    this.editStopError = '';
+  }
+
+  /** When user switches Stop type radio in Edit Stop modal, switch to editing that stop (pickup or delivery). */
+  onEditStopTypeChange(value: string): void {
+    const type = value.toString().toUpperCase();
+    const stops = this.sortedStops || [];
+    let idx = -1;
+    if (type === 'PICKUP') {
+      idx = stops.findIndex((s) => (s.stop_type || '').toString().toUpperCase() === 'PICKUP');
+    } else if (type === 'DELIVERY' || type === 'OTHER') {
+      idx = stops.findIndex((s) => (s.stop_type || '').toString().toUpperCase() === 'DELIVERY');
+    }
+    if (idx < 0) return;
+    const stop = stops[idx];
+    this.editingStopIndex = idx;
+    let dateVal = stop?.stop_date ? this.normalizeDate(stop.stop_date) : '';
+    if (!dateVal) {
+      const load = this.editingLoadDetail;
+      const formPickup = this.manualLoadForm.get('pickupDate')?.value;
+      const formDelivery = this.manualLoadForm.get('deliveryDate')?.value;
+      if (type === 'PICKUP') dateVal = this.normalizeDate(load?.pickup_date || formPickup);
+      else dateVal = this.normalizeDate(load?.delivery_date || formDelivery);
+    }
+    this.editStopForm.patchValue({
+      stopType: type,
+      orderAfterIndex: Math.max(0, idx - 1),
+      stopDate: dateVal,
+      address1: stop?.address1 || '',
+      city: stop?.city || '',
+      state: stop?.state || '',
+      zip: stop?.zip || '',
+      notes: (stop as any)?.address2 || ''
+    });
+  }
+
+  lookupZipForEditStop(): void {
+    const zip = (this.editStopForm.get('zip')?.value || '').toString().trim();
+    if (zip.length < 5) return;
+    this.loadsService.lookupZip(zip).subscribe({
+      next: (res) => {
+        this.editStopForm.patchValue({
+          city: res?.data?.city || '',
+          state: res?.data?.state || ''
+        });
+      }
+    });
+  }
+
+  saveEditStop(): void {
+    this.editStopError = '';
+    this.editStopForm.markAllAsTouched();
+    if (this.editStopForm.invalid) {
+      this.editStopError = 'Please fill required fields: Date, City, State.';
+      return;
+    }
+    if (this.editingStopIndex == null || !this.editingLoadId || !this.editingLoadDetail) {
+      this.editStopError = 'No stop selected.';
+      return;
+    }
+    const v = this.editStopForm.getRawValue();
+    const rawType = (v.stopType || 'PICKUP').toString().toUpperCase();
+    const stopType = rawType === 'OTHER' ? 'DELIVERY' : (rawType as 'PICKUP' | 'DELIVERY');
+    const updated: LoadStop & { stopDate?: string } = {
+      ...this.sortedStops[this.editingStopIndex],
+      stop_type: stopType,
+      stop_date: v.stopDate || null,
+      stopDate: v.stopDate || undefined,
+      city: v.city || null,
+      state: v.state || null,
+      zip: v.zip || null,
+      address1: v.address1 || null,
+      address2: v.notes || null
+    };
+    const stops = this.sortedStops.map((s, i) => ({
+      ...s,
+      sequence: i + 1,
+      stop_date: s.stop_date ?? (s as any).stopDate ?? null
+    }));
+    const updatedWithDate = {
+      ...updated,
+      sequence: this.editingStopIndex + 1,
+      stop_date: updated.stop_date ?? (updated as any).stopDate ?? null
+    };
+    stops[this.editingStopIndex] = updatedWithDate;
+    const payload = this.buildLoadPayloadFromDetail();
+    payload.stops = stops;
+    this.savingEditStop = true;
+    this.loadsService.updateLoad(this.editingLoadId, payload).subscribe({
+      next: (res) => {
+        const detail = res?.data;
+        if (detail) {
+          this.editingLoadDetail = detail;
+          this.sortedStops = (detail.stops || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+          this.syncManualFormFromStops();
+        }
+        this.savingEditStop = false;
+        this.closeEditStopModal();
+      },
+      error: () => {
+        this.savingEditStop = false;
+        this.editStopError = 'Failed to update stop.';
+      }
+    });
+  }
+
+  removeEditStop(): void {
+    if (this.editingStopIndex == null || !this.editingLoadId || !this.editingLoadDetail) return;
+    const stops = this.sortedStops.filter((_, i) => i !== this.editingStopIndex);
+    const hasPickup = stops.some((s) => (s.stop_type || '').toString().toUpperCase() === 'PICKUP');
+    const hasDelivery = stops.some((s) => (s.stop_type || '').toString().toUpperCase() === 'DELIVERY');
+    if (!hasPickup || !hasDelivery) {
+      this.editStopError = 'Load must have at least one pickup and one delivery stop.';
+      return;
+    }
+    const reordered = stops.map((s, i) => ({ ...s, sequence: i + 1 }));
+    const payload = this.buildLoadPayloadFromDetail();
+    payload.stops = reordered;
+    this.savingEditStop = true;
+    this.loadsService.updateLoad(this.editingLoadId, payload).subscribe({
+      next: (res) => {
+        const detail = res?.data;
+        if (detail) {
+          this.editingLoadDetail = detail;
+          this.sortedStops = (detail.stops || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+          this.syncManualFormFromStops();
+        }
+        this.savingEditStop = false;
+        this.closeEditStopModal();
+      },
+      error: () => {
+        this.savingEditStop = false;
+        this.editStopError = 'Failed to remove stop.';
+      }
+    });
+  }
+
+  private buildLoadPayloadFromDetail(): any {
+    const d = this.editingLoadDetail!;
+    return {
+      status: d.status,
+      billingStatus: d.billing_status,
+      dispatcherUserId: this.dispatcherUserId,
+      driverId: d.driver_id || null,
+      truckId: d.truck_id || null,
+      trailerId: d.trailer_id || null,
+      brokerId: d.broker_id || null,
+      brokerName: d.broker_name || null,
+      poNumber: d.po_number || null,
+      rate: d.rate ?? 0,
+      notes: d.notes || null,
+      stops: (d.stops || []).map((s, i) => ({ ...s, sequence: i + 1 }))
+    };
+  }
+
+  private syncManualFormFromStops(): void {
+    const stops = this.sortedStops || [];
+    const pickup = stops.find((s) => (s.stop_type || '').toString().toUpperCase() === 'PICKUP');
+    const delivery = stops.find((s) => (s.stop_type || '').toString().toUpperCase() === 'DELIVERY');
+    if (pickup) {
+      const patch: any = {};
+      if (pickup.stop_date) patch.pickupDate = this.normalizeDate(pickup.stop_date);
+      if (pickup.city != null && pickup.city !== '') patch.pickupCity = pickup.city;
+      if (pickup.state != null && pickup.state !== '') patch.pickupState = pickup.state;
+      if (pickup.zip != null && pickup.zip !== '') patch.pickupZip = pickup.zip;
+      if (Object.keys(patch).length) this.manualLoadForm.patchValue(patch);
+    }
+    if (delivery) {
+      const patch: any = {};
+      if (delivery.stop_date) patch.deliveryDate = this.normalizeDate(delivery.stop_date);
+      if (delivery.city != null && delivery.city !== '') patch.deliveryCity = delivery.city;
+      if (delivery.state != null && delivery.state !== '') patch.deliveryState = delivery.state;
+      if (delivery.zip != null && delivery.zip !== '') patch.deliveryZip = delivery.zip;
+      if (Object.keys(patch).length) this.manualLoadForm.patchValue(patch);
+    }
+  }
+
+  saveNewStop(): void {
+    this.newStopError = '';
+    this.newStopForm.markAllAsTouched();
+    if (this.newStopForm.invalid) {
+      this.newStopError = 'Please fill required fields: Date, City, State.';
+      return;
+    }
+    if (!this.editingLoadId || !this.editingLoadDetail) {
+      this.newStopError = 'No load selected.';
+      return;
+    }
+    const v = this.newStopForm.getRawValue();
+    const orderAfter = Math.min(Number(v.orderAfterIndex) || 0, Math.max(0, this.sortedStops.length - 1));
+    const newStop: LoadStop & { stopDate?: string } = {
+      stop_type: v.stopType as 'PICKUP' | 'DELIVERY',
+      stop_date: v.stopDate || null,
+      stopDate: v.stopDate || undefined,
+      city: v.city || null,
+      state: v.state || null,
+      zip: v.zip || null,
+      address1: v.address1 || null,
+      sequence: orderAfter + 2
+    };
+    const existing = this.sortedStops.map((s, i) => ({ ...s, sequence: i + 1 }));
+    const inserted = [...existing.slice(0, orderAfter + 1), newStop, ...existing.slice(orderAfter + 1)];
+    for (let i = 0; i < inserted.length; i++) {
+      inserted[i].sequence = i + 1;
+    }
+    const payload = {
+      status: this.editingLoadDetail.status,
+      billingStatus: this.editingLoadDetail.billing_status,
+      dispatcherUserId: this.dispatcherUserId,
+      driverId: this.editingLoadDetail.driver_id || null,
+      truckId: this.editingLoadDetail.truck_id || null,
+      trailerId: this.editingLoadDetail.trailer_id || null,
+      brokerId: this.editingLoadDetail.broker_id || null,
+      brokerName: this.editingLoadDetail.broker_name || null,
+      poNumber: this.editingLoadDetail.po_number || null,
+      rate: this.editingLoadDetail.rate ?? 0,
+      notes: this.editingLoadDetail.notes || null,
+      stops: inserted
+    };
+    this.savingNewStop = true;
+    this.loadsService.updateLoad(this.editingLoadId, payload).subscribe({
+      next: (res) => {
+        const detail = res?.data;
+        if (detail) {
+          this.editingLoadDetail = detail;
+          this.sortedStops = (detail.stops || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+          this.syncManualFormFromStops();
+        }
+        this.savingNewStop = false;
+        this.closeNewStopModal();
+      },
+      error: () => {
+        this.savingNewStop = false;
+        this.newStopError = 'Failed to add stop.';
+      }
+    });
+  }
+
+  recalculateDistance(): void {
+    if (!this.editingLoadId) return;
+    this.loadsService.getLoad(this.editingLoadId).subscribe({
+      next: (res) => {
+        const detail = res?.data;
+        if (detail) {
+          this.editingLoadDetail = detail;
+          this.sortedStops = (detail.stops || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+        }
+      },
+      error: () => {
+        this.errorMessage = 'Failed to refresh load.';
+      }
+    });
+  }
+
+  dispatchInfoToDriver(): void {
+    // To be implemented later
   }
 
   closeAutoModal(): void {
@@ -384,6 +1062,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         }
         this.editingLoadId = detail.id;
         this.editingLoadDetail = detail;
+        this.sortedStops = (detail.stops || []).slice().sort((a, b) => {
+          const aSeq = a.sequence ?? 0;
+          const bSeq = b.sequence ?? 0;
+          return aSeq - bSeq;
+        });
         this.attachmentTab = 'documents';
         this.populateFormFromDetail(detail);
         this.loadBrokers();
@@ -465,6 +1148,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.pickupStateEdited = false;
     this.deliveryCityEdited = false;
     this.deliveryStateEdited = false;
+    this.sortedStops = [];
   }
 
   /** Apply extracted AI values into the manual load form for review. */
@@ -599,6 +1283,102 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     event.preventDefault();
   }
 
+  handleReplaceDrop(event: DragEvent): void {
+    event.preventDefault();
+    if (event.dataTransfer?.files?.length) {
+      this.setReplaceAttachmentFile(event.dataTransfer.files);
+    }
+  }
+
+  // Placeholder hooks for upcoming services/documents logic
+  onNewLumper(): void {
+    // TODO: implement lumper service creation
+    // eslint-disable-next-line no-console
+    console.log('New lumper clicked');
+  }
+
+  onNewDetention(): void {
+    // TODO: implement detention service creation
+    // eslint-disable-next-line no-console
+    console.log('New detention clicked');
+  }
+
+  onOtherAdditions(): void {
+    // TODO: implement other additions/deductions creation
+    // eslint-disable-next-line no-console
+    console.log('Other additions/deductions clicked');
+  }
+
+  hasMultipleDocuments(): boolean {
+    if (this.editingLoadId) {
+      return (this.editingLoadDetail?.attachments?.length ?? 0) > 1;
+    }
+    return this.pendingAttachments.length > 1;
+  }
+
+  mergeDocuments(): void {
+    // TODO: implement merge-to-single-PDF behavior
+    // eslint-disable-next-line no-console
+    console.log('Merge documents clicked');
+  }
+
+  editAttachment(att: LoadAttachment): void {
+    this.editingAttachment = att;
+    this.replaceAttachmentType = att.type;
+    this.replaceAttachmentNotes = att.notes ?? '';
+    this.replaceAttachmentFile = null;
+    this.attachmentError = '';
+    this.showReplaceModal = true;
+  }
+
+  closeReplaceModal(): void {
+    this.editingAttachment = null;
+    this.showReplaceModal = false;
+    this.replaceAttachmentFile = null;
+    this.attachmentError = '';
+  }
+
+  setReplaceAttachmentFile(files: FileList | null): void {
+    this.replaceAttachmentFile = files?.length ? files[0] : null;
+  }
+
+  saveReplaceAttachment(): void {
+    if (!this.editingLoadId || !this.editingAttachment) return;
+    this.replacingAttachment = true;
+    this.attachmentError = '';
+    this.loadsService
+      .updateAttachment(
+        this.editingLoadId,
+        this.editingAttachment.id,
+        this.replaceAttachmentFile ?? undefined,
+        this.replaceAttachmentType,
+        this.replaceAttachmentNotes
+      )
+      .subscribe({
+        next: () => {
+          this.refreshEditingAttachments(this.editingLoadId!);
+          this.closeReplaceModal();
+          this.replacingAttachment = false;
+        },
+        error: (err) => {
+          this.attachmentError = err?.error?.error || 'Failed to update document';
+          this.replacingAttachment = false;
+        }
+      });
+  }
+
+  deleteAttachment(att: LoadAttachment): void {
+    if (!this.editingLoadId) return;
+    if (!confirm('Delete this document? This cannot be undone.')) return;
+    this.attachmentError = '';
+    this.loadsService.deleteAttachment(this.editingLoadId, att.id).subscribe({
+      next: () => this.refreshEditingAttachments(this.editingLoadId!),
+      error: (err) => {
+        this.attachmentError = err?.error?.error || 'Failed to delete document';
+      }
+    });
+  }
+
   private refreshEditingAttachments(loadId: string): void {
     this.loadsService.getLoad(loadId).subscribe({
       next: (res) => {
@@ -628,16 +1408,19 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   createLoad(): void {
     this.successMessage = '';
     this.errorMessage = '';
+    const isEdit = !!this.editingLoadId;
+
     this.manualLoadForm.markAllAsTouched();
-    if (this.manualLoadForm.invalid) {
-      const invalidFields: string[] = [];
-      const controls = this.manualLoadForm.controls;
+    const invalidFields: string[] = [];
+    const controls = this.manualLoadForm.controls;
+    if (controls['status']?.invalid) invalidFields.push('Status');
+    if (controls['billingStatus']?.invalid) invalidFields.push('Billing Status');
+    if (controls['rate']?.invalid) invalidFields.push('Rate');
+    if (!isEdit) {
       if (controls['pickupDate']?.invalid) invalidFields.push('Pickup Date');
       if (controls['deliveryDate']?.invalid) invalidFields.push('Delivery Date');
-      if (controls['status']?.invalid) invalidFields.push('Status');
-      if (controls['billingStatus']?.invalid) invalidFields.push('Billing Status');
-      if (controls['rate']?.invalid) invalidFields.push('Rate');
-
+    }
+    if (this.manualLoadForm.invalid && invalidFields.length > 0) {
       this.errorMessage =
         invalidFields.length > 0
           ? `Please fix the following fields before submitting: ${invalidFields.join(', ')}.`
@@ -645,31 +1428,35 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const validationErrors = this.validatePickupDelivery();
-    if (validationErrors.length > 0) {
-      this.errorMessage = validationErrors.join(' ');
-      return;
+    if (!isEdit) {
+      const validationErrors = this.validatePickupDelivery();
+      if (validationErrors.length > 0) {
+        this.errorMessage = validationErrors.join(' ');
+        return;
+      }
     }
 
     const formValue = this.manualLoadForm.getRawValue();
-    const stops: LoadStop[] = [
-      {
-        stop_type: 'PICKUP',
-        stop_date: formValue.pickupDate,
-        city: formValue.pickupCity,
-        state: formValue.pickupState,
-        zip: formValue.pickupZip,
-        sequence: 1
-      },
-      {
-        stop_type: 'DELIVERY',
-        stop_date: formValue.deliveryDate,
-        city: formValue.deliveryCity,
-        state: formValue.deliveryState,
-        zip: formValue.deliveryZip,
-        sequence: 2
-      }
-    ];
+    const stops: LoadStop[] = isEdit && this.sortedStops?.length
+      ? this.sortedStops.map((s, i) => ({ ...s, sequence: i + 1 }))
+      : [
+          {
+            stop_type: 'PICKUP',
+            stop_date: formValue.pickupDate,
+            city: formValue.pickupCity,
+            state: formValue.pickupState,
+            zip: formValue.pickupZip,
+            sequence: 1
+          },
+          {
+            stop_type: 'DELIVERY',
+            stop_date: formValue.deliveryDate,
+            city: formValue.deliveryCity,
+            state: formValue.deliveryState,
+            zip: formValue.deliveryZip,
+            sequence: 2
+          }
+        ];
 
     const payload = {
       status: formValue.status,
@@ -687,7 +1474,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     };
 
     this.creatingLoad = true;
-    const isEdit = !!this.editingLoadId;
     const request$ = isEdit
       ? this.loadsService.updateLoad(this.editingLoadId as string, payload)
       : this.loadsService.createLoad(payload);
@@ -735,6 +1521,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.successMessage = isEdit ? 'Load updated successfully.' : 'Load created successfully.';
     this.editingLoadId = null;
     this.closeManualModal();
+    this.showInlineNewLoad = false;
     this.loadLoads();
     setTimeout(() => {
       this.successMessage = '';
@@ -763,6 +1550,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showNewLoadMenu = false;
     this.actionsOpenLoadId = null;
     this.brokerDropdownOpen = false;
+    this.driverDropdownOpen = false;
+    this.truckDropdownOpen = false;
+    this.trailerDropdownOpen = false;
   }
 
   // Auto-create from PDF handlers
@@ -872,8 +1662,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return (this.loads || []).filter((load) => {
       // Date filter on pickup_date or delivery/completed date
       if (hf.date) {
+        const filterStr = hf.date.toString();
         const dateStr = (load.pickup_date || load.delivery_date || load.completed_date || '').toString();
-        if (!dateStr.includes(hf.date)) return false;
+        if (!dateStr.includes(filterStr)) return false;
       }
 
       if (hf.broker) {
@@ -913,5 +1704,118 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
       return true;
     });
+  }
+
+  // Active filter chips for UI summary
+  get activeFilterChips(): Array<{
+    key: string;
+    label: string;
+    value: string;
+    kind: 'header' | 'status' | 'billing' | 'driver';
+  }> {
+    const chips: Array<{
+      key: string;
+      label: string;
+      value: string;
+      kind: 'header' | 'status' | 'billing' | 'driver';
+    }> = [];
+
+    // Header filters
+    (Object.keys(this.headerFilters) as Array<keyof typeof this.headerFilters>).forEach((key) => {
+      const value = (this.headerFilters[key] || '').toString().trim();
+      if (!value) return;
+      chips.push({
+        key,
+        label: this.headerFilterLabels[key],
+        value,
+        kind: 'header'
+      });
+    });
+
+    // Status filter
+    if (this.filters.status) {
+      chips.push({
+        key: 'status',
+        label: 'Status',
+        value: this.filters.status.replace('_', ' '),
+        kind: 'status'
+      });
+    }
+
+    // Billing filter
+    if (this.filters.billingStatus) {
+      chips.push({
+        key: 'billingStatus',
+        label: 'Billing',
+        value: this.filters.billingStatus.replace('_', ' '),
+        kind: 'billing'
+      });
+    }
+
+    // Driver filter
+    if (this.filters.driverId) {
+      const driver = this.drivers.find((d) => d.id === this.filters.driverId);
+      chips.push({
+        key: 'driverId',
+        label: 'Driver',
+        value: driver?.name || 'Selected driver',
+        kind: 'driver'
+      });
+    }
+
+    return chips;
+  }
+
+  clearFilterChip(chip: { key: string; kind: 'header' | 'status' | 'billing' | 'driver' }): void {
+    if (chip.kind === 'header') {
+      this.headerFilters = {
+        ...this.headerFilters,
+        [chip.key]: ''
+      };
+      return;
+    }
+
+    if (chip.kind === 'status') {
+      this.filters.status = '';
+      this.page = 1;
+      this.loadLoads();
+      return;
+    }
+
+    if (chip.kind === 'billing') {
+      this.filters.billingStatus = '';
+      this.page = 1;
+      this.loadLoads();
+      return;
+    }
+
+    if (chip.kind === 'driver') {
+      this.filters.driverId = '';
+      this.page = 1;
+      this.loadLoads();
+    }
+  }
+
+  clearAllFilters(): void {
+    this.headerFilters = {
+      date: '',
+      broker: '',
+      po: '',
+      pickup: '',
+      delivery: '',
+      rate: '',
+      notes: '',
+      attachmentType: ''
+    };
+
+    this.filters = {
+      ...this.filters,
+      status: '',
+      billingStatus: '',
+      driverId: ''
+    };
+
+    this.page = 1;
+    this.loadLoads();
   }
 }

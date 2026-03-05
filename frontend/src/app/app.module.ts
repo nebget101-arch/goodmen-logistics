@@ -2,6 +2,11 @@ import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { CommonModule } from '@angular/common';
 import { AppRoutingModule } from './app-routing.module';
 
@@ -31,6 +36,8 @@ import { OnboardingPacketComponent } from './components/onboarding-packet/onboar
 import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-policy.component';
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
+import { DatePickerComponent } from './components/shared/date-picker/date-picker.component';
+import { InlineDateFilterComponent } from './components/shared/inline-date-filter/inline-date-filter.component';
 
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
@@ -62,15 +69,22 @@ import { CacheBustingInterceptor } from './cache-busting.interceptor';
     OnboardingPacketComponent,
     PrivacyPolicyComponent,
     TermsComponent,
-    CommunicationPreferencesComponent
+    CommunicationPreferencesComponent,
+    DatePickerComponent,
+    InlineDateFilterComponent
   ],
   imports: [
     BrowserModule,
+    BrowserAnimationsModule,
     CommonModule,
     AppRoutingModule,
     HttpClientModule,
     FormsModule,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
+    MatFormFieldModule,
+    MatInputModule
   ],
   providers: [
     {

@@ -1,12 +1,15 @@
-/* Vehicles Component Styles */
+/* Vehicles Component Styles - AI console theme for trucks & trailers */
 
 /* ============================================
    Controls Section - Search, Filter, Sort
    ============================================ */
 .controls-section {
-  padding: 20px;
-  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
-  border-bottom: 2px solid var(--border-color);
+  padding: 16px 20px 12px;
+  background:
+    radial-gradient(circle at 0 0, rgba(45, 212, 191, 0.14), transparent 60%),
+    rgba(15, 23, 42, 0.96);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 16px 16px 0 0;
 }
 
 .controls-row {
@@ -26,7 +29,7 @@
 .control-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-dark);
+  color: var(--text-light);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -47,25 +50,28 @@
 
 .search-input {
   padding: 10px 14px;
-  border: 2px solid var(--border-color);
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
   font-size: 14px;
   transition: all 0.3s ease;
+  background: rgba(15, 23, 42, 0.98);
+  color: var(--text-dark);
 }
 
 .search-input:focus {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.1);
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.4);
 }
 
 .filter-select,
 .pagesize-select {
   padding: 10px 14px;
-  border: 2px solid var(--border-color);
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
   font-size: 14px;
-  background: white;
+  background: rgba(15, 23, 42, 0.98);
+  color: var(--text-dark);
   cursor: pointer;
   transition: all 0.3s ease;
 }
@@ -73,8 +79,8 @@
 .filter-select:focus,
 .pagesize-select:focus {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.1);
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.4);
 }
 
 .clear-btn {
@@ -90,8 +96,8 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: white;
-  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.98);
+  border-radius: 999px;
   border: 1px solid var(--border-color);
 }
 
@@ -112,6 +118,8 @@
    ============================================ */
 .vehicles-loading {
   padding: 20px;
+  background: rgba(15, 23, 42, 0.96);
+  border-radius: 16px;
 }
 
 .skeleton-table {
@@ -158,9 +166,10 @@
 .error-state {
   text-align: center;
   padding: 60px 20px;
-  background: linear-gradient(135deg, #fff5f5 0%, #ffe8e8 100%);
-  border-radius: 8px;
-  margin: 20px;
+  background: radial-gradient(circle at 0 0, rgba(248, 113, 113, 0.16), transparent 60%);
+  border-radius: 16px;
+  margin: 20px 20px 0;
+  border: 1px solid rgba(248, 113, 113, 0.6);
 }
 
 .error-icon {
@@ -201,9 +210,12 @@
 .empty-state {
   text-align: center;
   padding: 80px 20px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 8px;
-  margin: 20px;
+  background:
+    radial-gradient(circle at 0 0, rgba(45, 212, 191, 0.12), transparent 60%),
+    rgba(15, 23, 42, 0.96);
+  border-radius: 16px;
+  margin: 20px 20px 0;
+  border: 1px solid var(--border-color);
 }
 
 .empty-icon {
@@ -211,6 +223,12 @@
   margin-bottom: 24px;
   opacity: 0.5;
   animation: float 3s ease-in-out infinite;
+}
+
+.status-icon {
+  font-size: 18px;
+  vertical-align: middle;
+  margin-right: 4px;
 }
 
 @keyframes float {
@@ -239,25 +257,25 @@
    ============================================ */
 .table-responsive {
   overflow-x: auto;
-  margin: 20px;
+  margin: 0 20px 0;
 }
 
 .vehicles-table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
+  background: transparent;
 }
 
 .vehicles-table thead {
-  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
-  border-bottom: 2px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.98);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .vehicles-table th {
   padding: 16px 12px;
   text-align: left;
   font-weight: 600;
-  color: var(--text-dark);
+  color: var(--text-light);
   font-size: 14px;
   white-space: nowrap;
 }
@@ -297,7 +315,7 @@
 }
 
 .vehicles-table tbody tr:hover {
-  background-color: #f9f9f9;
+  background-color: rgba(15, 23, 42, 0.9);
 }
 
 .vehicles-table tbody tr:focus-within {
@@ -371,9 +389,9 @@
 
 .compliance-content {
   padding: 16px;
-  background-color: #f9f9f9;
-  border-radius: 4px;
-  border-left: 4px solid var(--primary-color);
+  background-color: rgba(15, 23, 42, 0.96);
+  border-radius: 12px;
+  border-left: 4px solid #22c55e;
 }
 
 .compliance-content p {
@@ -383,7 +401,7 @@
 }
 
 .compliance-content strong {
-  color: var(--primary-color);
+  color: #a5f3fc;
 }
 
 /* ============================================

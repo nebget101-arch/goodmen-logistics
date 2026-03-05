@@ -9,7 +9,6 @@ import { ApiService } from '../../services/api.service';
 export class DispatchDriversComponent implements OnInit {
   drivers: any[] = [];
   loading = true;
-  search = '';
   showNewModal = false;
   saving = false;
   duplicateError: string | null = null;
@@ -17,6 +16,32 @@ export class DispatchDriversComponent implements OnInit {
   editingDriverId: string | null = null;
   trucks: any[] = [];
   trailers: any[] = [];
+
+  driverFilters: {
+    name: string;
+    type: string;
+    status: string;
+    hireDate: string;
+    termDate: string;
+    phone: string;
+    email: string;
+    truck: string;
+    trailer: string;
+    payBasis: string;
+    payRate: string;
+  } = {
+    name: '',
+    type: '',
+    status: '',
+    hireDate: '',
+    termDate: '',
+    phone: '',
+    email: '',
+    truck: '',
+    trailer: '',
+    payBasis: '',
+    payRate: ''
+  };
 
   newDriver: any = {
     firstName: '',
@@ -55,15 +80,55 @@ export class DispatchDriversComponent implements OnInit {
   }
 
   get filteredDrivers(): any[] {
-    const term = this.search.toLowerCase();
-    if (!term) return this.drivers;
-    return this.drivers.filter((d) => {
-      const name = `${d.firstName || ''} ${d.lastName || ''}`.toLowerCase();
-      return (
-        name.includes(term) ||
-        (d.email || '').toLowerCase().includes(term) ||
-        (d.phone || '').toLowerCase().includes(term)
-      );
+    const f = this.driverFilters;
+    return (this.drivers || []).filter((d) => {
+      if (f.name) {
+        const haystack = `${d.firstName || ''} ${d.lastName || ''} ${d.email || ''} ${d.phone || ''}`
+          .toLowerCase();
+        if (!haystack.includes(f.name.toLowerCase())) return false;
+      }
+      if (f.type) {
+        if ((d.driverType || '').toString() !== f.type) return false;
+      }
+      if (f.status) {
+        if ((d.status || '').toString() !== f.status) return false;
+      }
+      if (f.hireDate) {
+        const val = d.hireDate ? this.normalizeDate(d.hireDate) : '';
+        if (!val.includes(f.hireDate)) return false;
+      }
+      if (f.termDate) {
+        const val = d.terminationDate ? this.normalizeDate(d.terminationDate) : '';
+        if (!val.includes(f.termDate)) return false;
+      }
+      if (f.phone) {
+        const val = (d.phone || '').toString().toLowerCase();
+        if (!val.includes(f.phone.toLowerCase())) return false;
+      }
+      if (f.email) {
+        const val = (d.email || '').toString().toLowerCase();
+        if (!val.includes(f.email.toLowerCase())) return false;
+      }
+      if (f.truck) {
+        const val = (d.truckUnitNumber || '').toString().toLowerCase();
+        if (!val.includes(f.truck.toLowerCase())) return false;
+      }
+      if (f.trailer) {
+        const val = (d.trailerUnitNumber || '').toString().toLowerCase();
+        if (!val.includes(f.trailer.toLowerCase())) return false;
+      }
+      if (f.payBasis) {
+        if ((d.payBasis || '').toString() !== f.payBasis) return false;
+      }
+      if (f.payRate) {
+        const basis = (d.payBasis || '').toString();
+        const rate =
+          basis === 'percentage'
+            ? (d.payPercentage != null ? String(d.payPercentage) : '')
+            : (d.payRate != null ? String(d.payRate) : '');
+        if (!rate.includes(f.payRate)) return false;
+      }
+      return true;
     });
   }
 
@@ -159,6 +224,45 @@ export class DispatchDriversComponent implements OnInit {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return '';
     return d.toISOString().slice(0, 10);
+  }
+
+  private parseDate(value: any): Date | null {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // Date picker values for new driver modal
+  get newDobValue(): Date | null {
+    return this.parseDate(this.newDriver.dateOfBirth);
+  }
+
+  get newApplicationDateValue(): Date | null {
+    return this.parseDate(this.newDriver.applicationDate);
+  }
+
+  get newHireDateValue(): Date | null {
+    return this.parseDate(this.newDriver.hireDate);
+  }
+
+  get newCdlExpiryValue(): Date | null {
+    return this.parseDate(this.newDriver.cdlExpiry);
+  }
+
+  onNewDobChange(date: Date | null): void {
+    this.newDriver.dateOfBirth = this.normalizeDate(date);
+  }
+
+  onNewApplicationDateChange(date: Date | null): void {
+    this.newDriver.applicationDate = this.normalizeDate(date);
+  }
+
+  onNewHireDateChange(date: Date | null): void {
+    this.newDriver.hireDate = this.normalizeDate(date);
+  }
+
+  onNewCdlExpiryChange(date: Date | null): void {
+    this.newDriver.cdlExpiry = this.normalizeDate(date);
   }
 
   startEdit(driver: any): void {

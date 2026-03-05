@@ -48,6 +48,24 @@ export class DriversComponent implements OnInit {
   
   saving = false;
 
+  driverFilters: {
+    name: string;
+    cdlNumber: string;
+    cdlExpiry: string;
+    medicalExpiry: string;
+    dqfMin: string;
+    clearinghouseStatus: string;
+    status: string;
+  } = {
+    name: '',
+    cdlNumber: '',
+    cdlExpiry: '',
+    medicalExpiry: '',
+    dqfMin: '',
+    clearinghouseStatus: '',
+    status: ''
+  };
+
   constructor(
     private apiService: ApiService,
     private onboardingModal: OnboardingModalService
@@ -57,11 +75,104 @@ export class DriversComponent implements OnInit {
     this.loadDrivers();
   }
 
+  get filteredDrivers(): any[] {
+    const f = this.driverFilters;
+    return (this.drivers || []).filter((driver) => {
+      if (f.name) {
+        const name = `${driver.firstName || ''} ${driver.lastName || ''} ${driver.email || ''}`.toLowerCase();
+        if (!name.includes(f.name.toLowerCase())) return false;
+      }
+      if (f.cdlNumber) {
+        const cdl = (driver.cdlNumber || '').toString().toLowerCase();
+        if (!cdl.includes(f.cdlNumber.toLowerCase())) return false;
+      }
+      if (f.cdlExpiry) {
+        const val = driver.cdlExpiry ? new Date(driver.cdlExpiry).toISOString().slice(0, 10) : '';
+        if (!val.includes(f.cdlExpiry)) return false;
+      }
+      if (f.medicalExpiry) {
+        const val = driver.medicalCertExpiry ? new Date(driver.medicalCertExpiry).toISOString().slice(0, 10) : '';
+        if (!val.includes(f.medicalExpiry)) return false;
+      }
+      if (f.dqfMin) {
+        const min = parseInt(f.dqfMin, 10);
+        if (!Number.isNaN(min) && (driver.dqfCompleteness ?? 0) < min) return false;
+      }
+      if (f.clearinghouseStatus) {
+        if ((driver.clearinghouseStatus || '').toString() !== f.clearinghouseStatus) return false;
+      }
+      if (f.status) {
+        if ((driver.status || '').toString() !== f.status) return false;
+      }
+      return true;
+    });
+  }
+
   private normalizeDate(value: any): string {
     if (!value) return '';
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return '';
     return d.toISOString().slice(0, 10);
+  }
+
+  private parseDate(value: any): Date | null {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // Derived values for date pickers (new driver)
+  get newDobValue(): Date | null {
+    return this.parseDate(this.newDriver.dateOfBirth);
+  }
+
+  get newHireDateValue(): Date | null {
+    return this.parseDate(this.newDriver.hireDate);
+  }
+
+  get newCdlExpiryValue(): Date | null {
+    return this.parseDate(this.newDriver.cdlExpiry);
+  }
+
+  get newMedExpiryValue(): Date | null {
+    return this.parseDate(this.newDriver.medicalCertExpiry);
+  }
+
+  // Derived values for date pickers (edit driver)
+  get editCdlExpiryValue(): Date | null {
+    return this.editingDriver ? this.parseDate(this.editingDriver.cdlExpiry) : null;
+  }
+
+  get editMedExpiryValue(): Date | null {
+    return this.editingDriver ? this.parseDate(this.editingDriver.medicalCertExpiry) : null;
+  }
+
+  // Date picker handlers for new driver form
+  onNewDobChange(date: Date | null): void {
+    this.newDriver.dateOfBirth = this.normalizeDate(date);
+  }
+
+  onNewHireDateChange(date: Date | null): void {
+    this.newDriver.hireDate = this.normalizeDate(date);
+  }
+
+  onNewCdlExpiryChange(date: Date | null): void {
+    this.newDriver.cdlExpiry = this.normalizeDate(date);
+  }
+
+  onNewMedExpiryChange(date: Date | null): void {
+    this.newDriver.medicalCertExpiry = this.normalizeDate(date);
+  }
+
+  // Date picker handlers for edit driver form
+  onEditCdlExpiryChange(date: Date | null): void {
+    if (!this.editingDriver) return;
+    this.editingDriver.cdlExpiry = this.normalizeDate(date);
+  }
+
+  onEditMedExpiryChange(date: Date | null): void {
+    if (!this.editingDriver) return;
+    this.editingDriver.medicalCertExpiry = this.normalizeDate(date);
   }
 
   toggleAddForm(): void {
