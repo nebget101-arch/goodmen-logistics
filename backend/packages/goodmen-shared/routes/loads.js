@@ -148,6 +148,32 @@ async function getLoadDetail(clientOrQuery, loadId) {
   };
 }
 
+/**
+ * @openapi
+ * /api/loads:
+ *   get:
+ *     summary: List loads
+ *     tags:
+ *       - Loads
+ *     responses:
+ *       200:
+ *         description: Loads list returned
+ *   post:
+ *     summary: Create load
+ *     tags:
+ *       - Loads
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Load payload
+ *             additionalProperties: true
+ *     responses:
+ *       201:
+ *         description: Load created
+ */
 // GET /api/loads
 router.get('/', async (req, res) => {
   const startTime = Date.now();

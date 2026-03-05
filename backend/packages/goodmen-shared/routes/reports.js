@@ -28,8 +28,15 @@ function applyDateFilters(qb, dateField, from, to) {
 }
 
 /**
- * GET /api/reports/inventory-status
- * Inventory status report: parts + per-location quantities + status
+ * @openapi
+ * /api/reports/inventory-status:
+ *   get:
+ *     summary: Inventory status report
+ *     tags:
+ *       - Reports
+ *     responses:
+ *       200:
+ *         description: Inventory status returned
  */
 router.get('/inventory-status', authMiddleware, async (req, res) => {
 	try {

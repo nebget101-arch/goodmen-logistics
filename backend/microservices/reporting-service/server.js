@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
+const path = require('path');
 
 const dbConfig = require('@goodmen/shared/config/database');
 const knex = require('@goodmen/shared/config/knex');
@@ -21,91 +23,58 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const swaggerDocument = {
-  openapi: '3.0.0',
-  info: {
-    title: 'Reporting Service API',
-    version: '1.0.0',
-    description: 'API documentation for the Reporting & Audit microservice.'
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Reporting Service API',
+      version: '1.0.0',
+      description: 'API documentation for the Reporting & Audit microservice.'
+    },
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT'
+        }
+      }
+    },
+    security: [
+      {
+        bearerAuth: []
+      }
+    ]
   },
-  components: {
-    securitySchemes: {
-      bearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT'
-      }
-    }
-  },
-  security: [
-    {
-      bearerAuth: []
-    }
-  ],
-  servers: [
-    {
-      url: '/',
-      description: 'Current server'
-    }
-  ],
-  paths: {
-    '/health': {
-      get: {
-        summary: 'Health check',
-        description: 'Returns the health status of the Reporting service.',
-        responses: {
-          '200': {
-            description: 'Service is healthy'
-          }
-        }
-      }
-    },
-    '/api/dashboard': {
-      get: {
-        summary: 'Dashboard data',
-        description: 'Retrieve aggregated dashboard metrics for the fleet.',
-        responses: {
-          '200': {
-            description: 'Dashboard data returned'
-          }
-        }
-      }
-    },
-    '/api/reports': {
-      get: {
-        summary: 'Reports',
-        description: 'Retrieve available reports and report data.',
-        responses: {
-          '200': {
-            description: 'Reports returned'
-          }
-        }
-      }
-    },
-    '/api/audit': {
-      get: {
-        summary: 'Audit logs',
-        description: 'Retrieve audit log entries for system actions.',
-        responses: {
-          '200': {
-            description: 'Audit entries returned'
-          }
-        }
-      }
-    }
-  }
+  apis: [
+    path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
+    __filename
+  ]
 };
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const dashboardRouter = require('@goodmen/shared/routes/dashboard');
 const reportsRouter = require('@goodmen/shared/routes/reports');
 const auditRouter = require('@goodmen/shared/routes/audit');
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/audit', auditRouter);
 
+/**
+ * @openapi
+ * /health:
+ *   get:
+ *     summary: Health check
+ *     tags:
+ *       - Health
+ *     responses:
+ *       200:
+ *         description: Service is healthy
+ */
 app.get('/health', (req, res) => {
   const healthStatus = {
     status: 'ok',

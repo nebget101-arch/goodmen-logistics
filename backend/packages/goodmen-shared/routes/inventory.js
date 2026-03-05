@@ -19,8 +19,21 @@ function requireRole(allowedRoles) {
 }
 
 /**
- * GET /api/inventory
- * Get inventory for a location
+ * @openapi
+ * /api/inventory:
+ *   get:
+ *     summary: List inventory
+ *     tags:
+ *       - Inventory
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Inventory list returned
  */
 router.get('/', authMiddleware, async (req, res) => {
 	try {

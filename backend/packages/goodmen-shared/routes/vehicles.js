@@ -132,6 +132,32 @@ router.get('/search', async (req, res) => {
 });
 
 
+/**
+ * @openapi
+ * /api/vehicles:
+ *   get:
+ *     summary: List vehicles
+ *     tags:
+ *       - Vehicles
+ *     responses:
+ *       200:
+ *         description: Vehicles returned
+ *   post:
+ *     summary: Create vehicle
+ *     tags:
+ *       - Vehicles
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Vehicle payload
+ *             additionalProperties: true
+ *     responses:
+ *       201:
+ *         description: Vehicle created
+ */
 // GET all vehicles
 router.get('/', async (req, res) => {
   const startTime = Date.now();
