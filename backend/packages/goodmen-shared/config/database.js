@@ -3,7 +3,8 @@ const { Pool } = requireFromRoot('pg');
 const path = require('path');
 
 // Load env from repo root so all services share a single .env
-require('dotenv').config({
+const dotenv = requireFromRoot('dotenv');
+dotenv.config({
   path: path.join(__dirname, '..', '..', '..', '..', '.env'),
 });
 

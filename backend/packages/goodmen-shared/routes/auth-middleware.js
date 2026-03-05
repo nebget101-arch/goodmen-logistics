@@ -1,4 +1,5 @@
-const jwt = require('jsonwebtoken');
+const requireFromRoot = require('../internal/require-from-root');
+const jwt = requireFromRoot('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 
 function authMiddleware(roles = []) {

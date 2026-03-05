@@ -1,6 +1,8 @@
+name: fleetneuron-platform
+
 services:
   - type: web
-    name: goodmen-logistics-ui
+    name: fleetneuron-logistics-ui
     runtime: static
     rootDir: frontend
     buildCommand: npm install --include=dev && npm run build
@@ -11,7 +13,7 @@ services:
         destination: /index.html
 
   - type: web
-    name: goodmen-logistics-gateway
+    name: fleetneuron-logistics-gateway
     runtime: node
     plan: starter
     rootDir: backend/gateway
@@ -19,19 +21,19 @@ services:
     startCommand: npm start
     envVars:
       - key: REPORTING_SERVICE_URL
-        value: https://goodmen-reporting-service.onrender.com
+        value: https://fleetneuron-reporting-service.onrender.com
       - key: INTEGRATIONS_SERVICE_URL
-        value: https://goodmen-integrations-service.onrender.com
+        value: https://fleetneuron-integrations-service.onrender.com
       - key: AUTH_USERS_SERVICE_URL
-        value: https://goodmen-auth-users-service.onrender.com
+        value: https://fleetneuron-auth-users-service.onrender.com
       - key: DRIVERS_COMPLIANCE_SERVICE_URL
-        value: https://goodmen-drivers-compliance-service.onrender.com
+        value: https://fleetneuron-drivers-compliance-service.onrender.com
       - key: VEHICLES_MAINTENANCE_SERVICE_URL
-        value: https://goodmen-vehicles-maintenance-service.onrender.com
+        value: https://fleetneuron-vehicles-maintenance-service.onrender.com
       - key: LOGISTICS_SERVICE_URL
-        value: https://goodmen-logistics-service.onrender.com
+        value: https://fleetneuron-logistics-service.onrender.com
       - key: INVENTORY_SERVICE_URL
-        value: https://goodmen-inventory-service.onrender.com
+        value: https://fleetneuron-inventory-service.onrender.com
       - key: CORS_ORIGIN
         sync: false
       - key: NODE_ENV
@@ -40,13 +42,15 @@ services:
         value: 10002
 
   - type: web
-    name: goodmen-reporting-service
+    name: fleetneuron-reporting-service
     runtime: node
     plan: starter
     rootDir: backend/microservices/reporting-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      - key: NODE_PATH
+        value: /opt/render/project/src/backend/microservices/reporting-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -77,20 +81,22 @@ services:
         value: 10003
 
   - type: web
-    name: goodmen-integrations-service
+    name: fleetneuron-integrations-service
     runtime: node
     plan: starter
     rootDir: backend/microservices/integrations-service
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      - key: NODE_PATH
+        value: /opt/render/project/src/backend/microservices/integrations-service/node_modules
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10004
 
   - type: web
-    name: goodmen-auth-users-service
+    name: fleetneuron-auth-users-service
     runtime: node
     plan: starter
     rootDir: backend/microservices/auth-users-service
@@ -129,7 +135,7 @@ services:
         value: 10005
 
   - type: web
-    name: goodmen-drivers-compliance-service
+    name: fleetneuron-drivers-compliance-service
     runtime: node
     plan: starter
     rootDir: backend/microservices/drivers-compliance-service
@@ -180,7 +186,7 @@ services:
         value: 10006
 
   - type: web
-    name: goodmen-vehicles-maintenance-service
+    name: fleetneuron-vehicles-maintenance-service
     runtime: node
     plan: starter
     rootDir: backend/microservices/vehicles-maintenance-service
@@ -231,7 +237,7 @@ services:
         value: 10007
 
   - type: web
-    name: goodmen-logistics-service
+    name: fleetneuron-logistics-service
     runtime: node
     plan: starter
     rootDir: backend/microservices/logistics-service
@@ -282,7 +288,7 @@ services:
         value: 10008
 
   - type: web
-    name: goodmen-inventory-service
+    name: fleetneuron-inventory-service
     runtime: node
     plan: starter
     rootDir: backend/microservices/inventory-service
