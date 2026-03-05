@@ -10,7 +10,7 @@
         <li *ngIf="canSee('dashboard')"><a routerLink="/dashboard" routerLinkActive="active"><span class="nav-icon">📊</span>Dashboard</a></li>
         <li *ngIf="canSee('loads')"><a routerLink="/loads" routerLinkActive="active"><span class="nav-icon">📦</span>Loads</a></li>
         <!-- Dispatch / Admin drivers view -->
-        <li *ngIf="canSee('drivers') && (userRole === 'dispatch' || userRole === 'admin')">
+        <li *ngIf="canSee('drivers') && (getRole() === 'dispatch' || getRole() === 'admin')">
           <a routerLink="/drivers" routerLinkActive="active"><span class="nav-icon">👤</span>Drivers</a>
         </li>
         <li class="nav-section" *ngIf="canSee('vehicles')">
@@ -30,7 +30,7 @@
           </button>
         </li>
         <li *ngIf="canSee('hos') && safetyExpanded" class="nav-subsection"><a routerLink="/hos" routerLinkActive="active">HOS</a></li>
-        <li *ngIf="canSee('drivers') && safetyExpanded && (userRole === 'safety' || userRole === 'admin')" class="nav-subsection">
+        <li *ngIf="canSee('drivers') && safetyExpanded && (getRole() === 'safety' || getRole() === 'admin')" class="nav-subsection">
           <a routerLink="/drivers/dqf" routerLinkActive="active">DQF</a>
         </li>
         <li *ngIf="canSee('audit') && safetyExpanded" class="nav-subsection"><a routerLink="/audit" routerLinkActive="active">Audit</a></li>

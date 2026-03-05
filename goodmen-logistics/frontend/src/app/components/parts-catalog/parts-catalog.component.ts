@@ -48,7 +48,8 @@ export class PartsCatalogComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.userRole = localStorage.getItem('role');
+    const role = localStorage.getItem('role');
+    this.userRole = role ? role.toLowerCase().trim() : null;
     this.loadParts();
     this.loadCategories();
     this.loadManufacturers();
