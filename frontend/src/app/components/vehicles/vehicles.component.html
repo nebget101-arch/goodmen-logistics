@@ -1,22 +1,25 @@
-<div class="container">
-  <div class="card">
-    <!-- Card Header -->
-    <div class="card-header">
-      <h2 class="card-title" id="vehicles-title">
-        <span class="material-symbols-outlined nav-icon" aria-hidden="true">local_shipping</span>
-        {{ pageTitle }} Management
-      </h2>
+<div class="vehicles-dashboard container">
+  <div class="header">
+    <div>
+      <h1 id="vehicles-title">{{ pageTitle }}</h1>
+      <p class="subtitle">{{ vehicleType === 'trailer' ? 'Trailer fleet' : 'Truck fleet' }} – unit #, compliance, maintenance</p>
+    </div>
+    <div class="header-actions">
       <button 
         class="btn btn-primary" 
         (click)="openAddVehicleForm()"
         aria-label="Add new vehicle"
         type="button">
-        + {{ addLabel }}
+        <span class="material-symbols-outlined">add</span>
+        {{ addLabel }}
       </button>
     </div>
+  </div>
+
+  <div class="card vehicles-card">
 
     <!-- Search and Filter Controls -->
-    <div *ngIf="!loading && !error" class="controls-section">
+    <div *ngIf="!loading && !error" class="controls-section vehicles-controls">
       <div class="controls-row">
         <!-- Search Input -->
         <div class="control-group search-group">
@@ -95,23 +98,9 @@
       </div>
     </div>
 
-    <!-- Loading State with Skeleton -->
+    <!-- Loading State -->
     <div *ngIf="loading" class="vehicles-loading" role="status" aria-live="polite" aria-label="Loading vehicles">
-      <div class="skeleton-table">
-        <div class="skeleton-header">
-          <div class="skeleton-cell" *ngFor="let i of [1,2,3,4,5,6,7,8]"></div>
-        </div>
-        <div class="skeleton-row" *ngFor="let row of skeletonRows">
-          <div class="skeleton-cell skeleton-pulse"></div>
-          <div class="skeleton-cell skeleton-pulse"></div>
-          <div class="skeleton-cell skeleton-pulse"></div>
-          <div class="skeleton-cell skeleton-pulse"></div>
-          <div class="skeleton-cell skeleton-pulse"></div>
-          <div class="skeleton-cell skeleton-pulse"></div>
-          <div class="skeleton-cell skeleton-pulse"></div>
-          <div class="skeleton-cell skeleton-pulse"></div>
-        </div>
-      </div>
+      <div class="loading-spinner"></div>
     </div>
 
     <!-- Error State -->
@@ -152,8 +141,9 @@
         *ngIf="!hasActiveFilters"
         class="btn btn-primary" 
         type="button"
+        (click)="openAddVehicleForm()"
         aria-label="Add your first vehicle">
-        + Add Your First {{ singularLabel }}
+        <span class="material-symbols-outlined">add</span> Add Your First {{ singularLabel }}
       </button>
     </div>
 
@@ -231,11 +221,11 @@
             </td>
             <td data-label="Actions">
               <button 
-                class="btn btn-primary btn-sm" 
+                class="btn-action btn-edit" 
                 type="button"
-                (click)="openEditVehicleForm(vehicle)"
+                (click)="openEditVehicleForm(vehicle); $event.stopPropagation()"
                 [attr.aria-label]="'Edit vehicle ' + vehicle.unit_number">
-                Edit
+                <span class="material-symbols-outlined">edit</span> Edit
               </button>
             </td>
           </tr>
@@ -243,7 +233,7 @@
       </table>
     </div>
     <!-- Pagination Controls -->
-    <div *ngIf="!loading && !error && filteredVehicles.length > 0" class="pagination-section">
+    <div *ngIf="!loading && !error && filteredVehicles.length > 0" class="pagination-section vehicles-pagination">
       <div class="pagination-info">
         Showing {{ displayingRange }}
       </div>
@@ -313,8 +303,8 @@
 </app-vehicle-form>
 
 <!-- Vehicle Details Modal -->
-<div class="modal-overlay" *ngIf="showVehicleDetails" (click)="closeVehicleDetails()" (keydown.escape)="closeVehicleDetails()" tabindex="-1">
-  <div class="modal-container" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+<div class="modal-overlay vehicles-details-overlay" *ngIf="showVehicleDetails" (click)="closeVehicleDetails()" (keydown.escape)="closeVehicleDetails()" tabindex="-1">
+  <div class="modal-container vehicles-details-modal" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
     <div class="modal-header">
       <h2 class="modal-title">Vehicle Details</h2>
       <button class="close-btn" (click)="closeVehicleDetails()" type="button" aria-label="Close details">×</button>

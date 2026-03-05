@@ -1,9 +1,29 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const db = require('../internal/db').knex;
 const barcodesService = require('../services/barcodes.service');
+const { decodeBarcodeFromBuffer } = require('../services/barcode-decode');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+router.post('/decode-image', authMiddleware, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, error: 'No image uploaded; use field name "image".' });
+    }
+    const result = await decodeBarcodeFromBuffer(req.file.buffer);
+    if (!result) {
+      return res.status(200).json({ success: true, data: { barcode: null, format: null } });
+    }
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    dtLogger.error('barcode_decode_image_failed', { error: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to decode barcode from image.' });
+  }
+});
 
 router.get('/:code', authMiddleware, async (req, res) => {
   try {

@@ -23,7 +23,6 @@ export class BarcodeManagementComponent implements OnInit, OnDestroy {
   message = '';
   error = '';
 
-  // Phone bridge for barcode scanning
   bridgeMobileUrl = '';
   bridgeSessionId = '';
   bridgeConnected = false;
@@ -117,8 +116,7 @@ export class BarcodeManagementComponent implements OnInit, OnDestroy {
         const data = res?.data || {};
         this.bridgeMobileUrl = data.mobileUrl || '';
         this.bridgeSessionId = data.sessionId || '';
-
-        // Generate QR code
+        this.qrCodeDataUrl = '';
         if (this.bridgeMobileUrl) {
           QRCode.toDataURL(this.bridgeMobileUrl, {
             width: 250,
@@ -126,17 +124,15 @@ export class BarcodeManagementComponent implements OnInit, OnDestroy {
             color: { dark: '#000000', light: '#ffffff' }
           }).then((url: string) => {
             this.qrCodeDataUrl = url;
-          }).catch((err: any) => {
-            console.error('QR code generation failed', err);
-            this.error = 'Failed to generate QR code';
+          }).catch(() => {
+            this.qrCodeDataUrl = this.fallbackQrUrl(this.bridgeMobileUrl);
           });
         }
-
         const base = this.api.getBaseUrl();
         const eventsUrl = `${base}/scan-bridge/session/${encodeURIComponent(data.sessionId)}/events?readToken=${encodeURIComponent(data.readToken)}`;
         this.bridgeEvents = new EventSource(eventsUrl);
-        this.bridgeEvents.addEventListener('ready', () => { 
-          this.bridgeConnected = true; 
+        this.bridgeEvents.addEventListener('ready', () => {
+          this.bridgeConnected = true;
           this.message = 'Phone scanner connected';
         });
         this.bridgeEvents.addEventListener('scan', (evt: MessageEvent) => {
@@ -168,7 +164,10 @@ export class BarcodeManagementComponent implements OnInit, OnDestroy {
     this.bridgeMobileUrl = '';
     this.bridgeSessionId = '';
     this.qrCodeDataUrl = '';
-    this.bridgeSessionId = '';
+  }
+
+  private fallbackQrUrl(data: string): string {
+    return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(data || '')}`;
   }
 
   private clearMessages(): void {

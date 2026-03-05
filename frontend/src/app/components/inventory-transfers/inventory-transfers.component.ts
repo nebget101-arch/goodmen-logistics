@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { ApiService } from '../../services/api.service';
+import * as QRCode from 'qrcode';
 
 @Component({
   selector: 'app-inventory-transfers',
@@ -21,16 +22,12 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
   message = '';
   error = '';
   submitting = false;
+
   bridgeMobileUrl = '';
   bridgeSessionId = '';
   bridgeConnected = false;
-  showBridgeQr = false;
+  qrCodeDataUrl = '';
   private bridgeEvents?: EventSource;
-
-  get bridgeQrUrl(): string {
-    if (!this.bridgeMobileUrl) return '';
-    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(this.bridgeMobileUrl)}`;
-  }
 
   constructor(private api: ApiService) {}
 
@@ -96,10 +93,25 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
         const data = res?.data || {};
         this.bridgeMobileUrl = data.mobileUrl || '';
         this.bridgeSessionId = data.sessionId || '';
+        this.qrCodeDataUrl = '';
+        if (this.bridgeMobileUrl) {
+          QRCode.toDataURL(this.bridgeMobileUrl, {
+            width: 250,
+            margin: 2,
+            color: { dark: '#000000', light: '#ffffff' }
+          }).then((url: string) => {
+            this.qrCodeDataUrl = url;
+          }).catch(() => {
+            this.qrCodeDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(this.bridgeMobileUrl)}`;
+          });
+        }
         const base = this.api.getBaseUrl();
         const eventsUrl = `${base}/scan-bridge/session/${encodeURIComponent(data.sessionId)}/events?readToken=${encodeURIComponent(data.readToken)}`;
         this.bridgeEvents = new EventSource(eventsUrl);
-        this.bridgeEvents.addEventListener('ready', () => { this.bridgeConnected = true; });
+        this.bridgeEvents.addEventListener('ready', () => {
+          this.bridgeConnected = true;
+          this.message = 'Phone scanner connected';
+        });
         this.bridgeEvents.addEventListener('scan', (evt: MessageEvent) => {
           try {
             const payload = JSON.parse(evt.data || '{}');
@@ -109,17 +121,15 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
             this.addByScan();
           } catch {}
         });
-        this.bridgeEvents.onerror = () => { this.bridgeConnected = false; };
+        this.bridgeEvents.onerror = () => {
+          this.bridgeConnected = false;
+          this.error = 'Phone scanner disconnected';
+        };
       },
       error: (err: any) => {
         this.error = err?.error?.error || err?.message || 'Failed to start phone bridge';
       }
     });
-  }
-
-  openPhoneBridge(): void {
-    if (!this.bridgeMobileUrl) return;
-    window.open(this.bridgeMobileUrl, '_blank');
   }
 
   stopPhoneBridge(): void {
@@ -130,7 +140,11 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
     this.bridgeConnected = false;
     this.bridgeMobileUrl = '';
     this.bridgeSessionId = '';
-    this.showBridgeQr = false;
+    this.qrCodeDataUrl = '';
+  }
+
+  openPhoneBridge(): void {
+    if (this.bridgeMobileUrl) window.open(this.bridgeMobileUrl, '_blank');
   }
 
   createTransfer(): void {

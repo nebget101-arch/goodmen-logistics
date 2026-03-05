@@ -1,27 +1,32 @@
-<div class="container hub-container">
+<div class="maintenance-dashboard container">
+  <div class="header">
+    <div>
+      <h1>Work Orders Hub</h1>
+      <p class="subtitle">Track, filter, and invoice work orders faster</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" (click)="goToWorkOrder()">
+        <span class="material-symbols-outlined">add</span> New Work Order
+      </button>
+    </div>
+  </div>
+
   <div class="card hub-card">
-    <div class="card-header hub-header">
-      <div>
-        <h2 class="card-title">🔧 Work Orders Hub</h2>
-        <div class="subtitle">Track, filter, and invoice work orders faster</div>
-      </div>
-      <button class="btn btn-primary" (click)="goToWorkOrder()">+ New Work Order</button>
-    </div>
-
     <div class="quick-filters">
-      <button class="chip" [class.active]="!filters.status" (click)="setStatusFilter('')">All</button>
-      <button class="chip" [class.active]="filters.status === 'IN_PROGRESS'" (click)="setStatusFilter('IN_PROGRESS')">In Progress</button>
-      <button class="chip" [class.active]="filters.status === 'WAITING_PARTS'" (click)="setStatusFilter('WAITING_PARTS')">Waiting Parts</button>
-      <button class="chip" [class.active]="filters.status === 'COMPLETED'" (click)="setStatusFilter('COMPLETED')">Completed</button>
-      <button class="chip" [class.active]="filters.status === 'CLOSED'" (click)="setStatusFilter('CLOSED')">Closed</button>
-      <button class="chip" [class.active]="filters.status === 'CANCELED'" (click)="setStatusFilter('CANCELED')">Canceled</button>
+      <button type="button" class="chip" [class.active]="!filters.status" (click)="setStatusFilter('')">All</button>
+      <button type="button" class="chip" [class.active]="filters.status === 'IN_PROGRESS'" (click)="setStatusFilter('IN_PROGRESS')">In Progress</button>
+      <button type="button" class="chip" [class.active]="filters.status === 'WAITING_PARTS'" (click)="setStatusFilter('WAITING_PARTS')">Waiting Parts</button>
+      <button type="button" class="chip" [class.active]="filters.status === 'COMPLETED'" (click)="setStatusFilter('COMPLETED')">Completed</button>
+      <button type="button" class="chip" [class.active]="filters.status === 'CLOSED'" (click)="setStatusFilter('CLOSED')">Closed</button>
+      <button type="button" class="chip" [class.active]="filters.status === 'CANCELED'" (click)="setStatusFilter('CANCELED')">Canceled</button>
     </div>
 
-    <div class="card-body filters-panel">
+    <div class="filters-panel">
       <div class="filters-grid">
         <div class="filter-item filter-search">
-          <label>Search</label>
+          <label for="wo-search">Search</label>
           <input
+            id="wo-search"
             type="text"
             class="form-control"
             placeholder="WO #, unit, VIN, customer"
@@ -29,75 +34,77 @@
             (keyup.enter)="applyFilters()"
           >
         </div>
-
         <div class="filter-item">
-          <label>Status</label>
-          <select class="form-control" [(ngModel)]="filters.status">
+          <label for="wo-status">Status</label>
+          <select id="wo-status" class="form-control" [(ngModel)]="filters.status">
             <option value="">All Statuses</option>
             <option *ngFor="let status of statuses" [value]="status">{{ status }}</option>
           </select>
         </div>
-
         <div class="filter-item">
-          <label>Type</label>
-          <select class="form-control" [(ngModel)]="filters.type">
+          <label for="wo-type">Type</label>
+          <select id="wo-type" class="form-control" [(ngModel)]="filters.type">
             <option value="">All Types</option>
             <option *ngFor="let type of types" [value]="type">{{ type }}</option>
           </select>
         </div>
-
         <div class="filter-item">
-          <label>Location</label>
-          <select class="form-control" [(ngModel)]="filters.locationId">
+          <label for="wo-location">Location</label>
+          <select id="wo-location" class="form-control" [(ngModel)]="filters.locationId">
             <option value="">All Locations</option>
             <option *ngFor="let loc of locations" [value]="loc.id">{{ loc.name }}</option>
           </select>
         </div>
-
         <div class="filter-item">
-          <label>Invoice</label>
-          <select class="form-control" [(ngModel)]="filters.invoiceStatus">
+          <label for="wo-invoice">Invoice</label>
+          <select id="wo-invoice" class="form-control" [(ngModel)]="filters.invoiceStatus">
             <option value="">All Invoice Statuses</option>
             <option *ngFor="let status of invoiceStatuses" [value]="status">{{ status }}</option>
           </select>
         </div>
       </div>
-
       <div class="filters-actions">
         <span class="active-count">{{ getActiveFilterCount() }} filter(s) active</span>
-        <button class="btn btn-secondary" (click)="applyFilters()">Apply Filters</button>
-        <button class="btn btn-outline-secondary" (click)="clearFilters()">Reset</button>
+        <div class="filters-buttons">
+          <button type="button" class="btn btn-secondary" (click)="applyFilters()">Apply Filters</button>
+          <button type="button" class="btn btn-outline" (click)="clearFilters()">Reset</button>
+        </div>
       </div>
     </div>
 
-    <div class="card-body bulk-upload-panel">
+    <div class="bulk-upload-panel">
       <div class="bulk-upload-header">
-        <div>
-          <h4>Bulk Work Order Upload</h4>
+        <div class="bulk-upload-title">
+          <h3>Bulk Work Order Upload</h3>
           <p>Upload multiple work orders at once using an Excel spreadsheet.</p>
         </div>
-        <button class="btn btn-outline-primary" type="button" (click)="downloadWorkOrderTemplate()">
-          📥 Download Template
+        <button type="button" class="btn btn-secondary btn-download" (click)="downloadWorkOrderTemplate()">
+          <span class="material-symbols-outlined">download</span> Download Template
         </button>
       </div>
-
-      <div *ngIf="bulkUploadMessage" class="alert alert-success mt-2">{{ bulkUploadMessage }}</div>
-      <div *ngIf="bulkUploadError" class="alert alert-danger mt-2">{{ bulkUploadError }}</div>
-
+      <div *ngIf="bulkUploadMessage" class="alert alert-success">{{ bulkUploadMessage }}</div>
+      <div *ngIf="bulkUploadError" class="alert alert-danger">{{ bulkUploadError }}</div>
       <div class="bulk-upload-controls">
-        <input
-          id="workOrderBulkUpload"
-          type="file"
-          class="form-control"
-          (change)="onBulkFileSelected($event)"
-          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-        >
-        <button class="btn btn-primary" type="button" (click)="uploadBulkWorkOrders()" [disabled]="!bulkUploadFile || bulkUploading">
-          {{ bulkUploading ? 'Uploading...' : '🚀 Upload & Process' }}
-        </button>
-        <button class="btn btn-outline-secondary" type="button" (click)="clearBulkUpload()" [disabled]="bulkUploading">
-          Clear
-        </button>
+        <div class="file-input-wrap">
+          <input
+            id="workOrderBulkUpload"
+            type="file"
+            class="file-input"
+            (change)="onBulkFileSelected($event)"
+            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          >
+          <label for="workOrderBulkUpload" class="file-label">
+            <span class="material-symbols-outlined">upload_file</span>
+            <span class="file-label-text">{{ bulkUploadFile ? bulkUploadFile.name : 'Choose file...' }}</span>
+          </label>
+        </div>
+        <div class="bulk-upload-buttons">
+          <button type="button" class="btn btn-primary" (click)="uploadBulkWorkOrders()" [disabled]="!bulkUploadFile || bulkUploading">
+            <span class="material-symbols-outlined" *ngIf="!bulkUploading">rocket_launch</span>
+            {{ bulkUploading ? 'Uploading...' : 'Upload & Process' }}
+          </button>
+          <button type="button" class="btn btn-outline" (click)="clearBulkUpload()" [disabled]="bulkUploading">Clear</button>
+        </div>
       </div>
 
       <div class="bulk-upload-results" *ngIf="bulkUploadResults">
@@ -154,8 +161,8 @@
               <span *ngIf="!record.invoice_status">—</span>
             </td>
             <td class="actions-cell">
-              <button type="button" class="btn btn-sm btn-outline-primary" (click)="editWorkOrder(record)">View</button>
-              <button type="button" class="btn btn-sm btn-outline-success" (click)="generateInvoice(record)" [disabled]="record.status !== 'COMPLETED' || record.invoice_id">
+              <button type="button" class="btn-action btn-view" (click)="editWorkOrder(record)">View</button>
+              <button type="button" class="btn-action btn-invoice" (click)="generateInvoice(record)" [disabled]="record.status !== 'COMPLETED' || record.invoice_id">
                 Generate Invoice
               </button>
             </td>
