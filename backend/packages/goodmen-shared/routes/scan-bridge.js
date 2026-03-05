@@ -1,4 +1,5 @@
-const express = require('express');
+const requireFromRoot = require('../internal/require-from-root');
+const express = requireFromRoot('express');
 const crypto = require('crypto');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
