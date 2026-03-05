@@ -135,10 +135,12 @@ async function getLoadDetail(clientOrQuery, loadId) {
   if (loadRow?.billing_status) {
     loadRow.billing_status = normalizeEnum(loadRow.billing_status);
   }
-  const attachments = (attachmentsResult.rows || []).map((row) => ({
-    ...row,
-    file_url: row.storage_key ? `/uploads/${row.storage_key}` : null
-  }));
+  const attachments = await Promise.all(
+    (attachmentsResult.rows || []).map(async (row) => ({
+      ...row,
+      file_url: row.storage_key ? await getSignedDownloadUrl(row.storage_key) : null
+    }))
+  );
   return {
     ...loadRow,
     stops: stopsResult.rows,
