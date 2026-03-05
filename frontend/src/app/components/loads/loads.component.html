@@ -51,9 +51,9 @@
             </div>
           </td>
           <td>{{ load.commodity }}</td>
-          <td>{{ load.weight?.toLocaleString() }} lbs</td>
+          <td>{{ load.weight != null ? load.weight.toLocaleString() : '—' }} lbs</td>
           <td>{{ load.distance }} mi</td>
-          <td>${{ load.rate?.toFixed(2) }}</td>
+          <td>${{ load.rate != null ? load.rate.toFixed(2) : '—' }}</td>
           <td>
             <span [class]="'badge ' + getStatusBadge(load.status)">
               {{ load.status }}
