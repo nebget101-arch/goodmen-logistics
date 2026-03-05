@@ -28,6 +28,20 @@ const swaggerDocument = {
     version: '1.0.0',
     description: 'API documentation for the Inventory microservice.'
   },
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT'
+      }
+    }
+  },
+  security: [
+    {
+      bearerAuth: []
+    }
+  ],
   servers: [
     {
       url: '/',
