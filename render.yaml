@@ -33,7 +33,7 @@ services:
       - key: INVENTORY_SERVICE_URL
         value: https://fleetneuron-inventory-service.onrender.com
       - key: CORS_ORIGIN
-        sync: false
+        value: https://fleetneuron-logistics-ui.onrender.com
       - key: NODE_ENV
         value: production
       - key: PORT
