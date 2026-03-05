@@ -2,8 +2,8 @@
   <div class="sidebar-backdrop" *ngIf="isLoggedIn() && sidebarOpen" (click)="closeSidebar()" aria-hidden="true"></div>
 
   <aside class="sidebar" *ngIf="isLoggedIn()" [class.mobile-open]="sidebarOpen">
-    <div class="sidebar-header">
-      <img src="assets/fleetneuron-logo-header.png" alt="FleetNeuron Logo">
+  <div class="sidebar-header">
+      <img src="assets/fleetneuron-logo-sidebar.png" alt="FleetNeuron Logo">
     </div>
     <nav class="sidebar-nav" (click)="onSidebarNavClick($event)">
       <ul class="nav-links">
