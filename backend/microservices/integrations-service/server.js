@@ -55,6 +55,23 @@ const swaggerDocument = {
       post: {
         summary: 'Scan bridge handler',
         description: 'Entry point for scanner/webhook integrations via the scan bridge.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Scan payload from external system',
+                additionalProperties: true,
+                example: {
+                  barcode: '1234567890',
+                  source: 'scanner-1',
+                  type: 'RECEIVING'
+                }
+              }
+            }
+          }
+        },
         responses: {
           '200': {
             description: 'Scan processed successfully'

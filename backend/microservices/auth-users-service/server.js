@@ -60,13 +60,37 @@ const swaggerDocument = {
         }
       }
     },
-    '/api/auth': {
+    '/api/auth/login': {
       post: {
         summary: 'Authenticate user',
-        description: 'Authenticate a user and issue tokens.',
+        description: 'Authenticate a user with username and password and issue a JWT.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  username: {
+                    type: 'string',
+                    example: 'demo'
+                  },
+                  password: {
+                    type: 'string',
+                    example: 'password123'
+                  }
+                },
+                required: ['username', 'password']
+              }
+            }
+          }
+        },
         responses: {
           '200': {
-            description: 'User authenticated'
+            description: 'User authenticated, JWT returned'
+          },
+          '400': {
+            description: 'Missing credentials'
           },
           '401': {
             description: 'Invalid credentials'
@@ -87,6 +111,23 @@ const swaggerDocument = {
       post: {
         summary: 'Create user',
         description: 'Create a new user.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'User payload',
+                additionalProperties: true,
+                example: {
+                  username: 'newuser',
+                  password: 'Password123!',
+                  email: 'user@example.com'
+                }
+              }
+            }
+          }
+        },
         responses: {
           '201': {
             description: 'User created'
@@ -107,6 +148,23 @@ const swaggerDocument = {
       put: {
         summary: 'Update communication preferences',
         description: 'Update user communication preferences.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Communication preferences payload',
+                additionalProperties: true,
+                example: {
+                  email: true,
+                  sms: false,
+                  push: true
+                }
+              }
+            }
+          }
+        },
         responses: {
           '200': {
             description: 'Preferences updated'

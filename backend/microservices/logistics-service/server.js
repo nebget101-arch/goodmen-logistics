@@ -77,6 +77,25 @@ const swaggerDocument = {
       post: {
         summary: 'Create load',
         description: 'Create a new load.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Load payload',
+                additionalProperties: true,
+                example: {
+                  referenceNumber: 'LOAD-12345',
+                  shipper: 'ACME Corp',
+                  consignee: 'Customer Inc',
+                  pickupDate: '2026-03-10',
+                  deliveryDate: '2026-03-12'
+                }
+              }
+            }
+          }
+        },
         responses: {
           '201': {
             description: 'Load created'
