@@ -163,6 +163,8 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      - key: NODE_PATH
+        value: /opt/render/project/src/microservices/auth-users-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -206,6 +208,8 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      - key: NODE_PATH
+        value: /opt/render/project/src/microservices/drivers-compliance-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -249,6 +253,8 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      - key: NODE_PATH
+        value: /opt/render/project/src/microservices/vehicles-maintenance-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -292,6 +298,8 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      - key: NODE_PATH
+        value: /opt/render/project/src/microservices/logistics-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
@@ -335,6 +343,8 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      - key: NODE_PATH
+        value: /opt/render/project/src/microservices/inventory-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
           name: safetyapp-db
