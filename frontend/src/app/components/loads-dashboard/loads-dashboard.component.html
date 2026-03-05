@@ -23,22 +23,37 @@
 
   <div class="summary-bar" *ngIf="loads.length">
     <div class="summary-total">
-      Gross (page): ${{ summaryTotals.totalGross | number:'1.0-2' }}
+      <span class="summary-label">Gross (page)</span>
+      <span class="summary-value">${{ summaryTotals.totalGross | number:'1.0-2' }}</span>
     </div>
     <div class="summary-groups">
       <div class="summary-group">
-        <span class="label">By Status:</span>
-        <span class="chip" [class.muted]="!summaryTotals.byStatus[s]" *ngFor="let s of statusOptions">
-          {{ s.replace('_', ' ') }}:
-          ${{ (summaryTotals.byStatus[s] || 0) | number:'1.0-2' }}
-        </span>
+        <span class="label">By status</span>
+        <button
+          type="button"
+          class="chip"
+          *ngFor="let s of statusOptions"
+          [class.muted]="!summaryTotals.byStatus[s]"
+          [class.active]="filters.status === s"
+          (click)="setStatusFilter(filters.status === s ? '' : s)"
+        >
+          <span class="chip-label">{{ s.replace('_', ' ') }}</span>
+          <span class="chip-value">${{ (summaryTotals.byStatus[s] || 0) | number:'1.0-2' }}</span>
+        </button>
       </div>
       <div class="summary-group">
-        <span class="label">By Billing:</span>
-        <span class="chip" [class.muted]="!summaryTotals.byBilling[b]" *ngFor="let b of billingOptions">
-          {{ b.replace('_', ' ') }}:
-          ${{ (summaryTotals.byBilling[b] || 0) | number:'1.0-2' }}
-        </span>
+        <span class="label">By billing</span>
+        <button
+          type="button"
+          class="chip"
+          *ngFor="let b of billingOptions"
+          [class.muted]="!summaryTotals.byBilling[b]"
+          [class.active]="filters.billingStatus === b"
+          (click)="setBillingFilter(filters.billingStatus === b ? '' : b)"
+        >
+          <span class="chip-label">{{ b.replace('_', ' ') }}</span>
+          <span class="chip-value">${{ (summaryTotals.byBilling[b] || 0) | number:'1.0-2' }}</span>
+        </button>
       </div>
     </div>
   </div>
