@@ -1,85 +1,82 @@
-<div class="page">
-  <h2>Warehouse → Shop Transfers</h2>
+<div class="transfers-dashboard">
+  <div class="header">
+    <h1>Warehouse → Shop Transfers</h1>
+    <p class="subtitle">Use a hardware scanner or scan the QR code with your phone to use your phone as a barcode scanner.</p>
+  </div>
 
-  <div class="ok" *ngIf="message">{{ message }}</div>
-  <div class="err" *ngIf="error">{{ error }}</div>
+  <div class="card transfers-card">
+    <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+    <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
 
-  <div class="toolbar">
-    <div>
-      <label>From</label>
-      <select [(ngModel)]="fromLocationId">
-        <option value="">-- Select --</option>
-        <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
-      </select>
-    </div>
-    <div>
-      <label>To</label>
-      <select [(ngModel)]="toLocationId">
-        <option value="">-- Select --</option>
-        <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
-      </select>
-    </div>
-    <div>
-      <label>Scan Barcode</label>
-      <div class="scan-input-group">
-        <input #scanInput [(ngModel)]="scanCode" (keyup.enter)="addByScan()" placeholder="Scan and Enter" />
-        <button
-          type="button"
-          *ngIf="!bridgeConnected"
-          class="btn-scan"
-          (click)="startPhoneBridge()"
-          title="Start phone scanner"
-        >
-          📱 Scan
-        </button>
-        <button
-          type="button"
-          *ngIf="bridgeConnected"
-          class="btn-scan connected"
-          (click)="stopPhoneBridge()"
-          title="Stop phone scanner"
-        >
-          ✓ Connected
-        </button>
+    <div class="toolbar-panel">
+      <div class="toolbar-grid">
+        <div class="field">
+          <label for="xf-from">From</label>
+          <select id="xf-from" class="form-control" [(ngModel)]="fromLocationId">
+            <option value="">-- Select --</option>
+            <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="xf-to">To</label>
+          <select id="xf-to" class="form-control" [(ngModel)]="toLocationId">
+            <option value="">-- Select --</option>
+            <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+          </select>
+        </div>
+        <div class="field scan-field">
+          <label for="xf-scan">Scan barcode</label>
+          <div class="scan-input-group">
+            <input #scanInput id="xf-scan" type="text" class="form-control scan-input" [(ngModel)]="scanCode" (keyup.enter)="addByScan()" placeholder="Scan or type, then Enter" />
+            <button type="button" *ngIf="!bridgeConnected" class="btn-phone" (click)="startPhoneBridge()" title="Use phone as scanner">Scan with phone</button>
+            <button type="button" *ngIf="bridgeConnected" class="btn-phone connected" (click)="stopPhoneBridge()" title="Disconnect phone">Connected</button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+    <div *ngIf="qrCodeDataUrl" class="qr-section">
+      <p class="qr-title">Scan this QR code with your phone to use it as a barcode scanner:</p>
+      <img [src]="qrCodeDataUrl" alt="QR Code" class="qr-code-image" />
+      <p class="qr-link"><a [href]="bridgeMobileUrl" target="_blank" rel="noopener">Or open this link on your phone</a></p>
+      <p class="qr-status">{{ bridgeConnected ? 'Phone connected' : 'Waiting for phone...' }}</p>
+    </div>
 
-  <div *ngIf="bridgeMobileUrl" class="qr-section">
-    <p>Scan this QR code with your phone:</p>
-    <img [src]="bridgeQrUrl" alt="Phone bridge QR code" class="qr-code-image" />
-    <p class="qr-link"><a [href]="bridgeMobileUrl" target="_blank">Or open this link</a></p>
-    <p class="bridge-status">{{ bridgeConnected ? 'Phone scanner connected' : 'Waiting for phone connection...' }}</p>
-  </div>
+    <div class="table-section" *ngIf="lines.length > 0">
+      <h3 class="section-title">Transfer lines</h3>
+      <div class="table-wrap">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Name</th>
+              <th>Qty</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let line of lines; let i = index">
+              <td>{{ line.sku }}</td>
+              <td>{{ line.name }}</td>
+              <td><input type="number" min="1" class="form-control inline-input" [(ngModel)]="line.qty" /></td>
+              <td><button type="button" class="btn-remove" (click)="removeLine(i)">Remove</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-  <div class="bridge" *ngIf="bridgeMobileUrl">
-    <button type="button" (click)="openPhoneBridge()">Open Phone Link</button>
-    <button type="button" (click)="stopPhoneBridge()">Stop Bridge</button>
-  </div>
+    <div class="form-actions">
+      <button type="button" class="btn-primary" [disabled]="submitting || lines.length === 0" (click)="createTransfer()">
+        {{ submitting ? 'Creating...' : 'Create + Send Transfer' }}
+      </button>
+    </div>
 
-  <table *ngIf="lines.length > 0">
-    <thead>
-      <tr><th>SKU</th><th>Name</th><th>Qty</th><th></th></tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let line of lines; let i = index">
-        <td>{{ line.sku }}</td>
-        <td>{{ line.name }}</td>
-        <td><input type="number" min="1" [(ngModel)]="line.qty" /></td>
-        <td><button (click)="removeLine(i)">Remove</button></td>
-      </tr>
-    </tbody>
-  </table>
-
-  <button class="btn" [disabled]="submitting || lines.length===0" (click)="createTransfer()">
-    {{ submitting ? 'Creating...' : 'Create + Send Transfer' }}
-  </button>
-
-  <hr />
-
-  <h3>Receive Transfer</h3>
-  <div class="receive-row">
-    <input [(ngModel)]="receiveTransferId" placeholder="Transfer ID" />
-    <button (click)="receiveTransfer()">Receive</button>
+    <div class="receive-section">
+      <h3 class="section-title">Receive transfer</h3>
+      <div class="receive-row">
+        <input id="xf-receive-id" type="text" class="form-control" [(ngModel)]="receiveTransferId" placeholder="Transfer ID" />
+        <button type="button" class="btn-secondary" (click)="receiveTransfer()">Receive</button>
+      </div>
+    </div>
   </div>
 </div>

@@ -1,8 +1,12 @@
 const requireFromRoot = require('../internal/require-from-root');
 const express = requireFromRoot('express');
 const crypto = require('crypto');
+const multer = requireFromRoot('multer');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
+const { decodeBarcodeFromBuffer } = require('../services/barcode-decode');
+
+const scanUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const SESSION_TTL_MS = 1000 * 60 * 30;
 const sessions = new Map();
@@ -101,6 +105,47 @@ router.post('/session', authMiddleware, (req, res) => {
       expiresInSeconds: Math.floor(SESSION_TTL_MS / 1000)
     }
   });
+});
+
+/**
+ * POST /api/scan-bridge/decode-image
+ * Decode barcode from photo (phone/tablet camera). No auth; requires writeToken + sessionId.
+ * On success, pushes barcode to the bridge session so desktop receives it via SSE.
+ */
+router.post('/decode-image', scanUpload.single('image'), async (req, res) => {
+  const writeToken = (req.body?.writeToken || req.query?.writeToken || '').toString();
+  const sessionId = (req.body?.sessionId || req.query?.sessionId || req.body?.session || req.query?.session || '').toString();
+  const session = getSessionForWrite(writeToken, sessionId || null);
+
+  if (!session) {
+    return res.status(404).json({
+      success: false,
+      error: 'Session not found',
+      hint: 'Session expired or invalid. Create a new phone bridge session from desktop and scan the new QR code.'
+    });
+  }
+  if ((writeToken || '') !== session.writeToken) {
+    return res.status(403).json({ success: false, error: 'Invalid write token' });
+  }
+  if (!req.file || !req.file.buffer) {
+    return res.status(400).json({ success: false, error: 'No image uploaded; use field name "image".' });
+  }
+
+  try {
+    const result = await decodeBarcodeFromBuffer(req.file.buffer);
+    if (!result || !result.barcode) {
+      return res.status(200).json({ success: true, data: { barcode: null }, pushed: false });
+    }
+    const payload = { barcode: result.barcode, timestamp: new Date().toISOString() };
+    for (const client of session.clients) {
+      try {
+        client.write(`event: scan\ndata: ${JSON.stringify(payload)}\n\n`);
+      } catch (_) {}
+    }
+    return res.status(201).json({ success: true, data: result, pushed: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'Failed to decode barcode from image.' });
+  }
 });
 
 router.get('/session/:id/events', (req, res) => {
@@ -203,6 +248,13 @@ router.get('/mobile', (req, res) => {
   </div>
 
   <div class="row">
+    <label><strong>Take photo (inventory barcode)</strong></label>
+    <p class="text-muted" style="font-size:14px; margin:4px 0;">Use camera to capture a barcode image; it will be decoded and sent to the desktop.</p>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" />
+    <button id="photoBtn" type="button">Take photo / Choose image</button>
+  </div>
+
+  <div class="row">
     <label><strong>VIN OCR (camera)</strong></label>
     <button id="vinCamBtn" type="button">Start VIN OCR Camera</button>
     <video id="vinVideo" autoplay playsinline muted style="width:100%; max-width:360px; border-radius:6px; margin-top:8px; background:#000;"></video>
@@ -222,6 +274,8 @@ router.get('/mobile', (req, res) => {
       var startBtn = document.getElementById('startBtn');
       var sendBtn = document.getElementById('sendBtn');
       var manualInput = document.getElementById('manualInput');
+      var photoBtn = document.getElementById('photoBtn');
+      var photoInput = document.getElementById('photoInput');
       var vinCamBtn = document.getElementById('vinCamBtn');
       var vinVideo = document.getElementById('vinVideo');
       var vinCanvas = document.getElementById('vinCanvas');
@@ -445,6 +499,46 @@ router.get('/mobile', (req, res) => {
       sendBtn.addEventListener('click', function (e) {
         e.preventDefault();
         postBarcode(manualInput.value);
+      });
+
+      photoBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (photoInput) photoInput.click();
+      });
+
+      photoInput.addEventListener('change', function (e) {
+        var file = e.target && e.target.files && e.target.files[0];
+        if (!file) return;
+        setStatus('Decoding photo...', 'ok');
+        log('Uploading photo for decode');
+        var fd = new FormData();
+        fd.append('image', file);
+        fd.append('writeToken', WRITE_TOKEN);
+        fd.append('sessionId', SESSION_ID);
+        fetch('/api/scan-bridge/decode-image', { method: 'POST', body: fd })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (body) { return { ok: r.ok, status: r.status, body: body }; }); })
+          .then(function (result) {
+            if (!result.ok) {
+              var err = (result.body && result.body.error) ? result.body.error : ('HTTP ' + result.status);
+              throw new Error(err);
+            }
+            var barcode = result.body && result.body.data && result.body.data.barcode;
+            if (barcode) {
+              setStatus('Decoded: ' + barcode + (result.body.pushed ? ' (sent to desktop)' : ''), 'ok');
+              log('Decoded from photo: ' + barcode);
+              if (!result.body.pushed) postBarcode(barcode);
+            } else {
+              setStatus('No barcode found in photo', 'err');
+              log('No barcode found in photo');
+            }
+          })
+          .catch(function (e) {
+            setStatus('Photo decode failed: ' + e.message, 'err');
+            log('Photo decode failed: ' + e.message);
+          })
+          .finally(function () {
+            if (photoInput) photoInput.value = '';
+          });
       });
 
       vinCamBtn.addEventListener('click', function (e) {

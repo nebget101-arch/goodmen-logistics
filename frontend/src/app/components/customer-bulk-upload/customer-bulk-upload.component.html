@@ -1,80 +1,76 @@
-<div class="bulk-upload-container">
+<div class="bulk-upload-dashboard">
   <div class="header">
-    <h3>Bulk Customer Upload</h3>
+    <h1>Bulk Customer Upload</h1>
     <p class="subtitle">Upload multiple customers at once using an Excel spreadsheet</p>
   </div>
 
-  <!-- Messages -->
-  <div *ngIf="successMessage" class="message success">
-    {{ successMessage }}
-  </div>
-  <div *ngIf="errorMessage" class="message error">
-    {{ errorMessage }}
-  </div>
+  <div class="card bulk-card">
+    <div *ngIf="successMessage" class="message success">{{ successMessage }}</div>
+    <div *ngIf="errorMessage" class="message error">{{ errorMessage }}</div>
 
-  <!-- Upload Section -->
-  <div class="upload-section">
-    <div class="template-download">
-      <p>Start with our template:</p>
-      <button type="button" (click)="downloadTemplate()" class="btn btn-secondary">
-        📥 Download Upload Template
-      </button>
-      <span class="hint">Excel file with sample data and instructions</span>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="file-upload">
-      <p>Upload your completed spreadsheet:</p>
-      <div class="file-input-wrapper">
-        <input 
-          type="file" 
-          id="fileInput"
-          #fileInput
-          (change)="onFileSelected($event)" 
-          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-          class="file-input"
-        />
-        <label for="fileInput" class="file-label">
-          <span class="icon">📋</span>
-          <span *ngIf="!selectedFile" class="text">Choose Excel file...</span>
-          <span *ngIf="selectedFile" class="text">✓ {{ selectedFile.name }}</span>
-        </label>
+    <div class="upload-section">
+      <div class="block template-block">
+        <h3 class="block-title">Start with our template</h3>
+        <p class="block-desc">Excel file with sample data and instructions</p>
+        <button type="button" (click)="downloadTemplate()" class="btn btn-secondary btn-download">
+          <span class="material-symbols-outlined">download</span>
+          Download Upload Template
+        </button>
       </div>
 
-      <div class="file-info" *ngIf="selectedFile">
-        <p>Selected: <strong>{{ selectedFile.name }}</strong></p>
-        <p>Size: {{ (selectedFile.size / 1024).toFixed(2) }} KB</p>
-      </div>
+      <div class="divider"></div>
 
-      <div class="button-group">
-        <button 
-          type="button" 
-          (click)="uploadFile()" 
-          [disabled]="!selectedFile || uploading"
-          class="btn btn-primary"
-        >
-          <span *ngIf="!uploading">🚀 Upload & Process</span>
-          <span *ngIf="uploading">⏳ Processing...</span>
-        </button>
-        <button 
-          type="button" 
-          (click)="clearFile()" 
-          *ngIf="selectedFile && !uploading"
-          class="btn btn-outline"
-        >
-          Clear
-        </button>
+      <div class="block upload-block">
+        <h3 class="block-title">Upload your completed spreadsheet</h3>
+        <div class="upload-row">
+          <div class="file-input-wrap">
+            <input
+              type="file"
+              id="fileInput"
+              #fileInput
+              (change)="onFileSelected($event)"
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              class="file-input"
+            />
+            <label for="fileInput" class="file-label">
+              <span class="material-symbols-outlined">upload_file</span>
+              <span class="file-label-text">{{ selectedFile ? selectedFile.name : 'Choose Excel file...' }}</span>
+            </label>
+          </div>
+          <div class="upload-buttons">
+            <button
+              type="button"
+              (click)="uploadFile()"
+              [disabled]="!selectedFile || uploading"
+              class="btn btn-primary"
+            >
+              <span class="material-symbols-outlined" *ngIf="!uploading">rocket_launch</span>
+              {{ uploading ? 'Processing...' : 'Upload & Process' }}
+            </button>
+            <button
+              type="button"
+              (click)="clearFile()"
+              *ngIf="selectedFile && !uploading"
+              class="btn btn-outline"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        <div *ngIf="selectedFile" class="file-info">
+          <span>Selected: <strong>{{ selectedFile.name }}</strong></span>
+          <span class="file-size">Size: {{ (selectedFile.size / 1024).toFixed(2) }} KB</span>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Results Modal -->
-  <div *ngIf="showResults" class="modal-overlay" (click)="closeResults()">
-    <div class="modal" (click)="$event.stopPropagation()">
+  <div *ngIf="showResults" class="modal-backdrop" (click)="closeResults()">
+    <div class="modal bulk-results-modal" (click)="$event.stopPropagation()">
       <div class="modal-header">
-        <h4>Upload Results</h4>
-        <button type="button" (click)="closeResults()" class="close-btn">✕</button>
+        <h3>Upload Results</h3>
+        <button type="button" (click)="closeResults()" class="close-btn">×</button>
       </div>
 
       <div class="modal-body">

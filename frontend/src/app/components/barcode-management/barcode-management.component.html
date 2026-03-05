@@ -1,77 +1,83 @@
-<div class="card">
-  <h2>Parts + Barcode Management</h2>
-
-  <div class="alerts">
-    <div class="ok" *ngIf="message">{{ message }}</div>
-    <div class="err" *ngIf="error">{{ error }}</div>
+<div class="barcode-dashboard">
+  <div class="header">
+    <h1>Barcode Management</h1>
+    <p class="subtitle">Link barcodes to parts. Use a scanner or scan the QR code with your phone to use your phone as a barcode scanner.</p>
   </div>
 
-  <div class="grid">
-    <div>
-      <label>Search parts</label>
-      <input type="text" [(ngModel)]="search" (input)="onSearchChange()" placeholder="SKU or name" />
+  <div class="card barcode-card">
+    <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+    <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
 
-      <label>Select part</label>
-      <select [ngModel]="selectedPartId" (ngModelChange)="onSelectPart($event)">
-        <option value="">-- Select --</option>
-        <option *ngFor="let p of filteredParts" [value]="p.id">{{ p.sku }} - {{ p.name }}</option>
-      </select>
-    </div>
-
-    <div>
-      <label>Barcode value</label>
-      <div class="scan-input-group">
-        <input type="text" [(ngModel)]="barcodeValue" placeholder="Scan or type barcode" />
-        <button 
-          *ngIf="!bridgeConnected" 
-          class="btn-scan" 
-          (click)="startPhoneBridge()"
-          title="Start phone scanner">
-          📱 Scan
-        </button>
-        <button 
-          *ngIf="bridgeConnected" 
-          class="btn-scan connected" 
-          (click)="stopPhoneBridge()"
-          title="Stop phone scanner">
-          ✓ Connected
-        </button>
+    <div class="form-section">
+      <h3 class="section-title">Select part &amp; assign barcode</h3>
+      <div class="form-grid">
+        <div class="field">
+          <label for="bc-search">Search parts</label>
+          <input id="bc-search" type="text" class="form-control" [(ngModel)]="search" (input)="onSearchChange()" placeholder="SKU or name" />
+        </div>
+        <div class="field">
+          <label for="bc-part">Select part</label>
+          <select id="bc-part" class="form-control" [ngModel]="selectedPartId" (ngModelChange)="onSelectPart($event)">
+            <option value="">-- Select --</option>
+            <option *ngFor="let p of filteredParts" [value]="p.id">{{ p.sku }} - {{ p.name }}</option>
+          </select>
+        </div>
       </div>
-      
+
+      <div class="scan-row">
+        <div class="field scan-field">
+          <label for="bc-barcode">Barcode (scan or type)</label>
+          <div class="scan-input-group">
+            <input id="bc-barcode" type="text" class="form-control scan-input" [(ngModel)]="barcodeValue" placeholder="Focus here and scan, or paste" />
+            <button type="button" *ngIf="!bridgeConnected" class="btn-phone" (click)="startPhoneBridge()" title="Use phone as scanner">Scan with phone</button>
+            <button type="button" *ngIf="bridgeConnected" class="btn-phone connected" (click)="stopPhoneBridge()" title="Disconnect phone">Connected</button>
+          </div>
+        </div>
+        <div class="field field-sm">
+          <label for="bc-pack">Pack Qty</label>
+          <input id="bc-pack" type="number" min="1" class="form-control" [(ngModel)]="packQty" />
+        </div>
+        <div class="field">
+          <label for="bc-vendor">Vendor (optional)</label>
+          <input id="bc-vendor" type="text" class="form-control" [(ngModel)]="vendor" />
+        </div>
+        <div class="field field-action">
+          <label>&nbsp;</label>
+          <button type="button" class="btn-primary" (click)="assignBarcode()">Assign Barcode</button>
+        </div>
+      </div>
       <div *ngIf="qrCodeDataUrl" class="qr-section">
-        <p>Scan this QR code with your phone:</p>
+        <p class="qr-title">Scan this QR code with your phone to use it as a barcode scanner:</p>
         <img [src]="qrCodeDataUrl" alt="QR Code" class="qr-code-image" />
-        <p class="qr-link"><a [href]="bridgeMobileUrl" target="_blank">Or open this link</a></p>
+        <p class="qr-link"><a [href]="bridgeMobileUrl" target="_blank" rel="noopener">Or open this link on your phone</a></p>
+        <p class="qr-status">{{ bridgeConnected ? 'Phone connected' : 'Waiting for phone...' }}</p>
       </div>
+    </div>
 
-      <label>Pack Qty</label>
-      <input type="number" min="1" [(ngModel)]="packQty" />
-
-      <label>Vendor (optional)</label>
-      <input type="text" [(ngModel)]="vendor" />
-
-      <button class="btn" (click)="assignBarcode()">Assign Barcode</button>
+    <div class="table-section" *ngIf="selectedPart">
+      <h3 class="section-title">Assigned barcodes for {{ selectedPart.sku }} — {{ selectedPart.name }}</h3>
+      <div *ngIf="loading" class="loading-state"><span>Loading...</span></div>
+      <div *ngIf="!loading && barcodes.length > 0" class="table-wrap">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Barcode</th>
+              <th>Pack Qty</th>
+              <th>Vendor</th>
+              <th>Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let b of barcodes">
+              <td>{{ b.barcode_value }}</td>
+              <td>{{ b.pack_qty }}</td>
+              <td>{{ b.vendor || '—' }}</td>
+              <td>{{ b.is_active ? 'Yes' : 'No' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p *ngIf="!loading && barcodes.length === 0" class="empty-hint">No barcodes assigned yet. Scan or enter a barcode above and click Assign.</p>
     </div>
   </div>
-
-  <div *ngIf="selectedPart" class="subhead">Assigned barcodes for {{ selectedPart.sku }} - {{ selectedPart.name }}</div>
-
-  <table *ngIf="barcodes.length > 0">
-    <thead>
-      <tr>
-        <th>Barcode</th>
-        <th>Pack Qty</th>
-        <th>Vendor</th>
-        <th>Active</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let b of barcodes">
-        <td>{{ b.barcode_value }}</td>
-        <td>{{ b.pack_qty }}</td>
-        <td>{{ b.vendor || '-' }}</td>
-        <td>{{ b.is_active ? 'Yes' : 'No' }}</td>
-      </tr>
-    </tbody>
-  </table>
 </div>

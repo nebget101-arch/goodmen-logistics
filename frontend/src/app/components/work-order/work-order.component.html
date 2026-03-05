@@ -1,9 +1,13 @@
-<div class="container">
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">🛠️ Work Order</h2>
+<div class="work-order-dashboard container">
+  <div class="header">
+    <div>
+      <h1>Work Order</h1>
+      <p class="subtitle">Maintenance, repair, and service tracking</p>
     </div>
-    <div *ngIf="workOrderLoadError" class="alert alert-danger mt-2">{{ workOrderLoadError }}</div>
+  </div>
+
+  <div class="card work-order-card">
+    <div *ngIf="workOrderLoadError" class="alert alert-danger">{{ workOrderLoadError }}</div>
     <div class="row" style="margin: 12px 0;">
       <div class="col">
         <strong>Status:</strong>
@@ -81,14 +85,13 @@
         </div>
       </div>
       <!-- New Customer Modal -->
-      <div class="modal" tabindex="-1" [ngClass]="{show: showNewCustomerModal}" style="display: block;" *ngIf="showNewCustomerModal">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Add New Customer</h5>
-              <button type="button" class="btn-close" (click)="showNewCustomerModal = false"></button>
-            </div>
-            <div class="modal-body">
+      <div class="modal-backdrop" *ngIf="showNewCustomerModal" (click)="showNewCustomerModal = false">
+        <div class="modal wo-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3 class="modal-title">Add New Customer</h3>
+            <button type="button" class="close-btn" (click)="showNewCustomerModal = false">×</button>
+          </div>
+          <div class="modal-body">
               <div class="mb-2">
                 <label for="newCustomerName">Company Name</label>
                 <input id="newCustomerName" type="text" class="form-control" [(ngModel)]="newCustomer.company_name" name="newCustomerName">
@@ -123,10 +126,9 @@
               </div>
               <div *ngIf="newCustomerError" class="alert alert-danger">{{newCustomerError}}</div>
             </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" (click)="showNewCustomerModal = false">Cancel</button>
-              <button type="button" class="btn btn-primary" (click)="createCustomer()">Create</button>
-            </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="showNewCustomerModal = false">Cancel</button>
+            <button type="button" class="btn btn-primary" (click)="createCustomer()">Create</button>
           </div>
         </div>
       </div>
@@ -233,14 +235,13 @@
             </div>
             <button type="button" class="btn btn-outline-primary mb-2" (click)="openAddVehicleModal()">Add Vehicle</button>
             <!-- Add Customer Vehicle Modal -->
-            <div class="modal" tabindex="-1" [ngClass]="{show: showNewCustomerVehicleModal}" style="display: block;" *ngIf="showNewCustomerVehicleModal">
-              <div class="modal-dialog">
-                <div class="modal-content">
-                  <div class="modal-header">
-                    <h5 class="modal-title">Add Vehicle</h5>
-                    <button type="button" class="btn-close" (click)="showNewCustomerVehicleModal = false"></button>
-                  </div>
-                  <div class="modal-body">
+            <div class="modal-backdrop" *ngIf="showNewCustomerVehicleModal" (click)="showNewCustomerVehicleModal = false">
+              <div class="modal wo-modal" (click)="$event.stopPropagation()">
+                <div class="modal-header">
+                  <h3 class="modal-title">Add Vehicle</h3>
+                  <button type="button" class="close-btn" (click)="showNewCustomerVehicleModal = false">×</button>
+                </div>
+                <div class="modal-body">
                     <div class="mb-2">
                       <label for="newVehicleOwnership">Ownership</label>
                       <select id="newVehicleOwnership" class="form-control" [(ngModel)]="newVehicleOwnership" name="newVehicleOwnership">
@@ -302,10 +303,9 @@
                     </div>
                     <div *ngIf="newCustomerVehicleError" class="alert alert-danger">{{newCustomerVehicleError}}</div>
                   </div>
-                  <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" (click)="showNewCustomerVehicleModal = false">Cancel</button>
-                    <button type="button" class="btn btn-primary" (click)="createVehicleFromWorkOrder()">Create</button>
-                  </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" (click)="showNewCustomerVehicleModal = false">Cancel</button>
+                  <button type="button" class="btn btn-primary" (click)="createVehicleFromWorkOrder()">Create</button>
                 </div>
               </div>
             </div>
@@ -876,7 +876,10 @@
       </div>
       <div *ngIf="workOrderSaveError" class="alert alert-danger mt-3">{{workOrderSaveError}}</div>
       <div *ngIf="workOrderSaveSuccess" class="alert alert-success mt-3">{{workOrderSaveSuccess}}</div>
-      <button type="submit" class="btn btn-success mt-3">Save Work Order</button>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" (click)="cancelWorkOrder()">Cancel</button>
+        <button type="submit" class="btn btn-success">Save Work Order</button>
+      </div>
     </form>
   </div>
 </div>

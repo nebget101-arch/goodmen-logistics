@@ -1,35 +1,39 @@
-<div class="drivers-page">
-  <div class="drivers-header">
+<div class="dispatch-drivers-dashboard">
+  <div class="header">
     <div>
-      <h2>Drivers</h2>
+      <h1>Drivers</h1>
       <p class="subtitle">Dispatch view - core assignments and pay</p>
     </div>
     <div class="header-actions">
-      <button class="btn btn-primary" (click)="openNew()">+ New Driver</button>
+      <button class="btn btn-primary" (click)="openNew()">
+        <span class="material-symbols-outlined">person_add</span>
+        New Driver
+      </button>
     </div>
   </div>
 
-  <div *ngIf="loading" class="loading">
-    <div class="spinner"></div>
-  </div>
+  <div class="dispatch-card table-card">
+    <div *ngIf="loading" class="loading">
+      <div class="spinner"></div>
+    </div>
 
-  <table class="table" *ngIf="!loading">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Type</th>
-        <th>Status</th>
-        <th>Hire Date</th>
-        <th>Term Date</th>
-        <th>Phone</th>
-        <th>Email</th>
-        <th>Truck</th>
-        <th>Trailer</th>
-        <th>Pay Basis</th>
-        <th>Pay Rate / %</th>
-        <th>Actions</th>
-      </tr>
-      <tr class="drivers-header-filters">
+    <table class="table" *ngIf="!loading">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Hire Date</th>
+          <th>Term Date</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Truck</th>
+          <th>Trailer</th>
+          <th>Pay Basis</th>
+          <th>Pay Rate / %</th>
+          <th>Actions</th>
+        </tr>
+        <tr class="header-filters drivers-header-filters">
         <th>
           <input
             type="text"
@@ -138,8 +142,8 @@
           </ng-container>
         </td>
         <td>
-          <button class="btn btn-sm" type="button" (click)="startEdit(d)">
-            Edit
+          <button type="button" class="btn-action btn-edit" (click)="startEdit(d)">
+            <span class="material-symbols-outlined">edit</span> Edit
           </button>
         </td>
       </tr>
@@ -149,13 +153,14 @@
   <div *ngIf="!loading && filteredDrivers.length === 0" class="empty-state">
     <p>No drivers found</p>
   </div>
+  </div>
 
   <!-- New Driver Modal -->
-  <div class="modal-backdrop" *ngIf="showNewModal">
-    <div class="modal">
+  <div class="modal-backdrop" *ngIf="showNewModal" (click)="closeNew()">
+    <div class="modal dispatch-modal" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h3>{{ editingDriverId ? 'Edit Driver' : 'New Driver' }}</h3>
-        <button class="close-btn" type="button" (click)="closeNew()" [disabled]="saving">✕</button>
+        <button class="close-btn" type="button" (click)="closeNew()" [disabled]="saving">×</button>
       </div>
       <div class="modal-banner">
         <span class="banner-icon">ℹ</span>
@@ -486,7 +491,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn" type="button" (click)="closeNew()" [disabled]="saving">Cancel</button>
+        <button class="btn btn-secondary" type="button" (click)="closeNew()" [disabled]="saving">Cancel</button>
         <button class="btn btn-primary" type="button" (click)="saveDriver()" [disabled]="saving">
           {{ saving ? 'Saving...' : 'Save Driver' }}
         </button>

@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { CreditService } from '../../services/credit.service';
 import { lastValueFrom } from 'rxjs';
@@ -84,7 +84,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   creditCheckLoading: boolean = false;
   creditCheckError: string = '';
 
-  constructor(private apiService: ApiService, private route: ActivatedRoute, private creditService: CreditService) { }
+  constructor(private apiService: ApiService, private route: ActivatedRoute, private router: Router, private creditService: CreditService) { }
 
   ngOnInit(): void {
     this.loadVehicles();
@@ -959,6 +959,10 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
 
   onFileChange(event: any): void {
     this.files = Array.from(event.target.files);
+  }
+
+  cancelWorkOrder(): void {
+    this.router.navigate(['/maintenance']);
   }
 
   submitWorkOrder(): void {

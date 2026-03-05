@@ -1,12 +1,16 @@
-<div class="customer-form">
-  <h2>{{ customerId ? 'Edit Customer' : 'New Customer' }}</h2>
+<div class="customer-form-dashboard">
+  <div class="header">
+    <h1>{{ customerId ? 'Edit Customer' : 'New Customer' }}</h1>
+    <p class="subtitle">{{ customerId ? 'Update customer details' : 'Add a new customer account' }}</p>
+  </div>
 
+  <div class="card form-card">
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
   <div *ngIf="success" class="alert alert-success">{{ success }}</div>
 
   <form [formGroup]="form">
     <div class="section">
-      <h4>Basic Information</h4>
+      <h3 class="section-title">Basic Information</h3>
       <div class="grid">
         <div>
           <label>Company Name *</label>
@@ -32,7 +36,7 @@
     </div>
 
     <div class="section">
-      <h4>Contact</h4>
+      <h3 class="section-title">Contact</h3>
       <div class="grid">
         <div>
           <label>Primary Contact</label>
@@ -58,7 +62,7 @@
     </div>
 
     <div class="section">
-      <h4>Billing Address</h4>
+      <h3 class="section-title">Billing Address</h3>
       <div class="grid">
         <div>
           <label>Address Line 1</label>
@@ -88,7 +92,7 @@
     </div>
 
     <div class="section">
-      <h4>Payment & Billing</h4>
+      <h3 class="section-title">Payment & Billing</h3>
       <div class="grid">
         <div>
           <label>Payment Terms *</label>
@@ -121,4 +125,5 @@
       <button type="button" class="btn btn-primary" (click)="save()" [disabled]="loading">Save</button>
     </div>
   </form>
+  </div>
 </div>
