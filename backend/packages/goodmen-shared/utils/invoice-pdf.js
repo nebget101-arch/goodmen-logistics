@@ -2,24 +2,24 @@ const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
 
-// Dark theme to match website invoice page
+// White background theme; dark text for readability
 const theme = {
-  bg: '#0a0f1a',           // page background (very dark blue)
-  panel: '#151b2d',       // card/panel (lighter blue)
-  panelBorder: '#1e293b', // subtle panel border
-  heading: '#ffffff',      // bold white headings
-  label: '#94a3b8',       // section labels (BILL TO, VEHICLE / UNIT)
-  text: '#e2e8f0',        // body text (light gray-white)
-  highlight: '#f1f5f9',   // emphasized (customer name, unit, VIN, total)
-  tableHeaderBg: '#1e293b',
-  tableHeaderText: '#ffffff',
-  tableRowBg: '#151b2d',
-  tableRowAlt: '#0f172a',
-  tableBorder: '#1e293b',
-  total: '#f1f5f9',       // total amount
-  paid: '#22c55e',        // green
-  balanceDue: '#eab308',  // yellow
-  separator: '#334155'
+  bg: '#ffffff',
+  panel: '#f8fafc',
+  panelBorder: '#e2e8f0',
+  heading: '#0f172a',
+  label: '#475569',
+  text: '#334155',
+  highlight: '#0f172a',
+  tableHeaderBg: '#f1f5f9',
+  tableHeaderText: '#0f172a',
+  tableRowBg: '#ffffff',
+  tableRowAlt: '#f8fafc',
+  tableBorder: '#e2e8f0',
+  total: '#0f172a',
+  paid: '#16a34a',
+  balanceDue: '#ca8a04',
+  separator: '#e2e8f0'
 };
 
 function formatDate(value) {
@@ -47,110 +47,120 @@ function buildInvoicePdf({ invoice, customer, location, workOrder, vehicle, line
     const startX = doc.page.margins.left;
     let y = doc.page.margins.top;
 
-    // ----- Full page dark background -----
+    // ----- White background -----
     doc.rect(0, 0, doc.page.width, doc.page.height).fill(theme.bg);
 
-    // ----- Header: logo + INVOICE -----
+    // ----- Header: left = Invoice # + Service location; right = Status, Issued, Due, Payment terms -----
     const logoPath = process.env.INVOICE_LOGO_PATH || path.join(__dirname, '..', 'assets', 'logo.png');
     if (logoPath && fs.existsSync(logoPath)) {
-      doc.image(logoPath, startX, y, { width: 100 });
+      doc.image(logoPath, startX, y, { width: 80 });
     }
 
-    doc.fontSize(24).fillColor(theme.heading).text('INVOICE', startX + 120, y, { width: pageWidth - 120, align: 'right' });
-    y += 32;
-    doc.fontSize(11).fillColor(theme.label);
-    doc.text(`Invoice # ${invoice.invoice_number}`, startX + 120, y, { width: pageWidth - 120, align: 'right' });
-    doc.text(`Status: ${invoice.status}`, startX + 120, y + 14, { width: pageWidth - 120, align: 'right' });
-    doc.fillColor(theme.text).text(`Issued: ${formatDate(invoice.issued_date)}  ·  Due: ${formatDate(invoice.due_date)}`, startX + 120, y + 28, { width: pageWidth - 120, align: 'right' });
-    y += 50;
+    const headerLeftW = pageWidth * 0.5;
+    const headerRightX = startX + headerLeftW;
+    const headerRightW = pageWidth - headerLeftW;
 
+    doc.fontSize(22).fillColor(theme.heading).text('INVOICE', startX, y, { width: headerLeftW });
+    y += 26;
+    doc.fontSize(11).fillColor(theme.label).text('Invoice #', startX, y);
+    doc.fontSize(11).fillColor(theme.highlight).text(invoice.invoice_number || '—', startX + 52, y, { width: headerLeftW - 52 });
+    y += 16;
+    doc.fontSize(10).fillColor(theme.label).text('Service location', startX, y);
+    doc.fontSize(10).fillColor(theme.text).text(location?.name || '—', startX + 72, y, { width: headerLeftW - 72 });
+    const headerLeftBottom = y + 14;
+
+    // Right side of header: Status, Issued, Due, Payment terms
+    let rightY = doc.page.margins.top;
+    doc.fontSize(10).fillColor(theme.label).text(`Status: ${invoice.status || '—'}`, headerRightX, rightY, { width: headerRightW, align: 'right' });
+    rightY += 16;
+    doc.fontSize(10).fillColor(theme.label).text(`Issued: ${formatDate(invoice.issued_date)}`, headerRightX, rightY, { width: headerRightW, align: 'right' });
+    rightY += 16;
+    doc.fontSize(10).fillColor(theme.label).text(`Due: ${formatDate(invoice.due_date)}`, headerRightX, rightY, { width: headerRightW, align: 'right' });
+    rightY += 16;
+    doc.fontSize(10).fillColor(theme.label).text(`Payment terms: ${invoice.payment_terms || '—'}`, headerRightX, rightY, { width: headerRightW, align: 'right' });
+    rightY += 18;
+
+    y = Math.max(headerLeftBottom, rightY) + 4;
     doc.strokeColor(theme.separator).lineWidth(1).moveTo(startX, y).lineTo(startX + pageWidth, y).stroke();
     y += 20;
 
-    // ----- BILL TO (left) – dark panel style -----
-    doc.fontSize(10).fillColor(theme.label).text('BILL TO', startX, y);
-    y += 14;
-    doc.fontSize(12).fillColor(theme.highlight).text(customer?.company_name || '—', startX, y);
-    y += 16;
+    // ----- 2x2 grid: BILL TO (left) | VEHICLE / UNIT (right) -----
+    const gridY = y;
+    const halfW = (pageWidth - 16) / 2;
+    const leftColX = startX;
+    const rightColX = startX + halfW + 16;
+    let leftY = gridY;
+    let rightYGrid = gridY;
+
+    // Left column: BILL TO
+    doc.fontSize(10).fillColor(theme.label).text('BILL TO', leftColX, leftY);
+    leftY += 14;
+    doc.fontSize(12).fillColor(theme.highlight).text(customer?.company_name || '—', leftColX, leftY, { width: halfW - 4 });
+    leftY += 16;
     doc.fontSize(10).fillColor(theme.text);
     if (customer?.primary_contact_name) {
-      doc.text(`Contact: ${customer.primary_contact_name}`, startX, y);
-      y += 14;
+      doc.text(`Contact: ${customer.primary_contact_name}`, leftColX, leftY, { width: halfW - 4 });
+      leftY += 14;
     }
-    doc.text(customer?.billing_address_line1 || '', startX, y);
-    y += 14;
+    if (customer?.billing_address_line1) {
+      doc.text(customer.billing_address_line1, leftColX, leftY, { width: halfW - 4 });
+      leftY += 14;
+    }
     if (customer?.billing_address_line2) {
-      doc.text(customer.billing_address_line2, startX, y);
-      y += 14;
+      doc.text(customer.billing_address_line2, leftColX, leftY, { width: halfW - 4 });
+      leftY += 14;
     }
     const cityStateZip = [customer?.billing_city, customer?.billing_state, customer?.billing_zip].filter(Boolean).join(', ');
     if (cityStateZip) {
-      doc.text(cityStateZip, startX, y);
-      y += 14;
+      doc.text(cityStateZip, leftColX, leftY, { width: halfW - 4 });
+      leftY += 14;
     }
     if (customer?.billing_country) {
-      doc.text(customer.billing_country, startX, y);
-      y += 14;
+      doc.text(customer.billing_country, leftColX, leftY, { width: halfW - 4 });
+      leftY += 14;
     }
     if (customer?.phone) {
-      doc.text(`Phone: ${customer.phone}`, startX, y);
-      y += 14;
+      doc.text(`Phone: ${customer.phone}`, leftColX, leftY, { width: halfW - 4 });
+      leftY += 14;
     }
     if (customer?.email) {
-      doc.text(`Email: ${customer.email}`, startX, y);
-      y += 14;
+      doc.text(`Email: ${customer.email}`, leftColX, leftY, { width: halfW - 4 });
+      leftY += 14;
     }
     if (customer?.dot_number) {
-      doc.text(`DOT: ${customer.dot_number}`, startX, y);
-      y += 14;
+      doc.text(`DOT: ${customer.dot_number}`, leftColX, leftY, { width: halfW - 4 });
+      leftY += 14;
     }
-    y += 8;
+    leftY += 8;
 
-    // ----- VEHICLE / UNIT -----
+    // Right column: VEHICLE / UNIT
     const hasVehicleSection = workOrder || (vehicle && (vehicle.vin || vehicle.unit_number || vehicle.year || vehicle.make || vehicle.model));
     if (hasVehicleSection) {
-      doc.fontSize(10).fillColor(theme.label).text('VEHICLE / UNIT', startX, y);
-      y += 14;
+      doc.fontSize(10).fillColor(theme.label).text('VEHICLE / UNIT', rightColX, rightYGrid);
+      rightYGrid += 14;
       doc.fontSize(10).fillColor(theme.text);
       const unitNum = vehicle?.unit_number ?? '—';
-      doc.fillColor(theme.highlight).text(`Unit #: ${unitNum}`, startX, y);
-      y += 14;
+      doc.fillColor(theme.highlight).text(`Unit #: ${unitNum}`, rightColX, rightYGrid, { width: halfW - 4 });
+      rightYGrid += 14;
       const vin = vehicle?.vin ?? '—';
-      doc.fillColor(theme.highlight).text(`VIN: ${vin}`, startX, y);
-      y += 14;
+      doc.fillColor(theme.highlight).text(`VIN: ${vin}`, rightColX, rightYGrid, { width: halfW - 4 });
+      rightYGrid += 14;
       doc.fillColor(theme.text);
       if (vehicle?.year || vehicle?.make || vehicle?.model) {
         const ymm = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ');
         if (ymm) {
-          doc.text(ymm, startX, y);
-          y += 14;
+          doc.text(ymm, rightColX, rightYGrid, { width: halfW - 4 });
+          rightYGrid += 14;
         }
       }
       if (workOrder?.work_order_number) {
-        doc.text(`Work Order: ${workOrder.work_order_number}`, startX, y);
-        y += 14;
+        doc.text(`Work Order: ${workOrder.work_order_number}`, rightColX, rightYGrid, { width: halfW - 4 });
+        rightYGrid += 14;
       }
-      y += 12;
+      rightYGrid += 8;
     }
 
-    // ----- INVOICE DETAILS / SERVICE LOCATION (right column) -----
-    const rightColX = startX + pageWidth * 0.52;
-    let rightY = doc.page.margins.top + 20;
-    doc.fontSize(10).fillColor(theme.label).text('SERVICE LOCATION', rightColX, rightY);
-    rightY += 14;
-    doc.fontSize(10).fillColor(theme.text).text(location?.name || '—', rightColX, rightY);
-    rightY += 14;
-    if (location?.address) {
-      doc.text(location.address, rightColX, rightY, { width: pageWidth * 0.45 });
-      rightY += 24;
-    } else rightY += 8;
-
-    doc.fontSize(10).fillColor(theme.label).text('PAYMENT TERMS', rightColX, rightY);
-    rightY += 14;
-    doc.fontSize(10).fillColor(theme.text).text(invoice.payment_terms || '—', rightColX, rightY);
-    rightY += 20;
-
-    y = Math.max(y, rightY) + 10;
+    y = Math.max(leftY, rightYGrid) + 16;
 
     // ----- Financial summary bar (TOTAL | PAID | BALANCE DUE) -----
     const summaryY = y;
@@ -166,7 +176,7 @@ function buildInvoicePdf({ invoice, customer, location, workOrder, vehicle, line
     doc.fillColor(theme.balanceDue).text(`$${formatMoney(invoice.balance_due)}`, startX + third * 2 + 16, summaryY + 22);
     y = summaryY + summaryH + 18;
 
-    // ----- Line items table (dark theme) -----
+    // ----- Line items table -----
     doc.fontSize(10).fillColor(theme.label).text('LINE ITEMS', startX, y);
     y += 18;
 
@@ -197,20 +207,29 @@ function buildInvoicePdf({ invoice, customer, location, workOrder, vehicle, line
       y += rowHeight;
     });
 
-    // ----- Totals panel (dark) -----
+    // ----- Totals panel: taller height so text doesn't overflow -----
     const totalsX = startX + pageWidth - 240;
     const totalsTop = y + 16;
-    const totH = 132;
+    const totH = 172;
+    const lineLead = 20;
     doc.fillColor(theme.panel).strokeColor(theme.panelBorder).rect(totalsX, totalsTop, 240, totH).fillAndStroke();
     doc.fillColor(theme.text).fontSize(10);
-    doc.text(`Labor: $${formatMoney(invoice.subtotal_labor)}`, totalsX + 12, totalsTop + 12);
-    doc.text(`Parts: $${formatMoney(invoice.subtotal_parts)}`, totalsX + 12, totalsTop + 28);
-    doc.text(`Fees: $${formatMoney(invoice.subtotal_fees)}`, totalsX + 12, totalsTop + 44);
-    doc.text(`Discount: $${formatMoney(invoice.discount_value)} (${invoice.discount_type || 'NONE'})`, totalsX + 12, totalsTop + 60, { width: 216 });
-    doc.text(`Tax: $${formatMoney(invoice.tax_amount)} (${invoice.tax_rate_percent || 0}%)`, totalsX + 12, totalsTop + 76);
-    doc.fontSize(12).fillColor(theme.total).text(`Total: $${formatMoney(invoice.total_amount)}`, totalsX + 12, totalsTop + 96);
-    doc.fontSize(10).fillColor(theme.paid).text(`Paid: $${formatMoney(invoice.amount_paid)}`, totalsX + 12, totalsTop + 114);
-    doc.fontSize(11).fillColor(theme.balanceDue).text(`Balance Due: $${formatMoney(invoice.balance_due)}`, totalsX + 12, totalsTop + 128);
+    let ty = totalsTop + 14;
+    doc.text(`Labor: $${formatMoney(invoice.subtotal_labor)}`, totalsX + 12, ty);
+    ty += lineLead;
+    doc.text(`Parts: $${formatMoney(invoice.subtotal_parts)}`, totalsX + 12, ty);
+    ty += lineLead;
+    doc.text(`Fees: $${formatMoney(invoice.subtotal_fees)}`, totalsX + 12, ty);
+    ty += lineLead;
+    doc.text(`Discount: $${formatMoney(invoice.discount_value)} (${invoice.discount_type || 'NONE'})`, totalsX + 12, ty, { width: 216 });
+    ty += lineLead;
+    doc.text(`Tax: $${formatMoney(invoice.tax_amount)} (${invoice.tax_rate_percent || 0}%)`, totalsX + 12, ty);
+    ty += lineLead + 4;
+    doc.fontSize(12).fillColor(theme.total).text(`Total: $${formatMoney(invoice.total_amount)}`, totalsX + 12, ty);
+    ty += lineLead + 4;
+    doc.fontSize(10).fillColor(theme.paid).text(`Paid: $${formatMoney(invoice.amount_paid)}`, totalsX + 12, ty);
+    ty += lineLead + 4;
+    doc.fontSize(11).fillColor(theme.balanceDue).text(`Balance Due: $${formatMoney(invoice.balance_due)}`, totalsX + 12, ty);
 
     y = totalsTop + totH + 20;
 
