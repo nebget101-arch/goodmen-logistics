@@ -647,5 +647,41 @@ export class ApiService {
       barcode
     });
   }
+
+  // AI-powered helpers
+  triageWorkOrder(payload: {
+    description: string;
+    vehicleId?: string | null;
+    customerId?: string | null;
+    locationId?: string | null;
+  }): Observable<any> {
+    const aiBase = this.baseUrl.replace(/\/api\/?$/, '/api/ai');
+    return this.http.post(`${aiBase}/work-order/triage`, payload);
+  }
+
+  getInventoryRecommendations(payload: {
+    locationName?: string;
+    onHand: Array<{ sku?: string; name?: string; on_hand_qty?: number; reserved_qty?: number; available_qty?: number; status?: string; min_stock_level?: number; reorder_qty?: number }>;
+    recentTransactions?: Array<Record<string, unknown>>;
+  }): Observable<any> {
+    const aiBase = this.baseUrl.replace(/\/api\/?$/, '/api/ai');
+    return this.http.post(`${aiBase}/inventory/recommendations`, payload);
+  }
+
+  getPartsAnalysis(payload: {
+    parts: Array<{ sku?: string; name?: string; category?: string; manufacturer?: string; unit_cost?: number; unit_price?: number; quantity_on_hand?: number; reorder_level?: number; status?: string }>;
+    categories?: string[];
+    manufacturers?: string[];
+  }): Observable<any> {
+    const aiBase = this.baseUrl.replace(/\/api\/?$/, '/api/ai');
+    return this.http.post(`${aiBase}/parts/analysis`, payload);
+  }
+
+  getCustomersAnalysis(payload: {
+    customers: Array<{ id?: string; company_name?: string; customer_type?: string; status?: string; phone?: string; email?: string; default_location_id?: string; last_service_date?: string; payment_terms?: string; credit_limit?: number }>;
+  }): Observable<any> {
+    const aiBase = this.baseUrl.replace(/\/api\/?$/, '/api/ai');
+    return this.http.post(`${aiBase}/customers/analysis`, payload);
+  }
 }
 

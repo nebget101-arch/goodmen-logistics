@@ -37,6 +37,49 @@
           <label for="inv-date-to">To</label>
           <input id="inv-date-to" type="date" class="form-control" [(ngModel)]="filters.dateTo" (change)="loadTransactions()" />
         </div>
+        <div class="filter-item" style="margin-left: auto;">
+          <button type="button" class="btn btn-primary" (click)="loadAiRecommendations()" [disabled]="aiLoading || !locationId">
+            {{ aiLoading ? 'Analyzing…' : 'AI: Reorder & anomaly suggestions' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="aiError" class="alert alert-danger">{{ aiError }}</div>
+    <div *ngIf="aiResult" class="section ai-recommendations-section">
+      <h3 class="section-title">AI recommendations</h3>
+      <p *ngIf="aiResult.notes" class="mb-2">{{ aiResult.notes }}</p>
+      <div *ngIf="aiResult.reorderSuggestions.length" class="table-wrap mb-3">
+        <h4 class="h6">Suggested reorders</h4>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Part</th>
+              <th>Current qty</th>
+              <th>Suggested order</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of aiResult.reorderSuggestions">
+              <td>{{ s.sku }}</td>
+              <td>{{ s.name }}</td>
+              <td>{{ s.currentQty }}</td>
+              <td>{{ s.suggestedReorderQty }}</td>
+              <td>{{ s.reason }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div *ngIf="aiResult.anomalies.length">
+        <h4 class="h6">Anomalies & notes</h4>
+        <ul class="list-unstyled">
+          <li *ngFor="let a of aiResult.anomalies">
+            <span class="badge bg-secondary me-1">{{ a.type }}</span>
+            <span *ngIf="a.partSku">{{ a.partSku }} – </span>{{ a.message }}
+          </li>
+        </ul>
       </div>
     </div>
 

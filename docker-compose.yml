@@ -183,3 +183,18 @@ services:
     ports:
       - "5007:5007"
 
+  db-migrations:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/packages/goodmen-database
+    container_name: fleetneuron-db-migrations
+    env_file:
+      - .env
+    environment:
+      - PG_HOST=host.docker.internal
+    volumes:
+      - ./backend:/usr/src/app/backend
+    command: ["npm", "run", "migrate:dev"]
+

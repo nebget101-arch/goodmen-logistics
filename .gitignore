@@ -4,3 +4,13 @@ node_modules/
 *.log
 dist/
 build/
+
+# Xcode / iOS (optional: keeps repo clean when you add .xcodeproj later)
+# ios/ is NOT ignored — the FleetNeuronDriver source lives in ios/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3

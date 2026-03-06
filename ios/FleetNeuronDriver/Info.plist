@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>FleetNeuron Driver</string>
+	<key>CFBundleName</key>
+	<string>FleetNeuron Driver</string>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FleetNeuron Driver needs access to your photo library to upload proof of delivery, BOL, lumper, and roadside receipts.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>FleetNeuron Driver can use the camera to capture documents for your loads.</string>
+	<key>API_BASE_URL</key>
+	<string>http://localhost:4000</string>
+</dict>
+</plist>

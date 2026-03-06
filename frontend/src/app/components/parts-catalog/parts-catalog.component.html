@@ -5,7 +5,12 @@
       <p class="subtitle">Search, manage, and bulk‑upload inventory parts.</p>
     </div>
 
-    <div class="header-actions" *ngIf="userRole === 'admin' || userRole === 'parts_manager'">
+    <div class="header-actions">
+      <button type="button" class="btn-outline btn-with-icon" (click)="loadAiAnalysis()" [disabled]="aiAnalysisLoading || !parts.length">
+        <span class="btn-icon icon-ai"></span>
+        <span>{{ aiAnalysisLoading ? 'Analyzing…' : 'AI Analysis' }}</span>
+      </button>
+      <ng-container *ngIf="userRole === 'admin' || userRole === 'parts_manager'">
       <button type="button" class="btn-secondary btn-with-icon" (click)="downloadTemplate()">
         <span class="btn-icon icon-download"></span>
         <span>Download Template</span>
@@ -27,6 +32,7 @@
         <span class="btn-icon icon-plus"></span>
         <span>New Part</span>
       </button>
+      </ng-container>
     </div>
   </div>
 
@@ -55,6 +61,34 @@
       <small *ngIf="getBulkUploadErrors().length > 10">
         Total errors: {{ getBulkUploadErrors().length }}
       </small>
+    </div>
+  </div>
+
+  <div *ngIf="aiAnalysisError" class="alert alert-danger">
+    {{ aiAnalysisError }}
+  </div>
+
+  <div *ngIf="aiAnalysisResult" class="card ai-analysis-card">
+    <h3 class="ai-analysis-title">AI catalog analysis</h3>
+    <p class="ai-analysis-summary">{{ aiAnalysisResult.summary }}</p>
+    <div *ngIf="aiAnalysisResult.insights.length" class="ai-section">
+      <h4 class="ai-section-title">Insights</h4>
+      <ul class="ai-list">
+        <li *ngFor="let i of aiAnalysisResult.insights">
+          <span class="ai-badge" [attr.data-type]="i.type">{{ i.type }}</span>
+          <strong>{{ i.title }}</strong> — {{ i.message }}
+          <span *ngIf="i.partSkus?.length" class="ai-skus">SKUs: {{ i.partSkus?.join(', ') }}</span>
+        </li>
+      </ul>
+    </div>
+    <div *ngIf="aiAnalysisResult.recommendations.length" class="ai-section">
+      <h4 class="ai-section-title">Recommendations</h4>
+      <ul class="ai-list">
+        <li *ngFor="let r of aiAnalysisResult.recommendations">
+          <strong>{{ r.action }}</strong> — {{ r.detail }}
+          <span *ngIf="r.partSkus?.length" class="ai-skus">SKUs: {{ r.partSkus?.join(', ') }}</span>
+        </li>
+      </ul>
     </div>
   </div>
 

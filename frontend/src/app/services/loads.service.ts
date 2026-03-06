@@ -46,6 +46,8 @@ export interface UserProfile {
   last_name?: string;
   username?: string;
   email?: string;
+  role?: string;
+  driver_id?: string | null;
 }
 
 export interface BrokerOption {

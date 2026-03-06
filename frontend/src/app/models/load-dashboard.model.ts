@@ -1,7 +1,14 @@
 export type LoadStatus = 'NEW' | 'DISPATCHED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED';
 export type BillingStatus = 'PENDING' | 'FUNDED' | 'INVOICED' | 'PAID';
 export type LoadStopType = 'PICKUP' | 'DELIVERY';
-export type LoadAttachmentType = 'RATE_CONFIRMATION' | 'BOL' | 'LUMPER' | 'OTHER' | 'CONFIRMATION';
+export type LoadAttachmentType =
+  | 'RATE_CONFIRMATION'
+  | 'BOL'
+  | 'LUMPER'
+  | 'OTHER'
+  | 'CONFIRMATION'
+  | 'PROOF_OF_DELIVERY'
+  | 'ROADSIDE_MAINTENANCE_RECEIPT';
 
 export interface LoadListItem {
   id: string;

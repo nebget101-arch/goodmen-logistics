@@ -40,7 +40,8 @@ router.get('/me', baseAuth, (req, res) => {
     first_name: payload.first_name || null,
     last_name: payload.last_name || null,
     email: payload.email || null,
-    role: payload.role || null
+    role: payload.role || null,
+    driver_id: payload.driver_id || null
   };
   res.json({ success: true, data });
 });
@@ -76,12 +77,16 @@ router.get('/:id', async (req, res) => {
 
 // Only admin can create users
 router.post('/', authMiddleware(['admin']), async (req, res) => {
-  const { username, password, role, firstName, lastName, email } = req.body;
+  const { username, password, role, firstName, lastName, email, driverId } = req.body;
   if (!password || !role) {
     return res.status(400).json({ error: 'Password and role are required.' });
   }
-  if (!['admin', 'safety', 'fleet', 'dispatch'].includes(role)) {
+  const allowedRoles = ['admin', 'safety', 'fleet', 'dispatch', 'driver'];
+  if (!allowedRoles.includes(role)) {
     return res.status(400).json({ error: 'Invalid role.' });
+  }
+  if (role === 'driver' && !driverId) {
+    return res.status(400).json({ error: 'Driver role requires driverId (link to drivers.id).' });
   }
   try {
     let resolvedUsername = normalizeUsername(username);
@@ -99,9 +104,10 @@ router.post('/', authMiddleware(['admin']), async (req, res) => {
     }
     const password_hash = await bcrypt.hash(password, 10);
     const id = uuidv4();
+    const driverIdVal = role === 'driver' && driverId ? driverId : null;
     await db.query(
-      'INSERT INTO users (id, username, password_hash, role, first_name, last_name, email, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())',
-      [id, resolvedUsername, password_hash, role, firstName || null, lastName || null, email || null]
+      'INSERT INTO users (id, username, password_hash, role, first_name, last_name, email, driver_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())',
+      [id, resolvedUsername, password_hash, role, firstName || null, lastName || null, email || null, driverIdVal]
     );
     res.status(201).json({ message: 'User created successfully.', username: resolvedUsername });
   } catch (err) {
