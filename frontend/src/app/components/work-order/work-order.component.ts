@@ -83,10 +83,15 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   useCustomerCredit: boolean = false;
   creditCheckLoading: boolean = false;
   creditCheckError: string = '';
+  aiWorkOrderDraft: any = null;
 
   constructor(private apiService: ApiService, private route: ActivatedRoute, private router: Router, private creditService: CreditService) { }
 
   ngOnInit(): void {
+    const nav = this.router.getCurrentNavigation();
+    const stateDraft = (nav && (nav.extras.state as any)?.aiWorkOrderDraft) || (history.state as any)?.aiWorkOrderDraft || null;
+    this.aiWorkOrderDraft = stateDraft;
+
     this.loadVehicles();
     this.loadCustomers();
     this.loadLocations();
@@ -100,6 +105,8 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
         this.isEditMode = true;
         this.workOrderId = id;
         this.loadWorkOrder(id);
+      } else if (this.aiWorkOrderDraft) {
+        this.applyAiWorkOrderDraft(this.aiWorkOrderDraft);
       }
     });
   }
@@ -504,6 +511,16 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
       parts: [],
       labor: []
     };
+  }
+
+  applyAiWorkOrderDraft(draft: any): void {
+    if (!draft) return;
+    this.workOrder.title = draft.title || this.workOrder.title || '';
+    this.workOrder.priority = draft.priority || this.workOrder.priority || '';
+    if (draft.assetId) {
+      this.workOrder.vehicleId = draft.assetId;
+      this.onVehicleSelect();
+    }
   }
 
   openAddVehicleModal(): void {

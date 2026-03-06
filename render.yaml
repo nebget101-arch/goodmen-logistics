@@ -32,6 +32,8 @@ services:
         value: https://fleetneuron-logistics-service.onrender.com
       - key: INVENTORY_SERVICE_URL
         value: https://fleetneuron-inventory-service.onrender.com
+      - key: AI_SERVICE_URL
+        value: https://fleetneuron-ai-service.onrender.com
       - key: CORS_ORIGIN
         value: https://fleetneuron-logistics-ui.onrender.com
       - key: NODE_ENV
@@ -324,6 +326,28 @@ services:
       - key: PORT
         value: 10009
 
+  - type: web
+    name: fleetneuron-ai-service
+    runtime: node
+    plan: starter
+    rootDir: backend/microservices/ai-service
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_PATH
+        value: /opt/render/project/src/backend/microservices/ai-service/node_modules
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: CORS_ORIGIN
+        value: https://fleetneuron-logistics-ui.onrender.com
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10010
+      - key: AI_SERVICE_PORT
+        value: 10010
 
 databases:
   - name: safetyapp-db

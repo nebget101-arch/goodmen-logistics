@@ -23,6 +23,7 @@ const DRIVERS_COMPLIANCE_SERVICE_URL = requireEnv('DRIVERS_COMPLIANCE_SERVICE_UR
 const VEHICLES_MAINTENANCE_SERVICE_URL = requireEnv('VEHICLES_MAINTENANCE_SERVICE_URL');
 const LOGISTICS_SERVICE_URL = requireEnv('LOGISTICS_SERVICE_URL');
 const INVENTORY_SERVICE_URL = requireEnv('INVENTORY_SERVICE_URL');
+const AI_SERVICE_URL = requireEnv('AI_SERVICE_URL');
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(
@@ -143,6 +144,7 @@ app.use('/api/cycle-counts', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/receiving', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/barcodes', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/customers', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
+app.use('/api/ai', buildProxy(AI_SERVICE_URL, 'ai'));
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
