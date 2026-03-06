@@ -149,13 +149,12 @@ router.post('/:id/pdf', authMiddleware, requireRole(['admin', 'accounting', 'ser
     const data = await invoicesService.getInvoiceById(req.params.id);
     if (!data) return res.status(404).json({ error: 'Invoice not found' });
 
-    const customer = await db('customers').where({ id: data.invoice.customer_id }).first();
-    const location = await db('locations').where({ id: data.invoice.location_id }).first();
-
     const pdfBuffer = await buildInvoicePdf({
       invoice: data.invoice,
-      customer,
-      location,
+      customer: data.customer,
+      location: data.location,
+      workOrder: data.workOrder,
+      vehicle: data.vehicle,
       lineItems: data.lineItems,
       payments: data.payments
     });

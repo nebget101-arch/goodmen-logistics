@@ -355,7 +355,51 @@ async function getInvoiceById(id) {
 
   const payments = await db('invoice_payments').where({ invoice_id: id }).orderBy('payment_date', 'desc');
   const documents = await db('invoice_documents').where({ invoice_id: id }).orderBy('created_at', 'desc');
-  return { invoice, lineItems, payments, documents };
+
+  let customer = null;
+  let location = null;
+  let workOrder = null;
+  let vehicle = null;
+  if (invoice.customer_id) {
+    customer = await db('customers').where({ id: invoice.customer_id }).first();
+  }
+  if (invoice.location_id) {
+    location = await db('locations').where({ id: invoice.location_id }).first();
+  }
+  if (invoice.work_order_id) {
+    workOrder = await db('work_orders').where({ id: invoice.work_order_id }).first();
+    let vehicleId = workOrder?.vehicle_id;
+    if (vehicleId) {
+      vehicle = await db('all_vehicles').where({ id: vehicleId }).select('id', 'vin', 'unit_number', 'year', 'make', 'model').first();
+    }
+    // Fallback 1: work order may not have vehicle_id set; try maintenance_records linked to this work order
+    if (!vehicle && workOrder?.id) {
+      try {
+        const mr = await db('maintenance_records').where({ work_order_id: workOrder.id }).select('vehicle_id').first();
+        if (mr?.vehicle_id) {
+          vehicle = await db('all_vehicles').where({ id: mr.vehicle_id }).select('id', 'vin', 'unit_number', 'year', 'make', 'model').first();
+        }
+      } catch (e) {
+        // maintenance_records may not have work_order_id in older schemas
+      }
+    }
+  }
+  // Fallback 2: vehicle from line items that reference a maintenance record (e.g. invoice created from MR)
+  if (!vehicle && lineItems?.length) {
+    const mrRef = lineItems.find(li => (li.source_ref_type || '').toString().toLowerCase() === 'maintenance_records' && li.source_ref_id);
+    if (mrRef?.source_ref_id) {
+      try {
+        const mr = await db('maintenance_records').where({ id: mrRef.source_ref_id }).select('vehicle_id').first();
+        if (mr?.vehicle_id) {
+          vehicle = await db('all_vehicles').where({ id: mr.vehicle_id }).select('id', 'vin', 'unit_number', 'year', 'make', 'model').first();
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  return { invoice, lineItems, payments, documents, customer, location, workOrder, vehicle };
 }
 
 async function updateInvoiceDraft(id, payload, userId) {
