@@ -72,6 +72,100 @@
   border-color: rgba(34, 197, 94, 0.9);
 }
 
+.customers-dashboard .header-actions .btn-outline {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: transparent;
+  color: var(--text-dark);
+}
+
+.customers-dashboard .header-actions .btn-outline:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #93c5fd;
+}
+
+.customers-dashboard .header-actions .btn-outline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* AI analysis card */
+.customers-dashboard .card.ai-analysis-card {
+  border-radius: 16px;
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.1), transparent 50%),
+    rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.customers-dashboard .ai-analysis-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0 0 10px;
+}
+
+.customers-dashboard .ai-analysis-summary {
+  font-size: 14px;
+  color: var(--text-dark);
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+
+.customers-dashboard .ai-section {
+  margin-bottom: 14px;
+}
+
+.customers-dashboard .ai-section:last-child {
+  margin-bottom: 0;
+}
+
+.customers-dashboard .ai-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-light);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.customers-dashboard .ai-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.customers-dashboard .ai-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  font-size: 13px;
+  color: var(--text-dark);
+  line-height: 1.45;
+}
+
+.customers-dashboard .ai-list li:last-child {
+  border-bottom: none;
+}
+
+.customers-dashboard .ai-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(148, 163, 184, 0.3);
+  color: #e2e8f0;
+  margin-right: 8px;
+}
+
+.customers-dashboard .ai-ids {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-light);
+}
+
 .customers-dashboard .card.customers-card {
   border-radius: 16px;
   background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.12), transparent 50%),

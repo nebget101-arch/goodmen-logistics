@@ -24,6 +24,14 @@ export class InventoryReportsComponent implements OnInit {
   loadingTx = false;
   error = '';
 
+  aiLoading = false;
+  aiError = '';
+  aiResult: {
+    reorderSuggestions: Array<{ sku: string; name: string; currentQty: number; suggestedReorderQty: number; reason: string }>;
+    anomalies: Array<{ type: string; partSku: string | null; message: string }>;
+    notes: string;
+  } | null = null;
+
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
@@ -102,6 +110,51 @@ export class InventoryReportsComponent implements OnInit {
       error: (err: any) => {
         this.error = err?.error?.error || err?.message || 'Failed to load transaction history';
         this.loadingTx = false;
+      }
+    });
+  }
+
+  loadAiRecommendations(): void {
+    if (!this.locationId) {
+      this.aiError = 'Select a location first.';
+      return;
+    }
+    this.aiError = '';
+    this.aiResult = null;
+    this.aiLoading = true;
+    const locationName = (this.locations.find(l => l.id === this.locationId) as any)?.name || '';
+    const onHand = (this.onHandRows || []).map((r: any) => ({
+      sku: r.sku,
+      name: r.name,
+      on_hand_qty: r.on_hand_qty,
+      reserved_qty: r.reserved_qty,
+      available_qty: r.available_qty,
+      status: r.status,
+      min_stock_level: r.min_stock_level,
+      reorder_qty: r.reorder_qty
+    }));
+    const recentTransactions = (this.txRows || []).slice(0, 80).map((t: any) => ({
+      created_at: t.created_at,
+      tx_type_effective: t.tx_type_effective || t.tx_type,
+      part_sku: t.part_sku,
+      qty_change: t.qty_change
+    }));
+    this.api.getInventoryRecommendations({
+      locationName,
+      onHand,
+      recentTransactions
+    }).subscribe({
+      next: (res: any) => {
+        this.aiResult = {
+          reorderSuggestions: res?.reorderSuggestions || [],
+          anomalies: res?.anomalies || [],
+          notes: res?.notes || ''
+        };
+        this.aiLoading = false;
+      },
+      error: (err: any) => {
+        this.aiError = err?.error?.error || err?.message || 'AI recommendations unavailable.';
+        this.aiLoading = false;
       }
     });
   }

@@ -29,6 +29,14 @@ export class PartsCatalogComponent implements OnInit {
   bulkUploading = false;
   bulkUploadSummary: { created?: number; updated?: number; skipped?: number; errors?: Array<{ row?: number; sku?: string; error?: string }> } | null = null;
 
+  aiAnalysisLoading = false;
+  aiAnalysisError = '';
+  aiAnalysisResult: {
+    summary: string;
+    insights: Array<{ type: string; title: string; message: string; partSkus?: string[] }>;
+    recommendations: Array<{ action: string; detail: string; partSkus?: string[] }>;
+  } | null = null;
+
   constructor(private apiService: ApiService, private fb: FormBuilder) {
     this.partForm = this.fb.group({
       sku: ['', [Validators.required]],
@@ -325,5 +333,40 @@ export class PartsCatalogComponent implements OnInit {
 
   getBulkUploadErrors(): Array<{ row?: number; sku?: string; error?: string }> {
     return Array.isArray(this.bulkUploadSummary?.errors) ? this.bulkUploadSummary!.errors! : [];
+  }
+
+  loadAiAnalysis(): void {
+    this.aiAnalysisError = '';
+    this.aiAnalysisResult = null;
+    this.aiAnalysisLoading = true;
+    const parts = (this.parts || []).map((p: any) => ({
+      sku: p.sku,
+      name: p.name,
+      category: p.category,
+      manufacturer: p.manufacturer,
+      unit_cost: p.unit_cost,
+      unit_price: p.unit_price,
+      quantity_on_hand: p.quantity_on_hand,
+      reorder_level: p.reorder_level,
+      status: p.status
+    }));
+    this.apiService.getPartsAnalysis({
+      parts,
+      categories: this.categories || [],
+      manufacturers: this.manufacturers || []
+    }).subscribe({
+      next: (res: any) => {
+        this.aiAnalysisResult = {
+          summary: res?.summary || '',
+          insights: res?.insights || [],
+          recommendations: res?.recommendations || []
+        };
+        this.aiAnalysisLoading = false;
+      },
+      error: (err: any) => {
+        this.aiAnalysisError = err?.error?.error || err?.message || 'AI analysis unavailable.';
+        this.aiAnalysisLoading = false;
+      }
+    });
   }
 }

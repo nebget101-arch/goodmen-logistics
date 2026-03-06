@@ -1,14 +1,14 @@
 <div class="loads-dashboard">
   <div class="header">
     <div>
-      <h1>Loads</h1>
-      <p class="subtitle">Dispatch management and tracking</p>
+      <h1>{{ isDriverRole ? 'My Loads' : 'Loads' }}</h1>
+      <p class="subtitle">{{ isDriverRole ? 'View your loads and upload documents (POD, BOL, lumper, roadside receipts)' : 'Dispatch management and tracking' }}</p>
     </div>
 <div class="header-actions">
         <div class="search-box">
         <input type="text" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
       </div>
-      <div class="dropdown new-load-dropdown" (click)="$event.stopPropagation()">
+      <div class="dropdown new-load-dropdown" (click)="$event.stopPropagation()" *ngIf="!isDriverRole">
         <button class="btn btn-primary" (click)="showNewLoadMenu = !showNewLoadMenu">
           New Load
           <span class="material-symbols-outlined">expand_more</span>
@@ -400,6 +400,8 @@
               <option value="RATE_CONFIRMATION">Rate Conf</option>
               <option value="BOL">BOL</option>
               <option value="LUMPER">Lumper</option>
+              <option value="PROOF_OF_DELIVERY">POD</option>
+              <option value="ROADSIDE_MAINTENANCE_RECEIPT">Roadside Receipt</option>
               <option value="OTHER">Other</option>
               <option value="CONFIRMATION">Confirmation</option>
             </select>
@@ -1018,6 +1020,8 @@
           <label><input type="radio" name="uploadType" [(ngModel)]="uploadAttachmentType" [ngModelOptions]="{standalone: true}" [value]="'RATE_CONFIRMATION'"> Rate Confirmation</label>
           <label><input type="radio" name="uploadType" [(ngModel)]="uploadAttachmentType" [ngModelOptions]="{standalone: true}" [value]="'BOL'"> BOL</label>
           <label><input type="radio" name="uploadType" [(ngModel)]="uploadAttachmentType" [ngModelOptions]="{standalone: true}" [value]="'LUMPER'"> Lumper</label>
+          <label><input type="radio" name="uploadType" [(ngModel)]="uploadAttachmentType" [ngModelOptions]="{standalone: true}" [value]="'PROOF_OF_DELIVERY'"> Proof of Delivery</label>
+          <label><input type="radio" name="uploadType" [(ngModel)]="uploadAttachmentType" [ngModelOptions]="{standalone: true}" [value]="'ROADSIDE_MAINTENANCE_RECEIPT'"> Roadside Maintenance Receipt</label>
           <label><input type="radio" name="uploadType" [(ngModel)]="uploadAttachmentType" [ngModelOptions]="{standalone: true}" [value]="'OTHER'"> Other</label>
           <label><input type="radio" name="uploadType" [(ngModel)]="uploadAttachmentType" [ngModelOptions]="{standalone: true}" [value]="'CONFIRMATION'"> Confirmation</label>
         </div>

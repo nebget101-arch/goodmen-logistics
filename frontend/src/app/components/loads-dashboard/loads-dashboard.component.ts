@@ -62,7 +62,15 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   replaceAttachmentFile: File | null = null;
   replacingAttachment = false;
 
-  readonly attachmentTypeOptions: LoadAttachmentType[] = ['RATE_CONFIRMATION', 'BOL', 'LUMPER', 'OTHER', 'CONFIRMATION'];
+  readonly attachmentTypeOptions: LoadAttachmentType[] = [
+    'RATE_CONFIRMATION',
+    'BOL',
+    'LUMPER',
+    'PROOF_OF_DELIVERY',
+    'ROADSIDE_MAINTENANCE_RECEIPT',
+    'OTHER',
+    'CONFIRMATION'
+  ];
 
   // Auto-create from PDF state
   autoPdfFile: File | null = null;
@@ -117,6 +125,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   page = 1;
   pageSize = 25;
   total = 0;
+
+  /** True when current user has role driver (sees only their loads, can upload docs). */
+  isDriverRole = false;
 
   filters: {
     status: string;
@@ -403,6 +414,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         this.dispatcherName = name || user?.username || '';
         this.dispatcherUserId = user?.id || null;
         this.manualLoadForm.patchValue({ dispatcher: this.dispatcherName });
+        const role = (user?.role || '').toString().toLowerCase();
+        if (role === 'driver' && user?.driver_id) {
+          this.isDriverRole = true;
+          this.filters.driverId = user.driver_id;
+          this.loadLoads();
+        }
       }
     });
   }

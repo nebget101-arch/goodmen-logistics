@@ -69,7 +69,13 @@
             <div style="position: relative;">
               <input id="customerSearch" type="text" class="form-control" [(ngModel)]="customerSearch" (ngModelChange)="onCustomerSearchChange()" (blur)="onCustomerBlur()" name="customerSearch" placeholder="Type customer name or DOT...">
               <div *ngIf="showCustomerDropdown && filteredCustomers.length > 0" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
-                <div *ngFor="let c of filteredCustomers" (click)="selectCustomer(c)" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f5f5f5'" onmouseout="this.style.backgroundColor='white'">
+                <div
+                  *ngFor="let c of filteredCustomers"
+                  (click)="selectCustomer(c)"
+                  (keydown.enter)="selectCustomer(c)"
+                  tabindex="0"
+                  style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;"
+                >
                   {{ c.displayName || c.company_name || c.name }} <span *ngIf="c.dot_number" style="color: #999;">(DOT: {{ c.dot_number }})</span>
                 </div>
               </div>
@@ -224,7 +230,13 @@
             <div style="position: relative;">
               <input id="vehicleSearch" type="text" class="form-control mb-2" [(ngModel)]="vehicleSearch" name="vehicleSearch" placeholder="Type to search vehicles..." (ngModelChange)="onVehicleSearchChange()" (focus)="showVehicleDropdownForCustomer()" (click)="showVehicleDropdownForCustomer()" (blur)="onVehicleBlur()">
               <div *ngIf="showVehicleDropdown && filteredVehicles.length > 0" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; max-height: 300px; overflow-y: auto; z-index: 1000; margin-top: -8px;">
-                <div *ngFor="let vehicle of filteredVehicles" (click)="selectVehicle(vehicle)" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;" onmouseover="this.style.backgroundColor='#f5f5f5'" onmouseout="this.style.backgroundColor='white'">
+                <div
+                  *ngFor="let vehicle of filteredVehicles"
+                  (click)="selectVehicle(vehicle)"
+                  (keydown.enter)="selectVehicle(vehicle)"
+                  tabindex="0"
+                  style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;"
+                >
                   <strong>{{ vehicle.unit_number || vehicle.unitNumber }}</strong> - {{ vehicle.vin }} 
                   <span style="color: #666;">({{ vehicle.make }} {{ vehicle.model }} {{ vehicle.year }})</span>
                   <span class="badge" [ngClass]="vehicle.source === 'customer' || vehicle.company_owned === false ? 'badge-info' : 'badge-secondary'" style="margin-left: 8px;">
@@ -368,7 +380,17 @@
       </div>
       <!-- 3️⃣ Service / Repair Details -->
       <div class="section">
-        <h3>Service / Repair Details</h3>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h3 class="mb-0">Service / Repair Details</h3>
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            (click)="runAiTriage()"
+            [disabled]="aiTriageLoading"
+          >
+            {{ aiTriageLoading ? 'AI analyzing…' : 'AI suggest tasks & parts' }}
+          </button>
+        </div>
         <div class="row">
           <div class="col">
             <label for="workOrderServiceCategory">Service Category</label>
@@ -427,6 +449,36 @@
             <label for="workOrderEstimatedDuration">Estimated Duration (hrs)</label>
             <input id="workOrderEstimatedDuration" type="number" class="form-control" [(ngModel)]="workOrder.estimatedDuration" name="estimatedDuration">
           </div>
+        </div>
+        <div *ngIf="aiTriageError" class="alert alert-warning mt-2">
+          {{ aiTriageError }}
+        </div>
+        <div *ngIf="aiTriageResult" class="alert alert-info mt-2">
+          <div *ngIf="aiTriageResult.priority">
+            <strong>Suggested priority:</strong> {{ aiTriageResult.priority }}
+          </div>
+          <div *ngIf="aiTriageResult.notes">
+            <strong>Notes:</strong> {{ aiTriageResult.notes }}
+          </div>
+          <div *ngIf="aiTriageResult.tasks?.length">
+            <strong>Suggested tasks:</strong>
+            <ul class="mb-1">
+              <li *ngFor="let t of aiTriageResult.tasks">
+                {{ t.description }} <span *ngIf="t.estimatedHours">({{ t.estimatedHours }} hrs)</span>
+              </li>
+            </ul>
+          </div>
+          <div *ngIf="aiTriageResult.parts?.length">
+            <strong>Suggested parts:</strong>
+            <ul class="mb-1">
+              <li *ngFor="let p of aiTriageResult.parts">
+                {{ p.query }} <span *ngIf="p.qty">x {{ p.qty }}</span>
+              </li>
+            </ul>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm mt-1" (click)="applyAiTriage()">
+            Apply suggestions to form
+          </button>
         </div>
       </div>
       <!-- 4️⃣ Parts & Labor Section -->
@@ -641,6 +693,7 @@
             <table class="table">
               <thead>
                 <tr>
+                  <th>Description</th>
                   <th>Mechanic Name</th>
                   <th>Labor Hours</th>
                   <th>Labor Rate</th>
@@ -650,6 +703,9 @@
               </thead>
               <tbody>
                 <tr *ngFor="let labor of workOrder.labor; let j = index">
+                  <td>
+                    <input type="text" class="form-control" [(ngModel)]="labor.description" name="laborDescription{{j}}" placeholder="Task description">
+                  </td>
                   <td>
                     <div class="technician-input-wrap">
                       <input

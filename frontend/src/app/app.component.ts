@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { OnboardingModalService } from './services/onboarding-modal.service';
 import { ApiService } from './services/api.service';
+import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.service';
 
 @Component({
   selector: 'app-root',
@@ -27,15 +28,105 @@ export class AppComponent implements OnInit {
   accountingExpanded = true;
   inventoryExpanded = true;
   sidebarOpen = false;
+  aiChatOpen = false;
+  aiConversationId: string | null = null;
+  aiMessages: AiChatMessage[] = [];
+  aiSuggestions: AiSuggestion[] = [];
+  aiInput = '';
+  aiSending = false;
 
   constructor(
     private router: Router,
     public onboardingModal: OnboardingModalService,
-    private apiService: ApiService
+    private apiService: ApiService,
+    private aiChatService: AiChatService
   ) {}
 
   isLoggedIn(): boolean {
     return !!localStorage.getItem('token');
+  }
+
+  getCurrentRoute(): string {
+    return this.router.url || '';
+  }
+
+  toggleAiChat(): void {
+    if (!this.isLoggedIn()) {
+      this.router.navigate(['/login']);
+      return;
+    }
+    this.aiChatOpen = !this.aiChatOpen;
+  }
+
+  sendAiMessage(): void {
+    const trimmed = (this.aiInput || '').trim();
+    if (!trimmed || this.aiSending) return;
+
+    const nowIso = new Date().toISOString();
+    const localUserMessage: AiChatMessage = {
+      id: `local_user_${Date.now()}`,
+      role: 'user',
+      content: trimmed,
+      createdAt: nowIso
+    };
+
+    this.aiMessages = [...this.aiMessages, localUserMessage];
+    this.aiInput = '';
+    this.aiSending = true;
+
+    const payload = {
+      message: trimmed,
+      conversationId: this.aiConversationId,
+      context: {
+        route: this.getCurrentRoute()
+      },
+      clientMeta: {
+        uiSurface: 'global-chat'
+      }
+    };
+
+    this.aiChatService.sendMessage(payload).subscribe({
+      next: (resp) => {
+        this.aiConversationId = resp.conversationId;
+        this.aiMessages = resp.messages;
+        this.aiSuggestions = resp.suggestions || [];
+        this.aiSending = false;
+      },
+      error: () => {
+        this.aiSending = false;
+        this.aiSuggestions = [];
+      }
+    });
+  }
+
+  handleAiSuggestionClick(sugg: AiSuggestion): void {
+    if (!sugg) return;
+    if (sugg.type === 'navigation') {
+      const target = sugg.payload?.targetScreen || '';
+      const params = sugg.payload?.params || {};
+      const route =
+        target === 'work-order'
+          ? ['/work-order']
+          : target === 'parts'
+          ? ['/parts']
+          : target === 'maintenance'
+          ? ['/maintenance']
+          : ['/dashboard'];
+      this.router.navigate(route, { queryParams: params });
+      this.aiChatOpen = false;
+      return;
+    }
+
+    if (sugg.type === 'workOrderDraft') {
+      const draft = sugg.payload || {};
+      this.router.navigate(['/work-order'], {
+        state: {
+          aiWorkOrderDraft: draft
+        }
+      });
+      this.aiChatOpen = false;
+      return;
+    }
   }
 
   logout() {
@@ -58,6 +149,7 @@ export class AppComponent implements OnInit {
     if (role === 'safety') return ['dashboard', 'drivers', 'vehicles', 'hos', 'audit'].includes(tab);
     if (role === 'fleet') return ['maintenance'].includes(tab);
     if (role === 'dispatch') return ['loads', 'drivers'].includes(tab);
+    if (role === 'driver') return ['loads'].includes(tab);
 
     if (role === 'service_advisor') {
       return ['customers', 'invoices', 'sales', 'inventory_reports'].includes(tab);
@@ -68,7 +160,7 @@ export class AppComponent implements OnInit {
     }
 
     if (role === 'technician') {
-      return ['customers', 'parts', 'receiving', 'transfers', 'inventory_reports'].includes(tab);
+      return ['maintenance', 'customers', 'parts', 'receiving', 'transfers', 'inventory_reports'].includes(tab);
     }
 
     if (role === 'parts_manager' || role === 'shop_manager') {

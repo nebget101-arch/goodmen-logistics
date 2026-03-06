@@ -26,6 +26,14 @@ export class CustomersListComponent implements OnInit {
   pageSize = 20;
   total = 0;
 
+  aiAnalysisLoading = false;
+  aiAnalysisError = '';
+  aiAnalysisResult: {
+    summary: string;
+    insights: Array<{ type: string; title: string; message: string; customerIds?: string[] }>;
+    recommendations: Array<{ action: string; detail: string; customerIds?: string[] }>;
+  } | null = null;
+
   get totalPages(): number {
     return Math.ceil(this.total / this.pageSize);
   }
@@ -140,5 +148,37 @@ export class CustomersListComponent implements OnInit {
       pages.push(i);
     }
     return pages;
+  }
+
+  loadAiAnalysis(): void {
+    this.aiAnalysisError = '';
+    this.aiAnalysisResult = null;
+    this.aiAnalysisLoading = true;
+    const customers = (this.customers || []).map((c: any) => ({
+      id: c.id,
+      company_name: c.company_name,
+      customer_type: c.customer_type,
+      status: c.status,
+      phone: c.phone,
+      email: c.email,
+      default_location_id: c.default_location_id,
+      last_service_date: c.last_service_date,
+      payment_terms: c.payment_terms,
+      credit_limit: c.credit_limit
+    }));
+    this.apiService.getCustomersAnalysis({ customers }).subscribe({
+      next: (res: any) => {
+        this.aiAnalysisResult = {
+          summary: res?.summary || '',
+          insights: res?.insights || [],
+          recommendations: res?.recommendations || []
+        };
+        this.aiAnalysisLoading = false;
+      },
+      error: (err: any) => {
+        this.aiAnalysisError = err?.error?.error || err?.message || 'AI analysis unavailable.';
+        this.aiAnalysisLoading = false;
+      }
+    });
   }
 }

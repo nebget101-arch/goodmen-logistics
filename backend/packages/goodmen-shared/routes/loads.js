@@ -12,7 +12,15 @@ const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage
 const LOAD_STATUSES = ['NEW', 'DISPATCHED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'];
 const BILLING_STATUSES = ['PENDING', 'FUNDED', 'INVOICED', 'PAID'];
 const STOP_TYPES = ['PICKUP', 'DELIVERY'];
-const ATTACHMENT_TYPES = ['RATE_CONFIRMATION', 'BOL', 'LUMPER', 'OTHER', 'CONFIRMATION'];
+const ATTACHMENT_TYPES = [
+  'RATE_CONFIRMATION',
+  'BOL',
+  'LUMPER',
+  'OTHER',
+  'CONFIRMATION',
+  'PROOF_OF_DELIVERY',
+  'ROADSIDE_MAINTENANCE_RECEIPT'
+];
 
 async function lookupZipLatLon(zip) {
   const trimmed = (zip || '').toString().trim();
@@ -117,9 +125,25 @@ function requireRole(allowedRoles) {
   };
 }
 
-// Protect all loads routes: admin, dispatch
+/** For driver role: ensure load belongs to req.user.driver_id. Call after load is fetched. */
+function assertDriverCanAccessLoad(load, req) {
+  const role = (req.user?.role || '').toString().trim().toLowerCase();
+  if (role !== 'driver') return true;
+  const driverId = (req.user?.driver_id || '').toString().trim();
+  const loadDriverId = (load?.driver_id || '').toString().trim();
+  return driverId && loadDriverId && driverId === loadDriverId;
+}
+
+// Protect all loads routes: admin, dispatch, or driver (driver scoped to own loads)
 router.use(authMiddleware);
-router.use(requireRole(['admin', 'dispatch']));
+router.use((req, res, next) => {
+  const role = (req.user?.role || '').toString().trim().toLowerCase();
+  const allowed = ['admin', 'dispatch', 'driver'];
+  if (!allowed.includes(role)) {
+    return res.status(403).json({ success: false, error: 'Forbidden: insufficient role' });
+  }
+  next();
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -283,9 +307,15 @@ async function getLoadDetail(clientOrQuery, loadId) {
 router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
+    const role = (req.user?.role || '').toString().trim().toLowerCase();
+    const isDriver = role === 'driver';
+    if (isDriver && !req.user?.driver_id) {
+      return res.status(403).json({ success: false, error: 'Driver account not linked to a driver record' });
+    }
     const status = normalizeEnum(req.query.status);
     const billingStatus = normalizeEnum(req.query.billingStatus);
-    const driverId = (req.query.driverId || '').toString().trim();
+    let driverId = (req.query.driverId || '').toString().trim();
+    if (isDriver) driverId = (req.user.driver_id || '').toString().trim();
     const brokerId = (req.query.brokerId || '').toString().trim();
     const q = (req.query.q || '').toString().trim();
     const dateFrom = (req.query.dateFrom || '').toString().trim();
@@ -438,8 +468,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/loads
-router.post('/', async (req, res) => {
+// POST /api/loads (admin, dispatch only; driver cannot create)
+router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
   const startTime = Date.now();
   const client = await getClient();
   try {
@@ -566,6 +596,9 @@ router.get('/:id', async (req, res) => {
   try {
     const data = await getLoadDetail(query, req.params.id);
     if (!data) return res.status(404).json({ success: false, error: 'Load not found' });
+    if (!assertDriverCanAccessLoad(data, req)) {
+      return res.status(404).json({ success: false, error: 'Load not found' });
+    }
     res.json({ success: true, data });
   } catch (error) {
     dtLogger.error('loads_get_failed', error, { loadId: req.params.id });
@@ -573,8 +606,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /api/loads/:id
-router.put('/:id', async (req, res) => {
+// PUT /api/loads/:id (admin, dispatch only; driver cannot update load)
+router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   const client = await getClient();
   try {
     const body = req.body || {};
@@ -669,9 +702,24 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+async function ensureCanAccessLoad(loadId, req, res) {
+  const loadResult = await query('SELECT id, driver_id FROM loads WHERE id = $1', [loadId]);
+  if (!loadResult.rows.length) {
+    res.status(404).json({ success: false, error: 'Load not found' });
+    return null;
+  }
+  if (!assertDriverCanAccessLoad(loadResult.rows[0], req)) {
+    res.status(404).json({ success: false, error: 'Load not found' });
+    return null;
+  }
+  return loadResult.rows[0];
+}
+
 // POST /api/loads/:id/attachments
 router.post('/:id/attachments', upload.single('file'), async (req, res) => {
   try {
+    const load = await ensureCanAccessLoad(req.params.id, req, res);
+    if (!load) return;
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
@@ -723,6 +771,8 @@ router.post('/:id/attachments', upload.single('file'), async (req, res) => {
 // GET /api/loads/:id/attachments
 router.get('/:id/attachments', async (req, res) => {
   try {
+    const load = await ensureCanAccessLoad(req.params.id, req, res);
+    if (!load) return;
     const result = await query(
       `SELECT * FROM load_attachments WHERE load_id = $1 ORDER BY created_at DESC`,
       [req.params.id]
@@ -744,6 +794,8 @@ router.get('/:id/attachments', async (req, res) => {
 router.delete('/:id/attachments/:attachmentId', async (req, res) => {
   const { id: loadId, attachmentId } = req.params;
   try {
+    const load = await ensureCanAccessLoad(loadId, req, res);
+    if (!load) return;
     const existing = await query(
       'SELECT id, storage_key FROM load_attachments WHERE id = $1 AND load_id = $2',
       [attachmentId, loadId]
@@ -777,6 +829,8 @@ router.delete('/:id/attachments/:attachmentId', async (req, res) => {
 router.put('/:id/attachments/:attachmentId', upload.single('file'), async (req, res) => {
   const { id: loadId, attachmentId } = req.params;
   try {
+    const load = await ensureCanAccessLoad(loadId, req, res);
+    if (!load) return;
     const existing = await query(
       'SELECT * FROM load_attachments WHERE id = $1 AND load_id = $2',
       [attachmentId, loadId]

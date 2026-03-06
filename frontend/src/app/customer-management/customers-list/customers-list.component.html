@@ -5,12 +5,41 @@
       <p class="subtitle">Manage customer accounts, billing, and service history</p>
     </div>
     <div class="header-actions">
+      <button class="btn btn-outline" (click)="loadAiAnalysis()" [disabled]="aiAnalysisLoading || !customers.length">
+        <span class="material-symbols-outlined">analytics</span> {{ aiAnalysisLoading ? 'Analyzing…' : 'AI Analysis' }}
+      </button>
       <button class="btn btn-secondary" (click)="goToBulkUpload()">
         <span class="material-symbols-outlined">upload_file</span> Bulk Upload
       </button>
       <button class="btn btn-primary" (click)="goToNew()">
         <span class="material-symbols-outlined">add</span> New Customer
       </button>
+    </div>
+  </div>
+
+  <div *ngIf="aiAnalysisError" class="alert alert-danger">{{ aiAnalysisError }}</div>
+
+  <div *ngIf="aiAnalysisResult" class="card ai-analysis-card">
+    <h3 class="ai-analysis-title">AI customer analysis</h3>
+    <p class="ai-analysis-summary">{{ aiAnalysisResult.summary }}</p>
+    <div *ngIf="aiAnalysisResult.insights.length" class="ai-section">
+      <h4 class="ai-section-title">Insights</h4>
+      <ul class="ai-list">
+        <li *ngFor="let i of aiAnalysisResult.insights">
+          <span class="ai-badge" [attr.data-type]="i.type">{{ i.type }}</span>
+          <strong>{{ i.title }}</strong> — {{ i.message }}
+          <span *ngIf="i.customerIds?.length" class="ai-ids">Customer IDs: {{ i.customerIds?.join(', ') }}</span>
+        </li>
+      </ul>
+    </div>
+    <div *ngIf="aiAnalysisResult.recommendations.length" class="ai-section">
+      <h4 class="ai-section-title">Recommendations</h4>
+      <ul class="ai-list">
+        <li *ngFor="let r of aiAnalysisResult.recommendations">
+          <strong>{{ r.action }}</strong> — {{ r.detail }}
+          <span *ngIf="r.customerIds?.length" class="ai-ids">Customer IDs: {{ r.customerIds?.join(', ') }}</span>
+        </li>
+      </ul>
     </div>
   </div>
 
