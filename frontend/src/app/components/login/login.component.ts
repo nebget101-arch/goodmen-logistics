@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
+import { AccessControlService } from '../../services/access-control.service';
 
 @Component({
   selector: 'app-login',
@@ -12,9 +13,13 @@ export class LoginComponent {
   password = '';
   error = '';
 
-  constructor(private api: ApiService, private router: Router) {}
+  constructor(
+    private api: ApiService,
+    private router: Router,
+    private accessControl: AccessControlService
+  ) {}
 
-  login() {
+  login(): void {
     this.api.login(this.username, this.password).subscribe({
       next: (res) => {
         localStorage.setItem('token', res.token);
@@ -30,6 +35,7 @@ export class LoginComponent {
             localStorage.setItem('displayName', displayName);
           }
         }
+        this.accessControl.setAccessFromLoginResponse(res);
         this.router.navigate(['/dashboard']);
       },
       error: () => {

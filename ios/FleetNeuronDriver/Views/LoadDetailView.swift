@@ -20,13 +20,16 @@ struct LoadDetailView: View {
         Group {
             if loading && load == nil {
                 ProgressView("Loading…")
+                    .foregroundStyle(AppTheme.textSecondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let err = errorMessage {
                 VStack(spacing: 12) {
                     Text(err)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(AppTheme.danger)
                         .multilineTextAlignment(.center)
                     Button("Retry") { Task { await fetch() } }
+                        .buttonStyle(.borderedProminent)
+                        .tint(AppTheme.successGreen)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let load = load {
@@ -45,6 +48,7 @@ struct LoadDetailView: View {
                         } label: {
                             Label("Upload document", systemImage: "plus.circle.fill")
                         }
+                        .foregroundStyle(AppTheme.brandCyan)
                     }
                 }
             }
@@ -68,20 +72,23 @@ struct LoadDetailView: View {
                 if let r = load.rate, r > 0 {
                     Text("$\(r, specifier: "%.2f")")
                         .font(.headline)
+                        .foregroundStyle(AppTheme.brandCyan)
                 }
             }
             if let p = load.pickup_location, !p.isEmpty {
                 Label(p, systemImage: "arrow.down.circle")
                     .font(.subheadline)
+                    .foregroundStyle(AppTheme.textPrimary)
             }
             if let d = load.delivery_location, !d.isEmpty {
                 Label(d, systemImage: "arrow.down.circle.fill")
                     .font(.subheadline)
+                    .foregroundStyle(AppTheme.textPrimary)
             }
             if let n = load.notes, !n.isEmpty {
                 Text(n)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.textSecondary)
             }
         }
     }
@@ -89,9 +96,20 @@ struct LoadDetailView: View {
     private func statusBadge(_ s: String) -> some View {
         Text(s.replacingOccurrences(of: "_", with: " "))
             .font(.caption.bold())
+            .textCase(.uppercase)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Color.blue.opacity(0.2))
+            .background(
+                LinearGradient(
+                    colors: [
+                        AppTheme.successGreen.opacity(0.25),
+                        AppTheme.accentBlue.opacity(0.15)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .foregroundStyle(AppTheme.brandCyan)
             .clipShape(Capsule())
     }
 
@@ -101,22 +119,32 @@ struct LoadDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Stops")
                     .font(.headline)
+                    .foregroundStyle(AppTheme.textAccent)
                 ForEach(stops) { s in
                     HStack(alignment: .top) {
                         Text(s.stop_type ?? "—")
                             .font(.caption)
                             .frame(width: 60, alignment: .leading)
+                            .foregroundStyle(AppTheme.textSecondary)
                         VStack(alignment: .leading, spacing: 2) {
                             if let c = s.city, let st = s.state {
                                 Text("\(c), \(st)")
+                                    .foregroundStyle(AppTheme.textPrimary)
                             }
                             if let d = s.stop_date {
                                 Text(d)
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(AppTheme.textSecondary)
                             }
                         }
                     }
+                    .padding(8)
+                    .background(AppTheme.cardBackground)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(AppTheme.borderColor, lineWidth: 1)
+                    )
                 }
             }
         }
@@ -127,6 +155,7 @@ struct LoadDetailView: View {
             HStack {
                 Text("Documents")
                     .font(.headline)
+                    .foregroundStyle(AppTheme.textAccent)
                 Spacer()
                 Button {
                     showUpload = true
@@ -134,12 +163,13 @@ struct LoadDetailView: View {
                     Label("Add", systemImage: "plus.circle")
                         .font(.subheadline)
                 }
+                .foregroundStyle(AppTheme.brandCyan)
             }
             if attachments.isEmpty {
                 VStack(spacing: 12) {
                     Text("No documents yet. Upload POD, BOL, lumper receipt, or roadside receipt.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
                     Button {
                         showUpload = true
@@ -148,30 +178,37 @@ struct LoadDetailView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.successGreen)
                 }
                 .padding(.vertical, 8)
             } else {
                 ForEach(attachments) { att in
                     HStack {
                         Image(systemName: docIcon(att.type))
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(AppTheme.brandCyan)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(att.file_name ?? "—")
                                 .lineLimit(1)
+                                .foregroundStyle(AppTheme.textPrimary)
                             Text(att.type ?? "—")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppTheme.textSecondary)
                         }
                         Spacer()
                         if let urlStr = att.file_url, let url = URL(string: urlStr) {
                             Link(destination: url) {
                                 Image(systemName: "arrow.down.circle")
+                                    .foregroundStyle(AppTheme.brandCyan)
                             }
                         }
                     }
                     .padding(8)
-                    .background(Color.gray.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(AppTheme.cardBackground)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(AppTheme.borderColor, lineWidth: 1)
+                    )
                 }
             }
         }

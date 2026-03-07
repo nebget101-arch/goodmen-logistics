@@ -24,6 +24,7 @@ import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dash
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { UserCreateComponent } from './components/user-create/user-create.component';
+import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
 import { BarcodeManagementComponent } from './components/barcode-management/barcode-management.component';
 import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
@@ -41,10 +42,13 @@ import { InlineDateFilterComponent } from './components/shared/inline-date-filte
 
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
+import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/has-permission.directive';
 
 @NgModule({
   declarations: [
     AppComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective,
     DashboardComponent,
     DriversComponent,
     DispatchDriversComponent,
@@ -57,6 +61,7 @@ import { CacheBustingInterceptor } from './cache-busting.interceptor';
     AuditComponent,
     LoginComponent,
     UserCreateComponent,
+    ProfileComponent,
     WorkOrderComponent,
     PartsCatalogComponent,
     BarcodeManagementComponent,

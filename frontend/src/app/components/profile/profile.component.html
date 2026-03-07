@@ -1,0 +1,73 @@
+<div class="profile-shell">
+  <header class="profile-header">
+    <div>
+      <h1>Your Profile</h1>
+      <p class="profile-subtitle">AI-powered identity — roles, permissions, and locations.</p>
+    </div>
+    <div class="profile-pill">
+      <span class="material-symbols-outlined">verified_user</span>
+      Verified
+    </div>
+  </header>
+
+  <div class="profile-panels">
+    <div class="profile-panel profile-panel-main">
+      <div class="panel-header">
+        <h2>Identity</h2>
+        <span class="panel-tag">AI verified</span>
+      </div>
+      <div class="profile-identity">
+        <div class="profile-avatar">
+          <span class="material-symbols-outlined">person</span>
+        </div>
+        <div class="profile-info">
+          <h3 class="profile-name">{{ displayName }}</h3>
+          <p class="profile-username" *ngIf="access.getUser()?.username">{{ access.getUser()?.username }}</p>
+          <p class="profile-email" *ngIf="access.getUser()?.email">{{ access.getUser()?.email }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-panel">
+      <div class="panel-header">
+        <h2>Roles</h2>
+        <span class="panel-tag">RBAC</span>
+      </div>
+      <p class="profile-desc">What you can do in the system.</p>
+      <div class="profile-tags" *ngIf="roles.length; else noRoles">
+        <span *ngFor="let r of roles" class="profile-tag">{{ r }}</span>
+      </div>
+      <ng-template #noRoles>
+        <p class="profile-empty">No roles assigned.</p>
+      </ng-template>
+    </div>
+
+    <div class="profile-panel">
+      <div class="panel-header">
+        <h2>Locations</h2>
+        <span class="panel-tag">Where you work</span>
+      </div>
+      <p class="profile-desc">Locations you have access to.</p>
+      <div class="profile-tags" *ngIf="locations.length; else noLocations">
+        <span *ngFor="let loc of locations" class="profile-tag profile-tag-location">{{ loc.name }}</span>
+      </div>
+      <ng-template #noLocations>
+        <p class="profile-empty">No location restriction (all locations visible).</p>
+      </ng-template>
+    </div>
+
+    <div class="profile-panel profile-panel-perms">
+      <div class="panel-header">
+        <h2>Permissions</h2>
+        <span class="panel-tag">{{ permissions.length }} active</span>
+      </div>
+      <p class="profile-desc">Granular permission codes.</p>
+      <div class="profile-perms" *ngIf="permissions.length; else noPerms">
+        <span *ngFor="let p of permissions" class="profile-perm-chip">{{ p }}</span>
+      </div>
+      <ng-template #noPerms>
+        <p class="profile-empty">No explicit permissions (role-derived).</p>
+      </ng-template>
+    </div>
+  </div>
+</div>

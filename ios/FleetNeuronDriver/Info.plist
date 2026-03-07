@@ -12,6 +12,8 @@
 	<string>FleetNeuron Driver needs access to your photo library to upload proof of delivery, BOL, lumper, and roadside receipts.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>FleetNeuron Driver can use the camera to capture documents for your loads.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>FleetNeuron Driver shows your current location on the map to help you navigate your assigned loads.</string>
 	<key>API_BASE_URL</key>
 	<string>http://localhost:4000</string>
 </dict>

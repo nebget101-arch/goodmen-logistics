@@ -2,6 +2,20 @@ const db = require('../internal/db').knex;
 const dtLogger = require('../utils/logger');
 
 /**
+ * Get active-parts filter for schema compatibility.
+ * Parts table may have either status (ACTIVE/INACTIVE) or is_active (boolean).
+ */
+async function getActivePartsCondition() {
+	const cols = await db('parts').columnInfo();
+	if (cols.status) {
+		// Case-insensitive: production may have "active" (seed) or "ACTIVE" (bulk upload)
+		return (q) => q.whereRaw('LOWER(p.status) = ?', ['active']);
+	}
+	// Fallback for schema with is_active only
+	return (q) => q.where('p.is_active', true);
+}
+
+/**
  * Get all active parts with optional filters
  */
 async function getParts(filters = {}) {
@@ -12,10 +26,11 @@ async function getParts(filters = {}) {
 			.groupBy('part_id')
 			.as('inv');
 
+		const activeFilter = await getActivePartsCondition();
 		let query = db('parts as p')
 			.leftJoin(inventoryAgg, 'p.id', 'inv.part_id')
-			.select('p.*', db.raw('COALESCE(inv.quantity_on_hand, 0) as quantity_on_hand'))
-			.where('p.status', 'ACTIVE');
+			.select('p.*', db.raw('COALESCE(inv.quantity_on_hand, 0) as quantity_on_hand'));
+		query = activeFilter(query);
 
 		if (filters.category) {
 			query = query.where('p.category', filters.category);
@@ -209,8 +224,14 @@ async function deletePart(id) {
  */
 async function getCategories() {
 	try {
-		const categories = await db('parts')
-			.where('status', 'ACTIVE')
+		const cols = await db('parts').columnInfo();
+		let query = db('parts');
+		if (cols.status) {
+			query = query.whereRaw('LOWER(status) = ?', ['active']);
+		} else {
+			query = query.where('is_active', true);
+		}
+		const categories = await query
 			.distinct('category')
 			.orderBy('category', 'asc');
 
@@ -226,8 +247,14 @@ async function getCategories() {
  */
 async function getManufacturers() {
 	try {
-		const manufacturers = await db('parts')
-			.where('status', 'ACTIVE')
+		const cols = await db('parts').columnInfo();
+		let query = db('parts');
+		if (cols.status) {
+			query = query.whereRaw('LOWER(status) = ?', ['active']);
+		} else {
+			query = query.where('is_active', true);
+		}
+		const manufacturers = await query
 			.distinct('manufacturer')
 			.orderBy('manufacturer', 'asc');
 

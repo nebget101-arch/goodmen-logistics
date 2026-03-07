@@ -400,6 +400,112 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
+.user-menu-wrap {
+  position: relative;
+}
+
+.user-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: radial-gradient(circle at 0 0, rgba(45, 212, 191, 0.15), transparent 55%),
+              rgba(15, 23, 42, 0.9);
+  color: #a5f3fc;
+  font-size: 0.9rem;
+  cursor: pointer;
+  width: 100%;
+  justify-content: center;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.user-menu-btn:hover {
+  border-color: rgba(45, 212, 191, 0.5);
+  background: radial-gradient(circle at 0 0, rgba(45, 212, 191, 0.2), transparent 55%),
+              rgba(15, 23, 42, 0.95);
+}
+
+.user-menu-btn .material-symbols-outlined {
+  font-size: 1.25rem;
+}
+
+.user-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  z-index: 100;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: radial-gradient(circle at 10% 0%, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.96));
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.95);
+}
+
+.user-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #e5e7eb;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.2s;
+  text-align: left;
+}
+
+.user-dropdown-item:hover {
+  background: rgba(45, 212, 191, 0.15);
+  color: #a5f3fc;
+}
+
+.user-dropdown-item .material-symbols-outlined {
+  font-size: 1.1rem;
+  color: rgba(45, 212, 191, 0.9);
+}
+
+.user-dropdown-logout:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.user-dropdown-logout .material-symbols-outlined {
+  color: #94a3b8;
+}
+
+.mobile-user-menu {
+  position: relative;
+}
+
+.user-menu-btn-mobile {
+  width: auto;
+  padding: 8px 12px;
+}
+
+.user-menu-btn-mobile .user-menu-label {
+  display: none;
+}
+
+.user-dropdown-mobile {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: auto;
+  bottom: auto;
+  margin-top: 8px;
+  margin-bottom: 0;
+  min-width: 180px;
+  z-index: 100;
+}
+
 .btn-ghost {
   background: rgba(15, 23, 42, 0.95);
   color: #e5e7eb;

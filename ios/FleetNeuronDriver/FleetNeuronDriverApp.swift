@@ -14,6 +14,7 @@ struct FleetNeuronDriverApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(auth)
+                .preferredColorScheme(.dark)
         }
     }
 }

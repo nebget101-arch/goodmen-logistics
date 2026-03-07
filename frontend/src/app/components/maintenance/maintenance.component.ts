@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../services/api.service';
 import { Router } from '@angular/router';
+import { AccessControlService } from '../../services/access-control.service';
 
 @Component({
   selector: 'app-maintenance',
@@ -27,7 +28,11 @@ export class MaintenanceComponent implements OnInit {
   bulkUploadError = '';
   bulkUploadResults: any = null;
 
-  constructor(private apiService: ApiService, private router: Router) { }
+  constructor(
+    private apiService: ApiService,
+    private router: Router,
+    private access: AccessControlService
+  ) {}
 
   ngOnInit(): void {
     this.loadLocations();
@@ -45,7 +50,10 @@ export class MaintenanceComponent implements OnInit {
 
   loadLocations(): void {
     this.apiService.getLocations().subscribe({
-      next: (data) => { this.locations = data || []; }
+      next: (data) => {
+        const all = data || [];
+        this.locations = this.access.getFilteredLocations(all);
+      }
     });
   }
 

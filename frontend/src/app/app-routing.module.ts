@@ -12,7 +12,9 @@ import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dash
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { AuthGuard } from './auth.guard';
+import { PermissionGuard } from './guards/permission.guard';
 import { UserCreateComponent } from './components/user-create/user-create.component';
+import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
 import { BarcodeManagementComponent } from './components/barcode-management/barcode-management.component';
 import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
@@ -47,7 +49,8 @@ const routes: Routes = [
   { path: 'onboard/:packetId', component: OnboardingPacketComponent },
   { path: 'customers', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
   { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
-  { path: 'users/create', component: UserCreateComponent, canActivate: [AuthGuard] },
+  { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
+  { path: 'users/create', component: UserCreateComponent, canActivate: [AuthGuard, PermissionGuard], data: { permission: 'users.create' } },
   { path: 'login', component: LoginComponent },
   { path: 'privacy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
