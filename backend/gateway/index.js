@@ -133,12 +133,16 @@ app.use(
   buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
 );
 app.use('/api/parts', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
+// Proxy /api/health, /api/health/db, /api/health/db/diagnostic to logistics (path can be /db when mounted)
 app.use(
   '/api/health',
   createProxyMiddleware({
     target: LOGISTICS_SERVICE_URL,
     changeOrigin: true,
-    pathRewrite: { '^/api/health': '/health' },
+    pathRewrite: (path, req) => {
+      const full = (req.originalUrl || req.url || path).split('?')[0];
+      return full.replace(/^\/api\/health/, '/health') || '/health';
+    },
     logLevel: isProd ? 'warn' : 'debug',
     onError: (err, req, res) => {
       // eslint-disable-next-line no-console
