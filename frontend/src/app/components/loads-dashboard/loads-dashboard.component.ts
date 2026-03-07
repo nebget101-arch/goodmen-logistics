@@ -1,4 +1,5 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subject, debounceTime, distinctUntilChanged, takeUntil, forkJoin, of } from 'rxjs';
 import { map, catchError, switchMap } from 'rxjs/operators';
@@ -295,7 +296,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return (stop?.stop_date as string) || null;
   }
 
-  constructor(private loadsService: LoadsService, private fb: FormBuilder) {
+  constructor(
+    private loadsService: LoadsService,
+    private fb: FormBuilder,
+    private route: ActivatedRoute
+  ) {
     this.manualLoadForm = this.fb.group({
       status: ['NEW', Validators.required],
       billingStatus: ['PENDING', Validators.required],
@@ -353,6 +358,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.route.queryParams.subscribe((params) => {
+      if (params['status']) this.filters.status = params['status'];
+      if (params['billingStatus']) this.filters.billingStatus = params['billingStatus'];
+    });
     this.loadDropdownData();
     this.loadLoads();
 

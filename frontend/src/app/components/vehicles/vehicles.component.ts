@@ -43,6 +43,7 @@ export class VehiclesComponent implements OnInit {
   // Search and filter state
   searchQuery = '';
   selectedStatus = 'all';
+  presetFilter: 'maintenance-due' | null = null;
   private searchSubject = new Subject<string>();
 
   // Sort state
@@ -78,6 +79,21 @@ export class VehiclesComponent implements OnInit {
     this.route.data.subscribe(data => {
       this.vehicleType = (data['vehicleType'] || 'truck') as 'truck' | 'trailer';
       this.loadVehicles();
+    });
+
+    this.route.queryParams.subscribe(params => {
+      const filter = params['filter'];
+      if (filter === 'oos') {
+        this.selectedStatus = 'out-of-service';
+        this.presetFilter = null;
+      } else if (filter === 'maintenance-due') {
+        this.selectedStatus = 'all';
+        this.presetFilter = 'maintenance-due';
+      } else {
+        this.selectedStatus = 'all';
+        this.presetFilter = null;
+      }
+      this.applyFiltersAndSort();
     });
 
     // Debounce search input to reduce API calls
@@ -153,6 +169,16 @@ export class VehiclesComponent implements OnInit {
       );
     }
 
+    // Apply preset filter (from dashboard links)
+    if (this.presetFilter === 'maintenance-due') {
+      const today = new Date();
+      const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      result = result.filter(vehicle => {
+        const due = vehicle.next_pm_due ? new Date(vehicle.next_pm_due) : null;
+        return due && due <= thirtyDaysFromNow;
+      });
+    }
+
     // Apply status filter
     if (this.selectedStatus !== 'all') {
       result = result.filter(vehicle => this.normalizeStatus(vehicle.status) === this.selectedStatus);
@@ -224,6 +250,7 @@ export class VehiclesComponent implements OnInit {
   clearFilters(): void {
     this.searchQuery = '';
     this.selectedStatus = 'all';
+    this.presetFilter = null;
     this.sortField = 'unit_number';
     this.sortOrder = 'asc';
     this.currentPage = 1;

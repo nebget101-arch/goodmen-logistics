@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
 
@@ -66,18 +67,39 @@ export class DriversComponent implements OnInit {
     status: ''
   };
 
+  presetFilter: '' | 'med-certs' | 'clearinghouse' | 'dqf-low' = '';
+  highlightDriverId: string | null = null;
+
   constructor(
     private apiService: ApiService,
-    private onboardingModal: OnboardingModalService
+    private onboardingModal: OnboardingModalService,
+    private route: ActivatedRoute
   ) { }
 
   ngOnInit(): void {
     this.loadDrivers();
+    this.route.queryParams.subscribe(params => {
+      const filter = params['filter'];
+      const highlight = params['highlight'];
+      this.highlightDriverId = highlight || null;
+      if (filter === 'med-certs') {
+        this.presetFilter = 'med-certs';
+        this.driverFilters = { ...this.driverFilters, clearinghouseStatus: '', dqfMin: '' };
+      } else if (filter === 'clearinghouse') {
+        this.presetFilter = 'clearinghouse';
+        this.driverFilters = { ...this.driverFilters, clearinghouseStatus: 'query-pending', dqfMin: '' };
+      } else if (filter === 'dqf-low') {
+        this.presetFilter = 'dqf-low';
+        this.driverFilters = { ...this.driverFilters, clearinghouseStatus: '', dqfMin: '75' };
+      } else {
+        this.presetFilter = '';
+      }
+    });
   }
 
   get filteredDrivers(): any[] {
     const f = this.driverFilters;
-    return (this.drivers || []).filter((driver) => {
+    let list = (this.drivers || []).filter((driver) => {
       if (f.name) {
         const name = `${driver.firstName || ''} ${driver.lastName || ''} ${driver.email || ''}`.toLowerCase();
         if (!name.includes(f.name.toLowerCase())) return false;
@@ -106,6 +128,18 @@ export class DriversComponent implements OnInit {
       }
       return true;
     });
+
+    if (this.presetFilter === 'med-certs') {
+      const today = new Date();
+      const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      list = list.filter(d => {
+        const cdl = d.cdlExpiry ? new Date(d.cdlExpiry) : null;
+        const med = d.medicalCertExpiry ? new Date(d.medicalCertExpiry) : null;
+        return (cdl && cdl <= thirtyDaysFromNow) || (med && med <= thirtyDaysFromNow);
+      });
+    }
+
+    return list;
   }
 
   private normalizeDate(value: any): string {

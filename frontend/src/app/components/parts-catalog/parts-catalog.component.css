@@ -155,11 +155,29 @@
   margin-bottom: 16px;
 }
 
+.parts-dashboard .ai-analysis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 .parts-dashboard .ai-analysis-title {
   font-size: 18px;
   font-weight: 600;
   color: #e2e8f0;
-  margin: 0 0 10px;
+  margin: 0;
+}
+
+.parts-dashboard .ai-analysis-tag {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(45, 212, 191, 0.2);
+  color: #a5f3fc;
 }
 
 .parts-dashboard .ai-analysis-summary {
@@ -169,8 +187,48 @@
   margin: 0 0 16px;
 }
 
+.parts-dashboard .ai-analysis-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: rgba(30, 41, 59, 0.4);
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.parts-dashboard .ai-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.parts-dashboard .ai-filter-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.parts-dashboard .ai-filter-select,
+.parts-dashboard .ai-filter-input {
+  min-width: 180px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text-dark);
+  font-size: 13px;
+}
+
+.parts-dashboard .ai-filter-input {
+  min-width: 200px;
+}
+
 .parts-dashboard .ai-section {
-  margin-bottom: 14px;
+  margin-bottom: 20px;
 }
 
 .parts-dashboard .ai-section:last-child {
@@ -181,45 +239,171 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-light);
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.parts-dashboard .ai-list {
+.parts-dashboard .ai-empty {
+  font-size: 13px;
+  color: var(--text-light);
+  margin: 0;
+  padding: 12px 0;
+}
+
+.parts-dashboard .ai-insight-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.parts-dashboard .ai-insight-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(30, 41, 59, 0.3);
+}
+
+.parts-dashboard .ai-insight-card[data-type="ZERO_STOCK"],
+.parts-dashboard .ai-insight-card[data-type="LOW_STOCK"] {
+  border-left: 4px solid rgba(239, 68, 68, 0.6);
+}
+
+.parts-dashboard .ai-insight-card[data-type="HIGH_COST_LOW_STOCK"] {
+  border-left: 4px solid rgba(245, 158, 11, 0.7);
+}
+
+.parts-dashboard .ai-insight-card[data-type="CATEGORY_SPREAD"],
+.parts-dashboard .ai-insight-card[data-type="MANUFACTURER_DISTRIBUTION"] {
+  border-left: 4px solid rgba(59, 130, 246, 0.6);
+}
+
+.parts-dashboard .ai-insight-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.parts-dashboard .ai-insight-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+.parts-dashboard .ai-insight-desc {
+  font-size: 13px;
+  color: var(--text-light);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.parts-dashboard .ai-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.parts-dashboard .ai-badge[data-type="ZERO_STOCK"] {
+  background: rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+}
+
+.parts-dashboard .ai-badge[data-type="LOW_STOCK"] {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fcd34d;
+}
+
+.parts-dashboard .ai-badge[data-type="HIGH_COST_LOW_STOCK"] {
+  background: rgba(234, 88, 12, 0.25);
+  color: #fdba74;
+}
+
+.parts-dashboard .ai-badge[data-type="CATEGORY_SPREAD"],
+.parts-dashboard .ai-badge[data-type="MANUFACTURER_DISTRIBUTION"] {
+  background: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+}
+
+.parts-dashboard .ai-parts-list {
+  margin-top: 8px;
+}
+
+.parts-dashboard .ai-parts-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-light);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.parts-dashboard .ai-parts-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.parts-dashboard .ai-part-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #bfdbfe;
+  max-width: 100%;
+}
+
+.parts-dashboard .ai-part-chip .ai-part-sku {
+  margin-left: 4px;
+  font-size: 11px;
+  opacity: 0.8;
+  color: #94a3b8;
+}
+
+.parts-dashboard .ai-part-chip-rec {
+  background: rgba(45, 212, 191, 0.12);
+  border-color: rgba(45, 212, 191, 0.3);
+  color: #a5f3fc;
+}
+
+.parts-dashboard .ai-rec-list {
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
-.parts-dashboard .ai-list li {
-  padding: 8px 0;
+.parts-dashboard .ai-rec-item {
+  padding: 12px 0;
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
   font-size: 13px;
   color: var(--text-dark);
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
-.parts-dashboard .ai-list li:last-child {
+.parts-dashboard .ai-rec-item:last-child {
   border-bottom: none;
 }
 
-.parts-dashboard .ai-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  background: rgba(148, 163, 184, 0.3);
+.parts-dashboard .ai-rec-action {
+  display: block;
   color: #e2e8f0;
-  margin-right: 8px;
+  margin-bottom: 2px;
 }
 
-.parts-dashboard .ai-skus {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
+.parts-dashboard .ai-rec-detail {
   color: var(--text-light);
+}
+
+.parts-dashboard .ai-parts-list-rec {
+  margin-top: 8px;
+  margin-bottom: 0;
 }
 
 .parts-dashboard .loading-state {

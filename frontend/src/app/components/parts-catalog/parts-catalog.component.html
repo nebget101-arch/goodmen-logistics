@@ -69,24 +69,76 @@
   </div>
 
   <div *ngIf="aiAnalysisResult" class="card ai-analysis-card">
-    <h3 class="ai-analysis-title">AI catalog analysis</h3>
-    <p class="ai-analysis-summary">{{ aiAnalysisResult.summary }}</p>
-    <div *ngIf="aiAnalysisResult.insights.length" class="ai-section">
-      <h4 class="ai-section-title">Insights</h4>
-      <ul class="ai-list">
-        <li *ngFor="let i of aiAnalysisResult.insights">
-          <span class="ai-badge" [attr.data-type]="i.type">{{ i.type }}</span>
-          <strong>{{ i.title }}</strong> — {{ i.message }}
-          <span *ngIf="i.partSkus?.length" class="ai-skus">SKUs: {{ i.partSkus?.join(', ') }}</span>
-        </li>
-      </ul>
+    <div class="ai-analysis-header">
+      <h3 class="ai-analysis-title">Inventory health summary</h3>
+      <span class="ai-analysis-tag">AI analyzed</span>
     </div>
-    <div *ngIf="aiAnalysisResult.recommendations.length" class="ai-section">
-      <h4 class="ai-section-title">Recommendations</h4>
-      <ul class="ai-list">
-        <li *ngFor="let r of aiAnalysisResult.recommendations">
-          <strong>{{ r.action }}</strong> — {{ r.detail }}
-          <span *ngIf="r.partSkus?.length" class="ai-skus">SKUs: {{ r.partSkus?.join(', ') }}</span>
+    <p class="ai-analysis-summary">{{ aiAnalysisResult.summary }}</p>
+
+    <div class="ai-analysis-filters">
+      <div class="ai-filter-group">
+        <label for="aiFilterType">Filter by issue</label>
+        <select id="aiFilterType" class="ai-filter-select" [(ngModel)]="aiFilterType">
+          <option *ngFor="let opt of aiFilterTypes" [value]="opt.value">{{ opt.label }}</option>
+        </select>
+      </div>
+      <div class="ai-filter-group">
+        <label for="aiSearchText">Search parts</label>
+        <input
+          id="aiSearchText"
+          type="text"
+          class="ai-filter-input"
+          [(ngModel)]="aiSearchText"
+          placeholder="Part name or SKU…"
+        />
+      </div>
+    </div>
+
+    <div class="ai-section">
+      <h4 class="ai-section-title">What we found</h4>
+      <p *ngIf="!filteredInsights.length" class="ai-empty">No insights match your filter. Try changing the filter or search.</p>
+      <div *ngIf="filteredInsights.length" class="ai-insight-cards">
+        <div *ngFor="let i of filteredInsights" class="ai-insight-card" [attr.data-type]="i.type">
+          <div class="ai-insight-header">
+            <span class="ai-badge" [attr.data-type]="i.type">{{ getInsightLabel(i.type) }}</span>
+            <strong class="ai-insight-title">{{ i.title }}</strong>
+          </div>
+          <p class="ai-insight-desc">{{ i.message }}</p>
+          <div *ngIf="getPartDisplayList(i.partSkus).length" class="ai-parts-list">
+            <div class="ai-parts-header">{{ getPartDisplayList(i.partSkus).length }} part(s)</div>
+            <div class="ai-parts-chips">
+              <span
+                *ngFor="let p of getPartDisplayList(i.partSkus)"
+                class="ai-part-chip"
+                [title]="p.sku"
+              >
+                {{ p.name }}
+                <span class="ai-part-sku">({{ p.sku }})</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="filteredRecommendations.length" class="ai-section">
+      <h4 class="ai-section-title">What to do next</h4>
+      <ul class="ai-rec-list">
+        <li *ngFor="let r of filteredRecommendations" class="ai-rec-item">
+          <strong class="ai-rec-action">{{ r.action }}</strong>
+          <span class="ai-rec-detail">{{ r.detail }}</span>
+          <div *ngIf="getPartDisplayList(r.partSkus).length" class="ai-parts-list ai-parts-list-rec">
+            <div class="ai-parts-chips">
+              <span
+                *ngFor="let p of getPartDisplayList(r.partSkus)"
+                class="ai-part-chip ai-part-chip-rec"
+                [title]="p.sku"
+              >
+                {{ p.name }}
+                <span class="ai-part-sku">({{ p.sku }})</span>
+              </span>
+            </div>
+          </div>
         </li>
       </ul>
     </div>

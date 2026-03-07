@@ -151,6 +151,11 @@
   color: var(--text-light);
 }
 
+.drivers-dashboard .driver-row-highlight {
+  background: rgba(59, 130, 246, 0.25) !important;
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.6);
+}
+
 /* Action buttons – AI pill style */
 .drivers-dashboard .drivers-actions {
   display: flex;
