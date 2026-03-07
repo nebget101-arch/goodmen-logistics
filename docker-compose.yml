@@ -197,4 +197,3 @@ services:
     volumes:
       - ./backend:/usr/src/app/backend
     command: ["npm", "run", "migrate:dev"]
-

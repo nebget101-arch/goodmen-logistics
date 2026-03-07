@@ -38,8 +38,15 @@ export class LoginComponent {
         this.accessControl.setAccessFromLoginResponse(res);
         this.router.navigate(['/dashboard']);
       },
-      error: () => {
-        this.error = 'Invalid username or password';
+      error: (err) => {
+        const msg = err?.error?.error ?? err?.error?.detail ?? err?.message;
+        const isServerError = err?.status >= 500;
+        this.error =
+          msg && (typeof msg === 'string' ? msg : String(msg)).trim()
+            ? (typeof msg === 'string' ? msg : String(msg)).trim()
+            : isServerError
+              ? 'Server error. Please try again or check that the API is running.'
+              : 'Invalid username or password';
       }
     });
   }

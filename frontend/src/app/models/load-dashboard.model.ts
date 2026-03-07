@@ -1,5 +1,6 @@
 export type LoadStatus =
   | 'NEW'
+  | 'DRAFT'
   | 'CANCELLED'
   | 'CANCELED'
   | 'TONU'
@@ -115,9 +116,22 @@ export interface LoadsListResponse {
   };
 }
 
+export interface LoadAiEndpointExtractionStop {
+  type: 'PICKUP' | 'DELIVERY';
+  sequence?: number;
+  date?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  address1?: string | null;
+}
+
 export interface LoadAiEndpointExtraction {
   brokerName: string | null;
   poNumber: string | null;
+  loadId?: string | null;
+  orderId?: string | null;
+  proNumber?: string | null;
   rate: number | null;
   pickup: {
     date: string | null;
@@ -133,6 +147,7 @@ export interface LoadAiEndpointExtraction {
     zip: string | null;
     address1: string | null;
   };
+  stops?: LoadAiEndpointExtractionStop[];
   notes: string | null;
   confidence?: {
     brokerName?: number;

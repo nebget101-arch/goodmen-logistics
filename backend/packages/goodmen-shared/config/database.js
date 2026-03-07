@@ -2,11 +2,20 @@ const requireFromRoot = require('../internal/require-from-root');
 const { Pool } = requireFromRoot('pg');
 const path = require('path');
 
-// Load env from repo root so all services share a single .env
+// Load env from repo root so all services share a single .env (when running on host).
+// In Docker, env is usually provided by docker-compose env_file; we only load if file exists.
 const dotenv = requireFromRoot('dotenv');
-dotenv.config({
-  path: path.join(__dirname, '..', '..', '..', '..', '.env'),
-});
+const fs = require('fs');
+const envPaths = [
+  path.join(__dirname, '..', '..', '..', '..', '..', '.env'), // repo root (from backend/packages/.../config)
+  path.join(__dirname, '..', '..', '..', '..', '.env'),        // backend/.env fallback
+];
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 const poolConfig = process.env.DATABASE_URL
   ? {

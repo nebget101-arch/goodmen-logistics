@@ -5,8 +5,8 @@ WORKDIR /usr/src/app
 # Build argument to select which service directory to run
 ARG SERVICE_DIR=backend/microservices/auth-users-service
 
-# Install system dependencies (if needed later)
-RUN apk add --no-cache bash
+# Install system dependencies: Poppler (pdftotext) for PDF text extraction fallback in load-ai-extractor
+RUN apk add --no-cache bash poppler-utils
 
 # Copy the entire backend so file: dependencies and shared packages work
 COPY backend ./backend
