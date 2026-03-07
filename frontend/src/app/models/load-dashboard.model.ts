@@ -1,5 +1,22 @@
-export type LoadStatus = 'NEW' | 'DISPATCHED' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED';
-export type BillingStatus = 'PENDING' | 'FUNDED' | 'INVOICED' | 'PAID';
+export type LoadStatus =
+  | 'NEW'
+  | 'CANCELLED'
+  | 'CANCELED'
+  | 'TONU'
+  | 'DISPATCHED'
+  | 'EN_ROUTE'
+  | 'PICKED_UP'
+  | 'IN_TRANSIT'
+  | 'DELIVERED';
+export type BillingStatus =
+  | 'PENDING'
+  | 'CANCELLED'
+  | 'CANCELED'
+  | 'BOL_RECEIVED'
+  | 'INVOICED'
+  | 'SENT_TO_FACTORING'
+  | 'FUNDED'
+  | 'PAID';
 export type LoadStopType = 'PICKUP' | 'DELIVERY';
 export type LoadAttachmentType =
   | 'RATE_CONFIRMATION'
@@ -21,8 +38,10 @@ export interface LoadListItem {
   delivery_date?: string | null;
   pickup_city: string | null;
   pickup_state: string | null;
+  pickup_zip?: string | null;
   delivery_city: string | null;
   delivery_state: string | null;
+  delivery_zip?: string | null;
   driver_name: string | null;
   broker_name: string | null;
   po_number?: string | null;

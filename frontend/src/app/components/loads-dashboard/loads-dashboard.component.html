@@ -50,10 +50,22 @@
   <div *ngIf="errorMessage" class="alert alert-error">{{ errorMessage }}</div>
   <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
 
-  <div class="summary-bar" *ngIf="loads.length">
+  <div class="summary-bar" *ngIf="!loading">
     <div class="summary-total">
-      <span class="summary-label">Gross (page)</span>
+      <span class="summary-label">Gross Amount</span>
       <span class="summary-value">${{ summaryTotals.totalGross | number:'1.0-2' }}</span>
+    </div>
+    <div class="summary-group gross-period-group">
+      <span class="label">Period</span>
+      <button
+        type="button"
+        class="chip"
+        *ngFor="let opt of grossPeriodOptions"
+        [class.active]="grossPeriod === opt.value"
+        (click)="setGrossPeriod(opt.value)"
+      >
+        {{ opt.label }}
+      </button>
     </div>
     <div class="summary-groups">
       <div class="summary-group">
@@ -66,7 +78,7 @@
           [class.active]="filters.status === s"
           (click)="setStatusFilter(filters.status === s ? '' : s)"
         >
-          <span class="chip-label">{{ s.replace('_', ' ') }}</span>
+          <span class="chip-label">{{ getStatusLabel(s) }}</span>
           <span class="chip-value">${{ (summaryTotals.byStatus[s] || 0) | number:'1.0-2' }}</span>
         </button>
       </div>
@@ -80,7 +92,7 @@
           [class.active]="filters.billingStatus === b"
           (click)="setBillingFilter(filters.billingStatus === b ? '' : b)"
         >
-          <span class="chip-label">{{ b.replace('_', ' ') }}</span>
+          <span class="chip-label">{{ getBillingLabel(b) }}</span>
           <span class="chip-value">${{ (summaryTotals.byBilling[b] || 0) | number:'1.0-2' }}</span>
         </button>
       </div>
@@ -124,12 +136,12 @@
         <h4>New Load</h4>
         <label>Status
           <select formControlName="status">
-            <option *ngFor="let s of statusOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+            <option *ngFor="let s of statusOptions" [value]="s">{{ getStatusLabel(s) }}</option>
           </select>
         </label>
         <label>Billing
           <select formControlName="billingStatus">
-            <option *ngFor="let s of billingOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+            <option *ngFor="let s of billingOptions" [value]="s">{{ getBillingLabel(s) }}</option>
           </select>
         </label>
         <label>Dispatcher
@@ -176,10 +188,18 @@
             <input
               formControlName="brokerName"
               (focus)="onBrokerInputFocus()"
-              placeholder="Search or type broker name"
+              (input)="onBrokerSearchInput()"
+              placeholder="Search by name or MC number"
             >
-            <div class="broker-dropdown" *ngIf="brokerDropdownOpen && filteredBrokers.length">
-              <button type="button" *ngFor="let b of filteredBrokers" (click)="selectBroker(b)">{{ b.name }}</button>
+            <div class="broker-dropdown" *ngIf="brokerDropdownOpen">
+              <button type="button" class="broker-dropdown-new" (click)="openNewBrokerModal()">
+                <span class="material-symbols-outlined">add</span> new broker
+              </button>
+              <button type="button" *ngFor="let b of brokerSearchResults" (click)="selectBroker(b)">
+                {{ getBrokerDisplayLine(b) }}
+              </button>
+              <p *ngIf="brokerSearchLoading" class="broker-dropdown-loading">Loading…</p>
+              <p *ngIf="!brokerSearchLoading && brokerDropdownOpen && brokerSearchResults.length === 0" class="broker-dropdown-empty">No brokers found. Add one above.</p>
             </div>
           </div>
         </label>
@@ -295,7 +315,7 @@
       <thead>
         <tr>
           <th (click)="toggleSort('load_number')">Load #</th>
-          <th (click)="toggleSort('pickup_date')">Date</th>
+          <th (click)="toggleSort('pickup_date')">Pickup Date</th>
           <th>Driver</th>
           <th>Broker</th>
           <th>PO #</th>
@@ -377,14 +397,14 @@
           <th>
             <select [(ngModel)]="filters.status" (change)="onFilterChange()">
               <option value="">All</option>
-              <option *ngFor="let s of statusOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+              <option *ngFor="let s of statusOptions" [value]="s">{{ getStatusLabel(s) }}</option>
             </select>
           </th>
           <!-- Billing -->
           <th>
             <select [(ngModel)]="filters.billingStatus" (change)="onFilterChange()">
               <option value="">All</option>
-              <option *ngFor="let b of billingOptions" [value]="b">{{ b.replace('_',' ') }}</option>
+              <option *ngFor="let b of billingOptions" [value]="b">{{ getBillingLabel(b) }}</option>
             </select>
           </th>
           <!-- Notes -->
@@ -417,7 +437,7 @@
           <td>
             <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
           </td>
-          <td>{{ load.pickup_date ? (load.pickup_date | date:'yyyy-MM-dd') : '--' }}</td>
+          <td>{{ formatDateLocal(load.pickup_date) || '--' }}</td>
           <td>{{ load.driver_name || '--' }}</td>
           <td>{{ load.broker_name || '--' }}</td>
           <td>{{ load.po_number || '--' }}</td>
@@ -623,12 +643,12 @@
             <h4>Status & Billing</h4>
             <label>Status
               <select formControlName="status">
-                <option *ngFor="let s of statusOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+                <option *ngFor="let s of statusOptions" [value]="s">{{ getStatusLabel(s) }}</option>
               </select>
             </label>
             <label>Billing Status
               <select formControlName="billingStatus">
-                <option *ngFor="let s of billingOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+                <option *ngFor="let s of billingOptions" [value]="s">{{ getBillingLabel(s) }}</option>
               </select>
             </label>
             <label>Dispatcher
@@ -639,9 +659,16 @@
             <h4>Broker / PO / Rate</h4>
             <label>Broker
               <div class="broker-combo" (click)="$event.stopPropagation()">
-                <input formControlName="brokerName" (focus)="onBrokerInputFocus()" placeholder="Search or type broker name">
-                <div class="broker-dropdown" *ngIf="brokerDropdownOpen && filteredBrokers.length">
-                  <button type="button" *ngFor="let b of filteredBrokers" (click)="selectBroker(b)">{{ b.name }}</button>
+                <input formControlName="brokerName" (focus)="onBrokerInputFocus()" (input)="onBrokerSearchInput()" placeholder="Search by name or MC number">
+                <div class="broker-dropdown" *ngIf="brokerDropdownOpen">
+                  <button type="button" class="broker-dropdown-new" (click)="openNewBrokerModal()">
+                    <span class="material-symbols-outlined">add</span> new broker
+                  </button>
+                  <button type="button" *ngFor="let b of brokerSearchResults" (click)="selectBroker(b)">
+                    {{ getBrokerDisplayLine(b) }}
+                  </button>
+                  <p *ngIf="brokerSearchLoading" class="broker-dropdown-loading">Loading…</p>
+                  <p *ngIf="!brokerSearchLoading && brokerSearchResults.length === 0" class="broker-dropdown-empty">No brokers found. Add one above.</p>
                 </div>
               </div>
             </label>
@@ -676,12 +703,12 @@
           <section>
             <label>Status
               <select formControlName="status">
-                <option *ngFor="let s of statusOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+                <option *ngFor="let s of statusOptions" [value]="s">{{ getStatusLabel(s) }}</option>
               </select>
             </label>
             <label>Billing Status
               <select formControlName="billingStatus">
-                <option *ngFor="let s of billingOptions" [value]="s">{{ s.replace('_',' ') }}</option>
+                <option *ngFor="let s of billingOptions" [value]="s">{{ getBillingLabel(s) }}</option>
               </select>
             </label>
             <label>Dispatcher
@@ -730,9 +757,16 @@
             <h4>Broker / PO / Rate</h4>
             <label>Broker
               <div class="broker-combo" (click)="$event.stopPropagation()">
-                <input formControlName="brokerName" (focus)="onBrokerInputFocus()" placeholder="Search or type broker name">
-                <div class="broker-dropdown" *ngIf="brokerDropdownOpen && filteredBrokers.length">
-                  <button type="button" *ngFor="let b of filteredBrokers" (click)="selectBroker(b)">{{ b.name }}</button>
+                <input formControlName="brokerName" (focus)="onBrokerInputFocus()" (input)="onBrokerSearchInput()" placeholder="Search by name or MC number">
+                <div class="broker-dropdown" *ngIf="brokerDropdownOpen">
+                  <button type="button" class="broker-dropdown-new" (click)="openNewBrokerModal()">
+                    <span class="material-symbols-outlined">add</span> new broker
+                  </button>
+                  <button type="button" *ngFor="let b of brokerSearchResults" (click)="selectBroker(b)">
+                    {{ getBrokerDisplayLine(b) }}
+                  </button>
+                  <p *ngIf="brokerSearchLoading" class="broker-dropdown-loading">Loading…</p>
+                  <p *ngIf="!brokerSearchLoading && brokerSearchResults.length === 0" class="broker-dropdown-empty">No brokers found. Add one above.</p>
                 </div>
               </div>
             </label>
@@ -1040,6 +1074,70 @@
         <button class="btn btn-primary" type="button" (click)="saveAttachment()" [disabled]="creatingLoad">Save</button>
         <button class="btn btn-secondary" type="button" (click)="showUploadModal = false" [disabled]="creatingLoad">Close</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Add New Broker modal -->
+  <div class="modal-backdrop" *ngIf="showBrokerCreateModal" (click)="closeBrokerCreateModal()">
+    <div class="modal broker-create-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Add New Broker</h3>
+        <button class="close" type="button" (click)="closeBrokerCreateModal()">×</button>
+      </div>
+      <form [formGroup]="brokerCreateForm" (ngSubmit)="saveNewBroker()">
+        <div class="modal-body broker-create-body">
+          <div class="broker-create-grid">
+            <section class="broker-create-section">
+              <h4>Company &amp; contact</h4>
+              <label>Company name <span class="required">*</span>
+                <input formControlName="companyName" placeholder="Search by name or MC number">
+              </label>
+              <label>Address
+                <input formControlName="address" placeholder="Street address">
+              </label>
+              <label>Address line 2
+                <input formControlName="address2" placeholder="Suite, unit, etc.">
+              </label>
+              <label>City
+                <input formControlName="city" placeholder="City">
+              </label>
+              <label>State
+                <input formControlName="state" placeholder="State">
+              </label>
+              <label>Zip
+                <input formControlName="zip" placeholder="ZIP">
+              </label>
+              <label>Phone
+                <input formControlName="phone" placeholder="Phone">
+              </label>
+              <label>Email
+                <input formControlName="email" type="email" placeholder="Email">
+              </label>
+            </section>
+            <section class="broker-create-section">
+              <h4>Authority</h4>
+              <label>MC #
+                <input formControlName="mc_number" placeholder="MC number">
+              </label>
+              <label>DOT #
+                <input formControlName="dot_number" placeholder="DOT number">
+              </label>
+              <label>Notes
+                <textarea formControlName="notes" rows="3" placeholder="Notes"></textarea>
+              </label>
+            </section>
+          </div>
+          <div *ngIf="brokerCreateError" class="alert alert-error">{{ brokerCreateError }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" type="submit" [disabled]="brokerCreateSaving">
+            <span class="material-symbols-outlined">check</span> Save
+          </button>
+          <button class="btn btn-secondary" type="button" (click)="closeBrokerCreateModal()" [disabled]="brokerCreateSaving">
+            <span class="material-symbols-outlined">close</span> Close
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

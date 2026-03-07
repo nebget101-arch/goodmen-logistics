@@ -37,6 +37,11 @@ export class PartsCatalogComponent implements OnInit {
     recommendations: Array<{ action: string; detail: string; partSkus?: string[] }>;
   } | null = null;
 
+  /** Filter for AI analysis: '' = all, or insight/rec type */
+  aiFilterType = '';
+  /** Search within AI analysis parts */
+  aiSearchText = '';
+
   constructor(private apiService: ApiService, private fb: FormBuilder) {
     this.partForm = this.fb.group({
       sku: ['', [Validators.required]],
@@ -333,6 +338,58 @@ export class PartsCatalogComponent implements OnInit {
 
   getBulkUploadErrors(): Array<{ row?: number; sku?: string; error?: string }> {
     return Array.isArray(this.bulkUploadSummary?.errors) ? this.bulkUploadSummary!.errors! : [];
+  }
+
+  /** Map SKU to part name for display. */
+  getPartName(sku: string): string {
+    const part = (this.parts || []).find((p: any) => String(p.sku).toLowerCase() === String(sku).toLowerCase());
+    return part?.name || sku;
+  }
+
+  /** All unique insight + recommendation types for filter. */
+  get aiFilterTypes(): { value: string; label: string }[] {
+    const types = new Set<string>();
+    (this.aiAnalysisResult?.insights || []).forEach(i => { if (i.type) types.add(i.type); });
+    (this.aiAnalysisResult?.recommendations || []).forEach(r => {
+      const t = (r as any).type;
+      if (t) types.add(t);
+    });
+    const options = [{ value: '', label: 'All issues' }];
+    const labelMap = (t: string) => this.getInsightLabel(t);
+    Array.from(types).sort().forEach(t => options.push({ value: t, label: labelMap(t) }));
+    return options;
+  }
+
+  getInsightLabel(type: string): string {
+    const map: Record<string, string> = {
+      ZERO_STOCK: 'Out of stock',
+      LOW_STOCK: 'Running low',
+      HIGH_COST_LOW_STOCK: 'Expensive & low stock',
+      CATEGORY_SPREAD: 'Category spread',
+      MANUFACTURER_DISTRIBUTION: 'Manufacturer mix',
+    };
+    return map[type] || type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  /** Parts for an insight/rec, with names, optionally filtered by search. */
+  getPartDisplayList(skus: string[] | undefined): { sku: string; name: string }[] {
+    if (!skus?.length) return [];
+    const search = (this.aiSearchText || '').toLowerCase();
+    const list = skus.map(sku => ({ sku, name: this.getPartName(sku) }));
+    if (!search) return list;
+    return list.filter(p => p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search));
+  }
+
+  /** Filtered insights for display. */
+  get filteredInsights() {
+    const list = this.aiAnalysisResult?.insights || [];
+    if (!this.aiFilterType) return list;
+    return list.filter(i => i.type === this.aiFilterType);
+  }
+
+  /** Filtered recommendations for display. (Show all; insights are filtered by type.) */
+  get filteredRecommendations() {
+    return this.aiAnalysisResult?.recommendations || [];
   }
 
   loadAiAnalysis(): void {

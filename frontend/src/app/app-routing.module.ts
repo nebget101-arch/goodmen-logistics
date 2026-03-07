@@ -9,6 +9,7 @@ import { MaintenanceComponent } from './components/maintenance/maintenance.compo
 import { WorkOrderComponent } from './components/work-order/work-order.component';
 import { LoadsComponent } from './components/loads/loads.component';
 import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
+import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { AuthGuard } from './auth.guard';
@@ -38,6 +39,7 @@ const routes: Routes = [
   { path: 'work-order', component: WorkOrderComponent, canActivate: [AuthGuard] },
   { path: 'work-order/:id', component: WorkOrderComponent, canActivate: [AuthGuard] },
   { path: 'loads', component: LoadsDashboardComponent, canActivate: [AuthGuard] },
+  { path: 'dispatch-board', component: DispatchBoardComponent, canActivate: [AuthGuard] },
   { path: 'audit', component: AuditComponent, canActivate: [AuthGuard] },
   { path: 'parts', component: PartsCatalogComponent, canActivate: [AuthGuard] },
   { path: 'barcodes', component: BarcodeManagementComponent, canActivate: [AuthGuard] },

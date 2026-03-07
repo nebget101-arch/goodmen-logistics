@@ -29,53 +29,116 @@
         </div>
 
         <div class="metrics-grid">
-          <div class="metric-card">
+          <a class="metric-card metric-card-link" routerLink="/drivers">
             <div class="metric-label">Active Drivers</div>
             <div class="metric-value">{{ stats.activeDrivers }}/{{ stats.totalDrivers }}</div>
             <div class="metric-sub">Total drivers in fleet</div>
-          </div>
+          </a>
 
-          <div class="metric-card" [ngClass]="stats.oosVehicles > 0 ? 'metric-critical' : 'metric-good'">
+          <a class="metric-card metric-card-link" [ngClass]="stats.oosVehicles > 0 ? 'metric-critical' : 'metric-good'" routerLink="/vehicles" [queryParams]="{filter: 'oos'}">
             <div class="metric-label">Vehicle Status</div>
             <div class="metric-value">{{ stats.activeVehicles }}/{{ stats.totalVehicles }}</div>
             <div class="metric-sub">{{ stats.oosVehicles }} out of service</div>
-          </div>
+          </a>
 
-          <div class="metric-card">
+          <a class="metric-card metric-card-link" routerLink="/loads">
             <div class="metric-label">Active Loads</div>
             <div class="metric-value">{{ stats.activeLoads }}</div>
             <div class="metric-sub">{{ stats.pendingLoads }} pending assignment</div>
-          </div>
+          </a>
 
-          <div class="metric-card" [ngClass]="stats.hosViolations > 0 ? 'metric-warn' : 'metric-good'">
+          <a class="metric-card metric-card-link" [ngClass]="stats.hosViolations > 0 ? 'metric-warn' : 'metric-good'" routerLink="/hos">
             <div class="metric-label">HOS Compliance</div>
             <div class="metric-value">{{ stats.hosViolations }}</div>
             <div class="metric-sub">Violations / warnings today</div>
-          </div>
+          </a>
 
-          <div class="metric-card" [ngClass]="stats.dqfComplianceRate < 90 ? 'metric-warn' : 'metric-good'">
+          <a class="metric-card metric-card-link" [ngClass]="stats.dqfComplianceRate < 90 ? 'metric-warn' : 'metric-good'" routerLink="/drivers/dqf">
             <div class="metric-label">DQF Compliance</div>
             <div class="metric-value">{{ stats.dqfComplianceRate }}%</div>
             <div class="metric-sub">Average record completeness</div>
-          </div>
+          </a>
 
-          <div class="metric-card" [ngClass]="stats.expiredMedCerts > 0 ? 'metric-critical' : (stats.upcomingMedCerts > 0 ? 'metric-warn' : 'metric-good')">
+          <a class="metric-card metric-card-link" [ngClass]="stats.expiredMedCerts > 0 ? 'metric-critical' : (stats.upcomingMedCerts > 0 ? 'metric-warn' : 'metric-good')" routerLink="/drivers/dqf" [queryParams]="{filter: 'med-certs'}">
             <div class="metric-label">Medical Certificates</div>
             <div class="metric-value">{{ stats.expiredMedCerts }}</div>
             <div class="metric-sub">{{ stats.upcomingMedCerts }} expiring soon</div>
-          </div>
+          </a>
 
-          <div class="metric-card" [ngClass]="stats.vehiclesNeedingMaintenance > 0 ? 'metric-warn' : 'metric-good'">
+          <a class="metric-card metric-card-link" [ngClass]="stats.vehiclesNeedingMaintenance > 0 ? 'metric-warn' : 'metric-good'" routerLink="/vehicles" [queryParams]="{filter: 'maintenance-due'}">
             <div class="metric-label">Maintenance Due</div>
             <div class="metric-value">{{ stats.vehiclesNeedingMaintenance }}</div>
             <div class="metric-sub">Vehicles needing service</div>
-          </div>
+          </a>
 
-          <div class="metric-card" [ngClass]="stats.clearinghouseIssues > 0 ? 'metric-critical' : 'metric-good'">
+          <a class="metric-card metric-card-link" [ngClass]="stats.clearinghouseIssues > 0 ? 'metric-critical' : 'metric-good'" routerLink="/drivers/dqf" [queryParams]="{filter: 'clearinghouse'}">
             <div class="metric-label">Clearinghouse</div>
             <div class="metric-value">{{ stats.clearinghouseIssues }}</div>
             <div class="metric-sub">Queries pending / issues</div>
-          </div>
+          </a>
+        </div>
+      </div>
+
+      <div class="panel panel-loads">
+        <div class="panel-header">
+          <h2>Loads progress</h2>
+          <span class="panel-tag">Dispatch</span>
+        </div>
+        <div class="loads-metrics-grid">
+          <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{status: 'dispatched'}">
+            <div class="metric-label">Dispatched</div>
+            <div class="metric-value">{{ stats.loadsDispatched ?? 0 }}</div>
+            <div class="metric-sub">Assigned, ready to move</div>
+          </a>
+          <a class="metric-card metric-card-link metric-info" routerLink="/loads" [queryParams]="{status: 'in_transit'}">
+            <div class="metric-label">In Transit</div>
+            <div class="metric-value">{{ stats.loadsInTransit ?? 0 }}</div>
+            <div class="metric-sub">Currently on the road</div>
+          </a>
+          <a class="metric-card metric-card-link metric-good" routerLink="/loads" [queryParams]="{status: 'delivered'}">
+            <div class="metric-label">Delivered</div>
+            <div class="metric-value">{{ stats.loadsDelivered ?? 0 }}</div>
+            <div class="metric-sub">Completed</div>
+          </a>
+          <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{status: 'cancelled'}">
+            <div class="metric-label">Canceled</div>
+            <div class="metric-value">{{ stats.loadsCanceled ?? 0 }}</div>
+            <div class="metric-sub">Cancelled loads</div>
+          </a>
+        </div>
+      </div>
+
+      <div class="panel panel-billing">
+        <div class="panel-header">
+          <h2>Billing status</h2>
+          <span class="panel-tag">Finance</span>
+        </div>
+        <div class="loads-metrics-grid loads-metrics-grid-5">
+          <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{billingStatus: 'pending'}">
+            <div class="metric-label">Pending</div>
+            <div class="metric-value">{{ stats.billingPending ?? 0 }}</div>
+            <div class="metric-sub">Awaiting billing</div>
+          </a>
+          <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{billingStatus: 'cancelled'}">
+            <div class="metric-label">Canceled</div>
+            <div class="metric-value">{{ stats.billingCanceled ?? 0 }}</div>
+            <div class="metric-sub">Billing canceled</div>
+          </a>
+          <a class="metric-card metric-card-link metric-info" routerLink="/loads" [queryParams]="{billingStatus: 'invoiced'}">
+            <div class="metric-label">Invoiced</div>
+            <div class="metric-value">{{ stats.billingInvoiced ?? 0 }}</div>
+            <div class="metric-sub">BOL received / Sent to factoring</div>
+          </a>
+          <a class="metric-card metric-card-link metric-warn" routerLink="/loads" [queryParams]="{billingStatus: 'funded'}">
+            <div class="metric-label">Funded</div>
+            <div class="metric-value">{{ stats.billingFunded ?? 0 }}</div>
+            <div class="metric-sub">Advance funded</div>
+          </a>
+          <a class="metric-card metric-card-link metric-good" routerLink="/loads" [queryParams]="{billingStatus: 'paid'}">
+            <div class="metric-label">Paid</div>
+            <div class="metric-value">{{ stats.billingPaid ?? 0 }}</div>
+            <div class="metric-sub">Payment received</div>
+          </a>
         </div>
       </div>
 
@@ -112,29 +175,53 @@
     <!-- Alerts Column -->
     <aside class="dashboard-column dashboard-column-narrow">
       <div class="panel panel-alerts">
-        <div class="panel-header">
+        <div class="panel-header panel-header-with-filters">
           <h2>Compliance alerts</h2>
           <span class="panel-tag panel-tag-warn">Real-time</span>
         </div>
-
-        <div *ngIf="alerts.length === 0" class="alerts-empty">
-          <div class="alerts-ok-icon">✓</div>
-          <p>No active compliance alerts.</p>
-          <span>FleetNeuron is not detecting any anomalies right now.</span>
+        <div class="alerts-filters">
+          <select [(ngModel)]="alertFilterType" class="filter-select">
+            <option value="all">All severity</option>
+            <option value="critical">Critical</option>
+            <option value="warning">Warning</option>
+          </select>
+          <select [(ngModel)]="alertFilterCategory" class="filter-select">
+            <option value="all">All categories</option>
+            <option value="driver">Driver</option>
+            <option value="vehicle">Vehicle</option>
+            <option value="maintenance">Maintenance</option>
+            <option value="compliance">Compliance</option>
+          </select>
         </div>
 
-        <div *ngFor="let alert of alerts" [class]="'alert-row ' + getAlertClass(alert.type)">
-          <div class="alert-pip"></div>
-          <div class="alert-content">
-            <div class="alert-top">
-              <span class="alert-category">{{ alert.category | uppercase }}</span>
-              <span *ngIf="alert.date" class="alert-date">{{ alert.date }}</span>
+        <div *ngIf="filteredAlerts.length === 0" class="alerts-empty">
+          <div class="alerts-ok-icon">✓</div>
+          <p>No compliance alerts match your filters.</p>
+          <span>{{ alerts.length === 0 ? 'FleetNeuron is not detecting any anomalies right now.' : 'Try changing the filter options above.' }}</span>
+        </div>
+
+        <ng-container *ngFor="let alert of filteredAlerts">
+          <a *ngIf="getAlertLink(alert)" [routerLink]="getAlertLink(alert)" [queryParams]="getAlertQueryParams(alert)" [class]="'alert-row alert-clickable ' + getAlertClass(alert.type)">
+            <div class="alert-pip"></div>
+            <div class="alert-content">
+              <div class="alert-top">
+                <span class="alert-category">{{ alert.category | uppercase }}</span>
+                <span *ngIf="alert.date" class="alert-date">{{ alert.date }}</span>
+              </div>
+              <div class="alert-message">{{ alert.message }}</div>
             </div>
-            <div class="alert-message">
-              {{ alert.message }}
+          </a>
+          <div *ngIf="!getAlertLink(alert)" [class]="'alert-row ' + getAlertClass(alert.type)">
+            <div class="alert-pip"></div>
+            <div class="alert-content">
+              <div class="alert-top">
+                <span class="alert-category">{{ alert.category | uppercase }}</span>
+                <span *ngIf="alert.date" class="alert-date">{{ alert.date }}</span>
+              </div>
+              <div class="alert-message">{{ alert.message }}</div>
             </div>
           </div>
-        </div>
+        </ng-container>
       </div>
     </aside>
   </section>

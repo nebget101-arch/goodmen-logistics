@@ -70,7 +70,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let driver of filteredDrivers">
+        <tr *ngFor="let driver of filteredDrivers" [class.driver-row-highlight]="highlightDriverId === driver.id">
           <td>
             <div class="drivers-cell-primary">{{ driver.firstName }} {{ driver.lastName }}</div>
             <div class="drivers-cell-secondary">{{ driver.email }}</div>
