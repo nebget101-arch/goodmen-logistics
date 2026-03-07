@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Shared routes, services, utils, middleware and storage for Goodmen Logistics",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test services/settlement-calculation.test.js"
+  },
   "dependencies": {
     "@goodmen/database": "file:../goodmen-database",
     "dotenv": "^17.2.4",

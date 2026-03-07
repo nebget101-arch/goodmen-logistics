@@ -1,0 +1,3 @@
+.report-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem; margin: 1rem 0; }
+.report-filters .filter-row { display: flex; flex-direction: column; gap: 0.25rem; }
+.report-filters label { font-size: 0.8rem; font-weight: 600; }

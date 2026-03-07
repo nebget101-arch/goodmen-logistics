@@ -9,7 +9,7 @@ const { query, getClient } = require('../internal/db');
 const { extractLoadFromPdf } = require('../services/load-ai-extractor');
 const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 
-const LOAD_STATUSES = ['DRAFT', 'NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
+const LOAD_STATUSES = ['DRAFT', 'NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
 const BILLING_STATUSES = ['PENDING', 'CANCELLED', 'CANCELED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
 const STOP_TYPES = ['PICKUP', 'DELIVERY'];
 const ATTACHMENT_TYPES = [

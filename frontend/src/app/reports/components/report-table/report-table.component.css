@@ -1,0 +1,4 @@
+.report-table { margin: 1rem 0; }
+.report-table .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.report-table .table-responsive { overflow-x: auto; }
+.report-table .pagination { margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }

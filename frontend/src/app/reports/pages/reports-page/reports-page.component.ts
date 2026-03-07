@@ -213,7 +213,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
         console.log('[Reports] Locations loaded successfully:', data?.length || 0, 'locations');
         this.locations = data || []; 
       },
-      error: (err) => {
+      error: (err: unknown) => {
         console.error('[Reports] Locations load error:', err);
         this.locations = [];
       },
@@ -319,7 +319,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
         this.workOrderTypeData = (data.workOrdersByType || []).map((r: any) => Number(r.count || 0));
         console.log('[Reports] Dashboard processing complete');
       },
-      error: (err) => { 
+      error: (err: unknown) => { 
         console.error('[Reports] Dashboard subscription error:', err);
         this.isLoading = false;
         this.loadingMessage = '';
@@ -351,7 +351,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
           this.financialSummary = res?.data?.summary || null;
           this.revenueByLocation = res?.data?.revenueByLocation || [];
         },
-        error: (err) => {
+        error: (err: unknown) => {
           console.error('[Reports] Financial subscription error:', err);
           this.isLoading = false;
           this.loadingMessage = '';
@@ -383,7 +383,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
           this.workOrderSummary = res?.data?.summary || null;
           this.workOrderStatus = res?.data?.byStatus || [];
         },
-        error: (err) => {
+        error: (err: unknown) => {
           console.error('[Reports] Work order subscription error:', err);
           this.isLoading = false;
           this.loadingMessage = '';
@@ -428,7 +428,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
         this.inventoryValuationRows = results?.valuation?.data || [];
         console.log('[Reports] Inventory processing complete');
       },
-      error: (err) => {
+      error: (err: unknown) => {
         console.error('[Reports] Inventory subscription error:', err);
         this.isLoading = false;
         this.loadingMessage = '';
@@ -473,7 +473,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
         this.vehicleMaintenanceRows = results?.maintenance?.data || [];
         console.log('[Reports] Vehicle processing complete');
       },
-      error: (err) => {
+      error: (err: unknown) => {
         console.error('[Reports] Vehicle subscription error:', err);
         this.isLoading = false;
         this.loadingMessage = '';
@@ -518,7 +518,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
         this.customerAgingRows = results?.aging?.data || [];
         console.log('[Reports] Customer processing complete');
       },
-      error: (err) => {
+      error: (err: unknown) => {
         console.error('[Reports] Customer subscription error:', err);
         this.isLoading = false;
         this.loadingMessage = '';
@@ -561,10 +561,10 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
     if (!this.kpiSummary) return [];
     return [
       { label: 'Total Revenue (MTD)', value: `$${this.formatNumber(this.kpiSummary.totalRevenueMtd).toFixed(2)}` },
-      { label: 'Open Work Orders', value: this.kpiSummary.openWorkOrders },
-      { label: 'Vehicles OOS', value: this.kpiSummary.vehiclesOutOfService },
+      { label: 'Open Work Orders', value: this.kpiSummary.openWorkOrders ?? 0 },
+      { label: 'Vehicles OOS', value: this.kpiSummary.vehiclesOutOfService ?? 0 },
       { label: 'Inventory Value', value: `$${this.formatNumber(this.kpiSummary.inventoryValue).toFixed(2)}` },
-      { label: 'Low Stock Items', value: this.kpiSummary.lowStockItems },
+      { label: 'Low Stock Items', value: this.kpiSummary.lowStockItems ?? 0 },
       { label: 'Avg WO Completion (hrs)', value: this.formatNumber(this.kpiSummary.avgCompletionHours).toFixed(2) }
     ];
   }
@@ -582,9 +582,9 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
   get workOrderKpis(): Array<{ label: string; value: string | number }> {
     if (!this.workOrderSummary) return [];
     return [
-      { label: 'Total WOs', value: this.workOrderSummary.total },
-      { label: 'Completed WOs', value: this.workOrderSummary.completed },
-      { label: 'Open WOs', value: this.workOrderSummary.open },
+      { label: 'Total WOs', value: this.workOrderSummary.total ?? 0 },
+      { label: 'Completed WOs', value: this.workOrderSummary.completed ?? 0 },
+      { label: 'Open WOs', value: this.workOrderSummary.open ?? 0 },
       { label: 'Avg Completion (hrs)', value: this.formatNumber(this.workOrderSummary.avgCompletionHours).toFixed(2) }
     ];
   }

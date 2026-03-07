@@ -341,40 +341,261 @@
   grid-column: span 3;
 }
 
-/* Pay section */
+/* Pay section – AI template card */
 .dispatch-drivers-dashboard .pay-section {
   border-top: 1px solid rgba(148, 163, 184, 0.25);
   padding-top: 14px;
   margin-top: 8px;
 }
 
-.dispatch-drivers-dashboard .pay-tabs {
+.dispatch-drivers-dashboard .pay-section.comp-section-card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.1), transparent 55%),
+    rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.dispatch-drivers-dashboard .comp-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
-.dispatch-drivers-dashboard .pay-tab {
+.dispatch-drivers-dashboard .pay-tab.chip-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: transparent;
-  font-size: 12px;
-  cursor: pointer;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.9);
+  font-size: 0.8rem;
   color: var(--text-dark);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
-.dispatch-drivers-dashboard .pay-tab.active {
-  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.3), transparent 55%),
-    rgba(30, 58, 138, 0.5);
-  border-color: rgba(59, 130, 246, 0.6);
+.dispatch-drivers-dashboard .pay-tab.chip-tab .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.dispatch-drivers-dashboard .pay-tab.chip-tab:hover:not(:disabled) {
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+.dispatch-drivers-dashboard .pay-tab.chip-tab.active {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.3), rgba(15, 23, 42, 0.98));
+  border-color: rgba(34, 197, 94, 0.9);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.35);
   color: #e2e8f0;
 }
 
-.dispatch-drivers-dashboard .pay-tab.disabled {
-  color: rgba(148, 163, 184, 0.6);
-  cursor: default;
+.dispatch-drivers-dashboard .pay-tab.chip-tab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dispatch-drivers-dashboard .pay-content {
+  margin-top: 4px;
+}
+
+.dispatch-drivers-dashboard .comp-block {
+  margin-bottom: 18px;
+}
+
+.dispatch-drivers-dashboard .comp-block:last-child {
+  margin-bottom: 0;
+}
+
+.dispatch-drivers-dashboard .comp-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-light);
+}
+
+.dispatch-drivers-dashboard .comp-section-title .material-symbols-outlined {
+  font-size: 18px;
+  color: rgba(59, 130, 246, 0.9);
+}
+
+.dispatch-drivers-dashboard .chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dispatch-drivers-dashboard .chip-group .chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.9);
+  font-size: 0.8rem;
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.dispatch-drivers-dashboard .chip-group .chip:hover:not(:disabled) {
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+.dispatch-drivers-dashboard .chip-group .chip.active {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.3), rgba(15, 23, 42, 0.98));
+  border-color: rgba(34, 197, 94, 0.9);
+  color: #e2e8f0;
+}
+
+.dispatch-drivers-dashboard .comp-hint {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.dispatch-drivers-dashboard .comp-value-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dispatch-drivers-dashboard .comp-value-field {
+  min-width: 140px;
+  max-width: 200px;
+}
+
+.dispatch-drivers-dashboard .comp-value-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.dispatch-drivers-dashboard .comp-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+.dispatch-drivers-dashboard .comp-fields-grid .field-wide {
+  grid-column: 1 / -1;
+}
+
+.dispatch-drivers-dashboard .comp-dates {
+  grid-template-columns: 1fr 1fr;
+  max-width: 320px;
+}
+
+.dispatch-drivers-dashboard .expense-matrix {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.dispatch-drivers-dashboard .expense-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.dispatch-drivers-dashboard .expense-label {
+  font-size: 0.8rem;
+  color: var(--text-dark);
+}
+
+.dispatch-drivers-dashboard .form-select-sm {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text-dark);
+  cursor: pointer;
+}
+
+.dispatch-drivers-dashboard .comp-notes {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.dispatch-drivers-dashboard .deductions-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  color: var(--text-light);
+  font-size: 0.875rem;
+}
+
+.dispatch-drivers-dashboard .deductions-empty .material-symbols-outlined {
+  font-size: 32px;
+  opacity: 0.6;
+}
+
+.dispatch-drivers-dashboard .deductions-empty .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dispatch-drivers-dashboard .deductions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dispatch-drivers-dashboard .deduction-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  font-size: 0.85rem;
+}
+
+.dispatch-drivers-dashboard .deduction-desc {
+  flex: 1;
+  color: var(--text-dark);
+}
+
+.dispatch-drivers-dashboard .deduction-amount {
+  font-weight: 600;
+  color: rgba(34, 197, 94, 0.95);
+}
+
+.dispatch-drivers-dashboard .badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.dispatch-drivers-dashboard .badge-success {
+  background: rgba(34, 197, 94, 0.25);
+  color: #86efac;
+}
+
+.dispatch-drivers-dashboard .badge-muted {
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text-light);
 }
 
 .dispatch-drivers-dashboard .pay-row {

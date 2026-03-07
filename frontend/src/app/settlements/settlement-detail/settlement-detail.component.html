@@ -1,0 +1,25 @@
+<div class="settlement-detail">
+  <div class="header">
+    <div class="header-left">
+      <button type="button" class="btn-back" (click)="backToList()" aria-label="Back to settlements">
+        <span class="material-symbols-outlined">arrow_back</span>
+      </button>
+      <div>
+        <h1>Settlement {{ settlementId || '—' }}</h1>
+        <p class="subtitle">Detail view — Phase 4</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail-card">
+    <div class="placeholder-content">
+      <span class="material-symbols-outlined placeholder-icon">receipt_long</span>
+      <h2>Detail view coming in Phase 4</h2>
+      <p>This page will show compensation summary, load earnings, scheduled and variable deductions, manual adjustments, totals, and approval actions once the backend settlement APIs are in place.</p>
+      <button type="button" class="btn-primary" (click)="backToList()">
+        <span class="material-symbols-outlined">list</span>
+        Back to list
+      </button>
+    </div>
+  </div>
+</div>

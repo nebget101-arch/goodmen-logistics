@@ -44,8 +44,9 @@
         <th>
           <select [(ngModel)]="driverFilters.type">
             <option value="">All</option>
-            <option value="company">company</option>
-            <option value="owner_operator">owner_operator</option>
+            <option value="company">Company</option>
+            <option value="owner_operator">Owner operator</option>
+            <option value="hired_driver">Hired driver</option>
           </select>
         </th>
         <th>
@@ -123,7 +124,7 @@
           <strong>{{ d.firstName }} {{ d.lastName }}</strong><br />
           <small class="muted">CDL {{ d.cdlClass || 'A' }} - {{ d.cdlState }} {{ d.cdlNumber }}</small>
         </td>
-        <td>{{ d.driverType || 'company' }}</td>
+        <td>{{ getDriverTypeLabel(d.driverType) }}</td>
         <td>{{ d.status }}</td>
         <td>{{ d.hireDate || '--' }}</td>
         <td>{{ d.terminationDate || '--' }}</td>
@@ -382,103 +383,179 @@
           </div>
         </div>
 
-        <!-- Pay section -->
-        <div class="pay-section">
-          <div class="pay-tabs">
-            <button class="pay-tab active" type="button">Pay rates</button>
-            <button class="pay-tab disabled" type="button">Scheduled payments/deductions</button>
-            <button class="pay-tab disabled" type="button">Additional payee</button>
-            <button class="pay-tab disabled" type="button">Notes</button>
+        <!-- Compensation / Pay section (AI template) -->
+        <div class="pay-section comp-section-card">
+          <div class="comp-tabs">
+            <button type="button" class="pay-tab chip-tab" [class.active]="payTab === 'rates'" (click)="setPayTab('rates')">
+              <span class="material-symbols-outlined">payments</span>
+              Pay rates
+            </button>
+            <button type="button" class="pay-tab chip-tab" [class.active]="payTab === 'deductions'" (click)="setPayTab('deductions')">
+              <span class="material-symbols-outlined">receipt_long</span>
+              Recurring deductions
+            </button>
+            <button type="button" class="pay-tab chip-tab" [class.active]="payTab === 'payee'" (click)="setPayTab('payee')">
+              <span class="material-symbols-outlined">person_add</span>
+              Additional payee
+            </button>
+            <button type="button" class="pay-tab chip-tab" [class.active]="payTab === 'notes'" (click)="setPayTab('notes')">
+              <span class="material-symbols-outlined">note</span>
+              Notes
+            </button>
           </div>
-          <div class="pay-content">
-            <div class="pay-row">
-              <div class="pay-col">
-                <div class="pay-label">Driver type</div>
-                <div class="pay-radio-row">
-                  <label>
-                    <input
-                      type="radio"
-                      name="driverType"
-                      value="company"
-                      [(ngModel)]="newDriver.driverType"
-                      (change)="onDriverTypeChange()"
-                    />
-                    Company driver
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="driverType"
-                      value="owner_operator"
-                      [(ngModel)]="newDriver.driverType"
-                      (change)="onDriverTypeChange()"
-                    />
-                    Owner operator
-                  </label>
-                </div>
+
+          <!-- Tab: Pay rates -->
+          <div class="pay-content" *ngIf="payTab === 'rates'">
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">badge</span> Compensation type</h4>
+              <div class="chip-group">
+                <button type="button" class="chip" [class.active]="newDriver.driverType === 'company'" (click)="newDriver.driverType = 'company'; onDriverTypeChange()">
+                  Company driver
+                </button>
+                <button type="button" class="chip" [class.active]="newDriver.driverType === 'owner_operator'" (click)="newDriver.driverType = 'owner_operator'; onDriverTypeChange()">
+                  Owner operator
+                </button>
+                <button type="button" class="chip" [class.active]="newDriver.driverType === 'hired_driver'" (click)="newDriver.driverType = 'hired_driver'; onDriverTypeChange()">
+                  Hired driver for owner
+                </button>
               </div>
-              <div class="pay-col">
-                <div class="pay-label">Pay basis</div>
-                <div class="pay-radio-row">
-                  <label>
-                    <input
-                      type="radio"
-                      name="payBasis"
-                      value="per_mile"
-                      [(ngModel)]="newDriver.payBasis"
-                      [disabled]="newDriver.driverType === 'owner_operator'"
-                    />
-                    Per mile
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="payBasis"
-                      value="percentage"
-                      [(ngModel)]="newDriver.payBasis"
-                    />
-                    Freight percentage
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="payBasis"
-                      value="flatpay"
-                      [(ngModel)]="newDriver.payBasis"
-                    />
-                    Flatpay
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="payBasis"
-                      value="hourly"
-                      [(ngModel)]="newDriver.payBasis"
-                    />
-                    Hourly
-                  </label>
+            </div>
+
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">trending_up</span> Pay model</h4>
+              <div class="chip-group">
+                <button type="button" class="chip" [class.active]="newDriver.payModel === 'per_mile'" [disabled]="newDriver.driverType === 'owner_operator'" (click)="setPayModel('per_mile')">
+                  Per mile
+                </button>
+                <button type="button" class="chip" [class.active]="newDriver.payModel === 'percentage'" (click)="setPayModel('percentage')">
+                  Percentage
+                </button>
+                <button type="button" class="chip" [class.active]="newDriver.payModel === 'flat_weekly'" (click)="setPayModel('flat_weekly')">
+                  Flat weekly
+                </button>
+                <button type="button" class="chip" [class.active]="newDriver.payModel === 'flat_per_load'" (click)="setPayModel('flat_per_load')">
+                  Flat per load
+                </button>
+              </div>
+            </div>
+
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">attach_money</span> Compensation value</h4>
+              <div class="comp-value-row">
+                <div class="comp-value-field" *ngIf="newDriver.payModel === 'per_mile'">
+                  <label for="perMile">CPM ($/mile)</label>
+                  <input id="perMile" type="number" step="0.01" class="form-input with-icon" placeholder="0.00" [(ngModel)]="newDriver.payRate" />
+                </div>
+                <div class="comp-value-field" *ngIf="newDriver.payModel === 'percentage'">
+                  <label for="payPercentage">Percentage (%)</label>
+                  <input id="payPercentage" type="number" step="0.01" class="form-input with-icon" placeholder="0" [(ngModel)]="newDriver.payPercentage" />
+                </div>
+                <div class="comp-value-field" *ngIf="newDriver.payModel === 'flat_weekly'">
+                  <label for="flatWeekly">Weekly amount ($)</label>
+                  <input id="flatWeekly" type="number" step="0.01" class="form-input with-icon" placeholder="0.00" [(ngModel)]="newDriver.flatWeeklyAmount" />
+                </div>
+                <div class="comp-value-field" *ngIf="newDriver.payModel === 'flat_per_load'">
+                  <label for="flatPerLoad">Per load amount ($)</label>
+                  <input id="flatPerLoad" type="number" step="0.01" class="form-input with-icon" placeholder="0.00" [(ngModel)]="newDriver.flatPerLoadAmount" />
                 </div>
               </div>
             </div>
-            <div class="pay-row">
-              <div class="pay-col">
-                <label for="perMile">Per mile</label>
-                <input
-                  id="perMile"
-                  type="number"
-                  class="form-input"
-                  [(ngModel)]="newDriver.payRate"
-                />
+
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">account_balance</span> Expense responsibility</h4>
+              <p class="comp-hint">Who bears each cost: Company, Driver, Owner, or Shared.</p>
+              <div class="expense-matrix">
+                <div class="expense-row" *ngFor="let e of expenseKeys">
+                  <span class="expense-label">{{ e.label }}</span>
+                  <select class="form-input form-select-sm" [value]="expenseResponsibility[e.key]" (change)="setExpenseResponsibility(e.key, $any($event.target).value)">
+                    <option *ngFor="let o of responsibilityOptions" [value]="o.value">{{ o.label }}</option>
+                  </select>
+                </div>
               </div>
-              <div class="pay-col">
-                <label for="payPercentage">Pay percentage</label>
-                <input
-                  id="payPercentage"
-                  type="number"
-                  class="form-input"
-                  [(ngModel)]="newDriver.payPercentage"
-                />
+            </div>
+
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">send_money</span> Pay routing</h4>
+              <div class="comp-fields-grid">
+                <div class="field">
+                  <label for="payableToPrimary">Primary payable to</label>
+                  <input id="payableToPrimary" class="form-input" placeholder="Driver or company name" [(ngModel)]="newDriver.payableTo" />
+                </div>
+                <div class="field">
+                  <label for="additionalPayeeRates">Additional payee (optional)</label>
+                  <input id="additionalPayeeRates" class="form-input" placeholder="Owner / external company" [(ngModel)]="newDriver.additionalPayee" />
+                </div>
+                <div class="field field-wide">
+                  <label for="payeeReason">Reason / scenario</label>
+                  <input id="payeeReason" class="form-input" placeholder="e.g. Owner truck with hired driver" [(ngModel)]="newDriver.payeeReason" />
+                </div>
               </div>
+            </div>
+
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">event</span> Effective dates</h4>
+              <div class="comp-fields-grid comp-dates">
+                <div class="field">
+                  <label for="effectiveStart">Start</label>
+                  <input id="effectiveStart" type="date" class="form-input" [(ngModel)]="newDriver.effectiveStart" />
+                </div>
+                <div class="field">
+                  <label for="effectiveEnd">End</label>
+                  <input id="effectiveEnd" type="date" class="form-input" [(ngModel)]="newDriver.effectiveEnd" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Recurring deductions -->
+          <div class="pay-content" *ngIf="payTab === 'deductions'">
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">receipt_long</span> Scheduled deductions</h4>
+              <p class="comp-hint">Weekly deductions that auto-apply to settlements. Backend support coming soon.</p>
+              <div class="deductions-empty" *ngIf="recurringDeductions.length === 0">
+                <span class="material-symbols-outlined">inbox</span>
+                <p>No recurring deductions yet.</p>
+                <button type="button" class="btn btn-secondary btn-sm" disabled title="Coming soon">
+                  <span class="material-symbols-outlined">add</span> Add deduction
+                </button>
+              </div>
+              <div class="deductions-list" *ngIf="recurringDeductions.length > 0">
+                <div class="deduction-item" *ngFor="let d of recurringDeductions">
+                  <span class="deduction-desc">{{ d.description }}</span>
+                  <span class="deduction-amount">${{ d.weeklyAmount | number:'1.2-2' }}/wk</span>
+                  <span class="badge" [class.badge-success]="d.active" [class.badge-muted]="!d.active">{{ d.active ? 'Active' : 'Inactive' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Additional payee -->
+          <div class="pay-content" *ngIf="payTab === 'payee'">
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">person_add</span> Pay routing</h4>
+              <p class="comp-hint">When the driver is paid and an owner/external company is also paid on the same settlement.</p>
+              <div class="comp-fields-grid">
+                <div class="field">
+                  <label for="payableToPayee">Primary payable to</label>
+                  <input id="payableToPayee" class="form-input" placeholder="Driver or company" [(ngModel)]="newDriver.payableTo" />
+                </div>
+                <div class="field">
+                  <label for="additionalPayee">Additional payee</label>
+                  <input id="additionalPayee" class="form-input" placeholder="Owner / external company" [(ngModel)]="newDriver.additionalPayee" />
+                </div>
+                <div class="field field-wide">
+                  <label for="payeeReasonTab">Reason</label>
+                  <input id="payeeReasonTab" class="form-input" placeholder="e.g. Owner truck, hired driver" [(ngModel)]="newDriver.payeeReason" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Notes -->
+          <div class="pay-content" *ngIf="payTab === 'notes'">
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">note</span> Compensation notes</h4>
+              <textarea class="form-input comp-notes" rows="4" placeholder="Audit notes, change history, or special terms…" [(ngModel)]="newDriver.compensationNotes"></textarea>
             </div>
           </div>
         </div>

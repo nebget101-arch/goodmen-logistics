@@ -51,6 +51,8 @@ const routes: Routes = [
   { path: 'onboard/:packetId', component: OnboardingPacketComponent },
   { path: 'customers', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
   { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
+  { path: 'settlements', loadChildren: () => import('./settlements/settlements.module').then(m => m.SettlementsModule) },
+  { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   { path: 'users/create', component: UserCreateComponent, canActivate: [AuthGuard, PermissionGuard], data: { permission: 'users.create' } },
   { path: 'login', component: LoginComponent },

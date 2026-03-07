@@ -64,6 +64,7 @@ const geoRouter = require('@goodmen/shared/routes/geo');
 const invoicesRouter = require('@goodmen/shared/routes/invoices');
 const creditRouter = require('@goodmen/shared/routes/credit');
 const dbExampleRouter = require('@goodmen/shared/routes/db-example');
+const settlementsRouter = require('@goodmen/shared/routes/settlements');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
@@ -74,6 +75,7 @@ app.use('/api/geo', geoRouter);
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/credit', creditRouter);
 app.use('/api/db-example', dbExampleRouter);
+app.use('/api/settlements', settlementsRouter);
 
 /**
  * @openapi
