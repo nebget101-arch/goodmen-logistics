@@ -69,6 +69,12 @@ export const PERMISSIONS = {
   INVOICES_FINALIZE: 'invoices.finalize',
   INVOICES_EXPORT: 'invoices.export',
 
+  // Settlements / payroll
+  SETTLEMENTS_VIEW: 'settlements.view',
+  SETTLEMENTS_CREATE: 'settlements.create',
+  SETTLEMENTS_EDIT: 'settlements.edit',
+  SETTLEMENTS_APPROVE: 'settlements.approve',
+
   // Parts / inventory
   PARTS_VIEW: 'parts.view',
   PARTS_EDIT: 'parts.edit',
@@ -114,5 +120,6 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
   sales: [PERMISSIONS.SALES_VIEW],
   inventory_reports: [PERMISSIONS.INVENTORY_REPORTS_VIEW, PERMISSIONS.PARTS_VIEW],
   invoices: [PERMISSIONS.INVOICES_VIEW],
+  settlements: [PERMISSIONS.SETTLEMENTS_VIEW],
   users_create: [PERMISSIONS.USERS_CREATE, PERMISSIONS.USERS_VIEW],
 };

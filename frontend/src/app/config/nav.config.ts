@@ -67,9 +67,10 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     sectionLabel: 'Accounting',
     sectionIcon: 'account_balance',
-    tab: 'invoices',
+    tabs: ['invoices', 'settlements'],
     children: [
       { path: '/invoices', label: 'Invoices', tab: 'invoices' },
+      { path: '/settlements', label: 'Settlements', tab: 'settlements' },
     ],
   },
 ];

@@ -23,7 +23,7 @@
           </td>
         </tr>
         <tr *ngIf="!pagedRows || pagedRows.length === 0">
-          <td [attr.colspan]="columns?.length || 1" class="text-center text-muted" style="padding: 16px;">
+          <td [attr.colspan]="columns.length || 1" class="text-center text-muted" style="padding: 16px;">
             No data for the selected filters.
           </td>
         </tr>

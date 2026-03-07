@@ -1,0 +1,294 @@
+/* Settlement wizard – AI template */
+.settlement-wizard {
+  padding: 8px 16px 24px;
+  width: 100%;
+  max-width: 800px;
+}
+
+.settlement-wizard .header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.settlement-wizard .header h1 {
+  font-size: 28px;
+  margin: 0 0 4px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.settlement-wizard .header .subtitle {
+  color: var(--text-light);
+  font-size: 14px;
+  margin: 0;
+}
+
+.settlement-wizard .header-actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(30, 41, 59, 0.8);
+  color: var(--text-dark);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.settlement-wizard .header-actions .btn-secondary:hover {
+  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.settlement-wizard .header-actions .btn-secondary .material-symbols-outlined {
+  font-size: 20px;
+}
+
+/* Step chips */
+.settlement-wizard .wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.settlement-wizard .step-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.9);
+  color: var(--text-dark);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.settlement-wizard .step-chip .step-icon {
+  font-size: 18px;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.settlement-wizard .step-chip:hover {
+  border-color: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.settlement-wizard .step-chip.active {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.3), rgba(15, 23, 42, 0.98));
+  border-color: rgba(34, 197, 94, 0.9);
+  color: #e2e8f0;
+}
+
+.settlement-wizard .step-chip.active .step-icon {
+  color: #86efac;
+}
+
+.settlement-wizard .step-chip.complete {
+  border-color: rgba(34, 197, 94, 0.5);
+  color: var(--text-dark);
+}
+
+.settlement-wizard .step-chip.complete .step-icon {
+  color: rgba(34, 197, 94, 0.9);
+}
+
+/* Card */
+.settlement-wizard .wizard-card {
+  border-radius: 16px;
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.12), transparent 50%),
+    rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.9), 0 0 0 1px rgba(15, 23, 42, 1);
+  padding: 24px;
+}
+
+.settlement-wizard .step-content {
+  margin-bottom: 24px;
+}
+
+.settlement-wizard .step-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.settlement-wizard .step-title .material-symbols-outlined {
+  font-size: 24px;
+  color: rgba(59, 130, 246, 0.9);
+}
+
+.settlement-wizard .step-hint {
+  margin: 0 0 16px;
+  font-size: 0.85rem;
+  color: var(--text-light);
+}
+
+.settlement-wizard .form-row,
+.settlement-wizard .form-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.settlement-wizard .create-period-block {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.settlement-wizard .create-period-block .form-row {
+  align-items: flex-end;
+}
+
+.settlement-wizard .field {
+  min-width: 200px;
+  flex: 1;
+}
+
+.settlement-wizard .field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-light);
+}
+
+.settlement-wizard .form-input,
+.settlement-wizard .form-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.98);
+  color: var(--text-dark);
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.settlement-wizard .form-input:focus,
+.settlement-wizard .form-select:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.9);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+}
+
+/* Summary */
+.settlement-wizard .summary-block {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.settlement-wizard .summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.settlement-wizard .summary-row:last-child {
+  border-bottom: none;
+}
+
+.settlement-wizard .summary-label {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+.settlement-wizard .summary-value {
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+/* Actions */
+.settlement-wizard .wizard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.settlement-wizard .wizard-actions .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.6);
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.4), transparent 55%),
+    rgba(22, 101, 52, 0.7);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.25);
+}
+
+.settlement-wizard .wizard-actions .btn-primary .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.settlement-wizard .wizard-actions .btn-primary:hover:not(:disabled) {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.5), transparent 55%),
+    rgba(22, 101, 52, 0.85);
+  border-color: rgba(34, 197, 94, 0.9);
+}
+
+.settlement-wizard .wizard-actions .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settlement-wizard .wizard-actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(30, 41, 59, 0.8);
+  color: var(--text-dark);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.settlement-wizard .wizard-actions .btn-secondary .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.settlement-wizard .wizard-actions .btn-secondary:hover:not(:disabled) {
+  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.settlement-wizard .wizard-actions .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settlement-wizard .alert-danger {
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  margin-bottom: 16px;
+}

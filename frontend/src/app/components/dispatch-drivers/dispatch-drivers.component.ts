@@ -43,6 +43,22 @@ export class DispatchDriversComponent implements OnInit {
     payRate: ''
   };
 
+  /** Active tab in driver modal: Pay rates | Recurring deductions | Additional payee | Notes */
+  payTab: 'rates' | 'deductions' | 'payee' | 'notes' = 'rates';
+
+  /** Expense responsibility: who bears each cost (company | driver | owner | shared) */
+  expenseResponsibility: Record<string, string> = {
+    fuel: '',
+    insurance: '',
+    eld: '',
+    trailerRent: '',
+    tolls: '',
+    repairs: ''
+  };
+
+  /** Placeholder for recurring deduction rules (backend TBD) */
+  recurringDeductions: { id: string; description: string; weeklyAmount: number; active: boolean }[] = [];
+
   newDriver: any = {
     firstName: '',
     lastName: '',
@@ -55,6 +71,9 @@ export class DispatchDriversComponent implements OnInit {
     payBasis: 'per_mile',
     payRate: null,
     payPercentage: null,
+    payModel: 'per_mile',
+    flatWeeklyAmount: null as number | null,
+    flatPerLoadAmount: null as number | null,
     cdlNumber: '',
     cdlState: '',
     cdlClass: 'A',
@@ -66,6 +85,11 @@ export class DispatchDriversComponent implements OnInit {
     state: '',
     zip: '',
     payableTo: '',
+    additionalPayee: '',
+    payeeReason: '',
+    effectiveStart: '',
+    effectiveEnd: '',
+    compensationNotes: '',
     coDriverId: '',
     truckId: '',
     trailerId: '',
@@ -184,11 +208,61 @@ export class DispatchDriversComponent implements OnInit {
   onDriverTypeChange(): void {
     if (this.newDriver.driverType === 'owner_operator') {
       this.newDriver.payBasis = 'percentage';
+      this.newDriver.payModel = 'percentage';
       this.newDriver.payRate = null;
+    }
+    if (this.newDriver.driverType === 'hired_driver') {
+      this.newDriver.payBasis = this.newDriver.payBasis || 'per_mile';
+      this.newDriver.payModel = this.newDriver.payModel || 'per_mile';
     }
   }
 
+  setPayTab(tab: 'rates' | 'deductions' | 'payee' | 'notes'): void {
+    this.payTab = tab;
+  }
+
+  setPayModel(model: string): void {
+    this.newDriver.payModel = model;
+    if (model === 'per_mile') this.newDriver.payBasis = 'per_mile';
+    else if (model === 'percentage') this.newDriver.payBasis = 'percentage';
+    else this.newDriver.payBasis = 'flatpay';
+  }
+
+  setExpenseResponsibility(key: string, value: string): void {
+    this.expenseResponsibility = { ...this.expenseResponsibility, [key]: value };
+  }
+
+  get expenseKeys(): { key: string; label: string }[] {
+    return [
+      { key: 'fuel', label: 'Fuel' },
+      { key: 'insurance', label: 'Insurance' },
+      { key: 'eld', label: 'ELD' },
+      { key: 'trailerRent', label: 'Trailer rent' },
+      { key: 'tolls', label: 'Tolls' },
+      { key: 'repairs', label: 'Repairs' }
+    ];
+  }
+
+  get responsibilityOptions(): { value: string; label: string }[] {
+    return [
+      { value: '', label: '—' },
+      { value: 'company', label: 'Company' },
+      { value: 'driver', label: 'Driver' },
+      { value: 'owner', label: 'Owner' },
+      { value: 'shared', label: 'Shared' }
+    ];
+  }
+
+  getDriverTypeLabel(type: string): string {
+    const t = (type || '').toString();
+    if (t === 'owner_operator') return 'Owner operator';
+    if (t === 'hired_driver') return 'Hired driver';
+    return 'Company';
+  }
+
   resetForm(): void {
+    this.payTab = 'rates';
+    this.expenseResponsibility = { fuel: '', insurance: '', eld: '', trailerRent: '', tolls: '', repairs: '' };
     this.newDriver = {
       firstName: '',
       lastName: '',
@@ -201,6 +275,9 @@ export class DispatchDriversComponent implements OnInit {
       payBasis: 'per_mile',
       payRate: null,
       payPercentage: null,
+      payModel: 'per_mile',
+      flatWeeklyAmount: null,
+      flatPerLoadAmount: null,
       cdlNumber: '',
       cdlState: '',
       cdlClass: 'A',
@@ -212,6 +289,11 @@ export class DispatchDriversComponent implements OnInit {
       state: '',
       zip: '',
       payableTo: '',
+      additionalPayee: '',
+      payeeReason: '',
+      effectiveStart: '',
+      effectiveEnd: '',
+      compensationNotes: '',
       coDriverId: '',
       truckId: '',
       trailerId: '',
@@ -274,67 +356,54 @@ export class DispatchDriversComponent implements OnInit {
     this.apiService.getDriver(driver.id).subscribe({
       next: (detail) => {
         const source = detail || driver;
-        this.newDriver = {
-          firstName: source.firstName || '',
-          lastName: source.lastName || '',
-          email: source.email || '',
-          phone: source.phone || '',
-          status: source.status || 'applicant',
-          applicationDate: this.normalizeDate(source.applicationDate),
-          dateOfBirth: this.normalizeDate(source.dateOfBirth),
-          driverType: source.driverType || 'company',
-          payBasis: source.payBasis || 'per_mile',
-          payRate: source.payRate || null,
-          payPercentage: source.payPercentage || null,
-          cdlNumber: source.cdlNumber || '',
-          cdlState: source.cdlState || '',
-          cdlClass: source.cdlClass || 'A',
-          cdlExpiry: this.normalizeDate(source.cdlExpiry),
-          hireDate: this.normalizeDate(source.hireDate),
-          address: source.address || '',
-          address2: source.address2 || '',
-          city: source.city || '',
-          state: source.state || '',
-          zip: source.zip || '',
-          payableTo: source.payableTo || '',
-          coDriverId: source.coDriverId || '',
-          truckId: source.truckId || '',
-          trailerId: source.trailerId || '',
-          fuelCardNumber: source.fuelCardNumber || ''
-        };
+        this.newDriver = this.buildDriverFromSource(source);
       },
       error: () => {
-        // Fallback to list row if detail fetch fails
-        this.newDriver = {
-          firstName: driver.firstName || '',
-          lastName: driver.lastName || '',
-          email: driver.email || '',
-          phone: driver.phone || '',
-          status: driver.status || 'applicant',
-          applicationDate: this.normalizeDate(driver.applicationDate),
-          dateOfBirth: this.normalizeDate(driver.dateOfBirth),
-          driverType: driver.driverType || 'company',
-          payBasis: driver.payBasis || 'per_mile',
-          payRate: driver.payRate || null,
-          payPercentage: driver.payPercentage || null,
-          cdlNumber: driver.cdlNumber || '',
-          cdlState: driver.cdlState || '',
-          cdlClass: driver.cdlClass || 'A',
-          cdlExpiry: this.normalizeDate(driver.cdlExpiry),
-          hireDate: this.normalizeDate(driver.hireDate),
-          address: driver.address || '',
-          address2: driver.address2 || '',
-          city: driver.city || '',
-          state: driver.state || '',
-          zip: driver.zip || '',
-          payableTo: driver.payableTo || '',
-          coDriverId: driver.coDriverId || '',
-          truckId: driver.truckId || '',
-          trailerId: driver.trailerId || '',
-          fuelCardNumber: driver.fuelCardNumber || ''
-        };
+        this.newDriver = this.buildDriverFromSource(driver);
       }
     });
+  }
+
+  private buildDriverFromSource(source: any): any {
+    const basis = (source.payBasis || 'per_mile').toString();
+    let payModel = basis;
+    if (basis === 'flatpay') payModel = source.flatPerLoadAmount != null ? 'flat_per_load' : 'flat_weekly';
+    return {
+      firstName: source.firstName || '',
+      lastName: source.lastName || '',
+      email: source.email || '',
+      phone: source.phone || '',
+      status: source.status || 'applicant',
+      applicationDate: this.normalizeDate(source.applicationDate),
+      dateOfBirth: this.normalizeDate(source.dateOfBirth),
+      driverType: source.driverType || 'company',
+      payBasis: source.payBasis || 'per_mile',
+      payRate: source.payRate ?? null,
+      payPercentage: source.payPercentage ?? null,
+      payModel: source.payModel || payModel,
+      flatWeeklyAmount: source.flatWeeklyAmount ?? (basis === 'flatpay' && source.payRate != null ? Number(source.payRate) : null),
+      flatPerLoadAmount: source.flatPerLoadAmount ?? null,
+      cdlNumber: source.cdlNumber || '',
+      cdlState: source.cdlState || '',
+      cdlClass: source.cdlClass || 'A',
+      cdlExpiry: this.normalizeDate(source.cdlExpiry),
+      hireDate: this.normalizeDate(source.hireDate),
+      address: source.address || '',
+      address2: source.address2 || '',
+      city: source.city || '',
+      state: source.state || '',
+      zip: source.zip || '',
+      payableTo: source.payableTo || '',
+      additionalPayee: source.additionalPayee || '',
+      payeeReason: source.payeeReason || '',
+      effectiveStart: source.effectiveStart || this.normalizeDate(source.effectiveStart) || '',
+      effectiveEnd: source.effectiveEnd || this.normalizeDate(source.effectiveEnd) || '',
+      compensationNotes: source.compensationNotes || '',
+      coDriverId: source.coDriverId || '',
+      truckId: source.truckId || '',
+      trailerId: source.trailerId || '',
+      fuelCardNumber: source.fuelCardNumber || ''
+    };
   }
 
   saveDriver(): void {
@@ -347,7 +416,24 @@ export class DispatchDriversComponent implements OnInit {
     this.duplicateError = null;
     this.existingDriverId = null;
 
-    const payload = { ...this.newDriver };
+    const payload: any = { ...this.newDriver };
+    if (payload.driverType === 'hired_driver') payload.driverType = 'owner_operator';
+    const pm = (this.newDriver.payModel || this.newDriver.payBasis || 'per_mile').toString();
+    if (pm === 'flat_weekly' && this.newDriver.flatWeeklyAmount != null) {
+      payload.payBasis = 'flatpay';
+      payload.payRate = this.newDriver.flatWeeklyAmount;
+    } else if (pm === 'flat_per_load' && this.newDriver.flatPerLoadAmount != null) {
+      payload.payBasis = 'flatpay';
+      payload.payRate = this.newDriver.flatPerLoadAmount;
+    }
+    delete payload.payModel;
+    delete payload.flatWeeklyAmount;
+    delete payload.flatPerLoadAmount;
+    delete payload.additionalPayee;
+    delete payload.payeeReason;
+    delete payload.effectiveStart;
+    delete payload.effectiveEnd;
+    delete payload.compensationNotes;
 
     if (this.editingDriverId) {
       this.apiService.updateDriver(this.editingDriverId, payload).subscribe({

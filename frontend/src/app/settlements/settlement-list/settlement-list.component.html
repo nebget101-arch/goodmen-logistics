@@ -1,0 +1,92 @@
+<div class="settlements-list">
+  <div class="header">
+    <div>
+      <h1>Settlements</h1>
+      <p class="subtitle">Driver payroll and settlement center</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn-primary" (click)="createNew()">
+        <span class="material-symbols-outlined">add_circle</span>
+        New settlement
+      </button>
+    </div>
+  </div>
+
+  <div class="filters-bar">
+    <div class="filter-group">
+      <label for="filter-week">Week starting</label>
+      <input id="filter-week" type="week" class="form-input" [(ngModel)]="filters.weekStart" (change)="loadSettlements()" />
+    </div>
+    <div class="filter-group">
+      <label for="filter-driver">Driver</label>
+      <select id="filter-driver" class="form-select" [(ngModel)]="filters.driverId" (change)="loadSettlements()">
+        <option value="">All drivers</option>
+        <option *ngFor="let d of drivers" [value]="d.id">{{ getDriverDisplayName(d) }}</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="filter-status">Status</label>
+      <select id="filter-status" class="form-select" [(ngModel)]="filters.status" (change)="loadSettlements()">
+        <option *ngFor="let o of statusOptions" [value]="o.value">{{ o.label }}</option>
+      </select>
+    </div>
+    <div class="filter-group filter-actions">
+      <button type="button" class="btn-secondary" (click)="clearFilters()">Clear filters</button>
+    </div>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+  <div *ngIf="loading" class="loading-wrap">
+    <div class="spinner"></div>
+    <span>Loading settlements…</span>
+  </div>
+
+  <div class="table-card" *ngIf="!loading">
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Settlement #</th>
+            <th scope="col">Period</th>
+            <th scope="col">Driver</th>
+            <th scope="col">Payable to</th>
+            <th scope="col">Additional payee</th>
+            <th scope="col">Status</th>
+            <th scope="col">Gross</th>
+            <th scope="col">Deductions</th>
+            <th scope="col">Net driver</th>
+            <th scope="col">Net additional</th>
+            <th scope="col">Updated</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of settlements">
+            <td><span class="cell-settlement-num">{{ s.settlementNumber }}</span></td>
+            <td>{{ s.periodStart }} – {{ s.periodEnd }}</td>
+            <td>{{ s.driverName }}</td>
+            <td>{{ s.payableTo }}</td>
+            <td>{{ s.additionalPayee || '—' }}</td>
+            <td><span class="badge" [ngClass]="getStatusClass(s.status)">{{ getStatusLabel(s.status) }}</span></td>
+            <td class="cell-amount">${{ s.gross | number:'1.2-2' }}</td>
+            <td class="cell-amount">${{ s.deductions | number:'1.2-2' }}</td>
+            <td class="cell-amount">${{ s.netDriver | number:'1.2-2' }}</td>
+            <td class="cell-amount">${{ s.netAdditionalPayee | number:'1.2-2' }}</td>
+            <td>{{ s.updatedAt | date:'short' }}</td>
+            <td>
+              <button type="button" class="btn-sm btn-outline" (click)="openSettlement(s.id)" aria-label="View settlement">
+                <span class="material-symbols-outlined">visibility</span>
+                View
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div *ngIf="!loading && settlements.length === 0" class="empty-state">
+      <span class="material-symbols-outlined empty-icon">receipt_long</span>
+      <p>No settlements match your filters.</p>
+      <button type="button" class="btn-primary" (click)="createNew()">Create first settlement</button>
+    </div>
+  </div>
+</div>

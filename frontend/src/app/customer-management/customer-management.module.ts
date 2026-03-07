@@ -6,21 +6,21 @@ import { CustomerManagementRoutingModule } from './customer-management-routing.m
 import { CustomersListComponent } from './customers-list/customers-list.component';
 import { CustomerFormComponent } from './customer-form/customer-form.component';
 import { CustomerDetailComponent } from './customer-detail/customer-detail.component';
-import { CustomerBulkUploadComponent } from '../components/customer-bulk-upload/customer-bulk-upload.component';
+import { CustomerBulkUploadModule } from '../components/customer-bulk-upload/customer-bulk-upload.module';
 
 @NgModule({
   declarations: [
     CustomersListComponent,
     CustomerFormComponent,
-    CustomerDetailComponent,
-    CustomerBulkUploadComponent
+    CustomerDetailComponent
   ],
   imports: [
     CommonModule,
     HttpClientModule,
     FormsModule,
     ReactiveFormsModule,
-    CustomerManagementRoutingModule
+    CustomerManagementRoutingModule,
+    CustomerBulkUploadModule
   ]
 })
 export class CustomerManagementModule {}

@@ -121,6 +121,43 @@ export class ApiService {
     return this.http.delete(`${this.baseUrl}/drivers/${id}`);
   }
 
+  // Settlements (payroll)
+  listSettlements(filters?: { driver_id?: string; payroll_period_id?: string; settlement_status?: string; settlement_number?: string; limit?: number; offset?: number }): Observable<any> {
+    let url = `${this.baseUrl}/settlements`;
+    const params = new URLSearchParams();
+    if (filters?.driver_id) params.set('driver_id', filters.driver_id);
+    if (filters?.payroll_period_id) params.set('payroll_period_id', filters.payroll_period_id);
+    if (filters?.settlement_status) params.set('settlement_status', filters.settlement_status);
+    if (filters?.settlement_number) params.set('settlement_number', filters.settlement_number);
+    if (filters?.limit != null) params.set('limit', String(filters.limit));
+    if (filters?.offset != null) params.set('offset', String(filters.offset));
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+    return this.http.get(url);
+  }
+
+  getSettlement(id: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/settlements/${id}`);
+  }
+
+  createSettlementDraft(payload: { payroll_period_id: string; driver_id: string; date_basis?: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/draft`, payload);
+  }
+
+  getPayrollPeriods(params?: { status?: string; limit?: number }): Observable<any> {
+    let url = `${this.baseUrl}/settlements/payroll-periods`;
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    const qs = q.toString();
+    if (qs) url += `?${qs}`;
+    return this.http.get(url);
+  }
+
+  createPayrollPeriod(payload: { period_start: string; period_end: string; run_type?: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/payroll-periods`, payload);
+  }
+
   // DQF Documents
   uploadDQFDocument(driverId: string, documentType: string, file: File, uploadedBy: string = 'admin'): Observable<any> {
     const formData = new FormData();

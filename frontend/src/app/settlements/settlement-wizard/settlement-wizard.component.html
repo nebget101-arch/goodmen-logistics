@@ -1,0 +1,142 @@
+<div class="settlement-wizard">
+  <div class="header">
+    <div>
+      <h1>New settlement</h1>
+      <p class="subtitle">Create a driver settlement for a pay period</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="cancel()">
+        <span class="material-symbols-outlined">close</span>
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <div class="wizard-steps">
+    <div
+      *ngFor="let step of steps"
+      class="step-chip"
+      [class.active]="isActive(step.id)"
+      [class.complete]="isComplete(step.id)"
+      (click)="setStep(step.id)"
+    >
+      <span class="material-symbols-outlined step-icon">{{ step.icon }}</span>
+      <span class="step-label">{{ step.label }}</span>
+    </div>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+
+  <div class="wizard-card">
+    <!-- Step: Period -->
+    <div class="step-content" *ngIf="currentStep === 'week'">
+      <h2 class="step-title">
+        <span class="material-symbols-outlined">calendar_month</span>
+        Pay period
+      </h2>
+      <p class="step-hint">Select an existing payroll period or create a new one.</p>
+      <div class="field">
+        <label for="wizardPeriod">Payroll period</label>
+        <select id="wizardPeriod" class="form-select" [(ngModel)]="payrollPeriodId" (change)="onPeriodSelect()">
+          <option value="">Select period</option>
+          <option *ngFor="let p of payrollPeriods" [value]="p.id">
+            {{ p.period_start }} – {{ p.period_end }} ({{ p.status }})
+          </option>
+        </select>
+      </div>
+      <div class="create-period-block">
+        <p class="step-hint">Or create a new period:</p>
+        <div class="form-row">
+          <div class="field">
+            <label for="newPeriodStart">Start</label>
+            <input id="newPeriodStart" type="date" class="form-input" [(ngModel)]="newPeriodStart" />
+          </div>
+          <div class="field">
+            <label for="newPeriodEnd">End</label>
+            <input id="newPeriodEnd" type="date" class="form-input" [(ngModel)]="newPeriodEnd" />
+          </div>
+          <button type="button" class="btn-secondary" (click)="createNewPeriod()" [disabled]="creatingPeriod">
+            {{ creatingPeriod ? 'Creating…' : 'Create period' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step: Driver -->
+    <div class="step-content" *ngIf="currentStep === 'driver'">
+      <h2 class="step-title">
+        <span class="material-symbols-outlined">badge</span>
+        Driver
+      </h2>
+      <p class="step-hint">Choose the driver for this settlement.</p>
+      <div class="field">
+        <label for="wizardDriver">Driver</label>
+        <select id="wizardDriver" class="form-select" [(ngModel)]="driverId" (change)="onDriverChange()">
+          <option value="">Select driver</option>
+          <option *ngFor="let d of drivers" [value]="d.id">
+            {{ getDriverDisplayName(d) }}
+          </option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Step: Date basis -->
+    <div class="step-content" *ngIf="currentStep === 'date_basis'">
+      <h2 class="step-title">
+        <span class="material-symbols-outlined">event</span>
+        Date basis for loads
+      </h2>
+      <p class="step-hint">Choose which date (pickup or delivery) is used to include loads in this period.</p>
+      <div class="field">
+        <label for="dateBasis">Date basis</label>
+        <select id="dateBasis" class="form-select" [(ngModel)]="dateBasis">
+          <option value="pickup">Pickup date</option>
+          <option value="delivery">Delivery date</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Step: Summary -->
+    <div class="step-content" *ngIf="currentStep === 'summary'">
+      <h2 class="step-title">
+        <span class="material-symbols-outlined">summarize</span>
+        Summary
+      </h2>
+      <p class="step-hint">Create a draft settlement. The backend will add eligible loads and recurring deductions; you can edit the settlement on the detail page.</p>
+      <div class="summary-block">
+        <div class="summary-row">
+          <span class="summary-label">Period</span>
+          <span class="summary-value">{{ periodStart }} – {{ periodEnd }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Driver</span>
+          <span class="summary-value">{{ driverName || '(not selected)' }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Date basis</span>
+          <span class="summary-value">{{ dateBasis === 'pickup' ? 'Pickup date' : 'Delivery date' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="wizard-actions">
+      <button type="button" class="btn-secondary" (click)="back()" [disabled]="currentStep === 'week'">
+        <span class="material-symbols-outlined">arrow_back</span>
+        Back
+      </button>
+      <ng-container *ngIf="currentStep !== 'summary'">
+        <button type="button" class="btn-primary" (click)="next()" [disabled]="!canProceed()">
+          Next
+          <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+      </ng-container>
+      <ng-container *ngIf="currentStep === 'summary'">
+        <button type="button" class="btn-primary" (click)="createDraft()" [disabled]="saving">
+          <span class="material-symbols-outlined" *ngIf="!saving">add_circle</span>
+          <span *ngIf="saving">Creating…</span>
+          <span *ngIf="!saving">Create draft settlement</span>
+        </button>
+      </ng-container>
+    </div>
+  </div>
+</div>
