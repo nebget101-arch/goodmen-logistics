@@ -101,7 +101,7 @@ services:
     plan: starter
     rootDir: backend/microservices/auth-users-service
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: npx knex migrate:latest --env production --knexfile ../../packages/goodmen-database/knexfile.js && npm start
     envVars:
       - key: NODE_PATH
         value: /opt/render/project/src/backend/microservices/auth-users-service/node_modules
