@@ -1,39 +1,247 @@
+/* Add User — AI-themed RBAC */
+
+.user-create-shell {
+  min-height: calc(100vh - 64px);
+  padding: 24px clamp(16px, 4vw, 40px);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(45, 212, 191, 0.12), transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.18), transparent 55%),
+    #020617;
+  color: #e5e7eb;
+}
+
+.user-create-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.user-create-header h1 {
+  margin: 0 0 4px;
+  font-size: clamp(1.6rem, 2.1vw, 2rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.user-create-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #9ca3af;
+}
+
+.user-create-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(45, 212, 191, 0.6);
+  background: radial-gradient(circle at 0 0, rgba(45, 212, 191, 0.2), transparent 55%),
+              rgba(15, 23, 42, 0.9);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: #a5f3fc;
+}
+
+.user-create-panel {
+  max-width: 640px;
+  margin: 0 auto;
+  background: radial-gradient(circle at 10% 0%, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.9));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.8);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.panel-tag {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: #a5f3fc;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(45, 212, 191, 0.2);
+}
+
 .user-create-form {
-  max-width: 400px;
-  margin: 2rem auto;
-  padding: 1rem;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  background: #fafafa;
+  padding: 24px;
 }
-.user-create-form h2 {
-  margin-bottom: 1rem;
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
-.user-create-form label {
+
+.form-field {
+  margin-bottom: 16px;
+}
+
+.form-field label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #94a3b8;
 }
-.user-create-form input,
-.user-create-form select {
+
+.form-input {
   width: 100%;
-  margin-bottom: 1rem;
-  padding: 0.5rem;
-  border-radius: 4px;
-  border: 1px solid #ccc;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #e5e7eb;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.user-create-form button {
-  padding: 0.5rem 1.5rem;
-  border-radius: 4px;
-  border: none;
-  background: #1976d2;
-  color: #fff;
-  font-weight: bold;
+
+.form-input::placeholder {
+  color: #64748b;
 }
-.success {
-  color: green;
-  margin-top: 1rem;
+
+.form-input:focus {
+  outline: none;
+  border-color: rgba(45, 212, 191, 0.6);
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.2);
 }
-.error {
-  color: red;
-  margin-top: 1rem;
+
+.form-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.form-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+.form-section-title .material-symbols-outlined {
+  font-size: 1.2rem;
+  color: rgba(45, 212, 191, 0.9);
+}
+
+.form-section-desc {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+.roles-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.6);
+  font-size: 0.85rem;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.role-chip:hover {
+  border-color: rgba(45, 212, 191, 0.5);
+  color: #e5e7eb;
+}
+
+.role-chip.selected {
+  border-color: rgba(45, 212, 191, 0.7);
+  background: rgba(45, 212, 191, 0.2);
+  color: #a5f3fc;
+}
+
+.role-chip input {
+  display: none;
+}
+
+.roles-summary {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-top: 8px;
+}
+
+.locations-select-wrap {
+  margin-bottom: 4px;
+}
+
+.form-select-multi {
+  width: 100%;
+  padding: 10px;
+  font-size: 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #e5e7eb;
+}
+
+.form-select-multi option {
+  padding: 4px 8px;
+}
+
+.alert {
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.alert-success {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  color: #86efac;
+}
+
+.alert-error {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.form-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }

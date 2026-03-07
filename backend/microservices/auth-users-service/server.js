@@ -57,11 +57,15 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 const authRouter = require('@goodmen/shared/routes/auth');
 const usersRouter = require('@goodmen/shared/routes/users');
 const communicationPreferencesRouter = require('@goodmen/shared/routes/communication-preferences');
+const rolesRouter = require('@goodmen/shared/routes/roles');
+const permissionsRouter = require('@goodmen/shared/routes/permissions');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/roles', rolesRouter);
+app.use('/api/permissions', permissionsRouter);
 app.use('/api/communication-preferences', communicationPreferencesRouter);
 
 /**

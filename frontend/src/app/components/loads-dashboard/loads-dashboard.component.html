@@ -8,40 +8,42 @@
         <div class="search-box">
         <input type="text" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
       </div>
-      <div class="dropdown new-load-dropdown" (click)="$event.stopPropagation()" *ngIf="!isDriverRole">
-        <button class="btn btn-primary" (click)="showNewLoadMenu = !showNewLoadMenu">
-          New Load
-          <span class="material-symbols-outlined">expand_more</span>
-        </button>
-        <div class="dropdown-menu new-load-menu" *ngIf="showNewLoadMenu">
-          <button
-            type="button"
-            class="new-load-item"
-            (click)="openAutoCreate()"
-          >
-            <span class="new-load-icon ai">
-              <span class="material-symbols-outlined">auto_awesome</span>
-            </span>
-            <span class="new-load-text">
-              <span class="title">Auto-Create from PDF</span>
-              <span class="subtitle">Automatically extract load details from a PDF using AI.</span>
-            </span>
+      <ng-container *ngIf="!isDriverRole">
+        <div class="dropdown new-load-dropdown" (click)="$event.stopPropagation()" *appHasPermission="'loads.create'">
+          <button class="btn btn-primary" (click)="showNewLoadMenu = !showNewLoadMenu">
+            New Load
+            <span class="material-symbols-outlined">expand_more</span>
           </button>
-          <button
-            type="button"
-            class="new-load-item"
-            (click)="openManualEntry()"
-          >
-            <span class="new-load-icon">
-              <span class="material-symbols-outlined">edit_note</span>
-            </span>
-            <span class="new-load-text">
-              <span class="title">Manual Load Entry</span>
-              <span class="subtitle">Enter load information yourself with full control.</span>
-            </span>
-          </button>
+          <div class="dropdown-menu new-load-menu" *ngIf="showNewLoadMenu">
+            <button
+              type="button"
+              class="new-load-item"
+              (click)="openAutoCreate()"
+            >
+              <span class="new-load-icon ai">
+                <span class="material-symbols-outlined">auto_awesome</span>
+              </span>
+              <span class="new-load-text">
+                <span class="title">Auto-Create from PDF</span>
+                <span class="subtitle">Automatically extract load details from a PDF using AI.</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="new-load-item"
+              (click)="openManualEntry()"
+            >
+              <span class="new-load-icon">
+                <span class="material-symbols-outlined">edit_note</span>
+              </span>
+              <span class="new-load-text">
+                <span class="title">Manual Load Entry</span>
+                <span class="subtitle">Enter load information yourself with full control.</span>
+              </span>
+            </button>
+          </div>
         </div>
-      </div>
+      </ng-container>
     </div>
   </div>
 

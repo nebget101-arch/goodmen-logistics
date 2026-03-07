@@ -91,6 +91,8 @@ app.use('/api/audit', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/scan-bridge', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/auth', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/users', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
+app.use('/api/roles', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
+app.use('/api/permissions', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use(
   '/api/communication-preferences',
   buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users')

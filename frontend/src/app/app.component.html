@@ -11,92 +11,59 @@
       <span class="brand-wordmark">FleetNeuron</span>
       <span class="brand-tagline">AI fleet intelligence</span>
     </div>
-    <nav class="sidebar-nav" (click)="onSidebarNavClick($event)" (keydown.enter)="closeSidebar()">
+    <nav class="sidebar-nav" (click)="onSidebarNavClick($event); closeUserMenu()" (keydown.enter)="closeSidebar()">
       <ul class="nav-links">
-        <li *ngIf="canSee('dashboard')">
-          <a routerLink="/dashboard" routerLinkActive="active">
-            <span class="nav-icon material-symbols-outlined">dashboard</span>
-            Dashboard
-          </a>
-        </li>
-        <li *ngIf="canSee('loads')">
-          <a routerLink="/loads" routerLinkActive="active">
-            <span class="nav-icon material-symbols-outlined">route</span>
-            Loads
-          </a>
-        </li>
-        <!-- Dispatch / Admin drivers view -->
-        <li *ngIf="canSee('drivers') && (getRole() === 'dispatch' || getRole() === 'admin')">
-          <a routerLink="/drivers" routerLinkActive="active">
-            <span class="nav-icon material-symbols-outlined">badge</span>
-            Drivers
-          </a>
-        </li>
-        <li class="nav-section" *ngIf="canSee('vehicles')">
-          <button class="section-toggle" (click)="toggleEquipment()" type="button" [attr.aria-expanded]="equipmentExpanded">
-            <span class="section-icon material-symbols-outlined">deployed_code</span>
-            <span class="section-label">Equipment</span>
-            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="equipmentExpanded">chevron_right</span>
-          </button>
-        </li>
-        <li *ngIf="canSee('vehicles') && equipmentExpanded" class="nav-subsection"><a routerLink="/vehicles" routerLinkActive="active">Trucks</a></li>
-        <li *ngIf="canSee('vehicles') && equipmentExpanded" class="nav-subsection"><a routerLink="/trailers" routerLinkActive="active">Trailers</a></li>
-        <li *ngIf="canSee('hos') || canSee('audit')" class="nav-section">
-          <button class="section-toggle" (click)="toggleSafety()" type="button" [attr.aria-expanded]="safetyExpanded">
-            <span class="section-icon material-symbols-outlined">shield_person</span>
-            <span class="section-label">Safety</span>
-            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="safetyExpanded">chevron_right</span>
-          </button>
-        </li>
-        <li *ngIf="canSee('hos') && safetyExpanded" class="nav-subsection"><a routerLink="/hos" routerLinkActive="active">HOS</a></li>
-        <li *ngIf="canSee('drivers') && safetyExpanded && (getRole() === 'safety' || getRole() === 'admin')" class="nav-subsection">
-          <a routerLink="/drivers/dqf" routerLinkActive="active">DQF</a>
-        </li>
-        <li *ngIf="canSee('audit') && safetyExpanded" class="nav-subsection"><a routerLink="/audit" routerLinkActive="active">Audit</a></li>
-        <li *ngIf="canSee('maintenance') || canSee('parts') || canSee('customers')" class="nav-section">
-          <button class="section-toggle" (click)="toggleFleet()" type="button" [attr.aria-expanded]="fleetExpanded">
-            <span class="section-icon material-symbols-outlined">precision_manufacturing</span>
-            <span class="section-label">Fleet</span>
-            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="fleetExpanded">chevron_right</span>
-          </button>
-        </li>
-        <li *ngIf="canSee('maintenance') && fleetExpanded" class="nav-subsection"><a routerLink="/maintenance" routerLinkActive="active">Maintenance</a></li>
-        <li *ngIf="canSee('customers') && fleetExpanded" class="nav-subsection"><a routerLink="/customers" routerLinkActive="active">Customers</a></li>
-        <li *ngIf="canSee('parts') || canSee('barcodes') || canSee('receiving') || canSee('transfers') || canSee('sales') || canSee('inventory_reports')" class="nav-section">
-          <button class="section-toggle" (click)="toggleInventory()" type="button" [attr.aria-expanded]="inventoryExpanded">
-            <span class="section-icon material-symbols-outlined">inventory_2</span>
-            <span class="section-label">Inventory</span>
-            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="inventoryExpanded">chevron_right</span>
-          </button>
-        </li>
-        <li *ngIf="canSee('parts') && inventoryExpanded" class="nav-subsection"><a routerLink="/parts" routerLinkActive="active">Parts</a></li>
-        <li *ngIf="canSee('barcodes') && inventoryExpanded" class="nav-subsection"><a routerLink="/barcodes" routerLinkActive="active">Barcode Management</a></li>
-        <li *ngIf="canSee('receiving') && inventoryExpanded" class="nav-subsection"><a routerLink="/receiving" routerLinkActive="active">Warehouse Receiving</a></li>
-        <li *ngIf="canSee('transfers') && inventoryExpanded" class="nav-subsection"><a routerLink="/inventory-transfers" routerLinkActive="active">Transfers</a></li>
-        <li *ngIf="canSee('sales') && inventoryExpanded" class="nav-subsection"><a routerLink="/direct-sales" routerLinkActive="active">Direct Sales</a></li>
-        <li *ngIf="canSee('inventory_reports') && inventoryExpanded" class="nav-subsection"><a routerLink="/inventory-reports" routerLinkActive="active">Reports</a></li>
-        <li *ngIf="canSee('invoices')" class="nav-section">
-          <button class="section-toggle" (click)="toggleAccounting()" type="button" [attr.aria-expanded]="accountingExpanded">
-            <span class="section-icon material-symbols-outlined">account_balance</span>
-            <span class="section-label">Accounting</span>
-            <span class="toggle-chevron material-symbols-outlined" [class.rotated]="accountingExpanded">chevron_right</span>
-          </button>
-        </li>
-        <li *ngIf="canSee('invoices') && accountingExpanded" class="nav-subsection"><a routerLink="/invoices" routerLinkActive="active">Invoices</a></li>
-        <li *ngIf="userRole === 'admin'">
-          <a routerLink="/users/create" routerLinkActive="active">
-            <span class="nav-icon material-symbols-outlined">person_add</span>
-            Add User
-          </a>
-        </li>
+        <ng-container *ngFor="let link of navTopLinks">
+          <li *ngIf="access.canSee(link.tab)">
+            <a [routerLink]="link.path" routerLinkActive="active">
+              <span class="nav-icon material-symbols-outlined" *ngIf="link.icon">{{ link.icon }}</span>
+              {{ link.label }}
+            </a>
+          </li>
+        </ng-container>
+        <ng-container *ngFor="let section of navSections; let i = index">
+          <li class="nav-section" *ngIf="canSeeSection(section)">
+            <button class="section-toggle" type="button" [attr.aria-expanded]="getSectionExpanded(i)"
+              (click)="toggleSection(i)">
+              <span class="section-icon material-symbols-outlined">{{ section.sectionIcon }}</span>
+              <span class="section-label">{{ section.sectionLabel }}</span>
+              <span class="toggle-chevron material-symbols-outlined" [class.rotated]="getSectionExpanded(i)">chevron_right</span>
+            </button>
+          </li>
+          <ng-container *ngIf="getSectionExpanded(i)">
+            <ng-container *ngFor="let child of section.children">
+              <li *ngIf="canSeeLink(child)" class="nav-subsection">
+                <a [routerLink]="child.path" routerLinkActive="active">{{ child.label }}</a>
+              </li>
+            </ng-container>
+          </ng-container>
+        </ng-container>
       </ul>
     </nav>
     <div class="sidebar-actions">
-      <button (click)="logout()" class="btn btn-ghost">Logout</button>
+      <div class="user-menu-wrap" (click)="$event.stopPropagation()">
+        <button type="button" class="user-menu-btn" (click)="toggleUserMenu()" aria-label="User menu" [attr.aria-expanded]="userMenuOpen">
+          <span class="material-symbols-outlined">account_circle</span>
+          <span class="user-menu-label">Account</span>
+        </button>
+        <div class="user-dropdown" *ngIf="userMenuOpen">
+          <a routerLink="/profile" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+            <span class="material-symbols-outlined">person</span> Profile
+          </a>
+          <ng-container *ngIf="access.canSee(navAddUser.tab)">
+            <a routerLink="/users/create" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">person_add</span> Add User
+            </a>
+          </ng-container>
+          <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
+            <span class="material-symbols-outlined">logout</span> Logout
+          </button>
+        </div>
+      </div>
     </div>
   </aside>
 
-  <main class="content">
+  <main class="content" (click)="closeUserMenu()">
     <div class="mobile-topbar" *ngIf="isLoggedIn()">
       <button class="mobile-menu-btn" type="button" (click)="toggleSidebar()" [attr.aria-expanded]="sidebarOpen" aria-label="Toggle menu">
         ☰
@@ -107,7 +74,24 @@
         <span class="brand-tagline">AI fleet intelligence</span>
       </div>
 
-      <button (click)="logout()" class="btn btn-ghost mobile-logout">Logout</button>
+      <div class="user-menu-wrap mobile-user-menu" (click)="$event.stopPropagation()">
+        <button type="button" class="user-menu-btn user-menu-btn-mobile" (click)="toggleUserMenu()" aria-label="User menu" [attr.aria-expanded]="userMenuOpen">
+          <span class="material-symbols-outlined">account_circle</span>
+        </button>
+        <div class="user-dropdown user-dropdown-mobile" *ngIf="userMenuOpen">
+          <a routerLink="/profile" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+            <span class="material-symbols-outlined">person</span> Profile
+          </a>
+          <ng-container *ngIf="access.canSee(navAddUser.tab)">
+            <a routerLink="/users/create" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">person_add</span> Add User
+            </a>
+          </ng-container>
+          <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
+            <span class="material-symbols-outlined">logout</span> Logout
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="topbar" *ngIf="!isLoggedIn()">

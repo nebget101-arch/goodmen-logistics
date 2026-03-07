@@ -48,8 +48,27 @@ export class ApiService {
   }
 
   // Users
-  createUser(user: { username?: string; password: string; role: string; firstName?: string; lastName?: string; email?: string }): Observable<any> {
-    return this.http.post(`${this.baseUrl}/users`, user);
+  createUser(user: {
+    username?: string;
+    password: string;
+    role?: string;
+    roles?: string[];
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    locationIds?: string[];
+  }): Observable<any> {
+    const payload: any = {
+      username: user.username,
+      password: user.password,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+    };
+    payload.role = user.roles?.[0] ?? user.role ?? 'dispatcher';
+    if (user.roles?.length) payload.roles = user.roles;
+    if (user.locationIds?.length) payload.locationIds = user.locationIds;
+    return this.http.post(`${this.baseUrl}/users`, payload);
   }
 
   getTechnicians(): Observable<any> {

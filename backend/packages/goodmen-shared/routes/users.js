@@ -2,10 +2,13 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../internal/db');
-const authMiddleware = require('./auth-middleware');
+const knex = require('../internal/db').knex;
 const baseAuth = require('../middleware/auth-middleware');
+const authWithRole = require('./auth-middleware');
+const { loadUserRbac, requirePermission, requireAnyPermission } = require('../middleware/rbac-middleware');
 
 const router = express.Router();
+const rbac = [baseAuth, loadUserRbac];
 
 function normalizeUsername(value) {
   return (value || '').toString().trim().toLowerCase().replace(/\s+/g, '.');
@@ -58,6 +61,59 @@ router.get('/technicians', async (req, res) => {
   }
 });
 
+// ---- RBAC: user access (must be before /:id) ----
+router.get('/:id/access', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const user = await knex('users').where('id', req.params.id).first('id');
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    const [roles, locationRows] = await Promise.all([
+      knex('user_roles as ur').join('roles as r', 'ur.role_id', 'r.id').where('ur.user_id', req.params.id).select('r.id', 'r.code', 'r.name'),
+      knex('user_locations as ul').join('locations as l', 'ul.location_id', 'l.id').where('ul.user_id', req.params.id).select('l.id', 'l.code', 'l.name')
+    ]);
+    res.json({ success: true, data: { userId: req.params.id, roles, locations: locationRows } });
+  } catch (err) {
+    console.error('[users] access failed', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/:id/roles', rbac, requirePermission('users.manage'), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const user = await knex('users').where('id', req.params.id).first('id');
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    const roleIds = Array.isArray(req.body.roleIds) ? req.body.roleIds : [];
+    await knex('user_roles').where('user_id', req.params.id).del();
+    if (roleIds.length) {
+      await knex('user_roles').insert(roleIds.map((rid) => ({ user_id: req.params.id, role_id: rid })));
+    }
+    const roles = await knex('user_roles as ur').join('roles as r', 'ur.role_id', 'r.id').where('ur.user_id', req.params.id).select('r.id', 'r.code', 'r.name');
+    res.json({ success: true, data: roles });
+  } catch (err) {
+    console.error('[users] put roles failed', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/:id/locations', rbac, requirePermission('users.manage'), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const user = await knex('users').where('id', req.params.id).first('id');
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    const locationIds = Array.isArray(req.body.locationIds) ? req.body.locationIds : [];
+    await knex('user_locations').where('user_id', req.params.id).del();
+    if (locationIds.length) {
+      await knex('user_locations').insert(locationIds.map((lid) => ({ user_id: req.params.id, location_id: lid })));
+    }
+    const locations = await knex('user_locations as ul').join('locations as l', 'ul.location_id', 'l.id').where('ul.user_id', req.params.id).select('l.id', 'l.code', 'l.name');
+    res.json({ success: true, data: locations });
+  } catch (err) {
+    console.error('[users] put locations failed', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -74,8 +130,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Only admin can create users
-router.post('/', authMiddleware(['admin']), async (req, res) => {
+// Only admin can create users (legacy role check; RBAC users.manage can be added later)
+router.post('/', authWithRole(['admin']), async (req, res) => {
   const { username, password, role, firstName, lastName, email } = req.body;
   if (!password || !role) {
     return res.status(400).json({ error: 'Password and role are required.' });

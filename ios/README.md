@@ -22,7 +22,7 @@ Driver app for **iPhone and iPad**: sign in, view **My Loads**, and upload docum
 
 2. **Add the app source**
    - In the Project Navigator, **delete** the default `ContentView.swift` and `FleetNeuronDriverApp.swift` that Xcode created (if any).
-   - **Add** the contents of the `FleetNeuronDriver` folder:
+   - **Add** the contents of the `FleetNeuronDriver` folder (including the **Theme** folder with `AppTheme.swift`):
      - **Add Files to "FleetNeuron Driver"...** → select the `FleetNeuronDriver` folder.
      - Ensure **Copy items if needed** is unchecked if the folder is already under the repo.
      - Ensure your app target is checked for all added files.

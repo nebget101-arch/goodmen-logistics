@@ -83,26 +83,36 @@ struct DocumentUploadView: View {
                 if let err = errorMessage {
                     Section {
                         Text(err)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(AppTheme.danger)
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.background)
             .navigationTitle("Upload document")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .foregroundStyle(AppTheme.textSecondary)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Upload") { Task { await upload() } }
                         .disabled(uploading || selectedData == nil)
+                        .foregroundStyle(AppTheme.brandCyan)
                 }
             }
             .overlay {
                 if uploading {
-                    ProgressView("Uploading…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(.ultraThinMaterial)
+                    ZStack {
+                        Color.black.opacity(0.5)
+                            .ignoresSafeArea()
+                        ProgressView("Uploading…")
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .padding(24)
+                            .background(AppTheme.cardBackground)
+                            .cornerRadius(16)
+                    }
                 }
             }
         }

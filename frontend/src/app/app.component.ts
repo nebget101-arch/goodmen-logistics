@@ -3,6 +3,8 @@ import { Router } from '@angular/router';
 import { OnboardingModalService } from './services/onboarding-modal.service';
 import { ApiService } from './services/api.service';
 import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.service';
+import { AccessControlService } from './services/access-control.service';
+import { NAV_TOP_LINKS, NAV_SECTIONS, NAV_ADD_USER, NavSection, NavLink } from './config/nav.config';
 
 @Component({
   selector: 'app-root',
@@ -21,13 +23,8 @@ import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.s
 })
 export class AppComponent implements OnInit {
   title = 'FleetNeuron AI';
-  userRole: string | null = null;
-  equipmentExpanded = true;
-  safetyExpanded = true;
-  fleetExpanded = true;
-  accountingExpanded = true;
-  inventoryExpanded = true;
   sidebarOpen = false;
+  userMenuOpen = false;
   aiChatOpen = false;
   aiConversationId: string | null = null;
   aiMessages: AiChatMessage[] = [];
@@ -35,11 +32,18 @@ export class AppComponent implements OnInit {
   aiInput = '';
   aiSending = false;
 
+  readonly navTopLinks = NAV_TOP_LINKS;
+  readonly navSections = NAV_SECTIONS;
+  readonly navAddUser = NAV_ADD_USER;
+  /** Section expand state by index (Equipment=0, Safety=1, Fleet=2, Inventory=3, Accounting=4). */
+  sectionExpanded: boolean[] = [true, true, true, true, true];
+
   constructor(
     private router: Router,
     public onboardingModal: OnboardingModalService,
     private apiService: ApiService,
-    private aiChatService: AiChatService
+    private aiChatService: AiChatService,
+    public access: AccessControlService
   ) {}
 
   isLoggedIn(): boolean {
@@ -129,49 +133,42 @@ export class AppComponent implements OnInit {
     }
   }
 
-  logout() {
+  logout(): void {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
+    this.access.clearAccess();
     this.router.navigate(['/login']);
-    this.userRole = null;
   }
 
-  getRole(): string | null {
-    const role = localStorage.getItem('role');
-    return role ? role.toLowerCase().trim() : null;
-  }
-
-  canSee(tab: string): boolean {
-    const role = this.getRole();
-    if (!role) return false;
-    if (role === 'admin') return true;
-
-    if (role === 'safety') return ['dashboard', 'drivers', 'vehicles', 'hos', 'audit'].includes(tab);
-    if (role === 'fleet') return ['maintenance'].includes(tab);
-    if (role === 'dispatch') return ['loads', 'drivers'].includes(tab);
-    if (role === 'driver') return ['loads'].includes(tab);
-
-    if (role === 'service_advisor') {
-      return ['customers', 'invoices', 'sales', 'inventory_reports'].includes(tab);
-    }
-
-    if (role === 'accounting') {
-      return ['customers', 'invoices', 'sales', 'inventory_reports'].includes(tab);
-    }
-
-    if (role === 'technician') {
-      return ['maintenance', 'customers', 'parts', 'receiving', 'transfers', 'inventory_reports'].includes(tab);
-    }
-
-    if (role === 'parts_manager' || role === 'shop_manager') {
-      return ['parts', 'barcodes', 'receiving', 'transfers', 'sales', 'inventory_reports'].includes(tab);
-    }
-
+  /** Whether a nav section should be visible (uses tab or tabs from config). */
+  canSeeSection(section: NavSection): boolean {
+    if (section.tabs?.length) return this.access.canSeeAny(section.tabs);
+    if (section.tab) return this.access.canSee(section.tab);
     return false;
   }
 
+  /** Whether a section child link should be visible (optional role filter). */
+  canSeeLink(link: NavLink): boolean {
+    if (!this.access.canSee(link.tab)) return false;
+    if (link.roles?.length) return this.access.hasAnyRole(link.roles);
+    return true;
+  }
+
+  getSectionExpanded(index: number): boolean {
+    return this.sectionExpanded[index] ?? true;
+  }
+
+  toggleSection(index: number): void {
+    if (index >= 0 && index < this.sectionExpanded.length) {
+      this.sectionExpanded[index] = !this.sectionExpanded[index];
+      this.sectionExpanded = [...this.sectionExpanded];
+    }
+  }
+
   ngOnInit(): void {
-    this.userRole = this.getRole();
+    if (this.isLoggedIn() && !this.access.isLoaded()) {
+      this.access.loadAccess().subscribe();
+    }
   }
 
   toggleSidebar(): void {
@@ -182,6 +179,15 @@ export class AppComponent implements OnInit {
     this.sidebarOpen = false;
   }
 
+  toggleUserMenu(): void {
+    this.userMenuOpen = !this.userMenuOpen;
+  }
+
+  closeUserMenu(): void {
+    this.userMenuOpen = false;
+  }
+
+
   onSidebarNavClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
     if (!target) return;
@@ -189,26 +195,6 @@ export class AppComponent implements OnInit {
     if (target.closest('a')) {
       this.closeSidebar();
     }
-  }
-
-  toggleEquipment(): void {
-    this.equipmentExpanded = !this.equipmentExpanded;
-  }
-
-  toggleSafety(): void {
-    this.safetyExpanded = !this.safetyExpanded;
-  }
-
-  toggleFleet(): void {
-    this.fleetExpanded = !this.fleetExpanded;
-  }
-
-  toggleAccounting(): void {
-    this.accountingExpanded = !this.accountingExpanded;
-  }
-
-  toggleInventory(): void {
-    this.inventoryExpanded = !this.inventoryExpanded;
   }
 
   closeOnboardingModal(): void {
