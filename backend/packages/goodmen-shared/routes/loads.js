@@ -9,7 +9,7 @@ const { query, getClient } = require('../internal/db');
 const { extractLoadFromPdf } = require('../services/load-ai-extractor');
 const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 
-const LOAD_STATUSES = ['NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
+const LOAD_STATUSES = ['DRAFT', 'NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
 const BILLING_STATUSES = ['PENDING', 'CANCELLED', 'CANCELED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
 const STOP_TYPES = ['PICKUP', 'DELIVERY'];
 const ATTACHMENT_TYPES = [
@@ -58,15 +58,14 @@ async function getDrivingDistanceMiles(fromZip, toZip) {
 }
 
 async function computeTripMetrics(exec, loadId, loadRow, stops) {
-  const pickupStop = (stops || []).find(
-    (s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'PICKUP'
-  );
-  const deliveryStop = (stops || []).find(
-    (s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'DELIVERY'
-  );
+  const stopList = stops || [];
+  const pickups = stopList.filter((s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'PICKUP');
+  const deliveries = stopList.filter((s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'DELIVERY');
+  const firstPickup = pickups[0];
+  const lastDelivery = deliveries.length ? deliveries[deliveries.length - 1] : null;
 
-  const pickupZip = (pickupStop?.zip || '').toString().trim() || null;
-  const deliveryZip = (deliveryStop?.zip || '').toString().trim() || null;
+  const pickupZip = (firstPickup?.zip || '').toString().trim() || null;
+  const deliveryZip = (lastDelivery?.zip || '').toString().trim() || null;
 
   let prevZip = null;
   if (loadRow?.driver_id) {
@@ -259,14 +258,13 @@ async function getLoadDetail(clientOrQuery, loadId) {
     }))
   );
   const tripMetrics = await computeTripMetrics(exec, loadId, loadRow, stopsResult.rows || []);
-  const pickupStop = (stopsResult.rows || []).find(
-    (s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'PICKUP'
-  );
-  const deliveryStop = (stopsResult.rows || []).find(
-    (s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'DELIVERY'
-  );
-  const pickupDate = pickupStop?.stop_date ?? loadRow.pickup_date ?? null;
-  const deliveryDate = deliveryStop?.stop_date ?? loadRow.delivery_date ?? null;
+  const stopsRows = stopsResult.rows || [];
+  const pickups = stopsRows.filter((s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'PICKUP');
+  const deliveries = stopsRows.filter((s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'DELIVERY');
+  const firstPickup = pickups[0];
+  const lastDelivery = deliveries.length ? deliveries[deliveries.length - 1] : null;
+  const pickupDate = firstPickup?.stop_date ?? loadRow.pickup_date ?? null;
+  const deliveryDate = lastDelivery?.stop_date ?? loadRow.delivery_date ?? null;
   return {
     ...loadRow,
     ...tripMetrics,
@@ -331,7 +329,9 @@ router.get('/', async (req, res) => {
     const page = Math.max(parseInt(req.query.page || '1', 10), 1);
     const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '25', 10), 1), 200);
     const sortBy = (req.query.sortBy || '').toString().trim().toLowerCase();
-    const sortDirRaw = (req.query.sortDir || 'desc').toString().trim().toLowerCase();
+    // Default pickup_date to asc so nearest (earliest) date appears first
+    const defaultSortDir = sortBy === 'pickup_date' ? 'asc' : 'desc';
+    const sortDirRaw = (req.query.sortDir || defaultSortDir).toString().trim().toLowerCase();
     const sortDir = sortDirRaw === 'asc' ? 'asc' : 'desc';
     const offset = (page - 1) * pageSize;
 
@@ -396,7 +396,7 @@ router.get('/', async (req, res) => {
         SELECT city, state, zip, stop_date
         FROM load_stops
         WHERE load_id = l.id AND stop_type = 'DELIVERY'
-        ORDER BY sequence ASC
+        ORDER BY sequence DESC
         LIMIT 1
       ) delivery ON true
       LEFT JOIN (
@@ -423,6 +423,8 @@ router.get('/', async (req, res) => {
       created_at: 'l.created_at'
     };
     const orderBy = sortMap[sortBy] || 'l.created_at';
+    // Put DRAFT loads first when viewing all statuses
+    const draftFirst = !status ? 'CASE WHEN UPPER(l.status::text) = \'DRAFT\' THEN 0 ELSE 1 END, ' : '';
 
     const dataSql = `
       SELECT
@@ -448,7 +450,7 @@ router.get('/', async (req, res) => {
         COALESCE(att.attachment_count, 0) as attachment_count,
         COALESCE(att.attachment_types, ARRAY[]::text[]) as attachment_types
       ${baseSql}
-      ORDER BY ${orderBy} ${sortDir}
+      ORDER BY ${draftFirst}${orderBy} ${sortDir}
       LIMIT $${params.length - 1} OFFSET $${params.length}
     `;
     const result = await query(dataSql, params);
@@ -602,6 +604,217 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
   }
 });
 
+const BULK_MAX_FILES = 10;
+
+/** Find broker by name (ILIKE match on legal_name or name); return { id, name } or null. */
+async function findBrokerByName(clientOrQuery, brokerName) {
+  const bn = (brokerName || '').toString().trim();
+  if (!bn) return null;
+  const exec = clientOrQuery.query ? clientOrQuery.query.bind(clientOrQuery) : query;
+  const result = await exec(
+    `SELECT id, COALESCE(legal_name, name) as name FROM brokers
+     WHERE COALESCE(legal_name, name) ILIKE $1 OR dba_name ILIKE $1
+     LIMIT 1`,
+    [`%${bn}%`]
+  );
+  return result.rows.length ? result.rows[0] : null;
+}
+
+// POST /api/loads/bulk-rate-confirmations (admin, dispatch only; max 10 PDFs)
+router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), upload.array('files', BULK_MAX_FILES), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const files = req.files || [];
+    if (files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No files uploaded. Upload up to 10 PDF rate confirmations.' });
+    }
+    if (files.length > BULK_MAX_FILES) {
+      return res.status(400).json({ success: false, error: `Maximum ${BULK_MAX_FILES} rate confirmations per upload.` });
+    }
+
+    const pdfFiles = files.filter(f => f.mimetype === 'application/pdf' || (f.originalname || '').toLowerCase().endsWith('.pdf'));
+    if (pdfFiles.length !== files.length) {
+      return res.status(400).json({ success: false, error: 'Only PDF files are supported for bulk rate confirmation upload.' });
+    }
+
+    let client;
+    try {
+      client = await getClient();
+    } catch (e) {
+      return res.status(500).json({ success: false, error: 'Database unavailable' });
+    }
+    const results = [];
+    const dispatcherUserId = req.user?.id || null;
+
+    for (const file of pdfFiles) {
+      try {
+        const data = await extractLoadFromPdf(file.buffer, file.originalname || 'upload.pdf');
+        const pickup = data.pickup || {};
+        const delivery = data.delivery || {};
+        const brokerName = (data.brokerName || '').toString().trim() || null;
+        const extractedStops = Array.isArray(data.stops) && data.stops.length > 0 ? data.stops : null;
+
+        let brokerId = null;
+        let finalBrokerName = brokerName;
+        if (brokerName) {
+          const broker = await findBrokerByName(client, brokerName);
+          if (broker) {
+            brokerId = broker.id;
+            finalBrokerName = broker.name || brokerName;
+          }
+          if (!broker) finalBrokerName = null;
+        }
+
+        function buildLoc(obj) {
+          const parts = [(obj.city || '').trim(), (obj.state || '').trim()].filter(Boolean);
+          const loc = parts.join(', ');
+          const zip = (obj.zip || '').toString().trim();
+          return zip ? (loc ? `${loc} ${zip}` : zip) : (loc || 'UNKNOWN');
+        }
+        const today = new Date().toISOString().slice(0, 10);
+        const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+        let pickupLocation;
+        let deliveryLocation;
+        let pickupDate;
+        let deliveryDate;
+        let stopsToInsert;
+
+        if (extractedStops && extractedStops.length > 0) {
+          const pickups = extractedStops.filter((s) => (s.type || '').toString().toUpperCase() === 'PICKUP');
+          const deliveries = extractedStops.filter((s) => (s.type || '').toString().toUpperCase() === 'DELIVERY');
+          const firstPickup = pickups[0];
+          const lastDelivery = deliveries[deliveries.length - 1];
+          pickupLocation = firstPickup ? buildLoc(firstPickup) : buildLoc(pickup);
+          deliveryLocation = lastDelivery ? buildLoc(lastDelivery) : buildLoc(delivery);
+          pickupDate = firstPickup?.date && String(firstPickup.date).trim() ? String(firstPickup.date).trim().slice(0, 10) : (pickup.date && String(pickup.date).trim() ? String(pickup.date).trim().slice(0, 10) : today);
+          deliveryDate = lastDelivery?.date && String(lastDelivery.date).trim() ? String(lastDelivery.date).trim().slice(0, 10) : (delivery.date && String(delivery.date).trim() ? String(delivery.date).trim().slice(0, 10) : tomorrow);
+          stopsToInsert = extractedStops.map((s, idx) => {
+            const isDelivery = (s.type || '').toString().toUpperCase() === 'DELIVERY';
+            return {
+              stopType: isDelivery ? 'DELIVERY' : 'PICKUP',
+              date: s.date && String(s.date).trim() ? String(s.date).trim().slice(0, 10) : (isDelivery ? deliveryDate : pickupDate),
+              city: s.city,
+              state: s.state,
+              zip: s.zip,
+              address1: s.address1,
+              sequence: typeof s.sequence === 'number' ? s.sequence : idx + 1
+            };
+          });
+        } else {
+          pickupLocation = buildLoc(pickup);
+          deliveryLocation = buildLoc(delivery);
+          pickupDate = pickup.date && String(pickup.date).trim() ? String(pickup.date).trim().slice(0, 10) : today;
+          deliveryDate = delivery.date && String(delivery.date).trim() ? String(delivery.date).trim().slice(0, 10) : tomorrow;
+          stopsToInsert = [
+            { stopType: 'PICKUP', date: pickupDate, city: pickup.city, state: pickup.state, zip: pickup.zip, address1: null, sequence: 1 },
+            { stopType: 'DELIVERY', date: deliveryDate, city: delivery.city, state: delivery.state, zip: delivery.zip, address1: null, sequence: 2 }
+          ];
+        }
+
+        const refValue = (data.loadId || data.orderId || data.proNumber || data.poNumber || '').toString().trim();
+        const loadNumber = refValue ? refValue.slice(0, 50) : await generateLoadNumber(client);
+        // Use loadId/orderId/proNumber as PO when poNumber not found in document
+        const poValue = (data.poNumber && data.poNumber.toString().trim()) || (data.loadId || data.orderId || data.proNumber || '').toString().trim() || null;
+
+        await client.query('BEGIN');
+
+        const insertResult = await client.query(
+          `INSERT INTO loads (
+            load_number, status, billing_status, dispatcher_user_id,
+            driver_id, truck_id, trailer_id, broker_id, broker_name,
+            po_number, rate, notes, completed_date,
+            pickup_location, delivery_location, pickup_date, delivery_date
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          RETURNING *`,
+          [
+            loadNumber, 'DRAFT', 'PENDING', dispatcherUserId,
+            null, null, null, brokerId, finalBrokerName,
+            poValue, data.rate || 0, null, null,
+            pickupLocation, deliveryLocation, normalizeNullable(pickupDate), normalizeNullable(deliveryDate)
+          ]
+        );
+        const loadId = insertResult.rows[0].id;
+
+        for (const stop of stopsToInsert) {
+          await client.query(
+            `INSERT INTO load_stops (load_id, stop_type, stop_date, city, state, zip, address1, sequence)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [loadId, stop.stopType, normalizeNullable(stop.date), normalizeNullable(stop.city), normalizeNullable(stop.state), normalizeNullable(stop.zip), normalizeNullable(stop.address1 || null), stop.sequence]
+          );
+        }
+
+        const fileExt = path.extname(file.originalname || '').toLowerCase() || '.pdf';
+        const safeName = `load-${loadId}-${Date.now()}${fileExt}`;
+        const { key: storageKey } = await uploadBuffer({
+          buffer: file.buffer,
+          contentType: file.mimetype,
+          prefix: `loads/${loadId}`,
+          fileName: safeName
+        });
+        await client.query(
+          `INSERT INTO load_attachments (load_id, type, file_name, storage_key, mime_type, size_bytes, uploaded_by_user_id)
+           VALUES ($1,'RATE_CONFIRMATION',$2,$3,$4,$5,$6)`,
+          [loadId, file.originalname || safeName, storageKey, file.mimetype, file.size, dispatcherUserId]
+        );
+
+        await client.query('COMMIT');
+        const created = await getLoadDetail(client, loadId);
+        results.push({ success: true, data: created, filename: file.originalname });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        dtLogger.error('loads_bulk_single_failed', err, { filename: file.originalname });
+        results.push({ success: false, error: err.message || 'Extraction or insert failed', filename: file.originalname });
+      }
+    }
+
+    try { client.release(); } catch (_) {}
+    const duration = Date.now() - startTime;
+    dtLogger.trackRequest('POST', '/api/loads/bulk-rate-confirmations', 200, duration, { count: results.length });
+    res.json({ success: true, results });
+  } catch (error) {
+    dtLogger.error('loads_bulk_rate_confirmations_failed', error);
+    res.status(500).json({ success: false, error: 'Bulk upload failed', details: error.message });
+  }
+});
+
+// PATCH /api/loads/:id/approve-draft (admin, dispatch only; DRAFT -> DISPATCHED)
+router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const result = await query('SELECT id, status FROM loads WHERE id = $1', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ success: false, error: 'Load not found' });
+    if (normalizeEnum(result.rows[0].status) !== 'DRAFT') {
+      return res.status(400).json({ success: false, error: 'Only draft loads can be approved' });
+    }
+    await query(
+      `UPDATE loads SET status = 'DISPATCHED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [req.params.id]
+    );
+    const data = await getLoadDetail(query, req.params.id);
+    res.json({ success: true, data });
+  } catch (error) {
+    dtLogger.error('loads_approve_draft_failed', error, { loadId: req.params.id });
+    res.status(500).json({ success: false, error: 'Failed to approve draft' });
+  }
+});
+
+// DELETE /api/loads/:id (admin, dispatch only; only NEW or DRAFT loads)
+router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const result = await query('SELECT id, status FROM loads WHERE id = $1', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ success: false, error: 'Load not found' });
+    const status = normalizeEnum(result.rows[0].status);
+    if (status !== 'DRAFT' && status !== 'NEW') {
+      return res.status(400).json({ success: false, error: 'Only New or Draft loads can be deleted' });
+    }
+    await query('DELETE FROM loads WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    dtLogger.error('loads_delete_failed', error, { loadId: req.params.id });
+    res.status(500).json({ success: false, error: 'Failed to delete load' });
+  }
+});
+
 // GET /api/loads/:id
 router.get('/:id', async (req, res) => {
   try {
@@ -678,10 +891,12 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, error: 'Invalid stops', details: stopErrors });
       }
-      const pickupStop = stopsInput.find((s) => normalizeEnum(s.stopType || s.stop_type) === 'PICKUP');
-      const deliveryStop = stopsInput.find((s) => normalizeEnum(s.stopType || s.stop_type) === 'DELIVERY');
-      loadPickupDate = pickupStop ? (pickupStop.date || pickupStop.stopDate || pickupStop.stop_date || null) : null;
-      loadDeliveryDate = deliveryStop ? (deliveryStop.date || deliveryStop.stopDate || deliveryStop.stop_date || null) : null;
+      const pickups = stopsInput.filter((s) => normalizeEnum(s.stopType || s.stop_type) === 'PICKUP');
+      const deliveries = stopsInput.filter((s) => normalizeEnum(s.stopType || s.stop_type) === 'DELIVERY');
+      const firstPickup = pickups[0];
+      const lastDelivery = deliveries.length ? deliveries[deliveries.length - 1] : null;
+      loadPickupDate = firstPickup ? (firstPickup.date || firstPickup.stopDate || firstPickup.stop_date || null) : null;
+      loadDeliveryDate = lastDelivery ? (lastDelivery.date || lastDelivery.stopDate || lastDelivery.stop_date || null) : null;
 
       await client.query('DELETE FROM load_stops WHERE load_id = $1', [req.params.id]);
       for (const stop of stopsInput) {
@@ -943,6 +1158,7 @@ router.post('/ai-extract', upload.single('file'), async (req, res) => {
       return res.status(400).json({ success: false, error: 'Only PDF files are supported for AI extraction' });
     }
 
+    dtLogger.info('loads_ai_extract_request', { filename: req.file.originalname, size: req.file.size });
     const data = await extractLoadFromPdf(req.file.buffer, req.file.originalname || 'upload.pdf');
 
     return res.json({

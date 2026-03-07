@@ -62,7 +62,12 @@ router.post('/login', async (req, res) => {
       email: user.email || null
     });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    console.error('[auth/login]', err?.message || err);
+    const payload = { error: 'Server error' };
+    if (process.env.NODE_ENV !== 'production' && err?.message) {
+      payload.detail = err.message;
+    }
+    res.status(500).json(payload);
   }
 });
 

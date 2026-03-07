@@ -1,8 +1,15 @@
 const axios = require('axios');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const pdfParse = require('pdf-parse');
+const dtLogger = require('../utils/logger');
+
+const execFileAsync = promisify(execFile);
 
 // Prompt template used for AI extraction of load details from a PDF.
-// Returned here for reference and easier tweaking.
 const LOAD_EXTRACTION_PROMPT = `
 You are an expert freight dispatcher assistant.
 Extract structured load information from the provided document.
@@ -13,74 +20,319 @@ The JSON MUST match this exact schema and key names:
 {
   "brokerName": string | null,
   "poNumber": string | null,
+  "loadId": string | null,
+  "orderId": string | null,
+  "proNumber": string | null,
   "rate": number | null,
   "pickup": {
-    "date": string | null,        // ISO date or YYYY-MM-DD
+    "date": string | null,
     "city": string | null,
     "state": string | null,
     "zip": string | null,
     "address1": string | null
   },
   "delivery": {
-    "date": string | null,        // ISO date or YYYY-MM-DD
+    "date": string | null,
     "city": string | null,
     "state": string | null,
     "zip": string | null,
     "address1": string | null
   },
+  "stops": [
+    { "type": "PICKUP" | "DELIVERY", "sequence": 1, "date": string | null, "city": string | null, "state": string | null, "zip": string | null, "address1": string | null }
+  ],
   "notes": string | null,
-  "confidence": {
-    "brokerName": number,         // 0.0 - 1.0
-    "poNumber": number,
-    "rate": number,
-    "pickup": number,
-    "delivery": number
-  },
+  "confidence": { "brokerName": number, "poNumber": number, "rate": number, "pickup": number, "delivery": number },
   "rawTextSnippet": string | null
 }
 
 Guidelines:
 - If a field is not present with high confidence, set it to null and its confidence near 0.
-- "rate" should be numeric (no currency symbol), representing the line haul total.
-- Prefer dates in YYYY-MM-DD format when possible.
-- "rawTextSnippet" should include the 2-3 most relevant lines you used.
+- loadId/orderId/proNumber: extract Load #, Order #, PRO #, Reference #, conf# when present.
+- "rate": numeric only, line haul total (e.g. "Line Haul" line). Prefer dates YYYY-MM-DD.
+- "rawTextSnippet": 2-3 most relevant lines you used.
+
+Stops (REQUIRED – always return this array):
+- "stops" MUST be an array listing every pickup and delivery in order. Each item: type "PICKUP" or "DELIVERY", sequence (1, 2, 3...), and date/city/state/zip/address1 when known.
+- One pickup only: stops = [{ type: "PICKUP", sequence: 1, ... }].
+- One pickup + one delivery: stops = [{ type: "PICKUP", sequence: 1, ... }, { type: "DELIVERY", sequence: 2, ... }].
+- Multiple pickups and/or deliveries: include every stop in order. Do not merge multiple stops into one.
+
+Shipment Stops section (common on rate cons):
+- Many rate confirmations have a "Shipment Stops" or similar section with lettered stops: A, B, C, D, E, F, etc.
+- "PICK" (or "Pick", "Pickup") = type "PICKUP". "DROP" (or "Drop", "Drop-off", "Delivery") = type "DELIVERY".
+- Each letter (A, B, C...) is exactly one stop. Count all letters you see: if the document shows A, B, C, D, E, F then output exactly 6 stops. Do not merge two DROP stops into one even if they are in the same city (e.g. two Dunn, NC stops are two separate stops with different addresses or REF#).
+- Use the address and date that appear with each stop block. Each stop has its own date line (e.g. OCT 18 for A, OCT 20 for B and C, OCT 21 for D, E, F). Convert to YYYY-MM-DD. Do not reuse the previous stop's date for the next stop.
+- Example: A=PICK, B–F=DROP means 1 pickup and 5 deliveries -> 6 entries in "stops" (one PICKUP, five DELIVERY), in order. If you see six lettered blocks, output six stops.
+
+Also set "pickup" to the first pickup stop and "delivery" to the last delivery stop. If only one address appears, put it in stops as type PICKUP and set delivery to null.
+
+Document structure:
+- In multi-page rate confirmations, the first pages are often terms/boilerplate; load details (stops, rate, dates, addresses) are frequently on the final pages. Prefer and prioritize information from the end of the provided text when present.
 `;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_API_TOKEN || null;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 
-// Hard caps to avoid exceeding org TPM limits once text is extracted.
-const MAX_INPUT_CHARS = 120_000; // after filtering/windowing
+const MAX_INPUT_CHARS = 120_000;
 
+// Only treat as garbled when obviously corrupted: majority CJK/specials/control and almost no printable.
+const GARBLED_WEIRD_RATIO = 0.50;   // reject only if >50% of chars are weird
+const GARBLED_MAX_PRINTABLE_RATIO = 0.05; // and <5% printable (so we only reject obvious garbage)
+
+// Broad "printable" set: letters, digits, space, common punctuation and symbols in rate cons
+const PRINTABLE_REGEX = /[A-Za-z0-9\s,.:;#@()\/\-$%&'"*+=\[\]_;<>?`{}~\u2013\u2014\u2018\u2019\u201C\u201D\n\r\t]/g;
+
+function getTextQuality(text = '') {
+  if (!text || text.length < 50) return { weirdRatio: 1, printableRatio: 0 };
+  const sample = text.slice(0, 4000);
+  const weird =
+    (sample.match(/[\u3000-\u9FFF]/g) || []).length +
+    (sample.match(/[\uFFF0-\uFFFF]/g) || []).length +
+    (sample.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g) || []).length;
+  const printable = (sample.match(PRINTABLE_REGEX) || []).length;
+  return {
+    weirdRatio: weird / Math.max(sample.length, 1),
+    printableRatio: printable / Math.max(sample.length, 1)
+  };
+}
+
+function looksGarbled(text = '') {
+  const { weirdRatio, printableRatio } = getTextQuality(text);
+  if (!text || text.length < 50) return true;
+  return weirdRatio > GARBLED_WEIRD_RATIO && printableRatio < GARBLED_MAX_PRINTABLE_RATIO;
+}
+
+// When pdf-parse has any noticeable weird chars (font-mapping garbage), try pdftotext and use it if cleaner.
+const SUSPICIOUS_WEIRD_RATIO = 0.06;
+
+// ---------------------------------------------------------------------------
+// Primary: pdf-parse
+// ---------------------------------------------------------------------------
+async function extractWithPdfParse(buffer) {
+  const parsed = await pdfParse(buffer);
+  return (parsed.text || '').trim();
+}
+
+// ---------------------------------------------------------------------------
+// Get PDF page count via pdfinfo (Poppler)
+// ---------------------------------------------------------------------------
+async function getPdfPageCount(buffer) {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ratecon-'));
+  const pdfPath = path.join(dir, 'input.pdf');
+  try {
+    await fs.promises.writeFile(pdfPath, buffer);
+    const { stdout } = await execFileAsync('pdfinfo', [pdfPath], { encoding: 'utf8' });
+    const m = (stdout || '').match(/Pages:\s*(\d+)/);
+    const n = m ? parseInt(m[1], 10) : 0;
+    return n > 0 ? n : 0;
+  } catch (_) {
+    return 0;
+  } finally {
+    try {
+      await fs.promises.unlink(pdfPath).catch(() => {});
+      await fs.promises.rmdir(dir).catch(() => {});
+    } catch (_) {}
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fallback: pdftotext -layout (Poppler; preserves layout and often decodes fonts correctly)
+// firstPage/lastPage are 1-based; if omitted, all pages are extracted.
+// ---------------------------------------------------------------------------
+async function extractWithPdftotext(buffer, opts = {}) {
+  const { firstPage, lastPage } = opts;
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ratecon-'));
+  const pdfPath = path.join(dir, 'input.pdf');
+  const txtPath = path.join(dir, 'output.txt');
+  try {
+    await fs.promises.writeFile(pdfPath, buffer);
+    const args = ['-layout'];
+    if (firstPage != null && firstPage > 0) args.push('-f', String(firstPage));
+    if (lastPage != null && lastPage > 0) args.push('-l', String(lastPage));
+    args.push(pdfPath, txtPath);
+    await execFileAsync('pdftotext', args);
+    const text = await fs.promises.readFile(txtPath, 'utf8');
+    return text.trim();
+  } finally {
+    try {
+      await fs.promises.unlink(pdfPath).catch(() => {});
+      await fs.promises.unlink(txtPath).catch(() => {});
+      await fs.promises.rmdir(dir).catch(() => {});
+    } catch (_) {}
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fallback 2: OCR (optional; enable if tesseract + pdf-to-image available)
+// ---------------------------------------------------------------------------
+async function extractWithOcr(buffer) {
+  // Optional: use pdf2pic or pdf-poppler to render pages, then tesseract to OCR.
+  // Example: const pdf2pic = require('pdf2pic'); const Tesseract = require('tesseract.js');
+  // For now we do not add heavy deps; return null so pipeline continues without OCR.
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Multi-stage text extraction: try pdf-parse, then pdftotext, then OCR
+// ---------------------------------------------------------------------------
+async function getPdfText(buffer) {
+  let pdfText = '';
+  let source = 'none';
+
+  try {
+    pdfText = await extractWithPdfParse(buffer);
+    source = 'pdf-parse';
+  } catch (err) {
+    // continue to fallbacks
+  }
+
+  // When pdf-parse returns no text (e.g. scanned/image PDF), try pdftotext before giving up
+  const MIN_USEFUL_LENGTH = 50;
+  const LAST_PAGES_COUNT = 5; // load details are often on final pages
+  if (!pdfText || pdfText.length < MIN_USEFUL_LENGTH) {
+    dtLogger.info('load_ai_extract_pdf_parse_empty_or_short', { length: (pdfText || '').length, trying: 'pdftotext' });
+    try {
+      let altText = await extractWithPdftotext(buffer);
+      dtLogger.info('load_ai_extract_pdftotext_result', { scope: 'full', length: (altText || '').length });
+      if (altText && altText.length > 20) {
+        dtLogger.info('load_ai_extract_using_pdftotext', { reason: 'pdf-parse had no/short text', pdftotextLength: altText.length });
+        return { text: altText, source: 'pdftotext' };
+      }
+      // Full-doc pdftotext was empty/short; try last N pages only (rate/load details often at end)
+      const numPages = await getPdfPageCount(buffer);
+      if (numPages > 1) {
+        const firstPage = Math.max(1, numPages - LAST_PAGES_COUNT + 1);
+        dtLogger.info('load_ai_extract_trying_last_pages', { numPages, firstPage, lastPage: numPages });
+        altText = await extractWithPdftotext(buffer, { firstPage, lastPage: numPages });
+        dtLogger.info('load_ai_extract_pdftotext_result', { scope: 'last_pages', firstPage, lastPage: numPages, length: (altText || '').length });
+        if (altText && altText.length > 20) {
+          dtLogger.info('load_ai_extract_using_pdftotext', { reason: 'last pages only', pdftotextLength: altText.length, pages: `${firstPage}-${numPages}` });
+          return { text: altText, source: 'pdftotext' };
+        }
+      }
+    } catch (e) {
+      dtLogger.warn('load_ai_extract_pdftotext_failed', { error: e?.message || String(e), code: e?.code });
+    }
+    if (!pdfText) return { text: '', source };
+  }
+
+  // If pdf-parse text looks suspicious (weird chars = font-mapping garbage), try pdftotext and prefer it if cleaner
+  const quality = getTextQuality(pdfText);
+  if (pdfText && pdfText.length > 100) {
+    dtLogger.info('load_ai_extract_pdf_quality', {
+      source: 'pdf-parse',
+      weirdRatio: Math.round(quality.weirdRatio * 1000) / 1000,
+      printableRatio: Math.round(quality.printableRatio * 1000) / 1000,
+      willTryPdftotext: quality.weirdRatio > SUSPICIOUS_WEIRD_RATIO
+    });
+  }
+  if (pdfText && quality.weirdRatio > SUSPICIOUS_WEIRD_RATIO) {
+    dtLogger.info('load_ai_extract_suspicious_pdf_parse', {
+      weirdRatio: quality.weirdRatio,
+      printableRatio: quality.printableRatio,
+      trying: 'pdftotext'
+    });
+    try {
+      const altText = await extractWithPdftotext(buffer);
+      if (altText && altText.length > 20) {
+        const altQuality = getTextQuality(altText);
+        if (altQuality.weirdRatio < quality.weirdRatio || altQuality.printableRatio > quality.printableRatio) {
+          dtLogger.info('load_ai_extract_using_pdftotext', {
+            reason: 'pdf-parse had high weird ratio',
+            pdfParseWeird: quality.weirdRatio,
+            pdftotextWeird: altQuality.weirdRatio
+          });
+          return { text: altText, source: 'pdftotext' };
+        }
+        dtLogger.info('load_ai_extract_pdftotext_not_cleaner', {
+          pdftotextWeird: altQuality.weirdRatio,
+          pdfParseWeird: quality.weirdRatio
+        });
+      }
+    } catch (e) {
+      dtLogger.warn('load_ai_extract_pdftotext_failed', {
+        error: e?.message || String(e),
+        code: e?.code
+      });
+    }
+  }
+
+  if (pdfText && !looksGarbled(pdfText)) {
+    return { text: pdfText, source };
+  }
+
+  try {
+    const altText = await extractWithPdftotext(buffer);
+    if (altText && altText.length > 20 && !looksGarbled(altText)) {
+      return { text: altText, source: 'pdftotext' };
+    }
+    if (altText && altText.length > 20) {
+      pdfText = altText;
+      source = 'pdftotext';
+    }
+  } catch (e) {
+    // pdftotext not installed or failed
+  }
+
+  if (pdfText && !looksGarbled(pdfText)) {
+    return { text: pdfText, source };
+  }
+
+  try {
+    const ocrText = await extractWithOcr(buffer);
+    if (ocrText && ocrText.length > 20 && !looksGarbled(ocrText)) {
+      return { text: ocrText, source: 'ocr' };
+    }
+  } catch (_) {}
+
+  return { text: pdfText || '', source };
+}
+
+// ---------------------------------------------------------------------------
+// Keyword-based filtering – only when text is clean (so we don't drop good content)
+// ---------------------------------------------------------------------------
 function filterRelevantLines(text) {
+  if (!text) return '';
   const lines = text.split(/\r?\n/);
-  const keywords = /(pickup|pick-up|delivery|consignee|shipper|rate|total|linehaul|load|reference|broker|carrier|commodity|weight)/i;
-
+  const keywords = /(shipment|stops|pick|drop|pickup|pick-up|delivery|consignee|shipper|origin|destination|deliver to|ship to|rate|total|linehaul|line haul|load|reference|broker|carrier|commodity|weight|address|conf#|order#|pieces|pkwy|street|blvd|ave|drive|appointment|lbs)/i;
+  const isShipmentStopsLine = /(shipment\s*stops|^\s*[A-F]\s*$|PICK|DROP)/i;
   const kept = [];
   for (let i = 0; i < lines.length; i += 1) {
     if (keywords.test(lines[i])) {
       const start = Math.max(0, i - 3);
-      const end = Math.min(lines.length, i + 6);
-      for (let j = start; j < end; j += 1) {
-        kept.push(lines[j]);
-      }
+      const extra = isShipmentStopsLine.test(lines[i]) ? 25 : 10;
+      const end = Math.min(lines.length, i + extra);
+      for (let j = start; j < end; j += 1) kept.push(lines[j]);
     }
   }
   return [...new Set(kept)].join('\n');
 }
 
-/**
- * Best-effort extraction of load details from a PDF buffer.
- * If OpenAI is not configured, returns a safe placeholder payload so the
- * frontend can continue with manual entry.
- *
- * @param {Buffer} buffer
- * @param {string} filename
- * @returns {Promise<object>}
- */
+// ---------------------------------------------------------------------------
+// Regex pre-parser: extract candidate values to give the model anchors
+// ---------------------------------------------------------------------------
+function preParseHints(text) {
+  if (!text || looksGarbled(text)) return {};
+  const hints = {};
+  const lineHaul = text.match(/line\s*haul\s*rate\s*[\$]?\s*([0-9,]+\.?\d*)/i) || text.match(/rate\s*[\$]?\s*([0-9,]+\.?\d{2})/i);
+  if (lineHaul) hints.rate = lineHaul[1].replace(/,/g, '');
+  const dates = text.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/g) || text.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})/gi);
+  if (dates && dates.length) hints.dates = [...new Set(dates)].slice(0, 10);
+  const cityStateZip = text.match(/([A-Z][a-zA-Z\s]+)\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)/g);
+  if (cityStateZip && cityStateZip.length) hints.cityStateZips = [...new Set(cityStateZip)].slice(0, 15);
+  const refs = text.match(/(?:ref#|reference#|conf#|order#|load#|pro#)\s*[\s:]?\s*([A-Za-z0-9_-]+)/gi) || text.match(/\b(\d{5,})\s*(?:RC|rate|conf)?\b/gi);
+  if (refs && refs.length) hints.refs = [...new Set(refs)].slice(0, 5).map((s) => s.replace(/^[^#]*#?\s*[\s:]*/i, '').trim());
+  return hints;
+}
+
+// ---------------------------------------------------------------------------
+// Main extraction
+// ---------------------------------------------------------------------------
 async function extractLoadFromPdf(buffer, filename) {
-  // Fallback when no AI provider is configured.
+  dtLogger.info('load_ai_extract_start', { filename: filename || 'unknown', bufferLength: buffer?.length });
   if (!OPENAI_API_KEY) {
+    dtLogger.warn('load_ai_extract_skipped_no_key', { filename });
     return {
       brokerName: null,
       poNumber: null,
@@ -88,25 +340,23 @@ async function extractLoadFromPdf(buffer, filename) {
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
       notes: null,
-      confidence: {
-        brokerName: 0,
-        poNumber: 0,
-        rate: 0,
-        pickup: 0,
-        delivery: 0
-      },
+      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
       rawTextSnippet: null,
+      stops: [],
       provider: 'none',
       warning: 'OPENAI_API_KEY is not configured; returned empty extraction payload.'
     };
   }
 
-  // Extract text from the PDF. If this fails, fall back to a safe payload.
   let pdfText = '';
+  let extractionSource = 'none';
   try {
-    const parsed = await pdfParse(buffer);
-    pdfText = (parsed.text || '').trim();
+    const result = await getPdfText(buffer);
+    pdfText = result.text || '';
+    extractionSource = result.source;
+    dtLogger.info('load_ai_extract_pdf_text', { source: extractionSource, length: pdfText.length });
   } catch (err) {
+    dtLogger.error('load_ai_extract_getPdfText_failed', err, { filename });
     return {
       brokerName: null,
       poNumber: null,
@@ -114,16 +364,11 @@ async function extractLoadFromPdf(buffer, filename) {
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
       notes: null,
-      confidence: {
-        brokerName: 0,
-        poNumber: 0,
-        rate: 0,
-        pickup: 0,
-        delivery: 0
-      },
+      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
       rawTextSnippet: null,
+      stops: [],
       provider: 'none',
-      warning: 'Failed to read text from PDF (it may be a scanned image). Load not auto-extracted.'
+      warning: 'Failed to read text from PDF (it may be a scanned image or corrupted). Load not auto-extracted.'
     };
   }
 
@@ -135,27 +380,49 @@ async function extractLoadFromPdf(buffer, filename) {
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
       notes: null,
-      confidence: {
-        brokerName: 0,
-        poNumber: 0,
-        rate: 0,
-        pickup: 0,
-        delivery: 0
-      },
+      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
       rawTextSnippet: null,
+      stops: [],
       provider: 'none',
       warning: 'No text detected in PDF (likely a scanned image); cannot auto-extract.'
     };
   }
 
-  // Keep only lines near relevant keywords to shrink context.
+  if (looksGarbled(pdfText)) {
+    dtLogger.warn('load_ai_extract_skipped_garbled', { source: extractionSource, length: pdfText.length });
+    return {
+      brokerName: null,
+      poNumber: null,
+      rate: null,
+      pickup: { date: null, city: null, state: null, zip: null, address1: null },
+      delivery: { date: null, city: null, state: null, zip: null, address1: null },
+      notes: null,
+      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
+      rawTextSnippet: null,
+      stops: [],
+      provider: 'none',
+      warning: `PDF text appears corrupted (font/encoding issue). Extraction used: ${extractionSource}. Try installing Poppler (pdftotext) on the server for better extraction.`
+    };
+  }
+
+  dtLogger.info('load_ai_extract_calling_openai', { source: extractionSource, trimmedLength: Math.min(pdfText.length, MAX_INPUT_CHARS) });
+  const hints = preParseHints(pdfText);
   const windowed = filterRelevantLines(pdfText) || pdfText;
-  let trimmed = windowed;
+  const useFullText = windowed.length < 500 && pdfText.length > 500;
+  let trimmed = useFullText ? pdfText : windowed;
   let truncated = false;
   if (trimmed.length > MAX_INPUT_CHARS) {
     trimmed = trimmed.slice(0, MAX_INPUT_CHARS);
     truncated = true;
   }
+
+  const encodingHint = useFullText
+    ? ' The text may have encoding or font issues; extract any clearly readable values (numbers, dates, addresses, company names) you can identify.\n\n'
+    : '';
+  const hintsBlock =
+    Object.keys(hints).length > 0
+      ? `\nPre-extracted candidate values (use as anchors if they appear in the text):\n${JSON.stringify(hints)}\n\n`
+      : '';
 
   const messages = [
     {
@@ -169,7 +436,9 @@ async function extractLoadFromPdf(buffer, filename) {
           type: 'text',
           text:
             LOAD_EXTRACTION_PROMPT +
-            `\n\nThe following is text extracted from a rate confirmation or BOL PDF. Filename: ${filename}\n\n` +
+            `\n\nThe following is text extracted from a rate confirmation or BOL PDF. Filename: ${filename} (extraction method: ${extractionSource})\n\n` +
+            encodingHint +
+            hintsBlock +
             (truncated
               ? 'NOTE: Only the most relevant portion of the text was provided due to size limits. Focus on data present in this excerpt.\n\n'
               : '') +
@@ -187,8 +456,7 @@ async function extractLoadFromPdf(buffer, filename) {
       model: OPENAI_MODEL,
       messages,
       response_format: { type: 'json_object' },
-      // Keep output small and structured
-      max_tokens: 800
+      max_tokens: 1500
     },
     {
       headers: {
@@ -211,10 +479,55 @@ async function extractLoadFromPdf(buffer, filename) {
     throw new Error('Failed to parse AI extraction JSON response');
   }
 
-  // Basic shape validation; fill any missing core fields with null/defaults.
+  let stops = [];
+  if (Array.isArray(parsed.stops) && parsed.stops.length > 0) {
+    stops = parsed.stops
+      .map((s, idx) => ({
+        type: (s.type || '').toString().trim().toUpperCase() === 'DELIVERY' ? 'DELIVERY' : 'PICKUP',
+        sequence: typeof s.sequence === 'number' ? s.sequence : idx + 1,
+        date: s.date ?? null,
+        city: s.city ?? null,
+        state: s.state ?? null,
+        zip: s.zip != null ? String(s.zip).trim() : null,
+        address1: s.address1 ?? null
+      }))
+      .sort((a, b) => a.sequence - b.sequence);
+  }
+  if (stops.length === 0) {
+    const p = parsed.pickup || {};
+    const d = parsed.delivery || {};
+    const hasPickup = p.city || p.state || p.zip || p.address1;
+    const hasDelivery = d.city || d.state || d.zip || d.address1;
+    if (hasPickup) {
+      stops.push({
+        type: 'PICKUP',
+        sequence: 1,
+        date: p.date ?? null,
+        city: p.city ?? null,
+        state: p.state ?? null,
+        zip: p.zip != null ? String(p.zip).trim() : null,
+        address1: p.address1 ?? null
+      });
+    }
+    if (hasDelivery) {
+      stops.push({
+        type: 'DELIVERY',
+        sequence: 2,
+        date: d.date ?? null,
+        city: d.city ?? null,
+        state: d.state ?? null,
+        zip: d.zip != null ? String(d.zip).trim() : null,
+        address1: d.address1 ?? null
+      });
+    }
+  }
+
   const safe = {
     brokerName: parsed.brokerName ?? null,
     poNumber: parsed.poNumber ?? null,
+    loadId: (parsed.loadId || '').toString().trim() || null,
+    orderId: (parsed.orderId || '').toString().trim() || null,
+    proNumber: (parsed.proNumber || '').toString().trim() || null,
     rate: parsed.rate != null ? Number(parsed.rate) : null,
     pickup: {
       date: parsed.pickup?.date ?? null,
@@ -230,6 +543,7 @@ async function extractLoadFromPdf(buffer, filename) {
       zip: parsed.delivery?.zip ?? null,
       address1: parsed.delivery?.address1 ?? null
     },
+    stops,
     notes: parsed.notes ?? null,
     confidence: {
       brokerName: typeof parsed.confidence?.brokerName === 'number' ? parsed.confidence.brokerName : 0,
@@ -248,6 +562,8 @@ async function extractLoadFromPdf(buffer, filename) {
 
 module.exports = {
   extractLoadFromPdf,
-  LOAD_EXTRACTION_PROMPT
+  LOAD_EXTRACTION_PROMPT,
+  looksGarbled,
+  extractWithPdftotext,
+  preParseHints
 };
-

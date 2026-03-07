@@ -189,6 +189,23 @@ export class LoadsService {
     return this.http.post<{ success: boolean; data: BrokerOption }>(`${this.baseUrl}/brokers`, body);
   }
 
+  bulkUploadRateConfirmations(files: File[]): Observable<{ success: boolean; results: Array<{ success: boolean; data?: LoadDetail; error?: string; filename: string }> }> {
+    const form = new FormData();
+    files.forEach((f) => form.append('files', f));
+    return this.http.post<{ success: boolean; results: Array<{ success: boolean; data?: LoadDetail; error?: string; filename: string }> }>(
+      `${this.baseUrl}/loads/bulk-rate-confirmations`,
+      form
+    );
+  }
+
+  approveDraft(loadId: string): Observable<{ success: boolean; data: LoadDetail }> {
+    return this.http.patch<{ success: boolean; data: LoadDetail }>(`${this.baseUrl}/loads/${loadId}/approve-draft`, {});
+  }
+
+  deleteDraftLoad(loadId: string): Observable<{ success: boolean }> {
+    return this.http.delete<{ success: boolean }>(`${this.baseUrl}/loads/${loadId}`);
+  }
+
   aiExtractFromPdf(file: File): Observable<{ success: boolean; data: LoadAiEndpointExtraction }> {
     const form = new FormData();
     form.append('file', file);

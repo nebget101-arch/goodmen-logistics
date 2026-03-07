@@ -31,6 +31,19 @@
             <button
               type="button"
               class="new-load-item"
+              (click)="openBulkUpload()"
+            >
+              <span class="new-load-icon">
+                <span class="material-symbols-outlined">upload_file</span>
+              </span>
+              <span class="new-load-text">
+                <span class="title">Bulk Upload Rate Confirmations</span>
+                <span class="subtitle">Upload up to 10 PDFs; AI extracts data, creates drafts for validation.</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="new-load-item"
               (click)="openManualEntry()"
             >
               <span class="new-load-icon">
@@ -449,7 +462,7 @@
           <td><app-status-pill [status]="load.billing_status"></app-status-pill></td>
           <td class="notes-cell">{{ load.notes || '--' }}</td>
           <td>
-            <div class="attachment-chips">
+            <div class="attachment-chips attachment-chips--clickable" (click)="openEditForAttachments(load)" role="button" tabindex="0" (keydown.enter)="openEditForAttachments(load)" (keydown.space)="openEditForAttachments(load); $event.preventDefault()" title="Open attachments">
               <app-attachment-chip *ngFor="let type of (load.attachment_types || [])" [type]="type"></app-attachment-chip>
             </div>
           </td>
@@ -463,22 +476,33 @@
                 <span class="material-symbols-outlined">more_vert</span>
               </button>
               <div class="dropdown-menu actions-menu" *ngIf="actionsOpenLoadId === load.id">
-                <button
-                  type="button"
-                  class="actions-menu-item"
-                  (click)="openDetails(load); actionsOpenLoadId = null"
-                >
-                  <span class="material-symbols-outlined">visibility</span>
-                  <span>View</span>
+                <button type="button" class="actions-menu-item" (click)="openEdit(load); actionsOpenLoadId = null">
+                  <span class="material-symbols-outlined">edit</span>
+                  <span>Edit Load</span>
+                </button>
+                <button type="button" class="actions-menu-item" (click)="copyLoad(load); actionsOpenLoadId = null">
+                  <span class="material-symbols-outlined">content_copy</span>
+                  <span>Copy Load</span>
+                </button>
+                <button type="button" class="actions-menu-item" (click)="openEditAndShowMap(load); actionsOpenLoadId = null">
+                  <span class="material-symbols-outlined">map</span>
+                  <span>Show on Map</span>
                 </button>
                 <button
                   type="button"
-                  class="actions-menu-item"
-                  (click)="openDetails(load); actionsOpenLoadId = null"
+                  class="actions-menu-item actions-menu-item-danger"
+                  *ngIf="canDeleteLoad(load)"
+                  (click)="deleteLoadFromTable(load); actionsOpenLoadId = null"
                 >
-                  <span class="material-symbols-outlined">attach_file</span>
-                  <span>Attachments</span>
+                  <span class="material-symbols-outlined">delete</span>
+                  <span>Delete Load</span>
                 </button>
+                <ng-container *ngIf="isDraftLoad(load)">
+                  <button type="button" class="actions-menu-item actions-menu-item-success" (click)="approveDraftLoad(load); actionsOpenLoadId = null">
+                    <span class="material-symbols-outlined">check_circle</span>
+                    <span>Approve</span>
+                  </button>
+                </ng-container>
               </div>
             </div>
           </td>
@@ -511,10 +535,18 @@
     </button>
   </div>
 
-  <!-- Manual Load Entry Modal -->
+  <!-- Manual Load Entry Modal (draft: PDF left, load details right; non-draft: single column) -->
   <div class="modal-backdrop" *ngIf="showManualModal">
-    <div class="modal">
-      <!-- Edit header summary -->
+    <div class="modal" [class.modal--draft-review]="editingLoadDetail && isDraftLoad(editingLoadDetail)">
+      <!-- Draft only: PDF viewer left -->
+      <div class="draft-review__left" *ngIf="editingLoadDetail && isDraftLoad(editingLoadDetail)">
+        <div class="draft-review__pdf-wrap">
+          <iframe *ngIf="draftRateConPdfUrl" [src]="draftRateConPdfSafeUrl" class="draft-review__pdf" title="Rate confirmation PDF"></iframe>
+          <p *ngIf="!draftRateConPdfUrl" class="muted">No rate confirmation PDF attached.</p>
+        </div>
+      </div>
+      <div class="draft-review__right" [class.draft-review__right--full]="!editingLoadDetail || !isDraftLoad(editingLoadDetail)">
+      <!-- Edit header: top row = Load | Trip info | Driver & Broker (3 cols); below = Trip stops full width -->
       <div class="edit-load-header" *ngIf="editingLoadDetail">
         <div class="edit-load-header__row">
           <div class="edit-load-card">
@@ -533,50 +565,6 @@
           </div>
 
           <div class="edit-load-card">
-            <h4>Trip</h4>
-            <div class="trip-timeline" *ngIf="sortedStops.length">
-              <div class="trip-driver">
-                <div class="trip-driver-label">
-                  Driver position
-                </div>
-                <div class="trip-driver-location">
-                  <span class="material-symbols-outlined trip-driver-icon">location_on</span>
-                  <span class="trip-driver-link">{{ driverPositionDisplay }}</span>
-                </div>
-              </div>
-              <div class="trip-arrow">
-                <span class="material-symbols-outlined">trending_flat</span>
-              </div>
-              <ng-container *ngFor="let stop of sortedStops; let i = index">
-                <div class="trip-stop-card trip-stop-card--clickable" (click)="openEditStopModal(stop, i)" role="button" tabindex="0" (keydown.enter)="openEditStopModal(stop, i)" (keydown.space)="openEditStopModal(stop, i); $event.preventDefault()">
-                  <div class="trip-stop-card__header">
-                    #{{ i + 1 }} {{ (stop.stop_type || '').toLowerCase() }}
-                  </div>
-                  <div class="trip-stop-card__city">
-                    <span class="material-symbols-outlined trip-stop-card__icon"
-                      >location_on</span
-                    >
-                    <span>{{ stop.city || '--' }}, {{ stop.state || '' }}</span>
-                  </div>
-                  <div class="trip-stop-card__meta" *ngIf="getStopDisplayDate(stop, i)">
-                    <span class="material-symbols-outlined trip-stop-card__icon">schedule</span>
-                    <span>{{ getStopDisplayDate(stop, i) | date:'MM/dd/yy' }}</span>
-                  </div>
-                  <div class="trip-stop-card__meta muted" *ngIf="!getStopDisplayDate(stop, i)">
-                    No date set
-                  </div>
-                </div>
-                <div class="trip-arrow" *ngIf="i < sortedStops.length - 1">
-                  <span class="material-symbols-outlined">trending_flat</span>
-                </div>
-              </ng-container>
-            </div>
-            <div *ngIf="!sortedStops.length" class="muted">No stops configured yet.</div>
-          </div>
-        </div>
-
-        <div class="edit-load-secondary" *ngIf="editingLoadDetail">
-          <div class="edit-load-card">
             <h4>Trip info</h4>
             <div class="metric-row">
               <span>Total trip</span>
@@ -592,9 +580,7 @@
             </div>
             <div class="metric-row">
               <span>Rate / mi</span>
-              <strong>
-                {{ ratePerMileDisplay }}
-              </strong>
+              <strong>{{ ratePerMileDisplay }}</strong>
             </div>
           </div>
 
@@ -609,6 +595,50 @@
             <div class="edit-load-card__meta">
               Rate · {{ editingLoadDetail.rate != null ? ('$' + (editingLoadDetail.rate | number:'1.2-2')) : '--' }}
             </div>
+          </div>
+        </div>
+
+        <div class="edit-load-trip-section">
+          <div class="edit-load-card edit-load-card--trip">
+            <h4>Trip · {{ sortedStops.length }} stop{{ sortedStops.length !== 1 ? 's' : '' }}</h4>
+            <div class="trip-timeline" *ngIf="sortedStops.length">
+              <div class="trip-segment">
+                <div class="trip-driver">
+                  <div class="trip-driver-label">Driver position</div>
+                  <div class="trip-driver-location">
+                    <span class="material-symbols-outlined trip-driver-icon">location_on</span>
+                    <span class="trip-driver-link">{{ driverPositionDisplay }}</span>
+                  </div>
+                </div>
+                <div class="trip-arrow">
+                  <span class="material-symbols-outlined">trending_flat</span>
+                </div>
+              </div>
+              <ng-container *ngFor="let stop of sortedStops; let i = index">
+                <div class="trip-segment">
+                  <div class="trip-stop-card trip-stop-card--clickable" (click)="openEditStopModal(stop, i)" role="button" tabindex="0" (keydown.enter)="openEditStopModal(stop, i)" (keydown.space)="openEditStopModal(stop, i); $event.preventDefault()">
+                    <div class="trip-stop-card__header">
+                      #{{ i + 1 }} {{ (stop.stop_type || '').toLowerCase() }}
+                    </div>
+                    <div class="trip-stop-card__city">
+                      <span class="material-symbols-outlined trip-stop-card__icon">location_on</span>
+                      <span>{{ stop.city || '--' }}, {{ stop.state || '' }}</span>
+                    </div>
+                    <div class="trip-stop-card__meta" *ngIf="getStopDisplayDate(stop, i)">
+                      <span class="material-symbols-outlined trip-stop-card__icon">schedule</span>
+                      <span>{{ getStopDisplayDate(stop, i) | date:'MM/dd/yy':'UTC' }}</span>
+                    </div>
+                    <div class="trip-stop-card__meta muted" *ngIf="!getStopDisplayDate(stop, i)">
+                      No date set
+                    </div>
+                  </div>
+                  <div class="trip-arrow" *ngIf="i < sortedStops.length - 1">
+                    <span class="material-symbols-outlined">trending_flat</span>
+                  </div>
+                </div>
+              </ng-container>
+            </div>
+            <div *ngIf="!sortedStops.length" class="muted">No stops configured yet.</div>
           </div>
         </div>
         <!-- Trip action links above Edit Load -->
@@ -1001,12 +1031,29 @@
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-primary" type="submit" [disabled]="creatingLoad">
-            {{ creatingLoad ? (editingLoadId ? 'Saving...' : 'Creating...') : (editingLoadId ? 'Save Changes' : 'Create Load') }}
-          </button>
-          <button class="btn btn-secondary" type="button" (click)="closeManualModal()" [disabled]="creatingLoad">Close</button>
+          <ng-container *ngIf="editingLoadDetail && isDraftLoad(editingLoadDetail)">
+            <p class="draft-review-hint">Extracted automatically by AI – review details before approving.</p>
+            <div class="modal-footer__actions modal-footer__actions--draft">
+              <button type="button" class="btn btn-primary btn--draft-action" (click)="approveDraftLoad(editingLoadDetail!)">
+                <span class="material-symbols-outlined">check_circle</span> Approve
+              </button>
+              <button type="button" class="btn btn-secondary btn--draft-action" (click)="closeManualModal()">
+                <span class="material-symbols-outlined">close</span> Close
+              </button>
+              <button type="button" class="btn btn-danger btn--draft-action" (click)="deleteDraftLoad(editingLoadDetail!)" [disabled]="deletingDraft">
+                <span class="material-symbols-outlined">delete</span> {{ deletingDraft ? 'Deleting...' : 'Delete draft' }}
+              </button>
+            </div>
+          </ng-container>
+          <ng-container *ngIf="!editingLoadDetail || !isDraftLoad(editingLoadDetail)">
+            <button class="btn btn-primary" type="submit" [disabled]="creatingLoad">
+              {{ creatingLoad ? (editingLoadId ? 'Saving...' : 'Creating...') : (editingLoadId ? 'Save Changes' : 'Create Load') }}
+            </button>
+            <button class="btn btn-secondary" type="button" (click)="closeManualModal()" [disabled]="creatingLoad">Close</button>
+          </ng-container>
         </div>
       </form>
+      </div>
     </div>
   </div>
 
@@ -1326,6 +1373,58 @@
           </div>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Bulk Upload Rate Confirmations modal -->
+  <div class="modal-backdrop" *ngIf="showBulkUploadModal">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Bulk Upload Rate Confirmations</h3>
+        <button class="close" type="button" (click)="closeBulkUploadModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p>Upload up to 10 rate confirmation PDFs. You can add files from different folders in multiple steps. We'll extract load data with AI, match brokers in our database, and create draft loads at the top of the loads page for you to validate and approve.</p>
+        <div class="bulk-file-list" *ngIf="bulkPdfFiles.length">
+          <div class="bulk-file-list-header">
+            <span>{{ bulkPdfFiles.length }} file(s) (max 10)</span>
+          </div>
+          <ul class="bulk-file-items">
+            <li *ngFor="let f of bulkPdfFiles; let i = index" class="bulk-file-item">
+              <span class="bulk-file-name">{{ f.name }}</span>
+              <button type="button" class="bulk-file-remove" (click)="removeBulkFile(i)" title="Remove" [disabled]="bulkUploading">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+        <div
+          class="dropzone"
+          (drop)="onBulkDrop($event)"
+          (dragover)="allowDrop($event)"
+        >
+          <p *ngIf="bulkPdfFiles.length === 0">Drag and drop PDFs here or click to upload (max 10)</p>
+          <p *ngIf="bulkPdfFiles.length && bulkPdfFiles.length < 10">Add more PDFs ({{ bulkPdfFiles.length }}/10)</p>
+          <p *ngIf="bulkPdfFiles.length >= 10" class="muted">Maximum 10 files. Remove one above to add more.</p>
+          <input #bulkFileInput type="file" accept="application/pdf" multiple (change)="onBulkFilesSelected($any($event.target).files, bulkFileInput)">
+        </div>
+        <div *ngIf="bulkError" class="alert alert-error">{{ bulkError }}</div>
+        <div *ngIf="bulkResults.length" class="bulk-results">
+          <h4>Results</h4>
+          <ul>
+            <li *ngFor="let r of bulkResults">
+              <span *ngIf="r.success" class="bulk-result-ok">✓ {{ r.filename }} → Load #{{ r.data?.load_number || '--' }}</span>
+              <span *ngIf="!r.success" class="bulk-result-err">✗ {{ r.filename }}: {{ r.error || 'Failed' }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" type="button" (click)="runBulkUpload()" [disabled]="bulkPdfFiles.length === 0 || bulkUploading">
+          {{ bulkUploading ? 'Processing...' : 'Upload & Extract' }}
+        </button>
+        <button class="btn btn-secondary" type="button" (click)="closeBulkUploadModal()" [disabled]="bulkUploading">Close</button>
+      </div>
     </div>
   </div>
 

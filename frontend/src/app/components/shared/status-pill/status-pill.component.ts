@@ -24,7 +24,7 @@ export class StatusPillComponent {
     const normalized = (this.status || '').toString().toUpperCase().replace(/[\s-]+/g, '_');
     if (['DELIVERED'].includes(normalized)) return 'pill-success';
     if (['IN_TRANSIT', 'EN_ROUTE', 'PICKED_UP'].includes(normalized)) return 'pill-info';
-    if (['DISPATCHED', 'NEW', 'TONU'].includes(normalized)) return 'pill-warning';
+    if (['DISPATCHED', 'NEW', 'TONU', 'DRAFT'].includes(normalized)) return 'pill-warning';
     if (['CANCELLED', 'CANCELED'].includes(normalized)) return 'pill-danger';
     if (['PAID', 'FUNDED', 'INVOICED', 'BOL_RECEIVED', 'SENT_TO_FACTORING'].includes(normalized)) return 'pill-success';
     if (['PENDING'].includes(normalized)) return 'pill-muted';

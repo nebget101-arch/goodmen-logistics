@@ -1,4 +1,5 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subject, debounceTime, distinctUntilChanged, takeUntil, forkJoin, of } from 'rxjs';
@@ -33,6 +34,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   showNewLoadMenu = false;
   showManualModal = false;
   showAutoModal = false;
+  showBulkUploadModal = false;
   showDetailsModal = false;
   showInlineNewLoad = false;
   showRouteModal = false;
@@ -78,6 +80,14 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   autoExtracting = false;
   autoError = '';
   autoExtraction: LoadAiEndpointExtraction | null = null;
+
+  // Bulk upload rate confirmations
+  bulkPdfFiles: File[] = [];
+  bulkUploading = false;
+  bulkError = '';
+  bulkResults: Array<{ success: boolean; data?: LoadDetail; error?: string; filename: string }> = [];
+
+  deletingDraft = false;
 
   drivers: { id: string; name: string }[] = [];
   trucks: { id: string; label: string }[] = [];
@@ -196,7 +206,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   deliveryCityEdited = false;
   deliveryStateEdited = false;
 
-  statusOptions: LoadStatus[] = ['NEW', 'DISPATCHED', 'CANCELLED', 'TONU', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
+  statusOptions: LoadStatus[] = ['NEW', 'DRAFT', 'DISPATCHED', 'CANCELLED', 'TONU', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
   billingOptions: BillingStatus[] = ['PENDING', 'CANCELLED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
 
   grossPeriod = 'all';
@@ -219,7 +229,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   /** Display labels for status dropdowns (match screenshot) */
   getStatusLabel(s: string): string {
     const map: Record<string, string> = {
-      NEW: 'New', CANCELLED: 'Canceled', CANCELED: 'Canceled', TONU: 'TONU',
+      NEW: 'New', DRAFT: 'Draft', CANCELLED: 'Canceled', CANCELED: 'Canceled', TONU: 'TONU',
       DISPATCHED: 'Dispatched', EN_ROUTE: 'En Route', PICKED_UP: 'Picked-up',
       IN_TRANSIT: 'In Transit', DELIVERED: 'Delivered'
     };
@@ -331,11 +341,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     const formPickup = this.manualLoadForm.get('pickupDate')?.value;
     const formDelivery = this.manualLoadForm.get('deliveryDate')?.value;
     if (type === 'PICKUP') {
-      const v = (formPickup ?? stop?.stop_date ?? load?.pickup_date) ?? null;
+      const v = (stop?.stop_date ?? formPickup ?? load?.pickup_date) ?? null;
       return v ? String(v).trim() || null : null;
     }
     if (type === 'DELIVERY') {
-      const v = (formDelivery ?? stop?.stop_date ?? load?.delivery_date) ?? null;
+      const v = (stop?.stop_date ?? formDelivery ?? load?.delivery_date) ?? null;
       return v ? String(v).trim() || null : null;
     }
     return (stop?.stop_date as string) || null;
@@ -344,7 +354,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   constructor(
     private loadsService: LoadsService,
     private fb: FormBuilder,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private sanitizer: DomSanitizer
   ) {
     this.manualLoadForm = this.fb.group({
       status: ['NEW', Validators.required],
@@ -877,6 +888,171 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showNewLoadMenu = false;
   }
 
+  openBulkUpload(): void {
+    this.bulkPdfFiles = [];
+    this.bulkUploading = false;
+    this.bulkError = '';
+    this.bulkResults = [];
+    this.showBulkUploadModal = true;
+    this.showNewLoadMenu = false;
+  }
+
+  closeBulkUploadModal(): void {
+    this.showBulkUploadModal = false;
+    this.bulkPdfFiles = [];
+    this.bulkResults = [];
+  }
+
+  onBulkFilesSelected(files: FileList | null, inputEl?: HTMLInputElement): void {
+    this.bulkError = '';
+    if (!files || files.length === 0) return;
+    const pdfs = Array.from(files).filter((f) => f.type === 'application/pdf');
+    if (files.length > 0 && pdfs.length === 0) {
+      this.bulkError = 'Please select PDF files only.';
+      return;
+    }
+    const maxTotal = 10;
+    const current = this.bulkPdfFiles.length;
+    const remaining = Math.max(0, maxTotal - current);
+    if (remaining === 0) {
+      this.bulkError = 'Maximum 10 rate confirmations. Remove one to add more.';
+      return;
+    }
+    const toAdd = pdfs.slice(0, remaining);
+    this.bulkPdfFiles = [...this.bulkPdfFiles, ...toAdd];
+    if (pdfs.length > remaining) {
+      this.bulkError = `Added ${toAdd.length} file(s). Maximum 10 total; ${pdfs.length - remaining} not added.`;
+    }
+    if (inputEl) inputEl.value = '';
+  }
+
+  removeBulkFile(index: number): void {
+    this.bulkError = '';
+    this.bulkPdfFiles = this.bulkPdfFiles.filter((_, i) => i !== index);
+  }
+
+  onBulkDrop(event: DragEvent): void {
+    event.preventDefault();
+    const files = event.dataTransfer?.files;
+    if (files?.length) this.onBulkFilesSelected(files);
+  }
+
+  runBulkUpload(): void {
+    this.bulkError = '';
+    if (this.bulkPdfFiles.length === 0) {
+      this.bulkError = 'Please select at least one PDF file.';
+      return;
+    }
+    const filesToUpload = [...this.bulkPdfFiles];
+    this.bulkUploading = true;
+    this.bulkResults = [];
+    this.closeBulkUploadModal();
+    this.errorMessage = '';
+    this.successMessage = 'Extracting load details… we\'ll notify when ready.';
+    const fileCount = filesToUpload.length;
+    this.loadsService.bulkUploadRateConfirmations(filesToUpload).subscribe({
+      next: (res) => {
+        this.bulkUploading = false;
+        this.bulkResults = res?.results || [];
+        const successCount = this.bulkResults.filter((r) => r.success).length;
+        const failCount = this.bulkResults.length - successCount;
+        this.errorMessage = '';
+        if (successCount > 0) {
+          this.loadLoads();
+          this.successMessage =
+            successCount === fileCount
+              ? `${successCount} load(s) extracted and ready for review.`
+              : `${successCount} load(s) extracted.${failCount > 0 ? ` ${failCount} failed.` : ''}`;
+        } else {
+          this.errorMessage = failCount > 0
+            ? (this.bulkResults[0]?.error || 'Extraction failed for all files.')
+            : 'Bulk upload failed.';
+        }
+        setTimeout(() => {
+          this.successMessage = '';
+          this.errorMessage = '';
+        }, 5000);
+      },
+      error: (err) => {
+        this.bulkUploading = false;
+        this.successMessage = '';
+        this.errorMessage = err?.error?.error || 'Extraction failed. Please try again.';
+        setTimeout(() => { this.errorMessage = ''; }, 5000);
+      }
+    });
+  }
+
+  approveDraftLoad(load: LoadListItem, e?: Event): void {
+    if (e) e.stopPropagation();
+    const status = (load.status || '').toString().toUpperCase();
+    if (status !== 'DRAFT') return;
+    this.errorMessage = '';
+    this.loadsService.approveDraft(load.id).subscribe({
+      next: () => {
+        this.successMessage = 'Load approved.';
+        this.closeManualModal();
+        this.loadLoads();
+        setTimeout(() => { this.successMessage = ''; }, 3000);
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to approve load.';
+      }
+    });
+  }
+
+  deleteDraftLoad(load: LoadListItem | LoadDetail): void {
+    const id = load.id;
+    if (!id) return;
+    if ((load as LoadListItem).status && (load as LoadListItem).status.toString().toUpperCase() !== 'DRAFT') return;
+    if (!confirm('Delete this draft load? This cannot be undone.')) return;
+    this.errorMessage = '';
+    this.deletingDraft = true;
+    this.loadsService.deleteDraftLoad(id).subscribe({
+      next: () => {
+        this.deletingDraft = false;
+        this.successMessage = 'Draft deleted.';
+        this.closeManualModal();
+        this.loadLoads();
+        setTimeout(() => { this.successMessage = ''; }, 3000);
+      },
+      error: (err) => {
+        this.deletingDraft = false;
+        this.errorMessage = err?.error?.error || 'Failed to delete draft.';
+      }
+    });
+  }
+
+  /** Delete load from table (only NEW or DRAFT). */
+  deleteLoadFromTable(load: LoadListItem): void {
+    if (!this.canDeleteLoad(load)) return;
+    if (!confirm('Delete this load? This cannot be undone.')) return;
+    this.errorMessage = '';
+    this.loadsService.deleteDraftLoad(load.id).subscribe({
+      next: () => {
+        this.successMessage = 'Load deleted.';
+        this.loadLoads();
+        setTimeout(() => { this.successMessage = ''; }, 3000);
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to delete load.';
+      },
+    });
+  }
+
+  isDraftLoad(load: LoadListItem): boolean {
+    return (load.status || '').toString().toUpperCase() === 'DRAFT';
+  }
+
+  /** True if load can be deleted (NEW or DRAFT only). */
+  canDeleteLoad(load: LoadListItem): boolean {
+    const s = (load.status || '').toString().toUpperCase();
+    return s === 'DRAFT' || s === 'NEW';
+  }
+
+  getBulkFileNames(): string {
+    return (this.bulkPdfFiles || []).map((f) => f.name).join(', ');
+  }
+
   closeManualModal(): void {
     this.showManualModal = false;
     this.showUploadModal = false;
@@ -1284,6 +1460,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       state: v.state || null,
       zip: v.zip || null,
       address1: v.address1 || null,
+      address2: v.notes || null,
       sequence: orderAfter + 2
     };
     const existing = this.sortedStops.map((s, i) => ({ ...s, sequence: i + 1 }));
@@ -1365,7 +1542,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.selectedLoad = null;
   }
 
-  openEdit(load: LoadListItem): void {
+  openEdit(load: LoadListItem, attachmentTabFirst?: boolean): void {
     this.errorMessage = '';
     this.creatingLoad = false;
     this.loadsService.getLoad(load.id).subscribe({
@@ -1382,7 +1559,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
           const bSeq = b.sequence ?? 0;
           return aSeq - bSeq;
         });
-        this.attachmentTab = 'documents';
+        this.attachmentTab = attachmentTabFirst ? 'documents' : 'documents';
         this.populateFormFromDetail(detail);
         this.loadBrokers();
         this.showManualModal = true;
@@ -1391,6 +1568,105 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         this.errorMessage = 'Failed to load details for edit.';
       }
     });
+  }
+
+  /** Open load edit and then show route map (based on stop zips). */
+  openEditAndShowMap(load: LoadListItem): void {
+    this.errorMessage = '';
+    this.creatingLoad = false;
+    this.loadsService.getLoad(load.id).subscribe({
+      next: (res) => {
+        const detail = res?.data;
+        if (!detail) {
+          this.errorMessage = 'Failed to load details for map.';
+          return;
+        }
+        this.editingLoadId = detail.id;
+        this.editingLoadDetail = detail;
+        this.sortedStops = (detail.stops || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+        this.attachmentTab = 'documents';
+        this.populateFormFromDetail(detail);
+        this.loadBrokers();
+        this.showManualModal = true;
+        setTimeout(() => this.openRouteModal(), 100);
+      },
+      error: () => {
+        this.errorMessage = 'Failed to load details for map.';
+      }
+    });
+  }
+
+  /** Open load for edit with documents tab focused (e.g. from attachment chips). */
+  openEditForAttachments(load: LoadListItem): void {
+    this.openEdit(load, true);
+  }
+
+  /** Copy load: create a new draft with same details, then open for edit. */
+  copyLoad(load: LoadListItem): void {
+    this.loadsService.getLoad(load.id).subscribe({
+      next: (res) => {
+        const detail = res?.data;
+        if (!detail) {
+          this.errorMessage = 'Failed to load load details for copy.';
+          return;
+        }
+        const payload = this.buildCreatePayloadFromDetail(detail);
+        this.loadsService.createLoad(payload).subscribe({
+          next: (created) => {
+            const newId = created?.data?.id;
+            if (newId) {
+              this.loadLoads();
+              this.successMessage = 'Load copied. Opening for edit.';
+              setTimeout(() => { this.successMessage = ''; }, 3000);
+              this.loadsService.getLoad(newId).subscribe({
+                next: (r) => {
+                  const newDetail = r?.data;
+                  if (newDetail) this.openEdit({ ...newDetail, id: newId } as LoadListItem);
+                }
+              });
+            }
+          },
+          error: (err) => {
+            this.errorMessage = err?.error?.error || 'Failed to copy load.';
+          }
+        });
+      },
+      error: () => {
+        this.errorMessage = 'Failed to load details for copy.';
+      }
+    });
+  }
+
+  private buildCreatePayloadFromDetail(detail: LoadDetail): any {
+    const stops = (detail.stops || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const pickup = stops.find((s) => (s.stop_type || '').toString().toUpperCase() === 'PICKUP');
+    const delivery = stops.find((s) => (s.stop_type || '').toString().toUpperCase() === 'DELIVERY');
+    const pickupDate = pickup?.stop_date ?? (detail as any).pickup_date;
+    const deliveryDate = delivery?.stop_date ?? (detail as any).delivery_date;
+    return {
+      loadNumber: (detail.load_number || '').toString().trim() ? `Copy of ${(detail.load_number || '').toString().slice(0, 40)}` : undefined,
+      status: 'DRAFT',
+      billingStatus: detail.billing_status || 'PENDING',
+      brokerId: detail.broker_id || undefined,
+      brokerName: detail.broker_name || undefined,
+      poNumber: detail.po_number || undefined,
+      rate: detail.rate ?? 0,
+      notes: detail.notes ?? undefined,
+      driverId: undefined,
+      truckId: undefined,
+      trailerId: undefined,
+      pickupDate: pickupDate ? String(pickupDate).slice(0, 10) : undefined,
+      deliveryDate: deliveryDate ? String(deliveryDate).slice(0, 10) : undefined,
+      stops: stops.map((s, i) => ({
+        stopType: s.stop_type,
+        sequence: i + 1,
+        date: s.stop_date ? String(s.stop_date).slice(0, 10) : undefined,
+        city: s.city,
+        state: s.state,
+        zip: s.zip,
+        address1: s.address1
+      }))
+    };
   }
 
   private populateFormFromDetail(detail: LoadDetail): void {
@@ -1466,7 +1742,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.sortedStops = [];
   }
 
-  /** Apply extracted AI values into the manual load form for review. */
+  /** Apply extracted AI values into the manual load form for review (same scenarios as bulk: multi-stop, PO, etc.). */
   private applyExtractionToForm(extraction: LoadAiEndpointExtraction): void {
     this.editingLoadId = null;
     this.editingLoadDetail = null;
@@ -1477,7 +1753,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
     this.manualLoadForm.patchValue({
       brokerName: extraction.brokerName || '',
-      poNumber: extraction.poNumber || '',
+      poNumber: extraction.poNumber || (extraction.loadId || extraction.orderId || extraction.proNumber || '').toString() || '',
       rate: extraction.rate != null ? extraction.rate : '',
       pickupDate: pickup.date || '',
       pickupCity: pickup.city || '',
@@ -1488,6 +1764,22 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       deliveryState: delivery.state || '',
       deliveryZip: delivery.zip || ''
     });
+
+    // Apply multi-stop when present (same as bulk upload)
+    const rawStops = extraction.stops && Array.isArray(extraction.stops) ? extraction.stops : [];
+    if (rawStops.length > 0) {
+      this.sortedStops = rawStops
+        .map((s, i) => ({
+          stop_type: (s.type || (i === 0 ? 'PICKUP' : 'DELIVERY')) as 'PICKUP' | 'DELIVERY',
+          sequence: s.sequence ?? i + 1,
+          stop_date: s.date || null,
+          city: s.city || null,
+          state: s.state || null,
+          zip: s.zip || null,
+          address1: s.address1 || null
+        }))
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    }
   }
 
   markPickupCityEdited(): void {
@@ -1858,6 +2150,19 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     }
     const base = environment.apiUrl.replace(/\/api\/?$/, '');
     return base + (att.file_url.startsWith('/') ? att.file_url : '/' + att.file_url);
+  }
+
+  /** First rate confirmation PDF URL for draft review (side-by-side view). */
+  get draftRateConPdfUrl(): string {
+    const atts = this.editingLoadDetail?.attachments || [];
+    const rateCon = atts.find((a) => (a.type || '').toString() === 'RATE_CONFIRMATION');
+    return rateCon ? this.getAttachmentUrl(rateCon) : '';
+  }
+
+  /** Sanitized PDF URL for iframe in draft review. */
+  get draftRateConPdfSafeUrl(): SafeResourceUrl {
+    const url = this.draftRateConPdfUrl;
+    return url ? this.sanitizer.bypassSecurityTrustResourceUrl(url) : this.sanitizer.bypassSecurityTrustResourceUrl('about:blank');
   }
 
   @HostListener('document:click')
