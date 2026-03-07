@@ -265,8 +265,21 @@
   gap: 16px;
 }
 
+.loads-metrics-grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .loads-metrics-grid-5 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 1024px) {
   .loads-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .loads-metrics-grid-5 {
     grid-template-columns: repeat(2, 1fr);
   }
 }

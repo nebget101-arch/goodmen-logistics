@@ -1,0 +1,205 @@
+<div class="dispatch-board-shell">
+  <div class="dispatch-header">
+    <h1>Dispatch Board</h1>
+    <div class="header-right">
+      <div class="date-nav">
+        <button type="button" class="btn-icon" (click)="prevWeek()" title="Previous week">
+          <span class="material-symbols-outlined">chevron_left</span>
+        </button>
+        <span class="week-range">{{ weekRangeLabel }}</span>
+        <button type="button" class="btn-icon" (click)="nextWeek()" title="Next week">
+          <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <div class="ai-date-wrapper" title="Jump to date">
+        <app-date-picker
+          placeholder="Pick date"
+          [value]="dateSearchAsDate"
+          (valueChange)="onDatePickerChange($event)"
+        ></app-date-picker>
+      </div>
+      <select class="select-sort" [(ngModel)]="selectedSortOption" (ngModelChange)="setSort($event)">
+        <option *ngFor="let o of sortOptions" [ngValue]="o">{{ o.label }}</option>
+      </select>
+      <select class="select-filter" [(ngModel)]="filterBy" (change)="setFilterBy(filterBy)">
+        <option *ngFor="let o of filterOptions" [value]="o.value">{{ o.label }}</option>
+      </select>
+      <div class="driver-filter-dropdown">
+        <button type="button" class="btn-dropdown" (click)="driverFilterOpen = !driverFilterOpen">
+          Drivers: {{ driverFilterLabel }}
+          <span class="material-symbols-outlined chevron">expand_more</span>
+        </button>
+        <div class="dropdown-panel" *ngIf="driverFilterOpen">
+          <button type="button" class="dropdown-option" (click)="setDriverFilter('all'); driverFilterOpen = false">Show All</button>
+          <ng-container *ngFor="let f of customFilters">
+            <button type="button" class="dropdown-option" (click)="setDriverFilter(f.id); driverFilterOpen = false">
+              {{ f.name }}
+              <span class="material-symbols-outlined edit-icon" (click)="openFilterModal(f); $event.stopPropagation()">edit</span>
+            </button>
+          </ng-container>
+          <button type="button" class="dropdown-option new-filter" (click)="openFilterModal(); driverFilterOpen = false">
+            <span class="material-symbols-outlined">add</span> new filter
+          </button>
+        </div>
+      </div>
+      <button type="button" class="btn-primary-sm" (click)="newLoad()">
+        <span class="material-symbols-outlined">add</span>
+        New Load
+      </button>
+      <button
+        type="button"
+        class="chip"
+        [class.chip-active]="loadStatusFilter === 'DELIVERED'"
+        (click)="setLoadStatusFilter(loadStatusFilter === 'DELIVERED' ? '' : 'DELIVERED')"
+      >
+        Delivered
+      </button>
+      <button
+        type="button"
+        class="chip"
+        [class.chip-active]="loadStatusFilter === 'EN_ROUTE'"
+        (click)="setLoadStatusFilter(loadStatusFilter === 'EN_ROUTE' ? '' : 'EN_ROUTE')"
+      >
+        En Route
+      </button>
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Search"
+        [(ngModel)]="searchText"
+      />
+    </div>
+  </div>
+
+  <div class="board-container" *ngIf="loading">
+    <div class="loading-overlay">
+      <div class="spinner"></div>
+      <p>Loading schedule...</p>
+    </div>
+  </div>
+
+  <div class="board-grid" *ngIf="!loading">
+    <div class="grid-header">
+      <div class="col-driver">Driver</div>
+      <div class="col-days">
+        <div class="day-col" *ngFor="let d of days" [class.today]="d.isToday">{{ d.label }}</div>
+      </div>
+      <div class="col-notes">Notes</div>
+    </div>
+
+    <div class="grid-body">
+      <div class="driver-row" *ngFor="let driver of sortedFilteredDrivers" [class.unassigned-row]="driver.type === 'unassigned'">
+        <div class="col-driver driver-cell">
+          <ng-container *ngIf="driver.type === 'driver'">
+            <span class="material-symbols-outlined driver-icon">person</span>
+            <div class="driver-info">
+              <span class="driver-name">{{ driver.name }} (Drv)</span>
+              <span class="driver-id" *ngIf="driver.unitNumber || driver.id">{{ driver.unitNumber || (driver.id | slice:0:8) }}</span>
+              <span class="driver-phone" *ngIf="driver.phone">{{ driver.phone }}</span>
+            </div>
+          </ng-container>
+          <ng-container *ngIf="driver.type === 'unassigned'">
+            <span class="unassigned-label">Unassigned Loads</span>
+          </ng-container>
+        </div>
+        <div class="col-days day-cells" *ngIf="driver.type === 'driver' || driver.type === 'unassigned'">
+          <div class="day-cell" *ngFor="let day of days; let i = index" [style.grid-column]="(i+1) + ' / span 1'" [style.grid-row]="1">
+            <span class="cell-placeholder" *ngIf="!isDayCoveredByLoad(driver.id, i)">No load assigned</span>
+          </div>
+          <div
+            *ngFor="let load of getLoadsForDriver(driver.id)"
+            class="load-card-wrapper load-card-spanning"
+            [style.grid-column]="getLoadSpan(load).startCol + ' / span ' + getLoadSpan(load).span"
+            [style.grid-row]="1"
+          >
+            <div
+              [ngClass]="getLoadCardClass(load)"
+              (click)="goToLoad(load)"
+              class="load-card-inner load-card-span-inner"
+              [attr.title]="getLoadTooltip(load)"
+            >
+              <div class="load-card-id">#{{ load.load_number || load.id }}</div>
+              <div class="load-card-row">
+                <span class="load-pickup">
+                  {{ getLoadCardPickup(load) }}<span class="load-date" *ngIf="getLoadPickupDateMMDDYY(load)"> {{ getLoadPickupDateMMDDYY(load) }}</span>
+                </span>
+                <span class="load-arrow">→</span>
+                <span class="load-delivery">
+                  {{ getLoadCardDelivery(load) }}<span class="load-date" *ngIf="getLoadDeliveryDateMMDDYY(load)"> {{ getLoadDeliveryDateMMDDYY(load) }}</span>
+                </span>
+              </div>
+            </div>
+            <div class="load-card-hover">
+              <div class="hover-row" *ngIf="load.rate != null">Price: ${{ load.rate | number:'1.2-2' }}</div>
+              <div class="hover-row">Pickup: {{ getLoadCardPickup(load) }}{{ load.pickup_zip ? ' ' + load.pickup_zip : '' }}</div>
+              <div class="hover-row">Delivery: {{ getLoadCardDelivery(load) }}{{ load.delivery_zip ? ' ' + load.delivery_zip : '' }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-notes notes-cell">
+          <ng-container *ngIf="driver.type === 'driver'">
+            <a href="javascript:void(0)" class="note-link">Add note</a>
+            <a href="javascript:void(0)" class="note-link">Add Lumper</a>
+            <a href="javascript:void(0)" class="note-link">View details</a>
+          </ng-container>
+          <span *ngIf="driver.type === 'unassigned'">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom filter modal -->
+  <div class="modal-backdrop" *ngIf="showFilterModal" (click)="closeFilterModal()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Edit Dispatch board Filter</h2>
+        <button type="button" class="btn-close" (click)="closeFilterModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label for="filter-name">Name:</label>
+          <input id="filter-name" type="text" class="form-input" [(ngModel)]="filterName" placeholder="Filter name" />
+        </div>
+        <div class="form-row">
+          <label for="filter-driver-search">Drivers:</label>
+          <input
+            id="filter-driver-search"
+            type="text"
+            class="form-input search"
+            [(ngModel)]="filterDriverSearch"
+            placeholder="Search"
+          />
+        </div>
+        <div class="driver-check-list">
+          <button
+            type="button"
+            *ngFor="let d of filterModalDrivers"
+            class="checkbox-row"
+            [class.checked]="filterSelectedIds.has(d.id)"
+            (click)="toggleDriverSelection(d.id)"
+          >
+            <span class="custom-checkbox" [class.checked]="filterSelectedIds.has(d.id)" aria-hidden="true"></span>
+            <span class="checkbox-row-label">{{ d.name }} [{{ d.type }}]</span>
+          </button>
+        </div>
+        <p class="selected-count">selected {{ filterSelectedIds.size }}</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-link" *ngIf="editingFilter" (click)="removeFilter()">Remove</button>
+        <div class="footer-actions">
+          <button type="button" class="btn-secondary" (click)="closeFilterModal()">
+            <span class="material-symbols-outlined">close</span> Close
+          </button>
+          <button type="button" class="btn-primary" (click)="saveFilter()">
+            <span class="material-symbols-outlined">check</span> Save
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

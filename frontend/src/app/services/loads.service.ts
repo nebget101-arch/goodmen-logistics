@@ -52,11 +52,19 @@ export interface UserProfile {
 
 export interface BrokerOption {
   id: string;
-  name: string;
+  name?: string;
+  display_name?: string | null;
+  legal_name?: string | null;
   mc_number?: string | null;
   dot_number?: string | null;
   city?: string | null;
   state?: string | null;
+  dba_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  street?: string | null;
+  zip?: string | null;
+  country?: string | null;
 }
 
 @Injectable({
@@ -150,12 +158,35 @@ export class LoadsService {
     );
   }
 
-  getBrokers(search?: string): Observable<{ success: boolean; data: BrokerOption[] }> {
-    let params = new HttpParams();
+  getBrokers(search?: string, page = 1, pageSize = 50): Observable<{ success: boolean; data: BrokerOption[]; meta?: { total: number } }> {
+    let params = new HttpParams().set('page', String(page)).set('pageSize', String(pageSize));
     if (search != null && search !== '') {
       params = params.set('q', search);
     }
-    return this.http.get<{ success: boolean; data: BrokerOption[] }>(`${this.baseUrl}/brokers`, { params });
+    return this.http.get<{ success: boolean; data: BrokerOption[]; meta?: { total: number } }>(`${this.baseUrl}/brokers`, { params });
+  }
+
+  createBroker(payload: Partial<{
+    legal_name: string;
+    companyName: string;
+    dba_name: string;
+    mc_number: string;
+    dot_number: string;
+    phone: string;
+    email: string;
+    street: string;
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+    country: string;
+    authority_type: string;
+    status: string;
+    notes: string;
+  }>): Observable<{ success: boolean; data: BrokerOption }> {
+    const body: any = { ...payload };
+    if (payload?.companyName && !body.legal_name) body.legal_name = payload.companyName;
+    return this.http.post<{ success: boolean; data: BrokerOption }>(`${this.baseUrl}/brokers`, body);
   }
 
   aiExtractFromPdf(file: File): Observable<{ success: boolean; data: LoadAiEndpointExtraction }> {

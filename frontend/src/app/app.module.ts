@@ -21,6 +21,7 @@ import { MaintenanceComponent } from './components/maintenance/maintenance.compo
 import { WorkOrderComponent } from './components/work-order/work-order.component';
 import { LoadsComponent } from './components/loads/loads.component';
 import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
+import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { UserCreateComponent } from './components/user-create/user-create.component';
@@ -58,6 +59,7 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     MaintenanceComponent,
     LoadsComponent,
     LoadsDashboardComponent,
+    DispatchBoardComponent,
     AuditComponent,
     LoginComponent,
     UserCreateComponent,

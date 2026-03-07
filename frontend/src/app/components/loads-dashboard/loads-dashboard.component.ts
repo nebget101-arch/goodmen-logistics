@@ -14,7 +14,7 @@ import {
   LoadStop,
   LoadAiEndpointExtraction
 } from '../../models/load-dashboard.model';
-import { LoadsService } from '../../services/loads.service';
+import { LoadsService, BrokerOption } from '../../services/loads.service';
 import { environment } from '../../../environments/environment';
 
 type SortDir = 'asc' | 'desc';
@@ -84,6 +84,14 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   trailers: { id: string; label: string }[] = [];
   brokers: { id: string; name: string }[] = [];
   brokerDropdownOpen = false;
+  /** Broker search results from API (search-by-query). */
+  brokerSearchResults: BrokerOption[] = [];
+  brokerSearchLoading = false;
+  /** Add new broker modal and form. */
+  showBrokerCreateModal = false;
+  brokerCreateForm: FormGroup;
+  brokerCreateSaving = false;
+  brokerCreateError = '';
 
   dispatcherName = '';
   dispatcherUserId: string | null = null;
@@ -96,6 +104,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   selectedAttachmentFiles: FileList | null = null;
 
   search$ = new Subject<string>();
+  /** Broker search query – debounced and switchMap cancels in-flight requests. */
+  private brokerSearch$ = new Subject<string>();
   private destroy$ = new Subject<void>();
 
   // Inline searchable combos for driver / truck / trailer
@@ -142,8 +152,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     q: ''
   };
 
-  sortBy: 'load_number' | 'pickup_date' | 'rate' | 'completed_date' = 'load_number';
-  sortDir: SortDir = 'desc';
+  sortBy: 'load_number' | 'pickup_date' | 'rate' | 'completed_date' = 'pickup_date';
+  sortDir: SortDir = 'asc';
 
   // Summary totals for quick gross amount reporting on current page
   summaryTotals: {
@@ -186,8 +196,43 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   deliveryCityEdited = false;
   deliveryStateEdited = false;
 
-  statusOptions: LoadStatus[] = ['NEW', 'DISPATCHED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'];
-  billingOptions: BillingStatus[] = ['PENDING', 'FUNDED', 'INVOICED', 'PAID'];
+  statusOptions: LoadStatus[] = ['NEW', 'DISPATCHED', 'CANCELLED', 'TONU', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
+  billingOptions: BillingStatus[] = ['PENDING', 'CANCELLED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
+
+  grossPeriod = 'all';
+  grossPeriodOptions: { value: string; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'this_year', label: 'This year' },
+    { value: 'last_year', label: 'Last year' },
+    { value: 'last_6_months', label: 'Last 6 months' },
+    { value: 'last_3_months', label: 'Last 3 months' },
+    { value: 'this_month', label: 'This month' },
+    { value: 'last_month', label: 'Last month' },
+    { value: 'last_30_days', label: 'Last 30 days' },
+    { value: 'last_7_days', label: 'Last 7 days' },
+    { value: 'last_week', label: 'Last week' },
+    { value: 'this_week', label: 'This week' },
+    { value: 'yesterday', label: 'Yesterday' },
+    { value: 'today', label: 'Today' }
+  ];
+
+  /** Display labels for status dropdowns (match screenshot) */
+  getStatusLabel(s: string): string {
+    const map: Record<string, string> = {
+      NEW: 'New', CANCELLED: 'Canceled', CANCELED: 'Canceled', TONU: 'TONU',
+      DISPATCHED: 'Dispatched', EN_ROUTE: 'En Route', PICKED_UP: 'Picked-up',
+      IN_TRANSIT: 'In Transit', DELIVERED: 'Delivered'
+    };
+    return map[s] ?? s.replace(/_/g, ' ');
+  }
+  getBillingLabel(s: string): string {
+    const map: Record<string, string> = {
+      PENDING: 'Pending', CANCELLED: 'Canceled', CANCELED: 'Canceled',
+      BOL_RECEIVED: 'BOL received', INVOICED: 'Invoiced',
+      SENT_TO_FACTORING: 'Sent to factoring', FUNDED: 'Funded', PAID: 'Paid'
+    };
+    return map[s] ?? s.replace(/_/g, ' ');
+  }
 
   private headerFilterLabels: { [K in keyof typeof this.headerFilters]: string } = {
     date: 'Date',
@@ -348,6 +393,19 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       phone: [''],
       notes: ['']
     });
+    this.brokerCreateForm = this.fb.group({
+      companyName: ['', Validators.required],
+      address: [''],
+      address2: [''],
+      city: [''],
+      state: [''],
+      zip: [''],
+      phone: [''],
+      email: [''],
+      mc_number: [''],
+      dot_number: [''],
+      notes: ['']
+    });
   }
 
   private normalizeDate(value: any): string {
@@ -357,10 +415,36 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return d.toISOString().slice(0, 10);
   }
 
+  /** Format date string as yyyy-MM-dd using local parsing to avoid UTC shift. */
+  formatDateLocal(value: string | null | undefined): string {
+    if (!value) return '';
+    const s = String(value).trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+      return isNaN(d.getTime()) ? '' : `${m[1]}-${m[2]}-${m[3]}`;
+    }
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${mo}-${day}`;
+  }
+
   ngOnInit(): void {
     this.route.queryParams.subscribe((params) => {
       if (params['status']) this.filters.status = params['status'];
       if (params['billingStatus']) this.filters.billingStatus = params['billingStatus'];
+      const loadId = params['loadId'];
+      if (loadId) {
+        this.loadsService.getLoad(loadId).subscribe({
+          next: (res) => {
+            this.selectedLoad = res?.data || null;
+            this.showDetailsModal = true;
+          }
+        });
+      }
     });
     this.loadDropdownData();
     this.loadLoads();
@@ -371,6 +455,28 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         this.filters.q = value;
         this.page = 1;
         this.loadLoads();
+      });
+
+    this.brokerSearch$
+      .pipe(
+        debounceTime(350),
+        distinctUntilChanged(),
+        switchMap((q) => {
+          this.brokerSearchLoading = true;
+          return this.loadsService.getBrokers(q).pipe(
+            catchError(() => of({ data: [] })),
+            map((res) => ({ data: res?.data || [] }))
+          );
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe((res) => {
+        this.brokerSearchResults = res.data;
+        this.brokers = this.brokerSearchResults.map((b) => ({
+          id: b.id,
+          name: this.getBrokerDisplayName(b)
+        }));
+        this.brokerSearchLoading = false;
       });
   }
 
@@ -434,29 +540,116 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadBrokers(): void {
-    this.loadsService.getBrokers().subscribe({
-      next: (res) => {
-        this.brokers = (res?.data || []).map((b) => ({ id: b.id, name: b.name }));
-      },
-      error: () => {
-        this.brokers = [];
-      }
-    });
+    this.brokerSearch$.next((this.manualLoadForm.get('brokerName')?.value || '').toString().trim());
+  }
+
+  /** Emit broker search query (debounced; switchMap cancels in-flight). */
+  searchBrokers(): void {
+    const q = (this.manualLoadForm.get('brokerName')?.value || '').toString().trim();
+    this.brokerSearch$.next(q);
+  }
+
+  getBrokerDisplayName(b: BrokerOption): string {
+    return (b.display_name || b.name || b.legal_name || '').toString().trim() || '—';
+  }
+
+  /** One-line display for broker in dropdown: "Name / City, ST / MC". */
+  getBrokerDisplayLine(b: BrokerOption): string {
+    const name = this.getBrokerDisplayName(b);
+    const loc = [b.city, b.state].filter(Boolean).join(', ');
+    const mc = (b.mc_number || '').toString().trim();
+    if (loc && mc) return `${name} / ${loc} / ${mc}`;
+    if (loc) return `${name} / ${loc}`;
+    if (mc) return `${name} / ${mc}`;
+    return name;
   }
 
   get filteredBrokers(): { id: string; name: string }[] {
-    const q = (this.manualLoadForm.get('brokerName')?.value || '').toString().trim().toLowerCase();
-    if (!q) return this.brokers.slice(0, 50);
-    return this.brokers.filter((b) => b.name.toLowerCase().includes(q)).slice(0, 50);
+    return this.brokerSearchResults.map((b) => ({
+      id: b.id,
+      name: this.getBrokerDisplayLine(b)
+    }));
   }
 
-  selectBroker(broker: { id: string; name: string }): void {
-    this.manualLoadForm.patchValue({ brokerId: broker.id, brokerName: broker.name });
+  selectBroker(broker: { id: string; name: string } | BrokerOption): void {
+    const id = 'id' in broker ? broker.id : (broker as BrokerOption).id;
+    const name = 'name' in broker && (broker as { name: string }).name
+      ? (broker as { name: string }).name
+      : this.getBrokerDisplayName(broker as BrokerOption);
+    this.manualLoadForm.patchValue({ brokerId: id, brokerName: name });
     this.brokerDropdownOpen = false;
   }
 
   onBrokerInputFocus(): void {
     this.brokerDropdownOpen = true;
+    this.searchBrokers();
+  }
+
+  onBrokerSearchInput(): void {
+    this.searchBrokers();
+  }
+
+  openNewBrokerModal(): void {
+    const current = (this.manualLoadForm.get('brokerName')?.value || '').toString().trim();
+    this.brokerCreateForm.patchValue({
+      companyName: current || '',
+      address: '',
+      address2: '',
+      city: '',
+      state: '',
+      zip: '',
+      phone: '',
+      email: '',
+      mc_number: '',
+      dot_number: '',
+      notes: ''
+    });
+    this.brokerCreateError = '';
+    this.showBrokerCreateModal = true;
+    this.brokerDropdownOpen = false;
+  }
+
+  closeBrokerCreateModal(): void {
+    this.showBrokerCreateModal = false;
+    this.brokerCreateError = '';
+  }
+
+  saveNewBroker(): void {
+    if (this.brokerCreateForm.invalid) {
+      this.brokerCreateError = 'Company name is required.';
+      return;
+    }
+    const v = this.brokerCreateForm.value;
+    this.brokerCreateSaving = true;
+    this.brokerCreateError = '';
+    this.loadsService.createBroker({
+      legal_name: v.companyName,
+      companyName: v.companyName,
+      street: v.address,
+      address: v.address,
+      city: v.city,
+      state: v.state,
+      zip: v.zip,
+      phone: v.phone,
+      email: v.email,
+      mc_number: v.mc_number,
+      dot_number: v.dot_number,
+      notes: v.notes
+    }).subscribe({
+      next: (res) => {
+        this.brokerCreateSaving = false;
+        const created = res?.data;
+        if (created) {
+          this.brokerSearchResults = [created, ...this.brokerSearchResults];
+          this.selectBroker(created);
+        }
+        this.closeBrokerCreateModal();
+      },
+      error: (err) => {
+        this.brokerCreateSaving = false;
+        this.brokerCreateError = err?.error?.error || 'Failed to create broker.';
+      }
+    });
   }
 
   get inlineFilteredDrivers(): { id: string; name: string }[] {
@@ -498,12 +691,15 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   loadLoads(): void {
     this.loading = true;
     this.errorMessage = '';
+    const range = this.getGrossPeriodDateRange();
     this.loadsService
       .listLoads({
         status: this.filters.status,
         billingStatus: this.filters.billingStatus,
         driverId: this.filters.driverId,
         q: this.filters.q,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
         page: this.page,
         pageSize: this.pageSize,
         sortBy: this.sortBy,
@@ -552,6 +748,99 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.filters.billingStatus = value;
     this.page = 1;
     this.loadLoads();
+  }
+
+  onGrossPeriodChange(): void {
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  setGrossPeriod(value: string): void {
+    this.grossPeriod = value;
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  getGrossPeriodDateRange(): { dateFrom?: string; dateTo?: string } {
+    const now = new Date();
+    const toStr = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    switch (this.grossPeriod) {
+      case 'all':
+        return {};
+      case 'today': {
+        const d = new Date(now);
+        return { dateFrom: toStr(d), dateTo: toStr(d) };
+      }
+      case 'yesterday': {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 1);
+        return { dateFrom: toStr(d), dateTo: toStr(d) };
+      }
+      case 'this_week': {
+        const sun = new Date(now);
+        sun.setDate(sun.getDate() - sun.getDay());
+        const sat = new Date(sun);
+        sat.setDate(sat.getDate() + 6);
+        return { dateFrom: toStr(sun), dateTo: toStr(sat) };
+      }
+      case 'last_week': {
+        const sun = new Date(now);
+        sun.setDate(sun.getDate() - sun.getDay() - 7);
+        const sat = new Date(sun);
+        sat.setDate(sat.getDate() + 6);
+        return { dateFrom: toStr(sun), dateTo: toStr(sat) };
+      }
+      case 'last_7_days': {
+        const from = new Date(now);
+        from.setDate(from.getDate() - 6);
+        return { dateFrom: toStr(from), dateTo: toStr(now) };
+      }
+      case 'last_30_days': {
+        const from = new Date(now);
+        from.setDate(from.getDate() - 29);
+        return { dateFrom: toStr(from), dateTo: toStr(now) };
+      }
+      case 'this_month': {
+        const first = new Date(now.getFullYear(), now.getMonth(), 1);
+        const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        return { dateFrom: toStr(first), dateTo: toStr(last) };
+      }
+      case 'last_month': {
+        const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const last = new Date(now.getFullYear(), now.getMonth(), 0);
+        return { dateFrom: toStr(first), dateTo: toStr(last) };
+      }
+      case 'last_3_months': {
+        const from = new Date(now);
+        from.setMonth(from.getMonth() - 2);
+        from.setDate(1);
+        return { dateFrom: toStr(from), dateTo: toStr(now) };
+      }
+      case 'last_6_months': {
+        const from = new Date(now);
+        from.setMonth(from.getMonth() - 5);
+        from.setDate(1);
+        return { dateFrom: toStr(from), dateTo: toStr(now) };
+      }
+      case 'this_year': {
+        const first = new Date(now.getFullYear(), 0, 1);
+        const last = new Date(now.getFullYear(), 11, 31);
+        return { dateFrom: toStr(first), dateTo: toStr(last) };
+      }
+      case 'last_year': {
+        const y = now.getFullYear() - 1;
+        const first = new Date(y, 0, 1);
+        const last = new Date(y, 11, 31);
+        return { dateFrom: toStr(first), dateTo: toStr(last) };
+      }
+      default:
+        return {};
+    }
   }
 
   goToPage(page: number): void {

@@ -78,6 +78,7 @@ export const NAV_SECTIONS: NavSection[] = [
 export const NAV_TOP_LINKS: NavLink[] = [
   { path: '/dashboard', label: 'Dashboard', icon: 'dashboard', tab: 'dashboard' },
   { path: '/loads', label: 'Loads', icon: 'route', tab: 'loads' },
+  { path: '/dispatch-board', label: 'Dispatch Board', icon: 'calendar_view_month', tab: 'loads' },
   { path: '/drivers', label: 'Drivers', icon: 'badge', tab: 'drivers' },
 ];
 

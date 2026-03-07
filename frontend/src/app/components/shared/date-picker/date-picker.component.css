@@ -3,10 +3,17 @@
   font-size: 14px;
 }
 
+/* Hide Material outline to avoid white/light box; use wrapper border only */
+.ai-date-field .mat-mdc-form-field-outline,
+.ai-date-field .mat-mdc-form-field-focus-overlay,
+.ai-date-field .mdc-notched-outline {
+  display: none !important;
+}
+
 .ai-date-field .mat-mdc-text-field-wrapper {
   background: radial-gradient(circle at 0 0, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 1));
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.4));
 }
 
 .ai-date-field .mat-mdc-form-field-flex {
@@ -15,10 +22,6 @@
 
 .ai-date-field .mat-mdc-input-element {
   color: var(--text-dark);
-}
-
-.ai-date-field .mat-mdc-form-field-outline {
-  display: none;
 }
 
 .ai-date-field .material-symbols-outlined {

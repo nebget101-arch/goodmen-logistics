@@ -113,21 +113,26 @@
           <h2>Billing status</h2>
           <span class="panel-tag">Finance</span>
         </div>
-        <div class="loads-metrics-grid">
+        <div class="loads-metrics-grid loads-metrics-grid-5">
           <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{billingStatus: 'pending'}">
             <div class="metric-label">Pending</div>
             <div class="metric-value">{{ stats.billingPending ?? 0 }}</div>
             <div class="metric-sub">Awaiting billing</div>
           </a>
-          <a class="metric-card metric-card-link metric-info" routerLink="/loads" [queryParams]="{billingStatus: 'funded'}">
+          <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{billingStatus: 'cancelled'}">
+            <div class="metric-label">Canceled</div>
+            <div class="metric-value">{{ stats.billingCanceled ?? 0 }}</div>
+            <div class="metric-sub">Billing canceled</div>
+          </a>
+          <a class="metric-card metric-card-link metric-info" routerLink="/loads" [queryParams]="{billingStatus: 'invoiced'}">
+            <div class="metric-label">Invoiced</div>
+            <div class="metric-value">{{ stats.billingInvoiced ?? 0 }}</div>
+            <div class="metric-sub">BOL received / Sent to factoring</div>
+          </a>
+          <a class="metric-card metric-card-link metric-warn" routerLink="/loads" [queryParams]="{billingStatus: 'funded'}">
             <div class="metric-label">Funded</div>
             <div class="metric-value">{{ stats.billingFunded ?? 0 }}</div>
             <div class="metric-sub">Advance funded</div>
-          </a>
-          <a class="metric-card metric-card-link metric-warn" routerLink="/loads" [queryParams]="{billingStatus: 'invoiced'}">
-            <div class="metric-label">Invoiced</div>
-            <div class="metric-value">{{ stats.billingInvoiced ?? 0 }}</div>
-            <div class="metric-sub">Sent to customer</div>
           </a>
           <a class="metric-card metric-card-link metric-good" routerLink="/loads" [queryParams]="{billingStatus: 'paid'}">
             <div class="metric-label">Paid</div>

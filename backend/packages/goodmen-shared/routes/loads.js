@@ -9,8 +9,8 @@ const { query, getClient } = require('../internal/db');
 const { extractLoadFromPdf } = require('../services/load-ai-extractor');
 const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 
-const LOAD_STATUSES = ['NEW', 'DISPATCHED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'];
-const BILLING_STATUSES = ['PENDING', 'FUNDED', 'INVOICED', 'PAID'];
+const LOAD_STATUSES = ['NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
+const BILLING_STATUSES = ['PENDING', 'CANCELLED', 'CANCELED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
 const STOP_TYPES = ['PICKUP', 'DELIVERY'];
 const ATTACHMENT_TYPES = [
   'RATE_CONFIRMATION',
@@ -229,7 +229,7 @@ async function getLoadDetail(clientOrQuery, loadId) {
   const loadResult = await exec(
     `SELECT l.*,
             concat_ws(' ', d.first_name, d.last_name) as driver_name,
-            COALESCE(b.name, l.broker_name) as broker_display_name
+            COALESCE(b.legal_name, b.name, l.broker_name) as broker_display_name
      FROM loads l
      LEFT JOIN drivers d ON l.driver_id = d.id
      LEFT JOIN brokers b ON l.broker_id = b.id
@@ -358,17 +358,25 @@ router.get('/', async (req, res) => {
       params.push(`%${q}%`);
       where.push(`(
         l.load_number ILIKE $${params.length}
-        OR COALESCE(b.name, l.broker_name, '') ILIKE $${params.length}
+        OR COALESCE(b.legal_name, b.name, l.broker_name, '') ILIKE $${params.length}
         OR concat_ws(' ', d.first_name, d.last_name) ILIKE $${params.length}
       )`);
     }
-    if (dateFrom) {
+    if (dateFrom && dateTo) {
       params.push(dateFrom);
-      where.push(`COALESCE(delivery.stop_date, pickup.stop_date, l.completed_date, l.created_at)::date >= $${params.length}`);
-    }
-    if (dateTo) {
+      const idxFrom = params.length;
       params.push(dateTo);
-      where.push(`COALESCE(delivery.stop_date, pickup.stop_date, l.completed_date, l.created_at)::date <= $${params.length}`);
+      const idxTo = params.length;
+      where.push(`(
+        (COALESCE(pickup.stop_date, l.pickup_date)::date >= $${idxFrom} AND COALESCE(pickup.stop_date, l.pickup_date)::date <= $${idxTo})
+        OR (COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date >= $${idxFrom} AND COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date <= $${idxTo})
+      )`);
+    } else if (dateFrom) {
+      params.push(dateFrom);
+      where.push(`(COALESCE(pickup.stop_date, l.pickup_date)::date >= $${params.length} OR COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date >= $${params.length})`);
+    } else if (dateTo) {
+      params.push(dateTo);
+      where.push(`(COALESCE(pickup.stop_date, l.pickup_date)::date <= $${params.length} OR COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date <= $${params.length})`);
     }
 
     const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -419,6 +427,7 @@ router.get('/', async (req, res) => {
     const dataSql = `
       SELECT
         l.id,
+        l.driver_id,
         l.load_number,
         UPPER(l.status::text) as status,
         UPPER(l.billing_status::text) as billing_status,
@@ -428,10 +437,12 @@ router.get('/', async (req, res) => {
         COALESCE(delivery.stop_date, l.delivery_date) as delivery_date,
         pickup.city as pickup_city,
         pickup.state as pickup_state,
+        pickup.zip as pickup_zip,
         delivery.city as delivery_city,
         delivery.state as delivery_state,
+        delivery.zip as delivery_zip,
         concat_ws(' ', d.first_name, d.last_name) as driver_name,
-        COALESCE(b.name, l.broker_name) as broker_name,
+        COALESCE(b.legal_name, b.name, l.broker_name) as broker_name,
         l.po_number,
         l.notes,
         COALESCE(att.attachment_count, 0) as attachment_count,
@@ -659,15 +670,23 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
     }
 
     const stopsInput = Array.isArray(body.stops) ? body.stops : (body.pickup || body.delivery ? buildStopsFromBody(body) : null);
+    let loadPickupDate = null;
+    let loadDeliveryDate = null;
     if (stopsInput) {
       const stopErrors = validateStops(stopsInput, true);
       if (stopErrors.length > 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, error: 'Invalid stops', details: stopErrors });
       }
+      const pickupStop = stopsInput.find((s) => normalizeEnum(s.stopType || s.stop_type) === 'PICKUP');
+      const deliveryStop = stopsInput.find((s) => normalizeEnum(s.stopType || s.stop_type) === 'DELIVERY');
+      loadPickupDate = pickupStop ? (pickupStop.date || pickupStop.stopDate || pickupStop.stop_date || null) : null;
+      loadDeliveryDate = deliveryStop ? (deliveryStop.date || deliveryStop.stopDate || deliveryStop.stop_date || null) : null;
+
       await client.query('DELETE FROM load_stops WHERE load_id = $1', [req.params.id]);
       for (const stop of stopsInput) {
         const stopType = normalizeEnum(stop.stopType || stop.stop_type);
+        const stopDate = stop.date || stop.stopDate || stop.stop_date;
         await client.query(
           `INSERT INTO load_stops (
             load_id, stop_type, stop_date, city, state, zip, address1, address2, sequence
@@ -675,7 +694,7 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
           [
             req.params.id,
             stopType,
-            normalizeNullable(stop.date || stop.stopDate),
+            normalizeNullable(stopDate),
             normalizeNullable(stop.city),
             normalizeNullable(stop.state),
             normalizeNullable(stop.zip),
@@ -684,6 +703,29 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
             normalizeNullable(stop.sequence) || 1
           ]
         );
+      }
+      if (loadPickupDate != null || loadDeliveryDate != null) {
+        const loadDateUpdates = [];
+        const loadDateValues = [];
+        let loadDateIdx = 1;
+        if (loadPickupDate != null) {
+          loadDateUpdates.push(`pickup_date = $${loadDateIdx}`);
+          loadDateValues.push(normalizeNullable(loadPickupDate));
+          loadDateIdx += 1;
+        }
+        if (loadDeliveryDate != null) {
+          loadDateUpdates.push(`delivery_date = $${loadDateIdx}`);
+          loadDateValues.push(normalizeNullable(loadDeliveryDate));
+          loadDateIdx += 1;
+        }
+        if (loadDateUpdates.length > 0) {
+          loadDateValues.push(req.params.id);
+          const whereParam = loadDateIdx;
+          await client.query(
+            `UPDATE loads SET ${loadDateUpdates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${whereParam}`,
+            loadDateValues
+          );
+        }
       }
     }
 
