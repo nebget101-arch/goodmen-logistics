@@ -150,7 +150,24 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       const driverPayee = await knex('payees').where({ type: 'driver', is_active: true }).first();
       if (driverPayee) primaryPayeeId = driverPayee.id;
     }
-    if (!primaryPayeeId) throw new Error('No primary payee resolved for driver');
+    if (!primaryPayeeId) {
+      const driver = await knex('drivers').where({ id: driverId }).select('first_name', 'last_name').first();
+      if (!driver) throw new Error('Driver not found');
+      const payeeName = [driver.first_name, driver.last_name].filter(Boolean).join(' ').trim() || `Driver ${driverId.slice(0, 8)}`;
+      const [newPayee] = await knex('payees').insert({
+        type: 'driver',
+        name: payeeName,
+        is_active: true
+      }).returning('id');
+      primaryPayeeId = newPayee.id;
+      const periodStart = period.period_start ? new Date(period.period_start).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+      await knex('driver_payee_assignments').insert({
+        driver_id: driverId,
+        primary_payee_id: primaryPayeeId,
+        rule_type: 'company_truck',
+        effective_start_date: periodStart
+      });
+    }
 
     const eligibleLoads = await getEligibleLoads(
       knex,

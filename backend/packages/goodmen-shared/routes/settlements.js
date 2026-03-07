@@ -38,6 +38,20 @@ function requireRole(allowedRoles) {
 router.use(authMiddleware);
 const settlementRoles = ['admin', 'carrier_accountant', 'dispatch_manager'];
 
+// Root: avoid "Cannot GET /api/settlements/" when base URL is hit
+router.get('/', requireRole(settlementRoles), (_req, res) => {
+  res.json({
+    ok: true,
+    message: 'Settlements API',
+    links: {
+      payees: '/api/settlements/payees',
+      payrollPeriods: '/api/settlements/payroll-periods',
+      settlements: '/api/settlements/settlements',
+      recurringDeductions: '/api/settlements/recurring-deductions'
+    }
+  });
+});
+
 // ---------- Payees ----------
 router.get('/payees', requireRole(settlementRoles), async (req, res) => {
   try {
@@ -401,7 +415,7 @@ router.get('/settlements', requireRole(settlementRoles), async (req, res) => {
   }
 });
 
-router.post('/settlements/draft', requireRole(settlementRoles), async (req, res) => {
+const createDraftHandler = async (req, res) => {
   try {
     const { payroll_period_id, driver_id, date_basis } = req.body;
     if (!payroll_period_id || !driver_id) {
@@ -418,7 +432,12 @@ router.post('/settlements/draft', requireRole(settlementRoles), async (req, res)
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
-});
+};
+
+// POST /api/settlements/draft (alias for frontend)
+router.post('/draft', requireRole(settlementRoles), createDraftHandler);
+// POST /api/settlements/settlements/draft
+router.post('/settlements/draft', requireRole(settlementRoles), createDraftHandler);
 
 router.get('/settlements/:id', requireRole(settlementRoles), async (req, res) => {
   try {
