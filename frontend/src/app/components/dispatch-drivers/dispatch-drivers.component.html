@@ -467,7 +467,7 @@
               <div class="expense-matrix">
                 <div class="expense-row" *ngFor="let e of expenseKeys">
                   <span class="expense-label">{{ e.label }}</span>
-                  <select class="form-input form-select-sm" [value]="expenseResponsibility[e.key]" (change)="setExpenseResponsibility(e.key, $any($event.target).value)">
+                  <select class="form-input form-select-sm" [ngModel]="expenseResponsibility[e.key]" (ngModelChange)="setExpenseResponsibility(e.key, $event)" name="expense-{{ e.key }}">
                     <option *ngFor="let o of responsibilityOptions" [value]="o.value">{{ o.label }}</option>
                   </select>
                 </div>
