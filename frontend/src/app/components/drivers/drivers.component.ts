@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { finalize } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
 
@@ -329,20 +330,23 @@ export class DriversComponent implements OnInit {
     }
 
     this.saving = true;
-    this.apiService.updateDriver(this.editingDriver.id, this.editingDriver).subscribe({
+    this.apiService.updateDriver(this.editingDriver.id, this.editingDriver).pipe(
+      finalize(() => (this.saving = false))
+    ).subscribe({
       next: (updatedDriver) => {
         const index = this.drivers.findIndex(d => d.id === updatedDriver.id);
         if (index !== -1) {
           this.drivers[index] = updatedDriver;
         }
         this.editingDriver = null;
-        this.saving = false;
         alert(statusMessage + 'Driver updated successfully!');
       },
       error: (error) => {
         console.error('Error updating driver:', error);
-        alert('Failed to update driver. Please try again.');
-        this.saving = false;
+        const msg = error?.name === 'TimeoutError' || error?.message?.includes('timeout')
+          ? 'Request timed out. The server may be slow—please try again.'
+          : 'Failed to update driver. Please try again.';
+        alert(msg);
       }
     });
   }

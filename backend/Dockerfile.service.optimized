@@ -1,0 +1,39 @@
+FROM node:20-alpine AS base
+
+WORKDIR /usr/src/app
+
+# Install system dependencies
+RUN apk add --no-cache bash poppler-utils
+
+# Copy package files for all services and shared packages first (better caching)
+COPY backend/packages/goodmen-shared/package*.json ./backend/packages/goodmen-shared/
+COPY backend/packages/goodmen-database/package*.json ./backend/packages/goodmen-database/
+COPY backend/gateway/package*.json ./backend/gateway/
+COPY backend/microservices/*/package*.json ./backend/microservices/*/
+
+# Build argument to select which service directory to run
+ARG SERVICE_DIR=backend/microservices/auth-users-service
+
+# Install dependencies for shared packages first
+WORKDIR /usr/src/app/backend/packages/goodmen-shared
+RUN npm install
+
+WORKDIR /usr/src/app/backend/packages/goodmen-database
+RUN npm install
+
+# Install dependencies for the specific service
+WORKDIR /usr/src/app/${SERVICE_DIR}
+RUN npm install
+
+# Copy the rest of the backend code
+WORKDIR /usr/src/app
+COPY backend ./backend
+
+# Switch to service directory
+WORKDIR /usr/src/app/${SERVICE_DIR}
+
+ENV NODE_ENV=development
+
+EXPOSE 5000 5001 5002 5003 5004 5005 5006 5007 4000 4100
+
+CMD ["npm", "run", "start"]

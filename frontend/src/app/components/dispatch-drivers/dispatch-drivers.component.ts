@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { finalize } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 
 @Component({
@@ -55,6 +56,29 @@ export class DispatchDriversComponent implements OnInit {
     tolls: '',
     repairs: ''
   };
+
+  /**
+   * Stable arrays for expense *ngFor (not getters).
+   * Root cause of "edit stuck": after switching to [ngModel]/(ngModelChange) on the expense selects,
+   * using getters here returned new array refs every change detection, so *ngFor recreated the
+   * selects each cycle and could trigger a feedback loop with ngModel. Use readonly arrays instead.
+   */
+  readonly expenseKeys: { key: string; label: string }[] = [
+    { key: 'fuel', label: 'Fuel' },
+    { key: 'insurance', label: 'Insurance' },
+    { key: 'eld', label: 'ELD' },
+    { key: 'trailerRent', label: 'Trailer rent' },
+    { key: 'tolls', label: 'Tolls' },
+    { key: 'repairs', label: 'Repairs' }
+  ];
+
+  readonly responsibilityOptions: { value: string; label: string }[] = [
+    { value: '', label: '—' },
+    { value: 'company', label: 'Company' },
+    { value: 'driver', label: 'Driver' },
+    { value: 'owner', label: 'Owner' },
+    { value: 'shared', label: 'Shared' }
+  ];
 
   /** Placeholder for recurring deduction rules (backend TBD) */
   recurringDeductions: { id: string; description: string; weeklyAmount: number; active: boolean }[] = [];
@@ -232,27 +256,6 @@ export class DispatchDriversComponent implements OnInit {
     this.expenseResponsibility = { ...this.expenseResponsibility, [key]: value };
   }
 
-  get expenseKeys(): { key: string; label: string }[] {
-    return [
-      { key: 'fuel', label: 'Fuel' },
-      { key: 'insurance', label: 'Insurance' },
-      { key: 'eld', label: 'ELD' },
-      { key: 'trailerRent', label: 'Trailer rent' },
-      { key: 'tolls', label: 'Tolls' },
-      { key: 'repairs', label: 'Repairs' }
-    ];
-  }
-
-  get responsibilityOptions(): { value: string; label: string }[] {
-    return [
-      { value: '', label: '—' },
-      { value: 'company', label: 'Company' },
-      { value: 'driver', label: 'Driver' },
-      { value: 'owner', label: 'Owner' },
-      { value: 'shared', label: 'Shared' }
-    ];
-  }
-
   getDriverTypeLabel(type: string): string {
     const t = (type || '').toString();
     if (t === 'owner_operator') return 'Owner operator';
@@ -349,19 +352,24 @@ export class DispatchDriversComponent implements OnInit {
 
   startEdit(driver: any): void {
     this.editingDriverId = driver.id;
-    this.showNewModal = true;
     this.duplicateError = null;
     this.existingDriverId = null;
-    // Pull latest details from drivers API (DQF source of truth)
-    this.apiService.getDriver(driver.id).subscribe({
-      next: (detail) => {
-        const source = detail || driver;
-        this.newDriver = this.buildDriverFromSource(source);
-      },
-      error: () => {
-        this.newDriver = this.buildDriverFromSource(driver);
-      }
-    });
+    this.payTab = 'rates';
+    this.expenseResponsibility = { fuel: '', insurance: '', eld: '', trailerRent: '', tolls: '', repairs: '' };
+    this.newDriver = this.buildDriverFromSource(driver);
+    this.showNewModal = true;
+    // Defer API call so the modal renders first (avoids change-detection thrash with expense selects)
+    const driverId = driver.id;
+    setTimeout(() => {
+      this.apiService.getDriver(driverId).subscribe({
+        next: (detail) => {
+          this.newDriver = this.buildDriverFromSource(detail);
+        },
+        error: () => {
+          this.newDriver = this.buildDriverFromSource(driver);
+        }
+      });
+    }, 0);
   }
 
   private buildDriverFromSource(source: any): any {
@@ -436,18 +444,20 @@ export class DispatchDriversComponent implements OnInit {
     delete payload.compensationNotes;
 
     if (this.editingDriverId) {
-      this.apiService.updateDriver(this.editingDriverId, payload).subscribe({
+      this.apiService.updateDriver(this.editingDriverId, payload).pipe(
+        finalize(() => (this.saving = false))
+      ).subscribe({
         next: (updated) => {
-          // Reload from dispatch view so joined truck/trailer columns are populated
           this.loadDrivers();
-          this.saving = false;
           this.showNewModal = false;
           this.editingDriverId = null;
         },
         error: (error) => {
-          this.saving = false;
           console.error('Error updating driver', error);
-          alert('Failed to update driver. Please try again.');
+          const msg = error?.name === 'TimeoutError' || error?.message?.includes('timeout')
+            ? 'Request timed out. The server may be slow—please try again.'
+            : 'Failed to update driver. Please try again.';
+          alert(msg);
         }
       });
     } else {
