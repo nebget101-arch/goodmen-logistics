@@ -1,0 +1,255 @@
+version: "3.9"
+
+# Optimized Docker Compose for faster startup
+# Key improvements:
+# 1. Removed dependencies between services (they can start in parallel)
+# 2. Health checks added to ensure services are actually ready
+# 3. restart: unless-stopped for automatic recovery
+# 4. Optimized volume mounts (only mount what's needed)
+
+services:
+  # Backend services can start in parallel
+  reporting-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/reporting-service
+    container_name: fleetneuron-reporting-service
+    env_file:
+      - .env
+    environment:
+      - PORT=5001
+      - PG_HOST=host.docker.internal
+    volumes:
+      - ./backend/microservices/reporting-service:/usr/src/app/backend/microservices/reporting-service
+      - ./backend/packages:/usr/src/app/backend/packages
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  integrations-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/integrations-service
+    container_name: fleetneuron-integrations-service
+    environment:
+      - NODE_ENV=development
+      - PORT=5002
+    volumes:
+      - ./backend/microservices/integrations-service:/usr/src/app/backend/microservices/integrations-service
+      - ./backend/packages:/usr/src/app/backend/packages
+    ports:
+      - "5002:5002"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/ai-service
+    container_name: fleetneuron-ai-service
+    env_file:
+      - .env
+    environment:
+      - AI_SERVICE_PORT=4100
+      - CORS_ORIGIN=http://localhost:4200
+    volumes:
+      - ./backend/microservices/ai-service:/usr/src/app/backend/microservices/ai-service
+      - ./backend/packages:/usr/src/app/backend/packages
+    ports:
+      - "4100:4100"
+    restart: unless-stopped
+
+  auth-users-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/auth-users-service
+    container_name: fleetneuron-auth-users-service
+    env_file:
+      - .env
+    environment:
+      - PORT=5003
+      - PG_HOST=host.docker.internal
+    volumes:
+      - ./backend/microservices/auth-users-service:/usr/src/app/backend/microservices/auth-users-service
+      - ./backend/packages:/usr/src/app/backend/packages
+    ports:
+      - "5003:5003"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  drivers-compliance-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/drivers-compliance-service
+    container_name: fleetneuron-drivers-compliance-service
+    env_file:
+      - .env
+    environment:
+      - PORT=5004
+      - PG_HOST=host.docker.internal
+    volumes:
+      - ./backend/microservices/drivers-compliance-service:/usr/src/app/backend/microservices/drivers-compliance-service
+      - ./backend/packages:/usr/src/app/backend/packages
+    ports:
+      - "5004:5004"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  vehicles-maintenance-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/vehicles-maintenance-service
+    container_name: fleetneuron-vehicles-maintenance-service
+    env_file:
+      - .env
+    environment:
+      - PORT=5005
+      - PG_HOST=host.docker.internal
+    volumes:
+      - ./backend/microservices/vehicles-maintenance-service:/usr/src/app/backend/microservices/vehicles-maintenance-service
+      - ./backend/packages:/usr/src/app/backend/packages
+    ports:
+      - "5005:5005"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5005/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  logistics-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/logistics-service
+    container_name: fleetneuron-logistics-service
+    env_file:
+      - .env
+    environment:
+      - PORT=5006
+      - PG_HOST=host.docker.internal
+    volumes:
+      - ./backend/microservices/logistics-service:/usr/src/app/backend/microservices/logistics-service
+      - ./backend/packages:/usr/src/app/backend/packages
+    ports:
+      - "5006:5006"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5006/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/microservices/inventory-service
+    container_name: fleetneuron-inventory-service
+    env_file:
+      - .env
+    environment:
+      - PORT=5007
+      - PG_HOST=host.docker.internal
+    volumes:
+      - ./backend/microservices/inventory-service:/usr/src/app/backend/microservices/inventory-service
+      - ./backend/packages:/usr/src/app/backend/packages
+    ports:
+      - "5007:5007"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5007/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Gateway starts after services are healthy
+  gateway:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/gateway
+    container_name: fleetneuron-gateway
+    env_file:
+      - .env
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - REPORTING_SERVICE_URL=http://reporting-service:5001
+      - INTEGRATIONS_SERVICE_URL=http://integrations-service:5002
+      - AUTH_USERS_SERVICE_URL=http://auth-users-service:5003
+      - DRIVERS_COMPLIANCE_SERVICE_URL=http://drivers-compliance-service:5004
+      - VEHICLES_MAINTENANCE_SERVICE_URL=http://vehicles-maintenance-service:5005
+      - LOGISTICS_SERVICE_URL=http://logistics-service:5006
+      - INVENTORY_SERVICE_URL=http://inventory-service:5007
+      - AI_SERVICE_URL=http://ai-service:4100
+      - CORS_ORIGIN=http://localhost:4200
+    volumes:
+      - ./backend/gateway:/usr/src/app/backend/gateway
+      - ./backend/packages:/usr/src/app/backend/packages
+    depends_on:
+      reporting-service:
+        condition: service_healthy
+      integrations-service:
+        condition: service_healthy
+      auth-users-service:
+        condition: service_healthy
+      drivers-compliance-service:
+        condition: service_healthy
+      vehicles-maintenance-service:
+        condition: service_healthy
+      logistics-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Frontend starts after gateway is ready
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: fleetneuron-frontend
+    ports:
+      - "4200:4200"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/usr/src/app/frontend
+      - /usr/src/app/frontend/node_modules  # Anonymous volume for node_modules
+    depends_on:
+      - gateway
+    restart: unless-stopped

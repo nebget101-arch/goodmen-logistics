@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, timeout } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -106,7 +106,9 @@ export class ApiService {
   }
 
   getDriver(id: string): Observable<any> {
-    return this.http.get(`${this.baseUrl}/drivers/${id}`);
+    return this.http.get(`${this.baseUrl}/drivers/${id}`).pipe(
+      timeout(15000) // 15s so Edit modal does not spin forever if backend hangs
+    );
   }
 
   createDriver(driver: any): Observable<any> {
@@ -114,7 +116,9 @@ export class ApiService {
   }
 
   updateDriver(id: string, driver: any): Observable<any> {
-    return this.http.put(`${this.baseUrl}/drivers/${id}`, driver);
+    return this.http.put(`${this.baseUrl}/drivers/${id}`, driver).pipe(
+      timeout(30000) // 30s so UI does not stay stuck if backend hangs
+    );
   }
 
   deleteDriver(id: string): Observable<any> {

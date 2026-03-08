@@ -204,27 +204,25 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET driver by ID
+// GET driver by ID (simple query only so the request never hangs on JOINs or missing tables)
 router.get('/:id', async (req, res) => {
   const startTime = Date.now();
+  const driverId = req.params.id;
   try {
-    const result = await query('SELECT * FROM drivers WHERE id = $1', [req.params.id]);
+    const result = await query('SELECT * FROM drivers WHERE id = $1', [driverId]);
     const duration = Date.now() - startTime;
-    
-    if (result.rows.length > 0) {
-      dtLogger.trackDatabase('SELECT', 'drivers', duration, true, { driverId: req.params.id });
-      dtLogger.trackRequest('GET', `/api/drivers/${req.params.id}`, 200, duration);
-      res.json(transformRow(result.rows[0]));
-    } else {
-      dtLogger.warn('Driver not found', { driverId: req.params.id });
-      dtLogger.trackRequest('GET', `/api/drivers/${req.params.id}`, 404, duration);
-      res.status(404).json({ message: 'Driver not found' });
+    if (result.rows.length === 0) {
+      dtLogger.warn('Driver not found', { driverId });
+      dtLogger.trackRequest('GET', `/api/drivers/${driverId}`, 404, duration);
+      return res.status(404).json({ message: 'Driver not found' });
     }
+    dtLogger.trackDatabase('SELECT', 'drivers', duration, true, { driverId });
+    dtLogger.trackRequest('GET', `/api/drivers/${driverId}`, 200, duration);
+    res.json(transformRow(result.rows[0]));
   } catch (error) {
     const duration = Date.now() - startTime;
-    dtLogger.error('Failed to fetch driver', error, { driverId: req.params.id });
-    dtLogger.trackRequest('GET', `/api/drivers/${req.params.id}`, 500, duration);
-    
+    dtLogger.error('Failed to fetch driver', error, { driverId });
+    dtLogger.trackRequest('GET', `/api/drivers/${driverId}`, 500, duration);
     console.error('Error fetching driver:', error);
     res.status(500).json({ message: 'Failed to fetch driver' });
   }
