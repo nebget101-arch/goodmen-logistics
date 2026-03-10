@@ -113,6 +113,21 @@ function toPayeeDto(row) {
   };
 }
 
+let payeesColumnSetCache = null;
+
+async function getPayeesColumnSet() {
+  if (payeesColumnSetCache) return payeesColumnSetCache;
+  const rows = await knex('information_schema.columns')
+    .select('column_name')
+    .where({ table_schema: 'public', table_name: 'payees' });
+  payeesColumnSetCache = new Set(rows.map((r) => r.column_name));
+  return payeesColumnSetCache;
+}
+
+function includeIfColumnExists(payload, columns, key, value) {
+  if (columns.has(key)) payload[key] = value;
+}
+
 async function findOrCreatePayeeByName({ trx, name, requestedType, email, phone }) {
   const trimmedName = (name || '').toString().trim();
   if (!trimmedName) return null;
@@ -235,30 +250,33 @@ router.post('/payees', requireRole(settlementRoles), async (req, res) => {
       additional_payee_rate,
       settlement_template_type
     } = req.body;
+    const columns = await getPayeesColumnSet();
     const normalizedType = normalizePayeeType(type) || 'driver';
+    const insertPayload = {
+      type: normalizedType,
+      name: name || 'Unnamed',
+      contact_id: contact_id || null,
+      email: email || null,
+      phone: phone || null,
+      is_active: is_active !== false
+    };
+
+    includeIfColumnExists(insertPayload, columns, 'address', address || null);
+    includeIfColumnExists(insertPayload, columns, 'address_line_2', address_line_2 || null);
+    includeIfColumnExists(insertPayload, columns, 'city', city || null);
+    includeIfColumnExists(insertPayload, columns, 'state', state || null);
+    includeIfColumnExists(insertPayload, columns, 'zip', zip || null);
+    includeIfColumnExists(insertPayload, columns, 'fid_ein', fid_ein || null);
+    includeIfColumnExists(insertPayload, columns, 'mc', mc || null);
+    includeIfColumnExists(insertPayload, columns, 'notes', notes || null);
+    includeIfColumnExists(insertPayload, columns, 'vendor_type', vendor_type || null);
+    includeIfColumnExists(insertPayload, columns, 'is_additional_payee', is_additional_payee === true);
+    includeIfColumnExists(insertPayload, columns, 'is_equipment_owner', is_equipment_owner === true);
+    includeIfColumnExists(insertPayload, columns, 'additional_payee_rate', additional_payee_rate || null);
+    includeIfColumnExists(insertPayload, columns, 'settlement_template_type', settlement_template_type || null);
+
     const [row] = await knex('payees')
-      .insert({
-        type: normalizedType,
-        name: name || 'Unnamed',
-        contact_id: contact_id || null,
-        email: email || null,
-        phone: phone || null,
-        is_active: is_active !== false,
-        // Extended fields
-        address: address || null,
-        address_line_2: address_line_2 || null,
-        city: city || null,
-        state: state || null,
-        zip: zip || null,
-        fid_ein: fid_ein || null,
-        mc: mc || null,
-        notes: notes || null,
-        vendor_type: vendor_type || null,
-        is_additional_payee: is_additional_payee === true,
-        is_equipment_owner: is_equipment_owner === true,
-        additional_payee_rate: additional_payee_rate || null,
-        settlement_template_type: settlement_template_type || null
-      })
+      .insert(insertPayload)
       .returning('*');
     res.status(201).json(toPayeeDto(row));
   } catch (err) {
@@ -286,6 +304,7 @@ router.post('/payees/equipment-owner', requireRole(settlementRoles), async (req,
       additional_payee_rate,
       settlement_template_type
     } = req.body || {};
+    const columns = await getPayeesColumnSet();
     const trimmedName = (name || '').toString().trim();
     if (!trimmedName) {
       return res.status(400).json({ error: 'name is required' });
@@ -302,28 +321,30 @@ router.post('/payees/equipment-owner', requireRole(settlementRoles), async (req,
         return existing;
       }
 
+      const insertPayload = {
+        type: 'owner',
+        name: trimmedName,
+        email: email || null,
+        phone: phone || null,
+        is_active: true
+      };
+
+      includeIfColumnExists(insertPayload, columns, 'address', address || null);
+      includeIfColumnExists(insertPayload, columns, 'address_line_2', address_line_2 || null);
+      includeIfColumnExists(insertPayload, columns, 'city', city || null);
+      includeIfColumnExists(insertPayload, columns, 'state', state || null);
+      includeIfColumnExists(insertPayload, columns, 'zip', zip || null);
+      includeIfColumnExists(insertPayload, columns, 'fid_ein', fid_ein || null);
+      includeIfColumnExists(insertPayload, columns, 'mc', mc || null);
+      includeIfColumnExists(insertPayload, columns, 'notes', notes || null);
+      includeIfColumnExists(insertPayload, columns, 'vendor_type', vendor_type || 'equipment_rental');
+      includeIfColumnExists(insertPayload, columns, 'is_additional_payee', true);
+      includeIfColumnExists(insertPayload, columns, 'is_equipment_owner', true);
+      includeIfColumnExists(insertPayload, columns, 'additional_payee_rate', additional_payee_rate || null);
+      includeIfColumnExists(insertPayload, columns, 'settlement_template_type', settlement_template_type || null);
+
       const [created] = await trx('payees')
-        .insert({
-          type: 'owner',
-          name: trimmedName,
-          email: email || null,
-          phone: phone || null,
-          is_active: true,
-          // Extended fields
-          address: address || null,
-          address_line_2: address_line_2 || null,
-          city: city || null,
-          state: state || null,
-          zip: zip || null,
-          fid_ein: fid_ein || null,
-          mc: mc || null,
-          notes: notes || null,
-          vendor_type: vendor_type || 'equipment_rental',
-          is_additional_payee: true,
-          is_equipment_owner: true,
-          additional_payee_rate: additional_payee_rate || null,
-          settlement_template_type: settlement_template_type || null
-        })
+        .insert(insertPayload)
         .returning('*');
 
       return created;
@@ -369,32 +390,35 @@ router.put('/payees/:id', requireRole(settlementRoles), async (req, res) => {
       additional_payee_rate,
       settlement_template_type
     } = req.body;
+    const columns = await getPayeesColumnSet();
     const normalizedType = type != null ? normalizePayeeType(type) : null;
+    const updates = {
+      ...(normalizedType != null && { type: normalizedType }),
+      ...(name != null && { name }),
+      ...(contact_id !== undefined && { contact_id }),
+      ...(email !== undefined && { email }),
+      ...(phone !== undefined && { phone }),
+      ...(is_active !== undefined && { is_active }),
+      updated_at: knex.fn.now()
+    };
+
+    if (columns.has('address') && address !== undefined) updates.address = address;
+    if (columns.has('address_line_2') && address_line_2 !== undefined) updates.address_line_2 = address_line_2;
+    if (columns.has('city') && city !== undefined) updates.city = city;
+    if (columns.has('state') && state !== undefined) updates.state = state;
+    if (columns.has('zip') && zip !== undefined) updates.zip = zip;
+    if (columns.has('fid_ein') && fid_ein !== undefined) updates.fid_ein = fid_ein;
+    if (columns.has('mc') && mc !== undefined) updates.mc = mc;
+    if (columns.has('notes') && notes !== undefined) updates.notes = notes;
+    if (columns.has('vendor_type') && vendor_type !== undefined) updates.vendor_type = vendor_type;
+    if (columns.has('is_additional_payee') && is_additional_payee !== undefined) updates.is_additional_payee = is_additional_payee;
+    if (columns.has('is_equipment_owner') && is_equipment_owner !== undefined) updates.is_equipment_owner = is_equipment_owner;
+    if (columns.has('additional_payee_rate') && additional_payee_rate !== undefined) updates.additional_payee_rate = additional_payee_rate;
+    if (columns.has('settlement_template_type') && settlement_template_type !== undefined) updates.settlement_template_type = settlement_template_type;
+
     const [row] = await knex('payees')
       .where({ id: req.params.id })
-      .update({
-        ...(normalizedType != null && { type: normalizedType }),
-        ...(name != null && { name }),
-        ...(contact_id !== undefined && { contact_id }),
-        ...(email !== undefined && { email }),
-        ...(phone !== undefined && { phone }),
-        ...(is_active !== undefined && { is_active }),
-        // Extended fields
-        ...(address !== undefined && { address }),
-        ...(address_line_2 !== undefined && { address_line_2 }),
-        ...(city !== undefined && { city }),
-        ...(state !== undefined && { state }),
-        ...(zip !== undefined && { zip }),
-        ...(fid_ein !== undefined && { fid_ein }),
-        ...(mc !== undefined && { mc }),
-        ...(notes !== undefined && { notes }),
-        ...(vendor_type !== undefined && { vendor_type }),
-        ...(is_additional_payee !== undefined && { is_additional_payee }),
-        ...(is_equipment_owner !== undefined && { is_equipment_owner }),
-        ...(additional_payee_rate !== undefined && { additional_payee_rate }),
-        ...(settlement_template_type !== undefined && { settlement_template_type }),
-        updated_at: knex.fn.now()
-      })
+      .update(updates)
       .returning('*');
     if (!row) return res.status(404).json({ error: 'Payee not found' });
     res.json(toPayeeDto(row));
