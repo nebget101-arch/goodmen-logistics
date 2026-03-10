@@ -21,6 +21,7 @@ const {
   voidSettlement,
   listSettlements,
   getActiveCompensationProfile,
+  ensureActiveCompensationProfile,
   getActivePayeeAssignment,
   getEligibleLoads,
   getRecurringDeductionsForPeriod
@@ -651,10 +652,13 @@ router.post('/drivers/:driverId/expense-responsibility', requireRole(settlementR
     // Look up active compensation profile for this driver
     let compensationProfileId = body.compensation_profile_id;
     if (!compensationProfileId) {
-      const activeProfile = await knex('driver_compensation_profiles')
-        .where({ driver_id: req.params.driverId, status: 'active' })
-        .orderBy('effective_start_date', 'desc')
+      const driver = await knex('drivers')
+        .where({ id: req.params.driverId })
+        .select('id', 'pay_basis', 'pay_rate', 'pay_percentage', 'driver_type', 'hire_date')
         .first();
+      const activeProfile = driver
+        ? await ensureActiveCompensationProfile(knex, driver, body.effective_start_date || new Date().toISOString().slice(0, 10))
+        : null;
       compensationProfileId = activeProfile?.id || null;
     }
     
