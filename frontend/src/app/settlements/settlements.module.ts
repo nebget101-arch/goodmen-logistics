@@ -6,13 +6,15 @@ import { SettlementListComponent } from './settlement-list/settlement-list.compo
 import { SettlementWizardComponent } from './settlement-wizard/settlement-wizard.component';
 import { SettlementDetailComponent } from './settlement-detail/settlement-detail.component';
 import { ScheduledDeductionsComponent } from './scheduled-deductions/scheduled-deductions.component';
+import { EquipmentOwnersComponent } from './equipment-owners/equipment-owners.component';
 
 @NgModule({
   declarations: [
     SettlementListComponent,
     SettlementWizardComponent,
     SettlementDetailComponent,
-    ScheduledDeductionsComponent
+    ScheduledDeductionsComponent,
+    EquipmentOwnersComponent
   ],
   imports: [
     CommonModule,

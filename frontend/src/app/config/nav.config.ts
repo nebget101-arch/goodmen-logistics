@@ -72,6 +72,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/invoices', label: 'Invoices', tab: 'invoices' },
       { path: '/settlements', label: 'Settlements', tab: 'settlements' },
       { path: '/settlements/scheduled-deductions', label: 'Scheduled Payments', tab: 'settlements' },
+      { path: '/settlements/equipment-owners', label: 'Equipment Owners', tab: 'settlements' },
     ],
   },
 ];

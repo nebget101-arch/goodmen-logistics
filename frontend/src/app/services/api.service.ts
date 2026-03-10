@@ -338,10 +338,44 @@ export class ApiService {
     email?: string;
     phone?: string;
     address?: string;
+    address_line_2?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    fid_ein?: string;
+    mc?: string;
+    vendor_type?: string;
+    notes?: string;
     is_additional_payee?: boolean;
-    additional_payee_rate?: number;
+    is_equipment_owner?: boolean;
+    additional_payee_rate?: number | null;
+    settlement_template_type?: string;
+    is_active?: boolean;
   }): Observable<any> {
     return this.http.post(`${this.baseUrl}/settlements/payees`, payload);
+  }
+
+  updatePayee(id: string, payload: {
+    type?: string;
+    name?: string;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    address_line_2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
+    fid_ein?: string | null;
+    mc?: string | null;
+    vendor_type?: string | null;
+    notes?: string | null;
+    is_active?: boolean;
+    is_additional_payee?: boolean;
+    is_equipment_owner?: boolean;
+    additional_payee_rate?: number | null;
+    settlement_template_type?: string | null;
+  }): Observable<any> {
+    return this.http.put(`${this.baseUrl}/settlements/payees/${id}`, payload);
   }
 
   getRecurringDeductions(params?: { driver_id?: string; payee_id?: string; payee_ids?: string[]; enabled?: boolean | string }): Observable<any> {
