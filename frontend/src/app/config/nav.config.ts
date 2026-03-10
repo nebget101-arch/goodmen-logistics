@@ -71,6 +71,7 @@ export const NAV_SECTIONS: NavSection[] = [
     children: [
       { path: '/invoices', label: 'Invoices', tab: 'invoices' },
       { path: '/settlements', label: 'Settlements', tab: 'settlements' },
+      { path: '/settlements/scheduled-deductions', label: 'Scheduled payments & deductions', tab: 'settlements' },
     ],
   },
 ];

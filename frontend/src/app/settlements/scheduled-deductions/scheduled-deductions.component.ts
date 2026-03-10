@@ -155,8 +155,9 @@ export class ScheduledDeductionsComponent implements OnInit {
     if (this.filters.enabled) params.enabled = this.filters.enabled;
 
     this.apiService.getRecurringDeductions(params).subscribe({
-      next: (data: RecurringDeduction[]) => {
-        this.deductions = data || [];
+      next: (data: any) => {
+        const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+        this.deductions = rows.map((row: any) => this.normalizeDeduction(row));
         this.loading = false;
       },
       error: (err: HttpErrorResponse) => {
@@ -213,11 +214,28 @@ export class ScheduledDeductionsComponent implements OnInit {
   }
 
   openEdit(deduction: RecurringDeduction): void {
-    this.editingId = deduction.id;
-    const normalizedStartDate = this.normalizeDateInput(deduction.start_date) || undefined;
-    const normalizedEndDate = this.normalizeDateInput(deduction.end_date) || undefined;
+    const normalized = this.normalizeDeduction(deduction);
+    this.editingId = normalized.id;
+    const normalizedStartDate = this.normalizeDateInput(normalized.start_date) || undefined;
+    const normalizedEndDate = this.normalizeDateInput(normalized.end_date) || undefined;
+    const defaultFormData: Partial<RecurringDeduction> = {
+      driver_id: null,
+      payee_id: null,
+      equipment_id: null,
+      rule_scope: 'driver',
+      description: '',
+      amount_type: 'fixed',
+      amount: 0,
+      frequency: 'weekly',
+      start_date: new Date().toISOString().slice(0, 10),
+      end_date: null,
+      source_type: null,
+      applies_when: 'always',
+      enabled: true
+    };
     this.formData = {
-      ...deduction,
+      ...defaultFormData,
+      ...normalized,
       start_date: normalizedStartDate,
       end_date: normalizedEndDate
     };
@@ -313,13 +331,32 @@ export class ScheduledDeductionsComponent implements OnInit {
     });
   }
 
-  getDriverName(driverId: string | null): string {
+  deleteDeduction(deduction: RecurringDeduction): void {
+    const ok = window.confirm(`Delete scheduled deduction \"${deduction.description}\"? This cannot be undone.`);
+    if (!ok) return;
+
+    this.apiService.deleteRecurringDeduction(deduction.id).subscribe({
+      next: () => {
+        this.deductions = this.deductions.filter((d) => d.id !== deduction.id);
+      },
+      error: (err: HttpErrorResponse) => {
+        console.error('Error deleting deduction:', err);
+        alert(err?.error?.error || 'Failed to delete deduction');
+      }
+    });
+  }
+
+  getDriverName(deduction: RecurringDeduction): string {
+    if (deduction.driver_name) return deduction.driver_name;
+    const driverId = deduction.driver_id;
     if (!driverId) return '—';
     const driver = this.drivers.find(d => d.id === driverId);
     return driver ? `${driver.firstName} ${driver.lastName}` : driverId;
   }
 
-  getPayeeName(payeeId: string | null): string {
+  getPayeeName(deduction: RecurringDeduction): string {
+    if (deduction.payee_name) return deduction.payee_name;
+    const payeeId = deduction.payee_id;
     if (!payeeId) return '—';
     const payee = this.payees.find(p => p.id === payeeId);
     return payee ? payee.name : payeeId;
@@ -340,6 +377,36 @@ export class ScheduledDeductionsComponent implements OnInit {
   private normalizeDateInput(value?: string | null): string | null {
     if (!value) return null;
     return String(value).slice(0, 10);
+  }
+
+  private normalizeDeduction(row: any): RecurringDeduction {
+    const normalizedRuleScope = String(row?.rule_scope || 'driver').toLowerCase();
+    const normalizedAmountType = String(row?.amount_type || 'fixed').toLowerCase();
+    const normalizedFrequency = String(row?.frequency || 'weekly').toLowerCase();
+    const normalizedAppliesWhenRaw = String(row?.applies_when || 'always').toLowerCase();
+    const normalizedAppliesWhen = normalizedAppliesWhenRaw === 'has_load' ? 'has_loads' : normalizedAppliesWhenRaw;
+
+    return {
+      id: String(row?.id || ''),
+      driver_id: row?.driver_id ?? null,
+      payee_id: row?.payee_id ?? null,
+      equipment_id: row?.equipment_id ?? null,
+      rule_scope: normalizedRuleScope,
+      description: String(row?.description || ''),
+      amount_type: normalizedAmountType,
+      amount: Number(row?.amount ?? 0) || 0,
+      frequency: normalizedFrequency,
+      start_date: this.normalizeDateInput(row?.start_date) || new Date().toISOString().slice(0, 10),
+      end_date: this.normalizeDateInput(row?.end_date),
+      source_type: row?.source_type ?? null,
+      applies_when: normalizedAppliesWhen,
+      enabled: row?.enabled !== false,
+      created_at: row?.created_at,
+      updated_at: row?.updated_at,
+      driver_name: row?.driver_name || undefined,
+      payee_name: row?.payee_name || undefined,
+      expense_type: row?.expense_type || undefined
+    };
   }
 
   onBackfillCriteriaChange(): void {

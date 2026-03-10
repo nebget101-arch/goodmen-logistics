@@ -1,8 +1,8 @@
 <div class="scheduled-deductions">
   <div class="header">
     <div>
-      <h1>Scheduled Deductions</h1>
-      <p class="subtitle">Manage recurring payroll deductions and expense allocations</p>
+      <h1>Scheduled Payments & Deductions</h1>
+      <p class="subtitle">Manage recurring payroll deductions and scheduled payments for all drivers</p>
     </div>
     <div class="header-actions">
       <button type="button" class="btn-primary" (click)="openNew()">
@@ -124,8 +124,8 @@
               <strong>{{ d.description }}</strong>
               <span *ngIf="d.source_type" class="text-muted small"><br>Source: {{ d.source_type }}</span>
             </td>
-            <td>{{ getDriverName(d.driver_id) }}</td>
-            <td>{{ getPayeeName(d.payee_id) }}</td>
+            <td>{{ getDriverName(d) }}</td>
+            <td>{{ getPayeeName(d) }}</td>
             <td><span class="badge badge-secondary">{{ d.rule_scope }}</span></td>
             <td class="cell-amount">{{ formatAmount(d) }}</td>
             <td>{{ getFrequencyLabel(d.frequency) }}</td>
@@ -142,6 +142,10 @@
               <button type="button" class="btn-sm btn-outline" (click)="openEdit(d)" aria-label="Edit deduction">
                 <span class="material-symbols-outlined">edit</span>
                 Edit
+              </button>
+              <button type="button" class="btn-sm btn-danger" (click)="deleteDeduction(d)" aria-label="Delete deduction">
+                <span class="material-symbols-outlined">delete</span>
+                Delete
               </button>
             </td>
           </tr>
