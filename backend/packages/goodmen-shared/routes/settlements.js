@@ -38,6 +38,48 @@ function requireRole(allowedRoles) {
 router.use(authMiddleware);
 const settlementRoles = ['admin', 'carrier_accountant', 'dispatch_manager'];
 
+function normalizePayeeType(type) {
+  const t = (type || '').toString().trim().toLowerCase();
+  if (!t) return null;
+  if (t === 'equipment_owner') return 'owner';
+  return t;
+}
+
+function toPayeeDto(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    display_type: row.type === 'owner' ? 'equipment_owner' : row.type
+  };
+}
+
+async function findOrCreatePayeeByName({ trx, name, requestedType, email, phone }) {
+  const trimmedName = (name || '').toString().trim();
+  if (!trimmedName) return null;
+
+  const normalizedType = normalizePayeeType(requestedType) || 'owner';
+  const existing = await trx('payees')
+    .whereRaw('LOWER(TRIM(name)) = LOWER(TRIM(?))', [trimmedName])
+    .andWhere('type', normalizedType)
+    .first();
+
+  if (existing) {
+    return existing;
+  }
+
+  const [created] = await trx('payees')
+    .insert({
+      type: normalizedType,
+      name: trimmedName,
+      email: email || null,
+      phone: phone || null,
+      is_active: true
+    })
+    .returning('*');
+
+  return created;
+}
+
 // Root: avoid "Cannot GET /api/settlements/" when base URL is hit
 router.get('/', requireRole(settlementRoles), (_req, res) => {
   res.json({
@@ -56,13 +98,54 @@ router.get('/', requireRole(settlementRoles), (_req, res) => {
 router.get('/payees', requireRole(settlementRoles), async (req, res) => {
   try {
     const { type, search, is_active, limit = 50 } = req.query;
+    const normalizedType = normalizePayeeType(type);
     let q = knex('payees');
-    if (type) q = q.where('type', type);
+    if (normalizedType) q = q.where('type', normalizedType);
     if (is_active !== undefined) q = q.where('is_active', is_active === 'true' || is_active === true);
     if (search) q = q.where('name', 'ilike', `%${search}%`);
     q = q.orderBy('name').limit(Math.min(Number(limit) || 50, 100));
     const rows = await q;
-    res.json(rows);
+    res.json(rows.map(toPayeeDto));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Search endpoint for Payable To / Additional Payee dropdowns
+router.get('/payees/search', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const term = (req.query.q || req.query.search || '').toString().trim();
+    const role = (req.query.role || 'all').toString().trim().toLowerCase(); // primary | additional | all
+    const includeInactive = req.query.include_inactive === 'true' || req.query.include_inactive === true;
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+
+    let allowedTypes = ['driver', 'company', 'owner', 'external_company', 'contractor'];
+    if (role === 'additional') {
+      allowedTypes = ['owner', 'external_company', 'contractor'];
+    } else if (role === 'primary') {
+      allowedTypes = ['driver', 'company', 'owner', 'external_company', 'contractor'];
+    }
+
+    let q = knex('payees')
+      .whereIn('type', allowedTypes)
+      .orderBy('name', 'asc')
+      .limit(limit);
+
+    if (!includeInactive) {
+      q = q.where('is_active', true);
+    }
+
+    if (term) {
+      q = q.where((builder) => {
+        builder
+          .where('name', 'ilike', `%${term}%`)
+          .orWhere('email', 'ilike', `%${term}%`)
+          .orWhere('phone', 'ilike', `%${term}%`);
+      });
+    }
+
+    const rows = await q;
+    res.json(rows.map(toPayeeDto));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -70,20 +153,125 @@ router.get('/payees', requireRole(settlementRoles), async (req, res) => {
 
 router.post('/payees', requireRole(settlementRoles), async (req, res) => {
   try {
-    const { type, name, contact_id, email, phone, is_active } = req.body;
+    const {
+      type,
+      name,
+      contact_id,
+      email,
+      phone,
+      is_active,
+      // Extended fields
+      address,
+      address_line_2,
+      city,
+      state,
+      zip,
+      fid_ein,
+      mc,
+      notes,
+      vendor_type,
+      is_additional_payee,
+      is_equipment_owner,
+      additional_payee_rate,
+      settlement_template_type
+    } = req.body;
+    const normalizedType = normalizePayeeType(type) || 'driver';
     const [row] = await knex('payees')
       .insert({
-        type: type || 'driver',
+        type: normalizedType,
         name: name || 'Unnamed',
         contact_id: contact_id || null,
         email: email || null,
         phone: phone || null,
-        is_active: is_active !== false
+        is_active: is_active !== false,
+        // Extended fields
+        address: address || null,
+        address_line_2: address_line_2 || null,
+        city: city || null,
+        state: state || null,
+        zip: zip || null,
+        fid_ein: fid_ein || null,
+        mc: mc || null,
+        notes: notes || null,
+        vendor_type: vendor_type || null,
+        is_additional_payee: is_additional_payee === true,
+        is_equipment_owner: is_equipment_owner === true,
+        additional_payee_rate: additional_payee_rate || null,
+        settlement_template_type: settlement_template_type || null
       })
       .returning('*');
-    res.status(201).json(row);
+    res.status(201).json(toPayeeDto(row));
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Explicit create endpoint used by Driver Edit UI
+router.post('/payees/equipment-owner', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      phone,
+      // Extended fields
+      address,
+      address_line_2,
+      city,
+      state,
+      zip,
+      fid_ein,
+      mc,
+      notes,
+      vendor_type,
+      additional_payee_rate,
+      settlement_template_type
+    } = req.body || {};
+    const trimmedName = (name || '').toString().trim();
+    if (!trimmedName) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    // Use transaction to atomically create or retrieve payee
+    const row = await knex.transaction(async (trx) => {
+      const existing = await trx('payees')
+        .whereRaw('LOWER(TRIM(name)) = LOWER(TRIM(?))', [trimmedName])
+        .andWhere('type', 'owner')
+        .first();
+
+      if (existing) {
+        return existing;
+      }
+
+      const [created] = await trx('payees')
+        .insert({
+          type: 'owner',
+          name: trimmedName,
+          email: email || null,
+          phone: phone || null,
+          is_active: true,
+          // Extended fields
+          address: address || null,
+          address_line_2: address_line_2 || null,
+          city: city || null,
+          state: state || null,
+          zip: zip || null,
+          fid_ein: fid_ein || null,
+          mc: mc || null,
+          notes: notes || null,
+          vendor_type: vendor_type || 'equipment_rental',
+          is_additional_payee: true,
+          is_equipment_owner: true,
+          additional_payee_rate: additional_payee_rate || null,
+          settlement_template_type: settlement_template_type || null
+        })
+        .returning('*');
+
+      return created;
+    });
+
+    return res.status(201).json(toPayeeDto(row));
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -99,21 +287,57 @@ router.get('/payees/:id', requireRole(settlementRoles), async (req, res) => {
 
 router.put('/payees/:id', requireRole(settlementRoles), async (req, res) => {
   try {
-    const { type, name, contact_id, email, phone, is_active } = req.body;
+    const {
+      type,
+      name,
+      contact_id,
+      email,
+      phone,
+      is_active,
+      // Extended fields
+      address,
+      address_line_2,
+      city,
+      state,
+      zip,
+      fid_ein,
+      mc,
+      notes,
+      vendor_type,
+      is_additional_payee,
+      is_equipment_owner,
+      additional_payee_rate,
+      settlement_template_type
+    } = req.body;
+    const normalizedType = type != null ? normalizePayeeType(type) : null;
     const [row] = await knex('payees')
       .where({ id: req.params.id })
       .update({
-        ...(type != null && { type }),
+        ...(normalizedType != null && { type: normalizedType }),
         ...(name != null && { name }),
         ...(contact_id !== undefined && { contact_id }),
         ...(email !== undefined && { email }),
         ...(phone !== undefined && { phone }),
         ...(is_active !== undefined && { is_active }),
+        // Extended fields
+        ...(address !== undefined && { address }),
+        ...(address_line_2 !== undefined && { address_line_2 }),
+        ...(city !== undefined && { city }),
+        ...(state !== undefined && { state }),
+        ...(zip !== undefined && { zip }),
+        ...(fid_ein !== undefined && { fid_ein }),
+        ...(mc !== undefined && { mc }),
+        ...(notes !== undefined && { notes }),
+        ...(vendor_type !== undefined && { vendor_type }),
+        ...(is_additional_payee !== undefined && { is_additional_payee }),
+        ...(is_equipment_owner !== undefined && { is_equipment_owner }),
+        ...(additional_payee_rate !== undefined && { additional_payee_rate }),
+        ...(settlement_template_type !== undefined && { settlement_template_type }),
         updated_at: knex.fn.now()
       })
       .returning('*');
     if (!row) return res.status(404).json({ error: 'Payee not found' });
-    res.json(row);
+    res.json(toPayeeDto(row));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -198,9 +422,22 @@ router.put('/compensation-profiles/:id', requireRole(settlementRoles), async (re
 router.get('/drivers/:driverId/payee-assignment', requireRole(settlementRoles), async (req, res) => {
   try {
     const asOf = req.query.asOf || new Date().toISOString().slice(0, 10);
-    const row = await getActivePayeeAssignment(knex, req.params.driverId, asOf);
-    if (!row) return res.status(404).json({ error: 'No active payee assignment' });
-    res.json(row);
+    const assignment = await getActivePayeeAssignment(knex, req.params.driverId, asOf);
+    if (!assignment) return res.status(404).json({ error: 'No active payee assignment' });
+    
+    // Fetch payee details
+    const primaryPayee = assignment.primary_payee_id
+      ? await knex('payees').where({ id: assignment.primary_payee_id }).first()
+      : null;
+    const additionalPayee = assignment.additional_payee_id
+      ? await knex('payees').where({ id: assignment.additional_payee_id }).first()
+      : null;
+    
+    res.json({
+      assignment,
+      primary_payee: primaryPayee || null,
+      additional_payee: additionalPayee || null
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -222,6 +459,85 @@ router.post('/drivers/:driverId/payee-assignments', requireRole(settlementRoles)
     res.status(201).json(row);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Upsert-like helper for Driver Edit page:
+// - accepts IDs if selected from dropdown
+// - accepts names if user typed a new payable_to / additional payee
+// - creates missing equipment owner payees on the fly
+router.post('/drivers/:driverId/payee-assignment/resolve', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const {
+      primary_payee_id,
+      primary_payee_name,
+      primary_payee_type,
+      additional_payee_id,
+      additional_payee_name,
+      additional_payee_type,
+      rule_type,
+      effective_start_date,
+      effective_end_date
+    } = req.body || {};
+
+    const result = await knex.transaction(async (trx) => {
+      let primary = null;
+      let additional = null;
+
+      if (primary_payee_id) {
+        primary = await trx('payees').where({ id: primary_payee_id }).first();
+      } else if (primary_payee_name) {
+        primary = await findOrCreatePayeeByName({
+          trx,
+          name: primary_payee_name,
+          requestedType: primary_payee_type || 'driver'
+        });
+      }
+
+      if (!primary) {
+        const err = new Error('Primary payable-to is required');
+        err.status = 400;
+        throw err;
+      }
+
+      if (additional_payee_id) {
+        additional = await trx('payees').where({ id: additional_payee_id }).first();
+      } else if (additional_payee_name) {
+        additional = await findOrCreatePayeeByName({
+          trx,
+          name: additional_payee_name,
+          requestedType: additional_payee_type || 'owner'
+        });
+      }
+
+      const [assignment] = await trx('driver_payee_assignments')
+        .insert({
+          driver_id: req.params.driverId,
+          primary_payee_id: primary.id,
+          additional_payee_id: additional?.id || null,
+          rule_type: rule_type || 'custom',
+          effective_start_date: effective_start_date || new Date().toISOString().slice(0, 10),
+          effective_end_date: effective_end_date ?? null
+        })
+        .returning('*');
+
+      return {
+        assignment,
+        primary_payee: toPayeeDto(primary),
+        additional_payee: toPayeeDto(additional)
+      };
+    });
+
+    return res.status(201).json({
+      assignment: result.assignment,
+      primary_payee: result.primary_payee,
+      additional_payee: result.additional_payee
+    });
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -247,10 +563,21 @@ router.get('/drivers/:driverId/expense-responsibility', requireRole(settlementRo
 router.post('/drivers/:driverId/expense-responsibility', requireRole(settlementRoles), async (req, res) => {
   try {
     const body = req.body;
+    
+    // Look up active compensation profile for this driver
+    let compensationProfileId = body.compensation_profile_id;
+    if (!compensationProfileId) {
+      const activeProfile = await knex('driver_compensation_profiles')
+        .where({ driver_id: req.params.driverId, status: 'active' })
+        .orderBy('effective_start_date', 'desc')
+        .first();
+      compensationProfileId = activeProfile?.id || null;
+    }
+    
     const [row] = await knex('expense_responsibility_profiles')
       .insert({
         driver_id: req.params.driverId,
-        compensation_profile_id: body.compensation_profile_id ?? null,
+        compensation_profile_id: compensationProfileId,
         fuel_responsibility: body.fuel_responsibility ?? null,
         insurance_responsibility: body.insurance_responsibility ?? null,
         eld_responsibility: body.eld_responsibility ?? null,
@@ -443,9 +770,81 @@ router.get('/settlements/:id', requireRole(settlementRoles), async (req, res) =>
   try {
     const settlement = await knex('settlements').where({ id: req.params.id }).first();
     if (!settlement) return res.status(404).json({ error: 'Settlement not found' });
-    const loadItems = await knex('settlement_load_items').where({ settlement_id: req.params.id });
-    const adjustmentItems = await knex('settlement_adjustment_items').where({ settlement_id: req.params.id });
-    res.json({ ...settlement, load_items: loadItems, adjustment_items: adjustmentItems });
+
+    const loadItems = await knex('settlement_load_items as sli')
+      .leftJoin('loads as l', 'l.id', 'sli.load_id')
+      .where('sli.settlement_id', req.params.id)
+      .select(
+        'sli.id',
+        'sli.settlement_id',
+        'sli.load_id',
+        knex.raw('COALESCE(sli.pickup_date, l.pickup_date) as pickup_date'),
+        knex.raw('COALESCE(sli.delivery_date, l.delivery_date) as delivery_date'),
+        'sli.loaded_miles',
+        'sli.pay_basis_snapshot',
+        'sli.gross_amount',
+        'sli.driver_pay_amount',
+        'sli.additional_payee_amount',
+        'sli.included_by',
+        'sli.created_at',
+        'sli.updated_at',
+        'l.load_number'
+      );
+
+    const adjustmentItems = await knex('settlement_adjustment_items')
+      .where({ settlement_id: req.params.id })
+      .orderBy('created_at', 'asc');
+
+    const driver = await knex('drivers')
+      .where({ id: settlement.driver_id })
+      .select('id', 'first_name', 'last_name', 'email')
+      .first();
+
+    const period = await knex('payroll_periods')
+      .where({ id: settlement.payroll_period_id })
+      .first();
+
+    let primaryPayee = settlement.primary_payee_id
+      ? await knex('payees').where({ id: settlement.primary_payee_id }).first()
+      : null;
+
+    let additionalPayee = settlement.additional_payee_id
+      ? await knex('payees').where({ id: settlement.additional_payee_id }).first()
+      : null;
+
+    if (!primaryPayee || !additionalPayee) {
+      const asOf = settlement.date || period?.period_end || new Date().toISOString().slice(0, 10);
+      let assignment = await getActivePayeeAssignment(knex, settlement.driver_id, asOf);
+      if (!assignment) {
+        assignment = await knex('driver_payee_assignments')
+          .where({ driver_id: settlement.driver_id })
+          .orderBy('effective_start_date', 'desc')
+          .first();
+      }
+      if (!primaryPayee && assignment?.primary_payee_id) {
+        primaryPayee = await knex('payees').where({ id: assignment.primary_payee_id }).first();
+      }
+      if (!additionalPayee && assignment?.additional_payee_id) {
+        additionalPayee = await knex('payees').where({ id: assignment.additional_payee_id }).first();
+      }
+    }
+
+    const adjustmentGroups = {
+      scheduled: adjustmentItems.filter((i) => i.source_type === 'scheduled_rule'),
+      manual: adjustmentItems.filter((i) => (i.source_type || 'manual') === 'manual'),
+      variable: adjustmentItems.filter((i) => !['scheduled_rule', 'manual', null, undefined].includes(i.source_type))
+    };
+
+    res.json({
+      ...settlement,
+      driver: driver || null,
+      period: period || null,
+      primary_payee: primaryPayee || null,
+      additional_payee: additionalPayee || null,
+      load_items: loadItems,
+      adjustment_items: adjustmentItems,
+      adjustment_groups: adjustmentGroups
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

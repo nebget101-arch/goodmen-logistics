@@ -6,6 +6,32 @@
 
 ---
 
+## 🚨 URGENT: Database Migration Issue
+
+**Current Error:**
+```
+relation "payroll_periods" does not exist
+```
+
+**Root Cause:** Knex migrations have not been run. The migration file exists at:
+- `backend/packages/goodmen-database/migrations/20260309100000_add_payroll_settlement_tables.js`
+
+**Immediate Fix:**
+```bash
+cd backend/packages/goodmen-database
+npm install
+npx knex migrate:latest --env development
+```
+
+**Verification:**
+```bash
+psql -U postgres -d goodmen_logistics -c "\dt payroll_periods"
+```
+
+See section 9 below for detailed solution and long-term fixes.
+
+---
+
 ## 1. Backend Codebase Analysis
 
 ### 1.1 Architecture Overview
@@ -653,9 +679,260 @@ As **Lead Backend Architect & Developer**, your focus areas:
 
 ---
 
-## 9. Tools & Resources
+## 9. Database Migration Issue & Solution
 
-### 9.1 Development Tools
+### 9.1 Problem Summary
+
+**Error:**
+```
+insert into "payroll_periods" (...) values (...) returning * - relation "payroll_periods" does not exist
+```
+
+The `payroll_periods` table (and 10 other payroll/settlement tables) were added in migration:
+- `backend/packages/goodmen-database/migrations/20260309100000_add_payroll_settlement_tables.js`
+
+But the migration has **not been executed** against your database.
+
+### 9.2 Immediate Solution
+
+Run migrations manually:
+
+```bash
+cd backend/packages/goodmen-database
+npm install  # Install knex CLI if needed
+npx knex migrate:latest --env development
+```
+
+Or use the database init script:
+
+```bash
+cd backend/packages/goodmen-database
+node init.js
+```
+
+### 9.3 Verify Tables Exist
+
+```bash
+psql -U postgres -d goodmen_logistics
+
+-- List all tables
+\dt
+
+-- Check payroll_periods specifically
+\d payroll_periods
+
+-- View migration history
+SELECT * FROM knex_migrations ORDER BY id DESC LIMIT 10;
+
+\q
+```
+
+Expected: You should see `payroll_periods` and related tables (`payees`, `settlements`, `driver_compensation_profiles`, etc.).
+
+### 9.4 Root Cause Analysis
+
+**Why migrations weren't run:**
+
+1. **Docker Compose doesn't auto-migrate**
+   - Current `docker-compose.yml` starts services but assumes schema exists
+   - No init container runs migrations before app services start
+
+2. **Manual setup required**
+   - Developer must manually run `npx knex migrate:latest` on first clone/pull
+
+3. **No CI/CD migration gate**
+   - Deployments don't enforce "migrations run" check
+
+### 9.5 Long-Term Fix: Add Migration Service
+
+Update `docker-compose.yml` to add an init service:
+
+```yaml
+services:
+  db-migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.service
+      args:
+        SERVICE_DIR: backend/packages/goodmen-database
+    container_name: fleetneuron-db-migrate
+    env_file:
+      - .env
+    environment:
+      - PG_HOST=host.docker.internal
+      - PG_DATABASE=${DB_NAME:-goodmen_logistics}
+      - PG_USER=${DB_USER:-postgres}
+      - PG_PASSWORD=${DB_PASSWORD:-postgres}
+      - PG_PORT=${DB_PORT:-5432}
+    command: sh -c "npm install && npx knex migrate:latest"
+    volumes:
+      - ./backend:/usr/src/app/backend
+
+  # Make all services depend on db-migrate
+  gateway:
+    depends_on:
+      - db-migrate
+      - reporting-service
+      # ... other deps
+```
+
+### 9.6 Backend Dev Protocol for Migrations
+
+When backend agent creates new tables/columns:
+
+**Step 1: Create migration**
+```bash
+cd backend/packages/goodmen-database
+npx knex migrate:make descriptive_migration_name
+```
+
+**Step 2: Test locally**
+```bash
+npx knex migrate:up      # Apply
+npx knex migrate:down    # Test rollback
+npx knex migrate:up      # Re-apply
+```
+
+**Step 3: Document in PR**
+```markdown
+### Migration Required: YES
+
+**New Tables:**
+- payroll_periods
+- settlements
+- payees
+
+**Breaking Changes:** None (additive only)
+
+**Run Command:**
+```bash
+cd backend/packages/goodmen-database
+npx knex migrate:latest
+```
+
+**Rollback Plan:**
+```bash
+npx knex migrate:rollback --all
+```
+```
+
+**Step 4: Announce to team**
+```
+Feature Key: payroll-settlements-v1
+Scope: backend
+Contract Impact: additive
+Migration Required: YES
+Files: backend/packages/goodmen-database/migrations/20260309100000_add_payroll_settlement_tables.js
+Tables: payroll_periods, settlements, payees, driver_compensation_profiles, ...
+```
+
+### 9.7 Frontend/Mobile Protocol
+
+Before starting work on features that touch new backend tables:
+
+**Step 1: Check migration status**
+```bash
+cd backend/packages/goodmen-database
+npx knex migrate:list
+```
+
+**Step 2: Pull + migrate**
+```bash
+git pull origin main
+cd backend/packages/goodmen-database
+npx knex migrate:latest
+```
+
+**Step 3: If "relation does not exist" error occurs:**
+1. Check if migration file exists in `backend/packages/goodmen-database/migrations/`
+2. Run `npx knex migrate:latest`
+3. Verify table: `psql -c "\dt <table_name>"`
+4. If still failing, notify backend agent
+
+### 9.8 API Contract: Payroll Periods
+
+**Endpoint:** `POST /api/settlements/payroll-periods`
+
+**Request:**
+```json
+{
+  "period_start": "2026-03-01",
+  "period_end": "2026-03-07",
+  "run_type": "weekly",
+  "status": "draft"
+}
+```
+
+**Response (Success 201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "period_start": "2026-03-01",
+    "period_end": "2026-03-07",
+    "run_type": "weekly",
+    "status": "draft",
+    "created_by": "user-uuid-here",
+    "approved_by": null,
+    "approved_at": null,
+    "created_at": "2026-03-08T10:30:00.000Z",
+    "updated_at": "2026-03-08T10:30:00.000Z"
+  }
+}
+```
+
+**Response (Error 500 - Table Missing):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "DATABASE_ERROR",
+    "message": "relation \"payroll_periods\" does not exist",
+    "details": {
+      "hint": "Run migrations: cd backend/packages/goodmen-database && npx knex migrate:latest"
+    }
+  }
+}
+```
+
+### 9.9 Quick Reference Commands
+
+```bash
+# List pending migrations
+cd backend/packages/goodmen-database
+npx knex migrate:list
+
+# Run all pending migrations
+npx knex migrate:latest
+
+# Rollback last migration
+npx knex migrate:rollback
+
+# Rollback all migrations
+npx knex migrate:rollback --all
+
+# Create new migration
+npx knex migrate:make my_migration_name
+
+# Connect to database
+psql -U postgres -d goodmen_logistics
+
+# List all tables
+\dt
+
+# Describe table structure
+\d payroll_periods
+
+# Exit psql
+\q
+```
+
+---
+
+## 10. Tools & Resources
+
+### 10.1 Development Tools
 
 - **Git:** Version control
 - **Docker:** Local service orchestration
@@ -663,18 +940,20 @@ As **Lead Backend Architect & Developer**, your focus areas:
   - Extensions: ESLint, Prettier, Docker, GitLens
 - **Postman/Insomnia:** API testing
 - **DBeaver/pgAdmin:** Database inspection
+- **Knex CLI:** Database migrations (`npm install -g knex`)
 - **Xcode:** iOS development
 - **Android Studio:** Android development
 
-### 9.2 Documentation
+### 10.2 Documentation
 
 - **Project Docs:** `/docs/` folder (this repo)
 - **API Contracts:** `/docs/api-contracts/`
 - **Architecture:** `/docs/APPLICATION-KNOWLEDGE-FOR-AI.md`
 - **RBAC:** `/docs/RBAC.md`
 - **Payroll Design:** `/backend/docs/PAYROLL_SETTLEMENT_AUDIT_AND_PLAN.md`
+- **Team Collaboration:** `/docs/TEAM-COLLABORATION-PLAN.md`
 
-### 9.3 External Resources
+### 10.3 External Resources
 
 - **Render.com:** Production hosting (see `render.yaml`)
 - **PostgreSQL:** Database (connection string in `.env`)
@@ -685,19 +964,19 @@ As **Lead Backend Architect & Developer**, your focus areas:
 
 ---
 
-## 10. Success Metrics
+## 11. Success Metrics
 
-### 10.1 Code Quality
+### 11.1 Code Quality
 - Test coverage > 70% (backend)
 - All linters pass (no warnings)
 - No critical security vulnerabilities (npm audit)
 
-### 10.2 Collaboration
+### 11.2 Collaboration
 - PRs reviewed within 4 hours
 - < 3 merge conflicts per week (good branch hygiene)
 - Daily status updates by all agents
 
-### 10.3 Delivery
+### 11.3 Delivery
 - Features deployed to staging within 1 week of start
 - Production releases every 2 weeks
 - < 5 critical bugs per release

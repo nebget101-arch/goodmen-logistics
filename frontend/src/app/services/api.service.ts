@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, timeout } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -127,7 +128,7 @@ export class ApiService {
 
   // Settlements (payroll)
   listSettlements(filters?: { driver_id?: string; payroll_period_id?: string; settlement_status?: string; settlement_number?: string; limit?: number; offset?: number }): Observable<any> {
-    let url = `${this.baseUrl}/settlements`;
+    let url = `${this.baseUrl}/settlements/settlements`;
     const params = new URLSearchParams();
     if (filters?.driver_id) params.set('driver_id', filters.driver_id);
     if (filters?.payroll_period_id) params.set('payroll_period_id', filters.payroll_period_id);
@@ -140,12 +141,197 @@ export class ApiService {
     return this.http.get(url);
   }
 
+  normalizeSettlementDetail(raw: any): any {
+    const src = raw || {};
+    const settlement = src?.settlement || src;
+
+    const loadItems = Array.isArray(src?.load_items)
+      ? src.load_items
+      : (Array.isArray(settlement?.load_items) ? settlement.load_items : []);
+
+    const adjustmentItems = Array.isArray(src?.adjustment_items)
+      ? src.adjustment_items
+      : (Array.isArray(settlement?.adjustment_items) ? settlement.adjustment_items : []);
+
+    const scheduled = adjustmentItems.filter((a: any) => {
+      const source = (a?.source_type || '').toLowerCase();
+      return source === 'scheduled_rule' || source === 'scheduled';
+    });
+
+    const manual = adjustmentItems.filter((a: any) => {
+      const source = (a?.source_type || 'manual').toLowerCase();
+      return source === 'manual' || source === '';
+    });
+
+    const variable = adjustmentItems.filter((a: any) => !scheduled.includes(a) && !manual.includes(a));
+
+    const adjustmentGroups = {
+      scheduled: Array.isArray(src?.adjustment_groups?.scheduled) ? src.adjustment_groups.scheduled : scheduled,
+      manual: Array.isArray(src?.adjustment_groups?.manual) ? src.adjustment_groups.manual : manual,
+      variable: Array.isArray(src?.adjustment_groups?.variable) ? src.adjustment_groups.variable : variable
+    };
+
+    const normalized = {
+      ...settlement,
+      settlement,
+      load_items: loadItems,
+      adjustment_items: adjustmentItems,
+      driver: src?.driver || settlement?.driver || null,
+      period: src?.period || settlement?.period || null,
+      primary_payee: src?.primary_payee || settlement?.primary_payee || null,
+      additional_payee: src?.additional_payee || settlement?.additional_payee || null,
+      adjustment_groups: adjustmentGroups
+    };
+
+    return normalized;
+  }
+
   getSettlement(id: string): Observable<any> {
-    return this.http.get(`${this.baseUrl}/settlements/${id}`);
+    return this.http.get(`${this.baseUrl}/settlements/settlements/${id}`).pipe(
+      map((res: any) => this.normalizeSettlementDetail(res))
+    );
+  }
+
+  recalcSettlement(id: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/recalc`, {});
+  }
+
+  addSettlementLoad(id: string, payload: { load_id: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/loads`, payload);
+  }
+
+  removeSettlementLoad(id: string, loadItemId: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/settlements/settlements/${id}/loads/${loadItemId}`);
+  }
+
+  addSettlementAdjustment(
+    id: string,
+    payload: {
+      item_type: string;
+      source_type?: string;
+      description?: string;
+      amount: number;
+      quantity?: number | null;
+      unit_rate?: number | null;
+      charge_party?: string;
+      apply_to?: string;
+      category_id?: string | null;
+    }
+  ): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/adjustments`, payload);
+  }
+
+  removeSettlementAdjustment(id: string, adjustmentId: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/settlements/settlements/${id}/adjustments/${adjustmentId}`);
+  }
+
+  approveSettlement(id: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/approve`, {});
+  }
+
+  voidSettlement(id: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/void`, {});
+  }
+
+  getSettlementPdfPayload(id: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/settlements/settlements/${id}/pdf-payload`);
+  }
+
+  sendSettlementEmail(
+    id: string,
+    payload: { to_driver?: boolean; to_additional_payee?: boolean; cc_internal?: boolean }
+  ): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/send-email`, payload);
   }
 
   createSettlementDraft(payload: { payroll_period_id: string; driver_id: string; date_basis?: string }): Observable<any> {
     return this.http.post(`${this.baseUrl}/settlements/draft`, payload);
+  }
+
+  createEquipmentOwner(payload: {
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    address_line_2?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    fid_ein?: string;
+    mc?: string;
+    notes?: string;
+    vendor_type?: string;
+    is_additional_payee?: boolean;
+    is_equipment_owner?: boolean;
+    additional_payee_rate?: number | null;
+    settlement_template_type?: string;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/payees/equipment-owner`, payload);
+  }
+
+  resolveDriverPayeeAssignment(driverId: string, payload: {
+    primary_payee_id?: string;
+    primary_payee_name?: string;
+    primary_payee_type?: string;
+    additional_payee_id?: string;
+    additional_payee_name?: string;
+    additional_payee_type?: string;
+    rule_type?: string;
+    effective_start_date?: string;
+    effective_end_date?: string;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/drivers/${driverId}/payee-assignment/resolve`, payload);
+  }
+
+  saveExpenseResponsibility(driverId: string, payload: {
+    fuel_responsibility?: string | null;
+    insurance_responsibility?: string | null;
+    eld_responsibility?: string | null;
+    trailer_rent_responsibility?: string | null;
+    toll_responsibility?: string | null;
+    repairs_responsibility?: string | null;
+    effective_start_date?: string;
+    effective_end_date?: string | null;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/drivers/${driverId}/expense-responsibility`, payload);
+  }
+
+  getPayeeAssignment(driverId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/settlements/drivers/${driverId}/payee-assignment`);
+  }
+
+  getAllPayees(params?: { search?: string; type?: string; is_active?: boolean; limit?: number }): Observable<any> {
+    let url = `${this.baseUrl}/settlements/payees`;
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.type) q.set('type', params.type);
+    if (params?.is_active !== undefined) q.set('is_active', String(params.is_active));
+    if (params?.limit) q.set('limit', String(params.limit));
+    const qs = q.toString();
+    if (qs) url += `?${qs}`;
+    return this.http.get(url);
+  }
+
+  searchPayees(term: string, role: 'primary' | 'additional' | 'all' = 'all', limit: number = 50): Observable<any> {
+    return this.http.get(`${this.baseUrl}/settlements/payees/search`, {
+      params: { q: term, role, limit: String(limit) }
+    });
+  }
+
+  createPayee(payload: {
+    type: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    is_additional_payee?: boolean;
+    additional_payee_rate?: number;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/payees`, payload);
+  }
+
+  getExpenseResponsibility(driverId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/settlements/drivers/${driverId}/expense-responsibility`);
   }
 
   getPayrollPeriods(params?: { status?: string; limit?: number }): Observable<any> {

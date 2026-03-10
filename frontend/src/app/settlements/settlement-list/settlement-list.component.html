@@ -72,7 +72,7 @@
             <td class="cell-amount">${{ s.deductions | number:'1.2-2' }}</td>
             <td class="cell-amount">${{ s.netDriver | number:'1.2-2' }}</td>
             <td class="cell-amount">${{ s.netAdditionalPayee | number:'1.2-2' }}</td>
-            <td>{{ s.updatedAt | date:'short' }}</td>
+            <td>{{ s.updatedAt || '—' }}</td>
             <td>
               <button type="button" class="btn-sm btn-outline" (click)="openSettlement(s.id)" aria-label="View settlement">
                 <span class="material-symbols-outlined">visibility</span>

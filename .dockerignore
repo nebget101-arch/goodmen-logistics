@@ -6,13 +6,26 @@ build
 .gitignore
 .cursor
 .DS_Store
+.env
 
 # Frontend
 frontend/node_modules
 frontend/dist
+frontend/.angular
+frontend/.cache
+frontend/coverage
 
 # Backend
 backend/**/node_modules
 backend/**/dist
 backend/**/coverage
+backend/**/.cache
+
+# Mobile / native projects (not needed for backend image builds)
+ios
+FleetNeuron Drive
+
+# Misc
+**/*.log
+**/tmp
 

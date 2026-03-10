@@ -216,15 +216,68 @@ router.get('/:id', async (req, res) => {
       dtLogger.trackRequest('GET', `/api/drivers/${driverId}`, 404, duration);
       return res.status(404).json({ message: 'Driver not found' });
     }
+
+    const asOf = new Date().toISOString().slice(0, 10);
+
+    const payeeAssignmentResult = await query(
+      `SELECT dpa.*, 
+              p1.name AS primary_payee_name,
+              p2.name AS additional_payee_name
+       FROM driver_payee_assignments dpa
+       LEFT JOIN payees p1 ON p1.id = dpa.primary_payee_id
+       LEFT JOIN payees p2 ON p2.id = dpa.additional_payee_id
+       WHERE dpa.driver_id = $1
+         AND dpa.effective_start_date <= $2
+         AND (dpa.effective_end_date IS NULL OR dpa.effective_end_date >= $2)
+       ORDER BY dpa.effective_start_date DESC
+       LIMIT 1`,
+      [driverId, asOf]
+    );
+
+    const expenseResponsibilityResult = await query(
+      `SELECT *
+       FROM expense_responsibility_profiles
+       WHERE driver_id = $1
+         AND effective_start_date <= $2
+         AND (effective_end_date IS NULL OR effective_end_date >= $2)
+       ORDER BY effective_start_date DESC
+       LIMIT 1`,
+      [driverId, asOf]
+    );
+
+    const driver = transformRow(result.rows[0]);
+    const assignment = payeeAssignmentResult.rows[0] || null;
+    const expense = expenseResponsibilityResult.rows[0] || null;
+
+    const response = {
+      ...driver,
+      // Payee assignment details (for edit form population)
+      primaryPayeeId: assignment?.primary_payee_id || null,
+      primaryPayee: assignment?.primary_payee_name || null,
+      additionalPayeeId: assignment?.additional_payee_id || null,
+      additionalPayee: assignment?.additional_payee_name || null,
+      payeeReason: assignment?.rule_type || null,
+      effectiveStart: assignment?.effective_start_date || null,
+      effectiveEnd: assignment?.effective_end_date || null,
+
+      // Expense responsibility details (for edit form population)
+      fuelResponsibility: expense?.fuel_responsibility || null,
+      insuranceResponsibility: expense?.insurance_responsibility || null,
+      eldResponsibility: expense?.eld_responsibility || null,
+      trailerRentResponsibility: expense?.trailer_rent_responsibility || null,
+      tollResponsibility: expense?.toll_responsibility || null,
+      repairsResponsibility: expense?.repairs_responsibility || null
+    };
+
     dtLogger.trackDatabase('SELECT', 'drivers', duration, true, { driverId });
     dtLogger.trackRequest('GET', `/api/drivers/${driverId}`, 200, duration);
-    res.json(transformRow(result.rows[0]));
+    res.json(response);
   } catch (error) {
     const duration = Date.now() - startTime;
     dtLogger.error('Failed to fetch driver', error, { driverId });
     dtLogger.trackRequest('GET', `/api/drivers/${driverId}`, 500, duration);
     console.error('Error fetching driver:', error);
-    res.status(500).json({ message: 'Failed to fetch driver' });
+    res.json(transformRow(enriched));
   }
 });
 
@@ -403,6 +456,60 @@ router.post('/', async (req, res) => {
         clearinghouseStatus || 'eligible'
       ]
     );
+
+    // Auto-create compensation profile if pay info provided
+    if (payBasis || payRate || payPercentage) {
+      const payBasisLower = (payBasis || '').toString().toLowerCase();
+      const profileType = (driverType || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'company_driver';
+      let payModel = 'per_mile';
+      let centsPerMile = null;
+      let percentageRate = null;
+      let flatWeeklyAmount = null;
+      let flatPerLoadAmount = null;
+
+      if (payBasisLower === 'per_mile') {
+        payModel = 'per_mile';
+        centsPerMile = payRate;
+      } else if (payBasisLower === 'percentage') {
+        payModel = 'percentage';
+        percentageRate = payPercentage;
+      } else if (payBasisLower === 'flatpay' || payBasisLower === 'flat_weekly') {
+        payModel = 'flat_weekly';
+        flatWeeklyAmount = payRate;
+      } else if (payBasisLower === 'flat_per_load') {
+        payModel = 'flat_per_load';
+        flatPerLoadAmount = payRate;
+      }
+
+      const effectiveStart = hireDate || new Date().toISOString().slice(0, 10);
+      await client.query(
+        `INSERT INTO driver_compensation_profiles (
+          driver_id,
+          profile_type,
+          pay_model,
+          percentage_rate,
+          cents_per_mile,
+          flat_weekly_amount,
+          flat_per_load_amount,
+          expense_sharing_enabled,
+          effective_start_date,
+          effective_end_date,
+          status,
+          notes
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, NULL, 'active', 'Auto-created from driver save')`,
+        [
+          driverId,
+          profileType,
+          payModel,
+          percentageRate,
+          centsPerMile,
+          flatWeeklyAmount,
+          flatPerLoadAmount,
+          effectiveStart
+        ]
+      );
+    }
 
     await client.query('COMMIT');
 
@@ -601,6 +708,73 @@ router.put('/:id', async (req, res) => {
       `UPDATE drivers SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`,
       values
     );
+
+    // Auto-sync compensation profile if pay fields updated
+    const hasPayUpdate = body.payBasis || body.pay_basis || body.payRate || body.pay_rate || body.payPercentage || body.pay_percentage;
+    if (hasPayUpdate && result.rows.length > 0) {
+      const updatedDriver = result.rows[0];
+      const payBasisLower = (updatedDriver.pay_basis || '').toString().toLowerCase();
+      const profileType = (updatedDriver.driver_type || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'company_driver';
+      let payModel = 'per_mile';
+      let centsPerMile = null;
+      let percentageRate = null;
+      let flatWeeklyAmount = null;
+      let flatPerLoadAmount = null;
+
+      if (payBasisLower === 'per_mile') {
+        payModel = 'per_mile';
+        centsPerMile = updatedDriver.pay_rate;
+      } else if (payBasisLower === 'percentage') {
+        payModel = 'percentage';
+        percentageRate = updatedDriver.pay_percentage;
+      } else if (payBasisLower === 'flatpay' || payBasisLower === 'flat_weekly') {
+        payModel = 'flat_weekly';
+        flatWeeklyAmount = updatedDriver.pay_rate;
+      } else if (payBasisLower === 'flat_per_load') {
+        payModel = 'flat_per_load';
+        flatPerLoadAmount = updatedDriver.pay_rate;
+      }
+
+      // Close any existing active profile and create new one
+      const today = new Date().toISOString().slice(0, 10);
+      await client.query(
+        `UPDATE driver_compensation_profiles
+         SET effective_end_date = $1, status = 'superseded', updated_at = NOW()
+         WHERE driver_id = $2
+           AND status = 'active'
+           AND effective_end_date IS NULL`,
+        [today, req.params.id]
+      );
+
+      const effectiveStart = updatedDriver.hire_date || today;
+      await client.query(
+        `INSERT INTO driver_compensation_profiles (
+          driver_id,
+          profile_type,
+          pay_model,
+          percentage_rate,
+          cents_per_mile,
+          flat_weekly_amount,
+          flat_per_load_amount,
+          expense_sharing_enabled,
+          effective_start_date,
+          effective_end_date,
+          status,
+          notes
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, NULL, 'active', 'Auto-synced from driver update')`,
+        [
+          req.params.id,
+          profileType,
+          payModel,
+          percentageRate,
+          centsPerMile,
+          flatWeeklyAmount,
+          flatPerLoadAmount,
+          effectiveStart
+        ]
+      );
+    }
 
     await client.query('COMMIT');
 

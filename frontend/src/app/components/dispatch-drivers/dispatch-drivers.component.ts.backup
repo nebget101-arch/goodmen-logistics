@@ -47,7 +47,6 @@ export class DispatchDriversComponent implements OnInit {
   /** Active tab in driver modal: Pay rates | Recurring deductions | Additional payee | Notes */
   payTab: 'rates' | 'deductions' | 'payee' | 'notes' = 'rates';
   /** Payee search state */
-  allPayees: any[] = []; // Full list of available payees
   primaryPayeeSearch = '';
   filteredPrimaryPayees: any[] = [];
   showPrimaryPayeeDropdown = false;
@@ -61,7 +60,7 @@ export class DispatchDriversComponent implements OnInit {
   selectedAdditionalPayeeName = '';
 
   /** Equipment Owner creation state */
-  isCreatingEquipmentOwner: boolean = false;
+  isCreatingEquipmentOwner: 'primary' | 'additional' | null = null;
   newEquipmentOwner = {
     companyName: '',
     address: '',
@@ -167,19 +166,6 @@ export class DispatchDriversComponent implements OnInit {
   ngOnInit(): void {
     this.loadDrivers();
     this.loadVehicles();
-    this.loadAllPayees();
-  }
-
-  loadAllPayees(): void {
-    this.apiService.getAllPayees({ is_active: true, limit: 200 }).subscribe({
-      next: (payees) => {
-        this.allPayees = payees || [];
-      },
-      error: (err) => {
-        console.error('Error loading payees', err);
-        this.allPayees = [];
-      }
-    });
   }
 
   get filteredDrivers(): any[] {
@@ -365,7 +351,7 @@ export class DispatchDriversComponent implements OnInit {
     this.filteredAdditionalPayees = [];
     this.showPrimaryPayeeDropdown = false;
     this.showAdditionalPayeeDropdown = false;
-    this.isCreatingEquipmentOwner = false;
+    this.isCreatingEquipmentOwner = null;
     this.newEquipmentOwner = {
       companyName: '',
       address: '',
@@ -452,59 +438,8 @@ export class DispatchDriversComponent implements OnInit {
           this.newDriver = this.buildDriverFromSource(detail);
           this.primaryPayeeSearch = this.newDriver.payableTo || '';
           this.additionalPayeeSearch = this.newDriver.additionalPayee || '';
-          this.selectedPrimaryPayeeId = detail?.primaryPayeeId || '';
-          this.selectedAdditionalPayeeId = detail?.additionalPayeeId || '';
-
-          if (detail?.fuelResponsibility || detail?.insuranceResponsibility || detail?.eldResponsibility || detail?.trailerRentResponsibility || detail?.tollResponsibility || detail?.repairsResponsibility) {
-            this.expenseResponsibility = {
-              fuel: detail.fuelResponsibility || '',
-              insurance: detail.insuranceResponsibility || '',
-              eld: detail.eldResponsibility || '',
-              trailerRent: detail.trailerRentResponsibility || '',
-              tolls: detail.tollResponsibility || '',
-              repairs: detail.repairsResponsibility || ''
-            };
-          }
-          
-          // Load payee assignment
-          this.apiService.getPayeeAssignment(driverId).subscribe({
-            next: (response: any) => {
-              // Response includes: { assignment, primary_payee, additional_payee }
-              const assignment = response?.assignment || response;
-              const additionalPayee = response?.additional_payee;
-              
-              if (assignment?.additional_payee_id && additionalPayee) {
-                this.selectedAdditionalPayeeId = assignment.additional_payee_id;
-                this.additionalPayeeSearch = additionalPayee.name;
-                this.selectedAdditionalPayeeName = additionalPayee.name;
-              }
-            },
-            error: (err) => {
-              // 404 is expected for drivers without payee assignment yet
-              if (err.status !== 404) {
-                console.error('Error loading payee assignment:', err);
-              }
-            }
-          });
-          
-          // Load expense responsibility
-          this.apiService.getExpenseResponsibility(driverId).subscribe({
-            next: (expense) => {
-              if (expense) {
-                this.expenseResponsibility = {
-                  fuel: expense.fuel_responsibility || '',
-                  insurance: expense.insurance_responsibility || '',
-                  eld: expense.eld_responsibility || '',
-                  trailerRent: expense.trailer_rent_responsibility || '',
-                  tolls: expense.toll_responsibility || '',
-                  repairs: expense.repairs_responsibility || ''
-                };
-              }
-            },
-            error: () => {
-              // No expense responsibility found, skip
-            }
-          });
+          this.selectedPrimaryPayeeId = '';
+          this.selectedAdditionalPayeeId = '';
         },
         error: () => {
           this.newDriver = this.buildDriverFromSource(driver);
@@ -570,7 +505,7 @@ export class DispatchDriversComponent implements OnInit {
       onPrimaryPayeeSearchBlur(): void {
         setTimeout(() => {
           // Only hide dropdown if we're not about to create a new equipment owner
-          if (!this.isCreatingEquipmentOwner) {
+          if (this.isCreatingEquipmentOwner !== 'primary') {
             this.showPrimaryPayeeDropdown = false;
           }
         }, 250);
@@ -585,155 +520,157 @@ export class DispatchDriversComponent implements OnInit {
         }
       }
 
-  searchPrimaryPayees(): void {
-    this.apiService.searchPayees(this.primaryPayeeSearch, 'primary').subscribe({
-      next: (res: any) => {
-        this.filteredPrimaryPayees = Array.isArray(res.data) ? res.data : [];
-      },
-      error: (err) => {
-        console.error('Failed to search primary payees:', err);
+      searchPrimaryPayees(): void {
+        this.apiService.searchPayees('primary', this.primaryPayeeSearch).subscribe({
+          next: (res: any) => {
+            this.filteredPrimaryPayees = Array.isArray(res.data) ? res.data : [];
+          },
+          error: (err) => {
+            console.error('Failed to search primary payees:', err);
+            this.filteredPrimaryPayees = [];
+          }
+        });
+      }
+
+      selectPrimaryPayee(payee: any): void {
+        this.selectedPrimaryPayeeId = payee.id;
+        this.selectedPrimaryPayeeName = payee.name;
+        this.primaryPayeeSearch = payee.name;
+        this.newDriver.payableTo = payee.name;
+        this.showPrimaryPayeeDropdown = false;
+      }
+
+      clearPrimaryPayeeSelection(): void {
+        this.selectedPrimaryPayeeId = '';
+        this.selectedPrimaryPayeeName = '';
+        this.primaryPayeeSearch = '';
+        this.newDriver.payableTo = '';
         this.filteredPrimaryPayees = [];
       }
-    });
-  }
 
-  selectPrimaryPayee(payee: any): void {
-    this.selectedPrimaryPayeeId = payee.id;
-    this.selectedPrimaryPayeeName = payee.name;
-    this.primaryPayeeSearch = payee.name;
-    this.newDriver.payableTo = payee.name;
-    this.showPrimaryPayeeDropdown = false;
-  }
+      showCreatePrimaryPayee(): boolean {
+        if (!this.primaryPayeeSearch.trim()) return false;
+        const query = this.primaryPayeeSearch.toLowerCase();
+        return !this.filteredPrimaryPayees.some(p => p.name.toLowerCase() === query);
+      }
 
-  clearPrimaryPayeeSelection(): void {
-    this.selectedPrimaryPayeeId = '';
-    this.selectedPrimaryPayeeName = '';
-    this.primaryPayeeSearch = '';
-    this.newDriver.payableTo = '';
-    this.filteredPrimaryPayees = [];
-  }
+      onAdditionalPayeeSearchFocus(): void {
+        this.showAdditionalPayeeDropdown = true;
+        if (this.additionalPayeeSearch.trim()) {
+          this.searchAdditionalPayees();
+        }
+      }
 
-  showCreatePrimaryPayee(): boolean {
-    if (!this.primaryPayeeSearch.trim()) return false;
-    const query = this.primaryPayeeSearch.toLowerCase();
-    return !this.filteredPrimaryPayees.some(p => p.name.toLowerCase() === query);
-  }
+      onAdditionalPayeeSearchBlur(): void {
+        setTimeout(() => {
+          // Only hide dropdown if we're not about to create a new equipment owner
+          if (this.isCreatingEquipmentOwner !== 'additional') {
+            this.showAdditionalPayeeDropdown = false;
+          }
+        }, 250);
+      }
 
-  onAdditionalPayeeSearchFocus(): void {
-    this.showAdditionalPayeeDropdown = true;
-    if (this.additionalPayeeSearch.trim()) {
-      this.searchAdditionalPayees();
-    }
-  }
+      onAdditionalPayeeSearchInput(): void {
+        this.showAdditionalPayeeDropdown = true;
+        if (this.additionalPayeeSearch.trim().length >= 2) {
+          this.searchAdditionalPayees();
+        } else {
+          this.filteredAdditionalPayees = [];
+        }
+      }
 
-  onAdditionalPayeeSearchBlur(): void {
-    setTimeout(() => {
-      if (!this.isCreatingEquipmentOwner) {
+      searchAdditionalPayees(): void {
+        this.apiService.searchPayees('additional', this.additionalPayeeSearch).subscribe({
+          next: (res: any) => {
+            this.filteredAdditionalPayees = Array.isArray(res.data) ? res.data : [];
+          },
+          error: (err) => {
+            console.error('Failed to search additional payees:', err);
+            this.filteredAdditionalPayees = [];
+          }
+        });
+      }
+
+      selectAdditionalPayee(payee: any): void {
+        this.selectedAdditionalPayeeId = payee.id;
+        this.selectedAdditionalPayeeName = payee.name;
+        this.additionalPayeeSearch = payee.name;
+        this.newDriver.additionalPayee = payee.name;
         this.showAdditionalPayeeDropdown = false;
       }
-    }, 250);
-  }
 
-  onAdditionalPayeeSearchInput(): void {
-    this.showAdditionalPayeeDropdown = true;
-    const query = this.additionalPayeeSearch.trim().toLowerCase();
-    if (query.length >= 2) {
-      // Filter from all payees list - show owner, external_company, contractor types
-      this.filteredAdditionalPayees = this.allPayees.filter(p => {
-        const isAdditionalPayeeType = ['owner', 'external_company', 'contractor'].includes(p.type);
-        const matchesSearch = p.name.toLowerCase().includes(query);
-        return isAdditionalPayeeType && matchesSearch;
-      }).slice(0, 20); // Limit to 20 results
-    } else {
-      this.filteredAdditionalPayees = [];
-    }
-  }
+      clearAdditionalPayeeSelection(): void {
+        this.selectedAdditionalPayeeId = '';
+        this.selectedAdditionalPayeeName = '';
+        this.additionalPayeeSearch = '';
+        this.newDriver.additionalPayee = '';
+        this.filteredAdditionalPayees = [];
+      }
 
-  searchAdditionalPayees(): void {
-    // Use local filtering instead of API call
-    const query = this.additionalPayeeSearch.trim().toLowerCase();
-    this.filteredAdditionalPayees = this.allPayees.filter(p => {
-      const isAdditionalPayeeType = ['owner', 'external_company', 'contractor'].includes(p.type);
-      const matchesSearch = !query || p.name.toLowerCase().includes(query);
-      return isAdditionalPayeeType && matchesSearch;
-    }).slice(0, 20);
-  }
+      showCreateAdditionalPayee(): boolean {
+        if (!this.additionalPayeeSearch.trim()) return false;
+        const query = this.additionalPayeeSearch.toLowerCase();
+        return !this.filteredAdditionalPayees.some(p => p.name.toLowerCase() === query);
+      }
 
-  selectAdditionalPayee(payee: any): void {
-    this.selectedAdditionalPayeeId = payee.id;
-    this.selectedAdditionalPayeeName = payee.name;
-    this.additionalPayeeSearch = payee.name;
-    this.newDriver.additionalPayee = payee.name;
-    this.showAdditionalPayeeDropdown = false;
-  }
+      // Equipment Owner creation methods
+      startCreatingEquipmentOwner(type: 'primary' | 'additional'): void {
+        console.log('Starting equipment owner creation for:', type);
+        this.isCreatingEquipmentOwner = type;
+        this.newEquipmentOwner = {
+          companyName: type === 'primary' ? this.primaryPayeeSearch : this.additionalPayeeSearch,
+          address: '',
+          address2: '',
+          email: '',
+          phone: '',
+          city: '',
+          state: '',
+          zip: '',
+          fidEin: '',
+          mc: '',
+          notes: '',
+          vendorType: '',
+          additionalPayee: true,
+          equipmentOwner: true,
+          additionalPayeeRate: null,
+          settlementTemplateType: ''
+        };
+        // Hide the dropdown
+        if (type === 'primary') {
+          this.showPrimaryPayeeDropdown = false;
+        } else {
+          this.showAdditionalPayeeDropdown = false;
+        }
+      }
 
-  clearAdditionalPayeeSelection(): void {
-    this.selectedAdditionalPayeeId = '';
-    this.selectedAdditionalPayeeName = '';
-    this.additionalPayeeSearch = '';
-    this.newDriver.additionalPayee = '';
-    this.filteredAdditionalPayees = [];
-  }
+      cancelCreateEquipmentOwner(): void {
+        this.isCreatingEquipmentOwner = null;
+        this.newEquipmentOwner = {
+          companyName: '',
+          address: '',
+          address2: '',
+          email: '',
+          phone: '',
+          city: '',
+          state: '',
+          zip: '',
+          fidEin: '',
+          mc: '',
+          notes: '',
+          vendorType: '',
+          additionalPayee: true,
+          equipmentOwner: true,
+          additionalPayeeRate: null,
+          settlementTemplateType: ''
+        };
+      }
 
-  showCreateAdditionalPayee(): boolean {
-    if (!this.additionalPayeeSearch.trim()) return false;
-    const query = this.additionalPayeeSearch.toLowerCase();
-    return !this.filteredAdditionalPayees.some(p => p.name.toLowerCase() === query);
-  }
-
-  // Equipment Owner creation methods
-  startCreatingEquipmentOwner(): void {
-    console.log('Starting equipment owner creation for additional payee');
-    this.isCreatingEquipmentOwner = true;
-    this.newEquipmentOwner = {
-      companyName: this.additionalPayeeSearch,
-      address: '',
-      address2: '',
-      email: '',
-      phone: '',
-      city: '',
-      state: '',
-      zip: '',
-      fidEin: '',
-      mc: '',
-      notes: '',
-      vendorType: '',
-      additionalPayee: true,
-      equipmentOwner: true,
-      additionalPayeeRate: null,
-      settlementTemplateType: ''
-    };
-    this.showAdditionalPayeeDropdown = false;
-  }
-
-  cancelCreateEquipmentOwner(): void {
-    this.isCreatingEquipmentOwner = false;
-    this.newEquipmentOwner = {
-      companyName: '',
-      address: '',
-      address2: '',
-      email: '',
-      phone: '',
-      city: '',
-      state: '',
-      zip: '',
-      fidEin: '',
-      mc: '',
-      notes: '',
-      vendorType: '',
-      additionalPayee: true,
-      equipmentOwner: true,
-      additionalPayeeRate: null,
-      settlementTemplateType: ''
-    };
-  }
-
-  createEquipmentOwner(): void {
-    if (!this.newEquipmentOwner.companyName.trim() || this.saving) return;
-
-    this.saving = true;
-
-    this.apiService.createEquipmentOwner({
+      createEquipmentOwner(): void {
+        if (!this.newEquipmentOwner.companyName.trim() || this.saving) return;
+    
+        this.saving = true;
+    
+        this.apiService.createEquipmentOwner({
           name: this.newEquipmentOwner.companyName.trim(),
           email: this.newEquipmentOwner.email?.trim() || undefined,
           phone: this.newEquipmentOwner.phone?.trim() || undefined,
@@ -754,10 +691,15 @@ export class DispatchDriversComponent implements OnInit {
           next: (res: any) => {
             const newPayee = res?.data || res;
         
-            this.filteredAdditionalPayees.push(newPayee);
-            this.selectAdditionalPayee(newPayee);
+            if (this.isCreatingEquipmentOwner === 'primary') {
+              this.filteredPrimaryPayees.push(newPayee);
+              this.selectPrimaryPayee(newPayee);
+            } else {
+              this.filteredAdditionalPayees.push(newPayee);
+              this.selectAdditionalPayee(newPayee);
+            }
         
-            this.isCreatingEquipmentOwner = false;
+            this.isCreatingEquipmentOwner = null;
             this.newEquipmentOwner = {
               companyName: '',
               address: '',
@@ -865,24 +807,27 @@ export class DispatchDriversComponent implements OnInit {
   savePayeeAssignment(driverId: string): void {
     if (!driverId) return;
     
-    // Always use driver as primary payee
-    const driverName = `${this.newDriver.firstName || ''} ${this.newDriver.lastName || ''}`.trim() || 'Driver';
-    const hasAdditionalPayee = this.selectedAdditionalPayeeId || this.additionalPayeeSearch.trim();
+    const hasPayeeData = this.selectedPrimaryPayeeId || this.primaryPayeeSearch.trim() || 
+                         this.selectedAdditionalPayeeId || this.additionalPayeeSearch.trim();
+    
+    if (!hasPayeeData) return;
 
-    const payload: any = {
-      primary_payee_name: driverName,
-      primary_payee_type: 'driver'
-    };
+    const payload: any = {};
+    
+    if (this.selectedPrimaryPayeeId) {
+      payload.primary_payee_id = this.selectedPrimaryPayeeId;
+    } else if (this.primaryPayeeSearch.trim()) {
+      payload.primary_payee_name = this.primaryPayeeSearch.trim();
+    }
     
     if (this.selectedAdditionalPayeeId) {
       payload.additional_payee_id = this.selectedAdditionalPayeeId;
     } else if (this.additionalPayeeSearch.trim()) {
       payload.additional_payee_name = this.additionalPayeeSearch.trim();
-      payload.additional_payee_type = 'owner';
     }
     
     if (this.newDriver.payeeReason) {
-      payload.rule_type = this.newDriver.payeeReason;
+      payload.payee_scenario = this.newDriver.payeeReason;
     }
     
     if (this.newDriver.effectiveStart) {
@@ -896,39 +841,9 @@ export class DispatchDriversComponent implements OnInit {
     this.apiService.resolveDriverPayeeAssignment(driverId, payload).subscribe({
       next: () => {
         console.log('Payee assignment saved successfully');
-        // Also save expense responsibility if provided
-        this.saveExpenseResponsibility(driverId);
       },
       error: (err: any) => {
         console.error('Failed to save payee assignment:', err);
-      }
-    });
-  }
-
-  saveExpenseResponsibility(driverId: string): void {
-    if (!driverId) return;
-
-    // Check if any expense responsibility is set
-    const hasExpenseData = Object.values(this.expenseResponsibility).some(v => v && v.trim());
-    if (!hasExpenseData) return;
-
-    const payload: any = {
-      fuel_responsibility: this.expenseResponsibility['fuel'] || null,
-      insurance_responsibility: this.expenseResponsibility['insurance'] || null,
-      eld_responsibility: this.expenseResponsibility['eld'] || null,
-      trailer_rent_responsibility: this.expenseResponsibility['trailerRent'] || null,
-      toll_responsibility: this.expenseResponsibility['tolls'] || null,
-      repairs_responsibility: this.expenseResponsibility['repairs'] || null,
-      effective_start_date: this.newDriver.effectiveStart || new Date().toISOString().slice(0, 10),
-      effective_end_date: this.newDriver.effectiveEnd || null
-    };
-
-    this.apiService.saveExpenseResponsibility(driverId, payload).subscribe({
-      next: () => {
-        console.log('Expense responsibility saved successfully');
-      },
-      error: (err: any) => {
-        console.error('Failed to save expense responsibility:', err);
       }
     });
   }
