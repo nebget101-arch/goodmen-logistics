@@ -392,6 +392,10 @@ export class ApiService {
     return this.http.patch(`${this.baseUrl}/settlements/recurring-deductions/${id}`, payload);
   }
 
+  deleteRecurringDeduction(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/settlements/recurring-deductions/${id}`);
+  }
+
   backfillRecurringDeductions(payload: {
     driver_id?: string;
     start_date: string;

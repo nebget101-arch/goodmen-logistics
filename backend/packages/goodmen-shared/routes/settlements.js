@@ -687,7 +687,15 @@ router.post('/drivers/:driverId/expense-responsibility', requireRole(settlementR
 router.get('/recurring-deductions', requireRole(settlementRoles), async (req, res) => {
   try {
     const { driver_id, payee_id, payee_ids, enabled } = req.query;
-    let q = knex('recurring_deduction_rules');
+    let q = knex('recurring_deduction_rules as rdr')
+      .leftJoin('drivers as d', 'd.id', 'rdr.driver_id')
+      .leftJoin('payees as p', 'p.id', 'rdr.payee_id')
+      .select(
+        'rdr.*',
+        knex.raw("concat_ws(' ', d.first_name, d.last_name) as driver_name"),
+        'p.name as payee_name',
+        'p.type as payee_type'
+      );
     const normalizedPayeeIds = [payee_id, payee_ids]
       .flatMap((value) => String(value || '').split(','))
       .map((value) => value.trim())
@@ -695,18 +703,18 @@ router.get('/recurring-deductions', requireRole(settlementRoles), async (req, re
 
     if (driver_id && normalizedPayeeIds.length) {
       q = q.where(function () {
-        this.where('driver_id', driver_id)
+        this.where('rdr.driver_id', driver_id)
           .orWhere(function () {
-            this.whereNull('driver_id').whereIn('payee_id', normalizedPayeeIds);
+            this.whereNull('rdr.driver_id').whereIn('rdr.payee_id', normalizedPayeeIds);
           });
       });
     } else if (driver_id) {
-      q = q.where('driver_id', driver_id);
+      q = q.where('rdr.driver_id', driver_id);
     } else if (normalizedPayeeIds.length) {
-      q = q.whereIn('payee_id', normalizedPayeeIds);
+      q = q.whereIn('rdr.payee_id', normalizedPayeeIds);
     }
-    if (enabled !== undefined) q = q.where('enabled', enabled === 'true' || enabled === true);
-    const rows = await q.orderBy('start_date', 'desc');
+    if (enabled !== undefined) q = q.where('rdr.enabled', enabled === 'true' || enabled === true);
+    const rows = await q.orderBy('rdr.start_date', 'desc');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -761,6 +769,20 @@ router.patch('/recurring-deductions/:id', requireRole(settlementRoles), async (r
     res.json(row);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/recurring-deductions/:id', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await knex('recurring_deduction_rules').where({ id }).first();
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+
+    await knex('recurring_deduction_rules').where({ id }).del();
+    return res.json({ success: true, message: 'Recurring deduction deleted' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 

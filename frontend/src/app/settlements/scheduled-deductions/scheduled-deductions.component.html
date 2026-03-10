@@ -1,13 +1,13 @@
 <div class="scheduled-deductions">
   <div class="header">
     <div>
-      <h1>Scheduled Deductions</h1>
-      <p class="subtitle">Manage recurring payroll deductions and expense allocations</p>
+      <h1>Scheduled Payments</h1>
+      <p class="subtitle">Manage recurring payroll deductions and scheduled payments for all drivers</p>
     </div>
     <div class="header-actions">
-      <button type="button" class="btn-primary" (click)="openNew()">
-        <span class="material-symbols-outlined">add_circle</span>
-        New deduction
+      <button type="button" class="btn-primary btn-ai-chip" (click)="openNew()">
+        <span class="material-symbols-outlined">psychology_alt</span>
+        Add scheduled deduction
       </button>
     </div>
   </div>
@@ -124,8 +124,8 @@
               <strong>{{ d.description }}</strong>
               <span *ngIf="d.source_type" class="text-muted small"><br>Source: {{ d.source_type }}</span>
             </td>
-            <td>{{ getDriverName(d.driver_id) }}</td>
-            <td>{{ getPayeeName(d.payee_id) }}</td>
+            <td>{{ getDriverName(d) }}</td>
+            <td>{{ getPayeeName(d) }}</td>
             <td><span class="badge badge-secondary">{{ d.rule_scope }}</span></td>
             <td class="cell-amount">{{ formatAmount(d) }}</td>
             <td>{{ getFrequencyLabel(d.frequency) }}</td>
@@ -138,10 +138,14 @@
               </label>
               <span class="toggle-label">{{ d.enabled ? 'Active' : 'Inactive' }}</span>
             </td>
-            <td>
-              <button type="button" class="btn-sm btn-outline" (click)="openEdit(d)" aria-label="Edit deduction">
-                <span class="material-symbols-outlined">edit</span>
+            <td class="actions-cell">
+              <button type="button" class="btn-sm btn-outline btn-ai-chip btn-ai-chip-sm" (click)="openEdit(d)" aria-label="Edit deduction">
+                <span class="material-symbols-outlined">auto_fix_high</span>
                 Edit
+              </button>
+              <button type="button" class="btn-sm btn-danger" (click)="deleteDeduction(d)" aria-label="Delete deduction">
+                <span class="material-symbols-outlined">delete</span>
+                Delete
               </button>
             </td>
           </tr>
