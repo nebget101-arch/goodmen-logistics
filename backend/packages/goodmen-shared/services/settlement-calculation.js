@@ -57,9 +57,21 @@ function computeLoadPay(opts) {
 
   const additionalRateNum = Number(additionalPayeeRate);
   const hasAdditionalRate = Number.isFinite(additionalRateNum) && additionalRateNum > 0;
-  const additionalPayeePay = hasAdditionalPayee && hasAdditionalRate
-    ? Math.max(0, (grossNum * additionalRateNum) / 100)
-    : 0;
+  let additionalPayeePay = 0;
+  if (hasAdditionalPayee && hasAdditionalRate) {
+    additionalPayeePay = Math.max(0, (grossNum * additionalRateNum) / 100);
+  } else if (hasAdditionalPayee) {
+    // Backward-compatible fallback for environments where payee extension columns
+    // (e.g. additional_payee_rate) are not yet migrated: assign remainder to
+    // additional payee so split settlements still calculate.
+    additionalPayeePay = Math.max(0, grossNum - driverPay);
+  }
+
+  // Guardrail: total split cannot exceed gross.
+  if (driverPay + additionalPayeePay > grossNum) {
+    additionalPayeePay = Math.max(0, grossNum - driverPay);
+  }
+
   return { driverPay, additionalPayeePay };
 }
 
