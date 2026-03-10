@@ -72,6 +72,78 @@ async function getActiveCompensationProfile(knex, driverId, asOfDate) {
   return row || null;
 }
 
+function buildCompensationProfileInsert(driverRow, effectiveStartDate) {
+  if (!driverRow) return null;
+
+  const payBasisLower = (driverRow.pay_basis || '').toString().toLowerCase();
+  const profileType = (driverRow.driver_type || '').toString().toLowerCase() === 'owner_operator'
+    ? 'owner_operator'
+    : 'company_driver';
+
+  let payModel = 'per_mile';
+  let centsPerMile = null;
+  let percentageRate = null;
+  let flatWeeklyAmount = null;
+  let flatPerLoadAmount = null;
+
+  if (payBasisLower === 'percentage') {
+    payModel = 'percentage';
+    percentageRate = driverRow.pay_percentage ?? null;
+  } else if (payBasisLower === 'flatpay' || payBasisLower === 'flat_weekly') {
+    payModel = 'flat_weekly';
+    flatWeeklyAmount = driverRow.pay_rate ?? null;
+  } else if (payBasisLower === 'flat_per_load') {
+    payModel = 'flat_per_load';
+    flatPerLoadAmount = driverRow.pay_rate ?? null;
+  } else {
+    payModel = 'per_mile';
+    centsPerMile = driverRow.pay_rate ?? null;
+  }
+
+  const hasSomePayConfig = [percentageRate, centsPerMile, flatWeeklyAmount, flatPerLoadAmount]
+    .some((value) => value !== null && value !== undefined && value !== '');
+
+  if (!hasSomePayConfig) return null;
+
+  return {
+    driver_id: driverRow.id,
+    profile_type: profileType,
+    pay_model: payModel,
+    percentage_rate: percentageRate,
+    cents_per_mile: centsPerMile,
+    flat_weekly_amount: flatWeeklyAmount,
+    flat_per_load_amount: flatPerLoadAmount,
+    expense_sharing_enabled: false,
+    effective_start_date: toDateOnly(driverRow.hire_date) || toDateOnly(effectiveStartDate) || toDateOnly(new Date()),
+    effective_end_date: null,
+    status: 'active',
+    notes: 'Auto-created from driver pay settings'
+  };
+}
+
+async function ensureActiveCompensationProfile(knex, driverRow, asOfDate) {
+  if (!driverRow?.id) return null;
+
+  let profile = await getActiveCompensationProfile(knex, driverRow.id, asOfDate);
+  if (profile) return profile;
+
+  const insertPayload = buildCompensationProfileInsert(driverRow, asOfDate);
+  if (!insertPayload) return null;
+
+  const [created] = await knex('driver_compensation_profiles')
+    .insert(insertPayload)
+    .returning('*');
+
+  await knex('expense_responsibility_profiles')
+    .where({ driver_id: driverRow.id, compensation_profile_id: null })
+    .update({
+      compensation_profile_id: created.id,
+      updated_at: knex.fn.now()
+    });
+
+  return created;
+}
+
 async function getActivePayeeAssignment(knex, driverId, asOfDate) {
   const d = toDateOnly(asOfDate) || toDateOnly(new Date());
   const row = await knex('driver_payee_assignments')
@@ -323,11 +395,11 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
 
     const driver = await knex('drivers')
       .where({ id: driverId })
-      .select('id', 'first_name', 'last_name', 'pay_basis', 'pay_rate', 'pay_percentage')
+      .select('id', 'first_name', 'last_name', 'pay_basis', 'pay_rate', 'pay_percentage', 'driver_type', 'hire_date')
       .first();
     if (!driver) throw new Error('Driver not found');
 
-    const profile = await getActiveCompensationProfile(knex, driverId, period.period_end);
+    const profile = await ensureActiveCompensationProfile(knex, driver, period.period_end);
     const payeeAssignment = await getActivePayeeAssignment(knex, driverId, period.period_end);
 
     console.log('[Settlement Create] Driver lookup:', {
@@ -913,6 +985,7 @@ async function listSettlements(knex, filters = {}) {
 
 module.exports = {
   getActiveCompensationProfile,
+  ensureActiveCompensationProfile,
   getActivePayeeAssignment,
   getEligibleLoads,
   getRecurringDeductionsForPeriod,
