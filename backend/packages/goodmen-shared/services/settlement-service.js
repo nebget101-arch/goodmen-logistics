@@ -11,6 +11,7 @@ const {
 
 const DELIVERED_STATUSES = ['DELIVERED'];
 const SETTLEMENT_NUMBER_PREFIX = 'STL';
+let payeesColumnSetCache = null;
 
 function normalizeStopType(value) {
   return (value || '').toString().trim().toUpperCase();
@@ -34,6 +35,28 @@ function toDateOnly(value) {
   }
 
   return null;
+}
+
+async function getPayeesColumnSet(knex) {
+  if (payeesColumnSetCache) return payeesColumnSetCache;
+  const rows = await knex('information_schema.columns')
+    .select('column_name')
+    .where({ table_schema: 'public', table_name: 'payees' });
+  payeesColumnSetCache = new Set(rows.map((row) => row.column_name));
+  return payeesColumnSetCache;
+}
+
+async function getAdditionalPayeeRate(knex, payeeId) {
+  if (!payeeId) return null;
+  const columns = await getPayeesColumnSet(knex);
+  if (!columns.has('additional_payee_rate')) return null;
+
+  const row = await knex('payees')
+    .where({ id: payeeId })
+    .select('additional_payee_rate')
+    .first();
+
+  return row?.additional_payee_rate ?? null;
 }
 
 async function getActiveCompensationProfile(knex, driverId, asOfDate) {
@@ -341,10 +364,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       });
     }
 
-    const additionalPayee = additionalPayeeId
-      ? await knex('payees').where({ id: additionalPayeeId }).select('additional_payee_rate').first()
-      : null;
-    const additionalPayeeRate = additionalPayee?.additional_payee_rate ?? null;
+    const additionalPayeeRate = await getAdditionalPayeeRate(knex, additionalPayeeId);
 
     const eligibleLoads = await getEligibleLoads(
       knex,
@@ -584,10 +604,7 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
     .where({ id: settlement.driver_id })
     .select('pay_basis', 'pay_rate', 'pay_percentage')
     .first();
-  const additionalPayee = effectiveAdditionalPayeeId
-    ? await knex('payees').where({ id: effectiveAdditionalPayeeId }).select('additional_payee_rate').first()
-    : null;
-  const additionalPayeeRateRaw = additionalPayee?.additional_payee_rate ?? null;
+  const additionalPayeeRateRaw = await getAdditionalPayeeRate(knex, effectiveAdditionalPayeeId);
   const additionalPayeeRate = Number.isFinite(Number(additionalPayeeRateRaw))
     ? Number(additionalPayeeRateRaw)
     : null;
@@ -691,12 +708,10 @@ async function addLoadToSettlement(knex, settlementId, loadId, userId) {
       .where({ id: settlement.driver_id })
       .select('pay_basis', 'pay_rate', 'pay_percentage')
       .first();
-    const additionalPayee = settlement.additional_payee_id
-      ? await knex('payees').where({ id: settlement.additional_payee_id }).select('additional_payee_rate').first()
-      : null;
+    const additionalPayeeRate = await getAdditionalPayeeRate(knex, settlement.additional_payee_id);
     const snapshot = {
       ...buildPaySnapshot(profile, driver),
-      additional_payee_rate: additionalPayee?.additional_payee_rate ?? null
+      additional_payee_rate: additionalPayeeRate
     };
     const gross = Number(load.rate) || 0;
     const { driverPay, additionalPayeePay } = computeLoadPay({
