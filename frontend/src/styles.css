@@ -400,6 +400,50 @@ body {
   border-top: 1px solid var(--border-color);
 }
 
+.company-switcher {
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.company-switcher-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.company-switcher-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #e5e7eb;
+  font-size: 0.86rem;
+  outline: none;
+}
+
+.company-switcher-select:focus {
+  border-color: rgba(45, 212, 191, 0.55);
+}
+
+.company-switcher-loading .company-switcher-value {
+  font-size: 0.82rem;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.mobile-company-switcher {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-company-switcher .company-switcher-select {
+  max-width: 220px;
+  margin-left: auto;
+}
+
 .user-menu-wrap {
   position: relative;
 }
@@ -739,6 +783,12 @@ body {
 
   .sidebar-nav {
     padding: 8px 12px 12px;
+  }
+
+  .mobile-company-switcher .company-switcher-select {
+    max-width: 140px;
+    font-size: 0.8rem;
+    padding: 7px 8px;
   }
 
   .nav-links {

@@ -4,7 +4,7 @@
   "description": "Shared routes, services, utils, middleware and storage for Goodmen Logistics",
   "main": "index.js",
   "scripts": {
-    "test": "node --test services/settlement-calculation.test.js"
+    "test": "node --test"
   },
   "dependencies": {
     "@goodmen/database": "file:../goodmen-database",

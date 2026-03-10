@@ -811,7 +811,7 @@ router.put('/:id', async (req, res) => {
 // DELETE driver
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await query('DELETE FROM drivers WHERE id = $1 RETURNING *', [req.params.id]);
+    const result = await query('DELETE FROM drivers WHERE id = $1 AND tenant_id = $2 RETURNING *', [req.params.id, req.context?.tenantId || null]);
     if (result.rows.length > 0) {
       res.json({ message: 'Driver deleted successfully' });
     } else {

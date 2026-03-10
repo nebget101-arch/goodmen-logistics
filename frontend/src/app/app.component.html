@@ -41,7 +41,32 @@
       </ul>
     </nav>
     <div class="sidebar-actions">
-      <div class="user-menu-wrap" (click)="$event.stopPropagation()">
+      <div
+        class="company-switcher"
+        *ngIf="isLoggedIn() && operatingEntityContext.snapshot.isLoaded && operatingEntityContext.hasMultipleEntities()"
+      >
+        <label for="globalCompanySwitcher" class="company-switcher-label">Company</label>
+        <select
+          id="globalCompanySwitcher"
+          class="company-switcher-select"
+          [value]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
+          (change)="onOperatingEntityChange(($any($event.target)).value)"
+        >
+          <option
+            *ngFor="let entity of operatingEntityContext.snapshot.accessibleOperatingEntities"
+            [value]="entity.id"
+          >
+            {{ entity.name }}{{ entity.mcNumber ? ' · MC ' + entity.mcNumber : '' }}
+          </option>
+        </select>
+      </div>
+
+      <div class="company-switcher company-switcher-loading" *ngIf="isLoggedIn() && !operatingEntityContext.snapshot.isLoaded">
+        <span class="company-switcher-label">Company</span>
+        <span class="company-switcher-value">Loading…</span>
+      </div>
+
+      <div class="user-menu-wrap" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
         <button type="button" class="user-menu-btn" (click)="toggleUserMenu()" aria-label="User menu" [attr.aria-expanded]="userMenuOpen">
           <span class="material-symbols-outlined">account_circle</span>
           <span class="user-menu-label">Account</span>
@@ -63,7 +88,7 @@
     </div>
   </aside>
 
-  <main class="content" (click)="closeUserMenu()">
+  <main class="content" (click)="closeUserMenu()" (keydown.escape)="closeUserMenu()">
     <div class="mobile-topbar" *ngIf="isLoggedIn()">
       <button class="mobile-menu-btn" type="button" (click)="toggleSidebar()" [attr.aria-expanded]="sidebarOpen" aria-label="Toggle menu">
         ☰
@@ -74,7 +99,26 @@
         <span class="brand-tagline">AI fleet intelligence</span>
       </div>
 
-      <div class="user-menu-wrap mobile-user-menu" (click)="$event.stopPropagation()">
+      <div
+        class="mobile-company-switcher"
+        *ngIf="operatingEntityContext.snapshot.isLoaded && operatingEntityContext.hasMultipleEntities()"
+      >
+        <select
+          class="company-switcher-select"
+          [value]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
+          (change)="onOperatingEntityChange(($any($event.target)).value)"
+          aria-label="Select company"
+        >
+          <option
+            *ngFor="let entity of operatingEntityContext.snapshot.accessibleOperatingEntities"
+            [value]="entity.id"
+          >
+            {{ entity.name }}
+          </option>
+        </select>
+      </div>
+
+      <div class="user-menu-wrap mobile-user-menu" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
         <button type="button" class="user-menu-btn user-menu-btn-mobile" (click)="toggleUserMenu()" aria-label="User menu" [attr.aria-expanded]="userMenuOpen">
           <span class="material-symbols-outlined">account_circle</span>
         </button>
@@ -139,7 +183,7 @@
             <div class="ai-chat-message-content">Thinking…</div>
           </div>
         </div>
-        <div class="ai-chat-suggestions" *ngIf="aiSuggestions?.length">
+        <div class="ai-chat-suggestions" *ngIf="aiSuggestions.length">
           <h4>Suggested actions</h4>
           <div class="ai-chat-suggestion-list">
             <button

@@ -3,8 +3,8 @@
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
 
-async function resolveTenantForUser(userId) {
-  const memberships = await knex('user_tenant_memberships')
+async function resolveTenantForUser(knexClient, userId) {
+  const memberships = await knexClient('user_tenant_memberships')
     .where({ user_id: userId, is_active: true })
     .orderBy('is_default', 'desc')
     .orderBy('created_at', 'asc');
@@ -19,18 +19,18 @@ async function resolveTenantForUser(userId) {
   }
 
   // Transition compatibility: fallback to users.tenant_id if membership rows are not yet seeded.
-  const userRow = await knex('users').where({ id: userId }).select('tenant_id').first();
+  const userRow = await knexClient('users').where({ id: userId }).select('tenant_id').first();
   if (userRow?.tenant_id) {
     return userRow.tenant_id;
   }
 
   // Last fallback: first active tenant in system.
-  const tenant = await knex('tenants').where({ status: 'active' }).orderBy('created_at', 'asc').first();
+  const tenant = await knexClient('tenants').where({ status: 'active' }).orderBy('created_at', 'asc').first();
   return tenant?.id || null;
 }
 
-async function resolveEntityAccessForUser(userId, tenantId) {
-  const rows = await knex('user_operating_entities as uoe')
+async function resolveEntityAccessForUser(knexClient, userId, tenantId) {
+  const rows = await knexClient('user_operating_entities as uoe')
     .join('operating_entities as oe', 'oe.id', 'uoe.operating_entity_id')
     .where('uoe.user_id', userId)
     .andWhere('uoe.is_active', true)
@@ -48,44 +48,77 @@ async function resolveEntityAccessForUser(userId, tenantId) {
   return { allowedOperatingEntityIds, defaultEntityId };
 }
 
-module.exports = async function tenantContextMiddleware(req, res, next) {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
+async function countConfiguredEntityAssignments(knexClient, userId, tenantId) {
+  const rows = await knexClient('user_operating_entities as uoe')
+    .join('operating_entities as oe', 'oe.id', 'uoe.operating_entity_id')
+    .where('uoe.user_id', userId)
+    .modify((qb) => {
+      if (tenantId) qb.andWhere('oe.tenant_id', tenantId);
+    })
+    .select('uoe.id');
+
+  return rows.length;
+}
+
+async function listActiveTenantEntities(knexClient, tenantId) {
+  return knexClient('operating_entities')
+    .where({ tenant_id: tenantId, is_active: true })
+    .orderBy('created_at', 'asc')
+    .select('id');
+}
+
+function createTenantContextMiddleware({ knexClient = knex, logger = dtLogger } = {}) {
+  return async function tenantContextMiddleware(req, res, next) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return next();
+      }
+
+      const tenantId = await resolveTenantForUser(knexClient, userId);
+      if (!tenantId) {
+        return res.status(403).json({ error: 'Forbidden: tenant access not configured' });
+      }
+
+      let { allowedOperatingEntityIds, defaultEntityId } = await resolveEntityAccessForUser(knexClient, userId, tenantId);
+
+      const requestedEntityId = (req.headers['x-operating-entity-id'] || '').toString().trim() || null;
+      let operatingEntityId = requestedEntityId || defaultEntityId;
+
+      if (requestedEntityId && !allowedOperatingEntityIds.includes(requestedEntityId)) {
+        return res.status(403).json({ error: 'Forbidden: operating entity not allowed' });
+      }
+
+      if (!operatingEntityId) {
+        const configuredEntityAssignments = await countConfiguredEntityAssignments(knexClient, userId, tenantId);
+        if (configuredEntityAssignments > 0) {
+          return res.status(403).json({ error: 'Forbidden: no active operating entity access configured' });
+        }
+
+        const activeTenantEntities = await listActiveTenantEntities(knexClient, tenantId);
+        if (activeTenantEntities.length !== 1) {
+          return res.status(403).json({ error: 'Forbidden: operating entity access not configured' });
+        }
+
+        operatingEntityId = activeTenantEntities[0].id;
+        allowedOperatingEntityIds = [operatingEntityId];
+      }
+
+      req.context = {
+        tenantId,
+        operatingEntityId,
+        allowedOperatingEntityIds
+      };
+
       return next();
+    } catch (error) {
+      logger.error('tenant_context_middleware_error', { error: error.message });
+      return res.status(500).json({ error: 'Failed to resolve tenant context' });
     }
+  };
+}
 
-    const tenantId = await resolveTenantForUser(userId);
-    if (!tenantId) {
-      return res.status(403).json({ error: 'Forbidden: tenant access not configured' });
-    }
+const tenantContextMiddleware = createTenantContextMiddleware();
 
-    const { allowedOperatingEntityIds, defaultEntityId } = await resolveEntityAccessForUser(userId, tenantId);
-
-    const requestedEntityId = (req.headers['x-operating-entity-id'] || '').toString().trim() || null;
-    let operatingEntityId = requestedEntityId || defaultEntityId;
-
-    if (requestedEntityId && !allowedOperatingEntityIds.includes(requestedEntityId)) {
-      return res.status(403).json({ error: 'Forbidden: operating entity not allowed' });
-    }
-
-    if (!operatingEntityId) {
-      const fallback = await knex('operating_entities')
-        .where({ tenant_id: tenantId, is_active: true })
-        .orderBy('created_at', 'asc')
-        .first();
-      operatingEntityId = fallback?.id || null;
-    }
-
-    req.context = {
-      tenantId,
-      operatingEntityId,
-      allowedOperatingEntityIds
-    };
-
-    return next();
-  } catch (error) {
-    dtLogger.error('tenant_context_middleware_error', { error: error.message });
-    return res.status(500).json({ error: 'Failed to resolve tenant context' });
-  }
-};
+module.exports = tenantContextMiddleware;
+module.exports.createTenantContextMiddleware = createTenantContextMiddleware;
