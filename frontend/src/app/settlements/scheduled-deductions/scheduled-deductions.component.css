@@ -29,6 +29,13 @@
   gap: 12px;
 }
 
+.actions-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .filters-bar {
   display: flex;
   gap: 16px;
@@ -664,6 +671,23 @@ button:disabled {
   background: linear-gradient(135deg, #1d4ed8, #2563eb);
   color: #f8fafc;
   border: 1px solid rgba(96, 165, 250, 0.55);
+}
+
+.btn-ai-chip {
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.25);
+}
+
+.btn-ai-chip-sm {
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+.btn-ai-chip .material-symbols-outlined {
+  font-size: 15px;
 }
 
 .btn-primary:hover:not(:disabled) {

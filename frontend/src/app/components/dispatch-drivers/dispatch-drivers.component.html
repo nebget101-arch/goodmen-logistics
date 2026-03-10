@@ -515,9 +515,9 @@
 
               <div class="deduction-create-card" *ngIf="editingDriverId; else saveDriverFirst">
                 <div class="deduction-create-actions">
-                  <button type="button" class="btn btn-primary btn-sm" (click)="openRecurringDeductionModal()">
-                    <span class="material-symbols-outlined">auto_awesome</span>
-                    Add AI-themed deduction
+                  <button type="button" class="btn btn-primary btn-sm deduction-ai-chip" (click)="openRecurringDeductionModal()">
+                    <span class="material-symbols-outlined">psychology_alt</span>
+                    Add Scheduled deduction
                   </button>
                 </div>
               </div>
@@ -563,7 +563,10 @@
                   </div>
 
                   <div class="deduction-actions" *ngIf="editingRecurringDeductionId !== d.id">
-                    <button type="button" class="btn btn-secondary btn-sm" (click)="startRecurringDeductionInlineEdit(d)">Edit deduction</button>
+                    <button type="button" class="btn btn-secondary btn-sm deduction-ai-chip" (click)="startRecurringDeductionInlineEdit(d)">
+                      <span class="material-symbols-outlined">auto_fix_high</span>
+                      Edit deduction
+                    </button>
                     <button type="button" class="btn btn-secondary btn-sm" (click)="toggleRecurringDeduction(d)">
                       {{ d.enabled ? 'Disable' : 'Enable' }}
                     </button>
@@ -622,7 +625,7 @@
             <div class="deduction-modal-backdrop" *ngIf="showRecurringDeductionModal" (click)="closeRecurringDeductionModal()">
               <div class="deduction-modal" (click)="$event.stopPropagation()">
                 <div class="deduction-modal-header">
-                  <h4><span class="material-symbols-outlined">auto_awesome</span> New scheduled deduction</h4>
+                  <h4><span class="material-symbols-outlined">psychology_alt</span> New scheduled deduction</h4>
                   <button type="button" class="close-btn" (click)="closeRecurringDeductionModal()">×</button>
                 </div>
                 <div class="deduction-modal-body">
@@ -701,9 +704,9 @@
                 </div>
                 <div class="deduction-modal-footer">
                   <button type="button" class="btn btn-secondary btn-sm" (click)="closeRecurringDeductionModal()" [disabled]="addingRecurringDeduction">Cancel</button>
-                  <button type="button" class="btn btn-primary btn-sm" (click)="addRecurringDeduction()" [disabled]="addingRecurringDeduction">
-                    <span class="material-symbols-outlined">add</span>
-                    {{ addingRecurringDeduction ? 'Adding...' : 'Add deduction' }}
+                  <button type="button" class="btn btn-primary btn-sm deduction-ai-chip" (click)="addRecurringDeduction()" [disabled]="addingRecurringDeduction">
+                    <span class="material-symbols-outlined">psychology_alt</span>
+                    {{ addingRecurringDeduction ? 'Adding...' : 'Add Scheduled deduction' }}
                   </button>
                 </div>
               </div>

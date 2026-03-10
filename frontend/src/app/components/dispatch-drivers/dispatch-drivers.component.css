@@ -581,6 +581,21 @@
   gap: 8px;
 }
 
+.dispatch-drivers-dashboard .deduction-ai-chip {
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-size: 0.74rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.1;
+  box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.22);
+}
+
+.dispatch-drivers-dashboard .deduction-ai-chip .material-symbols-outlined {
+  font-size: 14px;
+}
+
 .dispatch-drivers-dashboard .deduction-backfill-card {
   margin-top: 12px;
   border: 1px solid rgba(59, 130, 246, 0.35);
