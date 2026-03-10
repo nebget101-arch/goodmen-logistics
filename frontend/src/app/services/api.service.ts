@@ -225,6 +225,10 @@ export class ApiService {
     return this.http.delete(`${this.baseUrl}/settlements/settlements/${id}/adjustments/${adjustmentId}`);
   }
 
+  restoreSettlementAdjustment(id: string, adjustmentId: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/adjustments/${adjustmentId}/restore`, {});
+  }
+
   approveSettlement(id: string): Observable<any> {
     return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/approve`, {});
   }
@@ -242,6 +246,16 @@ export class ApiService {
     payload: { to_driver?: boolean; to_additional_payee?: boolean; cc_internal?: boolean }
   ): Observable<any> {
     return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/send-email`, payload);
+  }
+
+  generateSettlementPdfToR2(id: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/settlements/${id}/pdf/generate`, {});
+  }
+
+  downloadSettlementPdfBlob(id: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/settlements/settlements/${id}/pdf/download`, {
+      responseType: 'blob'
+    });
   }
 
   createSettlementDraft(payload: { payroll_period_id: string; driver_id: string; date_basis?: string }): Observable<any> {
@@ -328,6 +342,65 @@ export class ApiService {
     additional_payee_rate?: number;
   }): Observable<any> {
     return this.http.post(`${this.baseUrl}/settlements/payees`, payload);
+  }
+
+  getRecurringDeductions(params?: { driver_id?: string; payee_id?: string; payee_ids?: string[]; enabled?: boolean | string }): Observable<any> {
+    let url = `${this.baseUrl}/settlements/recurring-deductions`;
+    const q = new URLSearchParams();
+    if (params?.driver_id) q.set('driver_id', params.driver_id);
+    if (params?.payee_id) q.set('payee_id', params.payee_id);
+    if (params?.payee_ids?.length) q.set('payee_ids', params.payee_ids.join(','));
+    if (params?.enabled !== undefined && params?.enabled !== '') q.set('enabled', String(params.enabled));
+    const qs = q.toString();
+    if (qs) url += `?${qs}`;
+    return this.http.get(url);
+  }
+
+  createRecurringDeduction(payload: {
+    driver_id?: string;
+    payee_id?: string;
+    equipment_id?: string;
+    rule_scope: string;
+    description: string;
+    amount_type: string;
+    amount: number;
+    frequency: string;
+    start_date: string;
+    end_date?: string;
+    source_type?: string;
+    applies_when?: string;
+    enabled: boolean;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/recurring-deductions`, payload);
+  }
+
+  updateRecurringDeduction(id: string, payload: {
+    driver_id?: string;
+    payee_id?: string;
+    equipment_id?: string;
+    rule_scope?: string;
+    description?: string;
+    amount_type?: string;
+    amount?: number;
+    frequency?: string;
+    start_date?: string;
+    end_date?: string;
+    enabled?: boolean;
+    applies_when?: string;
+    source_type?: string;
+  }): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/settlements/recurring-deductions/${id}`, payload);
+  }
+
+  backfillRecurringDeductions(payload: {
+    driver_id?: string;
+    start_date: string;
+    end_date: string;
+    include_locked?: boolean;
+    dry_run?: boolean;
+    limit?: number;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/recurring-deductions/backfill`, payload);
   }
 
   getExpenseResponsibility(driverId: string): Observable<any> {

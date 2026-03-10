@@ -5,6 +5,10 @@
       <p class="subtitle">Driver payroll and settlement center</p>
     </div>
     <div class="header-actions">
+      <button type="button" class="btn-ai" (click)="openScheduledDeductions()" aria-label="Open scheduled deductions">
+        <span class="material-symbols-outlined">auto_awesome</span>
+        <span>AI Scheduled Deductions</span>
+      </button>
       <button type="button" class="btn-primary" (click)="createNew()">
         <span class="material-symbols-outlined">add_circle</span>
         New settlement

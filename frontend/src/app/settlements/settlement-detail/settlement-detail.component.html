@@ -5,7 +5,7 @@
         <span class="material-symbols-outlined">arrow_back</span>
       </button>
       <div>
-        <h1>Settlement {{ settlementId || '—' }}</h1>
+        <h1>{{ getSettlementTitle() }}</h1>
         <p class="subtitle">Compensation summary, loads, deductions, adjustments, approvals</p>
         <div class="data-source-badge" *ngIf="!loading && settlement" [class.fallback]="dataSourceMode === 'fallback'">
           <span class="material-symbols-outlined">hub</span>
@@ -14,6 +14,14 @@
       </div>
     </div>
     <div class="header-actions" *ngIf="settlement">
+      <button type="button" class="btn-secondary" (click)="downloadSettlementPdf()" [disabled]="saving || loading">
+        <span class="material-symbols-outlined">download</span>
+        Download PDF
+      </button>
+      <button type="button" class="btn-secondary" (click)="generateSettlementPdfToCloud()" [disabled]="saving || loading">
+        <span class="material-symbols-outlined">cloud_upload</span>
+        Generate PDF
+      </button>
       <button type="button" class="btn-secondary" (click)="recalcTotals()" [disabled]="saving || loading">
         <span class="material-symbols-outlined">sync</span>
         Recalc totals
@@ -47,7 +55,7 @@
         <div class="summary-grid">
           <div class="summary-item">
             <div class="label">Settlement #</div>
-            <div class="value">{{ settlement.settlement_number || settlement.id }}</div>
+            <div class="value">{{ getSettlementNumberDisplay() }}</div>
           </div>
           <div class="summary-item">
             <div class="label">Driver</div>
@@ -159,18 +167,35 @@
       <div class="detail-card">
         <div class="section-header">
           <h2>Scheduled deductions</h2>
-          <span class="pill">${{ getTotalFor(scheduledDeductions) | number:'1.2-2' }}</span>
+          <span class="pill">${{ getScheduledTotalForDisplay() | number:'1.2-2' }}</span>
         </div>
         <ul class="line-items" *ngIf="scheduledDeductions.length">
           <li *ngFor="let x of scheduledDeductions">
             <div>
               <div class="line-title">{{ x.description || 'Scheduled deduction' }}</div>
-              <div class="line-sub">{{ x.source_type || 'scheduled_rule' }} • {{ x.item_type || 'deduction' }}</div>
+              <div class="line-sub" *ngIf="isScheduledDeductionRemoved(x)"><strong>Status:</strong> Removed from this settlement calculation</div>
+              <div class="line-sub">Type: {{ getScheduledDeductionTypeLabel(x) }}</div>
+              <div class="line-sub">Payroll period: {{ getSettlementPayrollPeriodLabel() }}</div>
+              <div class="line-sub">Applies to: {{ getScheduledDeductionTargetLabel(x) }}</div>
             </div>
-            <div class="line-amount">${{ x.amount | number:'1.2-2' }}</div>
+            <div class="line-actions">
+              <div class="line-amount">${{ x.amount | number:'1.2-2' }}</div>
+              <button type="button" class="btn-sm btn-danger" *ngIf="!isLocked() && !isScheduledDeductionRemoved(x)" (click)="removeScheduledDeductionFromCalculation(x)" [disabled]="saving">
+                <span class="material-symbols-outlined">delete</span>
+                Remove from calculation ({{ getScheduledDeductionTargetShortLabel(x) }})
+              </button>
+              <button type="button" class="btn-sm btn-primary" *ngIf="!isLocked() && isScheduledDeductionRemoved(x)" (click)="addScheduledDeductionBackToCalculation(x)" [disabled]="saving">
+                <span class="material-symbols-outlined">add_circle</span>
+                Add to calculation ({{ getScheduledDeductionTargetShortLabel(x) }})
+              </button>
+            </div>
           </li>
         </ul>
         <div class="empty-state" *ngIf="!scheduledDeductions.length">No scheduled deductions.</div>
+        <div class="alert alert-warning" *ngIf="!scheduledDeductions.length && scheduledDeductionWarning">
+          <span class="material-symbols-outlined">warning</span>
+          <span>{{ scheduledDeductionWarning }}</span>
+        </div>
       </div>
 
       <div class="detail-card">
@@ -336,6 +361,9 @@
         <span class="material-symbols-outlined">forward_to_inbox</span>
         Send email
       </button>
+      <div class="line-sub" *ngIf="lastGeneratedSettlementPdfUrl">
+        Latest stored PDF: <a [href]="lastGeneratedSettlementPdfUrl" target="_blank" rel="noopener">Open signed download link</a>
+      </div>
     </section>
   </ng-container>
 
