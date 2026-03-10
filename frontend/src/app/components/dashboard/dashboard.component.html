@@ -3,6 +3,7 @@
     <div>
       <h1>FleetNeuron Control Center</h1>
       <p>AI-augmented visibility into compliance, assets, and operations.</p>
+      <p *ngIf="activeOperatingEntityName" class="dashboard-context-label">Company: {{ activeOperatingEntityName }}</p>
     </div>
     <div class="dashboard-header-pill">
       <span class="status-dot"></span>

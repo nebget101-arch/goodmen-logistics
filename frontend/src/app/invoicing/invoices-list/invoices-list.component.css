@@ -10,6 +10,16 @@
   justify-content: space-between;
 }
 
+.header h2 {
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  color: var(--text-light);
+  font-size: 13px;
+  margin: 0;
+}
+
 .filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

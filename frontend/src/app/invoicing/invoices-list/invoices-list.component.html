@@ -1,6 +1,9 @@
 <div class="invoices-list">
   <div class="header">
-    <h2>Invoices</h2>
+    <div>
+      <h2>Invoices</h2>
+      <p class="subtitle" *ngIf="activeOperatingEntityName">Company: {{ activeOperatingEntityName }}</p>
+    </div>
   </div>
 
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>

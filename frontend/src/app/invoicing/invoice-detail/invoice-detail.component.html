@@ -2,6 +2,7 @@
   <div class="header">
     <h1>Invoice</h1>
     <p class="subtitle" *ngIf="invoice">#{{ invoice.invoice_number }}</p>
+    <p class="subtitle" *ngIf="activeOperatingEntityName">Company: {{ activeOperatingEntityName }}</p>
   </div>
 
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>

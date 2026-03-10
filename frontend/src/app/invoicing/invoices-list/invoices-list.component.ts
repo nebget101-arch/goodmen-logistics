@@ -1,20 +1,26 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { Subject, takeUntil } from 'rxjs';
 import { InvoiceService } from '../../services/invoice.service';
 import { CustomerService } from '../../services/customer.service';
 import { ApiService } from '../../services/api.service';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 @Component({
   selector: 'app-invoices-list',
   templateUrl: './invoices-list.component.html',
   styleUrls: ['./invoices-list.component.css']
 })
-export class InvoicesListComponent implements OnInit {
+export class InvoicesListComponent implements OnInit, OnDestroy {
   invoices: any[] = [];
   customers: any[] = [];
   locations: any[] = [];
   loading = false;
   error = '';
+  activeOperatingEntityName = '';
+
+  private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   filters: any = {
     search: '',
@@ -31,13 +37,41 @@ export class InvoicesListComponent implements OnInit {
     private invoiceService: InvoiceService,
     private customerService: CustomerService,
     private apiService: ApiService,
-    private router: Router
+    private router: Router,
+    private operatingEntityContext: OperatingEntityContextService
   ) {}
 
   ngOnInit(): void {
+    this.bindOperatingEntityContext();
     this.loadInvoices();
     this.loadCustomers();
     this.loadLocations();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          this.loadInvoices();
+        }
+      });
   }
 
   loadInvoices(): void {

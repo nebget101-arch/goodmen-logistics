@@ -1,22 +1,27 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { ExpensePaymentCategoriesService, ExpensePaymentCategory } from '../../services/expense-payment-categories.service';
-import { forkJoin, of } from 'rxjs';
+import { Subject, forkJoin, of, takeUntil } from 'rxjs';
 import { catchError } from 'rxjs/operators';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 @Component({
   selector: 'app-settlement-detail',
   templateUrl: './settlement-detail.component.html',
   styleUrls: ['./settlement-detail.component.css']
 })
-export class SettlementDetailComponent implements OnInit {
+export class SettlementDetailComponent implements OnInit, OnDestroy {
   settlementId: string | null = null;
   loading = false;
   saving = false;
   error = '';
   successMessage = '';
+  activeOperatingEntityName = '';
   dataSourceMode: 'normalized' | 'fallback' = 'normalized';
+
+  private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   settlement: any = null;
   period: any = null;
@@ -67,16 +72,44 @@ export class SettlementDetailComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private apiService: ApiService,
-    private categoriesService: ExpensePaymentCategoriesService
+    private categoriesService: ExpensePaymentCategoriesService,
+    private operatingEntityContext: OperatingEntityContextService
   ) {}
 
   ngOnInit(): void {
+    this.bindOperatingEntityContext();
     this.settlementId = this.route.snapshot.paramMap.get('id');
     if (this.settlementId) {
       this.loadDetail(this.settlementId);
     }
     // Load expense and revenue categories for the form
     this.loadCategories();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          if (this.settlementId) this.loadDetail(this.settlementId);
+        }
+      });
   }
 
   loadCategories(): void {
@@ -104,6 +137,17 @@ export class SettlementDetailComponent implements OnInit {
     this.successMessage = '';
     this.dataSourceMode = 'normalized';
     this.scheduledDeductionWarning = '';
+    this.settlement = null;
+    this.period = null;
+    this.driver = null;
+    this.primaryPayee = null;
+    this.additionalPayee = null;
+    this.loadItems = [];
+    this.adjustmentItems = [];
+    this.availableLoads = [];
+    this.scheduledDeductions = [];
+    this.variableDeductions = [];
+    this.manualAdjustments = [];
 
     forkJoin({
       settlementRes: this.apiService.getSettlement(id),
@@ -177,6 +221,17 @@ export class SettlementDetailComponent implements OnInit {
       },
       error: (err) => {
         this.error = err?.error?.error || err?.message || 'Failed to load settlement detail';
+        this.settlement = null;
+        this.period = null;
+        this.driver = null;
+        this.primaryPayee = null;
+        this.additionalPayee = null;
+        this.loadItems = [];
+        this.adjustmentItems = [];
+        this.availableLoads = [];
+        this.scheduledDeductions = [];
+        this.variableDeductions = [];
+        this.manualAdjustments = [];
         this.loading = false;
       }
     });

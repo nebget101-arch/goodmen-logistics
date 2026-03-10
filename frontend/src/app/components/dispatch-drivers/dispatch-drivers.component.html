@@ -3,6 +3,7 @@
     <div>
       <h1>Drivers</h1>
       <p class="subtitle">Dispatch view - core assignments and pay</p>
+      <p class="subtitle" *ngIf="activeOperatingEntityName">Current company context: {{ activeOperatingEntityName }} (driver roster remains tenant-wide).</p>
     </div>
     <div class="header-actions">
       <button type="button" class="btn btn-primary" (click)="openNew()">

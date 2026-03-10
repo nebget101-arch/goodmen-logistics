@@ -17,6 +17,7 @@ import {
 } from '../../models/load-dashboard.model';
 import { LoadsService, BrokerOption } from '../../services/loads.service';
 import { environment } from '../../../environments/environment';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 type SortDir = 'asc' | 'desc';
 
@@ -30,6 +31,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   loading = true;
   errorMessage = '';
   successMessage = '';
+  activeOperatingEntityName = '';
 
   showNewLoadMenu = false;
   showManualModal = false;
@@ -117,6 +119,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   /** Broker search query – debounced and switchMap cancels in-flight requests. */
   private brokerSearch$ = new Subject<string>();
   private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   // Inline searchable combos for driver / truck / trailer
   driverSearch = '';
@@ -355,7 +358,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     private loadsService: LoadsService,
     private fb: FormBuilder,
     private route: ActivatedRoute,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private operatingEntityContext: OperatingEntityContextService
   ) {
     this.manualLoadForm = this.fb.group({
       status: ['NEW', Validators.required],
@@ -444,6 +448,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.bindOperatingEntityContext();
     this.route.queryParams.subscribe((params) => {
       if (params['status']) this.filters.status = params['status'];
       if (params['billingStatus']) this.filters.billingStatus = params['billingStatus'];
@@ -494,6 +499,32 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          this.selectedLoad = null;
+          this.showDetailsModal = false;
+          this.editingLoadDetail = null;
+          this.editingLoadId = null;
+          this.page = 1;
+          this.loadLoads();
+        }
+      });
   }
 
   loadDropdownData(): void {

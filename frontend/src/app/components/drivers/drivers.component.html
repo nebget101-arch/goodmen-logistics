@@ -3,6 +3,7 @@
     <div>
       <h1>Driver qualification & safety</h1>
       <p class="subtitle">Track DQF completeness, expirations, and clearinghouse status in one AI view.</p>
+      <p class="subtitle" *ngIf="activeOperatingEntityName">Current company context: {{ activeOperatingEntityName }} (driver roster remains tenant-wide).</p>
     </div>
     <div class="header-actions">
       <button class="btn btn-primary" (click)="toggleAddForm()">

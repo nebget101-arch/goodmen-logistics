@@ -3,6 +3,7 @@
     <div>
       <h1>Settlements</h1>
       <p class="subtitle">Driver payroll and settlement center</p>
+      <p class="subtitle" *ngIf="activeOperatingEntityName">Company: {{ activeOperatingEntityName }}</p>
     </div>
     <div class="header-actions">
       <button type="button" class="btn-primary" (click)="createNew()">
