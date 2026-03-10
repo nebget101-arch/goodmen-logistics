@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { finalize } from 'rxjs/operators';
+import { forkJoin, of } from 'rxjs';
 import { ApiService } from '../../services/api.service';
 
 @Component({
@@ -122,8 +123,75 @@ export class DispatchDriversComponent implements OnInit {
     { value: 'shared', label: 'Shared' }
   ];
 
-  /** Placeholder for recurring deduction rules (backend TBD) */
-  recurringDeductions: { id: string; description: string; weeklyAmount: number; active: boolean }[] = [];
+  recurringDeductions: any[] = [];
+  loadingRecurringDeductions = false;
+  addingRecurringDeduction = false;
+  editingRecurringDeductionId: string | null = null;
+  editingRecurringDeductionDraft: {
+    description: string;
+    amount: number | null;
+    start_date: string;
+    end_date: string;
+  } = {
+    description: '',
+    amount: null,
+    start_date: '',
+    end_date: ''
+  };
+  savingRecurringDeductionEdit = false;
+  showRecurringDeductionModal = false;
+  newRecurringDeduction: {
+    target: 'primary' | 'additional';
+    expense_category: '' | 'fuel' | 'insurance' | 'eld' | 'trailerRent' | 'tolls' | 'repairs';
+    description: string;
+    amount_type: 'fixed' | 'percentage';
+    amount: number | null;
+    frequency: 'weekly' | 'biweekly' | 'monthly' | 'per_settlement';
+    start_date: string;
+    applies_when: 'always' | 'has_loads' | 'specific_expense';
+    source_type: string;
+    enabled: boolean;
+  } = {
+    target: 'primary',
+    expense_category: '',
+    description: '',
+    amount_type: 'fixed',
+    amount: null,
+    frequency: 'weekly',
+    start_date: new Date().toISOString().slice(0, 10),
+    applies_when: 'always',
+    source_type: '',
+    enabled: true
+  };
+  readonly deductionFrequencyOptions = [
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'biweekly', label: 'Bi-weekly' },
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'per_settlement', label: 'Per settlement' }
+  ];
+  readonly deductionAppliesWhenOptions = [
+    { value: 'always', label: 'Always' },
+    { value: 'has_loads', label: 'Only when driver has loads' },
+    { value: 'specific_expense', label: 'Specific expense responsibility' }
+  ];
+  readonly deductionExpenseTypeOptions = [
+    { value: 'fuel', label: 'Fuel' },
+    { value: 'insurance', label: 'Insurance' },
+    { value: 'eld', label: 'ELD' },
+    { value: 'trailer_rent', label: 'Trailer rent' },
+    { value: 'toll', label: 'Tolls' },
+    { value: 'repairs', label: 'Repairs' }
+  ];
+  driverBackfill = {
+    start_date: '',
+    end_date: '',
+    include_locked: false,
+    dry_run: true,
+    limit: 300
+  };
+  driverBackfilling = false;
+  driverBackfillResult: any = null;
+  driverBackfillWarning = '';
 
   newDriver: any = {
     firstName: '',
@@ -298,6 +366,9 @@ export class DispatchDriversComponent implements OnInit {
 
   setPayTab(tab: 'rates' | 'deductions' | 'payee' | 'notes'): void {
     this.payTab = tab;
+    if (tab === 'deductions' && this.editingDriverId) {
+      this.loadRecurringDeductions(this.editingDriverId);
+    }
   }
 
   setPayModel(model: string): void {
@@ -366,6 +437,18 @@ export class DispatchDriversComponent implements OnInit {
     this.showPrimaryPayeeDropdown = false;
     this.showAdditionalPayeeDropdown = false;
     this.isCreatingEquipmentOwner = false;
+    this.recurringDeductions = [];
+    this.editingRecurringDeductionId = null;
+    this.editingRecurringDeductionDraft = { description: '', amount: null, start_date: '', end_date: '' };
+    this.savingRecurringDeductionEdit = false;
+    this.loadingRecurringDeductions = false;
+    this.addingRecurringDeduction = false;
+    this.driverBackfill = { start_date: '', end_date: '', include_locked: false, dry_run: true, limit: 300 };
+    this.driverBackfilling = false;
+    this.driverBackfillResult = null;
+    this.driverBackfillWarning = '';
+    this.showRecurringDeductionModal = false;
+    this.resetRecurringDeductionDraft();
     this.newEquipmentOwner = {
       companyName: '',
       address: '',
@@ -443,6 +526,8 @@ export class DispatchDriversComponent implements OnInit {
     this.additionalPayeeSearch = this.newDriver.additionalPayee || '';
     this.selectedPrimaryPayeeId = '';
     this.selectedAdditionalPayeeId = '';
+    this.recurringDeductions = [];
+    this.resetRecurringDeductionDraft();
     this.showNewModal = true;
     // Defer API call so the modal renders first (avoids change-detection thrash with expense selects)
     const driverId = driver.id;
@@ -471,13 +556,20 @@ export class DispatchDriversComponent implements OnInit {
             next: (response: any) => {
               // Response includes: { assignment, primary_payee, additional_payee }
               const assignment = response?.assignment || response;
+              const primaryPayee = response?.primary_payee;
               const additionalPayee = response?.additional_payee;
+
+              if (assignment?.primary_payee_id && primaryPayee) {
+                this.selectedPrimaryPayeeId = assignment.primary_payee_id;
+              }
               
               if (assignment?.additional_payee_id && additionalPayee) {
                 this.selectedAdditionalPayeeId = assignment.additional_payee_id;
                 this.additionalPayeeSearch = additionalPayee.name;
                 this.selectedAdditionalPayeeName = additionalPayee.name;
               }
+
+              this.loadRecurringDeductions(driverId);
             },
             error: (err) => {
               // 404 is expected for drivers without payee assignment yet
@@ -505,6 +597,9 @@ export class DispatchDriversComponent implements OnInit {
               // No expense responsibility found, skip
             }
           });
+
+          // Load recurring deductions for this driver
+          this.loadRecurringDeductions(driverId);
         },
         error: () => {
           this.newDriver = this.buildDriverFromSource(driver);
@@ -512,9 +607,377 @@ export class DispatchDriversComponent implements OnInit {
           this.additionalPayeeSearch = this.newDriver.additionalPayee || '';
           this.selectedPrimaryPayeeId = '';
           this.selectedAdditionalPayeeId = '';
+          this.loadRecurringDeductions(driverId);
         }
       });
     }, 0);
+  }
+
+  resetRecurringDeductionDraft(): void {
+    this.newRecurringDeduction = {
+      target: 'primary',
+      expense_category: '',
+      description: '',
+      amount_type: 'fixed',
+      amount: null,
+      frequency: 'weekly',
+      start_date: new Date().toISOString().slice(0, 10),
+      applies_when: 'always',
+      source_type: '',
+      enabled: true
+    };
+  }
+
+  loadRecurringDeductions(driverId: string): void {
+    if (!driverId) {
+      this.recurringDeductions = [];
+      this.editingRecurringDeductionId = null;
+      this.editingRecurringDeductionDraft = { description: '', amount: null, start_date: '', end_date: '' };
+      this.savingRecurringDeductionEdit = false;
+      this.driverBackfillWarning = '';
+      return;
+    }
+
+    this.loadingRecurringDeductions = true;
+    const payeeIds = [this.selectedPrimaryPayeeId, this.selectedAdditionalPayeeId].filter(Boolean);
+    this.apiService.getRecurringDeductions({ driver_id: driverId, payee_ids: payeeIds }).subscribe({
+      next: (res: any) => {
+        const rows = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+        const unique = new Map<string, any>();
+        rows.forEach((row: any) => {
+          if (row?.id) unique.set(row.id, row);
+        });
+        this.recurringDeductions = Array.from(unique.values());
+        this.editingRecurringDeductionId = null;
+        this.editingRecurringDeductionDraft = { description: '', amount: null, start_date: '', end_date: '' };
+        this.savingRecurringDeductionEdit = false;
+        this.updateDriverBackfillWarning();
+        this.loadingRecurringDeductions = false;
+      },
+      error: (err: any) => {
+        console.error('Error loading recurring deductions:', err);
+        this.recurringDeductions = [];
+        this.editingRecurringDeductionId = null;
+        this.editingRecurringDeductionDraft = { description: '', amount: null, start_date: '', end_date: '' };
+        this.savingRecurringDeductionEdit = false;
+        this.driverBackfillWarning = '';
+        this.loadingRecurringDeductions = false;
+      }
+    });
+  }
+
+  addRecurringDeduction(): void {
+    if (!this.editingDriverId) {
+      alert('Save the driver first, then add recurring deductions.');
+      return;
+    }
+
+    if (!this.newRecurringDeduction.description.trim() || this.newRecurringDeduction.amount == null || this.newRecurringDeduction.amount <= 0) {
+      alert('Description and amount are required.');
+      return;
+    }
+
+    const selectedCategory = this.newRecurringDeduction.expense_category;
+    const suggestedTargets = this.getSuggestedTargetsForSelectedCategory();
+    const effectiveTargets: Array<'primary' | 'additional'> = selectedCategory
+      ? suggestedTargets
+      : [this.newRecurringDeduction.target];
+
+    if (effectiveTargets.includes('additional') && !this.selectedAdditionalPayeeId) {
+      alert('Select an additional payee first in the Additional Payee tab.');
+      return;
+    }
+
+    const basePayload: any = {
+      driver_id: this.editingDriverId,
+      description: this.newRecurringDeduction.description.trim(),
+      amount_type: this.newRecurringDeduction.amount_type,
+      amount: Number(this.newRecurringDeduction.amount),
+      frequency: this.newRecurringDeduction.frequency,
+      start_date: this.newRecurringDeduction.start_date || new Date().toISOString().slice(0, 10),
+      applies_when: selectedCategory ? 'specific_expense' : this.newRecurringDeduction.applies_when,
+      enabled: this.newRecurringDeduction.enabled
+    };
+
+    const sourceType = selectedCategory
+      ? this.mapExpenseCategoryToSourceType(selectedCategory)
+      : this.newRecurringDeduction.source_type;
+
+    if (basePayload.applies_when === 'specific_expense' && sourceType) {
+      basePayload.source_type = sourceType;
+    }
+
+    const requests = effectiveTargets.map((target) => {
+      const payload: any = { ...basePayload };
+      payload.rule_scope = target === 'additional' ? 'payee' : 'driver';
+      if (target === 'additional') {
+        payload.payee_id = this.selectedAdditionalPayeeId;
+      }
+      return this.apiService.createRecurringDeduction(payload);
+    });
+
+    this.addingRecurringDeduction = true;
+    forkJoin(requests).subscribe({
+      next: () => {
+        this.showRecurringDeductionModal = false;
+        this.resetRecurringDeductionDraft();
+        this.loadRecurringDeductions(this.editingDriverId as string);
+        this.addingRecurringDeduction = false;
+      },
+      error: (err: any) => {
+        console.error('Error creating recurring deduction:', err);
+        alert(err?.error?.error || 'Failed to create recurring deduction.');
+        this.addingRecurringDeduction = false;
+      }
+    });
+  }
+
+  openRecurringDeductionModal(): void {
+    this.resetRecurringDeductionDraft();
+    this.showRecurringDeductionModal = true;
+  }
+
+  closeRecurringDeductionModal(): void {
+    if (this.addingRecurringDeduction) return;
+    this.showRecurringDeductionModal = false;
+  }
+
+  onRecurringExpenseCategoryChange(): void {
+    const category = this.newRecurringDeduction.expense_category;
+    if (!category) return;
+
+    this.newRecurringDeduction.applies_when = 'specific_expense';
+    this.newRecurringDeduction.source_type = this.mapExpenseCategoryToSourceType(category);
+
+    const suggested = this.getSuggestedTargetsForSelectedCategory();
+    if (suggested.length === 1) {
+      this.newRecurringDeduction.target = suggested[0];
+    }
+  }
+
+  getExpenseResponsibilityForCategory(category: string): string {
+    const value = (this.expenseResponsibility[category] || '').toString();
+    return value || '—';
+  }
+
+  getSuggestedTargetsForSelectedCategory(): Array<'primary' | 'additional'> {
+    const category = this.newRecurringDeduction.expense_category;
+    if (!category) return [this.newRecurringDeduction.target];
+
+    const responsibility = (this.expenseResponsibility[category] || '').toString();
+    if (responsibility === 'shared') return ['primary', 'additional'];
+    if (responsibility === 'driver') return ['primary'];
+    if (responsibility === 'company' || responsibility === 'owner') return ['additional'];
+    return [this.newRecurringDeduction.target];
+  }
+
+  getSuggestedTargetsLabel(): string {
+    const targets = this.getSuggestedTargetsForSelectedCategory();
+    if (targets.length === 2) return 'Primary + Additional payee';
+    return targets[0] === 'additional' ? 'Additional payee only' : 'Primary payee only';
+  }
+
+  private mapExpenseCategoryToSourceType(category: string): string {
+    if (category === 'trailerRent') return 'trailer_rent';
+    if (category === 'tolls') return 'toll';
+    return category;
+  }
+
+  toggleRecurringDeduction(deduction: any): void {
+    if (this.savingRecurringDeductionEdit) return;
+    const nextEnabled = !deduction.enabled;
+    this.apiService.updateRecurringDeduction(deduction.id, { enabled: nextEnabled }).subscribe({
+      next: () => {
+        deduction.enabled = nextEnabled;
+      },
+      error: (err: any) => {
+        console.error('Error updating recurring deduction:', err);
+        alert('Failed to update deduction status.');
+      }
+    });
+  }
+
+  formatRecurringDeductionAmount(deduction: any): string {
+    const amount = Number(deduction?.amount || 0);
+    if (deduction?.amount_type === 'percentage') {
+      return `${amount}%`;
+    }
+    return `$${amount.toFixed(2)}`;
+  }
+
+  getRecurringDeductionTargetLabel(deduction: any): string {
+    if (deduction?.rule_scope === 'payee') return 'Additional payee';
+    return 'Primary payee';
+  }
+
+  getDeductionFrequencyLabel(frequency: string): string {
+    const opt = this.deductionFrequencyOptions.find((f) => f.value === frequency);
+    return opt ? opt.label : frequency;
+  }
+
+  getRecurringDeductionStartDateLabel(deduction: any): string {
+    return this.normalizeRecurringDate(deduction?.start_date) || '—';
+  }
+
+  getRecurringDeductionEndDateLabel(deduction: any): string {
+    return this.normalizeRecurringDate(deduction?.end_date) || 'Ongoing';
+  }
+
+  startRecurringDeductionInlineEdit(deduction: any): void {
+    this.editingRecurringDeductionId = deduction?.id || null;
+    this.editingRecurringDeductionDraft = {
+      description: String(deduction?.description || ''),
+      amount: Number(deduction?.amount ?? 0),
+      start_date: this.normalizeRecurringDate(deduction?.start_date) || new Date().toISOString().slice(0, 10),
+      end_date: this.normalizeRecurringDate(deduction?.end_date) || ''
+    };
+  }
+
+  cancelRecurringDeductionInlineEdit(): void {
+    if (this.savingRecurringDeductionEdit) return;
+    this.editingRecurringDeductionId = null;
+    this.editingRecurringDeductionDraft = { description: '', amount: null, start_date: '', end_date: '' };
+  }
+
+  saveRecurringDeductionInlineEdit(deduction: any): void {
+    this.commitRecurringDeductionInlineEdit(deduction, false);
+  }
+
+  saveRecurringDeductionInlineEditAndBackfill(deduction: any): void {
+    this.commitRecurringDeductionInlineEdit(deduction, true);
+  }
+
+  private commitRecurringDeductionInlineEdit(deduction: any, runBackfillAfterSave: boolean): void {
+    if (!deduction?.id) {
+      alert('Deduction not found.');
+      return;
+    }
+
+    if (!this.editingRecurringDeductionDraft.start_date) {
+      alert('Start date is required.');
+      return;
+    }
+
+    if (this.editingRecurringDeductionDraft.amount == null || Number(this.editingRecurringDeductionDraft.amount) <= 0) {
+      alert('Amount must be greater than zero.');
+      return;
+    }
+
+    if (
+      this.editingRecurringDeductionDraft.end_date &&
+      this.editingRecurringDeductionDraft.end_date < this.editingRecurringDeductionDraft.start_date
+    ) {
+      alert('End date must be on or after start date.');
+      return;
+    }
+
+    if (runBackfillAfterSave && (!this.driverBackfill.start_date || !this.driverBackfill.end_date)) {
+      alert('Set Start date and End date in Backfill past settlements before using Save + Backfill.');
+      return;
+    }
+
+    this.savingRecurringDeductionEdit = true;
+    this.apiService.updateRecurringDeduction(deduction.id, {
+      description: this.editingRecurringDeductionDraft.description.trim() || deduction.description,
+      amount: Number(this.editingRecurringDeductionDraft.amount),
+      start_date: this.editingRecurringDeductionDraft.start_date,
+      end_date: this.editingRecurringDeductionDraft.end_date || undefined
+    }).subscribe({
+      next: () => {
+        deduction.description = this.editingRecurringDeductionDraft.description.trim() || deduction.description;
+        deduction.amount = Number(this.editingRecurringDeductionDraft.amount);
+        deduction.start_date = this.editingRecurringDeductionDraft.start_date;
+        deduction.end_date = this.editingRecurringDeductionDraft.end_date || null;
+        this.savingRecurringDeductionEdit = false;
+        this.editingRecurringDeductionId = null;
+        this.editingRecurringDeductionDraft = { description: '', amount: null, start_date: '', end_date: '' };
+        this.updateDriverBackfillWarning();
+        if (runBackfillAfterSave) {
+          this.runDriverBackfill();
+        }
+      },
+      error: (err: any) => {
+        console.error('Error updating recurring deduction:', err);
+        alert(err?.error?.error || 'Failed to update deduction.');
+        this.savingRecurringDeductionEdit = false;
+      }
+    });
+  }
+
+  runDriverBackfill(): void {
+    if (!this.editingDriverId) {
+      alert('Open an existing driver to run backfill.');
+      return;
+    }
+    if (!this.driverBackfill.start_date || !this.driverBackfill.end_date) {
+      alert('Start date and end date are required.');
+      return;
+    }
+    if (this.driverBackfill.end_date < this.driverBackfill.start_date) {
+      alert('End date must be on or after start date.');
+      return;
+    }
+
+    this.driverBackfilling = true;
+    this.driverBackfillResult = null;
+    this.updateDriverBackfillWarning();
+
+    this.apiService.backfillRecurringDeductions({
+      driver_id: this.editingDriverId,
+      start_date: this.driverBackfill.start_date,
+      end_date: this.driverBackfill.end_date,
+      include_locked: this.driverBackfill.include_locked,
+      dry_run: this.driverBackfill.dry_run,
+      limit: this.driverBackfill.limit
+    }).subscribe({
+      next: (res: any) => {
+        this.driverBackfillResult = res;
+        this.driverBackfilling = false;
+      },
+      error: (err: any) => {
+        console.error('Driver backfill failed:', err);
+        alert(err?.error?.error || 'Backfill failed.');
+        this.driverBackfilling = false;
+      }
+    });
+  }
+
+  onDriverBackfillDateChange(): void {
+    this.updateDriverBackfillWarning();
+  }
+
+  private updateDriverBackfillWarning(): void {
+    this.driverBackfillWarning = '';
+    if (!this.driverBackfill.start_date || !this.driverBackfill.end_date) {
+      return;
+    }
+
+    const normalizedEnd = this.normalizeRecurringDate(this.driverBackfill.end_date);
+    if (!normalizedEnd) {
+      return;
+    }
+
+    const futureRules = (this.recurringDeductions || [])
+      .map((rule: any) => ({ ...rule, normalizedStartDate: this.normalizeRecurringDate(rule?.start_date) }))
+      .filter((rule: any) => !!rule.normalizedStartDate && rule.normalizedStartDate > normalizedEnd)
+      .sort((left: any, right: any) => String(left.normalizedStartDate).localeCompare(String(right.normalizedStartDate)));
+
+    if (!futureRules.length) {
+      return;
+    }
+
+    const earliestStart = futureRules[0].normalizedStartDate;
+    this.driverBackfillWarning = `${futureRules.length} active scheduled deduction ${futureRules.length === 1 ? 'rule starts' : 'rules start'} after this backfill range. Earliest start date: ${earliestStart}.`;
+  }
+
+  private normalizeRecurringDate(value: any): string {
+    if (!value) return '';
+    const text = String(value);
+    const iso = text.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toISOString().slice(0, 10);
   }
 
   private buildDriverFromSource(source: any): any {

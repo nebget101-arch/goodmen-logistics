@@ -225,12 +225,15 @@ async function backfillSettlementLoadDates(knex, settlementId) {
 }
 
 /** Recurring deductions applicable for driver in date range. */
-async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, periodEnd) {
+async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, periodEnd, payeeIds = []) {
   const startStr = toDateOnly(periodStart);
   const endStr = toDateOnly(periodEnd);
   if (!startStr || !endStr) {
     throw new Error('Invalid period_start or period_end');
   }
+  const normalizedPayeeIds = (Array.isArray(payeeIds) ? payeeIds : [])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
   return knex('recurring_deduction_rules')
     .where('enabled', true)
     .whereRaw('start_date <= ?', [endStr])
@@ -238,7 +241,16 @@ async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, peri
       this.whereNull('end_date').orWhereRaw('end_date >= ?', [startStr]);
     })
     .andWhere(function () {
-      this.whereNull('driver_id').orWhere('driver_id', driverId);
+      this.where('driver_id', driverId)
+        .orWhere(function () {
+          this.whereNull('driver_id').whereNull('payee_id');
+        });
+
+      if (normalizedPayeeIds.length) {
+        this.orWhere(function () {
+          this.whereNull('driver_id').whereIn('payee_id', normalizedPayeeIds);
+        });
+      }
     });
 }
 
@@ -248,6 +260,31 @@ async function generateSettlementNumber(knex) {
     .first();
   const seq = row ? parseInt((row.settlement_number || '').replace(/\D/g, ''), 10) + 1 : 1;
   return `${SETTLEMENT_NUMBER_PREFIX}-${Date.now().toString(36).toUpperCase()}-${seq}`;
+}
+
+function sanitizeSettlementToken(value, fallback = 'UNKNOWN') {
+  const raw = (value || '').toString().trim();
+  if (!raw) return fallback;
+  return raw
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase() || fallback;
+}
+
+async function generateSettlementNumberWithContext(knex, driver, period) {
+  const row = await knex('settlements')
+    .orderBy('created_at', 'desc')
+    .first();
+  const seq = row ? parseInt((row.settlement_number || '').replace(/\D/g, ''), 10) + 1 : 1;
+
+  const driverName = [driver?.first_name, driver?.last_name].filter(Boolean).join('_') || 'DRIVER';
+  const periodStart = toDateOnly(period?.period_start) || 'START';
+  const periodEnd = toDateOnly(period?.period_end) || 'END';
+
+  const driverToken = sanitizeSettlementToken(driverName, 'DRIVER');
+  const periodToken = sanitizeSettlementToken(`${periodStart}_TO_${periodEnd}`, 'NO_PERIOD');
+
+  return `${SETTLEMENT_NUMBER_PREFIX}-${driverToken}-${periodToken}-${seq}`;
 }
 
 /**
@@ -323,7 +360,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       additional_payee_rate: additionalPayeeRate
     };
 
-    const settlementNumber = await generateSettlementNumber(knex);
+    const settlementNumber = await generateSettlementNumberWithContext(knex, driver, period);
     const settlementDate = period.period_end;
 
     const [settlement] = await knex('settlements').insert({
@@ -375,9 +412,25 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       knex,
       driverId,
       period.period_start,
-      period.period_end
+      period.period_end,
+      [primaryPayeeId, additionalPayeeId].filter(Boolean)
     );
     for (const rule of recurring) {
+      // Determine which payee the deduction applies to
+      let applyTo = 'primary_payee'; // default
+
+      if (rule.payee_id) {
+        // If payee_id is specified, check if it matches primary or additional payee
+        if (rule.payee_id === primaryPayeeId) {
+          applyTo = 'primary_payee';
+        } else if (rule.payee_id === additionalPayeeId) {
+          applyTo = 'additional_payee';
+        } else {
+          // Payee doesn't match this settlement, skip this rule
+          continue;
+        }
+      }
+
       await knex('settlement_adjustment_items').insert({
         settlement_id: settlement.id,
         item_type: 'deduction',
@@ -385,7 +438,9 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
         description: rule.description || rule.source_type || 'Recurring deduction',
         amount: Number(rule.amount) || 0,
         charge_party: 'driver',
-        apply_to: 'primary_payee',
+        apply_to: applyTo,
+        source_reference_id: rule.id,
+        source_reference_type: 'recurring_deduction_rule',
         status: 'applied',
         created_by: userId
       });
@@ -451,6 +506,74 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
   }
 
   await backfillSettlementLoadDates(knex, settlementId);
+
+  // Refresh scheduled deductions: remove old ones and re-apply current rules
+  await knex('settlement_adjustment_items')
+    .where({ settlement_id: settlementId, source_type: 'scheduled_rule' })
+    .andWhere(function () {
+      this.whereNull('status').orWhereNot('status', 'removed');
+    })
+    .delete();
+
+  // Get settlement period for recurring deduction lookup
+  const period = settlement.payroll_period_id
+    ? await knex('payroll_periods').where({ id: settlement.payroll_period_id }).first()
+    : null;
+
+  if (period) {
+    const excludedScheduledRows = await knex('settlement_adjustment_items')
+      .where({ settlement_id: settlementId, source_type: 'scheduled_rule_removed' })
+      .select('source_reference_id', 'apply_to');
+    const excludedScheduledKeys = new Set(
+      excludedScheduledRows
+        .filter((row) => !!row?.source_reference_id)
+        .map((row) => `${row.source_reference_id}|${row.apply_to || 'primary_payee'}`)
+    );
+
+    const recurring = await getRecurringDeductionsForPeriod(
+      knex,
+      settlement.driver_id,
+      period.period_start,
+      period.period_end,
+      [effectivePrimaryPayeeId, effectiveAdditionalPayeeId].filter(Boolean)
+    );
+
+    for (const rule of recurring) {
+      // Determine which payee the deduction applies to
+      let applyTo = 'primary_payee'; // default
+
+      if (rule.payee_id) {
+        // If payee_id is specified, check if it matches primary or additional payee
+        if (rule.payee_id === effectivePrimaryPayeeId) {
+          applyTo = 'primary_payee';
+        } else if (rule.payee_id === effectiveAdditionalPayeeId) {
+          applyTo = 'additional_payee';
+        } else {
+          // Payee doesn't match this settlement, skip this rule
+          continue;
+        }
+      }
+
+      const exclusionKey = `${rule.id}|${applyTo}`;
+      if (excludedScheduledKeys.has(exclusionKey)) {
+        continue;
+      }
+
+      await knex('settlement_adjustment_items').insert({
+        settlement_id: settlementId,
+        item_type: 'deduction',
+        source_type: 'scheduled_rule',
+        description: rule.description || rule.source_type || 'Recurring deduction',
+        amount: Number(rule.amount) || 0,
+        charge_party: 'driver',
+        apply_to: applyTo,
+        source_reference_id: rule.id,
+        source_reference_type: 'recurring_deduction_rule',
+        status: 'applied',
+        created_by: settlement.created_by || null
+      });
+    }
+  }
 
   const loadItems = await knex('settlement_load_items').where({ settlement_id: settlementId });
   const adjustmentItems = await knex('settlement_adjustment_items').where({ settlement_id: settlementId });
@@ -644,7 +767,84 @@ async function removeAdjustment(knex, settlementId, adjustmentId) {
   const settlement = await knex('settlements').where({ id: settlementId }).first();
   if (!settlement) throw new Error('Settlement not found');
   if (['approved', 'paid', 'void'].includes(settlement.settlement_status)) throw new Error('Settlement is locked');
-  await knex('settlement_adjustment_items').where({ id: adjustmentId, settlement_id: settlementId }).del();
+
+  const adjustment = await knex('settlement_adjustment_items')
+    .where({ id: adjustmentId, settlement_id: settlementId })
+    .first();
+  if (!adjustment) throw new Error('Adjustment not found');
+
+  // For scheduled rules, persist an exclusion marker so recalc/backfill won't re-add it.
+  if (adjustment.source_type === 'scheduled_rule' && adjustment.source_reference_id) {
+    const existingExclusion = await knex('settlement_adjustment_items')
+      .where({
+        settlement_id: settlementId,
+        source_type: 'scheduled_rule_removed',
+        source_reference_id: adjustment.source_reference_id,
+        apply_to: adjustment.apply_to || 'primary_payee'
+      })
+      .first();
+
+    if (!existingExclusion) {
+      await knex('settlement_adjustment_items').insert({
+        settlement_id: settlementId,
+        item_type: 'deduction',
+        source_type: 'scheduled_rule_removed',
+        description: `Excluded scheduled deduction: ${adjustment.description || 'Recurring deduction'}`,
+        amount: 0,
+        charge_party: adjustment.charge_party || 'driver',
+        apply_to: adjustment.apply_to || 'primary_payee',
+        source_reference_id: adjustment.source_reference_id,
+        source_reference_type: adjustment.source_reference_type || 'recurring_deduction_rule',
+        status: 'applied',
+        created_by: settlement.created_by || null
+      });
+    }
+  }
+
+  if (adjustment.source_type === 'scheduled_rule') {
+    await knex('settlement_adjustment_items')
+      .where({ id: adjustmentId, settlement_id: settlementId })
+      .update({
+        status: 'removed',
+        updated_at: knex.fn.now()
+      });
+  } else {
+    await knex('settlement_adjustment_items').where({ id: adjustmentId, settlement_id: settlementId }).del();
+  }
+
+  await recalcAndUpdateSettlement(knex, settlementId);
+}
+
+async function restoreScheduledAdjustment(knex, settlementId, adjustmentId) {
+  const settlement = await knex('settlements').where({ id: settlementId }).first();
+  if (!settlement) throw new Error('Settlement not found');
+  if (['approved', 'paid', 'void'].includes(settlement.settlement_status)) throw new Error('Settlement is locked');
+
+  const adjustment = await knex('settlement_adjustment_items')
+    .where({ id: adjustmentId, settlement_id: settlementId, source_type: 'scheduled_rule' })
+    .first();
+  if (!adjustment) throw new Error('Scheduled adjustment not found');
+
+  const applyTo = adjustment.apply_to || 'primary_payee';
+
+  if (adjustment.source_reference_id) {
+    await knex('settlement_adjustment_items')
+      .where({
+        settlement_id: settlementId,
+        source_type: 'scheduled_rule_removed',
+        source_reference_id: adjustment.source_reference_id,
+        apply_to: applyTo
+      })
+      .del();
+  }
+
+  await knex('settlement_adjustment_items')
+    .where({ id: adjustmentId, settlement_id: settlementId })
+    .update({
+      status: 'applied',
+      updated_at: knex.fn.now()
+    });
+
   await recalcAndUpdateSettlement(knex, settlementId);
 }
 
@@ -673,9 +873,16 @@ async function listSettlements(knex, filters = {}) {
       's.*',
       'pp.period_start',
       'pp.period_end',
-      'pp.status as period_status'
+      'pp.status as period_status',
+      knex.raw("concat_ws(' ', d.first_name, d.last_name) as driver_name"),
+      knex.raw("concat_ws(' ', d.first_name, d.last_name) as payable_to_name"),
+      'primary_payee.name as primary_payee_name',
+      'additional_payee.name as additional_payee_name'
     )
-    .leftJoin('payroll_periods as pp', 'pp.id', 's.payroll_period_id');
+    .leftJoin('payroll_periods as pp', 'pp.id', 's.payroll_period_id')
+    .leftJoin('drivers as d', 'd.id', 's.driver_id')
+    .leftJoin('payees as primary_payee', 'primary_payee.id', 's.primary_payee_id')
+    .leftJoin('payees as additional_payee', 'additional_payee.id', 's.additional_payee_id');
 
   if (filters.driver_id) q = q.where('s.driver_id', filters.driver_id);
   if (filters.payroll_period_id) q = q.where('s.payroll_period_id', filters.payroll_period_id);
@@ -701,6 +908,7 @@ module.exports = {
   removeLoadFromSettlement,
   addAdjustment,
   removeAdjustment,
+  restoreScheduledAdjustment,
   approveSettlement,
   voidSettlement,
   listSettlements

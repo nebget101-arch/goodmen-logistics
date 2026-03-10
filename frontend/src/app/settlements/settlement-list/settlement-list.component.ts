@@ -99,7 +99,7 @@ export class SettlementListComponent implements OnInit {
       periodEnd: this.toDateOnly(s.period_end),
       driverId: s.driver_id || '',
       driverName,
-      payableTo: s.primary_payee_name ?? '—',
+      payableTo: s.payable_to_name || driverName || '—',
       additionalPayee: s.additional_payee_name ?? '—',
       status: this.normalizeStatus(s.settlement_status),
       gross: Number(s.subtotal_gross) || 0,
@@ -140,6 +140,10 @@ export class SettlementListComponent implements OnInit {
 
   createNew(): void {
     this.router.navigate(['/settlements/new']);
+  }
+
+  openScheduledDeductions(): void {
+    this.router.navigate(['/settlements/scheduled-deductions']);
   }
 
   getStatusClass(status: string): string {

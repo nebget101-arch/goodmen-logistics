@@ -128,6 +128,9 @@ function recalculateSettlementTotals(settlement, loadItems, adjustmentItems, pro
   let totalDeductions = 0;
   let totalAdvances = 0;
   for (const adj of adjustmentItems || []) {
+    const status = (adj?.status || '').toLowerCase();
+    if (status === 'removed' || status === 'void') continue;
+
     const amt = Math.abs(Number(adj.amount) || 0);
     const type = (adj.item_type || '').toLowerCase();
     if (type === 'deduction') totalDeductions += amt;

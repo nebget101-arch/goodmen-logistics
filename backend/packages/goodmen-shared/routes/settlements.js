@@ -7,6 +7,8 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
 const knex = require('../config/knex');
+const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
+const { buildSettlementPdf } = require('../utils/settlement-pdf');
 const {
   createDraftSettlement,
   recalcAndUpdateSettlement,
@@ -14,6 +16,7 @@ const {
   removeLoadFromSettlement,
   addAdjustment,
   removeAdjustment,
+  restoreScheduledAdjustment,
   approveSettlement,
   voidSettlement,
   listSettlements,
@@ -23,6 +26,63 @@ const {
   getRecurringDeductionsForPeriod
 } = require('../services/settlement-service');
 const { getClient } = require('../internal/db');
+
+async function getSettlementPdfContext(settlementId) {
+  const settlement = await knex('settlements').where({ id: settlementId }).first();
+  if (!settlement) return null;
+
+  const loadItems = await knex('settlement_load_items as sli')
+    .join('loads as l', 'l.id', 'sli.load_id')
+    .where('sli.settlement_id', settlementId)
+    .select('sli.*', 'l.load_number');
+
+  const adjustmentItems = await knex('settlement_adjustment_items')
+    .where({ settlement_id: settlementId })
+    .orderBy('created_at', 'asc');
+
+  const driver = await knex('drivers')
+    .where({ id: settlement.driver_id })
+    .select('first_name', 'last_name', 'email')
+    .first();
+
+  const primaryPayee = settlement.primary_payee_id
+    ? await knex('payees').where({ id: settlement.primary_payee_id }).first()
+    : null;
+
+  const additionalPayee = settlement.additional_payee_id
+    ? await knex('payees').where({ id: settlement.additional_payee_id }).first()
+    : null;
+
+  const period = settlement.payroll_period_id
+    ? await knex('payroll_periods').where({ id: settlement.payroll_period_id }).first()
+    : null;
+
+  return {
+    settlement,
+    loadItems,
+    adjustmentItems,
+    driver: driver || null,
+    primaryPayee: primaryPayee || null,
+    additionalPayee: additionalPayee || null,
+    period: period || null
+  };
+}
+
+function safeToken(value, fallback = 'UNKNOWN') {
+  const raw = (value || '').toString().trim();
+  if (!raw) return fallback;
+  return raw
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase() || fallback;
+}
+
+function getSettlementDisplayNumber(payload) {
+  const driverName = [payload?.driver?.first_name, payload?.driver?.last_name].filter(Boolean).join('_') || 'DRIVER';
+  const start = String(payload?.period?.period_start || payload?.settlement?.period_start || '').slice(0, 10) || 'START';
+  const end = String(payload?.period?.period_end || payload?.settlement?.period_end || payload?.settlement?.date || '').slice(0, 10) || 'END';
+  return `STL-${safeToken(driverName, 'DRIVER')}-${safeToken(`${start}_TO_${end}`, 'NO_PERIOD')}`;
+}
 
 function requireRole(allowedRoles) {
   return (req, res, next) => {
@@ -598,9 +658,25 @@ router.post('/drivers/:driverId/expense-responsibility', requireRole(settlementR
 // ---------- Recurring deductions ----------
 router.get('/recurring-deductions', requireRole(settlementRoles), async (req, res) => {
   try {
-    const { driver_id, enabled } = req.query;
+    const { driver_id, payee_id, payee_ids, enabled } = req.query;
     let q = knex('recurring_deduction_rules');
-    if (driver_id) q = q.where('driver_id', driver_id);
+    const normalizedPayeeIds = [payee_id, payee_ids]
+      .flatMap((value) => String(value || '').split(','))
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (driver_id && normalizedPayeeIds.length) {
+      q = q.where(function () {
+        this.where('driver_id', driver_id)
+          .orWhere(function () {
+            this.whereNull('driver_id').whereIn('payee_id', normalizedPayeeIds);
+          });
+      });
+    } else if (driver_id) {
+      q = q.where('driver_id', driver_id);
+    } else if (normalizedPayeeIds.length) {
+      q = q.whereIn('payee_id', normalizedPayeeIds);
+    }
     if (enabled !== undefined) q = q.where('enabled', enabled === 'true' || enabled === true);
     const rows = await q.orderBy('start_date', 'desc');
     res.json(rows);
@@ -639,11 +715,104 @@ router.patch('/recurring-deductions/:id', requireRole(settlementRoles), async (r
   try {
     const body = req.body;
     const updates = { updated_at: knex.fn.now() };
+    if (body.driver_id !== undefined) updates.driver_id = body.driver_id || null;
+    if (body.payee_id !== undefined) updates.payee_id = body.payee_id || null;
+    if (body.equipment_id !== undefined) updates.equipment_id = body.equipment_id || null;
+    if (body.rule_scope !== undefined) updates.rule_scope = body.rule_scope || 'driver';
+    if (body.description !== undefined) updates.description = body.description ?? null;
+    if (body.amount_type !== undefined) updates.amount_type = body.amount_type || 'fixed';
+    if (body.amount !== undefined) updates.amount = body.amount ?? 0;
+    if (body.frequency !== undefined) updates.frequency = body.frequency || 'weekly';
+    if (body.start_date !== undefined) updates.start_date = body.start_date || new Date().toISOString().slice(0, 10);
     if (body.enabled !== undefined) updates.enabled = body.enabled;
     if (body.end_date !== undefined) updates.end_date = body.end_date;
+    if (body.source_type !== undefined) updates.source_type = body.source_type ?? null;
+    if (body.applies_when !== undefined) updates.applies_when = body.applies_when ?? 'always';
     const [row] = await knex('recurring_deduction_rules').where({ id: req.params.id }).update(updates).returning('*');
     if (!row) return res.status(404).json({ error: 'Not found' });
     res.json(row);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/recurring-deductions/backfill', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const {
+      driver_id,
+      start_date,
+      end_date,
+      include_locked = false,
+      dry_run = false,
+      limit = 500
+    } = req.body || {};
+
+    if (!start_date || !end_date) {
+      return res.status(400).json({ error: 'start_date and end_date are required' });
+    }
+
+    let query = knex('settlements as s')
+      .leftJoin('payroll_periods as pp', 'pp.id', 's.payroll_period_id')
+      .select('s.id', 's.driver_id', 's.settlement_status', 'pp.period_start', 'pp.period_end')
+      .whereRaw('COALESCE(pp.period_end, pp.period_start, s.date::date, s.created_at::date) BETWEEN ? AND ?', [start_date, end_date])
+      .orderByRaw('COALESCE(pp.period_end, pp.period_start, s.date::date, s.created_at::date) ASC')
+      .limit(Math.min(Number(limit) || 500, 2000));
+
+    if (driver_id) {
+      query = query.where('s.driver_id', driver_id);
+    }
+
+    if (!include_locked) {
+      query = query.whereRaw("LOWER(COALESCE(s.settlement_status, '')) NOT IN ('approved', 'paid', 'void')");
+    }
+
+    const candidates = await query;
+
+    if (dry_run) {
+      return res.json({
+        mode: 'dry_run',
+        filters: { driver_id: driver_id || null, start_date, end_date, include_locked: !!include_locked },
+        matched_count: candidates.length,
+        matched_settlement_ids: candidates.map((s) => s.id)
+      });
+    }
+
+    const updated = [];
+    const failed = [];
+    let settlementsWithScheduledDeductions = 0;
+    let scheduledDeductionRowCount = 0;
+
+    for (const s of candidates) {
+      try {
+        await recalcAndUpdateSettlement(knex, s.id);
+        updated.push(s.id);
+
+        const scheduledCountRow = await knex('settlement_adjustment_items')
+          .where({ settlement_id: s.id, source_type: 'scheduled_rule' })
+          .count('* as count')
+          .first();
+
+        const scheduledCount = Number(scheduledCountRow?.count || 0);
+        if (scheduledCount > 0) {
+          settlementsWithScheduledDeductions += 1;
+          scheduledDeductionRowCount += scheduledCount;
+        }
+      } catch (err) {
+        failed.push({ id: s.id, error: err.message });
+      }
+    }
+
+    res.json({
+      mode: 'execute',
+      filters: { driver_id: driver_id || null, start_date, end_date, include_locked: !!include_locked },
+      matched_count: candidates.length,
+      updated_count: updated.length,
+      settlements_with_scheduled_deductions: settlementsWithScheduledDeductions,
+      scheduled_deduction_row_count: scheduledDeductionRowCount,
+      failed_count: failed.length,
+      updated_settlement_ids: updated,
+      failures: failed
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -832,7 +1001,7 @@ router.get('/settlements/:id', requireRole(settlementRoles), async (req, res) =>
     const adjustmentGroups = {
       scheduled: adjustmentItems.filter((i) => i.source_type === 'scheduled_rule'),
       manual: adjustmentItems.filter((i) => (i.source_type || 'manual') === 'manual'),
-      variable: adjustmentItems.filter((i) => !['scheduled_rule', 'manual', null, undefined].includes(i.source_type))
+      variable: adjustmentItems.filter((i) => !['scheduled_rule', 'scheduled_rule_removed', 'manual', null, undefined].includes(i.source_type))
     };
 
     res.json({
@@ -901,6 +1070,16 @@ router.delete('/settlements/:id/adjustments/:adjustmentId', requireRole(settleme
   }
 });
 
+router.post('/settlements/:id/adjustments/:adjustmentId/restore', requireRole(settlementRoles), async (req, res) => {
+  try {
+    await restoreScheduledAdjustment(knex, req.params.id, req.params.adjustmentId);
+    const settlement = await knex('settlements').where({ id: req.params.id }).first();
+    res.json(settlement);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post('/settlements/:id/approve', requireRole(settlementRoles), async (req, res) => {
   try {
     const settlement = await approveSettlement(knex, req.params.id, req.user?.id ?? null);
@@ -922,29 +1101,85 @@ router.post('/settlements/:id/void', requireRole(settlementRoles), async (req, r
 // ---------- PDF payload (Phase 4) ----------
 router.get('/settlements/:id/pdf-payload', requireRole(settlementRoles), async (req, res) => {
   try {
-    const settlement = await knex('settlements').where({ id: req.params.id }).first();
-    if (!settlement) return res.status(404).json({ error: 'Settlement not found' });
-    const loadItems = await knex('settlement_load_items as sli')
-      .join('loads as l', 'l.id', 'sli.load_id')
-      .where('sli.settlement_id', req.params.id)
-      .select('sli.*', 'l.load_number');
-    const adjustmentItems = await knex('settlement_adjustment_items').where({ settlement_id: req.params.id });
-    const driver = await knex('drivers').where({ id: settlement.driver_id }).select('first_name', 'last_name', 'email').first();
-    const primaryPayee = await knex('payees').where({ id: settlement.primary_payee_id }).first();
-    const period = await knex('payroll_periods').where({ id: settlement.payroll_period_id }).first();
+    const payload = await getSettlementPdfContext(req.params.id);
+    if (!payload) return res.status(404).json({ error: 'Settlement not found' });
+
     res.json({
-      settlement,
-      driver: driver || {},
-      primary_payee: primaryPayee || {},
-      additional_payee: settlement.additional_payee_id
-        ? await knex('payees').where({ id: settlement.additional_payee_id }).first()
-        : null,
-      period: period || {},
-      load_items: loadItems,
-      adjustment_items: adjustmentItems
+      settlement: payload.settlement,
+      driver: payload.driver || {},
+      primary_payee: payload.primaryPayee || {},
+      additional_payee: payload.additionalPayee || null,
+      period: payload.period || {},
+      load_items: payload.loadItems,
+      adjustment_items: payload.adjustmentItems
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Generate PDF and upload to Cloudflare R2, then return signed URL
+router.post('/settlements/:id/pdf/generate', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const payload = await getSettlementPdfContext(req.params.id);
+    if (!payload) return res.status(404).json({ error: 'Settlement not found' });
+
+    const pdfBuffer = await buildSettlementPdf({
+      settlement: payload.settlement,
+      driver: payload.driver,
+      period: payload.period,
+      primaryPayee: payload.primaryPayee,
+      additionalPayee: payload.additionalPayee,
+      loadItems: payload.loadItems,
+      adjustmentItems: payload.adjustmentItems
+    });
+
+    const displaySettlementNumber = getSettlementDisplayNumber(payload);
+    const fileName = `${displaySettlementNumber}.pdf`;
+    const { key: storageKey } = await uploadBuffer({
+      buffer: pdfBuffer,
+      contentType: 'application/pdf',
+      prefix: `settlements/${payload.settlement.id}`,
+      fileName
+    });
+
+    const downloadUrl = await getSignedDownloadUrl(storageKey);
+
+    res.json({
+      success: true,
+      settlement_id: payload.settlement.id,
+      settlement_number_display: displaySettlementNumber,
+      storage_key: storageKey,
+      file_name: fileName,
+      download_url: downloadUrl
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to generate settlement PDF' });
+  }
+});
+
+// Direct PDF download stream (no persistence)
+router.get('/settlements/:id/pdf/download', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const payload = await getSettlementPdfContext(req.params.id);
+    if (!payload) return res.status(404).json({ error: 'Settlement not found' });
+
+    const pdfBuffer = await buildSettlementPdf({
+      settlement: payload.settlement,
+      driver: payload.driver,
+      period: payload.period,
+      primaryPayee: payload.primaryPayee,
+      additionalPayee: payload.additionalPayee,
+      loadItems: payload.loadItems,
+      adjustmentItems: payload.adjustmentItems
+    });
+
+    const fileName = `${getSettlementDisplayNumber(payload)}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to download settlement PDF' });
   }
 });
 

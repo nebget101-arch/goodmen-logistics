@@ -511,19 +511,200 @@
           <div class="pay-content" *ngIf="payTab === 'deductions'">
             <div class="comp-block">
               <h4 class="comp-section-title"><span class="material-symbols-outlined">receipt_long</span> Scheduled deductions</h4>
-              <p class="comp-hint">Weekly deductions that auto-apply to settlements. Backend support coming soon.</p>
-              <div class="deductions-empty" *ngIf="recurringDeductions.length === 0">
+              <p class="comp-hint">Create recurring deductions for this driver. These rules are applied during settlement processing.</p>
+
+              <div class="deduction-create-card" *ngIf="editingDriverId; else saveDriverFirst">
+                <div class="deduction-create-actions">
+                  <button type="button" class="btn btn-primary btn-sm" (click)="openRecurringDeductionModal()">
+                    <span class="material-symbols-outlined">auto_awesome</span>
+                    Add AI-themed deduction
+                  </button>
+                </div>
+              </div>
+
+              <ng-template #saveDriverFirst>
+                <div class="deductions-empty">
+                  <span class="material-symbols-outlined">save</span>
+                  <p>Save the driver first, then add recurring deductions.</p>
+                </div>
+              </ng-template>
+
+              <div class="deductions-empty" *ngIf="editingDriverId && !loadingRecurringDeductions && recurringDeductions.length === 0">
                 <span class="material-symbols-outlined">inbox</span>
                 <p>No recurring deductions yet.</p>
-                <button type="button" class="btn btn-secondary btn-sm" disabled title="Coming soon">
-                  <span class="material-symbols-outlined">add</span> Add deduction
-                </button>
               </div>
-              <div class="deductions-list" *ngIf="recurringDeductions.length > 0">
+
+              <div class="deductions-empty" *ngIf="editingDriverId && loadingRecurringDeductions">
+                <span class="material-symbols-outlined">hourglass_top</span>
+                <p>Loading recurring deductions…</p>
+              </div>
+
+              <div class="deductions-list" *ngIf="editingDriverId && !loadingRecurringDeductions && recurringDeductions.length > 0">
                 <div class="deduction-item" *ngFor="let d of recurringDeductions">
                   <span class="deduction-desc">{{ d.description }}</span>
-                  <span class="deduction-amount">${{ d.weeklyAmount | number:'1.2-2' }}/wk</span>
-                  <span class="badge" [class.badge-success]="d.active" [class.badge-muted]="!d.active">{{ d.active ? 'Active' : 'Inactive' }}</span>
+                  <span class="badge badge-target">{{ getRecurringDeductionTargetLabel(d) }}</span>
+                  <span class="deduction-date">Start: {{ getRecurringDeductionStartDateLabel(d) }}</span>
+                  <span class="deduction-date">End: {{ getRecurringDeductionEndDateLabel(d) }}</span>
+                  <span class="deduction-amount">{{ formatRecurringDeductionAmount(d) }} · {{ getDeductionFrequencyLabel(d.frequency) }}</span>
+                  <span class="badge" [class.badge-success]="d.enabled" [class.badge-muted]="!d.enabled">{{ d.enabled ? 'Active' : 'Inactive' }}</span>
+
+                  <div class="deduction-inline-editor" *ngIf="editingRecurringDeductionId === d.id">
+                    <input type="text" class="form-input" placeholder="Description" [(ngModel)]="editingRecurringDeductionDraft.description" />
+                    <input type="number" min="0" step="0.01" class="form-input" placeholder="Amount" [(ngModel)]="editingRecurringDeductionDraft.amount" />
+                    <input type="date" class="form-input" [(ngModel)]="editingRecurringDeductionDraft.start_date" />
+                    <input type="date" class="form-input" [(ngModel)]="editingRecurringDeductionDraft.end_date" />
+                    <button type="button" class="btn btn-primary btn-sm" (click)="saveRecurringDeductionInlineEdit(d)" [disabled]="savingRecurringDeductionEdit || driverBackfilling">
+                      {{ savingRecurringDeductionEdit ? 'Saving...' : 'Save' }}
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" (click)="saveRecurringDeductionInlineEditAndBackfill(d)" [disabled]="savingRecurringDeductionEdit || driverBackfilling">
+                      {{ (savingRecurringDeductionEdit || driverBackfilling) ? 'Working...' : 'Save + Backfill' }}
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" (click)="cancelRecurringDeductionInlineEdit()" [disabled]="savingRecurringDeductionEdit">Cancel</button>
+                  </div>
+
+                  <div class="deduction-actions" *ngIf="editingRecurringDeductionId !== d.id">
+                    <button type="button" class="btn btn-secondary btn-sm" (click)="startRecurringDeductionInlineEdit(d)">Edit deduction</button>
+                    <button type="button" class="btn btn-secondary btn-sm" (click)="toggleRecurringDeduction(d)">
+                      {{ d.enabled ? 'Disable' : 'Enable' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="deduction-backfill-card" *ngIf="editingDriverId">
+                <h5 class="comp-section-title"><span class="material-symbols-outlined">history</span> Backfill past settlements</h5>
+                <p class="comp-hint">Recalculate this driver’s past settlements so scheduled deductions are applied retroactively.</p>
+                <div class="deduction-backfill-grid">
+                  <div class="field">
+                    <label for="driverBackfillStart">Start date</label>
+                    <input id="driverBackfillStart" type="date" class="form-input" [(ngModel)]="driverBackfill.start_date" (ngModelChange)="onDriverBackfillDateChange()" />
+                  </div>
+                  <div class="field">
+                    <label for="driverBackfillEnd">End date</label>
+                    <input id="driverBackfillEnd" type="date" class="form-input" [(ngModel)]="driverBackfill.end_date" (ngModelChange)="onDriverBackfillDateChange()" />
+                  </div>
+                  <div class="field">
+                    <label for="driverBackfillLimit">Max settlements</label>
+                    <input id="driverBackfillLimit" type="number" min="1" max="2000" class="form-input" [(ngModel)]="driverBackfill.limit" />
+                  </div>
+                </div>
+                <div class="deduction-backfill-options">
+                  <label class="checkbox-label">
+                    <input type="checkbox" [(ngModel)]="driverBackfill.include_locked" />
+                    <span>Include approved/paid/void</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" [(ngModel)]="driverBackfill.dry_run" />
+                    <span>Preview only (does not save changes)</span>
+                  </label>
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="runDriverBackfill()" [disabled]="driverBackfilling">
+                    <span class="material-symbols-outlined">sync</span>
+                    {{ driverBackfilling ? 'Processing...' : (driverBackfill.dry_run ? 'Preview backfill' : 'Run backfill') }}
+                  </button>
+                </div>
+                <div class="deduction-backfill-warning" *ngIf="driverBackfillWarning">
+                  <span class="material-symbols-outlined">warning</span>
+                  <span>{{ driverBackfillWarning }}</span>
+                </div>
+                <div class="deduction-backfill-result" *ngIf="driverBackfillResult">
+                  <span *ngIf="driverBackfillResult.mode === 'dry_run'">Matched {{ driverBackfillResult.matched_count || 0 }} settlements. No changes were saved.</span>
+                  <span *ngIf="driverBackfillResult.mode !== 'dry_run'">
+                    Updated {{ driverBackfillResult.updated_count || 0 }} of {{ driverBackfillResult.matched_count || 0 }} settlements.
+                    <ng-container *ngIf="(driverBackfillResult.scheduled_deduction_row_count || 0) > 0; else noDriverScheduledApplied">
+                      Applied {{ driverBackfillResult.scheduled_deduction_row_count || 0 }} scheduled deduction row(s) across {{ driverBackfillResult.settlements_with_scheduled_deductions || 0 }} settlement(s).
+                    </ng-container>
+                    <ng-template #noDriverScheduledApplied>No scheduled deductions were applied to the recalculated settlements.</ng-template>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="deduction-modal-backdrop" *ngIf="showRecurringDeductionModal" (click)="closeRecurringDeductionModal()">
+              <div class="deduction-modal" (click)="$event.stopPropagation()">
+                <div class="deduction-modal-header">
+                  <h4><span class="material-symbols-outlined">auto_awesome</span> New scheduled deduction</h4>
+                  <button type="button" class="close-btn" (click)="closeRecurringDeductionModal()">×</button>
+                </div>
+                <div class="deduction-modal-body">
+                  <div class="deduction-form-grid">
+                    <div class="field">
+                      <label for="rdExpenseCategory">Expense category (from responsibility)</label>
+                      <select id="rdExpenseCategory" class="form-input" [(ngModel)]="newRecurringDeduction.expense_category" (ngModelChange)="onRecurringExpenseCategoryChange()">
+                        <option value="">Manual / not expense-specific</option>
+                        <option *ngFor="let e of expenseKeys" [value]="e.key">{{ e.label }}</option>
+                      </select>
+                    </div>
+
+                    <div class="field" *ngIf="newRecurringDeduction.expense_category">
+                      <div class="field-label">Expense responsibility value</div>
+                      <div class="deduction-info-chip">{{ getExpenseResponsibilityForCategory(newRecurringDeduction.expense_category) | titlecase }}</div>
+                    </div>
+
+                    <div class="field field-wide" *ngIf="newRecurringDeduction.expense_category">
+                      <div class="field-label">Will apply to</div>
+                      <div class="deduction-info-chip">{{ getSuggestedTargetsLabel() }}</div>
+                    </div>
+
+                    <div class="field">
+                      <label for="rdTarget">Apply to</label>
+                      <select id="rdTarget" class="form-input" [(ngModel)]="newRecurringDeduction.target">
+                        <option value="primary">Primary payee</option>
+                        <option value="additional" [disabled]="!selectedAdditionalPayeeId">Additional payee</option>
+                      </select>
+                    </div>
+
+                    <div class="field field-wide">
+                      <label for="rdDescription">Description</label>
+                      <input id="rdDescription" class="form-input" placeholder="e.g. Insurance premium" [(ngModel)]="newRecurringDeduction.description" />
+                    </div>
+
+                    <div class="field">
+                      <label for="rdAmountType">Amount type</label>
+                      <select id="rdAmountType" class="form-input" [(ngModel)]="newRecurringDeduction.amount_type">
+                        <option value="fixed">Fixed</option>
+                        <option value="percentage">Percentage</option>
+                      </select>
+                    </div>
+
+                    <div class="field">
+                      <label for="rdAmount">Amount</label>
+                      <input id="rdAmount" type="number" min="0" step="0.01" class="form-input" [(ngModel)]="newRecurringDeduction.amount" placeholder="0.00" />
+                    </div>
+
+                    <div class="field">
+                      <label for="rdFrequency">Frequency</label>
+                      <select id="rdFrequency" class="form-input" [(ngModel)]="newRecurringDeduction.frequency">
+                        <option *ngFor="let f of deductionFrequencyOptions" [value]="f.value">{{ f.label }}</option>
+                      </select>
+                    </div>
+
+                    <div class="field">
+                      <label for="rdStartDate">Start date</label>
+                      <input id="rdStartDate" type="date" class="form-input" [(ngModel)]="newRecurringDeduction.start_date" />
+                    </div>
+
+                    <div class="field">
+                      <label for="rdAppliesWhen">Applies when</label>
+                      <select id="rdAppliesWhen" class="form-input" [(ngModel)]="newRecurringDeduction.applies_when">
+                        <option *ngFor="let a of deductionAppliesWhenOptions" [value]="a.value">{{ a.label }}</option>
+                      </select>
+                    </div>
+
+                    <div class="field" *ngIf="newRecurringDeduction.applies_when === 'specific_expense'">
+                      <label for="rdSourceType">Expense type</label>
+                      <select id="rdSourceType" class="form-input" [(ngModel)]="newRecurringDeduction.source_type">
+                        <option value="">Select expense</option>
+                        <option *ngFor="let e of deductionExpenseTypeOptions" [value]="e.value">{{ e.label }}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div class="deduction-modal-footer">
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="closeRecurringDeductionModal()" [disabled]="addingRecurringDeduction">Cancel</button>
+                  <button type="button" class="btn btn-primary btn-sm" (click)="addRecurringDeduction()" [disabled]="addingRecurringDeduction">
+                    <span class="material-symbols-outlined">add</span>
+                    {{ addingRecurringDeduction ? 'Adding...' : 'Add deduction' }}
+                  </button>
                 </div>
               </div>
             </div>

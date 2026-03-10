@@ -31,6 +31,7 @@ export class SettlementDetailComponent implements OnInit {
   scheduledDeductions: any[] = [];
   variableDeductions: any[] = [];
   manualAdjustments: any[] = [];
+  scheduledDeductionWarning = '';
 
   // Categories for dropdowns
   expenseCategories: ExpensePaymentCategory[] = [];
@@ -59,6 +60,8 @@ export class SettlementDetailComponent implements OnInit {
     to_additional_payee: false,
     cc_internal: false
   };
+
+  lastGeneratedSettlementPdfUrl = '';
 
   constructor(
     private route: ActivatedRoute,
@@ -100,6 +103,7 @@ export class SettlementDetailComponent implements OnInit {
     this.error = '';
     this.successMessage = '';
     this.dataSourceMode = 'normalized';
+    this.scheduledDeductionWarning = '';
 
     forkJoin({
       settlementRes: this.apiService.getSettlement(id),
@@ -143,6 +147,12 @@ export class SettlementDetailComponent implements OnInit {
         });
 
         this.buildBuckets(settlementRes?.adjustment_groups || null);
+        const settlementPeriodEnd = this.period?.period_end || settlementRes?.period_end || this.settlement?.date || null;
+        this.loadScheduledDeductionWarning(
+          driverIdForFallback,
+          settlementPeriodEnd,
+          [this.primaryPayee?.id || this.settlement?.primary_payee_id, this.additionalPayee?.id || this.settlement?.additional_payee_id].filter(Boolean)
+        );
 
         // Backward compatibility: if core related entities are missing,
         // fetch enriched payload from Phase 4 helper endpoint.
@@ -207,6 +217,20 @@ export class SettlementDetailComponent implements OnInit {
     const last = this.driver?.last_name || this.driver?.lastName || '';
     return `${first} ${last}`.trim() || this.settlement?.driver_id || '—';
   }
+
+  getSettlementTitle(): string {
+    const period = this.getSettlementPayrollPeriodLabel();
+    return period && period !== '—' ? `Settlement ${period}` : 'Settlement';
+  }
+
+  getSettlementNumberDisplay(): string {
+    const driver = this.getDriverName().replace(/\s+/g, '_').toUpperCase();
+    const start = this.dateOnly(this.period?.period_start || this.settlement?.period_start);
+    const end = this.dateOnly(this.period?.period_end || this.settlement?.period_end || this.settlement?.date);
+    const periodToken = start !== '—' && end !== '—' ? `${start}_TO_${end}` : 'NO_PERIOD';
+    return `STL-${driver}-${periodToken}`;
+  }
+
   dateOnly(value: any): string {
     if (!value) return '—';
     const str = String(value);
@@ -219,6 +243,163 @@ export class SettlementDetailComponent implements OnInit {
 
   getTotalFor(items: any[]): number {
     return (items || []).reduce((sum, x) => sum + (Number(x?.amount) || 0), 0);
+  }
+
+  getScheduledTotalForDisplay(): number {
+    return (this.scheduledDeductions || [])
+      .filter((x) => !this.isScheduledDeductionRemoved(x))
+      .reduce((sum, x) => sum + (Number(x?.amount) || 0), 0);
+  }
+
+  getScheduledDeductionTypeLabel(item: any): string {
+    const sourceType = String(item?.source_type || 'scheduled_rule').toLowerCase();
+    if (sourceType === 'scheduled_rule') return 'Scheduled deduction';
+    if (sourceType === 'insurance') return 'Insurance deduction';
+    if (sourceType === 'fuel') return 'Fuel deduction';
+    if (sourceType === 'eld') return 'ELD deduction';
+    if (sourceType === 'trailer_rent') return 'Trailer rent deduction';
+    if (sourceType === 'toll') return 'Toll deduction';
+    if (sourceType === 'repairs') return 'Repairs deduction';
+    return `${sourceType.replace(/_/g, ' ')} deduction`;
+  }
+
+  getSettlementPayrollPeriodLabel(): string {
+    const start = this.dateOnly(this.period?.period_start || this.settlement?.period_start);
+    const end = this.dateOnly(this.period?.period_end || this.settlement?.period_end || this.settlement?.date);
+    if (start === '—' && end === '—') return '—';
+    if (start === '—') return end;
+    if (end === '—') return start;
+    return `${start} → ${end}`;
+  }
+
+  getScheduledDeductionTargetLabel(item: any): string {
+    const applyTo = String(item?.apply_to || 'primary_payee').toLowerCase();
+    if (applyTo === 'additional_payee') {
+      const name = this.additionalPayee?.name || this.settlement?.additional_payee_id || 'Additional payee';
+      return `Additional payee: ${name}`;
+    }
+    if (applyTo === 'settlement') {
+      return 'Settlement-level deduction';
+    }
+    const primaryName = this.primaryPayee?.name || this.settlement?.primary_payee_id || 'Primary payee';
+    return `Primary payee: ${primaryName}`;
+  }
+
+  getScheduledDeductionTargetShortLabel(item: any): string {
+    const applyTo = String(item?.apply_to || 'primary_payee').toLowerCase();
+    return applyTo === 'additional_payee' ? 'additional payee' : 'primary payee';
+  }
+
+  isScheduledDeductionRemoved(item: any): boolean {
+    return String(item?.status || '').toLowerCase() === 'removed';
+  }
+
+  prefillManualFromScheduled(item: any): void {
+    const applyToRaw = String(item?.apply_to || 'primary_payee').toLowerCase();
+    const normalizedApplyTo = applyToRaw === 'additional_payee' ? 'additional_payee' : 'primary_payee';
+
+    this.addAdjustment = {
+      item_type: 'deduction',
+      source_type: 'manual',
+      description: item?.description || 'Scheduled deduction',
+      amount: Number(item?.amount || 0),
+      apply_to: normalizedApplyTo,
+      category_id: ''
+    };
+    this.successMessage = `Prefilled manual deduction for ${normalizedApplyTo === 'additional_payee' ? 'additional payee' : 'primary payee'}. Click Add in Manual adjustments to save.`;
+  }
+
+  removeScheduledDeductionFromCalculation(item: any): void {
+    if (!this.settlementId || !item?.id || this.saving) return;
+    if (this.isLocked()) {
+      this.error = 'Settlement is locked.';
+      return;
+    }
+
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+
+    this.apiService.removeSettlementAdjustment(this.settlementId, item.id).subscribe({
+      next: () => {
+        this.successMessage = 'Scheduled deduction removed from this settlement calculation.';
+        this.saving = false;
+        this.loadDetail(this.settlementId as string);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to remove scheduled deduction';
+        this.saving = false;
+      }
+    });
+  }
+
+  addScheduledDeductionBackToCalculation(item: any): void {
+    if (!this.settlementId || !item?.id || this.saving) return;
+    if (this.isLocked()) {
+      this.error = 'Settlement is locked.';
+      return;
+    }
+
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+
+    this.apiService.restoreSettlementAdjustment(this.settlementId, item.id).subscribe({
+      next: () => {
+        this.successMessage = 'Scheduled deduction added back to this settlement calculation.';
+        this.saving = false;
+        this.loadDetail(this.settlementId as string);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to add scheduled deduction back';
+        this.saving = false;
+      }
+    });
+  }
+
+  private loadScheduledDeductionWarning(driverId: string | null, settlementPeriodEnd: string | null, payeeIds: string[] = []): void {
+    this.scheduledDeductionWarning = '';
+
+    if (!driverId || !settlementPeriodEnd || this.scheduledDeductions.length > 0) {
+      return;
+    }
+
+    const normalizedPeriodEnd = this.normalizeDateValue(settlementPeriodEnd);
+    if (!normalizedPeriodEnd) {
+      return;
+    }
+
+    this.apiService.getRecurringDeductions({ driver_id: driverId, payee_ids: payeeIds, enabled: true }).pipe(catchError(() => of([]))).subscribe({
+      next: (rules: any[]) => {
+        if (this.scheduledDeductions.length > 0) {
+          this.scheduledDeductionWarning = '';
+          return;
+        }
+
+        const futureRules = (Array.isArray(rules) ? rules : [])
+          .map((rule) => ({ ...rule, normalizedStartDate: this.normalizeDateValue(rule?.start_date) }))
+          .filter((rule) => !!rule.normalizedStartDate && rule.normalizedStartDate > normalizedPeriodEnd)
+          .sort((left, right) => String(left.normalizedStartDate).localeCompare(String(right.normalizedStartDate)));
+
+        if (!futureRules.length) {
+          return;
+        }
+
+        const earliestStart = futureRules[0].normalizedStartDate;
+        const ruleLabel = futureRules.length === 1 ? 'rule starts' : `rules start, earliest on`;
+        this.scheduledDeductionWarning = `${futureRules.length} active scheduled deduction ${futureRules.length === 1 ? 'rule' : 'rules'} ${ruleLabel} ${earliestStart}, after this settlement period ended on ${normalizedPeriodEnd}. Edit the rule start date or backfill a later period.`;
+      }
+    });
+  }
+
+  private normalizeDateValue(value: unknown): string {
+    if (!value) return '';
+    const text = String(value);
+    const isoDate = text.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (isoDate) return isoDate[1];
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toISOString().slice(0, 10);
   }
 
   addLoad(): void {
@@ -394,6 +575,58 @@ export class SettlementDetailComponent implements OnInit {
       },
       error: (err) => {
         this.error = err?.error?.error || err?.message || 'Failed to send settlement email';
+        this.saving = false;
+      }
+    });
+  }
+
+  generateSettlementPdfToCloud(): void {
+    if (!this.settlementId || this.saving) return;
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+
+    this.apiService.generateSettlementPdfToR2(this.settlementId).subscribe({
+      next: (res: any) => {
+        const url = res?.download_url || '';
+        this.lastGeneratedSettlementPdfUrl = url;
+        if (url) {
+          window.open(url, '_blank');
+        }
+        this.successMessage = url
+          ? 'Settlement PDF generated and uploaded to Cloudflare R2.'
+          : 'Settlement PDF generated in Cloudflare R2.';
+        this.saving = false;
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to generate settlement PDF';
+        this.saving = false;
+      }
+    });
+  }
+
+  downloadSettlementPdf(): void {
+    if (!this.settlementId || this.saving) return;
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+
+    this.apiService.downloadSettlementPdfBlob(this.settlementId).subscribe({
+      next: (blob: Blob) => {
+        const fileName = `${this.getSettlementNumberDisplay()}.pdf`;
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        this.successMessage = 'Settlement PDF downloaded.';
+        this.saving = false;
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to download settlement PDF';
         this.saving = false;
       }
     });

@@ -1,0 +1,258 @@
+<div class="scheduled-deductions">
+  <div class="header">
+    <div>
+      <h1>Scheduled Deductions</h1>
+      <p class="subtitle">Manage recurring payroll deductions and expense allocations</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn-primary" (click)="openNew()">
+        <span class="material-symbols-outlined">add_circle</span>
+        New deduction
+      </button>
+    </div>
+  </div>
+
+  <div class="filters-bar">
+    <div class="filter-group">
+      <label for="filter-driver">Driver</label>
+      <select id="filter-driver" class="form-select" [(ngModel)]="filters.driverId" (change)="loadDeductions()">
+        <option value="">All drivers</option>
+        <option *ngFor="let d of drivers" [value]="d.id">{{ d.firstName }} {{ d.lastName }}</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="filter-enabled">Status</label>
+      <select id="filter-enabled" class="form-select" [(ngModel)]="filters.enabled" (change)="loadDeductions()">
+        <option value="">All</option>
+        <option value="true">Active</option>
+        <option value="false">Inactive</option>
+      </select>
+    </div>
+    <div class="filter-group filter-actions">
+      <button type="button" class="btn-secondary" (click)="clearFilters()">Clear filters</button>
+    </div>
+  </div>
+
+  <div class="backfill-card">
+    <div class="backfill-header">
+      <h3>Bulk backfill past settlements</h3>
+      <p>Apply scheduled deductions to past settlements by recalculating a date range.</p>
+    </div>
+    <div class="backfill-grid">
+      <div class="filter-group">
+        <label for="bf-driver">Driver (optional)</label>
+        <select id="bf-driver" class="form-select" [(ngModel)]="backfillForm.driver_id" (ngModelChange)="onBackfillCriteriaChange()">
+          <option value="">All drivers</option>
+          <option *ngFor="let d of drivers" [value]="d.id">{{ d.firstName }} {{ d.lastName }}</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="bf-start">Start date</label>
+        <input id="bf-start" type="date" class="form-input" [(ngModel)]="backfillForm.start_date" (ngModelChange)="onBackfillCriteriaChange()" />
+      </div>
+      <div class="filter-group">
+        <label for="bf-end">End date</label>
+        <input id="bf-end" type="date" class="form-input" [(ngModel)]="backfillForm.end_date" (ngModelChange)="onBackfillCriteriaChange()" />
+      </div>
+      <div class="filter-group">
+        <label for="bf-limit">Max settlements</label>
+        <input id="bf-limit" type="number" min="1" max="2000" class="form-input" [(ngModel)]="backfillForm.limit" />
+      </div>
+    </div>
+    <div class="backfill-options">
+      <label class="checkbox-label-inline">
+        <input type="checkbox" [(ngModel)]="backfillForm.include_locked" />
+        <span>Include approved/paid/void settlements</span>
+      </label>
+      <label class="checkbox-label-inline">
+        <input type="checkbox" [(ngModel)]="backfillForm.dry_run" />
+        <span>Preview only (does not save changes)</span>
+      </label>
+      <button type="button" class="btn-primary" (click)="runBackfill()" [disabled]="backfilling">
+        <span class="material-symbols-outlined">history</span>
+        {{ backfilling ? 'Processing...' : (backfillForm.dry_run ? 'Preview backfill' : 'Run backfill') }}
+      </button>
+    </div>
+
+    <div class="backfill-warning" *ngIf="backfillWarning">
+      <span class="material-symbols-outlined">warning</span>
+      <span>{{ backfillWarning }}</span>
+    </div>
+
+    <div class="backfill-result" *ngIf="backfillResult">
+      <strong>Backfill result:</strong>
+      <span *ngIf="backfillResult.mode === 'dry_run'">Matched {{ backfillResult.matched_count || 0 }} settlements. No changes were saved.</span>
+      <span *ngIf="backfillResult.mode !== 'dry_run'">
+        Updated {{ backfillResult.updated_count || 0 }} of {{ backfillResult.matched_count || 0 }} settlements
+        <ng-container *ngIf="(backfillResult.scheduled_deduction_row_count || 0) > 0; else noScheduledApplied">
+          . Applied {{ backfillResult.scheduled_deduction_row_count || 0 }} scheduled deduction row(s) across {{ backfillResult.settlements_with_scheduled_deductions || 0 }} settlement(s)
+        </ng-container>
+        <ng-template #noScheduledApplied>. No scheduled deductions were applied to the recalculated settlements</ng-template>
+        <span *ngIf="(backfillResult.failed_count || 0) > 0"> ({{ backfillResult.failed_count }} failed)</span>.
+      </span>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading-wrap">
+    <div class="spinner"></div>
+    <span>Loading deductions…</span>
+  </div>
+
+  <div class="table-card" *ngIf="!loading">
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Description</th>
+            <th scope="col">Driver</th>
+            <th scope="col">Payee</th>
+            <th scope="col">Scope</th>
+            <th scope="col">Amount</th>
+            <th scope="col">Frequency</th>
+            <th scope="col">Start date</th>
+            <th scope="col">End date</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="deductions.length === 0">
+            <td colspan="10" class="text-center">No deductions found</td>
+          </tr>
+          <tr *ngFor="let d of deductions">
+            <td>
+              <strong>{{ d.description }}</strong>
+              <span *ngIf="d.source_type" class="text-muted small"><br>Source: {{ d.source_type }}</span>
+            </td>
+            <td>{{ getDriverName(d.driver_id) }}</td>
+            <td>{{ getPayeeName(d.payee_id) }}</td>
+            <td><span class="badge badge-secondary">{{ d.rule_scope }}</span></td>
+            <td class="cell-amount">{{ formatAmount(d) }}</td>
+            <td>{{ getFrequencyLabel(d.frequency) }}</td>
+            <td>{{ d.start_date }}</td>
+            <td>{{ d.end_date || 'Ongoing' }}</td>
+            <td>
+              <label class="toggle-switch">
+                <input type="checkbox" [checked]="d.enabled" (change)="toggleEnabled(d)" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-label">{{ d.enabled ? 'Active' : 'Inactive' }}</span>
+            </td>
+            <td>
+              <button type="button" class="btn-sm btn-outline" (click)="openEdit(d)" aria-label="Edit deduction">
+                <span class="material-symbols-outlined">edit</span>
+                Edit
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" *ngIf="showModal" (click)="closeModal()"></div>
+<div class="modal" *ngIf="showModal" role="dialog" aria-labelledby="modal-title">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="modal-title">{{ editingId ? 'Edit' : 'New' }} Scheduled Deduction</h2>
+      <button class="close-btn" type="button" (click)="closeModal()" aria-label="Close">×</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group col-span-2">
+          <label for="description">Description *</label>
+          <input id="description" type="text" class="form-input" [(ngModel)]="formData.description" placeholder="e.g., Insurance premium, Fuel charge" required />
+        </div>
+
+        <div class="form-group">
+          <label for="rule_scope">Deduction scope *</label>
+          <select id="rule_scope" class="form-select" [(ngModel)]="formData.rule_scope">
+            <option *ngFor="let opt of ruleScopeOptions" [value]="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group" *ngIf="formData.rule_scope === 'driver'">
+          <label for="driver_id">Driver</label>
+          <select id="driver_id" class="form-select" [(ngModel)]="formData.driver_id">
+            <option [ngValue]="null">Select driver...</option>
+            <option *ngFor="let d of drivers" [value]="d.id">{{ d.firstName }} {{ d.lastName }}</option>
+          </select>
+        </div>
+
+        <div class="form-group" *ngIf="formData.rule_scope === 'payee'">
+          <label for="payee_id">Payee</label>
+          <select id="payee_id" class="form-select" [(ngModel)]="formData.payee_id">
+            <option [ngValue]="null">Select payee...</option>
+            <option *ngFor="let p of payees" [value]="p.id">{{ p.name }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="amount_type">Amount type *</label>
+          <select id="amount_type" class="form-select" [(ngModel)]="formData.amount_type">
+            <option *ngFor="let opt of amountTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="amount">Amount *</label>
+          <div class="input-group">
+            <span class="input-addon" *ngIf="formData.amount_type === 'fixed'">$</span>
+            <input id="amount" type="number" class="form-input" [(ngModel)]="formData.amount" step="0.01" min="0" required />
+            <span class="input-addon" *ngIf="formData.amount_type === 'percentage'">%</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="frequency">Frequency *</label>
+          <select id="frequency" class="form-select" [(ngModel)]="formData.frequency">
+            <option *ngFor="let opt of frequencyOptions" [value]="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="applies_when">Applies when</label>
+          <select id="applies_when" class="form-select" [(ngModel)]="formData.applies_when">
+            <option *ngFor="let opt of appliesWhenOptions" [value]="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group" *ngIf="formData.applies_when === 'specific_expense'">
+          <label for="source_type">Expense type</label>
+          <select id="source_type" class="form-select" [(ngModel)]="formData.source_type">
+            <option [ngValue]="null">Select expense type...</option>
+            <option *ngFor="let opt of expenseTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="start_date">Start date *</label>
+          <input id="start_date" type="date" class="form-input" [(ngModel)]="formData.start_date" required />
+        </div>
+
+        <div class="form-group">
+          <label for="end_date">End date (optional)</label>
+          <input id="end_date" type="date" class="form-input" [(ngModel)]="formData.end_date" />
+          <small class="form-hint">Leave empty for ongoing deduction</small>
+        </div>
+
+        <div class="form-group col-span-2">
+          <label class="checkbox-label">
+            <input type="checkbox" [(ngModel)]="formData.enabled" />
+            <span>Active (deduction will be applied to settlements)</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary" (click)="closeModal()" [disabled]="saving">Cancel</button>
+      <button type="button" class="btn-primary" (click)="save()" [disabled]="saving">
+        {{ saving ? 'Saving...' : (editingId ? 'Update' : 'Create') }}
+      </button>
+    </div>
+  </div>
+</div>
