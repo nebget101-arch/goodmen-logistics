@@ -3,6 +3,18 @@ const dtLogger = require('../utils/logger');
 const { generateInvoiceNumber } = require('../utils/invoice-number');
 const creditService = require('./credit.service');
 
+function applyTenantFilter(qb, context, column = 'tenant_id') {
+  if (context?.tenantId) {
+    qb.andWhere(column, context.tenantId);
+  }
+}
+
+function applyEntityFilter(qb, context, column = 'operating_entity_id') {
+  if (context?.operatingEntityId) {
+    qb.andWhere(column, context.operatingEntityId);
+  }
+}
+
 function normalizeDecimal(value) {
   if (value === undefined || value === null || value === '') return 0;
   const num = Number(value);
@@ -69,9 +81,12 @@ async function recomputeInvoiceTotals(trx, invoiceId) {
   return { invoice: updated, lineItems, payments };
 }
 
-async function createInvoiceFromWorkOrder(workOrderId, payload, userId) {
+async function createInvoiceFromWorkOrder(workOrderId, payload, userId, context = null) {
   return db.transaction(async trx => {
-    let workOrder = await trx('work_orders').where({ id: workOrderId }).first();
+    let workOrder = await trx('work_orders')
+      .where({ id: workOrderId })
+      .modify((qb) => applyTenantFilter(qb, context, 'work_orders.tenant_id'))
+      .first();
     let locationId = workOrder?.location_id || null;
     let customerId = workOrder?.customer_id || null;
     let description = workOrder?.description || 'Work order charges';
@@ -91,7 +106,10 @@ async function createInvoiceFromWorkOrder(workOrderId, payload, userId) {
 
     if (!customerId) throw new Error('Work order must have a customer');
 
-    const customer = await trx('customers').where({ id: customerId }).first();
+    const customer = await trx('customers')
+      .where({ id: customerId })
+      .modify((qb) => applyTenantFilter(qb, context, 'customers.tenant_id'))
+      .first();
     if (!customer || customer.is_deleted) throw new Error('Customer not found');
     if (customer.status === 'INACTIVE') throw new Error('Inactive customer cannot be invoiced');
 
@@ -101,6 +119,8 @@ async function createInvoiceFromWorkOrder(workOrderId, payload, userId) {
     const dueDate = payload.dueDate || computeDueDate(issuedDate, paymentTerms, customer.payment_terms_custom_days);
 
     const [invoice] = await trx('invoices').insert({
+      tenant_id: context?.tenantId || null,
+      operating_entity_id: context?.operatingEntityId || null,
       invoice_number: invoiceNumber,
       work_order_id: workOrder?.id || null,
       customer_id: customerId,
@@ -175,13 +195,15 @@ async function createInvoiceFromWorkOrder(workOrderId, payload, userId) {
   });
 }
 
-async function createManualInvoice(payload, userId) {
+async function createManualInvoice(payload, userId, context = null) {
   return db.transaction(async trx => {
     const invoiceNumber = await generateInvoiceNumber(trx);
     const issuedDate = payload.issuedDate || new Date().toISOString().slice(0, 10);
     const dueDate = payload.dueDate || computeDueDate(issuedDate, payload.paymentTerms, payload.paymentTermsCustomDays);
 
     const [invoice] = await trx('invoices').insert({
+      tenant_id: context?.tenantId || null,
+      operating_entity_id: context?.operatingEntityId || null,
       invoice_number: invoiceNumber,
       work_order_id: payload.workOrderId || null,
       customer_id: payload.customerId,
@@ -218,7 +240,7 @@ async function createManualInvoice(payload, userId) {
   });
 }
 
-async function listInvoices(filters) {
+async function listInvoices(filters, context = null) {
   const {
     search,
     status,
@@ -237,6 +259,8 @@ async function listInvoices(filters) {
     .join('customers', 'invoices.customer_id', 'customers.id')
     .where({ 'invoices.is_deleted': false })
     .modify(qb => {
+      applyTenantFilter(qb, context, 'invoices.tenant_id');
+      applyEntityFilter(qb, context, 'invoices.operating_entity_id');
       if (search) {
         qb.andWhere(function() {
           this.where('invoices.invoice_number', 'ilike', `%${search}%`)
@@ -261,8 +285,14 @@ async function listInvoices(filters) {
   return { rows, total: parseInt(count, 10) || 0, page: parseInt(page, 10) || 1, pageSize: limit };
 }
 
-async function getInvoiceById(id) {
-  const invoice = await db('invoices').where({ id, is_deleted: false }).first();
+async function getInvoiceById(id, context = null) {
+  const invoice = await db('invoices')
+    .where({ id, is_deleted: false })
+    .modify((qb) => {
+      applyTenantFilter(qb, context, 'invoices.tenant_id');
+      applyEntityFilter(qb, context, 'invoices.operating_entity_id');
+    })
+    .first();
   if (!invoice) return null;
   const lineItems = await db('invoice_line_items').where({ invoice_id: id });
 
@@ -402,9 +432,15 @@ async function getInvoiceById(id) {
   return { invoice, lineItems, payments, documents, customer, location, workOrder, vehicle };
 }
 
-async function updateInvoiceDraft(id, payload, userId) {
+async function updateInvoiceDraft(id, payload, userId, context = null) {
   return db.transaction(async trx => {
-    const invoice = await trx('invoices').where({ id }).first();
+    const invoice = await trx('invoices')
+      .where({ id })
+      .modify((qb) => {
+        applyTenantFilter(qb, context, 'invoices.tenant_id');
+        applyEntityFilter(qb, context, 'invoices.operating_entity_id');
+      })
+      .first();
     if (!invoice) throw new Error('Invoice not found');
     if (invoice.status !== 'DRAFT') throw new Error('Only DRAFT invoices can be edited');
 
@@ -443,9 +479,15 @@ async function updateInvoiceDraft(id, payload, userId) {
   });
 }
 
-async function setInvoiceStatus(id, status, reason, userId) {
+async function setInvoiceStatus(id, status, reason, userId, context = null) {
   return db.transaction(async trx => {
-    const invoice = await trx('invoices').where({ id }).first();
+    const invoice = await trx('invoices')
+      .where({ id })
+      .modify((qb) => {
+        applyTenantFilter(qb, context, 'invoices.tenant_id');
+        applyEntityFilter(qb, context, 'invoices.operating_entity_id');
+      })
+      .first();
     if (!invoice) throw new Error('Invoice not found');
 
     if (status === 'SENT') {
@@ -478,9 +520,15 @@ async function setInvoiceStatus(id, status, reason, userId) {
   });
 }
 
-async function addPayment(invoiceId, payload, userId) {
+async function addPayment(invoiceId, payload, userId, context = null) {
   return db.transaction(async trx => {
-    const invoice = await trx('invoices').where({ id: invoiceId }).first();
+    const invoice = await trx('invoices')
+      .where({ id: invoiceId })
+      .modify((qb) => {
+        applyTenantFilter(qb, context, 'invoices.tenant_id');
+        applyEntityFilter(qb, context, 'invoices.operating_entity_id');
+      })
+      .first();
     if (!invoice) throw new Error('Invoice not found');
     if (invoice.status === 'VOID') throw new Error('Cannot pay a void invoice');
 
@@ -506,17 +554,32 @@ async function addPayment(invoiceId, payload, userId) {
   });
 }
 
-async function deletePayment(invoiceId, paymentId) {
+async function deletePayment(invoiceId, paymentId, context = null) {
   return db.transaction(async trx => {
+    const invoice = await trx('invoices')
+      .where({ id: invoiceId })
+      .modify((qb) => {
+        applyTenantFilter(qb, context, 'invoices.tenant_id');
+        applyEntityFilter(qb, context, 'invoices.operating_entity_id');
+      })
+      .first();
+    if (!invoice) throw new Error('Invoice not found');
+
     await trx('invoice_payments').where({ id: paymentId, invoice_id: invoiceId }).del();
     const updated = await recomputeInvoiceTotals(trx, invoiceId);
     return updated.invoice;
   });
 }
 
-async function addLineItem(invoiceId, payload) {
+async function addLineItem(invoiceId, payload, context = null) {
   return db.transaction(async trx => {
-    const invoice = await trx('invoices').where({ id: invoiceId }).first();
+    const invoice = await trx('invoices')
+      .where({ id: invoiceId })
+      .modify((qb) => {
+        applyTenantFilter(qb, context, 'invoices.tenant_id');
+        applyEntityFilter(qb, context, 'invoices.operating_entity_id');
+      })
+      .first();
     if (!invoice) throw new Error('Invoice not found');
     if (invoice.status !== 'DRAFT') throw new Error('Only DRAFT invoices can be edited');
 
@@ -537,9 +600,15 @@ async function addLineItem(invoiceId, payload) {
   });
 }
 
-async function updateLineItem(invoiceId, lineItemId, payload) {
+async function updateLineItem(invoiceId, lineItemId, payload, context = null) {
   return db.transaction(async trx => {
-    const invoice = await trx('invoices').where({ id: invoiceId }).first();
+    const invoice = await trx('invoices')
+      .where({ id: invoiceId })
+      .modify((qb) => {
+        applyTenantFilter(qb, context, 'invoices.tenant_id');
+        applyEntityFilter(qb, context, 'invoices.operating_entity_id');
+      })
+      .first();
     if (!invoice) throw new Error('Invoice not found');
     if (invoice.status !== 'DRAFT') throw new Error('Only DRAFT invoices can be edited');
 
@@ -560,9 +629,15 @@ async function updateLineItem(invoiceId, lineItemId, payload) {
   });
 }
 
-async function deleteLineItem(invoiceId, lineItemId) {
+async function deleteLineItem(invoiceId, lineItemId, context = null) {
   return db.transaction(async trx => {
-    const invoice = await trx('invoices').where({ id: invoiceId }).first();
+    const invoice = await trx('invoices')
+      .where({ id: invoiceId })
+      .modify((qb) => {
+        applyTenantFilter(qb, context, 'invoices.tenant_id');
+        applyEntityFilter(qb, context, 'invoices.operating_entity_id');
+      })
+      .first();
     if (!invoice) throw new Error('Invoice not found');
     if (invoice.status !== 'DRAFT') throw new Error('Only DRAFT invoices can be edited');
 

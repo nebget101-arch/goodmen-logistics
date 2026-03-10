@@ -3,6 +3,11 @@ const router = express.Router();
 const { query, getClient } = require('../internal/db');
 const { transformRows, transformRow, toSnakeCase } = require('../utils/case-converter');
 const dtLogger = require('../utils/logger');
+const authMiddleware = require('../middleware/auth-middleware');
+const tenantContextMiddleware = require('../middleware/tenant-context-middleware');
+
+router.use(authMiddleware);
+router.use(tenantContextMiddleware);
 
 // Basic mapping of common CDL state inputs to 2‑letter codes.
 // This keeps the API forgiving (e.g. 'Texas', 'texas', 'tx' → 'TX')
@@ -153,9 +158,11 @@ router.get('/', async (req, res) => {
         LEFT JOIN driver_licenses dl ON dl.driver_id = d.id
         LEFT JOIN driver_compliance dc ON dc.driver_id = d.id
       `;
+      params.push(req.context?.tenantId || null);
+      sql += ` WHERE d.tenant_id = $${params.length}`;
       if (hasStatus) {
         params.push(status);
-        sql += ` WHERE LOWER(d.status) = $${params.length}`;
+        sql += ` AND LOWER(d.status) = $${params.length}`;
       }
       sql += ' ORDER BY d.created_at DESC';
       result = await query(sql, params);
@@ -170,9 +177,11 @@ router.get('/', async (req, res) => {
         LEFT JOIN all_vehicles t ON t.id = d.truck_id
         LEFT JOIN all_vehicles tr ON tr.id = d.trailer_id
       `;
+      params.push(req.context?.tenantId || null);
+      sql += ` WHERE d.tenant_id = $${params.length}`;
       if (hasStatus) {
         params.push(status);
-        sql += ` WHERE LOWER(d.status) = $${params.length}`;
+        sql += ` AND LOWER(d.status) = $${params.length}`;
       }
       sql += ' ORDER BY d.created_at DESC';
       result = await query(sql, params);
@@ -181,8 +190,12 @@ router.get('/', async (req, res) => {
       const params = [];
       let sql = 'SELECT * FROM drivers';
       if (hasStatus) {
+        params.push(req.context?.tenantId || null);
         params.push(status);
-        sql += ` WHERE LOWER(status) = $${params.length}`;
+        sql += ` WHERE tenant_id = $${params.length - 1} AND LOWER(status) = $${params.length}`;
+      } else {
+        params.push(req.context?.tenantId || null);
+        sql += ` WHERE tenant_id = $${params.length}`;
       }
       sql += ' ORDER BY created_at DESC';
       result = await query(sql, params);
@@ -209,7 +222,7 @@ router.get('/:id', async (req, res) => {
   const startTime = Date.now();
   const driverId = req.params.id;
   try {
-    const result = await query('SELECT * FROM drivers WHERE id = $1', [driverId]);
+    const result = await query('SELECT * FROM drivers WHERE id = $1 AND tenant_id = $2', [driverId, req.context?.tenantId || null]);
     const duration = Date.now() - startTime;
     if (result.rows.length === 0) {
       dtLogger.warn('Driver not found', { driverId });
@@ -340,6 +353,7 @@ router.post('/', async (req, res) => {
 
     const insertDriver = await client.query(
       `INSERT INTO drivers (
+        tenant_id,
         first_name,
         last_name,
         email,
@@ -366,19 +380,20 @@ router.post('/', async (req, res) => {
         co_driver_id
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, 0, 'active',
-        COALESCE($15, 'company'),
-        $16,
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+        $12, $13, $14, $15, 0, 'active',
+        COALESCE($16, 'company'),
         $17,
         $18,
         $19,
         $20,
         $21,
-        $22
+        $22,
+        $23
       )
       RETURNING *`,
       [
+        req.context?.tenantId || null,
         firstName,
         lastName,
         email,
@@ -704,8 +719,9 @@ router.put('/:id', async (req, res) => {
 
     // Keep legacy drivers table in sync (dual-write)
     values.push(req.params.id);
+    values.push(req.context?.tenantId || null);
     const result = await client.query(
-      `UPDATE drivers SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} RETURNING *`,
+      `UPDATE drivers SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramCount} AND tenant_id = $${paramCount + 1} RETURNING *`,
       values
     );
 

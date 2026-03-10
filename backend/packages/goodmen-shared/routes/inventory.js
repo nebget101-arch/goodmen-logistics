@@ -225,7 +225,8 @@ router.post('/receive', authMiddleware, requireRole(['admin', 'parts_manager', '
 			referenceType,
 			referenceId,
 			performedBy: req.user?.id,
-			notes
+			notes,
+			context: req.context || null
 		});
 
 		res.status(201).json({ success: true, data: result });
@@ -247,7 +248,8 @@ router.post('/transfer', authMiddleware, requireRole(['admin', 'parts_manager', 
 			toLocationId,
 			lines,
 			performedBy: req.user?.id,
-			notes
+			notes,
+			context: req.context || null
 		});
 
 		res.status(201).json({ success: true, data: result });
@@ -266,7 +268,8 @@ router.post('/transfer/:id/receive', authMiddleware, requireRole(['admin', 'part
 		const result = await inventoryService.receiveTransfer({
 			transferId: req.params.id,
 			receivedBy: req.user?.id,
-			notes: req.body?.notes
+			notes: req.body?.notes,
+			context: req.context || null
 		});
 
 		res.json({ success: true, data: result });
@@ -321,7 +324,8 @@ router.post('/sale', authMiddleware, requireRole(['admin', 'parts_manager', 'sho
 			items,
 			notes,
 			taxRatePercent,
-			performedBy: req.user?.id
+			performedBy: req.user?.id,
+			context: req.context || null
 		});
 
 		res.status(201).json({ success: true, data: result });
@@ -346,7 +350,7 @@ router.get('/transactions', authMiddleware, async (req, res) => {
 			dateFrom: req.query.dateFrom,
 			dateTo: req.query.dateTo,
 			limit: req.query.limit
-		});
+		}, req.context || null);
 
 		res.json({ success: true, data });
 	} catch (error) {

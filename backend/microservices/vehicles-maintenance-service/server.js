@@ -60,14 +60,16 @@ const maintenanceRouter = require('@goodmen/shared/routes/maintenance');
 const equipmentRouter = require('@goodmen/shared/routes/equipment');
 const workOrdersRouter = require('@goodmen/shared/routes/work-orders-hub');
 const partsRouter = require('@goodmen/shared/routes/parts');
+const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
+const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.use('/api/vehicles', vehiclesRouter);
-app.use('/api/maintenance', maintenanceRouter);
-app.use('/api/equipment', equipmentRouter);
-app.use('/api/work-orders', workOrdersRouter);
-app.use('/api/parts', partsRouter);
+app.use('/api/vehicles', authMiddleware, tenantContextMiddleware, vehiclesRouter);
+app.use('/api/maintenance', authMiddleware, tenantContextMiddleware, maintenanceRouter);
+app.use('/api/equipment', authMiddleware, tenantContextMiddleware, equipmentRouter);
+app.use('/api/work-orders', authMiddleware, tenantContextMiddleware, workOrdersRouter);
+app.use('/api/parts', authMiddleware, tenantContextMiddleware, partsRouter);
 
 /**
  * @openapi

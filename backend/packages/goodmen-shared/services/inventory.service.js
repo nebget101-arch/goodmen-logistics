@@ -2,6 +2,12 @@ const db = require('../internal/db').knex;
 const dtLogger = require('../utils/logger');
 const { generateInvoiceNumber } = require('../utils/invoice-number');
 
+function applyTenantFilter(qb, context, column = 'tenant_id') {
+	if (context?.tenantId) {
+		qb.andWhere(column, context.tenantId);
+	}
+}
+
 function toPositiveInt(value, fieldName) {
 	const n = Number(value);
 	if (!Number.isFinite(n) || n <= 0) {
@@ -125,7 +131,7 @@ async function applyInventoryDelta(trx, {
 	return { inventory: updated, transaction };
 }
 
-async function receiveInventory({ locationId, partId, qty, unitCostAtTime, referenceType, referenceId, performedBy, notes }) {
+async function receiveInventory({ locationId, partId, qty, unitCostAtTime, referenceType, referenceId, performedBy, notes, context = null }) {
 	const quantity = toPositiveInt(qty, 'qty');
 
 	return db.transaction(async trx => {
@@ -145,7 +151,7 @@ async function receiveInventory({ locationId, partId, qty, unitCostAtTime, refer
 	});
 }
 
-async function createTransfer({ fromLocationId, toLocationId, lines, performedBy, notes }) {
+async function createTransfer({ fromLocationId, toLocationId, lines, performedBy, notes, context = null }) {
 	if (!Array.isArray(lines) || lines.length === 0) {
 		throw new Error('lines are required');
 	}
@@ -160,6 +166,7 @@ async function createTransfer({ fromLocationId, toLocationId, lines, performedBy
 		const transferNumber = `TRF-${Date.now()}`;
 		const [transfer] = await trx('inventory_transfers')
 			.insert({
+				tenant_id: context?.tenantId || null,
 				transfer_number: transferNumber,
 				from_location_id: fromLocationId,
 				to_location_id: toLocationId,
@@ -211,10 +218,11 @@ async function createTransfer({ fromLocationId, toLocationId, lines, performedBy
 	});
 }
 
-async function receiveTransfer({ transferId, receivedBy, notes }) {
+async function receiveTransfer({ transferId, receivedBy, notes, context = null }) {
 	return db.transaction(async trx => {
 		const transfer = await trx('inventory_transfers')
 			.where({ id: transferId })
+			.modify((qb) => applyTenantFilter(qb, context, 'inventory_transfers.tenant_id'))
 			.forUpdate()
 			.first();
 
@@ -288,7 +296,7 @@ async function consumeInventory({ locationId, partId, qty, referenceType, refere
 	});
 }
 
-async function createDirectSale({ customerId, locationId, items, performedBy, notes, taxRatePercent = 0 }) {
+async function createDirectSale({ customerId, locationId, items, performedBy, notes, taxRatePercent = 0, context = null }) {
 	if (!customerId || !locationId) {
 		throw new Error('customerId and locationId are required');
 	}
@@ -300,6 +308,7 @@ async function createDirectSale({ customerId, locationId, items, performedBy, no
 		const saleNumber = `SAL-${Date.now()}`;
 		const [sale] = await trx('customer_sales')
 			.insert({
+				tenant_id: context?.tenantId || null,
 				sale_number: saleNumber,
 				customer_id: customerId,
 				location_id: locationId,
@@ -353,6 +362,8 @@ async function createDirectSale({ customerId, locationId, items, performedBy, no
 		const invoiceNumber = await generateInvoiceNumber(trx);
 		const [invoice] = await trx('invoices')
 			.insert({
+				tenant_id: context?.tenantId || null,
+				operating_entity_id: context?.operatingEntityId || null,
 				invoice_number: invoiceNumber,
 				work_order_id: null,
 				customer_id: customerId,
@@ -408,7 +419,7 @@ async function createDirectSale({ customerId, locationId, items, performedBy, no
 	});
 }
 
-async function listTransactions(filters = {}) {
+async function listTransactions(filters = {}, context = null) {
 	const {
 		locationId,
 		userId,
@@ -434,6 +445,8 @@ async function listTransactions(filters = {}) {
 		)
 		.orderBy('it.created_at', 'desc')
 		.limit(Math.min(Number(limit) || 200, 1000));
+
+	applyTenantFilter(query, context, 'l.tenant_id');
 
 	if (locationId) query = query.where('it.location_id', locationId);
 	if (userId) query = query.where(qb => qb.where('it.performed_by', userId).orWhere('it.performed_by_user_id', userId));

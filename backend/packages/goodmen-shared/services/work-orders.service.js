@@ -5,6 +5,12 @@ const { recomputeInvoiceTotals } = require('./invoices.service');
 const creditService = require('./credit.service');
 const barcodesService = require('./barcodes.service');
 
+function applyTenantFilter(qb, context, column = 'tenant_id') {
+  if (context?.tenantId) {
+    qb.andWhere(column, context.tenantId);
+  }
+}
+
 const STATUS_TRANSITIONS = {
   DRAFT: ['IN_PROGRESS', 'CANCELED'],
   IN_PROGRESS: ['WAITING_PARTS', 'COMPLETED', 'CANCELED'],
@@ -155,7 +161,7 @@ async function recomputeWorkOrderTotals(trx, workOrderId) {
   return { workOrder: updated, laborLines, partLines, feeLines, totals };
 }
 
-async function listWorkOrders(filters = {}) {
+async function listWorkOrders(filters = {}, context = null) {
   const {
     search,
     status,
@@ -204,6 +210,7 @@ async function listWorkOrders(filters = {}) {
       'i.id as invoice_id'
     )
     .modify(qb => {
+      applyTenantFilter(qb, context, 'wo.tenant_id');
       if (search) {
         qb.andWhere(function() {
           this.where('wo.work_order_number', 'ilike', `%${search}%`)
@@ -233,8 +240,11 @@ async function listWorkOrders(filters = {}) {
   return { rows, total: parseInt(count, 10) || 0, page: parseInt(page, 10) || 1, pageSize: limit };
 }
 
-async function getWorkOrderById(workOrderId) {
-  const workOrder = await db('work_orders').where({ id: workOrderId }).first();
+async function getWorkOrderById(workOrderId, context = null) {
+  const workOrder = await db('work_orders')
+    .where({ id: workOrderId })
+    .modify((qb) => applyTenantFilter(qb, context, 'work_orders.tenant_id'))
+    .first();
   if (!workOrder) return null;
 
   let requestedBy = null;
@@ -292,7 +302,7 @@ async function getWorkOrderById(workOrderId) {
   return { workOrder, vehicle, customer, location, labor, parts, fees, invoices, documents, requestedBy };
 }
 
-async function createWorkOrder(payload, userId) {
+async function createWorkOrder(payload, userId, context = null) {
   return db.transaction(async trx => {
     if (!normalizeUuid(payload.vehicleId) || !normalizeUuid(payload.locationId)) {
       throw new Error('vehicleId and locationId are required');
@@ -317,6 +327,7 @@ async function createWorkOrder(payload, userId) {
 
     const resolvedDescription = payload.description || payload.title || 'Work order';
     const [workOrder] = await trx('work_orders').insert({
+      tenant_id: context?.tenantId || null,
       work_order_number: workOrderNumber,
       vehicle_id: normalizeUuid(payload.vehicleId),
       customer_id: normalizeUuid(payload.customerId),
@@ -369,9 +380,12 @@ async function createWorkOrder(payload, userId) {
   });
 }
 
-async function updateWorkOrder(workOrderId, payload, userId) {
+async function updateWorkOrder(workOrderId, payload, userId, context = null) {
   return db.transaction(async trx => {
-    const workOrder = await trx('work_orders').where({ id: workOrderId }).first();
+    const workOrder = await trx('work_orders')
+      .where({ id: workOrderId })
+      .modify((qb) => applyTenantFilter(qb, context, 'work_orders.tenant_id'))
+      .first();
     if (!workOrder) throw new Error('Work order not found');
 
     if (payload.customerId) {
@@ -445,7 +459,10 @@ async function updateWorkOrder(workOrderId, payload, userId) {
 
 async function updateWorkOrderStatus(workOrderId, nextStatus, userRole) {
   return db.transaction(async trx => {
-    const workOrder = await trx('work_orders').where({ id: workOrderId }).first();
+    const workOrder = await trx('work_orders')
+      .where({ id: workOrderId })
+      .modify((qb) => applyTenantFilter(qb, context, 'work_orders.tenant_id'))
+      .first();
     if (!workOrder) throw new Error('Work order not found');
 
     if (nextStatus === 'CANCELED' && userRole !== 'admin') {
@@ -864,7 +881,7 @@ async function deleteLaborLine(workOrderId, laborId) {
   });
 }
 
-async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}) {
+async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}, context = null) {
   return db.transaction(async trx => {
     const workOrder = await trx('work_orders').where({ id: workOrderId }).first();
     if (!workOrder) throw new Error('Work order not found');
@@ -882,7 +899,13 @@ async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}) {
       throw new Error('Work order must have a customer to invoice');
     }
 
-    const existingInvoice = await trx('invoices').where({ work_order_id: workOrderId }).first();
+    const existingInvoice = await trx('invoices')
+      .where({ work_order_id: workOrderId })
+      .modify((qb) => {
+        applyTenantFilter(qb, context, 'invoices.tenant_id');
+        if (context?.operatingEntityId) qb.andWhere('invoices.operating_entity_id', context.operatingEntityId);
+      })
+      .first();
     if (existingInvoice) {
       if (payload.regenerate) {
         const laborLines = await trx('work_order_labor_items').where({ work_order_id: workOrderId });
@@ -1007,6 +1030,8 @@ async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}) {
     const dueDate = computeDueDate(issuedDate, paymentTerms, customer.payment_terms_custom_days);
 
     const [invoice] = await trx('invoices').insert({
+      tenant_id: context?.tenantId || null,
+      operating_entity_id: context?.operatingEntityId || null,
       invoice_number: invoiceNumber,
       work_order_id: workOrderId,
       customer_id: workOrder.customer_id,

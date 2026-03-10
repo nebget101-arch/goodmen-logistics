@@ -917,9 +917,9 @@ router.get('/eligible-loads', requireRole(settlementRoles), async (req, res) => 
     if (!driver_id || !period_start || !period_end) {
       return res.status(400).json({ error: 'driver_id, period_start, period_end required' });
     }
-    const client = await getClient();
+      const client = await getClient(); // Ensure client is obtained
     try {
-      const loads = await getEligibleLoads(knex, client, driver_id, period_start, period_end, date_basis || 'pickup');
+      const loads = await getEligibleLoads(knex, client, driver_id, period_start, period_end, date_basis || 'pickup', req.context || null);
       res.json(loads);
     } finally {
       client.release();
@@ -954,7 +954,7 @@ router.get('/settlements', requireRole(settlementRoles), async (req, res) => {
       limit: req.query.limit,
       offset: req.query.offset
     };
-    const rows = await listSettlements(knex, filters);
+    const rows = await listSettlements(knex, filters, req.context || null);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -972,7 +972,8 @@ const createDraftHandler = async (req, res) => {
       driver_id,
       date_basis || 'pickup',
       req.user?.id ?? null,
-      knex
+      knex,
+      req.context || null
     );
     res.status(201).json(settlement);
   } catch (err) {

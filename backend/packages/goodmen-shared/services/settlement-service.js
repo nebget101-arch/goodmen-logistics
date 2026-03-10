@@ -13,6 +13,18 @@ const DELIVERED_STATUSES = ['DELIVERED'];
 const SETTLEMENT_NUMBER_PREFIX = 'STL';
 let payeesColumnSetCache = null;
 
+function applyTenantFilter(qb, context, column = 'tenant_id') {
+  if (context?.tenantId) {
+    qb.andWhere(column, context.tenantId);
+  }
+}
+
+function applyEntityFilter(qb, context, column = 'operating_entity_id') {
+  if (context?.operatingEntityId) {
+    qb.andWhere(column, context.operatingEntityId);
+  }
+}
+
 function normalizeStopType(value) {
   return (value || '').toString().trim().toUpperCase();
 }
@@ -234,7 +246,7 @@ async function getAlreadySettledLoadIds(knex, driverId) {
  * Eligible loads: driver_id match, status delivered, pickup/delivery date in range, not already settled.
  * dateBasis: 'pickup' | 'delivery'
  */
-async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, dateBasis = 'pickup') {
+async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, dateBasis = 'pickup', context = null) {
   const settledIds = await getAlreadySettledLoadIds(knex, driverId);
   const dateCol = dateBasis === 'delivery' ? 'delivery_date' : 'pickup_date';
 
@@ -259,6 +271,8 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
     .whereIn('l.status', DELIVERED_STATUSES)
     .whereNotNull('l.rate')
     .modify((q) => {
+      applyTenantFilter(q, context, 'l.tenant_id');
+      applyEntityFilter(q, context, 'l.operating_entity_id');
       if (settledIds.length) q.whereNotIn('l.id', settledIds);
     });
 
@@ -386,15 +400,22 @@ async function generateSettlementNumberWithContext(knex, driver, period) {
  * Create draft settlement: resolve profile + payees, get eligible loads + recurring deductions,
  * build load items with pay snapshot, insert adjustments for recurring deductions, recalc totals.
  */
-async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userId, knex) {
+async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userId, knex, context = null) {
   const client = await getClient();
   try {
-    const period = await knex('payroll_periods').where({ id: payrollPeriodId }).first();
+    const period = await knex('payroll_periods')
+      .where({ id: payrollPeriodId })
+      .modify((qb) => {
+        applyTenantFilter(qb, context, 'payroll_periods.tenant_id');
+        applyEntityFilter(qb, context, 'payroll_periods.operating_entity_id');
+      })
+      .first();
     if (!period) throw new Error('Payroll period not found');
     if (!['draft', 'open'].includes(period.status)) throw new Error('Period not open for new settlements');
 
     const driver = await knex('drivers')
       .where({ id: driverId })
+      .modify((qb) => applyTenantFilter(qb, context, 'drivers.tenant_id'))
       .select('id', 'first_name', 'last_name', 'pay_basis', 'pay_rate', 'pay_percentage', 'driver_type', 'hire_date')
       .first();
     if (!driver) throw new Error('Driver not found');
@@ -444,7 +465,8 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       driverId,
       period.period_start,
       period.period_end,
-      dateBasis
+      dateBasis,
+      context
     );
 
     const profileSnapshot = {
@@ -456,6 +478,8 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
     const settlementDate = period.period_end;
 
     const [settlement] = await knex('settlements').insert({
+      tenant_id: context?.tenantId || null,
+      operating_entity_id: context?.operatingEntityId || null,
       payroll_period_id: payrollPeriodId,
       driver_id: driverId,
       compensation_profile_id: profile?.id ?? null,
@@ -954,7 +978,7 @@ async function voidSettlement(knex, settlementId) {
   return knex('settlements').where({ id: settlementId }).first();
 }
 
-async function listSettlements(knex, filters = {}) {
+async function listSettlements(knex, filters = {}, context = null) {
   let q = knex('settlements as s')
     .select(
       's.*',
@@ -970,6 +994,11 @@ async function listSettlements(knex, filters = {}) {
     .leftJoin('drivers as d', 'd.id', 's.driver_id')
     .leftJoin('payees as primary_payee', 'primary_payee.id', 's.primary_payee_id')
     .leftJoin('payees as additional_payee', 'additional_payee.id', 's.additional_payee_id');
+
+  q = q.modify((qb) => {
+    applyTenantFilter(qb, context, 's.tenant_id');
+    applyEntityFilter(qb, context, 's.operating_entity_id');
+  });
 
   if (filters.driver_id) q = q.where('s.driver_id', filters.driver_id);
   if (filters.payroll_period_id) q = q.where('s.payroll_period_id', filters.payroll_period_id);
