@@ -279,6 +279,7 @@ services:
     plan: starter
     rootDir: backend/microservices/logistics-service
     buildCommand: npm install
+    preDeployCommand: sh -c "npm --prefix ../../packages/goodmen-database install && npx --prefix ../../packages/goodmen-database knex migrate:latest --env production --knexfile ../../packages/goodmen-database/knexfile.js"
     startCommand: npm start
     envVars:
       - key: NODE_PATH
