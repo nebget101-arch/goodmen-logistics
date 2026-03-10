@@ -7,9 +7,11 @@ const path = require('path');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 
-const dbConfig = require('@goodmen/shared/config/database');
-const knex = require('@goodmen/shared/config/knex');
-require('@goodmen/shared').setDatabase({
+const sharedRoot = path.join(__dirname, '..', '..', 'packages', 'goodmen-shared');
+
+const dbConfig = require(path.join(sharedRoot, 'config', 'database'));
+const knex = require(path.join(sharedRoot, 'config', 'knex'));
+require(sharedRoot).setDatabase({
   pool: dbConfig.pool,
   query: dbConfig.query,
   getClient: dbConfig.getClient,
@@ -57,14 +59,15 @@ const swaggerOptions = {
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
-const loadsRouter = require('@goodmen/shared/routes/loads');
-const brokersRouter = require('@goodmen/shared/routes/brokers');
-const locationsRouter = require('@goodmen/shared/routes/locations');
-const geoRouter = require('@goodmen/shared/routes/geo');
-const invoicesRouter = require('@goodmen/shared/routes/invoices');
-const creditRouter = require('@goodmen/shared/routes/credit');
-const dbExampleRouter = require('@goodmen/shared/routes/db-example');
-const settlementsRouter = require('@goodmen/shared/routes/settlements');
+const loadsRouter = require(path.join(sharedRoot, 'routes', 'loads'));
+const brokersRouter = require(path.join(sharedRoot, 'routes', 'brokers'));
+const locationsRouter = require(path.join(sharedRoot, 'routes', 'locations'));
+const geoRouter = require(path.join(sharedRoot, 'routes', 'geo'));
+const invoicesRouter = require(path.join(sharedRoot, 'routes', 'invoices'));
+const creditRouter = require(path.join(sharedRoot, 'routes', 'credit'));
+const dbExampleRouter = require(path.join(sharedRoot, 'routes', 'db-example'));
+const settlementsRouter = require(path.join(sharedRoot, 'routes', 'settlements'));
+const expensePaymentCategoriesRouter = require(path.join(sharedRoot, 'routes', 'expense-payment-categories'));
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
@@ -76,6 +79,7 @@ app.use('/api/invoices', invoicesRouter);
 app.use('/api/credit', creditRouter);
 app.use('/api/db-example', dbExampleRouter);
 app.use('/api/settlements', settlementsRouter);
+app.use('/api/expense-payment-categories', expensePaymentCategoriesRouter);
 
 /**
  * @openapi

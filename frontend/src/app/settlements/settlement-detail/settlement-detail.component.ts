@@ -1,5 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { ApiService } from '../../services/api.service';
+import { ExpensePaymentCategoriesService, ExpensePaymentCategory } from '../../services/expense-payment-categories.service';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 
 @Component({
   selector: 'app-settlement-detail',
@@ -9,17 +13,545 @@ import { ActivatedRoute, Router } from '@angular/router';
 export class SettlementDetailComponent implements OnInit {
   settlementId: string | null = null;
   loading = false;
+  saving = false;
+  error = '';
+  successMessage = '';
+  dataSourceMode: 'normalized' | 'fallback' = 'normalized';
+
+  settlement: any = null;
+  period: any = null;
+  driver: any = null;
+  primaryPayee: any = null;
+  additionalPayee: any = null;
+
+  loadItems: any[] = [];
+  adjustmentItems: any[] = [];
+  availableLoads: any[] = [];
+
+  scheduledDeductions: any[] = [];
+  variableDeductions: any[] = [];
+  manualAdjustments: any[] = [];
+
+  // Categories for dropdowns
+  expenseCategories: ExpensePaymentCategory[] = [];
+  revenueCategories: ExpensePaymentCategory[] = [];
+
+  // Searchable category dropdown state
+  categorySearchQuery = '';
+  filteredCategories: ExpensePaymentCategory[] = [];
+  showCategoryDropdown = false;
+  selectedCategoryName = '';
+  isCreatingCategory = false;
+  newCategoryName = '';
+
+  addLoadId = '';
+  addAdjustment = {
+    item_type: 'deduction',
+    source_type: 'manual',
+    description: '',
+    amount: 0,
+    apply_to: 'primary_payee',
+    category_id: ''
+  };
+
+  emailOptions = {
+    to_driver: true,
+    to_additional_payee: false,
+    cc_internal: false
+  };
 
   constructor(
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private apiService: ApiService,
+    private categoriesService: ExpensePaymentCategoriesService
   ) {}
 
   ngOnInit(): void {
     this.settlementId = this.route.snapshot.paramMap.get('id');
+    if (this.settlementId) {
+      this.loadDetail(this.settlementId);
+    }
+    // Load expense and revenue categories for the form
+    this.loadCategories();
+  }
+
+  loadCategories(): void {
+    forkJoin({
+      expense: this.categoriesService.getFlatCategories('expense'),
+      revenue: this.categoriesService.getFlatCategories('revenue')
+    }).subscribe({
+      next: (result) => {
+        this.expenseCategories = result.expense;
+        this.revenueCategories = result.revenue;
+      },
+      error: (err) => {
+        console.error('Failed to load categories:', err);
+      }
+    });
   }
 
   backToList(): void {
     this.router.navigate(['/settlements']);
+  }
+
+  loadDetail(id: string): void {
+    this.loading = true;
+    this.error = '';
+    this.successMessage = '';
+    this.dataSourceMode = 'normalized';
+
+    forkJoin({
+      settlementRes: this.apiService.getSettlement(id),
+      loadsRes: this.apiService.getLoads().pipe(catchError(() => of([])))
+    }).subscribe({
+      next: ({ settlementRes, loadsRes }) => {
+        const settlement = settlementRes?.settlement || settlementRes;
+        this.settlement = settlement || null;
+        this.loadItems = Array.isArray(settlementRes?.load_items) ? settlementRes.load_items : [];
+        this.adjustmentItems = Array.isArray(settlementRes?.adjustment_items) ? settlementRes.adjustment_items : [];
+
+        // Prefer normalized response fields from contract guard adapter.
+        this.period = settlementRes?.period || null;
+        this.driver = settlementRes?.driver || null;
+        this.primaryPayee = settlementRes?.primary_payee || null;
+        this.additionalPayee = settlementRes?.additional_payee || null;
+
+        const driverIdForFallback = this.settlement?.driver_id || this.driver?.id || null;
+        if ((!this.additionalPayee || !this.additionalPayee.id) && driverIdForFallback) {
+          this.apiService.getPayeeAssignment(driverIdForFallback).pipe(catchError(() => of(null))).subscribe({
+            next: (payeeRes: any) => {
+              const fallbackAdditional = payeeRes?.additional_payee || null;
+              if (fallbackAdditional) {
+                this.additionalPayee = fallbackAdditional;
+              }
+              this.logAdditionalPayeeDiagnostics(settlementRes, payeeRes);
+            },
+            error: () => {
+              this.logAdditionalPayeeDiagnostics(settlementRes, null);
+            }
+          });
+        } else {
+          this.logAdditionalPayeeDiagnostics(settlementRes, null);
+        }
+
+        const allLoads = Array.isArray(loadsRes?.data) ? loadsRes.data : (Array.isArray(loadsRes) ? loadsRes : []);
+        this.availableLoads = allLoads.filter((l: any) => {
+          const belongsToDriver = !this.settlement?.driver_id || l.driver_id === this.settlement.driver_id;
+          const alreadyIncluded = this.loadItems.some((x) => x.load_id === l.id);
+          return belongsToDriver && !alreadyIncluded;
+        });
+
+        this.buildBuckets(settlementRes?.adjustment_groups || null);
+
+        // Backward compatibility: if core related entities are missing,
+        // fetch enriched payload from Phase 4 helper endpoint.
+        if (!this.driver && !this.period && !this.primaryPayee && !this.additionalPayee) {
+          this.apiService.getSettlementPdfPayload(id).pipe(catchError(() => of(null))).subscribe({
+            next: (pdfRes: any) => {
+              this.period = pdfRes?.period || this.period;
+              this.driver = pdfRes?.driver || this.driver;
+              this.primaryPayee = pdfRes?.primary_payee || this.primaryPayee;
+              this.additionalPayee = pdfRes?.additional_payee || this.additionalPayee;
+              this.dataSourceMode = 'fallback';
+              this.loading = false;
+            },
+            error: () => {
+              this.loading = false;
+            }
+          });
+          return;
+        }
+
+        this.loading = false;
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to load settlement detail';
+        this.loading = false;
+      }
+    });
+  }
+
+  buildBuckets(groups?: { scheduled?: any[]; variable?: any[]; manual?: any[] } | null): void {
+    if (groups?.scheduled || groups?.variable || groups?.manual) {
+      this.scheduledDeductions = Array.isArray(groups?.scheduled) ? groups.scheduled : [];
+      this.variableDeductions = Array.isArray(groups?.variable) ? groups.variable : [];
+      this.manualAdjustments = Array.isArray(groups?.manual) ? groups.manual : [];
+      return;
+    }
+
+    const adjustments = Array.isArray(this.adjustmentItems) ? this.adjustmentItems : [];
+    this.scheduledDeductions = adjustments.filter((a) => {
+      const source = (a.source_type || '').toLowerCase();
+      return source === 'scheduled_rule' || source === 'scheduled';
+    });
+
+    this.variableDeductions = adjustments.filter((a) => {
+      const source = (a.source_type || '').toLowerCase();
+      return source.startsWith('imported_') || source === 'variable';
+    });
+
+    this.manualAdjustments = adjustments.filter((a) => {
+      const source = (a.source_type || 'manual').toLowerCase();
+      return source === 'manual' || source === '';
+    });
+  }
+
+  isLocked(): boolean {
+    const s = (this.settlement?.settlement_status || '').toLowerCase();
+    return s === 'approved' || s === 'paid' || s === 'void';
+  }
+
+  getDriverName(): string {
+    const first = this.driver?.first_name || this.driver?.firstName || '';
+    const last = this.driver?.last_name || this.driver?.lastName || '';
+    return `${first} ${last}`.trim() || this.settlement?.driver_id || '—';
+  }
+  dateOnly(value: any): string {
+    if (!value) return '—';
+    const str = String(value);
+    const iso = str.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+    const d = new Date(str);
+    if (Number.isNaN(d.getTime())) return str;
+    return d.toISOString().slice(0, 10);
+  }
+
+  getTotalFor(items: any[]): number {
+    return (items || []).reduce((sum, x) => sum + (Number(x?.amount) || 0), 0);
+  }
+
+  addLoad(): void {
+    if (!this.settlementId || !this.addLoadId || this.saving) return;
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+    this.apiService.addSettlementLoad(this.settlementId, { load_id: this.addLoadId }).subscribe({
+      next: () => {
+        this.addLoadId = '';
+        this.successMessage = 'Load added and totals recalculated.';
+        this.saving = false;
+        this.loadDetail(this.settlementId as string);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to add load';
+        this.saving = false;
+      }
+    });
+  }
+
+  removeLoad(loadItemId: string): void {
+    if (!this.settlementId || !loadItemId || this.saving) return;
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+    this.apiService.removeSettlementLoad(this.settlementId, loadItemId).subscribe({
+      next: () => {
+        this.successMessage = 'Load removed and totals recalculated.';
+        this.saving = false;
+        this.loadDetail(this.settlementId as string);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to remove load';
+        this.saving = false;
+      }
+    });
+  }
+
+  addManualAdjustment(): void {
+    if (!this.settlementId || this.saving) return;
+    if (!this.addAdjustment.description.trim()) {
+      this.error = 'Description is required for adjustment.';
+      return;
+    }
+    if (!this.addAdjustment.amount) {
+      this.error = 'Amount is required for adjustment.';
+      return;
+    }
+
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+
+    this.apiService.addSettlementAdjustment(this.settlementId, {
+      item_type: this.addAdjustment.item_type,
+      source_type: this.addAdjustment.source_type,
+      description: this.addAdjustment.description,
+      amount: Number(this.addAdjustment.amount),
+      apply_to: this.addAdjustment.apply_to,
+      category_id: this.addAdjustment.category_id || null
+    }).subscribe({
+      next: () => {
+        this.addAdjustment = {
+          item_type: 'deduction',
+          source_type: 'manual',
+          description: '',
+          amount: 0,
+          apply_to: 'primary_payee',
+          category_id: ''
+        };
+        this.successMessage = 'Manual adjustment added.';
+        this.saving = false;
+        this.loadDetail(this.settlementId as string);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to add adjustment';
+        this.saving = false;
+      }
+    });
+  }
+
+  removeAdjustment(adjustmentId: string): void {
+    if (!this.settlementId || !adjustmentId || this.saving) return;
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+    this.apiService.removeSettlementAdjustment(this.settlementId, adjustmentId).subscribe({
+      next: () => {
+        this.successMessage = 'Adjustment removed.';
+        this.saving = false;
+        this.loadDetail(this.settlementId as string);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to remove adjustment';
+        this.saving = false;
+      }
+    });
+  }
+
+  recalcTotals(): void {
+    if (!this.settlementId || this.saving) return;
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+    this.apiService.recalcSettlement(this.settlementId).subscribe({
+      next: (recalcRes: any) => {
+        console.log('[Settlement Debug] recalc response', {
+          settlement_id: this.settlementId,
+          subtotal_driver_pay: recalcRes?.subtotal_driver_pay,
+          subtotal_additional_payee: recalcRes?.subtotal_additional_payee,
+          net_pay_driver: recalcRes?.net_pay_driver,
+          net_pay_additional_payee: recalcRes?.net_pay_additional_payee,
+          additional_payee_id: recalcRes?.additional_payee_id
+        });
+        this.successMessage = 'Totals recalculated.';
+        this.saving = false;
+        this.loadDetail(this.settlementId as string);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to recalculate totals';
+        this.saving = false;
+      }
+    });
+  }
+
+  approve(): void {
+    if (!this.settlementId || this.saving) return;
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+    this.apiService.approveSettlement(this.settlementId).subscribe({
+      next: () => {
+        this.successMessage = 'Settlement approved.';
+        this.saving = false;
+        this.loadDetail(this.settlementId as string);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to approve settlement';
+        this.saving = false;
+      }
+    });
+  }
+
+  voidSettlement(): void {
+    if (!this.settlementId || this.saving) return;
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+    this.apiService.voidSettlement(this.settlementId).subscribe({
+      next: () => {
+        this.successMessage = 'Settlement voided.';
+        this.saving = false;
+        this.loadDetail(this.settlementId as string);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to void settlement';
+        this.saving = false;
+      }
+    });
+  }
+
+  sendEmail(): void {
+    if (!this.settlementId || this.saving) return;
+    this.saving = true;
+    this.error = '';
+    this.successMessage = '';
+    this.apiService.sendSettlementEmail(this.settlementId, this.emailOptions).subscribe({
+      next: (res: any) => {
+        const count = Array.isArray(res?.recipients) ? res.recipients.length : 0;
+        this.successMessage = `Email request sent (${count} recipient${count === 1 ? '' : 's'}).`;
+        this.saving = false;
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to send settlement email';
+        this.saving = false;
+      }
+    });
+  }
+
+  getDataSourceLabel(): string {
+    return this.dataSourceMode === 'fallback' ? 'Fallback enriched payload' : 'Normalized settlement contract';
+  }
+
+  private logAdditionalPayeeDiagnostics(detail: any, payeeAssignmentRes: any | null): void {
+    const additionalFromDetail = detail?.additional_payee || null;
+    const additionalFromAssignment = payeeAssignmentRes?.additional_payee || null;
+    const additional = additionalFromDetail || additionalFromAssignment || null;
+
+    let snapshotRate: number | null = null;
+    const firstItem = Array.isArray(this.loadItems) && this.loadItems.length ? this.loadItems[0] : null;
+    if (firstItem?.pay_basis_snapshot) {
+      const snapshot = typeof firstItem.pay_basis_snapshot === 'string'
+        ? (() => {
+            try { return JSON.parse(firstItem.pay_basis_snapshot); } catch { return {}; }
+          })()
+        : firstItem.pay_basis_snapshot;
+      const parsed = Number(snapshot?.additional_payee_rate);
+      snapshotRate = Number.isFinite(parsed) ? parsed : null;
+    }
+
+    const rawRate = additional?.additional_payee_rate ?? snapshotRate;
+    const rate = Number(rawRate);
+    const validRate = Number.isFinite(rate) ? rate : 0;
+
+    console.groupCollapsed(`[Settlement Debug] Additional Payee diagnostics: ${this.settlementId || 'unknown'}`);
+    console.log('additional_payee(detail)', additionalFromDetail);
+    console.log('additional_payee(assignment fallback)', additionalFromAssignment);
+    console.log('chosen additional payee', additional);
+    console.log('additional_payee_rate raw', rawRate, 'numeric', validRate);
+
+    (this.loadItems || []).forEach((item: any) => {
+      const gross = Number(item?.gross_amount) || 0;
+      const expected = (gross * validRate) / 100;
+      console.log('load check', {
+        load_id: item?.load_id,
+        load_number: item?.load_number,
+        gross_amount: gross,
+        expected_additional_payee_amount: expected,
+        actual_additional_payee_amount: Number(item?.additional_payee_amount) || 0
+      });
+    });
+    console.groupEnd();
+  }
+
+  // Category dropdown methods
+  getAvailableCategories(): ExpensePaymentCategory[] {
+    // Return revenue categories for earnings/reimbursements, expense categories for others
+    const isRevenue = this.addAdjustment.item_type === 'earning' || this.addAdjustment.item_type === 'reimbursement';
+    return isRevenue ? this.revenueCategories : this.expenseCategories;
+  }
+
+  onCategorySearchFocus(): void {
+    this.showCategoryDropdown = true;
+    this.filterCategories();
+  }
+
+  onCategorySearchBlur(): void {
+    // Delay to allow click events to fire
+    setTimeout(() => {
+      this.showCategoryDropdown = false;
+    }, 200);
+  }
+
+  onCategorySearchInput(): void {
+    this.filterCategories();
+    this.showCategoryDropdown = true;
+  }
+
+  filterCategories(): void {
+    const query = this.categorySearchQuery.toLowerCase().trim();
+    const available = this.getAvailableCategories();
+    
+    if (!query) {
+      this.filteredCategories = available;
+    } else {
+      this.filteredCategories = available.filter(cat => 
+        cat.name.toLowerCase().includes(query) ||
+        cat.code.toString().includes(query)
+      );
+    }
+  }
+
+  selectCategory(category: ExpensePaymentCategory): void {
+    this.addAdjustment.category_id = category.id;
+    this.selectedCategoryName = category.name;
+    this.categorySearchQuery = category.name;
+    this.showCategoryDropdown = false;
+  }
+
+  clearCategorySelection(): void {
+    this.addAdjustment.category_id = '';
+    this.selectedCategoryName = '';
+    this.categorySearchQuery = '';
+    this.filteredCategories = this.getAvailableCategories();
+  }
+
+  showCreateNewCategory(): boolean {
+    // Show "Create new" option if search query exists and no exact match found
+    if (!this.categorySearchQuery.trim()) return false;
+    const query = this.categorySearchQuery.toLowerCase();
+    return !this.filteredCategories.some(cat => cat.name.toLowerCase() === query);
+  }
+
+  startCreatingCategory(): void {
+    this.isCreatingCategory = true;
+    this.newCategoryName = this.categorySearchQuery;
+  }
+
+  cancelCreateCategory(): void {
+    this.isCreatingCategory = false;
+    this.newCategoryName = '';
+  }
+
+  createNewCategory(): void {
+    if (!this.newCategoryName.trim() || this.saving) return;
+    
+    this.saving = true;
+    this.error = '';
+    
+    const isRevenue = this.addAdjustment.item_type === 'earning' || this.addAdjustment.item_type === 'reimbursement';
+    const categoryData = {
+      name: this.newCategoryName.trim(),
+      type: (isRevenue ? 'revenue' : 'expense') as 'expense' | 'revenue',
+      description: 'Custom category created from settlement'
+    };
+
+    this.categoriesService.createCategory(categoryData).subscribe({
+      next: (newCategory) => {
+        // Add to appropriate list
+        if (isRevenue) {
+          this.revenueCategories.push(newCategory);
+        } else {
+          this.expenseCategories.push(newCategory);
+        }
+        
+        // Select the newly created category
+        this.selectCategory(newCategory);
+        
+        this.isCreatingCategory = false;
+        this.newCategoryName = '';
+        this.saving = false;
+        this.successMessage = `Category "${newCategory.name}" created successfully`;
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          this.successMessage = '';
+        }, 3000);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || err?.message || 'Failed to create category';
+        this.saving = false;
+      }
+    });
   }
 }

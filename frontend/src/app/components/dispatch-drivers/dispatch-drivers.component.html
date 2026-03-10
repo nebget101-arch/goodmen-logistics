@@ -5,9 +5,8 @@
       <p class="subtitle">Dispatch view - core assignments and pay</p>
     </div>
     <div class="header-actions">
-      <button class="btn btn-primary" (click)="openNew()">
-        <span class="material-symbols-outlined">person_add</span>
-        New Driver
+      <button type="button" class="btn btn-primary" (click)="openNew()">
+        + New Driver
       </button>
     </div>
   </div>
@@ -34,126 +33,78 @@
           <th>Actions</th>
         </tr>
         <tr class="header-filters drivers-header-filters">
-        <th>
-          <input
-            type="text"
-            placeholder="Name / email / phone"
-            [(ngModel)]="driverFilters.name"
-          />
-        </th>
-        <th>
-          <select [(ngModel)]="driverFilters.type">
-            <option value="">All</option>
-            <option value="company">Company</option>
-            <option value="owner_operator">Owner operator</option>
-            <option value="hired_driver">Hired driver</option>
-          </select>
-        </th>
-        <th>
-          <select [(ngModel)]="driverFilters.status">
-            <option value="">All</option>
-            <option value="active">active</option>
-            <option value="inactive">inactive</option>
-            <option value="applicant">applicant</option>
-          </select>
-        </th>
-        <th>
-          <input
-            type="text"
-            placeholder="YYYY-MM-DD"
-            [(ngModel)]="driverFilters.hireDate"
-          />
-        </th>
-        <th>
-          <input
-            type="text"
-            placeholder="YYYY-MM-DD"
-            [(ngModel)]="driverFilters.termDate"
-          />
-        </th>
-        <th>
-          <input
-            type="text"
-            placeholder="Phone"
-            [(ngModel)]="driverFilters.phone"
-          />
-        </th>
-        <th>
-          <input
-            type="text"
-            placeholder="Email"
-            [(ngModel)]="driverFilters.email"
-          />
-        </th>
-        <th>
-          <input
-            type="text"
-            placeholder="Truck"
-            [(ngModel)]="driverFilters.truck"
-          />
-        </th>
-        <th>
-          <input
-            type="text"
-            placeholder="Trailer"
-            [(ngModel)]="driverFilters.trailer"
-          />
-        </th>
-        <th>
-          <select [(ngModel)]="driverFilters.payBasis">
-            <option value="">All</option>
-            <option value="per_mile">per_mile</option>
-            <option value="percentage">percentage</option>
-            <option value="flatpay">flatpay</option>
-            <option value="hourly">hourly</option>
-          </select>
-        </th>
-        <th>
-          <input
-            type="text"
-            placeholder="Rate / %"
-            [(ngModel)]="driverFilters.payRate"
-          />
-        </th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let d of filteredDrivers">
-        <td>
-          <strong>{{ d.firstName }} {{ d.lastName }}</strong><br />
-          <small class="muted">CDL {{ d.cdlClass || 'A' }} - {{ d.cdlState }} {{ d.cdlNumber }}</small>
-        </td>
-        <td>{{ getDriverTypeLabel(d.driverType) }}</td>
-        <td>{{ d.status }}</td>
-        <td>{{ d.hireDate || '--' }}</td>
-        <td>{{ d.terminationDate || '--' }}</td>
-        <td>{{ d.phone || '--' }}</td>
-        <td>{{ d.email || '--' }}</td>
-        <td>{{ d.truckUnitNumber || '--' }}</td>
-        <td>{{ d.trailerUnitNumber || '--' }}</td>
-        <td>{{ d.payBasis || '--' }}</td>
-        <td>
-          <ng-container [ngSwitch]="d.payBasis">
-            <span *ngSwitchCase="'per_mile'">{{ d.payRate || 0 }} / mile</span>
-            <span *ngSwitchCase="'percentage'">{{ d.payPercentage || 0 }}%</span>
-            <span *ngSwitchCase="'flatpay'">\${{ d.payRate || 0 }} flat</span>
-            <span *ngSwitchCase="'hourly'">\${{ d.payRate || 0 }} / hr</span>
-            <span *ngSwitchDefault>--</span>
-          </ng-container>
-        </td>
-        <td>
-          <button type="button" class="btn-action btn-edit" (click)="startEdit(d)">
-            <span class="material-symbols-outlined">edit</span> Edit
-          </button>
-        </td>
-      </tr>
-    </tbody>
-  </table>
+          <th><input type="text" placeholder="Search" [(ngModel)]="driverFilters.name" /></th>
+          <th>
+            <select [(ngModel)]="driverFilters.type">
+              <option value="">All</option>
+              <option value="company">company</option>
+              <option value="owner_operator">owner_operator</option>
+              <option value="hired_driver">hired_driver</option>
+            </select>
+          </th>
+          <th>
+            <select [(ngModel)]="driverFilters.status">
+              <option value="">All</option>
+              <option value="active">active</option>
+              <option value="inactive">inactive</option>
+              <option value="applicant">applicant</option>
+            </select>
+          </th>
+          <th><input type="text" placeholder="YYYY-MM-DD" [(ngModel)]="driverFilters.hireDate" /></th>
+          <th><input type="text" placeholder="YYYY-MM-DD" [(ngModel)]="driverFilters.termDate" /></th>
+          <th><input type="text" placeholder="Phone" [(ngModel)]="driverFilters.phone" /></th>
+          <th><input type="text" placeholder="Email" [(ngModel)]="driverFilters.email" /></th>
+          <th><input type="text" placeholder="Truck" [(ngModel)]="driverFilters.truck" /></th>
+          <th><input type="text" placeholder="Trailer" [(ngModel)]="driverFilters.trailer" /></th>
+          <th>
+            <select [(ngModel)]="driverFilters.payBasis">
+              <option value="">All</option>
+              <option value="per_mile">per_mile</option>
+              <option value="percentage">percentage</option>
+              <option value="flatpay">flatpay</option>
+              <option value="hourly">hourly</option>
+            </select>
+          </th>
+          <th><input type="text" placeholder="Rate / %" [(ngModel)]="driverFilters.payRate" /></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let d of filteredDrivers">
+          <td>
+            <strong>{{ d.firstName }} {{ d.lastName }}</strong><br />
+            <small class="muted">CDL {{ d.cdlClass || 'A' }} - {{ d.cdlState }} {{ d.cdlNumber }}</small>
+          </td>
+          <td>{{ getDriverTypeLabel(d.driverType) }}</td>
+          <td>{{ d.status }}</td>
+          <td>{{ d.hireDate || '--' }}</td>
+          <td>{{ d.terminationDate || '--' }}</td>
+          <td>{{ d.phone || '--' }}</td>
+          <td>{{ d.email || '--' }}</td>
+          <td>{{ d.truckUnitNumber || '--' }}</td>
+          <td>{{ d.trailerUnitNumber || '--' }}</td>
+          <td>{{ d.payBasis || '--' }}</td>
+          <td>
+            <ng-container [ngSwitch]="d.payBasis">
+              <span *ngSwitchCase="'per_mile'">{{ d.payRate || 0 }} / mile</span>
+              <span *ngSwitchCase="'percentage'">{{ d.payPercentage || 0 }}%</span>
+              <span *ngSwitchCase="'flatpay'">\${{ d.payRate || 0 }} flat</span>
+              <span *ngSwitchCase="'hourly'">\${{ d.payRate || 0 }} / hr</span>
+              <span *ngSwitchDefault>--</span>
+            </ng-container>
+          </td>
+          <td>
+            <button type="button" class="btn-action btn-edit" (click)="startEdit(d)">
+              <span class="material-symbols-outlined">edit</span> Edit
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
 
-  <div *ngIf="!loading && filteredDrivers.length === 0" class="empty-state">
-    <p>No drivers found</p>
-  </div>
+    <div *ngIf="!loading && filteredDrivers.length === 0" class="empty-state">
+      <p>No drivers found</p>
+    </div>
   </div>
 
   <!-- New Driver Modal -->
@@ -255,7 +206,11 @@
                 <input
                   id="payableTo"
                   class="form-input"
-                  [(ngModel)]="newDriver.payableTo"
+                  type="text"
+                  [value]="(newDriver.firstName || '') + ' ' + (newDriver.lastName || '')"
+                  readonly
+                  placeholder="Driver name"
+                  style="background-color: rgba(255, 255, 255, 0.05); cursor: not-allowed;"
                 />
               </div>
               <div class="field field-wide">
@@ -479,11 +434,56 @@
               <div class="comp-fields-grid">
                 <div class="field">
                   <label for="payableToPrimary">Primary payable to</label>
-                  <input id="payableToPrimary" class="form-input" placeholder="Driver or company name" [(ngModel)]="newDriver.payableTo" />
+                  <input
+                    id="payableToPrimary"
+                    class="form-input"
+                    type="text"
+                    [value]="(newDriver.firstName || '') + ' ' + (newDriver.lastName || '')"
+                    readonly
+                    placeholder="Driver name"
+                    style="background-color: rgba(255, 255, 255, 0.05); cursor: not-allowed;"
+                  />
                 </div>
                 <div class="field">
                   <label for="additionalPayeeRates">Additional payee (optional)</label>
-                  <input id="additionalPayeeRates" class="form-input" placeholder="Owner / external company" [(ngModel)]="newDriver.additionalPayee" />
+                  <div class="payee-search-wrapper">
+                    <div class="payee-search-input-wrapper">
+                      <input
+                        id="additionalPayeeRates"
+                        class="form-input payee-search-input"
+                        type="text"
+                        placeholder="Search equipment owner..."
+                        [(ngModel)]="additionalPayeeSearch"
+                        (focus)="onAdditionalPayeeSearchFocus()"
+                        (blur)="onAdditionalPayeeSearchBlur()"
+                        (input)="onAdditionalPayeeSearchInput()"
+                        [disabled]="isCreatingEquipmentOwner"
+                      />
+                      <button
+                        type="button"
+                        class="clear-payee-btn"
+                        *ngIf="selectedAdditionalPayeeId && !isCreatingEquipmentOwner"
+                        (click)="clearAdditionalPayeeSelection()"
+                      >
+                        <span class="material-symbols-outlined">close</span>
+                      </button>
+                    </div>
+                    
+                    <div class="payee-dropdown" *ngIf="showAdditionalPayeeDropdown && !isCreatingEquipmentOwner">
+                      <div class="payee-dropdown-item"
+                           *ngFor="let payee of filteredAdditionalPayees"
+                           (mousedown)="selectAdditionalPayee(payee)">
+                        <span class="payee-name">{{ payee.name }}</span>
+                      </div>
+                      
+                      <div class="payee-dropdown-item create-new"
+                           *ngIf="showCreateAdditionalPayee()"
+                             (mousedown)="startCreatingEquipmentOwner()">
+                        <span class="material-symbols-outlined">add_circle</span>
+                        <span>+ New Equipment Owner</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div class="field field-wide">
                   <label for="payeeReason">Reason / scenario</label>
@@ -537,11 +537,56 @@
               <div class="comp-fields-grid">
                 <div class="field">
                   <label for="payableToPayee">Primary payable to</label>
-                  <input id="payableToPayee" class="form-input" placeholder="Driver or company" [(ngModel)]="newDriver.payableTo" />
+                    <input
+                      id="payableToPayee"
+                      class="form-input"
+                      type="text"
+                      [value]="(newDriver.firstName || '') + ' ' + (newDriver.lastName || '')"
+                      readonly
+                      placeholder="Driver name"
+                      style="background-color: rgba(255, 255, 255, 0.05); cursor: not-allowed;"
+                    />
                 </div>
                 <div class="field">
                   <label for="additionalPayee">Additional payee</label>
-                  <input id="additionalPayee" class="form-input" placeholder="Owner / external company" [(ngModel)]="newDriver.additionalPayee" />
+                  <div class="payee-search-wrapper">
+                    <div class="payee-search-input-wrapper">
+                      <input
+                        id="additionalPayee"
+                        class="form-input payee-search-input"
+                        type="text"
+                        placeholder="Search equipment owner..."
+                        [(ngModel)]="additionalPayeeSearch"
+                        (focus)="onAdditionalPayeeSearchFocus()"
+                        (blur)="onAdditionalPayeeSearchBlur()"
+                        (input)="onAdditionalPayeeSearchInput()"
+                        [disabled]="isCreatingEquipmentOwner"
+                      />
+                      <button
+                        type="button"
+                        class="clear-payee-btn"
+                        *ngIf="selectedAdditionalPayeeId"
+                        (click)="clearAdditionalPayeeSelection()"
+                      >
+                        <span class="material-symbols-outlined">close</span>
+                      </button>
+                    </div>
+                    
+                    <div class="payee-dropdown" *ngIf="showAdditionalPayeeDropdown && !isCreatingEquipmentOwner">
+                      <div class="payee-dropdown-item"
+                           *ngFor="let payee of filteredAdditionalPayees"
+                           (mousedown)="selectAdditionalPayee(payee)">
+                        <span class="payee-name">{{ payee.name }}</span>
+                      </div>
+                      
+                      <div class="payee-dropdown-item create-new"
+                           *ngIf="showCreateAdditionalPayee()"
+                             (mousedown)="startCreatingEquipmentOwner()">
+                        <span class="material-symbols-outlined">add_circle</span>
+                        <span>+ New Equipment Owner</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div class="field field-wide">
                   <label for="payeeReasonTab">Reason</label>
@@ -575,5 +620,124 @@
       </div>
     </div>
   </div>
+
+<div class="modal-backdrop owner-modal-backdrop" *ngIf="isCreatingEquipmentOwner" (click)="cancelCreateEquipmentOwner()">
+  <div class="modal dispatch-modal owner-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>
+        <span class="material-symbols-outlined">business</span>
+        New Equipment Owner
+      </h2>
+      <button class="close-btn" type="button" (click)="cancelCreateEquipmentOwner()">×</button>
+    </div>
+
+    <div class="modal-body owner-modal-body">
+      <div class="owner-layout">
+        <section class="owner-left-col">
+          <div class="field field-wide">
+            <label for="ownerCompanyName">Company Name <span class="required">*</span></label>
+            <input id="ownerCompanyName" class="form-input" [(ngModel)]="newEquipmentOwner.companyName" />
+          </div>
+
+          <div class="field field-wide">
+            <label for="ownerAddress">Address</label>
+            <input id="ownerAddress" class="form-input" [(ngModel)]="newEquipmentOwner.address" />
+          </div>
+
+          <div class="field field-wide">
+            <label for="ownerAddress2">Address line 2</label>
+            <input id="ownerAddress2" class="form-input" [(ngModel)]="newEquipmentOwner.address2" />
+          </div>
+
+          <div class="owner-grid-2">
+            <div class="field">
+              <label for="ownerPhone">Phone</label>
+              <input id="ownerPhone" class="form-input" [(ngModel)]="newEquipmentOwner.phone" />
+            </div>
+            <div class="field">
+              <label for="ownerEmail">Email</label>
+              <input id="ownerEmail" class="form-input" type="email" [(ngModel)]="newEquipmentOwner.email" />
+            </div>
+          </div>
+
+          <div class="owner-grid-3">
+            <div class="field">
+              <label for="ownerCity">City</label>
+              <input id="ownerCity" class="form-input" [(ngModel)]="newEquipmentOwner.city" />
+            </div>
+            <div class="field">
+              <label for="ownerState">State</label>
+              <input id="ownerState" class="form-input" [(ngModel)]="newEquipmentOwner.state" />
+            </div>
+            <div class="field">
+              <label for="ownerZip">Zip</label>
+              <input id="ownerZip" class="form-input" [(ngModel)]="newEquipmentOwner.zip" />
+            </div>
+          </div>
+
+          <div class="owner-grid-2">
+            <div class="field">
+              <label for="ownerFidEin">FID/EIN</label>
+              <input id="ownerFidEin" class="form-input" [(ngModel)]="newEquipmentOwner.fidEin" />
+            </div>
+            <div class="field">
+              <label for="ownerMc">MC</label>
+              <input id="ownerMc" class="form-input" [(ngModel)]="newEquipmentOwner.mc" />
+            </div>
+          </div>
+
+          <div class="field field-wide">
+            <label for="ownerNotes">Notes</label>
+            <textarea id="ownerNotes" class="form-input" rows="3" [(ngModel)]="newEquipmentOwner.notes"></textarea>
+          </div>
+        </section>
+
+        <aside class="owner-right-col">
+          <div class="comp-block owner-panel">
+            <h4 class="comp-section-title">Vendor type</h4>
+            <button type="button" class="btn btn-success btn-sm" disabled>
+              <span class="material-symbols-outlined">add</span>
+              Vendor type
+            </button>
+          </div>
+
+          <div class="comp-block owner-panel">
+            <h4 class="comp-section-title">Billing</h4>
+            <div class="owner-billing-row">
+              <label class="check-row">
+                <input type="checkbox" [(ngModel)]="newEquipmentOwner.additionalPayee" />
+                <span>Additional payee</span>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" [(ngModel)]="newEquipmentOwner.equipmentOwner" />
+                <span>Equipment owner</span>
+              </label>
+            </div>
+
+            <div class="field field-wide">
+              <label for="ownerAdditionalPayeeRate">Additional payee rate, % (e.g. 90)</label>
+              <input id="ownerAdditionalPayeeRate" class="form-input" type="number" step="0.01" [(ngModel)]="newEquipmentOwner.additionalPayeeRate" />
+            </div>
+
+            <div class="field field-wide">
+              <label for="ownerSettlementTemplateType">Settlement template type</label>
+              <select id="ownerSettlementTemplateType" class="form-input" [(ngModel)]="newEquipmentOwner.settlementTemplateType">
+                <option *ngFor="let option of settlementTemplateTypes" [value]="option.value">{{ option.label }}</option>
+              </select>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" type="button" (click)="cancelCreateEquipmentOwner()" [disabled]="saving">Cancel</button>
+      <button class="btn btn-primary" type="button" (click)="createEquipmentOwner()" [disabled]="saving || !newEquipmentOwner.companyName.trim()">
+        {{ saving ? 'Creating...' : 'Create Equipment Owner' }}
+      </button>
+    </div>
+  </div>
+</div>
+
 </div>
 

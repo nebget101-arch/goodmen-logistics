@@ -15,7 +15,8 @@
 
 /**
  * Compute driver pay for a single load given pay model snapshot.
- * @param {Object} opts - { payModel, centsPerMile, percentageRate, flatPerLoadAmount, gross, loadedMiles }
+ * If an additional payee exists, compute its pay from configured rate (% of gross).
+ * @param {Object} opts - { payModel, centsPerMile, percentageRate, flatPerLoadAmount, gross, loadedMiles, hasAdditionalPayee, additionalPayeeRate }
  * @returns {{ driverPay: number, additionalPayeePay: number }}
  */
 function computeLoadPay(opts) {
@@ -25,18 +26,20 @@ function computeLoadPay(opts) {
     percentageRate = 0,
     flatPerLoadAmount = 0,
     gross = 0,
-    loadedMiles = 0
+    loadedMiles = 0,
+    hasAdditionalPayee = false,
+    additionalPayeeRate = null
   } = opts;
 
+  const grossNum = Number(gross) || 0;
   let driverPay = 0;
-  const additionalPayeePay = 0; // split logic later
 
   switch (payModel) {
     case 'per_mile':
-      driverPay = (Number(loadedMiles) || 0) * (Number(centsPerMile) || 0) / 100;
+      driverPay = ((Number(loadedMiles) || 0) * (Number(centsPerMile) || 0)) / 100;
       break;
     case 'percentage':
-      driverPay = (Number(gross) || 0) * (Number(percentageRate) || 0) / 100;
+      driverPay = (grossNum * (Number(percentageRate) || 0)) / 100;
       break;
     case 'flat_per_load':
       driverPay = Number(flatPerLoadAmount) || 0;
@@ -49,6 +52,14 @@ function computeLoadPay(opts) {
       driverPay = 0;
   }
 
+  // Never allow per-load driver pay to exceed load gross.
+  driverPay = Math.max(0, Math.min(driverPay, grossNum));
+
+  const additionalRateNum = Number(additionalPayeeRate);
+  const hasAdditionalRate = Number.isFinite(additionalRateNum) && additionalRateNum > 0;
+  const additionalPayeePay = hasAdditionalPayee && hasAdditionalRate
+    ? Math.max(0, (grossNum * additionalRateNum) / 100)
+    : 0;
   return { driverPay, additionalPayeePay };
 }
 
@@ -91,7 +102,7 @@ function computeNetPay(opts) {
   } = opts;
 
   const netPayDriver = Math.max(0, Number(subtotalDriverPay) - Number(totalDeductions) - Number(totalAdvances));
-  const netPayAdditionalPayee = Math.max(0, Number(subtotalAdditionalPayee));
+  const netPayAdditionalPayee = Math.max(0, Number(subtotalAdditionalPayee) - Number(totalDeductions) - Number(totalAdvances));
 
   return { netPayDriver, netPayAdditionalPayee };
 }

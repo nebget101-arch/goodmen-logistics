@@ -95,8 +95,8 @@ export class SettlementListComponent implements OnInit {
     return {
       id: s.id,
       settlementNumber: s.settlement_number || s.id,
-      periodStart: s.period_start || '',
-      periodEnd: s.period_end || '',
+      periodStart: this.toDateOnly(s.period_start),
+      periodEnd: this.toDateOnly(s.period_end),
       driverId: s.driver_id || '',
       driverName,
       payableTo: s.primary_payee_name ?? '—',
@@ -106,8 +106,18 @@ export class SettlementListComponent implements OnInit {
       deductions: Number(s.total_deductions) || 0,
       netDriver: Number(s.net_pay_driver) || 0,
       netAdditionalPayee: Number(s.net_pay_additional_payee) || 0,
-      updatedAt: s.updated_at || s.created_at || ''
+      updatedAt: this.toDateOnly(s.updated_at || s.created_at)
     };
+  }
+
+  private toDateOnly(value: any): string {
+    if (!value) return '';
+    const str = String(value);
+    const iso = str.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+    const d = new Date(str);
+    if (Number.isNaN(d.getTime())) return str;
+    return d.toISOString().slice(0, 10);
   }
 
   private normalizeStatus(backendStatus: string): 'draft' | 'pending_approval' | 'approved' | 'void' {

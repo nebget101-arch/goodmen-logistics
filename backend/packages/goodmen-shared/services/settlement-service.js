@@ -12,8 +12,32 @@ const {
 const DELIVERED_STATUSES = ['DELIVERED'];
 const SETTLEMENT_NUMBER_PREFIX = 'STL';
 
+function normalizeStopType(value) {
+  return (value || '').toString().trim().toUpperCase();
+}
+
+function toDateOnly(value) {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  const str = String(value).trim();
+  // Fast path for ISO-like strings: 2026-03-01 or 2026-03-01T...
+  const isoPrefix = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoPrefix) return isoPrefix[1];
+
+  const parsed = new Date(str);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return null;
+}
+
 async function getActiveCompensationProfile(knex, driverId, asOfDate) {
-  const d = (asOfDate || new Date()).toISOString().slice(0, 10);
+  const d = toDateOnly(asOfDate) || toDateOnly(new Date());
   const row = await knex('driver_compensation_profiles')
     .where({ driver_id: driverId, status: 'active' })
     .whereRaw('effective_start_date <= ?', [d])
@@ -26,7 +50,7 @@ async function getActiveCompensationProfile(knex, driverId, asOfDate) {
 }
 
 async function getActivePayeeAssignment(knex, driverId, asOfDate) {
-  const d = (asOfDate || new Date()).toISOString().slice(0, 10);
+  const d = toDateOnly(asOfDate) || toDateOnly(new Date());
   const row = await knex('driver_payee_assignments')
     .where({ driver_id: driverId })
     .whereRaw('effective_start_date <= ?', [d])
@@ -38,13 +62,62 @@ async function getActivePayeeAssignment(knex, driverId, asOfDate) {
   return row || null;
 }
 
+function buildPaySnapshot(profile, driverRow) {
+  if (profile) {
+    return {
+      pay_model: profile.pay_model,
+      percentage_rate: profile.percentage_rate,
+      cents_per_mile: profile.cents_per_mile,
+      flat_weekly_amount: profile.flat_weekly_amount,
+      flat_per_load_amount: profile.flat_per_load_amount
+    };
+  }
+
+  const payBasis = (driverRow?.pay_basis || '').toString().toLowerCase();
+  if (payBasis === 'percentage') {
+    return {
+      pay_model: 'percentage',
+      percentage_rate: driverRow?.pay_percentage ?? 0,
+      cents_per_mile: null,
+      flat_weekly_amount: null,
+      flat_per_load_amount: null
+    };
+  }
+  if (payBasis === 'flatpay' || payBasis === 'flat_weekly') {
+    return {
+      pay_model: 'flat_weekly',
+      percentage_rate: null,
+      cents_per_mile: null,
+      flat_weekly_amount: driverRow?.pay_rate ?? 0,
+      flat_per_load_amount: null
+    };
+  }
+  if (payBasis === 'flat_per_load') {
+    return {
+      pay_model: 'flat_per_load',
+      percentage_rate: null,
+      cents_per_mile: null,
+      flat_weekly_amount: null,
+      flat_per_load_amount: driverRow?.pay_rate ?? 0
+    };
+  }
+
+  return {
+    pay_model: 'per_mile',
+    percentage_rate: null,
+    cents_per_mile: driverRow?.pay_rate ?? 0,
+    flat_weekly_amount: null,
+    flat_per_load_amount: null
+  };
+}
+
 async function getLoadedMilesForLoad(client, loadId) {
   const stops = await client.query(
     `SELECT stop_type, zip FROM load_stops WHERE load_id = $1 ORDER BY sequence ASC, stop_type`,
     [loadId]
   );
-  const pickups = stops.rows.filter((s) => (s.stop_type || '').toUpperCase() === 'PICKUP');
-  const deliveries = stops.rows.filter((s) => (s.stop_type || '').toUpperCase() === 'DELIVERY');
+  const pickups = stops.rows.filter((s) => normalizeStopType(s.stop_type) === 'PICKUP');
+  const deliveries = stops.rows.filter((s) => normalizeStopType(s.stop_type) === 'DELIVERY');
   const firstZip = pickups[0]?.zip?.trim();
   const lastZip = deliveries.length ? deliveries[deliveries.length - 1]?.zip?.trim() : null;
   if (!firstZip || !lastZip) return 0;
@@ -76,13 +149,15 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
       'l.load_number',
       'l.rate',
       'l.driver_id',
+      'l.pickup_date as pickup_date_direct',
+      'l.delivery_date as delivery_date_direct',
       knex.raw(`(
         SELECT MIN(s.stop_date) FROM load_stops s
-        WHERE s.load_id = l.id AND s.stop_type = 'PICKUP'
+        WHERE s.load_id = l.id AND UPPER(TRIM(s.stop_type)) = 'PICKUP'
       ) as pickup_date`),
       knex.raw(`(
         SELECT MAX(s.stop_date) FROM load_stops s
-        WHERE s.load_id = l.id AND s.stop_type = 'DELIVERY'
+        WHERE s.load_id = l.id AND UPPER(TRIM(s.stop_type)) = 'DELIVERY'
       ) as delivery_date`)
     )
     .where('l.driver_id', driverId)
@@ -92,24 +167,70 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
       if (settledIds.length) q.whereNotIn('l.id', settledIds);
     });
 
-  const periodStartStr = (periodStart || '').toString().slice(0, 10);
-  const periodEndStr = (periodEnd || '').toString().slice(0, 10);
+  const periodStartStr = toDateOnly(periodStart);
+  const periodEndStr = toDateOnly(periodEnd);
+  if (!periodStartStr || !periodEndStr) {
+    throw new Error('Invalid period_start or period_end');
+  }
   const filtered = [];
   for (const row of loads) {
-    const dateVal = dateBasis === 'delivery' ? row.delivery_date : row.pickup_date;
-    const d = dateVal ? new Date(dateVal).toISOString().slice(0, 10) : null;
+    const pickupDate = row.pickup_date || row.pickup_date_direct || null;
+    const deliveryDate = row.delivery_date || row.delivery_date_direct || null;
+    const dateVal = dateBasis === 'delivery' ? deliveryDate : pickupDate;
+    const d = toDateOnly(dateVal);
     if (d && d >= periodStartStr && d <= periodEndStr) {
       const loadedMiles = await getLoadedMilesForLoad(client, row.id);
-      filtered.push({ ...row, loaded_miles: loadedMiles });
+      filtered.push({ ...row, pickup_date: pickupDate, delivery_date: deliveryDate, loaded_miles: loadedMiles });
     }
   }
   return filtered;
 }
 
+async function backfillSettlementLoadDates(knex, settlementId) {
+  const items = await knex('settlement_load_items')
+    .where({ settlement_id: settlementId })
+    .where(function () {
+      this.whereNull('pickup_date').orWhereNull('delivery_date');
+    });
+
+  if (!items.length) return;
+
+  const client = await getClient();
+  try {
+    for (const item of items) {
+      const load = await knex('loads').where({ id: item.load_id }).select('pickup_date', 'delivery_date').first();
+      const stops = await client.query(
+        'SELECT stop_type, stop_date FROM load_stops WHERE load_id = $1 ORDER BY sequence ASC, stop_type',
+        [item.load_id]
+      );
+      const pickups = stops.rows.filter((s) => normalizeStopType(s.stop_type) === 'PICKUP');
+      const deliveries = stops.rows.filter((s) => normalizeStopType(s.stop_type) === 'DELIVERY');
+
+      const pickupDate = item.pickup_date || pickups[0]?.stop_date || load?.pickup_date || null;
+      const deliveryDate = item.delivery_date || (deliveries.length ? deliveries[deliveries.length - 1].stop_date : null) || load?.delivery_date || null;
+
+      if (pickupDate !== item.pickup_date || deliveryDate !== item.delivery_date) {
+        await knex('settlement_load_items')
+          .where({ id: item.id })
+          .update({
+            pickup_date: pickupDate,
+            delivery_date: deliveryDate,
+            updated_at: knex.fn.now()
+          });
+      }
+    }
+  } finally {
+    client.release();
+  }
+}
+
 /** Recurring deductions applicable for driver in date range. */
 async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, periodEnd) {
-  const startStr = (periodStart || '').toString().slice(0, 10);
-  const endStr = (periodEnd || '').toString().slice(0, 10);
+  const startStr = toDateOnly(periodStart);
+  const endStr = toDateOnly(periodEnd);
+  if (!startStr || !endStr) {
+    throw new Error('Invalid period_start or period_end');
+  }
   return knex('recurring_deduction_rules')
     .where('enabled', true)
     .whereRaw('start_date <= ?', [endStr])
@@ -140,8 +261,24 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
     if (!period) throw new Error('Payroll period not found');
     if (!['draft', 'open'].includes(period.status)) throw new Error('Period not open for new settlements');
 
+    const driver = await knex('drivers')
+      .where({ id: driverId })
+      .select('id', 'first_name', 'last_name', 'pay_basis', 'pay_rate', 'pay_percentage')
+      .first();
+    if (!driver) throw new Error('Driver not found');
+
     const profile = await getActiveCompensationProfile(knex, driverId, period.period_end);
     const payeeAssignment = await getActivePayeeAssignment(knex, driverId, period.period_end);
+
+    console.log('[Settlement Create] Driver lookup:', {
+      driverId,
+      periodEnd: period.period_end,
+      profileFound: !!profile,
+      profileId: profile?.id,
+      payeeAssignmentFound: !!payeeAssignment,
+      primaryPayeeId: payeeAssignment?.primary_payee_id,
+      additionalPayeeIdFromAssignment: payeeAssignment?.additional_payee_id
+    });
 
     let primaryPayeeId = payeeAssignment?.primary_payee_id;
     let additionalPayeeId = payeeAssignment?.additional_payee_id ?? null;
@@ -151,8 +288,6 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       if (driverPayee) primaryPayeeId = driverPayee.id;
     }
     if (!primaryPayeeId) {
-      const driver = await knex('drivers').where({ id: driverId }).select('first_name', 'last_name').first();
-      if (!driver) throw new Error('Driver not found');
       const payeeName = [driver.first_name, driver.last_name].filter(Boolean).join(' ').trim() || `Driver ${driverId.slice(0, 8)}`;
       const [newPayee] = await knex('payees').insert({
         type: 'driver',
@@ -160,7 +295,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
         is_active: true
       }).returning('id');
       primaryPayeeId = newPayee.id;
-      const periodStart = period.period_start ? new Date(period.period_start).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+      const periodStart = toDateOnly(period.period_start) || toDateOnly(new Date());
       await knex('driver_payee_assignments').insert({
         driver_id: driverId,
         primary_payee_id: primaryPayeeId,
@@ -168,6 +303,11 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
         effective_start_date: periodStart
       });
     }
+
+    const additionalPayee = additionalPayeeId
+      ? await knex('payees').where({ id: additionalPayeeId }).select('additional_payee_rate').first()
+      : null;
+    const additionalPayeeRate = additionalPayee?.additional_payee_rate ?? null;
 
     const eligibleLoads = await getEligibleLoads(
       knex,
@@ -178,13 +318,10 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       dateBasis
     );
 
-    const profileSnapshot = profile ? {
-      pay_model: profile.pay_model,
-      percentage_rate: profile.percentage_rate,
-      cents_per_mile: profile.cents_per_mile,
-      flat_weekly_amount: profile.flat_weekly_amount,
-      flat_per_load_amount: profile.flat_per_load_amount
-    } : { pay_model: 'per_mile', cents_per_mile: 0 };
+    const profileSnapshot = {
+      ...buildPaySnapshot(profile, driver),
+      additional_payee_rate: additionalPayeeRate
+    };
 
     const settlementNumber = await generateSettlementNumber(knex);
     const settlementDate = period.period_end;
@@ -210,13 +347,15 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
 
     for (const load of eligibleLoads) {
       const gross = Number(load.rate) || 0;
-      const { driverPay } = computeLoadPay({
+      const { driverPay, additionalPayeePay } = computeLoadPay({
         payModel: profileSnapshot.pay_model,
         centsPerMile: profileSnapshot.cents_per_mile,
         percentageRate: profileSnapshot.percentage_rate,
         flatPerLoadAmount: profileSnapshot.flat_per_load_amount,
         gross,
-        loadedMiles: load.loaded_miles || 0
+        loadedMiles: load.loaded_miles || 0,
+        hasAdditionalPayee: !!additionalPayeeId,
+        additionalPayeeRate: profileSnapshot.additional_payee_rate
       });
       await knex('settlement_load_items').insert({
         settlement_id: settlement.id,
@@ -227,7 +366,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
         pay_basis_snapshot: profileSnapshot,
         gross_amount: gross,
         driver_pay_amount: driverPay,
-        additional_payee_amount: 0,
+        additional_payee_amount: additionalPayeePay,
         included_by: userId
       });
     }
@@ -264,17 +403,144 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
   if (!settlement) throw new Error('Settlement not found');
   if (settlement.settlement_status === 'void') return settlement;
 
+  const asOf = settlement.date || new Date().toISOString().slice(0, 10);
+  
+  // Resolve compensation profile
+  let effectiveCompensationProfileId = settlement.compensation_profile_id;
+  if (!effectiveCompensationProfileId) {
+    let profile = await getActiveCompensationProfile(knex, settlement.driver_id, asOf);
+    if (!profile) {
+      // Fallback to latest profile
+      profile = await knex('driver_compensation_profiles')
+        .where({ driver_id: settlement.driver_id, status: 'active' })
+        .orderBy('effective_start_date', 'desc')
+        .first();
+    }
+    effectiveCompensationProfileId = profile?.id || null;
+  }
+
+  // Resolve payee assignment
+  let payeeAssignment = await getActivePayeeAssignment(knex, settlement.driver_id, asOf);
+  if (!payeeAssignment) {
+    payeeAssignment = await knex('driver_payee_assignments')
+      .where({ driver_id: settlement.driver_id })
+      .orderBy('effective_start_date', 'desc')
+      .first();
+  }
+  const effectivePrimaryPayeeId = settlement.primary_payee_id || payeeAssignment?.primary_payee_id || null;
+  const effectiveAdditionalPayeeId = settlement.additional_payee_id || payeeAssignment?.additional_payee_id || null;
+
+  // Update settlement if snapshot values changed
+  if (
+    effectiveCompensationProfileId !== settlement.compensation_profile_id ||
+    effectivePrimaryPayeeId !== settlement.primary_payee_id ||
+    effectiveAdditionalPayeeId !== settlement.additional_payee_id
+  ) {
+    await knex('settlements')
+      .where({ id: settlementId })
+      .update({
+        compensation_profile_id: effectiveCompensationProfileId,
+        primary_payee_id: effectivePrimaryPayeeId,
+        additional_payee_id: effectiveAdditionalPayeeId,
+        updated_at: knex.fn.now()
+      });
+
+    settlement.compensation_profile_id = effectiveCompensationProfileId;
+    settlement.primary_payee_id = effectivePrimaryPayeeId;
+    settlement.additional_payee_id = effectiveAdditionalPayeeId;
+  }
+
+  await backfillSettlementLoadDates(knex, settlementId);
+
   const loadItems = await knex('settlement_load_items').where({ settlement_id: settlementId });
   const adjustmentItems = await knex('settlement_adjustment_items').where({ settlement_id: settlementId });
   const profile = settlement.compensation_profile_id
     ? await knex('driver_compensation_profiles').where({ id: settlement.compensation_profile_id }).first()
     : null;
-  const profileSnapshot = profile ? {
-    pay_model: profile.pay_model,
-    flat_weekly_amount: profile.flat_weekly_amount
-  } : {};
+  const driver = await knex('drivers')
+    .where({ id: settlement.driver_id })
+    .select('pay_basis', 'pay_rate', 'pay_percentage')
+    .first();
+  const additionalPayee = effectiveAdditionalPayeeId
+    ? await knex('payees').where({ id: effectiveAdditionalPayeeId }).select('additional_payee_rate').first()
+    : null;
+  const additionalPayeeRateRaw = additionalPayee?.additional_payee_rate ?? null;
+  const additionalPayeeRate = Number.isFinite(Number(additionalPayeeRateRaw))
+    ? Number(additionalPayeeRateRaw)
+    : null;
+  const profileSnapshot = {
+    ...buildPaySnapshot(profile, driver),
+    additional_payee_rate: additionalPayeeRate
+  };
 
-  const totals = recalculateSettlementTotals(settlement, loadItems, adjustmentItems, profileSnapshot);
+  const hasAdditionalPayee = !!effectiveAdditionalPayeeId || (Number(additionalPayeeRate) || 0) > 0;
+
+  console.log('[Settlement Recalc] payee context', {
+    settlementId,
+    settlementAdditionalPayeeId: settlement.additional_payee_id,
+    effectiveAdditionalPayeeId,
+    additionalPayeeRateRaw,
+    additionalPayeeRate,
+    hasAdditionalPayee
+  });
+  const normalizeSnapshot = (value) => {
+    if (!value) return {};
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch (_) {
+        return {};
+      }
+    }
+    return value;
+  };
+
+  const recalculatedLoadItems = [];
+  for (const item of loadItems) {
+    const itemSnapshot = normalizeSnapshot(item.pay_basis_snapshot);
+    const payModel = itemSnapshot.pay_model || profileSnapshot.pay_model || 'per_mile';
+    const { driverPay, additionalPayeePay } = computeLoadPay({
+      payModel,
+      centsPerMile: itemSnapshot.cents_per_mile ?? profileSnapshot.cents_per_mile,
+      percentageRate: itemSnapshot.percentage_rate ?? profileSnapshot.percentage_rate,
+      flatPerLoadAmount: itemSnapshot.flat_per_load_amount ?? profileSnapshot.flat_per_load_amount,
+      gross: Number(item.gross_amount) || 0,
+      loadedMiles: Number(item.loaded_miles) || 0,
+      hasAdditionalPayee,
+      additionalPayeeRate: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate
+    });
+
+    console.log('[Settlement Recalc] load pay', {
+      settlementId,
+      loadId: item.load_id,
+      gross: Number(item.gross_amount) || 0,
+      rateUsed: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate,
+      driverPay,
+      additionalPayeePay,
+      previousAdditionalPayeeAmount: Number(item.additional_payee_amount || 0)
+    });
+
+    if (
+      Number(item.driver_pay_amount) !== Number(driverPay) ||
+      Number(item.additional_payee_amount || 0) !== Number(additionalPayeePay)
+    ) {
+      await knex('settlement_load_items')
+        .where({ id: item.id })
+        .update({
+          driver_pay_amount: driverPay,
+          additional_payee_amount: additionalPayeePay,
+          updated_at: knex.fn.now()
+        });
+    }
+
+    recalculatedLoadItems.push({
+      ...item,
+      driver_pay_amount: driverPay,
+      additional_payee_amount: additionalPayeePay
+    });
+  }
+
+  const totals = recalculateSettlementTotals(settlement, recalculatedLoadItems, adjustmentItems, profileSnapshot);
   await knex('settlements').where({ id: settlementId }).update(totals);
   return knex('settlements').where({ id: settlementId }).first();
 }
@@ -298,34 +564,46 @@ async function addLoadToSettlement(knex, settlementId, loadId, userId) {
     const profile = settlement.compensation_profile_id
       ? await knex('driver_compensation_profiles').where({ id: settlement.compensation_profile_id }).first()
       : null;
-    const snapshot = profile ? {
-      pay_model: profile.pay_model,
-      percentage_rate: profile.percentage_rate,
-      cents_per_mile: profile.cents_per_mile,
-      flat_per_load_amount: profile.flat_per_load_amount
-    } : {};
+    const driver = await knex('drivers')
+      .where({ id: settlement.driver_id })
+      .select('pay_basis', 'pay_rate', 'pay_percentage')
+      .first();
+    const additionalPayee = settlement.additional_payee_id
+      ? await knex('payees').where({ id: settlement.additional_payee_id }).select('additional_payee_rate').first()
+      : null;
+    const snapshot = {
+      ...buildPaySnapshot(profile, driver),
+      additional_payee_rate: additionalPayee?.additional_payee_rate ?? null
+    };
     const gross = Number(load.rate) || 0;
-    const { driverPay } = computeLoadPay({
-      ...snapshot,
+    const { driverPay, additionalPayeePay } = computeLoadPay({
+      payModel: snapshot.pay_model,
+      centsPerMile: snapshot.cents_per_mile,
+      percentageRate: snapshot.percentage_rate,
+      flatPerLoadAmount: snapshot.flat_per_load_amount,
       gross,
-      loadedMiles
+      loadedMiles,
+      hasAdditionalPayee: !!settlement.additional_payee_id,
+      additionalPayeeRate: snapshot.additional_payee_rate
     });
     const stops = await client.query(
       'SELECT stop_type, stop_date FROM load_stops WHERE load_id = $1 ORDER BY sequence',
       [loadId]
     );
-    const pickups = stops.rows.filter((s) => (s.stop_type || '').toUpperCase() === 'PICKUP');
-    const deliveries = stops.rows.filter((s) => (s.stop_type || '').toUpperCase() === 'DELIVERY');
+    const pickups = stops.rows.filter((s) => normalizeStopType(s.stop_type) === 'PICKUP');
+    const deliveries = stops.rows.filter((s) => normalizeStopType(s.stop_type) === 'DELIVERY');
+    const pickupDate = pickups[0]?.stop_date ?? load.pickup_date ?? null;
+    const deliveryDate = deliveries.length ? deliveries[deliveries.length - 1].stop_date : (load.delivery_date ?? null);
     await knex('settlement_load_items').insert({
       settlement_id: settlementId,
       load_id: loadId,
-      pickup_date: pickups[0]?.stop_date ?? null,
-      delivery_date: deliveries.length ? deliveries[deliveries.length - 1].stop_date : null,
+      pickup_date: pickupDate,
+      delivery_date: deliveryDate,
       loaded_miles: loadedMiles,
       pay_basis_snapshot: snapshot,
       gross_amount: gross,
       driver_pay_amount: driverPay,
-      additional_payee_amount: 0,
+      additional_payee_amount: additionalPayeePay,
       included_by: userId
     });
     await recalcAndUpdateSettlement(knex, settlementId);

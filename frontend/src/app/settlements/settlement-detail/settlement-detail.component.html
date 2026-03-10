@@ -6,16 +6,344 @@
       </button>
       <div>
         <h1>Settlement {{ settlementId || '—' }}</h1>
-        <p class="subtitle">Detail view — Phase 4</p>
+        <p class="subtitle">Compensation summary, loads, deductions, adjustments, approvals</p>
+        <div class="data-source-badge" *ngIf="!loading && settlement" [class.fallback]="dataSourceMode === 'fallback'">
+          <span class="material-symbols-outlined">hub</span>
+          {{ getDataSourceLabel() }}
+        </div>
       </div>
+    </div>
+    <div class="header-actions" *ngIf="settlement">
+      <button type="button" class="btn-secondary" (click)="recalcTotals()" [disabled]="saving || loading">
+        <span class="material-symbols-outlined">sync</span>
+        Recalc totals
+      </button>
+      <button type="button" class="btn-primary" (click)="approve()" [disabled]="isLocked() || saving || loading">
+        <span class="material-symbols-outlined">verified</span>
+        Approve
+      </button>
+      <button type="button" class="btn-danger" (click)="voidSettlement()" [disabled]="isLocked() || saving || loading">
+        <span class="material-symbols-outlined">block</span>
+        Void
+      </button>
     </div>
   </div>
 
-  <div class="detail-card">
+  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+  <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
+
+  <div *ngIf="loading" class="loading-wrap">
+    <div class="spinner"></div>
+    <span>Loading settlement detail…</span>
+  </div>
+
+  <ng-container *ngIf="!loading && settlement">
+    <div class="detail-grid">
+      <section class="detail-card">
+        <div class="section-header">
+          <h2>Compensation summary</h2>
+          <span class="status-badge" [class.status-locked]="isLocked()">{{ settlement.settlement_status || 'preparing' }}</span>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-item">
+            <div class="label">Settlement #</div>
+            <div class="value">{{ settlement.settlement_number || settlement.id }}</div>
+          </div>
+          <div class="summary-item">
+            <div class="label">Driver</div>
+            <div class="value">{{ getDriverName() }}</div>
+          </div>
+          <div class="summary-item">
+            <div class="label">Payroll period</div>
+            <div class="value">{{ dateOnly(period?.period_start || settlement.period_start) }} → {{ dateOnly(period?.period_end || settlement.period_end) }}</div>
+          </div>
+          <div class="summary-item">
+            <div class="label">Primary payee</div>
+            <div class="value">{{ primaryPayee?.name || settlement.primary_payee_id || '—' }}</div>
+          </div>
+          <div class="summary-item">
+            <div class="label">Additional payee</div>
+            <div class="value">{{ additionalPayee?.name || settlement.additional_payee_id || '—' }}</div>
+          </div>
+          <div class="summary-item">
+            <div class="label">Date basis</div>
+            <div class="value">{{ settlement.date_basis || 'pickup' }}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="detail-card">
+        <div class="section-header">
+          <h2>Totals</h2>
+        </div>
+        <div class="totals-grid">
+          <div class="metric-card">
+            <div class="metric-label">Gross</div>
+            <div class="metric-value">${{ settlement.subtotal_gross | number:'1.2-2' }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Driver pay subtotal</div>
+            <div class="metric-value">${{ settlement.subtotal_driver_pay | number:'1.2-2' }}</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Additional payee subtotal</div>
+            <div class="metric-value">${{ settlement.subtotal_additional_payee | number:'1.2-2' }}</div>
+          </div>
+          <div class="metric-card metric-warn">
+            <div class="metric-label">Total deductions</div>
+            <div class="metric-value">${{ settlement.total_deductions | number:'1.2-2' }}</div>
+          </div>
+          <div class="metric-card metric-good">
+            <div class="metric-label">Net driver pay</div>
+            <div class="metric-value">${{ settlement.net_pay_driver | number:'1.2-2' }}</div>
+          </div>
+          <div class="metric-card metric-good">
+            <div class="metric-label">Net additional payee</div>
+            <div class="metric-value">${{ settlement.net_pay_additional_payee | number:'1.2-2' }}</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="detail-card">
+      <div class="section-header">
+        <h2>Load earnings</h2>
+      </div>
+      <div class="section-actions" *ngIf="!isLocked()">
+        <select class="form-select" [(ngModel)]="addLoadId">
+          <option value="">Select load to add</option>
+          <option *ngFor="let l of availableLoads" [value]="l.id">{{ l.load_number || l.id }} • ${{ (l.rate || 0) | number:'1.2-2' }}</option>
+        </select>
+        <button type="button" class="btn-primary" (click)="addLoad()" [disabled]="!addLoadId || saving">
+          <span class="material-symbols-outlined">add_circle</span>
+          Add load
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Load</th>
+              <th>Pickup</th>
+              <th>Delivery</th>
+              <th>Miles</th>
+              <th>Gross</th>
+              <th>Driver pay</th>
+              <th>Additional payee</th>
+              <th *ngIf="!isLocked()">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let li of loadItems">
+              <td>{{ li.load_number || li.load_id }}</td>
+              <td>{{ dateOnly(li.pickup_date) }}</td>
+              <td>{{ dateOnly(li.delivery_date) }}</td>
+              <td>{{ li.loaded_miles || 0 }}</td>
+              <td>${{ li.gross_amount | number:'1.2-2' }}</td>
+              <td>${{ li.driver_pay_amount | number:'1.2-2' }}</td>
+              <td>${{ li.additional_payee_amount | number:'1.2-2' }}</td>
+              <td *ngIf="!isLocked()">
+                <button type="button" class="btn-sm btn-danger" (click)="removeLoad(li.id)" [disabled]="saving">
+                  <span class="material-symbols-outlined">delete</span>
+                  Remove
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state" *ngIf="loadItems.length === 0">No load earnings added yet.</div>
+    </section>
+
+    <section class="detail-grid">
+      <div class="detail-card">
+        <div class="section-header">
+          <h2>Scheduled deductions</h2>
+          <span class="pill">${{ getTotalFor(scheduledDeductions) | number:'1.2-2' }}</span>
+        </div>
+        <ul class="line-items" *ngIf="scheduledDeductions.length">
+          <li *ngFor="let x of scheduledDeductions">
+            <div>
+              <div class="line-title">{{ x.description || 'Scheduled deduction' }}</div>
+              <div class="line-sub">{{ x.source_type || 'scheduled_rule' }} • {{ x.item_type || 'deduction' }}</div>
+            </div>
+            <div class="line-amount">${{ x.amount | number:'1.2-2' }}</div>
+          </li>
+        </ul>
+        <div class="empty-state" *ngIf="!scheduledDeductions.length">No scheduled deductions.</div>
+      </div>
+
+      <div class="detail-card">
+        <div class="section-header">
+          <h2>Variable deductions</h2>
+          <span class="pill">${{ getTotalFor(variableDeductions) | number:'1.2-2' }}</span>
+        </div>
+        <ul class="line-items" *ngIf="variableDeductions.length">
+          <li *ngFor="let x of variableDeductions">
+            <div>
+              <div class="line-title">{{ x.description || 'Variable deduction' }}</div>
+              <div class="line-sub">{{ x.source_type || 'variable' }} • {{ x.item_type || 'deduction' }}</div>
+            </div>
+            <div class="line-amount">${{ x.amount | number:'1.2-2' }}</div>
+          </li>
+        </ul>
+        <div class="empty-state" *ngIf="!variableDeductions.length">No variable deductions.</div>
+      </div>
+    </section>
+
+    <section class="detail-card">
+      <div class="section-header">
+        <h2>Manual adjustments</h2>
+        <span class="pill">${{ getTotalFor(manualAdjustments) | number:'1.2-2' }}</span>
+      </div>
+
+      <div class="adjustment-form" *ngIf="!isLocked()">
+        <select class="form-select" [(ngModel)]="addAdjustment.item_type">
+          <option value="deduction">Deduction</option>
+          <option value="earning">Earning</option>
+          <option value="reimbursement">Reimbursement</option>
+          <option value="advance">Advance</option>
+          <option value="correction">Correction</option>
+        </select>
+        <input class="form-input" type="text" placeholder="Description" [(ngModel)]="addAdjustment.description" />
+        <input class="form-input" type="number" step="0.01" placeholder="Amount" [(ngModel)]="addAdjustment.amount" />
+        
+        <!-- Searchable Category Dropdown -->
+        <div class="category-search-wrapper">
+          <div class="category-search-input-wrapper">
+            <input 
+              class="form-input category-search-input" 
+              type="text" 
+              placeholder="Search or create category (optional)..." 
+              [(ngModel)]="categorySearchQuery"
+              (focus)="onCategorySearchFocus()"
+              (blur)="onCategorySearchBlur()"
+              (input)="onCategorySearchInput()"
+              [disabled]="isCreatingCategory"
+            />
+            <button 
+              type="button" 
+              class="clear-category-btn"
+              *ngIf="addAdjustment.category_id && !isCreatingCategory"
+              (click)="clearCategorySelection()"
+              title="Clear selection"
+            >
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          
+          <!-- Dropdown Results -->
+          <div class="category-dropdown" *ngIf="showCategoryDropdown && !isCreatingCategory">
+            <div class="category-dropdown-item" 
+                 *ngFor="let cat of filteredCategories"
+                 (mousedown)="selectCategory(cat)"
+                 [class.indent]="cat.parent_code">
+              <span class="category-name">{{ cat.name }}</span>
+              <span class="category-code">#{{ cat.code }}</span>
+            </div>
+            
+            <div class="category-dropdown-item create-new" 
+                 *ngIf="showCreateNewCategory()"
+                 (mousedown)="startCreatingCategory()">
+              <span class="material-symbols-outlined">add_circle</span>
+              <span>Create "{{ categorySearchQuery }}"</span>
+            </div>
+            
+            <div class="category-dropdown-empty" *ngIf="filteredCategories.length === 0 && !showCreateNewCategory()">
+              No categories found
+            </div>
+          </div>
+
+          <!-- Create Category Form -->
+          <div class="create-category-form" *ngIf="isCreatingCategory">
+            <div class="create-category-header">
+              <span class="material-symbols-outlined">category</span>
+              <span>Create New Category</span>
+            </div>
+            <input 
+              class="form-input" 
+              type="text" 
+              placeholder="Category name" 
+              [(ngModel)]="newCategoryName"
+              autofocus
+            />
+            <div class="create-category-actions">
+              <button type="button" class="btn-secondary-sm" (click)="cancelCreateCategory()" [disabled]="saving">
+                Cancel
+              </button>
+              <button type="button" class="btn-primary-sm" (click)="createNewCategory()" [disabled]="saving || !newCategoryName.trim()">
+                <span class="material-symbols-outlined" *ngIf="!saving">check_circle</span>
+                <span class="spinner-sm" *ngIf="saving"></span>
+                {{ saving ? 'Creating...' : 'Create' }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <select class="form-select" [(ngModel)]="addAdjustment.apply_to">
+          <option value="primary_payee">Primary payee</option>
+          <option value="additional_payee">Additional payee</option>
+          <option value="settlement">Settlement</option>
+        </select>
+        <button type="button" class="btn-primary" (click)="addManualAdjustment()" [disabled]="saving">
+          <span class="material-symbols-outlined">add_circle</span>
+          Add adjustment
+        </button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Source</th>
+              <th>Apply to</th>
+              <th>Amount</th>
+              <th *ngIf="!isLocked()">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let a of manualAdjustments">
+              <td>{{ a.item_type || 'deduction' }}</td>
+              <td>{{ a.description || '—' }}</td>
+              <td>{{ a.source_type || 'manual' }}</td>
+              <td>{{ a.apply_to || 'primary_payee' }}</td>
+              <td>${{ a.amount | number:'1.2-2' }}</td>
+              <td *ngIf="!isLocked()">
+                <button type="button" class="btn-sm btn-danger" (click)="removeAdjustment(a.id)" [disabled]="saving">
+                  <span class="material-symbols-outlined">delete</span>
+                  Remove
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state" *ngIf="manualAdjustments.length === 0">No manual adjustments.</div>
+    </section>
+
+    <section class="detail-card">
+      <div class="section-header">
+        <h2>Phase 4 helper: send settlement email</h2>
+      </div>
+      <div class="email-options">
+        <label><input type="checkbox" [(ngModel)]="emailOptions.to_driver" /> Send to driver</label>
+        <label><input type="checkbox" [(ngModel)]="emailOptions.to_additional_payee" /> Send to additional payee</label>
+        <label><input type="checkbox" [(ngModel)]="emailOptions.cc_internal" /> CC internal</label>
+      </div>
+      <button type="button" class="btn-primary" (click)="sendEmail()" [disabled]="saving || loading">
+        <span class="material-symbols-outlined">forward_to_inbox</span>
+        Send email
+      </button>
+    </section>
+  </ng-container>
+
+  <div class="detail-card" *ngIf="!loading && !settlement && !error">
     <div class="placeholder-content">
-      <span class="material-symbols-outlined placeholder-icon">receipt_long</span>
-      <h2>Detail view coming in Phase 4</h2>
-      <p>This page will show compensation summary, load earnings, scheduled and variable deductions, manual adjustments, totals, and approval actions once the backend settlement APIs are in place.</p>
+      <span class="material-symbols-outlined placeholder-icon">error</span>
+      <h2>Settlement not found</h2>
+      <p>The requested settlement could not be loaded.</p>
       <button type="button" class="btn-primary" (click)="backToList()">
         <span class="material-symbols-outlined">list</span>
         Back to list
