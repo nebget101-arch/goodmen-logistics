@@ -1,0 +1,191 @@
+<div class="equipment-owners-page">
+  <div class="header">
+    <div>
+      <h1>Equipment Owners</h1>
+      <p class="subtitle">Configure additional payee equipment owners for driver settlements.</p>
+    </div>
+    <button type="button" class="btn-primary btn-ai" (click)="openCreate()">
+      <span class="material-symbols-outlined">psychology_alt</span>
+      Add equipment owner
+    </button>
+  </div>
+
+  <div class="filters-card">
+    <div class="field">
+      <label for="ownerSearch">Search</label>
+      <input id="ownerSearch" class="form-input" type="text" placeholder="Name, email, phone" [(ngModel)]="filters.search" (keyup.enter)="loadOwners()" />
+    </div>
+    <label class="check-inline">
+      <input type="checkbox" [(ngModel)]="filters.includeInactive" />
+      <span>Include inactive</span>
+    </label>
+    <div class="actions">
+      <button type="button" class="btn-secondary btn-ai-muted" (click)="clearFilters()">Clear</button>
+      <button type="button" class="btn-primary btn-ai" (click)="loadOwners()">Apply</button>
+    </div>
+  </div>
+
+  <div class="table-card" *ngIf="!loading">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Email</th>
+          <th scope="col">Phone</th>
+          <th scope="col">Location</th>
+          <th scope="col">Status</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="owners.length === 0">
+          <td colspan="6" class="empty">No equipment owners found.</td>
+        </tr>
+        <tr *ngFor="let owner of owners">
+          <td>{{ owner.name }}</td>
+          <td>{{ owner.email || '—' }}</td>
+          <td>{{ owner.phone || '—' }}</td>
+          <td>{{ getOwnerLocation(owner) }}</td>
+          <td>
+            <span class="toggle-switch">
+              <input type="checkbox" [checked]="owner.is_active" (change)="toggleActive(owner)" />
+              <span class="toggle-slider"></span>
+            </span>
+            <span class="toggle-label">{{ owner.is_active ? 'Active' : 'Inactive' }}</span>
+          </td>
+          <td class="row-actions">
+            <button type="button" class="btn-sm btn-outline btn-ai btn-ai-sm" (click)="openEdit(owner)">
+              <span class="material-symbols-outlined">auto_fix_high</span>
+              Edit
+            </button>
+            <button type="button" class="btn-sm btn-danger btn-ai-danger" (click)="deactivate(owner)" [disabled]="!owner.is_active">Deactivate</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="loading-wrap" *ngIf="loading">
+    <div class="spinner"></div>
+    <span>Loading equipment owners…</span>
+  </div>
+</div>
+
+<div class="modal-backdrop" *ngIf="showModal" (click)="closeModal()" (keydown.enter)="closeModal()"></div>
+<div class="modal" *ngIf="showModal">
+  <div class="modal-dialog" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>{{ editingId ? 'Edit Equipment Owner' : 'New Equipment Owner' }}</h2>
+      <button type="button" class="close-btn" (click)="closeModal()">×</button>
+    </div>
+
+    <div class="modal-body owner-modal-body">
+      <div class="owner-layout">
+        <section class="owner-left-col">
+          <div class="field field-wide">
+            <label for="ownerName">Company Name <span class="required">*</span></label>
+            <input id="ownerName" class="form-input" type="text" [(ngModel)]="formData.name" />
+          </div>
+
+          <div class="field field-wide">
+            <label for="ownerAddress">Address</label>
+            <input id="ownerAddress" class="form-input" type="text" [(ngModel)]="formData.address" />
+          </div>
+
+          <div class="field field-wide">
+            <label for="ownerAddress2">Address line 2</label>
+            <input id="ownerAddress2" class="form-input" type="text" [(ngModel)]="formData.address_line_2" />
+          </div>
+
+          <div class="owner-grid-2">
+            <div class="field">
+              <label for="ownerPhone">Phone</label>
+              <input id="ownerPhone" class="form-input" type="text" [(ngModel)]="formData.phone" />
+            </div>
+            <div class="field">
+              <label for="ownerEmail">Email</label>
+              <input id="ownerEmail" class="form-input" type="email" [(ngModel)]="formData.email" />
+            </div>
+          </div>
+
+          <div class="owner-grid-3">
+            <div class="field">
+              <label for="ownerCity">City</label>
+              <input id="ownerCity" class="form-input" type="text" [(ngModel)]="formData.city" />
+            </div>
+            <div class="field">
+              <label for="ownerState">State</label>
+              <input id="ownerState" class="form-input" type="text" [(ngModel)]="formData.state" />
+            </div>
+            <div class="field">
+              <label for="ownerZip">Zip</label>
+              <input id="ownerZip" class="form-input" type="text" [(ngModel)]="formData.zip" />
+            </div>
+          </div>
+
+          <div class="owner-grid-2">
+            <div class="field">
+              <label for="ownerFidEin">FID/EIN</label>
+              <input id="ownerFidEin" class="form-input" type="text" [(ngModel)]="formData.fid_ein" />
+            </div>
+            <div class="field">
+              <label for="ownerMc">MC</label>
+              <input id="ownerMc" class="form-input" type="text" [(ngModel)]="formData.mc" />
+            </div>
+          </div>
+
+          <div class="field field-wide">
+            <label for="ownerNotes">Notes</label>
+            <textarea id="ownerNotes" class="form-input" rows="3" [(ngModel)]="formData.notes"></textarea>
+          </div>
+        </section>
+
+        <aside class="owner-right-col">
+          <div class="owner-panel">
+            <h4 class="panel-title">Vendor type</h4>
+            <input id="ownerVendorType" class="form-input" type="text" [(ngModel)]="formData.vendor_type" placeholder="e.g. equipment_rental" />
+          </div>
+
+          <div class="owner-panel">
+            <h4 class="panel-title">Billing</h4>
+            <div class="owner-billing-row">
+              <label class="check-row">
+                <input type="checkbox" [(ngModel)]="formData.is_additional_payee" />
+                <span>Additional payee</span>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" [(ngModel)]="formData.is_equipment_owner" />
+                <span>Equipment owner</span>
+              </label>
+            </div>
+
+            <div class="field field-wide">
+              <label for="ownerAdditionalPayeeRate">Additional payee rate, % (e.g. 90)</label>
+              <input id="ownerAdditionalPayeeRate" class="form-input" type="number" step="0.01" [(ngModel)]="formData.additional_payee_rate" />
+            </div>
+
+            <div class="field field-wide">
+              <label for="ownerSettlementTemplateType">Settlement template type</label>
+              <select id="ownerSettlementTemplateType" class="form-input" [(ngModel)]="formData.settlement_template_type">
+                <option *ngFor="let option of settlementTemplateTypes" [value]="option.value">{{ option.label }}</option>
+              </select>
+            </div>
+
+            <label class="check-inline field-wide active-check">
+              <input type="checkbox" [(ngModel)]="formData.is_active" />
+              <span>Active (visible in Additional Payee search)</span>
+            </label>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary btn-ai-muted" (click)="closeModal()" [disabled]="saving">Cancel</button>
+      <button type="button" class="btn-primary btn-ai" (click)="save()" [disabled]="saving">
+        <span class="material-symbols-outlined">psychology_alt</span>
+        {{ saving ? 'Saving...' : (editingId ? 'Update Equipment Owner' : 'Create Equipment Owner') }}
+      </button>
+    </div>
+  </div>
+</div>

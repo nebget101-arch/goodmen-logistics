@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { finalize } from 'rxjs/operators';
 import { forkJoin, of } from 'rxjs';
 import { ApiService } from '../../services/api.service';
@@ -230,7 +231,7 @@ export class DispatchDriversComponent implements OnInit {
     fuelCardNumber: ''
   };
 
-  constructor(private apiService: ApiService) {}
+  constructor(private apiService: ApiService, private router: Router) {}
 
   ngOnInit(): void {
     this.loadDrivers();
@@ -1146,27 +1147,19 @@ export class DispatchDriversComponent implements OnInit {
 
   // Equipment Owner creation methods
   startCreatingEquipmentOwner(): void {
-    console.log('Starting equipment owner creation for additional payee');
-    this.isCreatingEquipmentOwner = true;
-    this.newEquipmentOwner = {
-      companyName: this.additionalPayeeSearch,
-      address: '',
-      address2: '',
-      email: '',
-      phone: '',
-      city: '',
-      state: '',
-      zip: '',
-      fidEin: '',
-      mc: '',
-      notes: '',
-      vendorType: '',
-      additionalPayee: true,
-      equipmentOwner: true,
-      additionalPayeeRate: null,
-      settlementTemplateType: ''
-    };
+    const prefillName = (this.additionalPayeeSearch || '').trim();
     this.showAdditionalPayeeDropdown = false;
+    const urlTree = this.router.createUrlTree(['/settlements/equipment-owners'], {
+      queryParams: {
+        create: '1',
+        prefillName: prefillName || undefined
+      }
+    });
+    const url = this.router.serializeUrl(urlTree);
+    const opened = window.open(url, '_blank', 'noopener');
+    if (!opened) {
+      this.router.navigateByUrl(url);
+    }
   }
 
   cancelCreateEquipmentOwner(): void {

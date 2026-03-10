@@ -479,8 +479,8 @@
                       <div class="payee-dropdown-item create-new"
                            *ngIf="showCreateAdditionalPayee()"
                              (mousedown)="startCreatingEquipmentOwner()">
-                        <span class="material-symbols-outlined">add_circle</span>
-                        <span>+ New Equipment Owner</span>
+                        <span class="material-symbols-outlined">psychology_alt</span>
+                        <span>Open AI Equipment Owner Form</span>
                       </div>
                     </div>
                   </div>
@@ -766,8 +766,8 @@
                       <div class="payee-dropdown-item create-new"
                            *ngIf="showCreateAdditionalPayee()"
                              (mousedown)="startCreatingEquipmentOwner()">
-                        <span class="material-symbols-outlined">add_circle</span>
-                        <span>+ New Equipment Owner</span>
+                        <span class="material-symbols-outlined">psychology_alt</span>
+                        <span>Open AI Equipment Owner Form</span>
                       </div>
                     </div>
                   </div>
@@ -805,123 +805,7 @@
     </div>
   </div>
 
-<div class="modal-backdrop owner-modal-backdrop" *ngIf="isCreatingEquipmentOwner" (click)="cancelCreateEquipmentOwner()">
-  <div class="modal dispatch-modal owner-modal" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h2>
-        <span class="material-symbols-outlined">business</span>
-        New Equipment Owner
-      </h2>
-      <button class="close-btn" type="button" (click)="cancelCreateEquipmentOwner()">×</button>
-    </div>
 
-    <div class="modal-body owner-modal-body">
-      <div class="owner-layout">
-        <section class="owner-left-col">
-          <div class="field field-wide">
-            <label for="ownerCompanyName">Company Name <span class="required">*</span></label>
-            <input id="ownerCompanyName" class="form-input" [(ngModel)]="newEquipmentOwner.companyName" />
-          </div>
-
-          <div class="field field-wide">
-            <label for="ownerAddress">Address</label>
-            <input id="ownerAddress" class="form-input" [(ngModel)]="newEquipmentOwner.address" />
-          </div>
-
-          <div class="field field-wide">
-            <label for="ownerAddress2">Address line 2</label>
-            <input id="ownerAddress2" class="form-input" [(ngModel)]="newEquipmentOwner.address2" />
-          </div>
-
-          <div class="owner-grid-2">
-            <div class="field">
-              <label for="ownerPhone">Phone</label>
-              <input id="ownerPhone" class="form-input" [(ngModel)]="newEquipmentOwner.phone" />
-            </div>
-            <div class="field">
-              <label for="ownerEmail">Email</label>
-              <input id="ownerEmail" class="form-input" type="email" [(ngModel)]="newEquipmentOwner.email" />
-            </div>
-          </div>
-
-          <div class="owner-grid-3">
-            <div class="field">
-              <label for="ownerCity">City</label>
-              <input id="ownerCity" class="form-input" [(ngModel)]="newEquipmentOwner.city" />
-            </div>
-            <div class="field">
-              <label for="ownerState">State</label>
-              <input id="ownerState" class="form-input" [(ngModel)]="newEquipmentOwner.state" />
-            </div>
-            <div class="field">
-              <label for="ownerZip">Zip</label>
-              <input id="ownerZip" class="form-input" [(ngModel)]="newEquipmentOwner.zip" />
-            </div>
-          </div>
-
-          <div class="owner-grid-2">
-            <div class="field">
-              <label for="ownerFidEin">FID/EIN</label>
-              <input id="ownerFidEin" class="form-input" [(ngModel)]="newEquipmentOwner.fidEin" />
-            </div>
-            <div class="field">
-              <label for="ownerMc">MC</label>
-              <input id="ownerMc" class="form-input" [(ngModel)]="newEquipmentOwner.mc" />
-            </div>
-          </div>
-
-          <div class="field field-wide">
-            <label for="ownerNotes">Notes</label>
-            <textarea id="ownerNotes" class="form-input" rows="3" [(ngModel)]="newEquipmentOwner.notes"></textarea>
-          </div>
-        </section>
-
-        <aside class="owner-right-col">
-          <div class="comp-block owner-panel">
-            <h4 class="comp-section-title">Vendor type</h4>
-            <button type="button" class="btn btn-success btn-sm" disabled>
-              <span class="material-symbols-outlined">add</span>
-              Vendor type
-            </button>
-          </div>
-
-          <div class="comp-block owner-panel">
-            <h4 class="comp-section-title">Billing</h4>
-            <div class="owner-billing-row">
-              <label class="check-row">
-                <input type="checkbox" [(ngModel)]="newEquipmentOwner.additionalPayee" />
-                <span>Additional payee</span>
-              </label>
-              <label class="check-row">
-                <input type="checkbox" [(ngModel)]="newEquipmentOwner.equipmentOwner" />
-                <span>Equipment owner</span>
-              </label>
-            </div>
-
-            <div class="field field-wide">
-              <label for="ownerAdditionalPayeeRate">Additional payee rate, % (e.g. 90)</label>
-              <input id="ownerAdditionalPayeeRate" class="form-input" type="number" step="0.01" [(ngModel)]="newEquipmentOwner.additionalPayeeRate" />
-            </div>
-
-            <div class="field field-wide">
-              <label for="ownerSettlementTemplateType">Settlement template type</label>
-              <select id="ownerSettlementTemplateType" class="form-input" [(ngModel)]="newEquipmentOwner.settlementTemplateType">
-                <option *ngFor="let option of settlementTemplateTypes" [value]="option.value">{{ option.label }}</option>
-              </select>
-            </div>
-          </div>
-        </aside>
-      </div>
-    </div>
-
-    <div class="modal-footer">
-      <button class="btn btn-secondary" type="button" (click)="cancelCreateEquipmentOwner()" [disabled]="saving">Cancel</button>
-      <button class="btn btn-primary" type="button" (click)="createEquipmentOwner()" [disabled]="saving || !newEquipmentOwner.companyName.trim()">
-        {{ saving ? 'Creating...' : 'Create Equipment Owner' }}
-      </button>
-    </div>
-  </div>
-</div>
 
 </div>
 
