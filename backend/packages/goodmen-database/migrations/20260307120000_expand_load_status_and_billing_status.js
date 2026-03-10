@@ -18,13 +18,33 @@ exports.up = async function(knex) {
     ALTER TABLE loads
     DROP CONSTRAINT IF EXISTS loads_status_check
   `);
+  // Normalize legacy/freeform statuses before re-adding constraint.
+  await knex.raw(`
+    UPDATE loads
+    SET status = CASE UPPER(REPLACE(TRIM(COALESCE(status::text, '')), ' ', '_'))
+      WHEN '' THEN 'NEW'
+      WHEN 'NEW' THEN 'NEW'
+      WHEN 'DRAFT' THEN 'DRAFT'
+      WHEN 'CANCELLED' THEN 'CANCELLED'
+      WHEN 'CANCELED' THEN 'CANCELED'
+      WHEN 'TONU' THEN 'TONU'
+      WHEN 'DISPATCHED' THEN 'DISPATCHED'
+      WHEN 'EN_ROUTE' THEN 'EN_ROUTE'
+      WHEN 'PICKED_UP' THEN 'PICKED_UP'
+      WHEN 'IN_TRANSIT' THEN 'IN_TRANSIT'
+      WHEN 'DELIVERED' THEN 'DELIVERED'
+      WHEN 'COMPLETED' THEN 'COMPLETED'
+      ELSE 'NEW'
+    END
+  `);
   await knex.raw(`
     ALTER TABLE loads
     ADD CONSTRAINT loads_status_check
     CHECK (status IN (
+      'DRAFT',
       'NEW', 'CANCELLED', 'CANCELED', 'TONU',
       'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'PICKED UP',
-      'IN_TRANSIT', 'DELIVERED'
+      'IN_TRANSIT', 'DELIVERED', 'COMPLETED'
     ))
   `);
 
@@ -36,6 +56,22 @@ exports.up = async function(knex) {
   await knex.raw(`
     ALTER TABLE loads
     DROP CONSTRAINT IF EXISTS loads_billing_status_check
+  `);
+  // Normalize legacy/freeform billing statuses before re-adding constraint.
+  await knex.raw(`
+    UPDATE loads
+    SET billing_status = CASE UPPER(REPLACE(TRIM(COALESCE(billing_status::text, '')), ' ', '_'))
+      WHEN '' THEN 'PENDING'
+      WHEN 'PENDING' THEN 'PENDING'
+      WHEN 'CANCELLED' THEN 'CANCELLED'
+      WHEN 'CANCELED' THEN 'CANCELED'
+      WHEN 'BOL_RECEIVED' THEN 'BOL_RECEIVED'
+      WHEN 'INVOICED' THEN 'INVOICED'
+      WHEN 'SENT_TO_FACTORING' THEN 'SENT_TO_FACTORING'
+      WHEN 'FUNDED' THEN 'FUNDED'
+      WHEN 'PAID' THEN 'PAID'
+      ELSE 'PENDING'
+    END
   `);
   await knex.raw(`
     ALTER TABLE loads
