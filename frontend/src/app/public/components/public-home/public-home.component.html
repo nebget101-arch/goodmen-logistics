@@ -307,11 +307,12 @@
             </li>
           </ul>
           <button
-            class="pub-pricing-cta"
-            [class.pub-btn-primary]="plan.highlighted"
-            [class.pub-btn-outline]="!plan.highlighted"
+            class="pub-pricing-cta pub-btn-primary"
+            [class.pub-pricing-cta-featured]="plan.highlighted"
+            type="button"
             (click)="navigateToTrial(plan.id)"
           >
+            <span class="material-symbols-outlined">rocket_launch</span>
             Start Free Trial
           </button>
         </div>
