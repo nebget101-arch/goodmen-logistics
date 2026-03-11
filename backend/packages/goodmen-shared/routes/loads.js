@@ -511,8 +511,14 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
   const client = await getClient();
   try {
     const body = req.body || {};
+    const tenantId = req.context?.tenantId || null;
+    const operatingEntityId = req.context?.operatingEntityId || null;
     const status = normalizeEnum(body.status) || 'NEW';
     const billingStatus = normalizeEnum(body.billingStatus) || 'PENDING';
+
+    if (!tenantId || !operatingEntityId) {
+      return res.status(403).json({ success: false, error: 'Operating entity context is required to create a load' });
+    }
 
     if (!LOAD_STATUSES.includes(status)) {
       return res.status(400).json({ success: false, error: 'Invalid status' });
@@ -572,8 +578,8 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       RETURNING *`,
       [
-        req.context?.tenantId || null,
-        req.context?.operatingEntityId || null,
+        tenantId,
+        operatingEntityId,
         loadNumber,
         status,
         billingStatus,

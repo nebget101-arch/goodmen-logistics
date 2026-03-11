@@ -234,7 +234,7 @@ export class VehicleFormComponent implements OnInit, OnChanges {
         error: (error) => {
           console.error('Error updating vehicle:', error);
           this.saving = false;
-          this.errors.submit = 'Failed to update vehicle';
+          this.errors.submit = error?.error?.message || error?.error?.error || 'Failed to update vehicle';
         }
       });
     } else {
@@ -247,7 +247,7 @@ export class VehicleFormComponent implements OnInit, OnChanges {
         error: (error) => {
           console.error('Error creating vehicle:', error);
           this.saving = false;
-          this.errors.submit = 'Failed to create vehicle';
+          this.errors.submit = error?.error?.message || error?.error?.error || 'Failed to create vehicle';
         }
       });
     }

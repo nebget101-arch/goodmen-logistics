@@ -350,6 +350,12 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'CDL state and CDL number are required' });
     }
 
+    const tenantId = req.context?.tenantId || null;
+    const operatingEntityId = req.context?.operatingEntityId || null;
+    if (!tenantId || !operatingEntityId) {
+      return res.status(403).json({ message: 'Operating entity context is required to create a driver' });
+    }
+
     await client.query('BEGIN');
 
     const existing = await findDriverByCdl(client, normState, normNumber);
@@ -401,20 +407,20 @@ router.post('/', async (req, res) => {
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-        $12, $13, $14, $15, 0, 'active',
-        COALESCE($16, 'company'),
-        $17,
+        $12, $13, $14, $15, $16, 0, 'active',
+        COALESCE($17, 'company'),
         $18,
         $19,
         $20,
         $21,
         $22,
-        $23
+        $23,
+        $24
       )
       RETURNING *`,
       [
-        req.context?.tenantId || null,
-        req.context?.operatingEntityId || null,
+        tenantId,
+        operatingEntityId,
         firstName,
         lastName,
         email,

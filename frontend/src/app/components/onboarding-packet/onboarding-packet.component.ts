@@ -70,6 +70,8 @@ export class OnboardingPacketComponent implements OnInit {
   sections: { section_key: string; status: string; completed_at?: string }[] = [];
   currentStep: 'employment_application' | 'mvr_authorization' = 'employment_application';
   saving = false;
+  reviewMode = false;
+  submittedEmployment = false;
   saveSuccess: string | null = null;
 
   employment: EmploymentForm = {};
@@ -111,7 +113,7 @@ export class OnboardingPacketComponent implements OnInit {
     const ea = this.sections.find((s) => s.section_key === 'employment_application');
     const eaData = (ea as unknown as { data?: EmploymentForm })?.data;
     if (eaData) {
-      this.employment = { ...eaData };
+      this.employment = { ...this.employment, ...eaData };
     }
     const mvrSection = this.sections.find((s) => s.section_key === 'mvr_authorization');
     const mvrData = (mvrSection as unknown as { data?: MvrForm })?.data;
@@ -122,11 +124,46 @@ export class OnboardingPacketComponent implements OnInit {
 
   setStep(step: 'employment_application' | 'mvr_authorization'): void {
     this.currentStep = step;
+    this.reviewMode = false;
     this.saveSuccess = null;
   }
 
   isSectionCompleted(sectionKey: string): boolean {
     return this.sections.some((s) => s.section_key === sectionKey && s.status === 'completed');
+  }
+
+  saveEmploymentDraft(): void {
+    if (!this.packetId || !this.token) return;
+    this.saving = true;
+    this.saveSuccess = null;
+    this.errorMessage = null;
+    this.apiService
+      .saveOnboardingSection(
+        this.packetId,
+        'employment_application',
+        this.employment,
+        'in_progress',
+        this.token
+      )
+      .subscribe({
+        next: () => {
+          this.saving = false;
+          this.saveSuccess = 'Draft saved. You can resume later from this same onboarding link.';
+        },
+        error: (err) => {
+          this.saving = false;
+          this.errorMessage = err?.error?.message || 'Failed to save draft.';
+        }
+      });
+  }
+
+  openReview(): void {
+    this.reviewMode = true;
+    this.saveSuccess = null;
+  }
+
+  backToEdit(): void {
+    this.reviewMode = false;
   }
 
   submitEmploymentApplication(): void {
@@ -145,7 +182,9 @@ export class OnboardingPacketComponent implements OnInit {
       .subscribe({
         next: () => {
           this.saving = false;
-          this.saveSuccess = 'Employment application saved successfully.';
+          this.submittedEmployment = true;
+          this.reviewMode = false;
+          this.saveSuccess = 'Employment application submitted successfully. Your DQF employment checklist item will be updated automatically.';
           const idx = this.sections.findIndex((s) => s.section_key === 'employment_application');
           if (idx >= 0) {
             this.sections = this.sections.map((s, i) =>
@@ -163,35 +202,6 @@ export class OnboardingPacketComponent implements OnInit {
   }
 
   submitMvrAuthorization(): void {
-    if (!this.packetId || !this.token) return;
-    this.saving = true;
-    this.saveSuccess = null;
-    this.errorMessage = null;
-    this.apiService
-      .saveOnboardingSection(
-        this.packetId,
-        'mvr_authorization',
-        this.mvr,
-        'completed',
-        this.token
-      )
-      .subscribe({
-        next: () => {
-          this.saving = false;
-          this.saveSuccess = 'MVR authorization saved successfully.';
-          const idx = this.sections.findIndex((s) => s.section_key === 'mvr_authorization');
-          if (idx >= 0) {
-            this.sections = this.sections.map((s, i) =>
-              i === idx ? { ...s, status: 'completed', completed_at: new Date().toISOString() } : s
-            );
-          } else {
-            this.sections = [...this.sections, { section_key: 'mvr_authorization', status: 'completed', completed_at: new Date().toISOString() }];
-          }
-        },
-        error: (err) => {
-          this.saving = false;
-          this.errorMessage = err?.error?.message || 'Failed to save MVR authorization.';
-        }
-      });
+    this.saveSuccess = 'MVR Authorization is not part of this phase yet. Placeholder only.';
   }
 }

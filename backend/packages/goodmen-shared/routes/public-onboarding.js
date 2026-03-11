@@ -8,6 +8,131 @@ const {
   buildEmploymentApplicationPdf,
   buildMvrAuthorizationPdf
 } = require('../services/driver-onboarding-pdf');
+const employmentAppService = require('../services/employment-application.service');
+
+function hasMeaningfulData(data) {
+  if (!data || typeof data !== 'object') return false;
+  return Object.values(data).some((v) => {
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== null && v !== undefined && String(v).trim() !== '';
+  });
+}
+
+function buildEmploymentPrefill({ driver, license, latestApp }) {
+  const snapshot = latestApp?.applicant_snapshot || {};
+  const firstName = snapshot.firstName || driver?.first_name || '';
+  const middleName = snapshot.middleName || '';
+  const lastName = snapshot.lastName || driver?.last_name || '';
+
+  return {
+    // Applicant info
+    firstName,
+    middleName,
+    lastName,
+    phone: snapshot.phone || driver?.phone || '',
+    email: snapshot.email || driver?.email || '',
+    dateOfBirth: snapshot.dateOfBirth || driver?.date_of_birth || '',
+    ssnLast4: snapshot.ssn ? String(snapshot.ssn).slice(-4) : '',
+    dateOfApplication: snapshot.applicationDate || latestApp?.application_date || driver?.application_date || '',
+    positionAppliedFor: snapshot.positionAppliedFor || '',
+    dateAvailable: snapshot.dateAvailableForWork || '',
+    canWorkInUs: snapshot.legalRightToWorkInUS ?? null,
+
+    // Address/residency (simple top-level fields for current UI)
+    addressStreet: snapshot.addressStreet || '',
+    addressCity: snapshot.addressCity || '',
+    addressState: snapshot.addressState || '',
+    addressZip: snapshot.addressZip || '',
+    yearsAtAddress: snapshot.yearsAtAddress || '',
+
+    // License
+    licenseState: snapshot.licenseState || license?.cdl_state || driver?.cdl_state || '',
+    licenseNumber: snapshot.licenseNumber || license?.cdl_number || driver?.cdl_number || '',
+    licenseClass: snapshot.licenseClass || license?.cdl_class || driver?.cdl_class || '',
+    licenseEndorsements: snapshot.licenseEndorsements || license?.endorsements || '',
+    licenseExpiry: snapshot.licenseExpiry || license?.cdl_expiry || driver?.cdl_expiry || '',
+
+    // Employment/signature legacy fields used by current packet UI
+    drivingExperienceSummary: snapshot.drivingExperienceSummary || '',
+    currentEmployerName: snapshot.currentEmployerName || '',
+    currentEmployerPhone: snapshot.currentEmployerPhone || '',
+    currentEmployerFrom: snapshot.currentEmployerFrom || '',
+    currentEmployerTo: snapshot.currentEmployerTo || '',
+    currentEmployerReasonForLeaving: snapshot.currentEmployerReasonForLeaving || '',
+    previousEmployerName: snapshot.previousEmployerName || '',
+    previousEmployerPhone: snapshot.previousEmployerPhone || '',
+    previousEmployerFrom: snapshot.previousEmployerFrom || '',
+    previousEmployerTo: snapshot.previousEmployerTo || '',
+    previousEmployerReasonForLeaving: snapshot.previousEmployerReasonForLeaving || '',
+    educationSummary: snapshot.educationSummary || '',
+    otherQualifications: snapshot.otherQualifications || '',
+    applicationSignatureName: snapshot.applicantPrintedName || [firstName, middleName, lastName].filter(Boolean).join(' '),
+    applicationSignatureDate: snapshot.signatureDate || ''
+  };
+}
+
+async function safeOptionalQuery(sql, params = [], fallbackRows = []) {
+  try {
+    return await query(sql, params);
+  } catch (error) {
+    // tolerate legacy schema drift for optional prefill sources
+    if (error?.code === '42703' || error?.code === '42P01') {
+      dtLogger.warn('public_onboarding_optional_query_fallback', {
+        code: error.code,
+        message: error.message
+      });
+      return { rows: fallbackRows };
+    }
+    throw error;
+  }
+}
+
+async function upsertEmploymentApplicationFromPacket(packet, data, submit = false) {
+  const payload = {
+    applicationDate: data?.applicationDate || data?.dateOfApplication || null,
+    applicantSnapshot: {
+      firstName: data?.firstName || null,
+      middleName: data?.middleName || null,
+      lastName: data?.lastName || null,
+      phone: data?.phone || null,
+      email: data?.email || null,
+      dateOfBirth: data?.dateOfBirth || null,
+      ssn: data?.ssn || data?.ssnLast4 || null,
+      applicationDate: data?.applicationDate || data?.dateOfApplication || null,
+      positionAppliedFor: data?.positionAppliedFor || null,
+      dateAvailableForWork: data?.dateAvailableForWork || data?.dateAvailable || null,
+      legalRightToWorkInUS: data?.legalRightToWorkInUS ?? data?.canWorkInUs ?? null,
+      deniedLicensePermitPrivilege: data?.deniedLicensePermitPrivilege ?? null,
+      deniedLicenseExplanation: data?.deniedLicenseExplanation || null,
+      suspendedOrRevokedLicensePermitPrivilege: data?.suspendedOrRevokedLicensePermitPrivilege ?? null,
+      suspendedOrRevokedExplanation: data?.suspendedOrRevokedExplanation || null,
+      otherQualifications: data?.otherQualifications || null,
+      applicantPrintedName: data?.applicantPrintedName || data?.applicationSignatureName || null,
+      applicantSignature: data?.applicantSignature || data?.applicationSignatureName || null,
+      signatureDate: data?.signatureDate || data?.applicationSignatureDate || null,
+      certificationAccepted: data?.certificationAccepted ?? null
+    },
+    residencies: data?.residencies || [],
+    licenses: data?.licenses || [],
+    drivingExperience: data?.drivingExperience || [],
+    accidents: data?.accidents || [],
+    convictions: data?.convictions || [],
+    employers: data?.employers || [],
+    education: data?.education || []
+  };
+
+  const apps = await employmentAppService.getByDriverId(packet.driver_id);
+  let target = apps.find((a) => a.status === 'draft') || null;
+  if (!target) {
+    target = await employmentAppService.createDraft(packet.driver_id, payload, null, null);
+  } else {
+    await employmentAppService.updateDraft(target.id, payload, null, null);
+  }
+
+  if (submit) {
+    await employmentAppService.submitApplication(target.id, {}, null, null);
+  }
+}
 
 async function loadPacketWithToken(packetId, token, forUpdate = false) {
   if (!packetId || !token) {
@@ -139,6 +264,22 @@ async function maybeGenerateOnboardingPdfs(packetId) {
   }
 }
 
+async function safeMaybeGenerateOnboardingPdfs(packetId) {
+  try {
+    await maybeGenerateOnboardingPdfs(packetId);
+  } catch (error) {
+    // Template assets may not exist in some deployments. Do not fail onboarding submission.
+    if (error?.code === 'ENOENT') {
+      dtLogger.warn('onboarding_pdf_template_missing_skip', {
+        packetId,
+        message: error.message
+      });
+      return;
+    }
+    throw error;
+  }
+}
+
 // Basic rate limit placeholder (per-process, very simple)
 const recentRequests = new Map();
 function rateLimited(req, res, next) {
@@ -163,18 +304,63 @@ router.get('/:packetId', rateLimited, async (req, res) => {
       return res.status(status || 400).json({ message: error });
     }
 
-    const sectionsRes = await query(
-      `SELECT section_key, status, completed_at
-       FROM driver_onboarding_sections
-       WHERE packet_id = $1
-       ORDER BY section_key`,
-      [packetId]
-    );
+    let sectionsRes;
+    try {
+      sectionsRes = await query(
+        `SELECT section_key, status, completed_at, data
+         FROM driver_onboarding_sections
+         WHERE packet_id = $1
+         ORDER BY section_key`,
+        [packetId]
+      );
+    } catch (err) {
+      if (err?.code === '42703') {
+        // older schema without data column
+        sectionsRes = await query(
+          `SELECT section_key, status, completed_at
+           FROM driver_onboarding_sections
+           WHERE packet_id = $1
+           ORDER BY section_key`,
+          [packetId]
+        );
+        sectionsRes.rows = (sectionsRes.rows || []).map((r) => ({ ...r, data: null }));
+      } else {
+        throw err;
+      }
+    }
 
     const driverRes = await query(
-      'SELECT id, first_name, last_name, email, phone, cdl_number, cdl_state FROM drivers WHERE id = $1',
+      `SELECT id, first_name, last_name, email, phone, cdl_number, cdl_state, cdl_class, cdl_expiry
+       FROM drivers WHERE id = $1`,
       [packet.driver_id]
     );
+
+    const licenseRes = await safeOptionalQuery(
+      `SELECT *
+       FROM driver_licenses
+       WHERE driver_id = $1
+       LIMIT 1`,
+      [packet.driver_id]
+    );
+
+    const latestAppRes = await safeOptionalQuery(
+      `SELECT *
+       FROM employment_applications
+       WHERE driver_id = $1
+       LIMIT 1`,
+      [packet.driver_id]
+    );
+
+    const driver = driverRes.rows[0] || null;
+    const license = licenseRes.rows[0] || null;
+    const latestApp = latestAppRes.rows[0] || null;
+    const employmentPrefill = buildEmploymentPrefill({ driver, license, latestApp });
+
+    const sections = (sectionsRes.rows || []).map((s) => {
+      if (s.section_key !== 'employment_application') return s;
+      if (hasMeaningfulData(s.data)) return s;
+      return { ...s, data: employmentPrefill };
+    });
 
     const duration = Date.now() - start;
     dtLogger.trackRequest('GET', `/public/onboarding/${packetId}`, 200, duration);
@@ -186,8 +372,8 @@ router.get('/:packetId', rateLimited, async (req, res) => {
         expiresAt: packet.expires_at,
         driverId: packet.driver_id
       },
-      driver: driverRes.rows[0] || null,
-      sections: sectionsRes.rows
+      driver,
+      sections
     });
   } catch (error) {
     const duration = Date.now() - start;
@@ -298,7 +484,33 @@ router.post('/:packetId/sections/:sectionKey', rateLimited, async (req, res) => 
             signatureHash
           ]
         );
-        await maybeGenerateOnboardingPdfs(packet.id);
+        await safeMaybeGenerateOnboardingPdfs(packet.id);
+      }
+
+      if (sectionKey === 'employment_application') {
+        // mirror into normalized employment application tables and perform final submission orchestration
+        try {
+          await upsertEmploymentApplicationFromPacket(packet, data, true);
+        } catch (syncError) {
+          // Do not fail onboarding section save if normalized employment tables are not yet fully migrated.
+          dtLogger.warn('employment_application_sync_failed_nonblocking', {
+            packetId: packet.id,
+            sectionKey,
+            error: syncError?.message || String(syncError)
+          });
+        }
+      }
+    } else if (sectionKey === 'employment_application') {
+      // keep draft in normalized employment application storage
+      try {
+        await upsertEmploymentApplicationFromPacket(packet, data, false);
+      } catch (syncError) {
+        // Non-blocking for legacy schemas.
+        dtLogger.warn('employment_application_draft_sync_failed_nonblocking', {
+          packetId: packet.id,
+          sectionKey,
+          error: syncError?.message || String(syncError)
+        });
       }
     }
 
@@ -395,7 +607,7 @@ router.post('/:packetId/esignatures', rateLimited, async (req, res) => {
     );
 
     // Generate PDFs if sections are completed and PDFs not yet created
-    await maybeGenerateOnboardingPdfs(packet.id);
+    await safeMaybeGenerateOnboardingPdfs(packet.id);
 
     const duration = Date.now() - start;
     dtLogger.trackRequest(

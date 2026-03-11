@@ -43,6 +43,7 @@ router.get('/decode-vin/:vin', async (req, res) => {
 router.post('/customer', async (req, res) => {
   const startTime = Date.now();
   try {
+    const tenantId = req.context?.tenantId || null;
     const {
       unit_number,
       vin,
@@ -57,6 +58,10 @@ router.post('/customer', async (req, res) => {
       next_pm_mileage,
       customer_id
     } = req.body;
+
+    if (!tenantId) {
+      return res.status(403).json({ message: 'Tenant context is required to create a customer vehicle' });
+    }
 
     // Convert empty strings to null and set VIN/unit number fallbacks
     const finalVin = (vin && vin.trim()) ? vin.trim() : (unit_number ? unit_number.slice(-4) : null);
@@ -75,13 +80,13 @@ router.post('/customer', async (req, res) => {
     const result = await query(
       `INSERT INTO customer_vehicles (
         unit_number, vin, make, model, year, license_plate, state, mileage,
-        inspection_expiry, next_pm_due, next_pm_mileage, customer_id
+        inspection_expiry, next_pm_due, next_pm_mileage, customer_id, tenant_id
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING vehicle_uuid`,
       [
         finalUnitNumber, finalVin, finalMake, finalModel, finalYear, finalLicensePlate, finalState, finalMileage,
-        finalInspectionExpiry, finalNextPmDue, finalNextPmMileage, finalCustomerId
+        finalInspectionExpiry, finalNextPmDue, finalNextPmMileage, finalCustomerId, tenantId
       ]
     );
     const created = await query('SELECT * FROM all_vehicles WHERE id = $1', [result.rows[0].vehicle_uuid]);
@@ -206,6 +211,8 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const startTime = Date.now();
   try {
+    const tenantId = req.context?.tenantId || null;
+    const operatingEntityId = req.context?.operatingEntityId || null;
     const { 
       unit_number, 
       vin, 
@@ -224,6 +231,10 @@ router.post('/', async (req, res) => {
       vehicle_type
     } = req.body;
 
+    if (!tenantId || !operatingEntityId) {
+      return res.status(403).json({ message: 'Operating entity context is required to create a vehicle' });
+    }
+
     const finalVin = (vin && vin.trim()) ? vin.trim() : (unit_number ? unit_number.slice(-4) : null);
     const finalUnitNumber = (unit_number && unit_number.trim()) ? unit_number.trim() : (finalVin ? finalVin.slice(-4) : null);
     
@@ -233,14 +244,14 @@ router.post('/', async (req, res) => {
       `INSERT INTO vehicles (
         unit_number, vin, make, model, year, license_plate, state, mileage, 
         inspection_expiry, next_pm_due, next_pm_mileage,
-        insurance_expiry, registration_expiry, oos_reason, status, vehicle_type
+        insurance_expiry, registration_expiry, oos_reason, status, vehicle_type, tenant_id, operating_entity_id
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'in-service', $15) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'in-service', $15, $16, $17) 
        RETURNING *`,
       [
         finalUnitNumber, finalVin, make, model, year, license_plate, state, mileage || 0,
         inspection_expiry, next_pm_due, next_pm_mileage,
-        insurance_expiry, registration_expiry, oos_reason, finalVehicleType
+        insurance_expiry, registration_expiry, oos_reason, finalVehicleType, tenantId, operatingEntityId
       ]
     );
     await query('UPDATE vehicles SET is_company_owned = true WHERE id = $1', [result.rows[0].id]);

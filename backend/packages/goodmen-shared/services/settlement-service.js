@@ -403,6 +403,12 @@ async function generateSettlementNumberWithContext(knex, driver, period) {
 async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userId, knex, context = null) {
   const client = await getClient();
   try {
+    const tenantId = context?.tenantId || null;
+    const operatingEntityId = context?.operatingEntityId || null;
+    if (!tenantId || !operatingEntityId) {
+      throw new Error('Operating entity context is required to create a settlement');
+    }
+
     const period = await knex('payroll_periods')
       .where({ id: payrollPeriodId })
       .modify((qb) => {
@@ -443,6 +449,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
     if (!primaryPayeeId) {
       const payeeName = [driver.first_name, driver.last_name].filter(Boolean).join(' ').trim() || `Driver ${driverId.slice(0, 8)}`;
       const [newPayee] = await knex('payees').insert({
+        tenant_id: tenantId,
         type: 'driver',
         name: payeeName,
         is_active: true
@@ -450,6 +457,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       primaryPayeeId = newPayee.id;
       const periodStart = toDateOnly(period.period_start) || toDateOnly(new Date());
       await knex('driver_payee_assignments').insert({
+        tenant_id: tenantId,
         driver_id: driverId,
         primary_payee_id: primaryPayeeId,
         rule_type: 'company_truck',
@@ -478,8 +486,8 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
     const settlementDate = period.period_end;
 
     const [settlement] = await knex('settlements').insert({
-      tenant_id: context?.tenantId || null,
-      operating_entity_id: context?.operatingEntityId || null,
+      tenant_id: tenantId,
+      operating_entity_id: operatingEntityId,
       payroll_period_id: payrollPeriodId,
       driver_id: driverId,
       compensation_profile_id: profile?.id ?? null,

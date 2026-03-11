@@ -41,6 +41,7 @@ import { CommunicationPreferencesComponent } from './components/communication-pr
 import { DatePickerComponent } from './components/shared/date-picker/date-picker.component';
 import { InlineDateFilterComponent } from './components/shared/inline-date-filter/inline-date-filter.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
+import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
 
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
@@ -81,6 +82,7 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     DatePickerComponent,
     InlineDateFilterComponent,
     MultiMcAdminComponent
+    ,EmploymentApplicationComponent
   ],
   imports: [
     BrowserModule,

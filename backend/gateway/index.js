@@ -114,6 +114,7 @@ app.use(
   '/api/onboarding',
   buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
 );
+app.use('/api/employment', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
 app.use(
   '/public/onboarding',
   buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
