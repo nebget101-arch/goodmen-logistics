@@ -97,6 +97,8 @@ app.use(
   '/api/communication-preferences',
   buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users')
 );
+// Public marketing endpoints (trial requests, plan metadata)
+app.use('/api/public', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/drivers', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
 app.use('/api/dqf', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
 app.use(

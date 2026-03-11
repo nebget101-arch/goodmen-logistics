@@ -1,12 +1,12 @@
 <div class="app-shell">
   <div
     class="sidebar-backdrop"
-    *ngIf="isLoggedIn() && sidebarOpen"
+    *ngIf="isLoggedIn() && !isPublicRoute() && sidebarOpen"
     (click)="closeSidebar()"
     (keydown.escape)="closeSidebar()"
   ></div>
 
-  <aside class="sidebar" *ngIf="isLoggedIn()" [class.mobile-open]="sidebarOpen">
+  <aside class="sidebar" *ngIf="isLoggedIn() && !isPublicRoute()" [class.mobile-open]="sidebarOpen">
     <div class="sidebar-header brand-block">
       <span class="brand-wordmark">FleetNeuron</span>
       <span class="brand-tagline">AI fleet intelligence</span>
@@ -43,7 +43,7 @@
     <div class="sidebar-actions">
       <div
         class="company-switcher"
-        *ngIf="isLoggedIn() && operatingEntityContext.snapshot.isLoaded && operatingEntityContext.hasMultipleEntities()"
+        *ngIf="isLoggedIn() && operatingEntityContext.snapshot.isLoaded && operatingEntityContext.snapshot.accessibleOperatingEntities.length > 0"
       >
         <label for="globalCompanySwitcher" class="company-switcher-label">Company</label>
         <select
@@ -80,6 +80,11 @@
               <span class="material-symbols-outlined">person_add</span> Add User
             </a>
           </ng-container>
+          <ng-container *ngIf="access.hasAnyPermission(['roles.manage', 'access.admin', 'users.edit'])">
+            <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">domain</span> Company Access Admin
+            </a>
+          </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
             <span class="material-symbols-outlined">logout</span> Logout
           </button>
@@ -88,8 +93,8 @@
     </div>
   </aside>
 
-  <main class="content" (click)="closeUserMenu()" (keydown.escape)="closeUserMenu()">
-    <div class="mobile-topbar" *ngIf="isLoggedIn()">
+  <main class="content" [class.public-content]="isPublicRoute()" (click)="closeUserMenu()" (keydown.escape)="closeUserMenu()">
+    <div class="mobile-topbar" *ngIf="isLoggedIn() && !isPublicRoute()">
       <button class="mobile-menu-btn" type="button" (click)="toggleSidebar()" [attr.aria-expanded]="sidebarOpen" aria-label="Toggle menu">
         ☰
       </button>
@@ -101,7 +106,7 @@
 
       <div
         class="mobile-company-switcher"
-        *ngIf="operatingEntityContext.snapshot.isLoaded && operatingEntityContext.hasMultipleEntities()"
+        *ngIf="operatingEntityContext.snapshot.isLoaded && operatingEntityContext.snapshot.accessibleOperatingEntities.length > 0"
       >
         <select
           class="company-switcher-select"
@@ -131,6 +136,11 @@
               <span class="material-symbols-outlined">person_add</span> Add User
             </a>
           </ng-container>
+          <ng-container *ngIf="access.hasAnyPermission(['roles.manage', 'access.admin', 'users.edit'])">
+            <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">domain</span> Company Access Admin
+            </a>
+          </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
             <span class="material-symbols-outlined">logout</span> Logout
           </button>
@@ -138,7 +148,7 @@
       </div>
     </div>
 
-    <div class="topbar" *ngIf="!isLoggedIn()">
+    <div class="topbar" *ngIf="!isLoggedIn() && !isPublicRoute()">
       <div class="topbar-brand brand-block brand-block-topbar">
         <span class="brand-wordmark">FleetNeuron</span>
         <span class="brand-tagline">AI‑powered fleet, safety & inventory intelligence</span>
@@ -152,7 +162,7 @@
     <button
       class="ai-chat-launcher"
       type="button"
-      *ngIf="isLoggedIn()"
+        *ngIf="isLoggedIn() && !isPublicRoute()"
       (click)="toggleAiChat()"
       aria-label="Open FleetNeuron AI assistant"
     >
@@ -160,7 +170,7 @@
       <span class="ai-chat-launcher-label">Ask AI</span>
     </button>
 
-    <section class="ai-chat-panel" *ngIf="aiChatOpen && isLoggedIn()">
+    <section class="ai-chat-panel" *ngIf="aiChatOpen && isLoggedIn() && !isPublicRoute()">
       <header class="ai-chat-header">
         <div>
           <h3>FleetNeuron AI assistant</h3>
@@ -219,7 +229,7 @@
       </footer>
     </section>
 
-    <footer class="app-footer">
+    <footer class="app-footer" *ngIf="!isPublicRoute()">
       <div class="app-footer-left">
         <span class="footer-pill">Protected by FleetNeuron AI anomaly detection</span>
       </div>

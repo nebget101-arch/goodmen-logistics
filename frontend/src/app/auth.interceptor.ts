@@ -38,7 +38,16 @@ export class AuthInterceptor implements HttpInterceptor {
       catchError((error: HttpErrorResponse) => {
         if (this.isBackendApiRequest(req.url) && error?.status === 403) {
           const message = `${error?.error?.error || ''} ${error?.error?.message || ''}`.toLowerCase();
-          if (message.includes('operating entity')) {
+          const shouldRecoverSelection =
+            message.includes('operating entity')
+            && (
+              message.includes('not configured')
+              || message.includes('context missing')
+              || message.includes('tenant context missing')
+              || message.includes('no active operating entity access')
+            );
+
+          if (shouldRecoverSelection) {
             this.operatingEntityContext.recoverFromStaleSelection();
           }
         }

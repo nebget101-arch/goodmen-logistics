@@ -110,4 +110,44 @@ export class InvoicesListComponent implements OnInit, OnDestroy {
   openInvoice(id: string): void {
     this.router.navigate(['/invoices', id]);
   }
+
+  createInvoice(): void {
+    this.error = '';
+    const customerId = this.filters.customerId;
+    const locationId = this.filters.locationId;
+
+    if (!customerId || !locationId) {
+      this.error = 'To create a new invoice, select a Customer and Location in filters first.';
+      return;
+    }
+
+    this.invoiceService.createInvoice({
+      customerId,
+      locationId,
+      paymentTerms: 'DUE_ON_RECEIPT',
+      lineItems: []
+    }).subscribe({
+      next: (res: any) => {
+        const id = res?.data?.id || res?.id;
+        if (!id) {
+          this.error = 'Invoice was created but no invoice id was returned.';
+          this.loadInvoices();
+          return;
+        }
+        this.router.navigate(['/invoices', id]);
+      },
+      error: (err) => {
+        this.error = err?.error?.error || 'Failed to create invoice draft';
+      }
+    });
+  }
+
+  getStatusClass(status: string): string {
+    const normalized = (status || '').toLowerCase();
+    if (normalized.includes('draft')) return 'draft';
+    if (normalized.includes('pending') || normalized.includes('sent')) return 'pending';
+    if (normalized.includes('paid')) return 'paid';
+    if (normalized.includes('overdue') || normalized.includes('void')) return 'overdue';
+    return 'draft';
+  }
 }

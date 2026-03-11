@@ -1,0 +1,339 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   PUBLIC TRIAL — Free trial request form
+   Extends the shared pub-* design system from public-home.
+───────────────────────────────────────────────────────────────────────────── */
+
+/* Import shared pub-* styles from the home component's CSS approach */
+/* (Both components use the same .pub-* class prefix so styles compose) */
+
+:host { display: block; }
+
+/* Force solid nav on trial page */
+.pub-nav-solid {
+  background: rgba(2, 6, 23, 0.96) !important;
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(31, 41, 55, 0.9) !important;
+}
+
+/* ─── Trial section ─────────────────────────────────────────────────────── */
+.pub-trial-section {
+  min-height: calc(100vh - 70px);
+  padding: 100px 24px 60px;
+  position: relative;
+  overflow: hidden;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.pub-trial-glow {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.1), transparent 70%);
+  pointer-events: none;
+}
+
+/* ─── Success state ─────────────────────────────────────────────────────── */
+.pub-trial-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 60vh;
+  gap: 20px;
+}
+.pub-success-icon-wrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid rgba(34, 197, 94, 0.5);
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.2), transparent 70%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pub-success-icon { font-size: 40px; color: #4ade80; }
+.pub-success-title { font-size: 2.2rem; font-weight: 800; color: #f1f5f9; margin: 0; }
+.pub-success-msg { font-size: 1.05rem; color: #94a3b8; line-height: 1.7; max-width: 500px; margin: 0; }
+.pub-success-actions { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+
+/* ─── Form layout ───────────────────────────────────────────────────────── */
+.pub-trial-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 60px;
+  align-items: flex-start;
+}
+
+/* ─── Left column ───────────────────────────────────────────────────────── */
+.pub-trial-left { position: sticky; top: 100px; }
+
+.pub-trial-title {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  font-weight: 800;
+  color: #f1f5f9;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 14px 0 16px;
+}
+.pub-trial-sub {
+  font-size: 1.05rem;
+  color: #94a3b8;
+  line-height: 1.7;
+  margin: 0 0 28px;
+}
+
+.pub-trial-benefits {
+  list-style: none;
+  margin: 0 0 32px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pub-trial-benefits li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: #cbd5e1;
+}
+.pub-trial-benefits li .material-symbols-outlined { color: #22c55e; font-size: 18px; }
+
+/* Plan pills on left panel */
+.pub-trial-plans-preview {
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(31, 41, 55, 0.9);
+  background: rgba(15, 23, 42, 0.6);
+}
+.pub-plans-preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #6b7280;
+  margin: 0 0 12px;
+}
+.pub-plan-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.pub-plan-pill {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: transparent;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pub-plan-pill:hover { border-color: rgba(45, 212, 191, 0.5); color: #e5e7eb; }
+.pub-plan-pill-active {
+  border-color: rgba(45, 212, 191, 0.7);
+  background: rgba(45, 212, 191, 0.12);
+  color: #a5f3fc;
+}
+.pub-plan-pill-tag {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.pub-plan-desc {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ─── Form card ──────────────────────────────────────────────────────────── */
+.pub-trial-form-card {
+  padding: 32px 28px;
+  border-radius: 20px;
+  border: 1px solid rgba(31, 41, 55, 0.9);
+  background: rgba(15, 23, 42, 0.85);
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.6);
+}
+
+.pub-form-title { font-size: 1.3rem; font-weight: 700; color: #f1f5f9; margin: 0 0 6px; }
+.pub-form-sub { font-size: 13px; color: #6b7280; margin: 0 0 26px; }
+
+/* ─── Form fields ────────────────────────────────────────────────────────── */
+.pub-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.pub-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.pub-form-group:last-child { margin-bottom: 0; }
+
+.pub-form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+.pub-required { color: #ef4444; }
+.pub-optional { color: #6b7280; font-weight: 400; font-size: 12px; }
+
+.pub-form-input {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(31, 41, 55, 0.9);
+  background: rgba(2, 6, 23, 0.7);
+  color: #e5e7eb;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.pub-form-input:focus {
+  border-color: rgba(45, 212, 191, 0.6);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+}
+.pub-form-input::placeholder { color: #4b5563; }
+select.pub-form-input { cursor: pointer; }
+select.pub-form-input option { background: #0f172a; color: #e5e7eb; }
+
+.pub-form-textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
+
+.pub-field-error .pub-form-input {
+  border-color: rgba(239, 68, 68, 0.6);
+}
+.pub-field-error .pub-form-input:focus {
+  border-color: rgba(239, 68, 68, 0.8);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.pub-error-msg {
+  font-size: 12px;
+  color: #f87171;
+  min-height: 16px;
+}
+
+/* Checkbox */
+.pub-form-checkbox-group { flex-direction: row; align-items: center; gap: 0; margin-bottom: 16px; }
+.pub-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+.pub-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(2, 6, 23, 0.8);
+  accent-color: #2dd4bf;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Submit area */
+.pub-submit-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.pub-submit-error .material-symbols-outlined { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+
+.pub-submit-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 14px;
+  font-size: 15px;
+  border-radius: 12px;
+  margin-top: 8px;
+  margin-bottom: 14px;
+}
+.pub-submit-btn:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+.pub-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: pub-spin 0.7s linear infinite;
+}
+@keyframes pub-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pub-form-privacy {
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+}
+.pub-form-privacy a { color: #2dd4bf; text-decoration: none; }
+.pub-form-privacy a:hover { text-decoration: underline; }
+
+/* ─── Minimal footer ─────────────────────────────────────────────────────── */
+.pub-footer-minimal {
+  border-top: 1px solid rgba(31, 41, 55, 0.9);
+  background: rgba(2, 6, 23, 0.8);
+  padding: 20px 24px;
+}
+.pub-footer-minimal-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.pub-footer-copy { font-size: 12px; color: #374151; flex: 1; }
+.pub-footer-minimal-links { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.pub-footer-minimal-links a { color: #6b7280; text-decoration: none; }
+.pub-footer-minimal-links a:hover { color: #e5e7eb; }
+.pub-footer-minimal-links span { color: #374151; }
+
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .pub-trial-layout { grid-template-columns: 1fr; gap: 32px; }
+  .pub-trial-left { position: static; }
+}
+
+@media (max-width: 600px) {
+  .pub-trial-section { padding: 90px 16px 48px; }
+  .pub-form-row { grid-template-columns: 1fr; }
+  .pub-trial-form-card { padding: 24px 18px; }
+}

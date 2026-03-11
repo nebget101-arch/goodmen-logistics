@@ -162,7 +162,15 @@ router.get('/search', async (req, res) => {
 router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
-    const result = await query('SELECT * FROM all_vehicles ORDER BY unit_number');
+    // Apply operating_entity scoping when present and user is not a global admin
+    const params = [];
+    let sql = 'SELECT * FROM all_vehicles WHERE 1=1';
+    if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+      params.push(req.context.operatingEntityId);
+      sql += ` AND operating_entity_id = $${params.length}`;
+    }
+    sql += ' ORDER BY unit_number';
+    const result = await query(sql, params);
     const duration = Date.now() - startTime;
     
     dtLogger.trackDatabase('SELECT', 'all_vehicles', duration, true, { count: result.rows.length });

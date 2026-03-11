@@ -260,7 +260,6 @@ async function listInvoices(filters, context = null) {
     .where({ 'invoices.is_deleted': false })
     .modify(qb => {
       applyTenantFilter(qb, context, 'invoices.tenant_id');
-      applyEntityFilter(qb, context, 'invoices.operating_entity_id');
       if (search) {
         qb.andWhere(function() {
           this.where('invoices.invoice_number', 'ilike', `%${search}%`)
@@ -290,7 +289,6 @@ async function getInvoiceById(id, context = null) {
     .where({ id, is_deleted: false })
     .modify((qb) => {
       applyTenantFilter(qb, context, 'invoices.tenant_id');
-      applyEntityFilter(qb, context, 'invoices.operating_entity_id');
     })
     .first();
   if (!invoice) return null;

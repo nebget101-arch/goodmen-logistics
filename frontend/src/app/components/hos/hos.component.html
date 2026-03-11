@@ -1,70 +1,140 @@
-<div class="container">
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">⏰ Hours of Service (HOS) Records</h2>
-      <button class="btn btn-primary">ELD Integration</button>
+<div class="hos-shell ai-admin-shell">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">FleetNeuron AI Compliance</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">schedule</span>
+        Hours of Service Records
+      </h1>
+      <p class="subtitle">Monitor driver HOS compliance and violation alerts in real time.</p>
     </div>
+    <button type="button" class="btn btn-primary ai-glow-btn" (click)="syncEldData()">
+      <span class="material-symbols-outlined">sync</span>
+      Sync ELD
+    </button>
+  </header>
 
-    <div *ngIf="loading" class="loading">
-      <div class="spinner"></div>
-    </div>
-
-    <table class="table" *ngIf="!loading">
-      <thead>
-        <tr>
-          <th>Driver</th>
-          <th>Date</th>
-          <th>On Duty</th>
-          <th>Driving</th>
-          <th>Off Duty</th>
-          <th>Violations</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let record of hosRecords">
-          <td><strong>{{ record.driverName }}</strong></td>
-          <td>{{ record.date }}</td>
-          <td>{{ record.onDutyHours }}h</td>
-          <td>{{ record.drivingHours }}h</td>
-          <td>{{ record.offDutyHours }}h</td>
-          <td>
-            <div *ngIf="record.violations.length === 0">-</div>
-            <div *ngFor="let violation of record.violations" style="font-size: 12px; color: var(--warning-color);">
-              {{ violation }}
-            </div>
-          </td>
-          <td>
-            <span [class]="'badge ' + getStatusBadge(record.status)">
-              {{ record.status }}
-            </span>
-          </td>
-          <td>
-            <button class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">View Logs</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+  <div *ngIf="message" class="alert alert-success">
+    <span class="material-symbols-outlined">check_circle</span>
+    <span>{{ message }}</span>
+  </div>
+  <div *ngIf="error" class="alert alert-danger">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ error }}</span>
   </div>
 
-  <div class="card" *ngIf="violations.length > 0">
-    <div class="card-header">
-      <h3 class="card-title">⚠️ HOS Violations & Warnings</h3>
+  <section class="panel ai-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">person_clock</span>
+        Driver HOS Records
+      </h2>
     </div>
-    <div *ngFor="let record of violations" class="alert alert-warning">
-      <strong>{{ record.driverName }}</strong> - {{ record.date }}: 
-      <span *ngFor="let v of record.violations">{{ v }}</span>
-    </div>
-  </div>
 
-  <div class="card">
-    <div class="card-header">
-      <h3 class="card-title">📋 HOS Retention Requirements</h3>
+    <div *ngIf="loading" class="loading ai-loading">
+      <span class="material-symbols-outlined">hourglass_bottom</span>
+      Loading HOS records…
     </div>
-    <div style="padding: 10px; background-color: #f9f9f9; border-radius: 4px;">
-      <p><strong>49 CFR 395.8:</strong> Motor carriers must retain Records of Duty Status (RODS) and supporting documents for at least 6 months from the date of receipt.</p>
-      <p style="margin-top: 10px;"><strong>Driver Requirement:</strong> Drivers must have the previous 7 days of RODS available while on duty.</p>
+
+    <div class="table-wrap" *ngIf="!loading">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Driver</th>
+            <th scope="col">Date</th>
+            <th scope="col">On Duty</th>
+            <th scope="col">Driving</th>
+            <th scope="col">Off Duty</th>
+            <th scope="col">Violations</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let record of hosRecords">
+            <td class="entity-name-cell">
+              <span class="material-symbols-outlined">person</span>
+              <strong>{{ record.driverName }}</strong>
+            </td>
+            <td>{{ record.date }}</td>
+            <td>{{ record.onDutyHours }}h</td>
+            <td>{{ record.drivingHours }}h</td>
+            <td>{{ record.offDutyHours }}h</td>
+            <td>
+              <div *ngIf="record.violations.length === 0">—</div>
+              <div *ngFor="let violation of record.violations" style="font-size: 0.8rem; color: #fca5a5;">
+                <span class="material-symbols-outlined" style="font-size: 0.9rem; vertical-align: middle;">warning</span>
+                {{ violation }}
+              </div>
+            </td>
+            <td>
+              <span class="status-pill" [class.status-pill-off]="record.status === 'violation'">
+                <span class="dot"></span>
+                {{ record.status }}
+              </span>
+            </td>
+            <td>
+              <button type="button" class="btn-sm btn-outline" (click)="viewLogs(record.id)">
+                <span class="material-symbols-outlined">description</span>
+                View
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-  </div>
+
+    <div class="empty-state" *ngIf="!loading && hosRecords.length === 0">
+      <span class="material-symbols-outlined">info</span>
+      No HOS records found.
+    </div>
+  </section>
+
+  <section class="panel ai-panel" *ngIf="violations.length > 0">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">warning</span>
+        Active Violations & Alerts
+      </h2>
+    </div>
+    <div class="violations-list">
+      <div *ngFor="let record of violations" class="violation-card">
+        <div class="violation-header">
+          <span class="material-symbols-outlined">error</span>
+          <div>
+            <strong>{{ record.driverName }}</strong>
+            <span class="violation-date">{{ record.date }}</span>
+          </div>
+        </div>
+        <div class="violation-body">
+          <div *ngFor="let v of record.violations" class="violation-tag">{{ v }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel ai-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">info</span>
+        HOS Retention Requirements
+      </h2>
+    </div>
+    <div class="requirements-grid">
+      <div class="requirement-box">
+        <div class="requirement-icon">📋</div>
+        <div>
+          <h4>49 CFR 395.8</h4>
+          <p>Motor carriers must retain Records of Duty Status (RODS) and supporting documents for at least 6 months from the date of receipt.</p>
+        </div>
+      </div>
+      <div class="requirement-box">
+        <div class="requirement-icon">👤</div>
+        <div>
+          <h4>Driver Requirements</h4>
+          <p>Drivers must have the previous 7 days of RODS available while on duty for inspection by law enforcement.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>

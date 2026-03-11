@@ -38,7 +38,7 @@ export class LoginComponent {
           }
         }
         this.accessControl.setAccessFromLoginResponse(res);
-        this.operatingEntityContext.initializeFromLoginPayload(res);
+        this.operatingEntityContext.bootstrapFromSessionIfNeeded(true);
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {

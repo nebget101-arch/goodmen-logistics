@@ -1,0 +1,258 @@
+<div class="pub-page pub-trial-page">
+
+  <!-- ═══════════════════ NAVIGATION ═══════════════════ -->
+  <nav class="pub-nav pub-nav-solid">
+    <div class="pub-nav-inner">
+      <button type="button" class="pub-brand pub-brand-btn" (click)="goBack()">
+        <span class="pub-brand-wordmark">FleetNeuron</span>
+        <span class="pub-brand-tag">AI fleet intelligence</span>
+      </button>
+
+      <ul class="pub-nav-links" [class.pub-nav-open]="mobileNavOpen">
+        <li><button type="button" class="pub-nav-link-btn" (click)="goBack()">← Back to site</button></li>
+        <li class="pub-nav-cta-item">
+          <button class="pub-btn-outline" (click)="goToLogin()">Sign In</button>
+        </li>
+      </ul>
+
+      <button class="pub-nav-hamburger" type="button" (click)="toggleMobileNav(); $event.stopPropagation()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════ TRIAL FORM SECTION ═══════════════════ -->
+  <section class="pub-trial-section">
+    <div class="pub-trial-glow"></div>
+
+    <!-- Success State -->
+    <div class="pub-trial-success" *ngIf="success">
+      <div class="pub-success-icon-wrap">
+        <span class="material-symbols-outlined pub-success-icon">check_circle</span>
+      </div>
+      <h1 class="pub-success-title">Request Received!</h1>
+      <p class="pub-success-msg">
+        Thank you for your interest in FleetNeuron. Our team will review your request
+        and reach out to you shortly to get your trial started.
+      </p>
+      <div class="pub-success-actions">
+        <button class="pub-btn-primary pub-btn-lg" (click)="goBack()">
+          <span class="material-symbols-outlined">home</span>
+          Back to FleetNeuron
+        </button>
+        <button class="pub-btn-outline pub-btn-lg" (click)="goToLogin()">
+          Sign In
+        </button>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <div class="pub-trial-layout" *ngIf="!success">
+      <!-- Left: Value Prop -->
+      <div class="pub-trial-left">
+        <div class="pub-section-label">Free Trial</div>
+        <h1 class="pub-trial-title">
+          Start your free trial of
+          <span class="pub-gradient-text">FleetNeuron</span>
+        </h1>
+        <p class="pub-trial-sub">
+          Get full access to the platform — no credit card required.
+          Our team will set up your account and help you get started.
+        </p>
+
+        <ul class="pub-trial-benefits">
+          <li>
+            <span class="material-symbols-outlined">check_circle</span>
+            <span>Full platform access during trial</span>
+          </li>
+          <li>
+            <span class="material-symbols-outlined">check_circle</span>
+            <span>Dedicated onboarding support</span>
+          </li>
+          <li>
+            <span class="material-symbols-outlined">check_circle</span>
+            <span>No credit card required</span>
+          </li>
+          <li>
+            <span class="material-symbols-outlined">check_circle</span>
+            <span>Cancel or upgrade anytime</span>
+          </li>
+        </ul>
+
+        <div class="pub-trial-plans-preview">
+          <p class="pub-plans-preview-label">Available plans</p>
+          <div class="pub-plan-pills">
+            <button
+              *ngFor="let plan of plans"
+              class="pub-plan-pill"
+              [class.pub-plan-pill-active]="form.get('requestedPlan')?.value === plan.id"
+              (click)="form.patchValue({ requestedPlan: plan.id })"
+              type="button"
+            >
+              {{ plan.name }}
+              <span class="pub-plan-pill-tag" *ngIf="plan.badge">{{ plan.badge }}</span>
+            </button>
+          </div>
+          <p class="pub-plan-desc" *ngFor="let plan of plans" [hidden]="form.get('requestedPlan')?.value !== plan.id">
+            {{ plan.description }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Right: Form -->
+      <div class="pub-trial-right">
+        <div class="pub-trial-form-card">
+          <h2 class="pub-form-title">Tell us about your operation</h2>
+          <p class="pub-form-sub">We'll reach out within 1 business day to set up your trial.</p>
+
+          <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+            <!-- Row: Company + Contact -->
+            <div class="pub-form-row">
+              <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('companyName')">
+                <label for="companyName">Company Name <span class="pub-required">*</span></label>
+                <input
+                  id="companyName"
+                  type="text"
+                  class="pub-form-input"
+                  formControlName="companyName"
+                  placeholder="Acme Trucking LLC"
+                  autocomplete="organization"
+                />
+                <span class="pub-error-msg">{{ getFieldError('companyName') }}</span>
+              </div>
+
+              <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('contactName')">
+                <label for="contactName">Your Full Name <span class="pub-required">*</span></label>
+                <input
+                  id="contactName"
+                  type="text"
+                  class="pub-form-input"
+                  formControlName="contactName"
+                  placeholder="Jane Smith"
+                  autocomplete="name"
+                />
+                <span class="pub-error-msg">{{ getFieldError('contactName') }}</span>
+              </div>
+            </div>
+
+            <!-- Row: Email + Phone -->
+            <div class="pub-form-row">
+              <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('email')">
+                <label for="email">Work Email <span class="pub-required">*</span></label>
+                <input
+                  id="email"
+                  type="email"
+                  class="pub-form-input"
+                  formControlName="email"
+                  placeholder="jane@acmetrucking.com"
+                  autocomplete="email"
+                />
+                <span class="pub-error-msg">{{ getFieldError('email') }}</span>
+              </div>
+
+              <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('phone')">
+                <label for="phone">Phone Number <span class="pub-required">*</span></label>
+                <input
+                  id="phone"
+                  type="tel"
+                  class="pub-form-input"
+                  formControlName="phone"
+                  placeholder="(555) 123-4567"
+                  autocomplete="tel"
+                />
+                <span class="pub-error-msg">{{ getFieldError('phone') }}</span>
+              </div>
+            </div>
+
+            <!-- Row: Fleet size + Current system -->
+            <div class="pub-form-row">
+              <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('fleetSize')">
+                <label for="fleetSize">Fleet Size <span class="pub-required">*</span></label>
+                <select id="fleetSize" class="pub-form-input" formControlName="fleetSize">
+                  <option value="">Select fleet size</option>
+                  <option *ngFor="let opt of fleetSizeOptions" [value]="opt">{{ opt }}</option>
+                </select>
+                <span class="pub-error-msg">{{ getFieldError('fleetSize') }}</span>
+              </div>
+
+              <div class="pub-form-group">
+                <label for="currentSystem">Current Tool / System <span class="pub-optional">(optional)</span></label>
+                <input
+                  id="currentSystem"
+                  type="text"
+                  class="pub-form-input"
+                  formControlName="currentSystem"
+                  placeholder="e.g. spreadsheets, McLeod, etc."
+                />
+              </div>
+            </div>
+
+            <!-- Plan selection -->
+            <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('requestedPlan')">
+              <label for="requestedPlan">Plan Interest <span class="pub-required">*</span></label>
+              <select id="requestedPlan" class="pub-form-input" formControlName="requestedPlan">
+                <option *ngFor="let plan of plans" [value]="plan.id">{{ plan.name }} — {{ plan.tagline }}</option>
+              </select>
+              <span class="pub-error-msg">{{ getFieldError('requestedPlan') }}</span>
+            </div>
+
+            <!-- Demo assistance -->
+            <div class="pub-form-group pub-form-checkbox-group">
+              <label class="pub-checkbox-label">
+                <input type="checkbox" class="pub-checkbox" formControlName="wantsDemoAssistance" />
+                <span class="pub-checkbox-text">I'd like a guided demo / onboarding walkthrough</span>
+              </label>
+            </div>
+
+            <!-- Notes -->
+            <div class="pub-form-group">
+              <label for="notes">Business Needs / Notes <span class="pub-optional">(optional)</span></label>
+              <textarea
+                id="notes"
+                class="pub-form-input pub-form-textarea"
+                formControlName="notes"
+                rows="4"
+                placeholder="Describe your fleet operation, challenges, or anything you'd like us to know…"
+              ></textarea>
+            </div>
+
+            <!-- Error banner -->
+            <div class="pub-submit-error" *ngIf="submitError">
+              <span class="material-symbols-outlined">error</span>
+              {{ submitError }}
+            </div>
+
+            <!-- Submit -->
+            <button
+              type="submit"
+              class="pub-btn-primary pub-submit-btn"
+              [disabled]="submitting"
+            >
+              <span *ngIf="!submitting" class="material-symbols-outlined">rocket_launch</span>
+              <span class="pub-spinner" *ngIf="submitting"></span>
+              {{ submitting ? 'Submitting…' : 'Submit Trial Request' }}
+            </button>
+
+            <p class="pub-form-privacy">
+              By submitting you agree to our <a routerLink="/privacy">Privacy Policy</a> and
+              <a routerLink="/terms">Terms of Service</a>.
+            </p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ FOOTER ═══════════════════ -->
+  <footer class="pub-footer pub-footer-minimal">
+    <div class="pub-footer-minimal-inner">
+      <span class="pub-brand-wordmark">FleetNeuron</span>
+      <span class="pub-footer-copy">© {{ currentYear }} FleetNeuron. All rights reserved.</span>
+      <div class="pub-footer-minimal-links">
+        <a routerLink="/privacy">Privacy</a>
+        <span>·</span>
+        <a routerLink="/terms">Terms</a>
+      </div>
+    </div>
+  </footer>
+</div>

@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
     const status = (req.query.status || '').toString().trim().toLowerCase();
     const params = [];
     let sql = `
-      SELECT id, unit_number, vin, make, model, year, vehicle_type, status
+      SELECT id, unit_number, vin, make, model, year, vehicle_type, status, operating_entity_id
       FROM all_vehicles
       WHERE 1=1
     `;
@@ -23,6 +23,11 @@ router.get('/', async (req, res) => {
       const normalizedStatus = status === 'active' ? 'in-service' : status;
       params.push(normalizedStatus);
       sql += ` AND LOWER(status) = $${params.length}`;
+    }
+    // Apply operating entity scoping: if request has an operatingEntityId and user is not global admin
+    if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+      params.push(req.context.operatingEntityId);
+      sql += ` AND operating_entity_id = $${params.length}`;
     }
     sql += ' ORDER BY unit_number';
     const result = await query(sql, params);

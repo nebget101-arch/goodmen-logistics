@@ -48,6 +48,50 @@ async function resolveEntityAccessForUser(knexClient, userId, tenantId) {
   return { allowedOperatingEntityIds, defaultEntityId };
 }
 
+async function isGlobalAdminUser(knexClient, userId, tokenRole) {
+  const normalizedTokenRole = (tokenRole || '').toString().trim().toLowerCase();
+  // Treat only true platform-level roles as global admins.
+  // Do NOT consider generic 'admin' tenant roles as global admin for scoping purposes.
+  if (normalizedTokenRole === 'super_admin' || normalizedTokenRole === 'platform_admin') return true;
+
+  const userRow = await knexClient('users').where({ id: userId }).select('role').first();
+  const legacyRole = (userRow?.role || '').toString().trim().toLowerCase();
+  if (legacyRole === 'super_admin' || legacyRole === 'platform_admin') return true;
+
+  const hasUserRolesTable = await knexClient.schema.hasTable('user_roles');
+  const hasRolesTable = await knexClient.schema.hasTable('roles');
+  if (!hasUserRolesTable || !hasRolesTable) return false;
+
+  const platformRole = await knexClient('user_roles as ur')
+    .join('roles as r', 'r.id', 'ur.role_id')
+    .where('ur.user_id', userId)
+    .whereIn('r.code', ['super_admin', 'platform_admin'])
+    .first('ur.id');
+
+  return !!platformRole;
+}
+
+async function isTenantAdminUser(knexClient, userId, tokenRole, tenantId) {
+  const normalizedTokenRole = (tokenRole || '').toString().trim().toLowerCase();
+  if (normalizedTokenRole === 'admin') return true;
+
+  const userRow = await knexClient('users').where({ id: userId }).select('role').first();
+  const legacyRole = (userRow?.role || '').toString().trim().toLowerCase();
+  if (legacyRole === 'admin') return true;
+
+  const hasUserRolesTable = await knexClient.schema.hasTable('user_roles');
+  const hasRolesTable = await knexClient.schema.hasTable('roles');
+  if (!hasUserRolesTable || !hasRolesTable) return false;
+
+  const tenantAdminRole = await knexClient('user_roles as ur')
+    .join('roles as r', 'r.id', 'ur.role_id')
+    .where('ur.user_id', userId)
+    .where('r.code', 'admin')
+    .first('ur.id');
+
+  return !!tenantAdminRole;
+}
+
 async function countConfiguredEntityAssignments(knexClient, userId, tenantId) {
   const rows = await knexClient('user_operating_entities as uoe')
     .join('operating_entities as oe', 'oe.id', 'uoe.operating_entity_id')
@@ -77,26 +121,65 @@ function createTenantContextMiddleware({ knexClient = knex, logger = dtLogger } 
 
       const tenantId = await resolveTenantForUser(knexClient, userId);
       if (!tenantId) {
+        res.setHeader('X-Debug-Tenant', tenantId || 'null');
+        res.setHeader('X-Debug-User', userId || 'null');
         return res.status(403).json({ error: 'Forbidden: tenant access not configured' });
       }
 
+      const isGlobalAdmin = await isGlobalAdminUser(knexClient, userId, req.user?.role);
+
       let { allowedOperatingEntityIds, defaultEntityId } = await resolveEntityAccessForUser(knexClient, userId, tenantId);
+
+      if (isGlobalAdmin) {
+        const allActiveTenantEntities = await listActiveTenantEntities(knexClient, tenantId);
+        const allIds = allActiveTenantEntities.map((row) => row.id);
+        if (allIds.length > 0) {
+          allowedOperatingEntityIds = allIds;
+          if (!defaultEntityId || !allowedOperatingEntityIds.includes(defaultEntityId)) {
+            defaultEntityId = allIds[0] || null;
+          }
+        }
+      } else {
+        // If this user is a tenant-level admin (tenant 'admin' role), allow access to all tenant operating_entities
+        const isTenantAdmin = await isTenantAdminUser(knexClient, userId, req.user?.role, tenantId).catch(() => false);
+        if (isTenantAdmin) {
+          const allActiveTenantEntities = await listActiveTenantEntities(knexClient, tenantId);
+          const allIds = allActiveTenantEntities.map((row) => row.id);
+          if (allIds.length > 0) {
+            allowedOperatingEntityIds = allIds;
+            if (!defaultEntityId || !allowedOperatingEntityIds.includes(defaultEntityId)) {
+              defaultEntityId = allIds[0] || null;
+            }
+          }
+        }
+      }
 
       const requestedEntityId = (req.headers['x-operating-entity-id'] || '').toString().trim() || null;
       let operatingEntityId = requestedEntityId || defaultEntityId;
 
       if (requestedEntityId && !allowedOperatingEntityIds.includes(requestedEntityId)) {
+        res.setHeader('X-Debug-Tenant', tenantId);
+        res.setHeader('X-Debug-User', userId);
+        res.setHeader('X-Debug-Requested-Operating-Entity', requestedEntityId);
+        res.setHeader('X-Debug-Allowed-Operating-Entities', allowedOperatingEntityIds.join(',') || '');
+        res.setHeader('X-Debug-Is-Global-Admin', isGlobalAdmin ? '1' : '0');
         return res.status(403).json({ error: 'Forbidden: operating entity not allowed' });
       }
 
       if (!operatingEntityId) {
         const configuredEntityAssignments = await countConfiguredEntityAssignments(knexClient, userId, tenantId);
         if (configuredEntityAssignments > 0) {
+          res.setHeader('X-Debug-Tenant', tenantId);
+          res.setHeader('X-Debug-User', userId);
+          res.setHeader('X-Debug-Allowed-Operating-Entities', allowedOperatingEntityIds.join(',') || '');
           return res.status(403).json({ error: 'Forbidden: no active operating entity access configured' });
         }
 
         const activeTenantEntities = await listActiveTenantEntities(knexClient, tenantId);
         if (activeTenantEntities.length !== 1) {
+          res.setHeader('X-Debug-Tenant', tenantId);
+          res.setHeader('X-Debug-User', userId);
+          res.setHeader('X-Debug-Active-Tenant-Entity-Count', activeTenantEntities.length.toString());
           return res.status(403).json({ error: 'Forbidden: operating entity access not configured' });
         }
 
@@ -104,10 +187,19 @@ function createTenantContextMiddleware({ knexClient = knex, logger = dtLogger } 
         allowedOperatingEntityIds = [operatingEntityId];
       }
 
+      // Expose debug headers so callers can observe resolved tenant/context during diagnosis
+      res.setHeader('X-Debug-Tenant', tenantId);
+      res.setHeader('X-Debug-Operating-Entity', operatingEntityId || 'null');
+      res.setHeader('X-Debug-Requested-Operating-Entity', requestedEntityId || '');
+      res.setHeader('X-Debug-Allowed-Operating-Entities', allowedOperatingEntityIds.join(',') || '');
+      res.setHeader('X-Debug-Default-Operating-Entity', defaultEntityId || 'null');
+      res.setHeader('X-Debug-Is-Global-Admin', isGlobalAdmin ? '1' : '0');
+
       req.context = {
         tenantId,
         operatingEntityId,
-        allowedOperatingEntityIds
+        allowedOperatingEntityIds,
+        isGlobalAdmin: !!isGlobalAdmin
       };
 
       return next();

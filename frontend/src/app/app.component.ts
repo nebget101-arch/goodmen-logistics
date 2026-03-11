@@ -56,6 +56,12 @@ export class AppComponent implements OnInit {
     return this.router.url || '';
   }
 
+    /** Returns true when on a public marketing page (no app shell needed). */
+    isPublicRoute(): boolean {
+      const url = this.router.url || '';
+      return url.startsWith('/home');
+    }
+
   toggleAiChat(): void {
     if (!this.isLoggedIn()) {
       this.router.navigate(['/login']);

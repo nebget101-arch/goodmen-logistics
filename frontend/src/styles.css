@@ -563,6 +563,10 @@ body {
   min-width: 0;
 }
 
+.content.public-content {
+  padding: 0;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -831,6 +835,10 @@ body {
     padding: 12px;
     width: 100%;
   }
+
+    .content.public-content {
+      padding: 0;
+    }
 
   .card {
     padding: 16px;
@@ -1378,6 +1386,309 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
 .ai-chat-send-btn {
   border-radius: 999px;
   padding-inline: 14px;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Public marketing website shared styles (.pub-*)
+   Used by /home and /home/trial.
+─────────────────────────────────────────────────────────────────────────── */
+
+.pub-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(45, 212, 191, 0.08), transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.12), transparent 50%),
+    #020617;
+  color: #e5e7eb;
+  overflow-x: hidden;
+}
+
+.pub-gradient-text {
+  background: linear-gradient(135deg, #e0f2fe 0%, #a5f3fc 45%, #22c55e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.pub-btn-primary,
+.pub-btn-outline,
+.pub-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.pub-btn-primary {
+  padding: 11px 22px;
+  border: none;
+  border-radius: 999px;
+  background: radial-gradient(circle at 0 0, #22c55e, #0ea5e9);
+  color: #e5f9ff;
+  font-size: 14px;
+}
+
+.pub-btn-primary:hover {
+  filter: saturate(1.1) brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.pub-btn-outline {
+  padding: 11px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: transparent;
+  color: #e5e7eb;
+  font-size: 14px;
+}
+
+.pub-btn-outline:hover {
+  border-color: rgba(45, 212, 191, 0.7);
+  background: rgba(45, 212, 191, 0.08);
+  transform: translateY(-1px);
+}
+
+.pub-btn-ghost {
+  padding: 11px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e5e7eb;
+  font-size: 14px;
+}
+
+.pub-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.pub-btn-lg { padding: 13px 26px; font-size: 15px; }
+.pub-btn-xl { padding: 15px 30px; font-size: 16px; }
+
+.pub-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  transition: background 0.3s, box-shadow 0.3s, border-color 0.3s;
+  border-bottom: 1px solid transparent;
+}
+
+.pub-nav-scrolled,
+.pub-nav-solid {
+  background: rgba(2, 6, 23, 0.94);
+  backdrop-filter: blur(16px);
+  border-bottom-color: rgba(31, 41, 55, 0.9);
+  box-shadow: 0 8px 32px rgba(2, 6, 23, 0.8);
+}
+
+.pub-nav-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.pub-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  cursor: pointer;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.pub-brand-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+
+.pub-brand-wordmark {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: linear-gradient(135deg, #e0f2fe 0%, #a5f3fc 50%, #67e8f9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.pub-brand-tag {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(148, 163, 184, 0.85);
+  font-weight: 500;
+}
+
+.pub-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.pub-nav-links li a {
+  display: inline-block;
+  padding: 7px 14px;
+  color: rgba(203, 213, 225, 0.9);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: color 0.2s, background 0.2s;
+  text-decoration: none;
+}
+
+.pub-nav-link-btn {
+  display: inline-block;
+  padding: 7px 14px;
+  color: rgba(203, 213, 225, 0.9);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: color 0.2s, background 0.2s;
+  text-decoration: none;
+  background: transparent;
+  border: none;
+}
+
+.pub-nav-links li a:hover {
+  color: #e5e7eb;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pub-nav-link-btn:hover {
+  color: #e5e7eb;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pub-inline-link-btn,
+.pub-footer-link-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pub-inline-link-btn {
+  color: #2dd4bf;
+  text-decoration: underline;
+}
+
+.pub-inline-link-btn:hover {
+  color: #5eead4;
+}
+
+.pub-footer-link-btn {
+  font-size: 13px;
+  color: #6b7280;
+  text-decoration: none;
+}
+
+.pub-footer-link-btn:hover {
+  color: #e5e7eb;
+}
+
+.pub-nav-hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  margin-left: auto;
+}
+
+.pub-nav-hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #e5e7eb;
+  border-radius: 2px;
+}
+
+.pub-section-label {
+  display: inline-flex;
+  padding: 4px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.1);
+  color: #2dd4bf;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 16px;
+}
+
+.pub-footer-copy {
+  font-size: 12px;
+  color: #374151;
+}
+
+@media (max-width: 768px) {
+  .pub-nav-links {
+    display: none;
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    background: rgba(2, 6, 23, 0.97);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(31, 41, 55, 0.9);
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+    gap: 4px;
+  }
+
+  .pub-nav-links.pub-nav-open {
+    display: flex;
+  }
+
+  .pub-nav-links li a {
+    padding: 12px 16px;
+    font-size: 15px;
+  }
+
+  .pub-nav-link-btn {
+    padding: 12px 16px;
+    font-size: 15px;
+    text-align: left;
+    width: 100%;
+  }
+
+  .pub-nav-cta-item .pub-btn-primary,
+  .pub-nav-cta-item .pub-btn-outline {
+    width: 100%;
+    justify-content: center;
+    border-radius: 12px;
+    padding: 12px;
+  }
+
+  .pub-nav-hamburger {
+    display: flex;
+  }
 }
 
 @media (max-width: 768px) {

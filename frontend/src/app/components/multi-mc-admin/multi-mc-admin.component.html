@@ -1,0 +1,249 @@
+<div class="multi-mc-admin ai-admin-shell">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">FleetNeuron AI Admin</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">domain</span>
+        Multi-company Admin
+      </h1>
+      <p class="subtitle">Manage operating entities and assign user company access.</p>
+    </div>
+    <button type="button" class="btn btn-primary ai-glow-btn" (click)="openCreateEntity()">
+      <span class="material-symbols-outlined">add_circle</span>
+      New company / MC
+    </button>
+  </header>
+
+  <div *ngIf="message" class="alert alert-success">
+    <span class="material-symbols-outlined">check_circle</span>
+    <span>{{ message }}</span>
+  </div>
+  <div *ngIf="error" class="alert alert-danger">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ error }}</span>
+  </div>
+
+  <div class="grid">
+    <section class="panel ai-panel">
+      <div class="panel-header">
+        <h2>
+          <span class="material-symbols-outlined">apartment</span>
+          Operating entities
+        </h2>
+      </div>
+
+      <div *ngIf="loadingEntities" class="loading ai-loading">Loading entities…</div>
+
+      <div class="table-wrap" *ngIf="!loadingEntities">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">MC</th>
+              <th scope="col">DOT</th>
+              <th scope="col">Type</th>
+              <th scope="col">Status</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let e of entities">
+              <td class="entity-name-cell">
+                <span class="material-symbols-outlined">business_center</span>
+                <span>{{ e.name }}</span>
+              </td>
+              <td>{{ e.mc_number || '—' }}</td>
+              <td>{{ e.dot_number || '—' }}</td>
+              <td>{{ e.entity_type || 'carrier' }}</td>
+              <td>
+                <span class="status-pill" [class.status-pill-off]="e.is_active === false">
+                  <span class="dot"></span>
+                  {{ e.is_active === false ? 'inactive' : 'active' }}
+                </span>
+              </td>
+              <td>
+                <button type="button" class="btn-sm btn-outline" (click)="openEditEntity(e)">
+                  <span class="material-symbols-outlined">edit</span>
+                  Edit
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="empty-state" *ngIf="!loadingEntities && entities.length === 0">
+        <span class="material-symbols-outlined">info</span>
+        No operating entities configured.
+      </div>
+    </section>
+
+    <section class="panel ai-panel">
+      <div class="panel-header">
+        <h2>
+          <span class="material-symbols-outlined">manage_accounts</span>
+          User company access
+        </h2>
+      </div>
+
+      <div class="field">
+        <label for="userPicker">
+          <span class="material-symbols-outlined">person</span>
+          User
+        </label>
+        <select id="userPicker" class="form-select" [ngModel]="selectedUserId" (ngModelChange)="onSelectUser($event)">
+          <option value="">Select user</option>
+          <option *ngFor="let u of users" [value]="u.id">
+            {{ getDisplayName(u) }}{{ u.role ? ' · ' + u.role : '' }}
+          </option>
+        </select>
+      </div>
+
+      <div *ngIf="loadingUsers" class="loading ai-loading">Loading users…</div>
+      <div *ngIf="loadingUserAccess" class="loading ai-loading">Loading access…</div>
+
+      <div *ngIf="selectedUserId && !loadingUserAccess" class="access-grid">
+        <div class="access-row" *ngFor="let e of entities" [class.access-row-active]="selectedEntityIds.has(e.id)">
+          <label class="access-checkbox">
+            <input
+              type="checkbox"
+              [checked]="selectedEntityIds.has(e.id)"
+              (change)="toggleEntity(e.id)"
+            />
+            <span>{{ e.name }}</span>
+          </label>
+
+          <label class="default-radio">
+            <input
+              type="radio"
+              name="defaultEntity"
+              [checked]="defaultEntityId === e.id"
+              [disabled]="!selectedEntityIds.has(e.id)"
+              (change)="setDefaultEntity(e.id)"
+            />
+            <span>Default</span>
+          </label>
+        </div>
+
+        <div class="access-actions">
+          <button
+            type="button"
+            class="btn btn-primary ai-glow-btn"
+            [disabled]="!canSaveAccess || savingAccess"
+            (click)="saveUserAccess()"
+          >
+            <span class="material-symbols-outlined">save</span>
+            {{ savingAccess ? 'Saving…' : 'Save access' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="empty-state" *ngIf="!selectedUserId && !loadingUsers">
+        <span class="material-symbols-outlined">person_search</span>
+        Select a user to manage company access.
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="showEntityForm" (click)="closeEntityForm()" (keydown.escape)="closeEntityForm()">
+    <div class="modal ai-modal" (click)="$event.stopPropagation()" (keydown.escape)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>
+          <span class="material-symbols-outlined">hub</span>
+          {{ editingEntityId ? 'Edit company / MC' : 'Create company / MC' }}
+        </h3>
+        <button type="button" class="close-btn" (click)="closeEntityForm()" aria-label="Close">×</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="field">
+          <label for="entityName">
+            <span class="material-symbols-outlined">badge</span>
+            Name
+          </label>
+          <input id="entityName" class="form-input" [(ngModel)]="entityForm.name" />
+        </div>
+        <div class="field">
+          <label for="entityLegalName">
+            <span class="material-symbols-outlined">gavel</span>
+            Legal name
+          </label>
+          <input id="entityLegalName" class="form-input" [(ngModel)]="entityForm.legal_name" />
+        </div>
+        <div class="field-grid">
+          <div class="field">
+            <label for="entityMc">
+              <span class="material-symbols-outlined">pin</span>
+              MC number
+            </label>
+            <input id="entityMc" class="form-input" [(ngModel)]="entityForm.mc_number" />
+          </div>
+          <div class="field">
+            <label for="entityDot">
+              <span class="material-symbols-outlined">route</span>
+              DOT number
+            </label>
+            <input id="entityDot" class="form-input" [(ngModel)]="entityForm.dot_number" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="entityAddressLine1">
+            <span class="material-symbols-outlined">home_pin</span>
+            Address
+          </label>
+          <input id="entityAddressLine1" class="form-input" [(ngModel)]="entityForm.address_line1" />
+        </div>
+        <div class="field-grid field-grid-city-state-zip">
+          <div class="field">
+            <label for="entityCity">
+              <span class="material-symbols-outlined">location_city</span>
+              City
+            </label>
+            <input id="entityCity" class="form-input" [(ngModel)]="entityForm.city" />
+          </div>
+          <div class="field">
+            <label for="entityState">
+              <span class="material-symbols-outlined">map</span>
+              State
+            </label>
+            <input id="entityState" class="form-input" [(ngModel)]="entityForm.state" />
+          </div>
+          <div class="field">
+            <label for="entityZipCode">
+              <span class="material-symbols-outlined">markunread_mailbox</span>
+              Zip code
+            </label>
+            <input id="entityZipCode" class="form-input" [(ngModel)]="entityForm.zip_code" />
+          </div>
+        </div>
+        <div class="field-grid">
+          <div class="field">
+            <label for="entityType">
+              <span class="material-symbols-outlined">category</span>
+              Type
+            </label>
+            <select id="entityType" class="form-select ai-select-lg" [(ngModel)]="entityForm.entity_type">
+              <option value="carrier">carrier</option>
+              <option value="shop">shop</option>
+              <option value="warehouse">warehouse</option>
+            </select>
+          </div>
+          <div class="field status-field">
+            <label class="active-toggle">
+              <input type="checkbox" [(ngModel)]="entityForm.is_active" />
+              <span>Active</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeEntityForm()">Cancel</button>
+        <button type="button" class="btn btn-primary ai-glow-btn" [disabled]="savingEntity" (click)="saveEntity()">
+          <span class="material-symbols-outlined">save</span>
+          {{ savingEntity ? 'Saving…' : 'Save' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

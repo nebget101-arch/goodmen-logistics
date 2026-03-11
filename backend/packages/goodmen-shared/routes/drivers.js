@@ -160,6 +160,10 @@ router.get('/', async (req, res) => {
       `;
       params.push(req.context?.tenantId || null);
       sql += ` WHERE d.tenant_id = $${params.length}`;
+      if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+        params.push(req.context.operatingEntityId);
+        sql += ` AND d.operating_entity_id = $${params.length}`;
+      }
       if (hasStatus) {
         params.push(status);
         sql += ` AND LOWER(d.status) = $${params.length}`;
@@ -179,6 +183,10 @@ router.get('/', async (req, res) => {
       `;
       params.push(req.context?.tenantId || null);
       sql += ` WHERE d.tenant_id = $${params.length}`;
+      if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+        params.push(req.context.operatingEntityId);
+        sql += ` AND d.operating_entity_id = $${params.length}`;
+      }
       if (hasStatus) {
         params.push(status);
         sql += ` AND LOWER(d.status) = $${params.length}`;
@@ -196,6 +204,10 @@ router.get('/', async (req, res) => {
       } else {
         params.push(req.context?.tenantId || null);
         sql += ` WHERE tenant_id = $${params.length}`;
+      }
+      if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+        params.push(req.context.operatingEntityId);
+        sql += ` AND operating_entity_id = $${params.length}`;
       }
       sql += ' ORDER BY created_at DESC';
       result = await query(sql, params);
@@ -222,7 +234,14 @@ router.get('/:id', async (req, res) => {
   const startTime = Date.now();
   const driverId = req.params.id;
   try {
-    const result = await query('SELECT * FROM drivers WHERE id = $1 AND tenant_id = $2', [driverId, req.context?.tenantId || null]);
+    // Enforce operating_entity scoping for single-driver fetch
+    const singleParams = [driverId, req.context?.tenantId || null];
+    let singleSql = 'SELECT * FROM drivers WHERE id = $1 AND tenant_id = $2';
+    if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+      singleParams.push(req.context.operatingEntityId);
+      singleSql += ` AND operating_entity_id = $3`;
+    }
+    const result = await query(singleSql, singleParams);
     const duration = Date.now() - startTime;
     if (result.rows.length === 0) {
       dtLogger.warn('Driver not found', { driverId });
@@ -354,6 +373,7 @@ router.post('/', async (req, res) => {
     const insertDriver = await client.query(
       `INSERT INTO drivers (
         tenant_id,
+        operating_entity_id,
         first_name,
         last_name,
         email,
@@ -394,6 +414,7 @@ router.post('/', async (req, res) => {
       RETURNING *`,
       [
         req.context?.tenantId || null,
+        req.context?.operatingEntityId || null,
         firstName,
         lastName,
         email,

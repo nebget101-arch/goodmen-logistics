@@ -26,9 +26,16 @@ import { OnboardingPacketComponent } from './components/onboarding-packet/onboar
 import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-policy.component';
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
+import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
 
 const routes: Routes = [
-  { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
+  { path: '', redirectTo: '/home', pathMatch: 'full' },
+  // ─── Public marketing website ───────────────────────────────────────────
+  // Accessible without login. Contains: /home (landing) and /home/trial (trial form)
+  {
+    path: 'home',
+    loadChildren: () => import('./public/public.module').then(m => m.PublicModule)
+  },
   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard] },
   { path: 'drivers', component: DispatchDriversComponent, canActivate: [AuthGuard] },
   { path: 'drivers/dqf', component: DriversComponent, canActivate: [AuthGuard] },
@@ -55,6 +62,12 @@ const routes: Routes = [
   { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   { path: 'users/create', component: UserCreateComponent, canActivate: [AuthGuard, PermissionGuard], data: { permission: 'users.create' } },
+  {
+    path: 'admin/multi-mc',
+    component: MultiMcAdminComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: ['roles.manage', 'access.admin', 'users.edit'] }
+  },
   { path: 'login', component: LoginComponent },
   { path: 'privacy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
