@@ -1,6 +1,7 @@
 import { Component, OnInit, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
 import {
+  MarketingFeature,
   MARKETING_FEATURES,
   MARKETING_PLANS,
   HOW_IT_WORKS_STEPS,
@@ -17,10 +18,11 @@ export class PublicHomeComponent implements OnInit {
   plans = MARKETING_PLANS;
   steps = HOW_IT_WORKS_STEPS;
   aiBenefits = AI_BENEFITS;
+  selectedFeature: MarketingFeature | null = null;
 
   mobileNavOpen = false;
   navScrolled = false;
-    currentYear = new Date().getFullYear();
+  currentYear = new Date().getFullYear();
 
   constructor(private router: Router) {}
 
@@ -29,6 +31,11 @@ export class PublicHomeComponent implements OnInit {
   @HostListener('window:scroll')
   onWindowScroll(): void {
     this.navScrolled = window.scrollY > 40;
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.closeFeatureDetail();
   }
 
   scrollToSection(id: string): void {
@@ -49,6 +56,25 @@ export class PublicHomeComponent implements OnInit {
 
   goToLogin(): void {
     this.router.navigate(['/login']);
+  }
+
+  openFeatureDetail(feature: MarketingFeature): void {
+    this.selectedFeature = feature;
+    document.body.style.overflow = 'hidden';
+  }
+
+  closeFeatureDetail(): void {
+    if (!this.selectedFeature) return;
+    this.selectedFeature = null;
+    document.body.style.overflow = '';
+  }
+
+  getMetricToneClass(tone: string): string {
+    return `pub-badge-${tone}`;
+  }
+
+  getRowToneClass(tone: string): string {
+    return `pub-pill-${tone}`;
   }
 
   toggleMobileNav(): void {

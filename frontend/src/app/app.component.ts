@@ -56,11 +56,20 @@ export class AppComponent implements OnInit {
     return this.router.url || '';
   }
 
-    /** Returns true when on a public marketing page (no app shell needed). */
-    isPublicRoute(): boolean {
-      const url = this.router.url || '';
-      return url.startsWith('/home');
-    }
+  /** Returns true when on a route that should not render the main app shell. */
+  isShelllessRoute(): boolean {
+    const url = this.router.url || '';
+    return (
+      url.startsWith('/home') ||
+      url.startsWith('/login') ||
+      url.startsWith('/onboard/')
+    );
+  }
+
+  /** Backward-compatible alias used by public page layout bindings. */
+  isPublicRoute(): boolean {
+    return this.isShelllessRoute();
+  }
 
   toggleAiChat(): void {
     if (!this.isLoggedIn()) {

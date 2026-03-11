@@ -172,16 +172,121 @@
       </p>
 
       <div class="pub-features-grid">
-        <div class="pub-feature-card" *ngFor="let f of features">
+        <button type="button" class="pub-feature-card" *ngFor="let f of features" (click)="openFeatureDetail(f)">
           <div class="pub-feature-icon-wrap">
             <span class="material-symbols-outlined pub-feature-icon">{{ f.icon }}</span>
           </div>
           <h3 class="pub-feature-title">{{ f.title }}</h3>
           <p class="pub-feature-desc">{{ f.description }}</p>
-        </div>
+          <div class="pub-feature-cap-preview">
+            <span class="pub-feature-chip" *ngFor="let capability of f.capabilities | slice:0:2">{{ capability }}</span>
+          </div>
+          <div class="pub-feature-link">
+            <span>Explore workflow</span>
+            <span class="material-symbols-outlined">arrow_forward</span>
+          </div>
+        </button>
       </div>
     </div>
   </section>
+
+  <div
+    class="pub-feature-modal-backdrop"
+    *ngIf="selectedFeature as feature"
+    (click)="closeFeatureDetail()"
+    (keydown.escape)="closeFeatureDetail()"
+  >
+    <div class="pub-feature-modal" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+      <button type="button" class="pub-feature-modal-close" aria-label="Close feature details" (click)="closeFeatureDetail()">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+
+      <div class="pub-feature-modal-copy">
+        <div class="pub-section-label">Feature Deep Dive</div>
+        <div class="pub-feature-modal-head">
+          <div class="pub-feature-icon-wrap pub-feature-modal-icon">
+            <span class="material-symbols-outlined pub-feature-icon">{{ feature.icon }}</span>
+          </div>
+          <div>
+            <h3 class="pub-feature-modal-title">{{ feature.title }}</h3>
+            <p class="pub-feature-modal-subtitle">{{ feature.description }}</p>
+          </div>
+        </div>
+
+        <div class="pub-feature-detail-list">
+          <p *ngFor="let detail of feature.details">{{ detail }}</p>
+        </div>
+
+        <div class="pub-feature-capabilities">
+          <h4>What teams can do with it</h4>
+          <ul>
+            <li *ngFor="let capability of feature.capabilities">
+              <span class="material-symbols-outlined pub-check-icon">check_circle</span>
+              <span>{{ capability }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="pub-feature-modal-actions">
+          <button type="button" class="pub-btn-primary" (click)="navigateToTrial()">
+            <span class="material-symbols-outlined">rocket_launch</span>
+            Start Free Trial
+          </button>
+          <button type="button" class="pub-btn-outline" (click)="closeFeatureDetail()">
+            Close
+          </button>
+        </div>
+      </div>
+
+      <div class="pub-feature-modal-visual">
+        <div class="pub-feature-mock-label">{{ feature.mock.navLabel }}</div>
+        <div class="pub-mockup pub-feature-mockup">
+          <div class="pub-mockup-bar">
+            <span class="pub-mockup-dot pub-dot-red"></span>
+            <span class="pub-mockup-dot pub-dot-yellow"></span>
+            <span class="pub-mockup-dot pub-dot-green"></span>
+            <span class="pub-mockup-url">fleetneuron.app/workflows</span>
+          </div>
+
+          <div class="pub-mockup-body">
+            <div class="pub-feature-mock-head">
+              <div>
+                <div class="pub-feature-mock-title">{{ feature.mock.title }}</div>
+                <div class="pub-feature-mock-subtitle">{{ feature.mock.subtitle }}</div>
+              </div>
+              <span class="pub-feature-mock-status">Live workflow</span>
+            </div>
+
+            <div class="pub-mock-stat-row">
+              <div class="pub-mock-stat" *ngFor="let metric of feature.mock.metrics">
+                <span class="pub-mock-stat-num">{{ metric.value }}</span>
+                <span class="pub-mock-stat-label">{{ metric.label }}</span>
+                <span class="pub-mock-stat-badge" [ngClass]="getMetricToneClass(metric.tone)">Updated</span>
+              </div>
+            </div>
+
+            <div class="pub-mock-ai-strip pub-feature-mock-insight">
+              <span class="material-symbols-outlined pub-mock-ai-icon">psychology</span>
+              <div class="pub-mock-ai-text">
+                <span class="pub-mock-ai-label">AI insight</span>
+                <span class="pub-mock-ai-msg">{{ feature.mock.insight }}</span>
+              </div>
+            </div>
+
+            <div class="pub-mock-table-header">Workflow details</div>
+            <div class="pub-mock-table-row" *ngFor="let row of feature.mock.rows">
+              <span class="pub-mock-pill" [ngClass]="getRowToneClass(row.tone)">{{ row.status }}</span>
+              <span class="pub-mock-row-text">
+                <strong>{{ row.primary }}</strong>
+                <span class="pub-feature-row-secondary">{{ row.secondary }}</span>
+              </span>
+              <span class="pub-mock-row-meta">{{ row.meta }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ═══════════════════ HOW IT WORKS ═══════════════════ -->
   <section class="pub-section pub-section-alt" id="how">
