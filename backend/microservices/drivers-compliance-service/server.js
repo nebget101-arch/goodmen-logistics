@@ -60,6 +60,7 @@ const dqfDocumentsRouter = require('@goodmen/shared/routes/dqf-documents');
 const hosRouter = require('@goodmen/shared/routes/hos');
 const drugAlcoholRouter = require('@goodmen/shared/routes/drug-alcohol');
 const onboardingRouter = require('@goodmen/shared/routes/onboarding');
+const employmentApplicationRouter = require('@goodmen/shared/routes/employment-application');
 const publicOnboardingRouter = require('@goodmen/shared/routes/public-onboarding');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
@@ -72,6 +73,7 @@ app.use('/api/dqf-documents', authMiddleware, tenantContextMiddleware, dqfDocume
 app.use('/api/hos', authMiddleware, tenantContextMiddleware, hosRouter);
 app.use('/api/drug-alcohol', authMiddleware, tenantContextMiddleware, drugAlcoholRouter);
 app.use('/api/onboarding', authMiddleware, tenantContextMiddleware, onboardingRouter);
+app.use('/api/employment', authMiddleware, tenantContextMiddleware, employmentApplicationRouter);
 app.use('/public/onboarding', publicOnboardingRouter);
 
 /**

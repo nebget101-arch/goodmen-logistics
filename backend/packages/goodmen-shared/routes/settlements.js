@@ -872,7 +872,13 @@ router.post('/recurring-deductions/backfill', requireRole(settlementRoles), asyn
 router.get('/payroll-periods', requireRole(settlementRoles), async (req, res) => {
   try {
     const { status, limit = 50 } = req.query;
-    let q = knex('payroll_periods').orderBy('period_start', 'desc').limit(Math.min(Number(limit) || 50, 100));
+    let q = knex('payroll_periods')
+      .modify((qb) => {
+        if (req.context?.tenantId) qb.where('tenant_id', req.context.tenantId);
+        if (req.context?.operatingEntityId) qb.andWhere('operating_entity_id', req.context.operatingEntityId);
+      })
+      .orderBy('period_start', 'desc')
+      .limit(Math.min(Number(limit) || 50, 100));
     if (status) q = q.where('status', status);
     const rows = await q;
     res.json(rows);
@@ -883,9 +889,17 @@ router.get('/payroll-periods', requireRole(settlementRoles), async (req, res) =>
 
 router.post('/payroll-periods', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = req.context?.tenantId || null;
+    const operatingEntityId = req.context?.operatingEntityId || null;
+    if (!tenantId || !operatingEntityId) {
+      return res.status(403).json({ error: 'Operating entity context is required to create a payroll period' });
+    }
+
     const { period_start, period_end, run_type } = req.body;
     const [row] = await knex('payroll_periods')
       .insert({
+        tenant_id: tenantId,
+        operating_entity_id: operatingEntityId,
         period_start: period_start || new Date().toISOString().slice(0, 10),
         period_end: period_end || new Date().toISOString().slice(0, 10),
         run_type: run_type || 'weekly',
@@ -902,7 +916,14 @@ router.post('/payroll-periods', requireRole(settlementRoles), async (req, res) =
 router.patch('/payroll-periods/:id', requireRole(settlementRoles), async (req, res) => {
   try {
     const { status } = req.body;
-    const [row] = await knex('payroll_periods').where({ id: req.params.id }).update({ status, updated_at: knex.fn.now() }).returning('*');
+    const [row] = await knex('payroll_periods')
+      .where({ id: req.params.id })
+      .modify((qb) => {
+        if (req.context?.tenantId) qb.andWhere('tenant_id', req.context.tenantId);
+        if (req.context?.operatingEntityId) qb.andWhere('operating_entity_id', req.context.operatingEntityId);
+      })
+      .update({ status, updated_at: knex.fn.now() })
+      .returning('*');
     if (!row) return res.status(404).json({ error: 'Period not found' });
     res.json(row);
   } catch (err) {

@@ -1,0 +1,39 @@
+<div class="employment-application">
+  <form [formGroup]="form">
+    <h2>Applicant Information</h2>
+    <div formGroupName="applicant">
+      <label>First Name <input formControlName="firstName" /></label>
+      <label>Middle Name <input formControlName="middleName" /></label>
+      <label>Last Name <input formControlName="lastName" /></label>
+      <label>Phone <input formControlName="phone" /></label>
+      <label>Email <input formControlName="email" /></label>
+    </div>
+
+    <h3>Residency</h3>
+    <div formArrayName="residencies">
+      <div *ngFor="let r of residencies.controls; let i = index" [formGroupName]="i">
+        <label>Type <input formControlName="residencyType" /></label>
+        <label>Street <input formControlName="street" /></label>
+        <label>City <input formControlName="city" /></label>
+        <label>State <input formControlName="state" /></label>
+      </div>
+    </div>
+
+    <h3>Driving Experience</h3>
+    <table class="driving-table">
+      <thead><tr><th>Equipment</th><th>Type</th><th>From</th><th>To</th><th>Miles</th></tr></thead>
+      <tbody>
+        <tr *ngFor="let d of drivingExperience.controls; let i = index" [formGroupName]="i">
+          <td><input formControlName="classOfEquipment" /></td>
+          <td><input formControlName="typeOfEquipment" /></td>
+          <td><input formControlName="dateFrom" /></td>
+          <td><input formControlName="dateTo" /></td>
+          <td><input formControlName="approximateMilesTotal" /></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <button type="button" (click)="autosave()">Save Draft</button>
+    <button type="button" (click)="submit()">Review & Submit</button>
+  </form>
+</div>

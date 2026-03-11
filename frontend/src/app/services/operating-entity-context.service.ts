@@ -22,6 +22,18 @@ export interface OperatingEntityContextState {
 
 const STORAGE_SELECTED_ID = 'selectedOperatingEntityId';
 const LEGACY_STORAGE_KEYS = ['operatingEntityId', 'activeOperatingEntityId', 'selectedCompanyId', 'selectedOperatingEntity'];
+const DEFAULT_OPERATING_ENTITY_NAME_CANDIDATES = [
+  'fleetneuron default operating entity',
+  'fleetneurin default operating entity'
+];
+
+function normalizeEntityName(value: string | null | undefined): string {
+  return (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
 
 @Injectable({ providedIn: 'root' })
 export class OperatingEntityContextService {
@@ -105,7 +117,11 @@ export class OperatingEntityContextService {
 
   recoverFromStaleSelection(): void {
     const entities = this.snapshot.accessibleOperatingEntities || [];
-    const preferred = entities.find((entity) => !!entity.isDefault) || entities[0] || null;
+    const preferred =
+      entities.find((entity) => !!entity.isDefault)
+      || entities.find((entity) => DEFAULT_OPERATING_ENTITY_NAME_CANDIDATES.includes(normalizeEntityName(entity?.name || '')))
+      || entities[0]
+      || null;
     const selectedId = preferred?.id || null;
 
     if (selectedId) {
@@ -209,10 +225,14 @@ export class OperatingEntityContextService {
       .filter(Boolean)
       .find((id) => entities.some((entity) => entity.id === id));
 
-    const selected = entities.find((entity) => entity.id === selectedCandidate)
-      || entities.find((entity) => !!entity.isDefault)
-      || entities[0]
-      || null;
+    const byCandidateId = entities.find((entity) => entity.id === selectedCandidate) || null;
+    const byDefaultFlag = entities.find((entity) => !!entity.isDefault) || null;
+    const byDefaultName = entities.find((entity) => {
+      const normalized = normalizeEntityName(entity?.name || '');
+      return DEFAULT_OPERATING_ENTITY_NAME_CANDIDATES.includes(normalized);
+    }) || null;
+
+    const selected = byCandidateId || byDefaultFlag || byDefaultName || entities[0] || null;
 
     if (selected?.id) {
       localStorage.setItem(STORAGE_SELECTED_ID, selected.id);

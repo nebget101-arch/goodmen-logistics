@@ -1,352 +1,334 @@
 <div class="onboard-container">
+  <div class="onboard-background-glow onboard-background-glow-left"></div>
+  <div class="onboard-background-glow onboard-background-glow-right"></div>
+
   <div class="onboard-card">
-    <h1>Driver Onboarding Packet</h1>
-
-    <p *ngIf="packetId">
-      Packet ID:
-      <strong>{{ packetId }}</strong>
-    </p>
-
-    <div *ngIf="loading">Loading your packet…</div>
-    <div *ngIf="!loading && errorMessage" class="onboard-warning">
-      {{ errorMessage }}
-    </div>
-    <div *ngIf="saveSuccess" class="onboard-success">
-      {{ saveSuccess }}
-    </div>
-
-    <ng-container *ngIf="!loading && !errorMessage">
-      <div class="onboard-header" *ngIf="driver">
-        <div class="onboard-driver-name">
-          {{ driver.first_name }} {{ driver.last_name }}
+    <div class="onboard-hero">
+      <div class="onboard-hero-copy">
+        <div class="onboard-pill">
+          <span class="material-symbols-outlined">neurology</span>
+          <span>AI driver onboarding workspace</span>
         </div>
-        <div class="onboard-driver-meta">
-          <span *ngIf="driver.email">📧 {{ driver.email }}</span>
-          <span *ngIf="driver.phone">📞 {{ driver.phone }}</span>
+        <h1>Driver Onboarding Packet</h1>
+        <p class="onboard-hero-subtitle">
+          Complete your employment application and MVR authorization in a secure FleetNeuron workspace styled for modern fleet operations.
+        </p>
+        <div class="onboard-packet-meta" *ngIf="packetId">
+          <span class="material-symbols-outlined">badge</span>
+          <span>Packet ID</span>
+          <strong>{{ packetId }}</strong>
         </div>
       </div>
 
+      <div class="onboard-hero-panel" *ngIf="driver">
+        <div class="onboard-driver-avatar">
+          {{ (driver.first_name || '?').charAt(0) }}{{ (driver.last_name || '?').charAt(0) }}
+        </div>
+        <div class="onboard-driver-summary">
+          <div class="onboard-driver-label">Assigned applicant</div>
+          <div class="onboard-driver-name">{{ driver.first_name }} {{ driver.last_name }}</div>
+          <div class="onboard-driver-meta">
+            <span *ngIf="driver.email">
+              <span class="material-symbols-outlined">mail</span>
+              {{ driver.email }}
+            </span>
+            <span *ngIf="driver.phone">
+              <span class="material-symbols-outlined">call</span>
+              {{ driver.phone }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="onboard-state-card onboard-loading-card">
+      <span class="material-symbols-outlined">progress_activity</span>
+      <div>
+        <h2>Preparing your packet</h2>
+        <p>Loading your secure onboarding workspace…</p>
+      </div>
+    </div>
+
+    <div *ngIf="!loading && errorMessage" class="onboard-state-card onboard-warning">
+      <span class="material-symbols-outlined">error</span>
+      <div>
+        <h2>We couldn’t load this packet</h2>
+        <p>{{ errorMessage }}</p>
+      </div>
+    </div>
+
+    <div *ngIf="saveSuccess" class="onboard-state-card onboard-success">
+      <span class="material-symbols-outlined">check_circle</span>
+      <div>
+        <h2>Saved successfully</h2>
+        <p>{{ saveSuccess }}</p>
+      </div>
+    </div>
+
+    <ng-container *ngIf="!loading && !errorMessage">
       <div class="onboard-layout">
         <aside class="onboard-sidebar">
-          <div class="onboard-step"
-               [class.active]="currentStep === 'employment_application'"
-               (click)="setStep('employment_application')">
-            <div class="onboard-step-title">
-              1. Employment Application
-            </div>
-            <div class="onboard-step-status">
-              {{ isSectionCompleted('employment_application') ? 'Completed' : 'In progress' }}
-            </div>
+          <div class="onboard-sidebar-card">
+            <div class="onboard-sidebar-heading">Packet progress</div>
+            <button
+              type="button"
+              class="onboard-step"
+              [class.active]="currentStep === 'employment_application'"
+              (click)="setStep('employment_application')"
+            >
+              <div class="onboard-step-icon">
+                <span class="material-symbols-outlined">description</span>
+              </div>
+              <div class="onboard-step-copy">
+                <div class="onboard-step-title">Employment Application</div>
+                <div class="onboard-step-status">
+                  {{ isSectionCompleted('employment_application') ? 'Completed' : 'In progress' }}
+                </div>
+              </div>
+              <span class="material-symbols-outlined onboard-step-check" *ngIf="isSectionCompleted('employment_application')">check_circle</span>
+            </button>
+
+            <button
+              type="button"
+              class="onboard-step"
+              [class.active]="currentStep === 'mvr_authorization'"
+              (click)="setStep('mvr_authorization')"
+            >
+              <div class="onboard-step-icon onboard-step-icon-alt">
+                <span class="material-symbols-outlined">policy</span>
+              </div>
+              <div class="onboard-step-copy">
+                <div class="onboard-step-title">MVR Authorization</div>
+                <div class="onboard-step-status">
+                  {{ isSectionCompleted('mvr_authorization') ? 'Completed' : 'In progress' }}
+                </div>
+              </div>
+              <span class="material-symbols-outlined onboard-step-check" *ngIf="isSectionCompleted('mvr_authorization')">check_circle</span>
+            </button>
           </div>
-          <div class="onboard-step"
-               [class.active]="currentStep === 'mvr_authorization'"
-               (click)="setStep('mvr_authorization')">
-            <div class="onboard-step-title">
-              2. MVR Authorization
-            </div>
-            <div class="onboard-step-status">
-              {{ isSectionCompleted('mvr_authorization') ? 'Completed' : 'In progress' }}
-            </div>
+
+          <div class="onboard-sidebar-card onboard-sidebar-note">
+            <div class="onboard-sidebar-heading">What to expect</div>
+            <ul>
+              <li>Complete each section accurately</li>
+              <li>Review all driver details before signing</li>
+              <li>Your responses save into the FleetNeuron onboarding workflow</li>
+            </ul>
           </div>
         </aside>
 
         <section class="onboard-content">
-          <!-- Employment application step -->
-          <form *ngIf="currentStep === 'employment_application'"
-                (ngSubmit)="submitEmploymentApplication()"
-                novalidate>
-            <h2>Employment Application</h2>
-            <p class="onboard-subtitle">
-              Complete this application in full so we can process your driver file.
-            </p>
-
-            <div class="onboard-grid-2">
+          <form *ngIf="currentStep === 'employment_application'" (ngSubmit)="submitEmploymentApplication()" novalidate>
+            <div class="onboard-form-header">
               <div>
-                <h3 class="onboard-section-title">Applicant Information</h3>
-                <div class="onboard-field">
-                  <label for="eaFirstName">First Name *</label>
-                  <input id="eaFirstName" class="form-input" [(ngModel)]="employment.firstName" name="eaFirstName" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaMiddleName">Middle Name</label>
-                  <input id="eaMiddleName" class="form-input" [(ngModel)]="employment.middleName" name="eaMiddleName" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaLastName">Last Name *</label>
-                  <input id="eaLastName" class="form-input" [(ngModel)]="employment.lastName" name="eaLastName" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaPhone">Phone</label>
-                  <input id="eaPhone" class="form-input" [(ngModel)]="employment.phone" name="eaPhone" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaEmail">Email</label>
-                  <input id="eaEmail" type="email" class="form-input" [(ngModel)]="employment.email" name="eaEmail" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaDob">Date of Birth</label>
-                  <input id="eaDob" type="date" class="form-input" [(ngModel)]="employment.dateOfBirth" name="eaDob" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaSsnLast4">SSN (last 4)</label>
-                  <input id="eaSsnLast4" maxlength="4" class="form-input" [(ngModel)]="employment.ssnLast4" name="eaSsnLast4" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaPosition">Position applied for</label>
-                  <input id="eaPosition" class="form-input" [(ngModel)]="employment.positionAppliedFor" name="eaPosition" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaAvailable">Date available for work</label>
-                  <input id="eaAvailable" type="date" class="form-input" [(ngModel)]="employment.dateAvailable" name="eaAvailable" />
-                </div>
-                <div class="onboard-field">
-                  <label>Legal right to work in the U.S.?</label>
-                  <div class="onboard-radio-group">
-                    <label>
-                      <input type="radio" name="eaCanWork" [value]="true" [(ngModel)]="employment.canWorkInUs" />
-                      Yes
-                    </label>
-                    <label>
-                      <input type="radio" name="eaCanWork" [value]="false" [(ngModel)]="employment.canWorkInUs" />
-                      No
-                    </label>
+                <div class="onboard-form-kicker">Step 1</div>
+                <h2>Employment Application</h2>
+                <p class="onboard-subtitle">Build a complete applicant profile for your driver qualification file and onboarding review.</p>
+              </div>
+              <div class="onboard-form-badge">
+                <span class="material-symbols-outlined">shield_person</span>
+                <span>Secure submission</span>
+              </div>
+            </div>
+
+            <div class="onboard-form-panel-grid">
+              <section class="onboard-panel">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">person</span>
+                  <div>
+                    <h3 class="onboard-section-title">Applicant Information</h3>
+                    <p>Personal details used to create and verify your application record.</p>
                   </div>
                 </div>
-              </div>
+                <div class="onboard-grid-2">
+                  <div class="onboard-field"><label for="eaFirstName">First Name *</label><input id="eaFirstName" class="form-input" [(ngModel)]="employment.firstName" name="eaFirstName" placeholder="Enter first name" /></div>
+                  <div class="onboard-field"><label for="eaMiddleName">Middle Name</label><input id="eaMiddleName" class="form-input" [(ngModel)]="employment.middleName" name="eaMiddleName" placeholder="Optional middle name" /></div>
+                  <div class="onboard-field"><label for="eaLastName">Last Name *</label><input id="eaLastName" class="form-input" [(ngModel)]="employment.lastName" name="eaLastName" placeholder="Enter last name" /></div>
+                  <div class="onboard-field"><label for="eaPhone">Phone</label><input id="eaPhone" class="form-input" [(ngModel)]="employment.phone" name="eaPhone" placeholder="(555) 555-5555" /></div>
+                  <div class="onboard-field"><label for="eaEmail">Email</label><input id="eaEmail" type="email" class="form-input" [(ngModel)]="employment.email" name="eaEmail" placeholder="name@example.com" /></div>
+                  <div class="onboard-field"><label for="eaDob">Date of Birth</label><input id="eaDob" type="date" class="form-input" [(ngModel)]="employment.dateOfBirth" name="eaDob" /></div>
+                  <div class="onboard-field"><label for="eaSsnLast4">SSN (last 4)</label><input id="eaSsnLast4" maxlength="4" class="form-input" [(ngModel)]="employment.ssnLast4" name="eaSsnLast4" placeholder="1234" /></div>
+                  <div class="onboard-field"><label for="eaPosition">Position applied for</label><input id="eaPosition" class="form-input" [(ngModel)]="employment.positionAppliedFor" name="eaPosition" placeholder="Company Driver / Owner Operator" /></div>
+                  <div class="onboard-field"><label for="eaAvailable">Date available for work</label><input id="eaAvailable" type="date" class="form-input" [(ngModel)]="employment.dateAvailable" name="eaAvailable" /></div>
+                  <div class="onboard-field onboard-field-full"><div class="onboard-field-label">Legal right to work in the U.S.?</div><div class="onboard-radio-group"><label class="onboard-choice"><input type="radio" name="eaCanWork" [value]="true" [(ngModel)]="employment.canWorkInUs" /><span>Yes</span></label><label class="onboard-choice"><input type="radio" name="eaCanWork" [value]="false" [(ngModel)]="employment.canWorkInUs" /><span>No</span></label></div></div>
+                </div>
+              </section>
 
-              <div>
-                <h3 class="onboard-section-title">Current Address</h3>
-                <div class="onboard-field">
-                  <label for="eaStreet">Street</label>
-                  <input id="eaStreet" class="form-input" [(ngModel)]="employment.addressStreet" name="eaStreet" />
+              <section class="onboard-panel">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">home_pin</span>
+                  <div>
+                    <h3 class="onboard-section-title">Current Address</h3>
+                    <p>Where you currently reside and how long you’ve lived there.</p>
+                  </div>
                 </div>
-                <div class="onboard-field">
-                  <label for="eaCity">City</label>
-                  <input id="eaCity" class="form-input" [(ngModel)]="employment.addressCity" name="eaCity" />
+                <div class="onboard-grid-2">
+                  <div class="onboard-field onboard-field-full"><label for="eaStreet">Street</label><input id="eaStreet" class="form-input" [(ngModel)]="employment.addressStreet" name="eaStreet" placeholder="Street address" /></div>
+                  <div class="onboard-field"><label for="eaCity">City</label><input id="eaCity" class="form-input" [(ngModel)]="employment.addressCity" name="eaCity" placeholder="City" /></div>
+                  <div class="onboard-field"><label for="eaState">State</label><input id="eaState" maxlength="2" class="form-input" [(ngModel)]="employment.addressState" name="eaState" placeholder="OH" /></div>
+                  <div class="onboard-field"><label for="eaZip">ZIP</label><input id="eaZip" class="form-input" [(ngModel)]="employment.addressZip" name="eaZip" placeholder="ZIP code" /></div>
+                  <div class="onboard-field"><label for="eaYearsAt">Years at address</label><input id="eaYearsAt" class="form-input" [(ngModel)]="employment.yearsAtAddress" name="eaYearsAt" placeholder="e.g. 3 years" /></div>
                 </div>
-                <div class="onboard-field">
-                  <label for="eaState">State</label>
-                  <input id="eaState" maxlength="2" class="form-input" [(ngModel)]="employment.addressState" name="eaState" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaZip">ZIP</label>
-                  <input id="eaZip" class="form-input" [(ngModel)]="employment.addressZip" name="eaZip" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaYearsAt">Years at address</label>
-                  <input id="eaYearsAt" class="form-input" [(ngModel)]="employment.yearsAtAddress" name="eaYearsAt" />
-                </div>
+              </section>
 
-                <h3 class="onboard-section-title">License Information</h3>
-                <div class="onboard-field">
-                  <label for="eaLicState">CDL State</label>
-                  <input id="eaLicState" maxlength="2" class="form-input" [(ngModel)]="employment.licenseState" name="eaLicState" />
+              <section class="onboard-panel">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">badge</span>
+                  <div>
+                    <h3 class="onboard-section-title">License Information</h3>
+                    <p>CDL information required for qualification review and compliance tracking.</p>
+                  </div>
+                </div>
+                <div class="onboard-grid-2">
+                  <div class="onboard-field"><label for="eaLicState">CDL State</label><input id="eaLicState" maxlength="2" class="form-input" [(ngModel)]="employment.licenseState" name="eaLicState" placeholder="State" /></div>
+                  <div class="onboard-field"><label for="eaLicNumber">CDL Number</label><input id="eaLicNumber" class="form-input" [(ngModel)]="employment.licenseNumber" name="eaLicNumber" placeholder="License number" /></div>
+                  <div class="onboard-field"><label for="eaLicClass">CDL Class</label><input id="eaLicClass" class="form-input" [(ngModel)]="employment.licenseClass" name="eaLicClass" placeholder="Class A / B / C" /></div>
+                  <div class="onboard-field"><label for="eaLicEndorse">Endorsements</label><input id="eaLicEndorse" class="form-input" [(ngModel)]="employment.licenseEndorsements" name="eaLicEndorse" placeholder="Hazmat, Tanker, etc." /></div>
+                  <div class="onboard-field"><label for="eaLicExp">CDL Expiration</label><input id="eaLicExp" type="date" class="form-input" [(ngModel)]="employment.licenseExpiry" name="eaLicExp" /></div>
+                </div>
+              </section>
+
+              <section class="onboard-panel onboard-panel-full">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">local_shipping</span>
+                  <div>
+                    <h3 class="onboard-section-title">Driving Experience Summary</h3>
+                    <p>Tell us what equipment you’ve handled, approximate miles, and the period of experience.</p>
+                  </div>
                 </div>
                 <div class="onboard-field">
-                  <label for="eaLicNumber">CDL Number</label>
-                  <input id="eaLicNumber" class="form-input" [(ngModel)]="employment.licenseNumber" name="eaLicNumber" />
+                  <textarea class="form-input" rows="4" [(ngModel)]="employment.drivingExperienceSummary" name="eaDrivingExperience" placeholder="List tractors, trailers, route types, mileage, and time periods."></textarea>
                 </div>
-                <div class="onboard-field">
-                  <label for="eaLicClass">CDL Class</label>
-                  <input id="eaLicClass" class="form-input" [(ngModel)]="employment.licenseClass" name="eaLicClass" />
+              </section>
+
+              <section class="onboard-panel onboard-panel-full">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">work_history</span>
+                  <div>
+                    <h3 class="onboard-section-title">Employment History</h3>
+                    <p>Provide your two most recent employers so the team can verify prior employment history.</p>
+                  </div>
                 </div>
-                <div class="onboard-field">
-                  <label for="eaLicEndorse">Endorsements</label>
-                  <input id="eaLicEndorse" class="form-input" [(ngModel)]="employment.licenseEndorsements" name="eaLicEndorse" />
+                <div class="onboard-grid-2">
+                  <div class="onboard-subpanel">
+                    <h4>Current / most recent employer</h4>
+                    <div class="onboard-field"><label for="eaCurEmpName">Employer name</label><input id="eaCurEmpName" class="form-input" [(ngModel)]="employment.currentEmployerName" name="eaCurEmpName" /></div>
+                    <div class="onboard-field"><label for="eaCurEmpPhone">Employer phone</label><input id="eaCurEmpPhone" class="form-input" [(ngModel)]="employment.currentEmployerPhone" name="eaCurEmpPhone" /></div>
+                    <div class="onboard-grid-2 onboard-grid-tight"><div class="onboard-field"><label for="eaCurEmpFrom">From</label><input id="eaCurEmpFrom" class="form-input" [(ngModel)]="employment.currentEmployerFrom" name="eaCurEmpFrom" placeholder="MM/YYYY" /></div><div class="onboard-field"><label for="eaCurEmpTo">To</label><input id="eaCurEmpTo" class="form-input" [(ngModel)]="employment.currentEmployerTo" name="eaCurEmpTo" placeholder="MM/YYYY" /></div></div>
+                    <div class="onboard-field"><label for="eaCurEmpReason">Reason for leaving</label><input id="eaCurEmpReason" class="form-input" [(ngModel)]="employment.currentEmployerReasonForLeaving" name="eaCurEmpReason" /></div>
+                  </div>
+                  <div class="onboard-subpanel">
+                    <h4>Previous employer</h4>
+                    <div class="onboard-field"><label for="eaPrevEmpName">Employer name</label><input id="eaPrevEmpName" class="form-input" [(ngModel)]="employment.previousEmployerName" name="eaPrevEmpName" /></div>
+                    <div class="onboard-field"><label for="eaPrevEmpPhone">Employer phone</label><input id="eaPrevEmpPhone" class="form-input" [(ngModel)]="employment.previousEmployerPhone" name="eaPrevEmpPhone" /></div>
+                    <div class="onboard-grid-2 onboard-grid-tight"><div class="onboard-field"><label for="eaPrevEmpFrom">From</label><input id="eaPrevEmpFrom" class="form-input" [(ngModel)]="employment.previousEmployerFrom" name="eaPrevEmpFrom" placeholder="MM/YYYY" /></div><div class="onboard-field"><label for="eaPrevEmpTo">To</label><input id="eaPrevEmpTo" class="form-input" [(ngModel)]="employment.previousEmployerTo" name="eaPrevEmpTo" placeholder="MM/YYYY" /></div></div>
+                    <div class="onboard-field"><label for="eaPrevEmpReason">Reason for leaving</label><input id="eaPrevEmpReason" class="form-input" [(ngModel)]="employment.previousEmployerReasonForLeaving" name="eaPrevEmpReason" /></div>
+                  </div>
                 </div>
-                <div class="onboard-field">
-                  <label for="eaLicExp">CDL Expiration</label>
-                  <input id="eaLicExp" type="date" class="form-input" [(ngModel)]="employment.licenseExpiry" name="eaLicExp" />
+              </section>
+
+              <section class="onboard-panel">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">school</span>
+                  <div>
+                    <h3 class="onboard-section-title">Education</h3>
+                    <p>Summarize formal education, training, and certifications relevant to the role.</p>
+                  </div>
                 </div>
-              </div>
+                <div class="onboard-field"><label for="eaEdu">Education summary</label><textarea id="eaEdu" class="form-input" rows="4" [(ngModel)]="employment.educationSummary" name="eaEdu"></textarea></div>
+              </section>
+
+              <section class="onboard-panel">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">workspace_premium</span>
+                  <div>
+                    <h3 class="onboard-section-title">Other Qualifications</h3>
+                    <p>Add specialized training, safety achievements, or other relevant qualifications.</p>
+                  </div>
+                </div>
+                <div class="onboard-field"><label for="eaOther">Other qualifications</label><textarea id="eaOther" class="form-input" rows="4" [(ngModel)]="employment.otherQualifications" name="eaOther"></textarea></div>
+              </section>
+
+              <section class="onboard-panel onboard-panel-full onboard-panel-signature">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">draw</span>
+                  <div>
+                    <h3 class="onboard-section-title">Acknowledgment & Signature</h3>
+                    <p>Certify that your information is complete and authorize the verification steps required for driver onboarding.</p>
+                  </div>
+                </div>
+                <p class="onboard-small">By signing below, you certify that the information provided is true and complete to the best of your knowledge and authorize FleetNeuron AI to verify your employment and safety performance history as required by 49 CFR 391.21 and 391.23.</p>
+                <div class="onboard-grid-2">
+                  <div class="onboard-field"><label for="eaSigName">Applicant signature (type full name) *</label><input id="eaSigName" class="form-input" [(ngModel)]="employment.applicationSignatureName" name="eaSigName" placeholder="Type your full legal name" /></div>
+                  <div class="onboard-field"><label for="eaSigDate">Date</label><input id="eaSigDate" type="date" class="form-input" [(ngModel)]="employment.applicationSignatureDate" name="eaSigDate" /></div>
+                </div>
+              </section>
             </div>
 
-            <h3 class="onboard-section-title">Driving Experience (summary)</h3>
-            <div class="onboard-field">
-              <textarea
-                class="form-input"
-                rows="3"
-                [(ngModel)]="employment.drivingExperienceSummary"
-                name="eaDrivingExperience"
-                placeholder="List the types of equipment you’ve driven, approximate miles, and dates."
-              ></textarea>
-            </div>
-
-            <h3 class="onboard-section-title">Employment History (last 2 employers)</h3>
-            <div class="onboard-grid-2">
-              <div>
-                <div class="onboard-field">
-                  <label for="eaCurEmpName">Current / most recent employer</label>
-                  <input id="eaCurEmpName" class="form-input" [(ngModel)]="employment.currentEmployerName" name="eaCurEmpName" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaCurEmpPhone">Employer phone</label>
-                  <input id="eaCurEmpPhone" class="form-input" [(ngModel)]="employment.currentEmployerPhone" name="eaCurEmpPhone" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaCurEmpFrom">From (month/year)</label>
-                  <input id="eaCurEmpFrom" class="form-input" [(ngModel)]="employment.currentEmployerFrom" name="eaCurEmpFrom" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaCurEmpTo">To (month/year)</label>
-                  <input id="eaCurEmpTo" class="form-input" [(ngModel)]="employment.currentEmployerTo" name="eaCurEmpTo" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaCurEmpReason">Reason for leaving</label>
-                  <input id="eaCurEmpReason" class="form-input" [(ngModel)]="employment.currentEmployerReasonForLeaving" name="eaCurEmpReason" />
-                </div>
-              </div>
-              <div>
-                <div class="onboard-field">
-                  <label for="eaPrevEmpName">Previous employer</label>
-                  <input id="eaPrevEmpName" class="form-input" [(ngModel)]="employment.previousEmployerName" name="eaPrevEmpName" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaPrevEmpPhone">Employer phone</label>
-                  <input id="eaPrevEmpPhone" class="form-input" [(ngModel)]="employment.previousEmployerPhone" name="eaPrevEmpPhone" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaPrevEmpFrom">From (month/year)</label>
-                  <input id="eaPrevEmpFrom" class="form-input" [(ngModel)]="employment.previousEmployerFrom" name="eaPrevEmpFrom" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaPrevEmpTo">To (month/year)</label>
-                  <input id="eaPrevEmpTo" class="form-input" [(ngModel)]="employment.previousEmployerTo" name="eaPrevEmpTo" />
-                </div>
-                <div class="onboard-field">
-                  <label for="eaPrevEmpReason">Reason for leaving</label>
-                  <input id="eaPrevEmpReason" class="form-input" [(ngModel)]="employment.previousEmployerReasonForLeaving" name="eaPrevEmpReason" />
-                </div>
-              </div>
-            </div>
-
-            <h3 class="onboard-section-title">Education & Other Qualifications</h3>
-            <div class="onboard-field">
-              <label for="eaEdu">Education summary</label>
-              <textarea
-                id="eaEdu"
-                class="form-input"
-                rows="2"
-                [(ngModel)]="employment.educationSummary"
-                name="eaEdu"
-              ></textarea>
-            </div>
-            <div class="onboard-field">
-              <label for="eaOther">Other qualifications</label>
-              <textarea
-                id="eaOther"
-                class="form-input"
-                rows="2"
-                [(ngModel)]="employment.otherQualifications"
-                name="eaOther"
-              ></textarea>
-            </div>
-
-            <h3 class="onboard-section-title">Acknowledgment & Signature</h3>
-            <p class="onboard-small">
-              By signing below, you certify that the information provided is true and complete to the best of your knowledge and you
-              authorize FleetNeuron AI to verify your employment and safety performance history as required by 49 CFR 391.21
-              and 391.23.
-            </p>
-            <div class="onboard-grid-2">
-              <div class="onboard-field">
-                <label for="eaSigName">Applicant signature (type full name) *</label>
-                <input id="eaSigName" class="form-input" [(ngModel)]="employment.applicationSignatureName" name="eaSigName" />
-              </div>
-              <div class="onboard-field">
-                <label for="eaSigDate">Date</label>
-                <input id="eaSigDate" type="date" class="form-input" [(ngModel)]="employment.applicationSignatureDate" name="eaSigDate" />
-              </div>
-            </div>
-
-            <div class="onboard-actions">
-              <button class="btn btn-primary" type="submit" [disabled]="saving">
-                {{ saving ? 'Saving…' : 'Submit Employment Application' }}
+            <div class="onboard-actions" *ngIf="!reviewMode">
+              <button class="btn btn-secondary" type="button" (click)="saveEmploymentDraft()" [disabled]="saving || submittedEmployment">
+                <span class="material-symbols-outlined">save</span>
+                {{ saving ? 'Saving…' : 'Save Draft' }}
               </button>
+              <button class="btn btn-primary" type="button" (click)="openReview()" [disabled]="saving || submittedEmployment">
+                <span class="material-symbols-outlined">preview</span>
+                Review and Submit
+              </button>
+            </div>
+
+            <div class="onboard-state-card" *ngIf="reviewMode">
+              <span class="material-symbols-outlined">fact_check</span>
+              <div>
+                <h2>Review before submit</h2>
+                <p>Please confirm your application details are complete and accurate before final submission.</p>
+                <div class="onboard-actions onboard-actions-split">
+                  <button class="btn btn-secondary" type="button" (click)="backToEdit()" [disabled]="saving">
+                    <span class="material-symbols-outlined">edit</span>
+                    Back to Edit
+                  </button>
+                  <button class="btn btn-primary" type="submit" [disabled]="saving || submittedEmployment">
+                    <span class="material-symbols-outlined">task_alt</span>
+                    {{ saving ? 'Submitting…' : 'Confirm Submit Employment Application' }}
+                  </button>
+                </div>
+              </div>
             </div>
           </form>
 
-          <!-- MVR Authorization step -->
-          <form *ngIf="currentStep === 'mvr_authorization'"
-                (ngSubmit)="submitMvrAuthorization()"
-                novalidate>
-            <h2>MVR Authorization</h2>
-            <p class="onboard-subtitle">
-              Authorize Goodmen Logistics LLC to obtain your Motor Vehicle Record (MVR) for employment screening.
-            </p>
-
-            <div class="onboard-grid-2">
+          <form *ngIf="currentStep === 'mvr_authorization'" (ngSubmit)="submitMvrAuthorization()" novalidate>
+            <div class="onboard-form-header">
               <div>
-                <h3 class="onboard-section-title">Applicant</h3>
-                <div class="onboard-field">
-                  <label for="mvrFirstName">First Name *</label>
-                  <input id="mvrFirstName" class="form-input" [(ngModel)]="mvr.firstName" name="mvrFirstName" />
-                </div>
-                <div class="onboard-field">
-                  <label for="mvrMiddleName">Middle Name</label>
-                  <input id="mvrMiddleName" class="form-input" [(ngModel)]="mvr.middleName" name="mvrMiddleName" />
-                </div>
-                <div class="onboard-field">
-                  <label for="mvrLastName">Last Name *</label>
-                  <input id="mvrLastName" class="form-input" [(ngModel)]="mvr.lastName" name="mvrLastName" />
-                </div>
-                <div class="onboard-field">
-                  <label for="mvrAka">Maiden / AKA / previous names</label>
-                  <input id="mvrAka" class="form-input" [(ngModel)]="mvr.akaNames" name="mvrAka" />
-                </div>
-                <div class="onboard-field">
-                  <label for="mvrDob">Date of Birth</label>
-                  <input id="mvrDob" type="date" class="form-input" [(ngModel)]="mvr.dateOfBirth" name="mvrDob" />
-                </div>
+                <div class="onboard-form-kicker">Step 2</div>
+                <h2>MVR Authorization</h2>
+                <p class="onboard-subtitle">Authorize FleetNeuron AI to retrieve your MVR as part of driver qualification and employment screening.</p>
               </div>
-
-              <div>
-                <h3 class="onboard-section-title">License & Contact</h3>
-                <div class="onboard-field">
-                  <label for="mvrLicNumber">Driver License Number</label>
-                  <input id="mvrLicNumber" class="form-input" [(ngModel)]="mvr.driverLicenseNumber" name="mvrLicNumber" />
-                </div>
-                <div class="onboard-field">
-                  <label for="mvrLicState">Driver License State</label>
-                  <input id="mvrLicState" maxlength="2" class="form-input" [(ngModel)]="mvr.driverLicenseState" name="mvrLicState" />
-                </div>
-                <div class="onboard-field">
-                  <label for="mvrEmailCopy">Email (to receive a copy of your report, if applicable)</label>
-                  <input id="mvrEmailCopy" type="email" class="form-input" [(ngModel)]="mvr.emailForReportCopy" name="mvrEmailCopy" />
-                </div>
+              <div class="onboard-form-badge onboard-form-badge-alt">
+                <span class="material-symbols-outlined">verified_user</span>
+                <span>Consent required</span>
               </div>
             </div>
 
-            <h3 class="onboard-section-title">Disclosure & Authorization</h3>
-            <p class="onboard-small">
-              I hereby authorize FleetNeuron AI and its designated agents and representatives to obtain my motor vehicle record
-              (MVR) and other background information for employment screening, promotion, reassignment, or retention as an employee, as
-              described in the FleetNeuron AI MVR Authorization form provided to me.
-            </p>
-            <div class="onboard-field">
-              <label>
-                <input type="checkbox" [(ngModel)]="mvr.acknowledgesRights" name="mvrAck" />
-                I have read and understand this disclosure, and I authorize FleetNeuron AI to obtain my MVR.
-              </label>
+            <div class="onboard-form-panel-grid">
+              <section class="onboard-panel onboard-panel-full">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">construction</span>
+                  <div>
+                    <h3 class="onboard-section-title">Phase 2 Placeholder</h3>
+                    <p>MVR Authorization is intentionally not implemented in this phase.</p>
+                  </div>
+                </div>
+                <p class="onboard-small">Next phase will include a dedicated MVR authorization tab, separate MVR PDF generation, Cloudflare R2 upload, and separate DQF checklist item.</p>
+              </section>
             </div>
 
-            <div class="onboard-grid-2">
-              <div class="onboard-field">
-                <label for="mvrSigName">Applicant signature (type full name) *</label>
-                <input id="mvrSigName" class="form-input" [(ngModel)]="mvr.mvrSignatureName" name="mvrSigName" />
-              </div>
-              <div class="onboard-field">
-                <label for="mvrSigDate">Date</label>
-                <input id="mvrSigDate" type="date" class="form-input" [(ngModel)]="mvr.mvrSignatureDate" name="mvrSigDate" />
-              </div>
-            </div>
-
-            <div class="onboard-actions">
-              <button class="btn" type="button" (click)="setStep('employment_application')" [disabled]="saving">
+            <div class="onboard-actions onboard-actions-split">
+              <button class="btn btn-secondary" type="button" (click)="setStep('employment_application')" [disabled]="saving">
+                <span class="material-symbols-outlined">arrow_back</span>
                 Back to Employment Application
               </button>
               <button class="btn btn-primary" type="submit" [disabled]="saving">
-                {{ saving ? 'Saving…' : 'Submit MVR Authorization' }}
+                <span class="material-symbols-outlined">verified</span>
+                Acknowledge Placeholder
               </button>
             </div>
           </form>
