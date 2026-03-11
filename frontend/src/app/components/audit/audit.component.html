@@ -1,149 +1,204 @@
-<div class="container">
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">📊 Compliance Audit & Reporting</h2>
-      <div>
-        <select [(ngModel)]="selectedCategory" class="form-control" style="width: auto; display: inline-block; margin-right: 10px;">
-          <option value="dqf">Driver Qualification Files</option>
-          <option value="hos">Hours of Service</option>
-          <option value="maintenance">Maintenance Records</option>
-          <option value="drug-alcohol">Drug & Alcohol Testing</option>
-        </select>
-        <button class="btn btn-success" (click)="exportData()">📥 Export Data</button>
-      </div>
+<div class="audit-shell ai-admin-shell">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">FleetNeuron AI Compliance</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">assessment</span>
+        Compliance Audit & Reporting
+      </h1>
+      <p class="subtitle">Comprehensive compliance reporting across drivers, vehicles, and HOS regulations.</p>
     </div>
-
-    <div *ngIf="loading" class="loading">
-      <div class="spinner"></div>
+    <div class="header-actions">
+      <select [(ngModel)]="selectedCategory" class="form-select ai-select-lg">
+        <option value="dqf">Driver Qualification Files</option>
+        <option value="hos">Hours of Service</option>
+        <option value="maintenance">Maintenance Records</option>
+        <option value="drug-alcohol">Drug & Alcohol Testing</option>
+      </select>
+      <button type="button" class="btn btn-primary ai-glow-btn export-ai-btn" (click)="exportData()">
+        <span class="material-symbols-outlined">ios_share</span>
+        Export
+      </button>
     </div>
+  </header>
 
-    <div *ngIf="!loading && complianceSummary">
-      <h3 style="margin: 20px 0; color: var(--primary-color);">Compliance Summary Report</h3>
-      
-      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-        <p><strong>Company:</strong> {{ complianceSummary.companyName }}</p>
-        <p><strong>Report Period:</strong> {{ complianceSummary.reportPeriod.start }} to {{ complianceSummary.reportPeriod.end }}</p>
-        <p><strong>Generated:</strong> {{ complianceSummary.generatedAt }}</p>
+  <div *ngIf="loading" class="loading ai-loading">
+    <span class="material-symbols-outlined">hourglass_bottom</span>
+    Loading compliance data…
+  </div>
+
+  <div *ngIf="!loading && complianceSummary">
+    <section class="panel ai-panel">
+      <div class="panel-header">
+        <h2>
+          <span class="material-symbols-outlined">description</span>
+          Summary Report
+        </h2>
       </div>
-
-      <!-- Driver Compliance -->
-      <div class="card" style="margin-bottom: 20px;">
-        <div class="card-header">
-          <h4 class="card-title">👥 Driver Compliance</h4>
+      <div class="summary-info">
+        <div class="info-item">
+          <span class="info-label">Company:</span>
+          <span class="info-value">{{ complianceSummary.companyName }}</span>
         </div>
-        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
-          <div>
-            <div class="stat-label">Total Drivers</div>
-            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.driverCompliance.totalDrivers }}</div>
-          </div>
-          <div>
-            <div class="stat-label">Active Drivers</div>
-            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.driverCompliance.activeDrivers }}</div>
-          </div>
-          <div>
-            <div class="stat-label">Avg DQF Completeness</div>
-            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.driverCompliance.averageDQFCompleteness }}%</div>
-          </div>
-          <div>
-            <div class="stat-label">Expired Med Certs</div>
-            <div class="stat-value" style="font-size: 24px; color: var(--danger-color);">{{ complianceSummary.driverCompliance.expiredMedCerts }}</div>
-          </div>
+        <div class="info-item">
+          <span class="info-label">Report Period:</span>
+          <span class="info-value">{{ complianceSummary.reportPeriod.start }} to {{ complianceSummary.reportPeriod.end }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Generated:</span>
+          <span class="info-value">{{ complianceSummary.generatedAt }}</span>
         </div>
       </div>
+    </section>
 
-      <!-- Vehicle Compliance -->
-      <div class="card" style="margin-bottom: 20px;">
-        <div class="card-header">
-          <h4 class="card-title">🚛 Vehicle Compliance</h4>
+    <!-- Driver Compliance -->
+    <section class="panel ai-panel">
+      <div class="panel-header">
+        <h2>
+          <span class="material-symbols-outlined">people</span>
+          Driver Compliance
+        </h2>
+      </div>
+      <div class="stats-grid-4">
+        <div class="stat-card">
+          <div class="stat-label">Total Drivers</div>
+          <div class="stat-value">{{ complianceSummary.driverCompliance.totalDrivers }}</div>
+          <div class="stat-icon">👥</div>
         </div>
-        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
-          <div>
-            <div class="stat-label">Total Vehicles</div>
-            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.vehicleCompliance.totalVehicles }}</div>
-          </div>
-          <div>
-            <div class="stat-label">In Service</div>
-            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.vehicleCompliance.inService }}</div>
-          </div>
-          <div>
-            <div class="stat-label">Out of Service</div>
-            <div class="stat-value" style="font-size: 24px; color: var(--danger-color);">{{ complianceSummary.vehicleCompliance.outOfService }}</div>
-          </div>
-          <div>
-            <div class="stat-label">Maintenance Overdue</div>
-            <div class="stat-value" style="font-size: 24px; color: var(--warning-color);">{{ complianceSummary.vehicleCompliance.maintenanceOverdue }}</div>
-          </div>
+        <div class="stat-card">
+          <div class="stat-label">Active Drivers</div>
+          <div class="stat-value">{{ complianceSummary.driverCompliance.activeDrivers }}</div>
+          <div class="stat-icon">✓</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg DQF Completeness</div>
+          <div class="stat-value">{{ complianceSummary.driverCompliance.averageDQFCompleteness }}%</div>
+          <div class="stat-icon">📋</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="stat-label">Expired Med Certs</div>
+          <div class="stat-value">{{ complianceSummary.driverCompliance.expiredMedCerts }}</div>
+          <div class="stat-icon">⚠️</div>
         </div>
       </div>
+    </section>
 
-      <!-- HOS Compliance -->
-      <div class="card" style="margin-bottom: 20px;">
-        <div class="card-header">
-          <h4 class="card-title">⏰ HOS Compliance</h4>
+    <!-- Vehicle Compliance -->
+    <section class="panel ai-panel">
+      <div class="panel-header">
+        <h2>
+          <span class="material-symbols-outlined">local_shipping</span>
+          Vehicle Compliance
+        </h2>
+      </div>
+      <div class="stats-grid-4">
+        <div class="stat-card">
+          <div class="stat-label">Total Vehicles</div>
+          <div class="stat-value">{{ complianceSummary.vehicleCompliance.totalVehicles }}</div>
+          <div class="stat-icon">🚛</div>
         </div>
-        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
-          <div>
-            <div class="stat-label">Total Records</div>
-            <div class="stat-value" style="font-size: 24px;">{{ complianceSummary.hosCompliance.totalRecords }}</div>
-          </div>
-          <div>
-            <div class="stat-label">Compliant</div>
-            <div class="stat-value" style="font-size: 24px; color: var(--success-color);">{{ complianceSummary.hosCompliance.compliant }}</div>
-          </div>
-          <div>
-            <div class="stat-label">Warnings</div>
-            <div class="stat-value" style="font-size: 24px; color: var(--warning-color);">{{ complianceSummary.hosCompliance.warnings }}</div>
-          </div>
-          <div>
-            <div class="stat-label">Violations</div>
-            <div class="stat-value" style="font-size: 24px; color: var(--danger-color);">{{ complianceSummary.hosCompliance.violations }}</div>
-          </div>
+        <div class="stat-card">
+          <div class="stat-label">In Service</div>
+          <div class="stat-value">{{ complianceSummary.vehicleCompliance.inService }}</div>
+          <div class="stat-icon">✓</div>
+        </div>
+        <div class="stat-card danger">
+          <div class="stat-label">Out of Service</div>
+          <div class="stat-value">{{ complianceSummary.vehicleCompliance.outOfService }}</div>
+          <div class="stat-icon">✕</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="stat-label">Maintenance Overdue</div>
+          <div class="stat-value">{{ complianceSummary.vehicleCompliance.maintenanceOverdue }}</div>
+          <div class="stat-icon">🔧</div>
         </div>
       </div>
+    </section>
 
-      <!-- Recommended Actions -->
-      <div class="card" *ngIf="complianceSummary.recommendedActions.length > 0">
-        <div class="card-header">
-          <h4 class="card-title">✅ Recommended Actions</h4>
-        </div>
-        <ul style="margin-left: 20px;">
-          <li *ngFor="let action of complianceSummary.recommendedActions" style="margin-bottom: 10px;">
-            {{ action }}
-          </li>
-        </ul>
+    <!-- HOS Compliance -->
+    <section class="panel ai-panel">
+      <div class="panel-header">
+        <h2>
+          <span class="material-symbols-outlined">schedule</span>
+          HOS Compliance
+        </h2>
       </div>
-    </div>
+      <div class="stats-grid-4">
+        <div class="stat-card">
+          <div class="stat-label">Total Records</div>
+          <div class="stat-value">{{ complianceSummary.hosCompliance.totalRecords }}</div>
+          <div class="stat-icon">📊</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Compliant</div>
+          <div class="stat-value">{{ complianceSummary.hosCompliance.compliant }}</div>
+          <div class="stat-icon">✓</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="stat-label">Warnings</div>
+          <div class="stat-value">{{ complianceSummary.hosCompliance.warnings }}</div>
+          <div class="stat-icon">⚠️</div>
+        </div>
+        <div class="stat-card danger">
+          <div class="stat-label">Violations</div>
+          <div class="stat-value">{{ complianceSummary.hosCompliance.violations }}</div>
+          <div class="stat-icon">⛔</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recommended Actions -->
+    <section class="panel ai-panel" *ngIf="complianceSummary.recommendedActions.length > 0">
+      <div class="panel-header">
+        <h2>
+          <span class="material-symbols-outlined">checklist</span>
+          Recommended Actions
+        </h2>
+      </div>
+      <div class="actions-list">
+        <div *ngFor="let action of complianceSummary.recommendedActions" class="action-item">
+          <span class="material-symbols-outlined">arrow_right</span>
+          <span>{{ action }}</span>
+        </div>
+      </div>
+    </section>
   </div>
 
   <!-- Audit Trail -->
-  <div class="card">
-    <div class="card-header">
-      <h3 class="card-title">📜 Audit Trail (Recent Changes)</h3>
+  <section class="panel ai-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">history</span>
+        Audit Trail (Recent Changes)
+      </h2>
     </div>
     
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Timestamp</th>
-          <th>User</th>
-          <th>Action</th>
-          <th>Resource</th>
-          <th>IP Address</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let entry of auditTrail">
-          <td>{{ entry.timestamp | date:'short' }}</td>
-          <td>{{ entry.userId }}</td>
-          <td>
-            <span [class]="'badge ' + (entry.action === 'DELETE' ? 'badge-danger' : (entry.action === 'CREATE' ? 'badge-success' : 'badge-info'))">
-              {{ entry.action }}
-            </span>
-          </td>
-          <td>{{ entry.resource }}</td>
-          <td><small>{{ entry.ip }}</small></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Timestamp</th>
+            <th scope="col">User</th>
+            <th scope="col">Action</th>
+            <th scope="col">Resource</th>
+            <th scope="col">IP Address</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let entry of auditTrail">
+            <td>{{ entry.timestamp | date:'short' }}</td>
+            <td>{{ entry.userId }}</td>
+            <td>
+              <span class="action-badge" [class.badge-delete]="entry.action === 'DELETE'" [class.badge-create]="entry.action === 'CREATE'">
+                <span class="material-symbols-outlined">{{ getBadgeIcon(entry.action) }}</span>
+                {{ entry.action }}
+              </span>
+            </td>
+            <td>{{ entry.resource }}</td>
+            <td><small>{{ entry.ip }}</small></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
 </div>

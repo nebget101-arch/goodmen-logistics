@@ -3,6 +3,10 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 const userDb = require('../internal/user');
 const bcrypt = require('bcrypt');
+const authMiddleware = require('../middleware/auth-middleware');
+const knex = require('../internal/db').knex;
+const rbacService = require('../services/rbac-service');
+const tenantContextService = require('../services/tenant-context-service');
 
 // Secret for JWT (in production, use env var)
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
@@ -68,6 +72,99 @@ router.post('/login', async (req, res) => {
       payload.detail = err.message;
     }
     res.status(500).json(payload);
+  }
+});
+
+// GET /auth/me
+// Unified session/access/context payload for frontend bootstrap.
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    if (!knex) {
+      return res.status(503).json({ success: false, error: 'Database not available' });
+    }
+
+    const userId = req.user?.id || req.user?.sub;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const user = await knex('users')
+      .where({ id: userId })
+      .first('id', 'username', 'first_name', 'last_name', 'email', 'role', 'tenant_id');
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const [access, locationRows, entityRows, defaultContext] = await Promise.all([
+      rbacService.loadUserAccess(userId),
+      knex('user_locations as ul')
+        .join('locations as l', 'l.id', 'ul.location_id')
+        .where('ul.user_id', userId)
+        .select('l.id', 'l.name'),
+      tenantContextService.getUserOperatingEntities(knex, userId),
+      tenantContextService.getDefaultContextForUser(knex, userId)
+    ]);
+
+    const roles = (access?.roles || []).map((r) => r.code);
+    const permissions = Array.from(access?.permissions || []);
+    const locations = (locationRows || []).map((l) => ({ id: l.id, name: l.name }));
+
+    const sessionTenantId = user.tenant_id || defaultContext?.tenant?.tenant_id || defaultContext?.tenant?.id || null;
+    let entities = (entityRows || []).map((entity) => ({
+      id: entity.operating_entity_id,
+      name: entity.operating_entity_name,
+      mcNumber: entity.mc_number,
+      dotNumber: entity.dot_number,
+      isDefault: !!entity.is_default
+    }));
+
+    const isGlobalAdmin = roles.includes('super_admin') || (user.role || '').toString().trim().toLowerCase() === 'admin';
+    if (isGlobalAdmin && sessionTenantId) {
+      const tenantEntities = await knex('operating_entities')
+        .where({ tenant_id: sessionTenantId, is_active: true })
+        .orderBy('name', 'asc')
+        .select('id', 'name', 'mc_number', 'dot_number');
+
+      if (tenantEntities.length > 0) {
+        const assignedDefaultId = entities.find((entity) => entity.isDefault)?.id || null;
+        entities = tenantEntities.map((entity, index) => ({
+          id: entity.id,
+          name: entity.name,
+          mcNumber: entity.mc_number,
+          dotNumber: entity.dot_number,
+          isDefault: assignedDefaultId ? entity.id === assignedDefaultId : index === 0
+        }));
+      }
+    }
+
+    const selectedOperatingEntityId =
+      entities.find((entity) => entity.isDefault)?.id
+      || entities[0]?.id
+      || defaultContext?.operatingEntity?.id
+      || null;
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          username: user.username,
+          firstName: user.first_name || null,
+          lastName: user.last_name || null,
+          email: user.email || null,
+          role: user.role || null
+        },
+        roles,
+        permissions,
+        locations,
+        tenantId: sessionTenantId,
+        accessibleOperatingEntities: entities,
+        selectedOperatingEntityId
+      }
+    });
+  } catch (err) {
+    console.error('[auth/me]', err?.message || err);
+    res.status(500).json({ success: false, error: 'Failed to load session context' });
   }
 });
 

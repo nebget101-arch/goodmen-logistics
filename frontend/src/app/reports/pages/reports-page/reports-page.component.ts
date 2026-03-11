@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ApiService } from '../../../services/api.service';
 import { ReportsService } from '../../services/reports.service';
+import { OperatingEntityContextService } from '../../../services/operating-entity-context.service';
 import { ReportFilters, FinancialSummary, WorkOrderSummary, KpiSummary } from '../../reports.models';
 import { Subject, forkJoin, EMPTY, of } from 'rxjs';
 import { takeUntil, catchError, finalize } from 'rxjs/operators';
@@ -12,8 +13,10 @@ import { takeUntil, catchError, finalize } from 'rxjs/operators';
 })
 export class ReportsPageComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
   isLoading = false;
   loadingMessage = '';
+  activeOperatingEntityName = '';
   tabs = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'financial', label: 'Financial' },
@@ -156,11 +159,16 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
     { key: 'total_outstanding', label: 'Total' }
   ];
 
-  constructor(private apiService: ApiService, private reportsService: ReportsService) {}
+  constructor(
+    private apiService: ApiService,
+    private reportsService: ReportsService,
+    private operatingEntityContext: OperatingEntityContextService
+  ) {}
 
   ngOnInit(): void {
     try {
       console.log('[Reports] ngOnInit starting', new Date().toISOString());
+      this.bindOperatingEntityContext();
       this.role = (localStorage.getItem('role') || '').toLowerCase().trim();
       if (!this.role) {
         this.role = this.getRoleFromToken();
@@ -204,6 +212,29 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          this.loadedTabs = {};
+          this.reportsService.invalidateCache();
+          this.loadTabData(this.activeTab, true);
+        }
+      });
   }
 
   loadLocations(): void {

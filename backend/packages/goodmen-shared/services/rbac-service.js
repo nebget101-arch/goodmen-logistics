@@ -9,13 +9,43 @@ const db = require('../internal/db').knex;
 
 const SUPER_ADMIN_ROLE_CODE = 'super_admin';
 
+const LEGACY_TO_ROLE_CODE = {
+  admin: 'super_admin',
+  safety: 'safety_manager',
+  fleet: 'dispatcher',
+  dispatch: 'dispatcher',
+  driver: 'driver'
+};
+
+async function getLegacyRoleCodeForUser(userId) {
+  if (!db) return null;
+  const hasUsersTable = await db.schema.hasTable('users');
+  if (!hasUsersTable) return null;
+
+  const row = await db('users').where('id', userId).first('role');
+  const legacyRole = (row?.role || '').toString().trim().toLowerCase();
+  return LEGACY_TO_ROLE_CODE[legacyRole] || null;
+}
+
 async function getRolesForUser(userId) {
   if (!db) return [];
-  const rows = await db('user_roles as ur')
-    .join('roles as r', 'ur.role_id', 'r.id')
-    .where('ur.user_id', userId)
-    .select('r.id', 'r.code', 'r.name');
-  return rows;
+  const hasUserRoles = await db.schema.hasTable('user_roles');
+  const hasRoles = await db.schema.hasTable('roles');
+
+  if (hasUserRoles && hasRoles) {
+    const rows = await db('user_roles as ur')
+      .join('roles as r', 'ur.role_id', 'r.id')
+      .where('ur.user_id', userId)
+      .select('r.id', 'r.code', 'r.name');
+
+    if (rows.length > 0) return rows;
+  }
+
+  // Legacy fallback: map users.role to an RBAC role code when no role assignment exists yet.
+  const fallbackCode = await getLegacyRoleCodeForUser(userId);
+  if (!fallbackCode) return [];
+
+  return [{ id: null, code: fallbackCode, name: `Legacy ${fallbackCode}` }];
 }
 
 async function getPermissionsForUser(userId) {

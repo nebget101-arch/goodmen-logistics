@@ -1,0 +1,384 @@
+<div class="pub-page">
+
+  <!-- ═══════════════════ NAVIGATION ═══════════════════ -->
+  <nav class="pub-nav" [class.pub-nav-scrolled]="navScrolled">
+    <div class="pub-nav-inner">
+      <button type="button" class="pub-brand pub-brand-btn" (click)="scrollToSection('hero')">
+        <span class="pub-brand-wordmark">FleetNeuron</span>
+        <span class="pub-brand-tag">AI fleet intelligence</span>
+      </button>
+
+      <ul class="pub-nav-links" [class.pub-nav-open]="mobileNavOpen">
+        <li><button type="button" class="pub-nav-link-btn" (click)="scrollToSection('features')">Features</button></li>
+        <li><button type="button" class="pub-nav-link-btn" (click)="scrollToSection('how')">How it works</button></li>
+        <li><button type="button" class="pub-nav-link-btn" (click)="scrollToSection('ai')">AI</button></li>
+        <li><button type="button" class="pub-nav-link-btn" (click)="scrollToSection('pricing')">Pricing</button></li>
+        <li class="pub-nav-cta-item">
+          <button class="pub-btn-outline" (click)="goToLogin()">Sign In</button>
+        </li>
+        <li class="pub-nav-cta-item">
+          <button class="pub-btn-primary" (click)="navigateToTrial()">Start Free Trial</button>
+        </li>
+      </ul>
+
+      <button class="pub-nav-hamburger" type="button" (click)="toggleMobileNav(); $event.stopPropagation()" [attr.aria-expanded]="mobileNavOpen">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════ HERO ═══════════════════ -->
+  <section class="pub-hero" id="hero">
+    <div class="pub-hero-glow pub-hero-glow-1"></div>
+    <div class="pub-hero-glow pub-hero-glow-2"></div>
+    <div class="pub-hero-glow pub-hero-glow-3"></div>
+
+    <div class="pub-hero-content">
+      <div class="pub-hero-badge">
+        <span class="material-symbols-outlined">psychology</span>
+        <span>AI-Powered Fleet Operations</span>
+      </div>
+
+      <h1 class="pub-hero-headline">
+        Run Your Fleet
+        <span class="pub-gradient-text"> Smarter, Faster,</span>
+        <br>Together.
+      </h1>
+
+      <p class="pub-hero-sub">
+        FleetNeuron helps carriers manage dispatch, safety, drivers, maintenance, inventory,
+        and multi-company operations in one AI-powered platform built for real trucking.
+      </p>
+
+      <div class="pub-hero-actions">
+        <button class="pub-btn-primary pub-btn-lg" (click)="navigateToTrial()">
+          <span class="material-symbols-outlined">rocket_launch</span>
+          Start Free Trial
+        </button>
+        <button class="pub-btn-outline pub-btn-lg" (click)="scrollToSection('pricing')">
+          View Plans
+        </button>
+      </div>
+
+      <div class="pub-hero-trust">
+        <span class="pub-trust-pill">
+          <span class="material-symbols-outlined">check_circle</span>
+          No credit card required
+        </span>
+        <span class="pub-trust-pill">
+          <span class="material-symbols-outlined">check_circle</span>
+          Setup in minutes
+        </span>
+        <span class="pub-trust-pill">
+          <span class="material-symbols-outlined">check_circle</span>
+          Cancel anytime
+        </span>
+      </div>
+    </div>
+
+    <!-- Dashboard preview mockup -->
+    <div class="pub-hero-visual">
+      <div class="pub-mockup">
+        <div class="pub-mockup-bar">
+          <span class="pub-mockup-dot pub-dot-red"></span>
+          <span class="pub-mockup-dot pub-dot-yellow"></span>
+          <span class="pub-mockup-dot pub-dot-green"></span>
+          <span class="pub-mockup-url">fleetneuron.app / dashboard</span>
+        </div>
+        <div class="pub-mockup-body">
+          <div class="pub-mock-stat-row">
+            <div class="pub-mock-stat">
+              <span class="pub-mock-stat-num">24</span>
+              <span class="pub-mock-stat-label">Active Loads</span>
+              <span class="pub-mock-stat-badge pub-badge-green">+12%</span>
+            </div>
+            <div class="pub-mock-stat">
+              <span class="pub-mock-stat-num">18</span>
+              <span class="pub-mock-stat-label">Drivers On Road</span>
+              <span class="pub-mock-stat-badge pub-badge-teal">Live</span>
+            </div>
+            <div class="pub-mock-stat">
+              <span class="pub-mock-stat-num">6</span>
+              <span class="pub-mock-stat-label">Work Orders</span>
+              <span class="pub-mock-stat-badge pub-badge-amber">Pending</span>
+            </div>
+          </div>
+
+          <div class="pub-mock-ai-strip">
+            <span class="material-symbols-outlined pub-mock-ai-icon">psychology</span>
+            <div class="pub-mock-ai-text">
+              <span class="pub-mock-ai-label">AI insight</span>
+              <span class="pub-mock-ai-msg">Load #LTL-4821 document intake ready — extracted 6 fields automatically</span>
+            </div>
+            <span class="pub-mock-ai-cta">Review →</span>
+          </div>
+
+          <div class="pub-mock-table-header">
+            <span>Recent Loads</span>
+          </div>
+          <div class="pub-mock-table-row">
+            <span class="pub-mock-pill pub-pill-green">Delivered</span>
+            <span class="pub-mock-row-text">Chicago → Dallas · Driver: M. Torres</span>
+            <span class="pub-mock-row-meta">$2,400</span>
+          </div>
+          <div class="pub-mock-table-row">
+            <span class="pub-mock-pill pub-pill-blue">In Transit</span>
+            <span class="pub-mock-row-text">Memphis → Atlanta · Driver: R. Johnson</span>
+            <span class="pub-mock-row-meta">$1,850</span>
+          </div>
+          <div class="pub-mock-table-row">
+            <span class="pub-mock-pill pub-pill-amber">Dispatched</span>
+            <span class="pub-mock-row-text">Detroit → Nashville · Driver: K. Williams</span>
+            <span class="pub-mock-row-meta">$2,100</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ STATS BAR ═══════════════════ -->
+  <div class="pub-stats-bar">
+    <div class="pub-stats-inner">
+      <div class="pub-stat-item">
+        <span class="pub-stat-num">10+</span>
+        <span class="pub-stat-label">Operational Modules</span>
+      </div>
+      <div class="pub-stat-divider"></div>
+      <div class="pub-stat-item">
+        <span class="pub-stat-num">Multi-MC</span>
+        <span class="pub-stat-label">Multi-company ready</span>
+      </div>
+      <div class="pub-stat-divider"></div>
+      <div class="pub-stat-item">
+        <span class="pub-stat-num">AI-First</span>
+        <span class="pub-stat-label">Built-in AI workflows</span>
+      </div>
+      <div class="pub-stat-divider"></div>
+      <div class="pub-stat-item">
+        <span class="pub-stat-num">Real-Time</span>
+        <span class="pub-stat-label">Fleet visibility</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ FEATURES ═══════════════════ -->
+  <section class="pub-section" id="features">
+    <div class="pub-section-inner">
+      <div class="pub-section-label">Platform Capabilities</div>
+      <h2 class="pub-section-title">Everything your fleet operation needs</h2>
+      <p class="pub-section-sub">
+        From dispatch to driver compliance, maintenance to multi-company management —
+        FleetNeuron covers the full operational stack in one connected platform.
+      </p>
+
+      <div class="pub-features-grid">
+        <div class="pub-feature-card" *ngFor="let f of features">
+          <div class="pub-feature-icon-wrap">
+            <span class="material-symbols-outlined pub-feature-icon">{{ f.icon }}</span>
+          </div>
+          <h3 class="pub-feature-title">{{ f.title }}</h3>
+          <p class="pub-feature-desc">{{ f.description }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ HOW IT WORKS ═══════════════════ -->
+  <section class="pub-section pub-section-alt" id="how">
+    <div class="pub-section-inner">
+      <div class="pub-section-label">Getting started</div>
+      <h2 class="pub-section-title">Up and running in four steps</h2>
+      <p class="pub-section-sub">
+        FleetNeuron is designed for real fleet operators — not IT departments.
+        Get your operation centralized and running smarter quickly.
+      </p>
+
+      <div class="pub-how-grid">
+        <div class="pub-how-step" *ngFor="let s of steps">
+          <div class="pub-how-step-num">{{ s.step }}</div>
+          <div class="pub-how-step-connector"></div>
+          <h3 class="pub-how-step-title">{{ s.title }}</h3>
+          <p class="pub-how-step-desc">{{ s.description }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ AI SECTION ═══════════════════ -->
+  <section class="pub-section pub-ai-section" id="ai">
+    <div class="pub-ai-glow"></div>
+    <div class="pub-section-inner pub-ai-inner">
+      <div class="pub-ai-left">
+        <div class="pub-section-label">AI-First Platform</div>
+        <h2 class="pub-section-title">
+          Intelligence built into every workflow
+        </h2>
+        <p class="pub-section-sub">
+          FleetNeuron doesn't bolt AI on top — it's designed from the ground up with AI-powered
+          workflows that reduce manual work and give your team operational superpowers.
+        </p>
+
+        <ul class="pub-ai-benefits">
+          <li class="pub-ai-benefit" *ngFor="let b of aiBenefits">
+            <span class="material-symbols-outlined pub-ai-benefit-icon">{{ b.icon }}</span>
+            <span>{{ b.text }}</span>
+          </li>
+        </ul>
+
+        <button class="pub-btn-primary pub-btn-lg pub-ai-cta" (click)="navigateToTrial()">
+          <span class="material-symbols-outlined">rocket_launch</span>
+          Try FleetNeuron AI Free
+        </button>
+      </div>
+
+      <div class="pub-ai-right">
+        <div class="pub-ai-card">
+          <div class="pub-ai-card-header">
+            <span class="material-symbols-outlined pub-ai-card-icon">psychology</span>
+            <span>FleetNeuron AI</span>
+            <span class="pub-ai-card-live">● LIVE</span>
+          </div>
+          <div class="pub-ai-card-body">
+            <div class="pub-ai-msg pub-ai-msg-system">
+              <span class="pub-ai-msg-role">System</span>
+              <p>Load intake document detected. Extracting fields…</p>
+            </div>
+            <div class="pub-ai-msg pub-ai-msg-ai">
+              <span class="pub-ai-msg-role">AI</span>
+              <p>✓ Pickup: Chicago, IL · Delivery: Atlanta, GA</p>
+              <p>✓ Rate: $2,850 · Miles: 718</p>
+              <p>✓ Broker: Swift Transport · Ref: LTL-9921</p>
+              <p class="pub-ai-msg-highlight">6 fields extracted · Ready for dispatch</p>
+            </div>
+            <div class="pub-ai-msg pub-ai-msg-action">
+              <span class="pub-ai-msg-role">Action</span>
+              <p>Load created automatically — assign driver?</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pub-ai-metric-row">
+          <div class="pub-ai-metric">
+            <span class="pub-ai-metric-num">6s</span>
+            <span class="pub-ai-metric-label">avg. intake time</span>
+          </div>
+          <div class="pub-ai-metric">
+            <span class="pub-ai-metric-num">97%</span>
+            <span class="pub-ai-metric-label">field accuracy</span>
+          </div>
+          <div class="pub-ai-metric">
+            <span class="pub-ai-metric-num">0</span>
+            <span class="pub-ai-metric-label">manual re-entry</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ PRICING ═══════════════════ -->
+  <section class="pub-section" id="pricing">
+    <div class="pub-section-inner">
+      <div class="pub-section-label">Subscription Plans</div>
+      <h2 class="pub-section-title">Choose the right plan for your operation</h2>
+      <p class="pub-section-sub">
+        Whether you run one carrier authority or manage multiple MCs and companies,
+        FleetNeuron scales with your growth.
+      </p>
+
+      <div class="pub-pricing-grid">
+        <div
+          class="pub-pricing-card"
+          *ngFor="let plan of plans"
+          [class.pub-pricing-featured]="plan.highlighted"
+        >
+          <div class="pub-pricing-badge" *ngIf="plan.badge">{{ plan.badge }}</div>
+          <div class="pub-pricing-header">
+            <h3 class="pub-pricing-name">{{ plan.name }}</h3>
+            <p class="pub-pricing-tagline">{{ plan.tagline }}</p>
+          </div>
+          <div class="pub-pricing-price">
+            <span class="pub-price-label">{{ plan.priceLabel }}</span>
+          </div>
+          <p class="pub-pricing-desc">{{ plan.description }}</p>
+          <ul class="pub-pricing-features">
+            <li *ngFor="let f of plan.features" [class.pub-pricing-feature-hl]="f.highlight">
+              <span class="material-symbols-outlined pub-check-icon">{{ f.highlight ? 'star' : 'check_circle' }}</span>
+              {{ f.text }}
+            </li>
+          </ul>
+          <button
+            class="pub-pricing-cta"
+            [class.pub-btn-primary]="plan.highlighted"
+            [class.pub-btn-outline]="!plan.highlighted"
+            (click)="navigateToTrial(plan.id)"
+          >
+            Start Free Trial
+          </button>
+        </div>
+      </div>
+
+      <p class="pub-pricing-note">
+        All plans include a free trial period. Pricing is custom based on fleet size and requirements.
+        <button type="button" class="pub-inline-link-btn" (click)="navigateToTrial()">Contact our team</button> to discuss your needs.
+      </p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ CTA SECTION ═══════════════════ -->
+  <section class="pub-cta-section" id="cta">
+    <div class="pub-cta-glow"></div>
+    <div class="pub-cta-inner">
+      <div class="pub-section-label pub-cta-label">Get Started Today</div>
+      <h2 class="pub-cta-title">
+        Ready to run a smarter fleet?
+      </h2>
+      <p class="pub-cta-sub">
+        Join modern trucking operations already using FleetNeuron to move faster, 
+        work smarter, and grow with confidence.
+      </p>
+      <div class="pub-cta-actions">
+        <button class="pub-btn-primary pub-btn-xl" (click)="navigateToTrial()">
+          <span class="material-symbols-outlined">rocket_launch</span>
+          Start Free Trial
+        </button>
+        <button class="pub-btn-ghost pub-btn-xl" (click)="navigateToTrial()">
+          <span class="material-symbols-outlined">calendar_today</span>
+          Request Demo
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ FOOTER ═══════════════════ -->
+  <footer class="pub-footer">
+    <div class="pub-footer-inner">
+      <div class="pub-footer-brand">
+        <span class="pub-brand-wordmark">FleetNeuron</span>
+        <span class="pub-footer-tagline">AI-powered fleet, safety & inventory intelligence</span>
+        <span class="pub-footer-copy">© {{ currentYear }} FleetNeuron. All rights reserved.</span>
+      </div>
+
+      <div class="pub-footer-links">
+        <div class="pub-footer-col">
+          <span class="pub-footer-col-title">Platform</span>
+          <button type="button" class="pub-footer-link-btn" (click)="scrollToSection('features')">Features</button>
+          <button type="button" class="pub-footer-link-btn" (click)="scrollToSection('pricing')">Pricing</button>
+          <button type="button" class="pub-footer-link-btn" (click)="scrollToSection('ai')">AI Capabilities</button>
+          <button type="button" class="pub-footer-link-btn" (click)="scrollToSection('how')">How It Works</button>
+        </div>
+        <div class="pub-footer-col">
+          <span class="pub-footer-col-title">Get Started</span>
+          <button type="button" class="pub-footer-link-btn" (click)="navigateToTrial()">Start Free Trial</button>
+          <button type="button" class="pub-footer-link-btn" (click)="navigateToTrial()">Request Demo</button>
+          <button type="button" class="pub-footer-link-btn" (click)="goToLogin()">Sign In</button>
+        </div>
+        <div class="pub-footer-col">
+          <span class="pub-footer-col-title">Legal</span>
+          <a routerLink="/privacy">Privacy Policy</a>
+          <a routerLink="/terms">Terms of Service</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</div>

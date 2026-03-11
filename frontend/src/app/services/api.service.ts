@@ -80,6 +80,58 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/users/${id}`);
   }
 
+  listUsers(): Observable<any> {
+    return this.http.get(`${this.baseUrl}/users`);
+  }
+
+  // Multi-MC admin management
+  listOperatingEntities(): Observable<any> {
+    return this.http.get(`${this.baseUrl}/users/operating-entities`);
+  }
+
+  createOperatingEntity(payload: {
+    name: string;
+    legal_name?: string;
+    dba_name?: string;
+    mc_number?: string;
+    dot_number?: string;
+    address_line1?: string;
+    city?: string;
+    state?: string;
+    zip_code?: string;
+    entity_type?: string;
+    is_active?: boolean;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/users/operating-entities`, payload);
+  }
+
+  updateOperatingEntity(entityId: string, payload: {
+    name?: string;
+    legal_name?: string;
+    dba_name?: string;
+    mc_number?: string;
+    dot_number?: string;
+    address_line1?: string;
+    city?: string;
+    state?: string;
+    zip_code?: string;
+    entity_type?: string;
+    is_active?: boolean;
+  }): Observable<any> {
+    return this.http.put(`${this.baseUrl}/users/operating-entities/${entityId}`, payload);
+  }
+
+  getUserOperatingEntityAccess(userId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/users/${userId}/operating-entities`);
+  }
+
+  updateUserOperatingEntityAccess(userId: string, payload: {
+    operatingEntityIds: string[];
+    defaultOperatingEntityId?: string | null;
+  }): Observable<any> {
+    return this.http.put(`${this.baseUrl}/users/${userId}/operating-entities`, payload);
+  }
+
   // Dashboard
   getDashboardStats(): Observable<any> {
     return this.http.get(`${this.baseUrl}/dashboard/stats`);
@@ -737,6 +789,25 @@ export class ApiService {
   login(username: string, password: string): Observable<any> {
     return this.http.post(`${this.baseUrl}/auth/login`, { username, password });
   }
+
+    // Public marketing website
+    getMarketingPlans(): Observable<any> {
+      return this.http.get(`${this.baseUrl}/public/trial-requests/plans`);
+    }
+
+    submitTrialRequest(payload: {
+      companyName: string;
+      contactName: string;
+      email: string;
+      phone: string;
+      fleetSize: string;
+      currentSystem?: string;
+      requestedPlan: 'basic' | 'multi_mc' | 'end_to_end';
+      wantsDemoAssistance: boolean;
+      notes?: string;
+    }): Observable<any> {
+      return this.http.post(`${this.baseUrl}/public/trial-requests`, payload);
+    }
 
   // ========== INVENTORY MANAGEMENT (PHASE 2) ==========
 

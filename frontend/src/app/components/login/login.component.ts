@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { AccessControlService } from '../../services/access-control.service';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 @Component({
   selector: 'app-login',
@@ -16,7 +17,8 @@ export class LoginComponent {
   constructor(
     private api: ApiService,
     private router: Router,
-    private accessControl: AccessControlService
+    private accessControl: AccessControlService,
+    private operatingEntityContext: OperatingEntityContextService
   ) {}
 
   login(): void {
@@ -36,6 +38,7 @@ export class LoginComponent {
           }
         }
         this.accessControl.setAccessFromLoginResponse(res);
+        this.operatingEntityContext.bootstrapFromSessionIfNeeded(true);
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {

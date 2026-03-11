@@ -27,6 +27,18 @@ function applyDateFilters(qb, dateField, from, to) {
 	if (to) qb.andWhere(dateField, '<=', to);
 }
 
+function applyTenantFilter(qb, req, column = 'tenant_id') {
+	if (req.context?.tenantId) {
+		qb.andWhere(column, req.context.tenantId);
+	}
+}
+
+function applyEntityFilter(qb, req, column = 'operating_entity_id') {
+	if (req.context?.operatingEntityId) {
+		qb.andWhere(column, req.context.operatingEntityId);
+	}
+}
+
 /**
  * @openapi
  * /api/reports/inventory-status:
@@ -70,7 +82,8 @@ router.get('/inventory-status', authMiddleware, async (req, res) => {
 				'inventory.last_counted_at',
 				'inventory.last_received_at'
 			)
-			.where('parts.status', 'ACTIVE');
+			.where('parts.status', 'ACTIVE')
+			.modify((qb) => applyTenantFilter(qb, req, 'locations.tenant_id'));
 
 		if (locationId) {
 			query = query.where('inventory.location_id', locationId);
@@ -142,7 +155,8 @@ router.get('/low-stock', authMiddleware, async (req, res) => {
 			.where('parts.status', 'ACTIVE')
 			.whereRaw(
 				'inventory.on_hand_qty = 0 OR (inventory.on_hand_qty - inventory.reserved_qty) <= inventory.min_stock_level'
-			);
+			)
+			.modify((qb) => applyTenantFilter(qb, req, 'locations.tenant_id'));
 
 		if (locationId) {
 			query = query.where('inventory.location_id', locationId);
@@ -188,7 +202,8 @@ router.get('/valuation', authMiddleware, async (req, res) => {
 				db.raw('(inventory.on_hand_qty * COALESCE(parts.unit_cost, 0))::numeric as total_value')
 			)
 			.where('parts.status', 'ACTIVE')
-			.andWhereRaw('inventory.on_hand_qty > 0');
+			.andWhereRaw('inventory.on_hand_qty > 0')
+			.modify((qb) => applyTenantFilter(qb, req, 'locations.tenant_id'));
 
 		if (locationId) {
 			query = query.where('inventory.location_id', locationId);
@@ -199,12 +214,14 @@ router.get('/valuation', authMiddleware, async (req, res) => {
 		// Calculate totals
 		const totals = await db('inventory')
 			.join('parts', 'inventory.part_id', 'parts.id')
+			.join('locations', 'inventory.location_id', 'locations.id')
 			.select(
 				db.raw('SUM(inventory.on_hand_qty)::integer as total_qty'),
 				db.raw('SUM(inventory.on_hand_qty * COALESCE(parts.unit_cost, 0))::numeric as total_value')
 			)
 			.where('parts.status', 'ACTIVE')
 			.andWhereRaw('inventory.on_hand_qty > 0')
+			.modify((qb) => applyTenantFilter(qb, req, 'locations.tenant_id'))
 			.modify(qb => {
 				if (locationId) qb.where('inventory.location_id', locationId);
 			})
@@ -254,7 +271,8 @@ router.get('/movement', authMiddleware, async (req, res) => {
 				'users.name as performed_by_name',
 				'inventory_transactions.created_at'
 			)
-			.whereBetween('inventory_transactions.created_at', [startDate, endDate]);
+			.whereBetween('inventory_transactions.created_at', [startDate, endDate])
+			.modify((qb) => applyTenantFilter(qb, req, 'locations.tenant_id'));
 
 		if (locationId) {
 			query = query.where('inventory_transactions.location_id', locationId);
@@ -312,7 +330,8 @@ router.get('/cycle-variance', authMiddleware, async (req, res) => {
 				'cycle_counts.created_at'
 			)
 			.where('cycle_counts.status', 'APPROVED')
-			.whereRaw('cycle_count_lines.counted_qty != cycle_count_lines.system_on_hand_qty');
+			.whereRaw('cycle_count_lines.counted_qty != cycle_count_lines.system_on_hand_qty')
+			.modify((qb) => applyTenantFilter(qb, req, 'locations.tenant_id'));
 
 		if (locationId) {
 			query = query.where('cycle_counts.location_id', locationId);
@@ -325,12 +344,14 @@ router.get('/cycle-variance', authMiddleware, async (req, res) => {
 		// Calculate summary
 		const summary = await db('cycle_count_lines')
 			.join('cycle_counts', 'cycle_count_lines.cycle_count_id', 'cycle_counts.id')
+			.join('locations', 'cycle_counts.location_id', 'locations.id')
 			.select(
 				db.raw('COUNT(*) as total_lines'),
 				db.raw('COUNT(CASE WHEN cycle_count_lines.counted_qty != cycle_count_lines.system_on_hand_qty THEN 1 END) as variance_lines'),
 				db.raw('SUM(ABS(cycle_count_lines.counted_qty - cycle_count_lines.system_on_hand_qty))::integer as total_variance_qty')
 			)
 			.where('cycle_counts.status', 'APPROVED')
+			.modify((qb) => applyTenantFilter(qb, req, 'locations.tenant_id'))
 			.modify(qb => {
 				if (locationId) qb.where('cycle_counts.location_id', locationId);
 			})

@@ -61,15 +61,17 @@ const hosRouter = require('@goodmen/shared/routes/hos');
 const drugAlcoholRouter = require('@goodmen/shared/routes/drug-alcohol');
 const onboardingRouter = require('@goodmen/shared/routes/onboarding');
 const publicOnboardingRouter = require('@goodmen/shared/routes/public-onboarding');
+const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
+const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.use('/api/drivers', driversRouter);
-app.use('/api/dqf', dqfRouter);
-app.use('/api/dqf-documents', dqfDocumentsRouter);
-app.use('/api/hos', hosRouter);
-app.use('/api/drug-alcohol', drugAlcoholRouter);
-app.use('/api/onboarding', onboardingRouter);
+app.use('/api/drivers', authMiddleware, tenantContextMiddleware, driversRouter);
+app.use('/api/dqf', authMiddleware, tenantContextMiddleware, dqfRouter);
+app.use('/api/dqf-documents', authMiddleware, tenantContextMiddleware, dqfDocumentsRouter);
+app.use('/api/hos', authMiddleware, tenantContextMiddleware, hosRouter);
+app.use('/api/drug-alcohol', authMiddleware, tenantContextMiddleware, drugAlcoholRouter);
+app.use('/api/onboarding', authMiddleware, tenantContextMiddleware, onboardingRouter);
 app.use('/public/onboarding', publicOnboardingRouter);
 
 /**

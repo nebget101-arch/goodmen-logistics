@@ -1,6 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { Subject, takeUntil } from 'rxjs';
 import { ApiService } from '../../services/api.service';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 type WizardStep = 'week' | 'driver' | 'date_basis' | 'summary';
 
@@ -9,7 +11,7 @@ type WizardStep = 'week' | 'driver' | 'date_basis' | 'summary';
   templateUrl: './settlement-wizard.component.html',
   styleUrls: ['./settlement-wizard.component.css']
 })
-export class SettlementWizardComponent implements OnInit {
+export class SettlementWizardComponent implements OnInit, OnDestroy {
   currentStep: WizardStep = 'week';
   steps: { id: WizardStep; label: string; icon: string }[] = [
     { id: 'week', label: 'Period', icon: 'calendar_month' },
@@ -36,16 +38,49 @@ export class SettlementWizardComponent implements OnInit {
   saving = false;
   error = '';
   creatingPeriod = false;
+  activeOperatingEntityName = '';
+
+  private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   constructor(
     private apiService: ApiService,
-    private router: Router
+    private router: Router,
+    private operatingEntityContext: OperatingEntityContextService
   ) {}
 
   ngOnInit(): void {
+    this.bindOperatingEntityContext();
     this.setDefaultWeek();
     this.loadPayrollPeriods();
     this.loadDrivers();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          this.loadPayrollPeriods();
+          this.loadDrivers();
+        }
+      });
   }
 
   private setDefaultWeek(): void {

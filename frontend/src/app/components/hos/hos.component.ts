@@ -10,6 +10,8 @@ export class HosComponent implements OnInit {
   hosRecords: any[] = [];
   violations: any[] = [];
   loading = true;
+  message = '';
+  error = '';
 
   constructor(private apiService: ApiService) { }
 
@@ -43,5 +45,18 @@ export class HosComponent implements OnInit {
     if (status === 'compliant') return 'badge-success';
     if (status === 'warning') return 'badge-warning';
     return 'badge-danger';
+  }
+
+  syncEldData(): void {
+    this.loading = true;
+    this.message = 'Syncing ELD data...';
+    setTimeout(() => {
+      this.message = '';
+      this.loading = false;
+    }, 1000);
+  }
+
+  viewLogs(recordId: string): void {
+    console.log('View logs for record:', recordId);
   }
 }

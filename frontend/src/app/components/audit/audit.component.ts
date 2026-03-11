@@ -57,4 +57,17 @@ export class AuditComponent implements OnInit {
       }
     });
   }
+
+  getBadgeIcon(action: string): string {
+    switch (action) {
+      case 'CREATE':
+        return 'add_circle';
+      case 'UPDATE':
+        return 'edit';
+      case 'DELETE':
+        return 'delete';
+      default:
+        return 'info';
+    }
+  }
 }

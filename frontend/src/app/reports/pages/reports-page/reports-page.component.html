@@ -1,6 +1,7 @@
 <div class="reports-page">
   <div class="header">
     <h2>Reports & Analytics</h2>
+    <p class="subtitle" *ngIf="activeOperatingEntityName">Company: {{ activeOperatingEntityName }}</p>
   </div>
 
   <div *ngIf="isLoading" class="alert alert-info" style="margin: 15px 0;">

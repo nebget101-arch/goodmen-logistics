@@ -57,12 +57,14 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 const dashboardRouter = require('@goodmen/shared/routes/dashboard');
 const reportsRouter = require('@goodmen/shared/routes/reports');
 const auditRouter = require('@goodmen/shared/routes/audit');
+const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
+const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.use('/api/dashboard', dashboardRouter);
-app.use('/api/reports', reportsRouter);
-app.use('/api/audit', auditRouter);
+app.use('/api/dashboard', authMiddleware, tenantContextMiddleware, dashboardRouter);
+app.use('/api/reports', authMiddleware, tenantContextMiddleware, reportsRouter);
+app.use('/api/audit', authMiddleware, tenantContextMiddleware, auditRouter);
 
 /**
  * @openapi

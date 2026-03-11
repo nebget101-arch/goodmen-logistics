@@ -271,7 +271,7 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advis
           requestedByUsername: requestedByUsername || null
         };
 
-        const workOrder = await workOrdersService.createWorkOrder(payload, requestedByUserId || req.user?.id);
+        const workOrder = await workOrdersService.createWorkOrder(payload, requestedByUserId || req.user?.id, req.context || null);
         results.successful.push({
           row: i + 2,
           workOrderId: workOrder.id,
@@ -303,7 +303,7 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advis
 
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const result = await workOrdersService.listWorkOrders(req.query || {});
+    const result = await workOrdersService.listWorkOrders(req.query || {}, req.context || null);
     res.json({ success: true, ...result });
   } catch (error) {
     dtLogger.error('work_orders_list_failed', error);
@@ -313,7 +313,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
 router.post('/', authMiddleware, requireRole(['admin', 'service_advisor']), async (req, res) => {
   try {
-    const workOrder = await workOrdersService.createWorkOrder(req.body || {}, req.user?.id);
+    const workOrder = await workOrdersService.createWorkOrder(req.body || {}, req.user?.id, req.context || null);
     res.status(201).json({ success: true, data: workOrder });
   } catch (error) {
     dtLogger.error('work_orders_create_failed', error);
@@ -323,7 +323,7 @@ router.post('/', authMiddleware, requireRole(['admin', 'service_advisor']), asyn
 
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const data = await workOrdersService.getWorkOrderById(req.params.id);
+    const data = await workOrdersService.getWorkOrderById(req.params.id, req.context || null);
     if (!data) return res.status(404).json({ error: 'Work order not found' });
     res.json({ success: true, data });
   } catch (error) {
@@ -345,7 +345,7 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor']), as
     payload.locationId = normalizeUuidInput(payload.locationId);
     payload.assignedMechanicUserId = normalizeUuidInput(payload.assignedMechanicUserId);
 
-    const workOrder = await workOrdersService.updateWorkOrder(req.params.id, payload, req.user?.id);
+    const workOrder = await workOrdersService.updateWorkOrder(req.params.id, payload, req.user?.id, req.context || null);
     res.json({ success: true, data: workOrder });
   } catch (error) {
     dtLogger.error('work_orders_update_failed', error);
@@ -449,7 +449,7 @@ router.put('/:id/charges', authMiddleware, requireRole(['admin', 'service_adviso
 // Invoice integration
 router.post('/:id/generate-invoice', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting']), async (req, res) => {
   try {
-    const invoice = await workOrdersService.generateInvoiceForWorkOrder(req.params.id, req.user?.id, req.body);
+    const invoice = await workOrdersService.generateInvoiceForWorkOrder(req.params.id, req.user?.id, req.body, req.context || null);
     res.status(201).json({ success: true, data: invoice });
   } catch (error) {
     dtLogger.error('work_orders_invoice_failed', error);
@@ -459,7 +459,7 @@ router.post('/:id/generate-invoice', authMiddleware, requireRole(['admin', 'serv
 
 router.get('/:id/invoices', authMiddleware, async (req, res) => {
   try {
-    const data = await workOrdersService.getWorkOrderById(req.params.id);
+    const data = await workOrdersService.getWorkOrderById(req.params.id, req.context || null);
     if (!data) return res.status(404).json({ error: 'Work order not found' });
     res.json({ success: true, data: data.invoices || [] });
   } catch (error) {
@@ -499,7 +499,7 @@ router.post('/:id/documents', authMiddleware, requireRole(['admin', 'service_adv
 
 router.get('/:id/documents', authMiddleware, async (req, res) => {
   try {
-    const data = await workOrdersService.getWorkOrderById(req.params.id);
+    const data = await workOrdersService.getWorkOrderById(req.params.id, req.context || null);
     if (!data) return res.status(404).json({ error: 'Work order not found' });
     const documents = data.documents || [];
     const withUrls = await Promise.all(
@@ -517,7 +517,7 @@ router.get('/:id/documents', authMiddleware, async (req, res) => {
 
 router.get('/:id/documents/:docId/download', authMiddleware, async (req, res) => {
   try {
-    const data = await workOrdersService.getWorkOrderById(req.params.id);
+    const data = await workOrdersService.getWorkOrderById(req.params.id, req.context || null);
     if (!data) return res.status(404).json({ error: 'Work order not found' });
 
     const doc = (data.documents || []).find(d => String(d.id) === String(req.params.docId));

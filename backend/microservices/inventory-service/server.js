@@ -61,16 +61,18 @@ const receivingRouter = require('@goodmen/shared/routes/receiving');
 const barcodesRouter = require('@goodmen/shared/routes/barcodes');
 const customersRouter = require('@goodmen/shared/routes/customers');
 const customerBulkUploadRouter = require('@goodmen/shared/routes/customer-bulk-upload');
+const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
+const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.use('/api/inventory', inventoryRouter);
-app.use('/api/adjustments', adjustmentsRouter);
-app.use('/api/cycle-counts', cycleCountsRouter);
-app.use('/api/receiving', receivingRouter);
-app.use('/api/barcodes', barcodesRouter);
-app.use('/api/customers', customerBulkUploadRouter);
-app.use('/api/customers', customersRouter);
+app.use('/api/inventory', authMiddleware, tenantContextMiddleware, inventoryRouter);
+app.use('/api/adjustments', authMiddleware, tenantContextMiddleware, adjustmentsRouter);
+app.use('/api/cycle-counts', authMiddleware, tenantContextMiddleware, cycleCountsRouter);
+app.use('/api/receiving', authMiddleware, tenantContextMiddleware, receivingRouter);
+app.use('/api/barcodes', authMiddleware, tenantContextMiddleware, barcodesRouter);
+app.use('/api/customers', authMiddleware, tenantContextMiddleware, customerBulkUploadRouter);
+app.use('/api/customers', authMiddleware, tenantContextMiddleware, customersRouter);
 
 /**
  * @openapi

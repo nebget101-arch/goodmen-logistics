@@ -40,6 +40,7 @@ import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { DatePickerComponent } from './components/shared/date-picker/date-picker.component';
 import { InlineDateFilterComponent } from './components/shared/inline-date-filter/inline-date-filter.component';
+import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
 
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
@@ -78,7 +79,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     TermsComponent,
     CommunicationPreferencesComponent,
     DatePickerComponent,
-    InlineDateFilterComponent
+    InlineDateFilterComponent,
+    MultiMcAdminComponent
   ],
   imports: [
     BrowserModule,

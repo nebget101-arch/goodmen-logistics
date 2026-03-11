@@ -8,6 +8,8 @@ const invoicesService = require('../services/invoices.service');
 const { buildInvoicePdf } = require('../utils/invoice-pdf');
 const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function requireRole(allowedRoles) {
   return (req, res, next) => {
     const role = req.user?.role || 'technician';
@@ -20,9 +22,16 @@ function requireRole(allowedRoles) {
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+router.param('id', (req, res, next, id) => {
+  if (!UUID_RE.test(String(id || ''))) {
+    return res.status(400).json({ error: 'Invalid invoice id' });
+  }
+  next();
+});
+
 router.post('/from-work-order/:workOrderId', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
   try {
-    const invoice = await invoicesService.createInvoiceFromWorkOrder(req.params.workOrderId, req.body || {}, req.user?.id);
+    const invoice = await invoicesService.createInvoiceFromWorkOrder(req.params.workOrderId, req.body || {}, req.user?.id, req.context || null);
     res.status(201).json({ success: true, data: invoice });
   } catch (error) {
     dtLogger.error('invoice_from_work_order_failed', error);
@@ -32,7 +41,7 @@ router.post('/from-work-order/:workOrderId', authMiddleware, requireRole(['admin
 
 router.post('/', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
   try {
-    const invoice = await invoicesService.createManualInvoice(req.body || {}, req.user?.id);
+    const invoice = await invoicesService.createManualInvoice(req.body || {}, req.user?.id, req.context || null);
     res.status(201).json({ success: true, data: invoice });
   } catch (error) {
     dtLogger.error('invoice_create_failed', error);
@@ -42,7 +51,7 @@ router.post('/', authMiddleware, requireRole(['admin', 'accounting']), async (re
 
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const result = await invoicesService.listInvoices(req.query || {});
+    const result = await invoicesService.listInvoices(req.query || {}, req.context || null);
     res.json({ success: true, ...result });
   } catch (error) {
     dtLogger.error('invoice_list_failed', error);
@@ -52,7 +61,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const data = await invoicesService.getInvoiceById(req.params.id);
+    const data = await invoicesService.getInvoiceById(req.params.id, req.context || null);
     if (!data) return res.status(404).json({ error: 'Invoice not found' });
     res.json({ success: true, ...data });
   } catch (error) {
@@ -63,7 +72,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
 router.put('/:id', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
   try {
-    const invoice = await invoicesService.updateInvoiceDraft(req.params.id, req.body || {}, req.user?.id);
+    const invoice = await invoicesService.updateInvoiceDraft(req.params.id, req.body || {}, req.user?.id, req.context || null);
     res.json({ success: true, data: invoice });
   } catch (error) {
     dtLogger.error('invoice_update_failed', error);
@@ -73,7 +82,7 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'accounting']), async (
 
 router.patch('/:id/status', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
   try {
-    const invoice = await invoicesService.setInvoiceStatus(req.params.id, req.body?.status, req.body?.reason, req.user?.id);
+    const invoice = await invoicesService.setInvoiceStatus(req.params.id, req.body?.status, req.body?.reason, req.user?.id, req.context || null);
     res.json({ success: true, data: invoice });
   } catch (error) {
     dtLogger.error('invoice_status_failed', error);
@@ -84,7 +93,7 @@ router.patch('/:id/status', authMiddleware, requireRole(['admin', 'accounting', 
 // Line items (optional)
 router.post('/:id/line-items', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
   try {
-    const item = await invoicesService.addLineItem(req.params.id, req.body || {});
+    const item = await invoicesService.addLineItem(req.params.id, req.body || {}, req.context || null);
     res.status(201).json({ success: true, data: item });
   } catch (error) {
     dtLogger.error('invoice_line_add_failed', error);
@@ -94,7 +103,7 @@ router.post('/:id/line-items', authMiddleware, requireRole(['admin', 'accounting
 
 router.put('/:id/line-items/:lineItemId', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
   try {
-    const item = await invoicesService.updateLineItem(req.params.id, req.params.lineItemId, req.body || {});
+    const item = await invoicesService.updateLineItem(req.params.id, req.params.lineItemId, req.body || {}, req.context || null);
     res.json({ success: true, data: item });
   } catch (error) {
     dtLogger.error('invoice_line_update_failed', error);
@@ -104,7 +113,7 @@ router.put('/:id/line-items/:lineItemId', authMiddleware, requireRole(['admin', 
 
 router.delete('/:id/line-items/:lineItemId', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
   try {
-    await invoicesService.deleteLineItem(req.params.id, req.params.lineItemId);
+    await invoicesService.deleteLineItem(req.params.id, req.params.lineItemId, req.context || null);
     res.json({ success: true });
   } catch (error) {
     dtLogger.error('invoice_line_delete_failed', error);
@@ -115,7 +124,7 @@ router.delete('/:id/line-items/:lineItemId', authMiddleware, requireRole(['admin
 // Payments
 router.post('/:id/payments', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
   try {
-    const invoice = await invoicesService.addPayment(req.params.id, req.body || {}, req.user?.id);
+    const invoice = await invoicesService.addPayment(req.params.id, req.body || {}, req.user?.id, req.context || null);
     res.status(201).json({ success: true, data: invoice });
   } catch (error) {
     dtLogger.error('invoice_payment_failed', error);
@@ -125,6 +134,15 @@ router.post('/:id/payments', authMiddleware, requireRole(['admin', 'accounting']
 
 router.get('/:id/payments', authMiddleware, async (req, res) => {
   try {
+    const invoice = await db('invoices')
+      .where({ id: req.params.id })
+      .modify((qb) => {
+        if (req.context?.tenantId) qb.andWhere('tenant_id', req.context.tenantId);
+        if (req.context?.operatingEntityId) qb.andWhere('operating_entity_id', req.context.operatingEntityId);
+      })
+      .first();
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
     const payments = await db('invoice_payments').where({ invoice_id: req.params.id }).orderBy('payment_date', 'desc');
     res.json({ success: true, data: payments });
   } catch (error) {
@@ -135,7 +153,7 @@ router.get('/:id/payments', authMiddleware, async (req, res) => {
 
 router.delete('/:id/payments/:paymentId', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
   try {
-    const invoice = await invoicesService.deletePayment(req.params.id, req.params.paymentId);
+    const invoice = await invoicesService.deletePayment(req.params.id, req.params.paymentId, req.context || null);
     res.json({ success: true, data: invoice });
   } catch (error) {
     dtLogger.error('invoice_payment_delete_failed', error);
@@ -146,7 +164,7 @@ router.delete('/:id/payments/:paymentId', authMiddleware, requireRole(['admin', 
 // PDF
 router.post('/:id/pdf', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
   try {
-    const data = await invoicesService.getInvoiceById(req.params.id);
+    const data = await invoicesService.getInvoiceById(req.params.id, req.context || null);
     if (!data) return res.status(404).json({ error: 'Invoice not found' });
 
     const pdfBuffer = await buildInvoicePdf({
@@ -204,6 +222,15 @@ router.get('/:id/pdf', authMiddleware, async (req, res) => {
 // Documents
 router.post('/:id/documents', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), upload.single('file'), async (req, res) => {
   try {
+    const invoice = await db('invoices')
+      .where({ id: req.params.id })
+      .modify((qb) => {
+        if (req.context?.tenantId) qb.andWhere('tenant_id', req.context.tenantId);
+        if (req.context?.operatingEntityId) qb.andWhere('operating_entity_id', req.context.operatingEntityId);
+      })
+      .first();
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'File is required' });
 
@@ -234,6 +261,15 @@ router.post('/:id/documents', authMiddleware, requireRole(['admin', 'accounting'
 
 router.get('/:id/documents', authMiddleware, async (req, res) => {
   try {
+    const invoice = await db('invoices')
+      .where({ id: req.params.id })
+      .modify((qb) => {
+        if (req.context?.tenantId) qb.andWhere('tenant_id', req.context.tenantId);
+        if (req.context?.operatingEntityId) qb.andWhere('operating_entity_id', req.context.operatingEntityId);
+      })
+      .first();
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
     const docs = await db('invoice_documents').where({ invoice_id: req.params.id }).orderBy('created_at', 'desc');
     const data = await Promise.all(
       docs.map(async doc => ({
@@ -250,6 +286,15 @@ router.get('/:id/documents', authMiddleware, async (req, res) => {
 
 router.get('/:id/documents/:docId/download', authMiddleware, async (req, res) => {
   try {
+    const invoice = await db('invoices')
+      .where({ id: req.params.id })
+      .modify((qb) => {
+        if (req.context?.tenantId) qb.andWhere('tenant_id', req.context.tenantId);
+        if (req.context?.operatingEntityId) qb.andWhere('operating_entity_id', req.context.operatingEntityId);
+      })
+      .first();
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
     const doc = await db('invoice_documents').where({ id: req.params.docId, invoice_id: req.params.id }).first();
     if (!doc) return res.status(404).json({ error: 'Document not found' });
     const downloadUrl = await getSignedDownloadUrl(doc.storage_key);

@@ -4,6 +4,7 @@ import { OnboardingModalService } from './services/onboarding-modal.service';
 import { ApiService } from './services/api.service';
 import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.service';
 import { AccessControlService } from './services/access-control.service';
+import { OperatingEntityContextService } from './services/operating-entity-context.service';
 import { NAV_TOP_LINKS, NAV_SECTIONS, NAV_ADD_USER, NavSection, NavLink } from './config/nav.config';
 
 @Component({
@@ -43,7 +44,8 @@ export class AppComponent implements OnInit {
     public onboardingModal: OnboardingModalService,
     private apiService: ApiService,
     private aiChatService: AiChatService,
-    public access: AccessControlService
+    public access: AccessControlService,
+    public operatingEntityContext: OperatingEntityContextService
   ) {}
 
   isLoggedIn(): boolean {
@@ -53,6 +55,12 @@ export class AppComponent implements OnInit {
   getCurrentRoute(): string {
     return this.router.url || '';
   }
+
+    /** Returns true when on a public marketing page (no app shell needed). */
+    isPublicRoute(): boolean {
+      const url = this.router.url || '';
+      return url.startsWith('/home');
+    }
 
   toggleAiChat(): void {
     if (!this.isLoggedIn()) {
@@ -137,7 +145,14 @@ export class AppComponent implements OnInit {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
     this.access.clearAccess();
+    this.operatingEntityContext.reset();
     this.router.navigate(['/login']);
+  }
+
+  onOperatingEntityChange(rawId: string): void {
+    const selectedId = (rawId || '').toString().trim();
+    if (!selectedId) return;
+    this.operatingEntityContext.selectOperatingEntity(selectedId);
   }
 
   /** Whether a nav section should be visible (uses tab or tabs from config). */
@@ -169,6 +184,7 @@ export class AppComponent implements OnInit {
     if (this.isLoggedIn() && !this.access.isLoaded()) {
       this.access.loadAccess().subscribe();
     }
+    this.operatingEntityContext.bootstrapFromSessionIfNeeded(this.isLoggedIn());
   }
 
   toggleSidebar(): void {

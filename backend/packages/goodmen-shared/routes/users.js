@@ -48,6 +48,245 @@ router.get('/me', baseAuth, (req, res) => {
   res.json({ success: true, data });
 });
 
+// Tenant-scoped users list (admin/RBAC)
+router.get('/', rbac, requireAnyPermission(['users.view', 'users.manage', 'roles.manage']), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const tenantId = req.context?.tenantId || null;
+
+    const rows = await knex('users')
+      .modify((qb) => {
+        if (tenantId) qb.where('tenant_id', tenantId);
+      })
+      .orderBy('first_name', 'asc')
+      .orderBy('last_name', 'asc')
+      .orderBy('username', 'asc')
+      .select('id', 'username', 'first_name', 'last_name', 'email', 'role', 'tenant_id', 'created_at');
+
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('[users] list failed', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Operating entities list for admin management
+router.get('/operating-entities', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const rows = await knex('operating_entities')
+      .where({ tenant_id: tenantId })
+      .orderBy('name', 'asc')
+      .select(
+        'id',
+        'tenant_id',
+        'entity_type',
+        'name',
+        'legal_name',
+        'dba_name',
+        'mc_number',
+        'dot_number',
+        'address_line1',
+        'city',
+        'state',
+        'zip_code',
+        'is_active',
+        'created_at',
+        'updated_at'
+      );
+
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('[users] list operating entities failed', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/operating-entities', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const {
+      name,
+      legal_name,
+      dba_name,
+      mc_number,
+      dot_number,
+      address_line1,
+      city,
+      state,
+      zip_code,
+      entity_type,
+      is_active
+    } = req.body || {};
+
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'name is required' });
+    }
+
+    const payload = {
+      tenant_id: tenantId,
+      name: String(name).trim(),
+      legal_name: legal_name ? String(legal_name).trim() : null,
+      dba_name: dba_name ? String(dba_name).trim() : null,
+      mc_number: mc_number ? String(mc_number).trim() : null,
+      dot_number: dot_number ? String(dot_number).trim() : null,
+      address_line1: address_line1 ? String(address_line1).trim() : null,
+      city: city ? String(city).trim() : null,
+      state: state ? String(state).trim() : null,
+      zip_code: zip_code ? String(zip_code).trim() : null,
+      entity_type: entity_type ? String(entity_type).trim() : 'carrier',
+      is_active: is_active === false ? false : true
+    };
+
+    const [row] = await knex('operating_entities').insert(payload).returning('*');
+    res.status(201).json({ success: true, data: row });
+  } catch (err) {
+    if (err?.code === '23505') {
+      return res.status(409).json({ success: false, error: 'MC/DOT already exists' });
+    }
+    console.error('[users] create operating entity failed', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/operating-entities/:entityId', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const updates = {};
+    const fields = ['name', 'legal_name', 'dba_name', 'mc_number', 'dot_number', 'address_line1', 'city', 'state', 'zip_code', 'entity_type', 'is_active'];
+    for (const field of fields) {
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) {
+        const value = req.body[field];
+        if (field === 'is_active') {
+          updates[field] = !!value;
+        } else if (value == null || String(value).trim() === '') {
+          updates[field] = null;
+        } else {
+          updates[field] = String(value).trim();
+        }
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
+
+    updates.updated_at = knex.fn.now();
+
+    const [row] = await knex('operating_entities')
+      .where({ id: req.params.entityId, tenant_id: tenantId })
+      .update(updates)
+      .returning('*');
+
+    if (!row) return res.status(404).json({ success: false, error: 'Operating entity not found' });
+
+    res.json({ success: true, data: row });
+  } catch (err) {
+    if (err?.code === '23505') {
+      return res.status(409).json({ success: false, error: 'MC/DOT already exists' });
+    }
+    console.error('[users] update operating entity failed', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// User operating entity access list (for admin assign UI)
+router.get('/:id/operating-entities', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const user = await knex('users').where({ id: req.params.id, tenant_id: tenantId }).first('id');
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    const entities = await knex('operating_entities as oe')
+      .leftJoin('user_operating_entities as uoe', function joinUoe() {
+        this.on('uoe.operating_entity_id', '=', 'oe.id').andOn('uoe.user_id', '=', knex.raw('?', [req.params.id]));
+      })
+      .where('oe.tenant_id', tenantId)
+      .orderBy('oe.name', 'asc')
+      .select(
+        'oe.id',
+        'oe.name',
+        'oe.mc_number',
+        'oe.dot_number',
+        'oe.is_active',
+        knex.raw('COALESCE(uoe.is_active, false) as assigned'),
+        knex.raw('COALESCE(uoe.is_default, false) as is_default')
+      );
+
+    res.json({ success: true, data: { userId: req.params.id, entities } });
+  } catch (err) {
+    console.error('[users] get user operating entities failed', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Replace user operating entity access and default
+router.put('/:id/operating-entities', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const user = await knex('users').where({ id: req.params.id, tenant_id: tenantId }).first('id');
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    const operatingEntityIds = Array.isArray(req.body?.operatingEntityIds) ? req.body.operatingEntityIds : [];
+    const defaultOperatingEntityId = (req.body?.defaultOperatingEntityId || '').toString().trim() || null;
+
+    const allowedEntities = await knex('operating_entities')
+      .where('tenant_id', tenantId)
+      .whereIn('id', operatingEntityIds)
+      .select('id');
+    const allowedSet = new Set(allowedEntities.map((row) => row.id));
+
+    if (operatingEntityIds.length !== allowedSet.size) {
+      return res.status(400).json({ success: false, error: 'One or more operatingEntityIds are invalid for this tenant' });
+    }
+
+    if (defaultOperatingEntityId && !allowedSet.has(defaultOperatingEntityId)) {
+      return res.status(400).json({ success: false, error: 'defaultOperatingEntityId must be included in operatingEntityIds' });
+    }
+
+    await knex.transaction(async (trx) => {
+      await trx('user_operating_entities').where('user_id', req.params.id).del();
+
+      if (operatingEntityIds.length > 0) {
+        const rows = operatingEntityIds.map((operatingEntityId) => ({
+          user_id: req.params.id,
+          operating_entity_id: operatingEntityId,
+          is_active: true,
+          is_default: defaultOperatingEntityId ? operatingEntityId === defaultOperatingEntityId : false
+        }));
+        await trx('user_operating_entities').insert(rows);
+      }
+    });
+
+    const updated = await knex('user_operating_entities as uoe')
+      .join('operating_entities as oe', 'oe.id', 'uoe.operating_entity_id')
+      .where('uoe.user_id', req.params.id)
+      .where('oe.tenant_id', tenantId)
+      .orderBy('oe.name', 'asc')
+      .select('oe.id', 'oe.name', 'oe.mc_number', 'oe.dot_number', 'uoe.is_default', 'uoe.is_active');
+
+    res.json({ success: true, data: { userId: req.params.id, entities: updated } });
+  } catch (err) {
+    console.error('[users] put user operating entities failed', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Get all technicians (for dropdown selection)
 router.get('/technicians', async (req, res) => {
   try {

@@ -68,18 +68,20 @@ const creditRouter = require(path.join(sharedRoot, 'routes', 'credit'));
 const dbExampleRouter = require(path.join(sharedRoot, 'routes', 'db-example'));
 const settlementsRouter = require(path.join(sharedRoot, 'routes', 'settlements'));
 const expensePaymentCategoriesRouter = require(path.join(sharedRoot, 'routes', 'expense-payment-categories'));
+const authMiddleware = require(path.join(sharedRoot, 'middleware', 'auth-middleware'));
+const tenantContextMiddleware = require(path.join(sharedRoot, 'middleware', 'tenant-context-middleware'));
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.use('/api/loads', loadsRouter);
-app.use('/api/brokers', brokersRouter);
-app.use('/api/locations', locationsRouter);
-app.use('/api/geo', geoRouter);
-app.use('/api/invoices', invoicesRouter);
-app.use('/api/credit', creditRouter);
-app.use('/api/db-example', dbExampleRouter);
-app.use('/api/settlements', settlementsRouter);
-app.use('/api/expense-payment-categories', expensePaymentCategoriesRouter);
+app.use('/api/loads', authMiddleware, tenantContextMiddleware, loadsRouter);
+app.use('/api/brokers', authMiddleware, tenantContextMiddleware, brokersRouter);
+app.use('/api/locations', authMiddleware, tenantContextMiddleware, locationsRouter);
+app.use('/api/geo', authMiddleware, tenantContextMiddleware, geoRouter);
+app.use('/api/invoices', authMiddleware, tenantContextMiddleware, invoicesRouter);
+app.use('/api/credit', authMiddleware, tenantContextMiddleware, creditRouter);
+app.use('/api/db-example', authMiddleware, tenantContextMiddleware, dbExampleRouter);
+app.use('/api/settlements', authMiddleware, tenantContextMiddleware, settlementsRouter);
+app.use('/api/expense-payment-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
 
 /**
  * @openapi

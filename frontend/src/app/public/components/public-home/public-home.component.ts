@@ -1,0 +1,61 @@
+import { Component, OnInit, HostListener } from '@angular/core';
+import { Router } from '@angular/router';
+import {
+  MARKETING_FEATURES,
+  MARKETING_PLANS,
+  HOW_IT_WORKS_STEPS,
+  AI_BENEFITS
+} from '../../config/marketing.config';
+
+@Component({
+  selector: 'app-public-home',
+  templateUrl: './public-home.component.html',
+  styleUrls: ['./public-home.component.css']
+})
+export class PublicHomeComponent implements OnInit {
+  features = MARKETING_FEATURES;
+  plans = MARKETING_PLANS;
+  steps = HOW_IT_WORKS_STEPS;
+  aiBenefits = AI_BENEFITS;
+
+  mobileNavOpen = false;
+  navScrolled = false;
+    currentYear = new Date().getFullYear();
+
+  constructor(private router: Router) {}
+
+  ngOnInit(): void {}
+
+  @HostListener('window:scroll')
+  onWindowScroll(): void {
+    this.navScrolled = window.scrollY > 40;
+  }
+
+  scrollToSection(id: string): void {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    this.mobileNavOpen = false;
+  }
+
+  navigateToTrial(planId?: string): void {
+    if (planId) {
+      this.router.navigate(['/home/trial'], { queryParams: { plan: planId } });
+    } else {
+      this.router.navigate(['/home/trial']);
+    }
+  }
+
+  goToLogin(): void {
+    this.router.navigate(['/login']);
+  }
+
+  toggleMobileNav(): void {
+    this.mobileNavOpen = !this.mobileNavOpen;
+  }
+
+  closeMobileNav(): void {
+    this.mobileNavOpen = false;
+  }
+}

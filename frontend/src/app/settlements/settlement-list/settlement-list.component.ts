@@ -1,6 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { Subject, takeUntil } from 'rxjs';
 import { ApiService } from '../../services/api.service';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 export interface SettlementRow {
   id: string;
@@ -24,11 +26,15 @@ export interface SettlementRow {
   templateUrl: './settlement-list.component.html',
   styleUrls: ['./settlement-list.component.css']
 })
-export class SettlementListComponent implements OnInit {
+export class SettlementListComponent implements OnInit, OnDestroy {
   settlements: SettlementRow[] = [];
   drivers: { id: string; firstName?: string; lastName?: string; name?: string }[] = [];
   loading = false;
   error = '';
+  activeOperatingEntityName = '';
+
+  private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   filters: {
     weekStart: string;
@@ -52,11 +58,39 @@ export class SettlementListComponent implements OnInit {
 
   constructor(
     private apiService: ApiService,
-    private router: Router
+    private router: Router,
+    private operatingEntityContext: OperatingEntityContextService
   ) {}
 
   ngOnInit(): void {
+    this.bindOperatingEntityContext();
     this.loadDrivers();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          this.loadSettlements();
+        }
+      });
   }
 
   loadDrivers(): void {

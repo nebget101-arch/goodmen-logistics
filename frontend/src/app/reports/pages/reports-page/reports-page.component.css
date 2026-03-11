@@ -2,6 +2,12 @@
   margin-bottom: 12px;
 }
 
+.reports-page .subtitle {
+  margin: 4px 0 0;
+  color: var(--text-light);
+  font-size: 13px;
+}
+
 .nav-tabs {
   margin-bottom: 16px;
 }

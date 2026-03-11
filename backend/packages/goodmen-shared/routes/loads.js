@@ -223,8 +223,30 @@ function validateStops(stops, requireBoth) {
   return errors;
 }
 
-async function getLoadDetail(clientOrQuery, loadId) {
+function applyLoadScope(where, params, context) {
+  if (context?.tenantId) {
+    params.push(context.tenantId);
+    where.push(`l.tenant_id = $${params.length}`);
+  }
+  if (context?.operatingEntityId) {
+    params.push(context.operatingEntityId);
+    where.push(`l.operating_entity_id = $${params.length}`);
+  }
+}
+
+async function getLoadDetail(clientOrQuery, loadId, context = null) {
   const exec = clientOrQuery.query ? clientOrQuery.query.bind(clientOrQuery) : query;
+  const detailParams = [loadId];
+  let whereSql = 'WHERE l.id = $1';
+  if (context?.tenantId) {
+    detailParams.push(context.tenantId);
+    whereSql += ` AND l.tenant_id = $${detailParams.length}`;
+  }
+  if (context?.operatingEntityId) {
+    detailParams.push(context.operatingEntityId);
+    whereSql += ` AND l.operating_entity_id = $${detailParams.length}`;
+  }
+
   const loadResult = await exec(
     `SELECT l.*,
             concat_ws(' ', d.first_name, d.last_name) as driver_name,
@@ -232,8 +254,8 @@ async function getLoadDetail(clientOrQuery, loadId) {
      FROM loads l
      LEFT JOIN drivers d ON l.driver_id = d.id
      LEFT JOIN brokers b ON l.broker_id = b.id
-     WHERE l.id = $1`,
-    [loadId]
+     ${whereSql}`,
+    detailParams
   );
   if (loadResult.rows.length === 0) return null;
   const stopsResult = await exec(
@@ -337,6 +359,8 @@ router.get('/', async (req, res) => {
 
     const where = [];
     const params = [];
+
+    applyLoadScope(where, params, req.context || null);
 
     if (status) {
       params.push(status);
@@ -540,13 +564,16 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
 
     const insertResult = await client.query(
       `INSERT INTO loads (
+        tenant_id, operating_entity_id,
         load_number, status, billing_status, dispatcher_user_id,
         driver_id, truck_id, trailer_id, broker_id, broker_name,
         po_number, rate, notes, completed_date,
         pickup_location, delivery_location, pickup_date, delivery_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       RETURNING *`,
       [
+        req.context?.tenantId || null,
+        req.context?.operatingEntityId || null,
         loadNumber,
         status,
         billingStatus,
@@ -721,13 +748,16 @@ router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), uplo
 
         const insertResult = await client.query(
           `INSERT INTO loads (
+            tenant_id, operating_entity_id,
             load_number, status, billing_status, dispatcher_user_id,
             driver_id, truck_id, trailer_id, broker_id, broker_name,
             po_number, rate, notes, completed_date,
             pickup_location, delivery_location, pickup_date, delivery_date
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
           RETURNING *`,
           [
+            req.context?.tenantId || null,
+            req.context?.operatingEntityId || null,
             loadNumber, 'DRAFT', 'PENDING', dispatcherUserId,
             null, null, null, brokerId, finalBrokerName,
             poValue, data.rate || 0, null, null,
@@ -801,13 +831,16 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
 // DELETE /api/loads/:id (admin, dispatch only; only NEW or DRAFT loads)
 router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   try {
-    const result = await query('SELECT id, status FROM loads WHERE id = $1', [req.params.id]);
+    const result = await query(
+      'SELECT id, status FROM loads WHERE id = $1 AND tenant_id = $2 AND operating_entity_id = $3',
+      [req.params.id, req.context?.tenantId || null, req.context?.operatingEntityId || null]
+    );
     if (!result.rows.length) return res.status(404).json({ success: false, error: 'Load not found' });
     const status = normalizeEnum(result.rows[0].status);
     if (status !== 'DRAFT' && status !== 'NEW') {
       return res.status(400).json({ success: false, error: 'Only New or Draft loads can be deleted' });
     }
-    await query('DELETE FROM loads WHERE id = $1', [req.params.id]);
+    await query('DELETE FROM loads WHERE id = $1 AND tenant_id = $2 AND operating_entity_id = $3', [req.params.id, req.context?.tenantId || null, req.context?.operatingEntityId || null]);
     res.json({ success: true });
   } catch (error) {
     dtLogger.error('loads_delete_failed', error, { loadId: req.params.id });
@@ -818,7 +851,7 @@ router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
 // GET /api/loads/:id
 router.get('/:id', async (req, res) => {
   try {
-    const data = await getLoadDetail(query, req.params.id);
+    const data = await getLoadDetail(query, req.params.id, req.context || null);
     if (!data) return res.status(404).json({ success: false, error: 'Load not found' });
     if (!assertDriverCanAccessLoad(data, req)) {
       return res.status(404).json({ success: false, error: 'Load not found' });
@@ -877,8 +910,8 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
     if (updates.length > 0) {
       values.push(req.params.id);
       await client.query(
-        `UPDATE loads SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${idx}`,
-        values
+        `UPDATE loads SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${idx} AND tenant_id = $${idx + 1} AND operating_entity_id = $${idx + 2}`,
+        [...values, req.context?.tenantId || null, req.context?.operatingEntityId || null]
       );
     }
 
@@ -937,15 +970,15 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
           loadDateValues.push(req.params.id);
           const whereParam = loadDateIdx;
           await client.query(
-            `UPDATE loads SET ${loadDateUpdates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${whereParam}`,
-            loadDateValues
+            `UPDATE loads SET ${loadDateUpdates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${whereParam} AND tenant_id = $${whereParam + 1} AND operating_entity_id = $${whereParam + 2}`,
+            [...loadDateValues, req.context?.tenantId || null, req.context?.operatingEntityId || null]
           );
         }
       }
     }
 
     await client.query('COMMIT');
-    const updated = await getLoadDetail(client, req.params.id);
+    const updated = await getLoadDetail(client, req.params.id, req.context || null);
     if (!updated) {
       return res.status(404).json({ success: false, error: 'Load not found' });
     }
@@ -960,7 +993,10 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
 });
 
 async function ensureCanAccessLoad(loadId, req, res) {
-  const loadResult = await query('SELECT id, driver_id FROM loads WHERE id = $1', [loadId]);
+  const loadResult = await query(
+    'SELECT id, driver_id FROM loads WHERE id = $1 AND tenant_id = $2 AND operating_entity_id = $3',
+    [loadId, req.context?.tenantId || null, req.context?.operatingEntityId || null]
+  );
   if (!loadResult.rows.length) {
     res.status(404).json({ success: false, error: 'Load not found' });
     return null;

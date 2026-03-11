@@ -1,15 +1,17 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { Subject, takeUntil } from 'rxjs';
 import { InvoiceService } from '../../services/invoice.service';
 import { CustomerService } from '../../services/customer.service';
 import { environment } from '../../../environments/environment';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 @Component({
   selector: 'app-invoice-detail',
   templateUrl: './invoice-detail.component.html',
   styleUrls: ['./invoice-detail.component.css']
 })
-export class InvoiceDetailComponent implements OnInit {
+export class InvoiceDetailComponent implements OnInit, OnDestroy {
   invoice: any;
   customer: any;
   location: any;
@@ -21,6 +23,10 @@ export class InvoiceDetailComponent implements OnInit {
   loading = false;
   error = '';
   fileBaseUrl = environment.apiUrl.replace(/\/api\/?$/, '');
+  activeOperatingEntityName = '';
+
+  private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   paymentForm: any = {
     paymentDate: new Date().toISOString().slice(0, 10),
@@ -33,16 +39,54 @@ export class InvoiceDetailComponent implements OnInit {
   constructor(
     private route: ActivatedRoute,
     private invoiceService: InvoiceService,
-    private customerService: CustomerService
+    private customerService: CustomerService,
+    private operatingEntityContext: OperatingEntityContextService
   ) {}
 
   ngOnInit(): void {
+    this.bindOperatingEntityContext();
     const id = this.route.snapshot.paramMap.get('id');
     if (id) this.loadInvoice(id);
   }
 
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          const id = this.route.snapshot.paramMap.get('id');
+          if (id) this.loadInvoice(id);
+        }
+      });
+  }
+
   loadInvoice(id: string): void {
     this.loading = true;
+    this.error = '';
+    this.invoice = null;
+    this.customer = null;
+    this.location = null;
+    this.workOrder = null;
+    this.vehicle = null;
+    this.lineItems = [];
+    this.payments = [];
+    this.documents = [];
     this.invoiceService.getInvoice(id).subscribe({
       next: (res: any) => {
         this.invoice = res.invoice || res.data?.invoice || res.invoice;
@@ -64,6 +108,14 @@ export class InvoiceDetailComponent implements OnInit {
       },
       error: (err) => {
         this.error = err?.error?.error || 'Failed to load invoice';
+        this.invoice = null;
+        this.customer = null;
+        this.location = null;
+        this.workOrder = null;
+        this.vehicle = null;
+        this.lineItems = [];
+        this.payments = [];
+        this.documents = [];
         this.loading = false;
       }
     });

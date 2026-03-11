@@ -1,15 +1,17 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { Subject, takeUntil } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { forkJoin, of } from 'rxjs';
 import { ApiService } from '../../services/api.service';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 @Component({
   selector: 'app-dispatch-drivers',
   templateUrl: './dispatch-drivers.component.html',
   styleUrls: ['./dispatch-drivers.component.css']
 })
-export class DispatchDriversComponent implements OnInit {
+export class DispatchDriversComponent implements OnInit, OnDestroy {
   drivers: any[] = [];
   loading = true;
   showNewModal = false;
@@ -231,12 +233,34 @@ export class DispatchDriversComponent implements OnInit {
     fuelCardNumber: ''
   };
 
-  constructor(private apiService: ApiService, private router: Router) {}
+  activeOperatingEntityName = '';
+  private destroy$ = new Subject<void>();
+
+  constructor(
+    private apiService: ApiService,
+    private router: Router,
+    private operatingEntityContext: OperatingEntityContextService
+  ) {}
 
   ngOnInit(): void {
+    this.bindOperatingEntityContext();
     this.loadDrivers();
     this.loadVehicles();
     this.loadAllPayees();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+      });
   }
 
   loadAllPayees(): void {

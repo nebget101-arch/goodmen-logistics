@@ -1,66 +1,166 @@
-<div class="invoices-list">
-  <div class="header">
-    <h2>Invoices</h2>
+<div class="invoices-shell ai-admin-shell">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">FleetNeuron AI Financial</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">receipt</span>
+        Invoices
+      </h1>
+      <p class="subtitle" *ngIf="activeOperatingEntityName">
+        <span class="material-symbols-outlined" style="font-size: 1rem; vertical-align: middle;">business</span>
+        {{ activeOperatingEntityName }}
+      </p>
+    </div>
+    <button type="button" class="btn btn-primary ai-glow-btn new-invoice-btn" (click)="createInvoice()">
+      <span class="material-symbols-outlined">auto_awesome</span>
+      New Invoice
+    </button>
+  </header>
+
+  <div *ngIf="error" class="alert alert-danger">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ error }}</span>
   </div>
 
-  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+  <section class="panel ai-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">tune</span>
+        Filters
+      </h2>
+    </div>
 
-  <div class="filters">
-    <input class="form-control" placeholder="Search invoice # or customer" [(ngModel)]="filters.search" (input)="loadInvoices()" />
+    <div class="filters-grid">
+      <div class="filter-field">
+        <label for="searchInvoice">
+          <span class="material-symbols-outlined">search</span>
+          Search
+        </label>
+        <input id="searchInvoice" class="form-input" placeholder="Invoice # or customer" [(ngModel)]="filters.search" (input)="loadInvoices()" />
+      </div>
 
-    <select class="form-control" [(ngModel)]="filters.status" (change)="loadInvoices()">
-      <option value="">All Statuses</option>
-      <option *ngFor="let s of statuses" [value]="s">{{ s }}</option>
-    </select>
+      <div class="filter-field">
+        <label for="filterStatus">
+          <span class="material-symbols-outlined">pending_actions</span>
+          Status
+        </label>
+        <select id="filterStatus" class="form-select" [(ngModel)]="filters.status" (change)="loadInvoices()">
+          <option value="">All Statuses</option>
+          <option *ngFor="let s of statuses" [value]="s">{{ s }}</option>
+        </select>
+      </div>
 
-    <select class="form-control" [(ngModel)]="filters.customerId" (change)="loadInvoices()">
-      <option value="">All Customers</option>
-      <option *ngFor="let c of customers" [value]="c.id">{{ c.company_name }}</option>
-    </select>
+      <div class="filter-field">
+        <label for="filterCustomer">
+          <span class="material-symbols-outlined">person</span>
+          Customer
+        </label>
+        <select id="filterCustomer" class="form-select" [(ngModel)]="filters.customerId" (change)="loadInvoices()">
+          <option value="">All Customers</option>
+          <option *ngFor="let c of customers" [value]="c.id">{{ c.company_name }}</option>
+        </select>
+      </div>
 
-    <select class="form-control" [(ngModel)]="filters.locationId" (change)="loadInvoices()">
-      <option value="">All Locations</option>
-      <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
-    </select>
+      <div class="filter-field">
+        <label for="filterLocation">
+          <span class="material-symbols-outlined">place</span>
+          Location
+        </label>
+        <select id="filterLocation" class="form-select" [(ngModel)]="filters.locationId" (change)="loadInvoices()">
+          <option value="">All Locations</option>
+          <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+        </select>
+      </div>
 
-    <input class="form-control" type="date" [(ngModel)]="filters.dateFrom" (change)="loadInvoices()" />
-    <input class="form-control" type="date" [(ngModel)]="filters.dateTo" (change)="loadInvoices()" />
+      <div class="filter-field">
+        <label for="filterDateFrom">
+          <span class="material-symbols-outlined">calendar_today</span>
+          From
+        </label>
+        <input id="filterDateFrom" class="form-input" type="date" [(ngModel)]="filters.dateFrom" (change)="loadInvoices()" />
+      </div>
 
-    <button class="btn btn-secondary" (click)="clearFilters()">Clear</button>
-  </div>
+      <div class="filter-field">
+        <label for="filterDateTo">
+          <span class="material-symbols-outlined">calendar_today</span>
+          To
+        </label>
+        <input id="filterDateTo" class="form-input" type="date" [(ngModel)]="filters.dateTo" (change)="loadInvoices()" />
+      </div>
 
-  <div *ngIf="loading" class="alert alert-info">Loading...</div>
+      <div class="filter-actions">
+        <button type="button" class="btn btn-secondary" (click)="clearFilters()">
+          <span class="material-symbols-outlined">clear</span>
+          Clear
+        </button>
+      </div>
+    </div>
+  </section>
 
-  <div class="table-responsive" *ngIf="!loading">
-    <table class="table table-striped">
-      <thead>
-        <tr>
-          <th>Invoice #</th>
-          <th>Customer</th>
-          <th>Location</th>
-          <th>Issued</th>
-          <th>Due</th>
-          <th>Status</th>
-          <th>Total</th>
-          <th>Paid</th>
-          <th>Balance</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let inv of invoices">
-          <td>{{ inv.invoice_number }}</td>
-          <td>{{ inv.company_name }}</td>
-          <td>{{ inv.location_id }}</td>
-          <td>{{ inv.issued_date }}</td>
-          <td>{{ inv.due_date }}</td>
-          <td>{{ inv.status }}</td>
-          <td>${{ inv.total_amount | number:'1.2-2' }}</td>
-          <td>${{ inv.amount_paid | number:'1.2-2' }}</td>
-          <td>${{ inv.balance_due | number:'1.2-2' }}</td>
-          <td><button class="btn btn-sm btn-info" (click)="openInvoice(inv.id)">View</button></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <section class="panel ai-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">table_chart</span>
+        Invoice List
+      </h2>
+    </div>
+
+    <div *ngIf="loading" class="loading ai-loading">
+      <span class="material-symbols-outlined">hourglass_bottom</span>
+      Loading invoices…
+    </div>
+
+    <div class="table-wrap" *ngIf="!loading">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Invoice #</th>
+            <th scope="col">Customer</th>
+            <th scope="col">Location</th>
+            <th scope="col">Issued</th>
+            <th scope="col">Due</th>
+            <th scope="col">Status</th>
+            <th scope="col">Total</th>
+            <th scope="col">Paid</th>
+            <th scope="col">Balance</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let inv of invoices">
+            <td class="invoice-number">
+              <span class="material-symbols-outlined">description</span>
+              {{ inv.invoice_number }}
+            </td>
+            <td>{{ inv.company_name }}</td>
+            <td>{{ inv.location_id }}</td>
+            <td>{{ inv.issued_date }}</td>
+            <td>{{ inv.due_date }}</td>
+            <td>
+              <span class="status-badge" [ngClass]="getStatusClass(inv.status)">
+                <span class="dot"></span>
+                {{ inv.status }}
+              </span>
+            </td>
+            <td class="amount">${{ inv.total_amount | number:'1.2-2' }}</td>
+            <td class="amount">{{ inv.amount_paid | number:'1.2-2' }}</td>
+            <td class="amount balance" [style.color]="inv.balance_due > 0 ? '#fca5a5' : '#86efac'">
+              ${{ inv.balance_due | number:'1.2-2' }}
+            </td>
+            <td>
+              <button type="button" class="btn-sm btn-outline" (click)="openInvoice(inv.id)">
+                <span class="material-symbols-outlined">open_in_new</span>
+                View
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="empty-state" *ngIf="!loading && invoices.length === 0">
+      <span class="material-symbols-outlined">inbox</span>
+      No invoices found.
+    </div>
+  </section>
 </div>

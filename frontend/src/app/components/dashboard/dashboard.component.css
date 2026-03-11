@@ -33,6 +33,12 @@
   color: #9ca3af;
 }
 
+.dashboard-context-label {
+  margin-top: 4px !important;
+  font-size: 0.78rem !important;
+  color: #93c5fd !important;
+}
+
 .dashboard-header-pill {
   display: inline-flex;
   align-items: center;

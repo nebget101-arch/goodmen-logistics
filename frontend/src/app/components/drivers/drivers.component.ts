@@ -1,15 +1,17 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { Subject, takeUntil } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 @Component({
   selector: 'app-drivers',
   templateUrl: './drivers.component.html',
   styleUrls: ['./drivers.component.css']
 })
-export class DriversComponent implements OnInit {
+export class DriversComponent implements OnInit, OnDestroy {
   drivers: any[] = [];
   loading = true;
   showAddForm = false;
@@ -70,14 +72,19 @@ export class DriversComponent implements OnInit {
 
   presetFilter: '' | 'med-certs' | 'clearinghouse' | 'dqf-low' = '';
   highlightDriverId: string | null = null;
+  activeOperatingEntityName = '';
+
+  private destroy$ = new Subject<void>();
 
   constructor(
     private apiService: ApiService,
     private onboardingModal: OnboardingModalService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private operatingEntityContext: OperatingEntityContextService
   ) { }
 
   ngOnInit(): void {
+    this.bindOperatingEntityContext();
     this.loadDrivers();
     this.route.queryParams.subscribe(params => {
       const filter = params['filter'];
@@ -96,6 +103,20 @@ export class DriversComponent implements OnInit {
         this.presetFilter = '';
       }
     });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+      });
   }
 
   get filteredDrivers(): any[] {

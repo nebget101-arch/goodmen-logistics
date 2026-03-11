@@ -3,6 +3,7 @@
     <div>
       <h1>{{ isDriverRole ? 'My Loads' : 'Loads' }}</h1>
       <p class="subtitle">{{ isDriverRole ? 'View your loads and upload documents (POD, BOL, lumper, roadside receipts)' : 'Dispatch management and tracking' }}</p>
+      <p class="subtitle" *ngIf="activeOperatingEntityName">Company: {{ activeOperatingEntityName }}</p>
     </div>
 <div class="header-actions">
         <div class="search-box">

@@ -58,15 +58,22 @@ const authRouter = require('@goodmen/shared/routes/auth');
 const usersRouter = require('@goodmen/shared/routes/users');
 const communicationPreferencesRouter = require('@goodmen/shared/routes/communication-preferences');
 const rolesRouter = require('@goodmen/shared/routes/roles');
+const trialRequestsRouter = require('@goodmen/shared/routes/trial-requests');
 const permissionsRouter = require('@goodmen/shared/routes/permissions');
+const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
+const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/auth', authRouter);
-app.use('/api/users', usersRouter);
-app.use('/api/roles', rolesRouter);
-app.use('/api/permissions', permissionsRouter);
-app.use('/api/communication-preferences', communicationPreferencesRouter);
+app.use('/api/users', authMiddleware, tenantContextMiddleware, usersRouter);
+app.use('/api/roles', authMiddleware, tenantContextMiddleware, rolesRouter);
+app.use('/api/permissions', authMiddleware, tenantContextMiddleware, permissionsRouter);
+app.use('/api/communication-preferences', authMiddleware, tenantContextMiddleware, communicationPreferencesRouter);
+
+// Public marketing endpoints – no auth middleware on the base route
+// (individual admin sub-routes inside the router apply authMiddleware themselves)
+app.use('/api/public/trial-requests', trialRequestsRouter);
 
 /**
  * @openapi
