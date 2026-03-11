@@ -1,12 +1,12 @@
 <div class="app-shell">
   <div
     class="sidebar-backdrop"
-    *ngIf="isLoggedIn() && !isPublicRoute() && sidebarOpen"
+    *ngIf="isLoggedIn() && !isShelllessRoute() && sidebarOpen"
     (click)="closeSidebar()"
     (keydown.escape)="closeSidebar()"
   ></div>
 
-  <aside class="sidebar" *ngIf="isLoggedIn() && !isPublicRoute()" [class.mobile-open]="sidebarOpen">
+  <aside class="sidebar" *ngIf="isLoggedIn() && !isShelllessRoute()" [class.mobile-open]="sidebarOpen">
     <div class="sidebar-header brand-block">
       <span class="brand-wordmark">FleetNeuron</span>
       <span class="brand-tagline">AI fleet intelligence</span>
@@ -93,8 +93,8 @@
     </div>
   </aside>
 
-  <main class="content" [class.public-content]="isPublicRoute()" (click)="closeUserMenu()" (keydown.escape)="closeUserMenu()">
-    <div class="mobile-topbar" *ngIf="isLoggedIn() && !isPublicRoute()">
+  <main class="content" [class.public-content]="isShelllessRoute()" (click)="closeUserMenu()" (keydown.escape)="closeUserMenu()">
+    <div class="mobile-topbar" *ngIf="isLoggedIn() && !isShelllessRoute()">
       <button class="mobile-menu-btn" type="button" (click)="toggleSidebar()" [attr.aria-expanded]="sidebarOpen" aria-label="Toggle menu">
         ☰
       </button>
@@ -148,7 +148,7 @@
       </div>
     </div>
 
-    <div class="topbar" *ngIf="!isLoggedIn() && !isPublicRoute()">
+    <div class="topbar" *ngIf="!isLoggedIn() && !isShelllessRoute()">
       <div class="topbar-brand brand-block brand-block-topbar">
         <span class="brand-wordmark">FleetNeuron</span>
         <span class="brand-tagline">AI‑powered fleet, safety & inventory intelligence</span>
@@ -162,7 +162,7 @@
     <button
       class="ai-chat-launcher"
       type="button"
-        *ngIf="isLoggedIn() && !isPublicRoute()"
+        *ngIf="isLoggedIn() && !isShelllessRoute()"
       (click)="toggleAiChat()"
       aria-label="Open FleetNeuron AI assistant"
     >
@@ -170,7 +170,7 @@
       <span class="ai-chat-launcher-label">Ask AI</span>
     </button>
 
-    <section class="ai-chat-panel" *ngIf="aiChatOpen && isLoggedIn() && !isPublicRoute()">
+    <section class="ai-chat-panel" *ngIf="aiChatOpen && isLoggedIn() && !isShelllessRoute()">
       <header class="ai-chat-header">
         <div>
           <h3>FleetNeuron AI assistant</h3>
@@ -229,7 +229,7 @@
       </footer>
     </section>
 
-    <footer class="app-footer" *ngIf="!isPublicRoute()">
+    <footer class="app-footer" *ngIf="!isShelllessRoute()">
       <div class="app-footer-left">
         <span class="footer-pill">Protected by FleetNeuron AI anomaly detection</span>
       </div>
