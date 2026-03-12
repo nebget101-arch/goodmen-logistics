@@ -93,23 +93,29 @@ router.post('/:callId/complete', async (req, res) => {
   }
 });
 
-// Twilio webhook: Handle incoming/outgoing call instructions
-// POST /webhooks/twilio/call?callId=...
-router.post('/webhooks/call', async (req, res) => {
+function pickLast(value) {
+  if (Array.isArray(value)) return value[value.length - 1];
+  return value;
+}
+
+async function handleTwilioCallWebhook(req, res) {
   try {
     const callData = twilioService.parseIncomingCallWebhook(req);
     let call = null;
-    let callId = req.query?.callId;
+    let callId = pickLast(req.query?.callId) || pickLast(req.body?.callId);
 
-    const webhookBaseUrl = `${req.protocol}://${req.get('host')}${req.baseUrl}${req.path}`;
-    const questionIndexRaw = Number(req.query?.q);
+    const configuredWebhookBaseUrl = (process.env.TWILIO_TWIML_URL || '').trim();
+    const webhookBaseUrl = configuredWebhookBaseUrl
+      || `${req.protocol}://${req.get('host')}${req.baseUrl}${req.path}`;
+    const questionIndexRaw = Number(pickLast(req.query?.q) ?? pickLast(req.body?.q));
     const hasQuestionIndex = Number.isInteger(questionIndexRaw) && questionIndexRaw >= 0;
 
-    const speechAnswer = String(req.body?.SpeechResult || '').trim();
-    const digitAnswer = String(req.body?.Digits || '').trim();
+    const speechAnswer = String(pickLast(req.body?.SpeechResult) || pickLast(req.query?.SpeechResult) || '').trim();
+    const digitAnswer = String(pickLast(req.body?.Digits) || pickLast(req.query?.Digits) || '').trim();
     const answerText = speechAnswer || digitAnswer;
     const answerInputType = speechAnswer ? 'speech' : (digitAnswer ? 'dtmf' : null);
-    const confidence = Number.isFinite(Number(req.body?.Confidence)) ? Number(req.body.Confidence) : null;
+    const confidenceRaw = pickLast(req.body?.Confidence) ?? pickLast(req.query?.Confidence);
+    const confidence = Number.isFinite(Number(confidenceRaw)) ? Number(confidenceRaw) : null;
 
     if (callId) {
       call = await roadsideService.getCall(callId, { isGlobalAdmin: true });
@@ -186,7 +192,12 @@ router.post('/webhooks/call', async (req, res) => {
     dtLogger.error('Twilio call webhook error:', error);
     res.status(400).json({ error: error.message });
   }
-});
+}
+
+// Twilio webhook: Handle incoming/outgoing call instructions
+// POST/GET /webhooks/twilio/call?callId=...&q=...
+router.post('/webhooks/call', handleTwilioCallWebhook);
+router.get('/webhooks/call', handleTwilioCallWebhook);
 
 // Twilio webhook: Handle call status updates
 // POST /webhooks/twilio/status?callId=...
