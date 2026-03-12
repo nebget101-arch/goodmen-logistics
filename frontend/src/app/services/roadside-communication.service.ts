@@ -138,10 +138,7 @@ export class RoadsideCommunicationService {
    * @returns boolean
    */
   isTwilioConfigured(): boolean {
-    return !!(
-      environment.twilioEnabled &&
-      localStorage.getItem('twilio-configured')
-    );
+    return !!localStorage.getItem('twilio-configured');
   }
 
   /**
@@ -149,10 +146,7 @@ export class RoadsideCommunicationService {
    * @returns boolean
    */
   isSendGridConfigured(): boolean {
-    return !!(
-      environment.sendGridEnabled &&
-      localStorage.getItem('sendgrid-configured')
-    );
+    return !!localStorage.getItem('sendgrid-configured');
   }
 
   /**

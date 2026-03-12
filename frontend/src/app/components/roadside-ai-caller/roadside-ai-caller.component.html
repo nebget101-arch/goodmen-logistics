@@ -1,7 +1,7 @@
 <div class="ai-caller-container">
   <div class="panel ai-call-panel">
     <h3>
-      <material-symbols icon="phone" class="icon"></material-symbols>
+      <span class="material-symbols-outlined icon">phone</span>
       AI Voice Call
     </h3>
 
@@ -13,12 +13,15 @@
         <strong>Call SID:</strong>
         <span class="call-sid">
           {{ callSid }}
-          <material-symbols
-            icon="content_copy"
+          <button
+            type="button"
             class="icon-button"
             (click)="copyCallSid()"
             title="Copy Call SID"
-          ></material-symbols>
+            aria-label="Copy Call SID"
+          >
+            <span class="material-symbols-outlined">content_copy</span>
+          </button>
         </span>
       </div>
     </div>
@@ -38,19 +41,19 @@
       (click)="initiateAiCall()"
       [disabled]="initiatingCall || callInitiated"
     >
-      <material-symbols icon="call" class="icon"></material-symbols>
+      <span class="material-symbols-outlined icon">call</span>
       {{ callInitiated ? 'Call Initiated' : 'Initiate AI Call' }}
     </button>
 
     <div class="alert alert-error" *ngIf="callError">
-      <material-symbols icon="error" class="icon"></material-symbols>
+      <span class="material-symbols-outlined icon">error</span>
       {{ callError }}
     </div>
 
     <!-- Recording Section -->
     <div class="recording-section" *ngIf="callInitiated">
       <h4>
-        <material-symbols icon="radio_button_checked" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">radio_button_checked</span>
         Call Recording
       </h4>
       <p class="text-muted">Recordings are available after call completes (up to 10 minutes)</p>
@@ -60,18 +63,18 @@
         (click)="fetchRecording()"
         [disabled]="fetchingRecording"
       >
-        <material-symbols icon="download" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">download</span>
         Fetch Recording
       </button>
 
       <div *ngIf="recordingUrl" class="recording-available">
-        <material-symbols icon="check_circle" class="icon success"></material-symbols>
+        <span class="material-symbols-outlined icon success">check_circle</span>
         <p>Recording available</p>
         <button
           class="btn btn-secondary"
           (click)="openRecording()"
         >
-          <material-symbols icon="play_circle" class="icon"></material-symbols>
+          <span class="material-symbols-outlined icon">play_circle</span>
           Play Recording
         </button>
       </div>
@@ -81,14 +84,14 @@
   <!-- Notifications Panel -->
   <div class="panel notifications-panel">
     <h3>
-      <material-symbols icon="mail" class="icon"></material-symbols>
+      <span class="material-symbols-outlined icon">mail</span>
       Notifications & Alerts
     </h3>
 
     <!-- Notify Dispatcher -->
     <div class="notification-section">
       <h4>
-        <material-symbols icon="notifications_active" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">notifications_active</span>
         Notify Dispatcher(s)
       </h4>
 
@@ -107,7 +110,7 @@
         (click)="notifyDispatcher()"
         [disabled]="notifyingDispatcher || dispatcherNotified"
       >
-        <material-symbols icon="send" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">send</span>
         {{ dispatcherNotified ? 'Dispatcher Notified' : 'Notify Dispatcher' }}
       </button>
 
@@ -119,7 +122,7 @@
     <!-- Notify Dispatch Assigned -->
     <div class="notification-section">
       <h4>
-        <material-symbols icon="assignment" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">assignment</span>
         Dispatch Assigned
       </h4>
       <p class="text-muted">Send notification when vendor/dispatch is assigned</p>
@@ -129,7 +132,7 @@
         (click)="notifyDispatchAssigned()"
         [disabled]="notifyingDispatchAssigned"
       >
-        <material-symbols icon="send" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">send</span>
         Notify Driver & Vendor
       </button>
 
@@ -141,7 +144,7 @@
     <!-- Notify Call Resolved -->
     <div class="notification-section">
       <h4>
-        <material-symbols icon="task_alt" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">task_alt</span>
         Call Resolved
       </h4>
       <p class="text-muted">Send resolution confirmation to driver</p>
@@ -151,7 +154,7 @@
         (click)="notifyCallResolved()"
         [disabled]="notifyingResolved"
       >
-        <material-symbols icon="send" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">send</span>
         Notify Resolution
       </button>
 
@@ -163,7 +166,7 @@
     <!-- Notify Payment Contact -->
     <div class="notification-section">
       <h4>
-        <material-symbols icon="payment" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">payment</span>
         Billing Notification
       </h4>
       <p class="text-muted">Send invoice and billing details to payment contact</p>
@@ -203,7 +206,7 @@
         (click)="notifyPayment()"
         [disabled]="notifyingPayment"
       >
-        <material-symbols icon="send" class="icon"></material-symbols>
+        <span class="material-symbols-outlined icon">send</span>
         Send Billing Notification
       </button>
 
