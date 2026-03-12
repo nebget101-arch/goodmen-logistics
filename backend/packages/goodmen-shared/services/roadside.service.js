@@ -1,0 +1,739 @@
+const db = require('../internal/db').knex;
+const dtLogger = require('../utils/logger');
+const { generateToken, hashToken } = require('./token-service');
+const notifications = require('./notification-service');
+const { getSignedUploadUrl } = require('../storage/r2-storage');
+const workOrdersService = require('./work-orders.service');
+const {
+  normalizeRoadsideCallDraft,
+  normalizeEnum,
+  ROADSIDE_CALL_STATUS,
+  ROADSIDE_CALL_URGENCY,
+  ROADSIDE_INTAKE_SOURCE,
+  ROADSIDE_DISPATCH_STATUS,
+  ROADSIDE_WORK_ORDER_LINK_STATUS,
+  resolveConfidenceTier
+} = require('./roadside-domain');
+
+function scopeCallsQuery(queryBuilder, context = {}, tableAlias = 'roadside_calls') {
+  if (!context?.isGlobalAdmin && context?.tenantId) {
+    queryBuilder.andWhere(`${tableAlias}.tenant_id`, context.tenantId);
+  }
+
+  if (!context?.isGlobalAdmin && context?.allowedOperatingEntityIds?.length) {
+    queryBuilder.whereIn(`${tableAlias}.operating_entity_id`, context.allowedOperatingEntityIds);
+  }
+}
+
+function getPublicBaseUrl() {
+  return (process.env.PUBLIC_APP_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:4200').replace(/\/$/, '');
+}
+
+function buildPublicRoadsideUrl(callId, token) {
+  return `${getPublicBaseUrl()}/roadside/${callId}?token=${encodeURIComponent(token)}`;
+}
+
+async function generateCallNumber(trx) {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = `${now.getUTCMonth() + 1}`.padStart(2, '0');
+  const d = `${now.getUTCDate()}`.padStart(2, '0');
+  const prefix = `RS-${y}${m}${d}`;
+
+  const latest = await trx('roadside_calls')
+    .where('call_number', 'like', `${prefix}-%`)
+    .orderBy('created_at', 'desc')
+    .first('call_number');
+
+  const seq = latest?.call_number ? Number(latest.call_number.split('-').pop()) + 1 : 1;
+  const padded = `${seq}`.padStart(4, '0');
+  return `${prefix}-${padded}`;
+}
+
+async function assertCallAccess(trx, callId, context = {}, forUpdate = false) {
+  const query = trx('roadside_calls').where('id', callId).modify((qb) => scopeCallsQuery(qb, context));
+  if (forUpdate) query.forUpdate();
+  const row = await query.first();
+  if (!row) throw new Error('Roadside call not found');
+  return row;
+}
+
+async function logEvent(trx, callId, eventType, actorType = 'SYSTEM', actorId = null, payload = {}, sessionId = null) {
+  await trx('roadside_event_logs').insert({
+    call_id: callId,
+    session_id: sessionId,
+    actor_type: actorType,
+    actor_id: actorId,
+    event_type: eventType,
+    event_payload: payload || {}
+  });
+}
+
+async function createCall(payload = {}, userId = null, context = {}) {
+  return db.transaction(async (trx) => {
+    const normalized = normalizeRoadsideCallDraft(payload);
+    const callNumber = await generateCallNumber(trx);
+
+    const [created] = await trx('roadside_calls')
+      .insert({
+        call_number: callNumber,
+        tenant_id: context?.tenantId || null,
+        operating_entity_id: context?.operatingEntityId || null,
+        source_channel: normalized.source_channel,
+        caller_name: normalized.caller_name,
+        caller_phone: normalized.caller_phone,
+        caller_email: normalized.caller_email,
+        driver_id: payload.driver_id || null,
+        customer_id: payload.customer_id || null,
+        unit_id: payload.unit_id || null,
+        trailer_id: payload.trailer_id || null,
+        issue_type: normalized.issue_type,
+        incident_summary: normalized.incident_summary,
+        urgency: normalized.urgency,
+        status: normalized.status,
+        location_snapshot: payload.location_snapshot || {},
+        created_by: userId || null,
+        updated_by: userId || null
+      })
+      .returning('*');
+
+    await logEvent(trx, created.id, 'CALL_CREATED', 'USER', userId, {
+      source_channel: created.source_channel,
+      urgency: created.urgency,
+      status: created.status
+    });
+
+    return created;
+  });
+}
+
+async function listCalls(filters = {}, context = {}) {
+  const limit = Math.min(Math.max(Number(filters.limit || 25), 1), 100);
+  const query = db('roadside_calls').modify((qb) => scopeCallsQuery(qb, context));
+
+  if (filters.status) {
+    query.andWhere('status', normalizeEnum(filters.status, ROADSIDE_CALL_STATUS, 'OPEN'));
+  }
+  if (filters.urgency) {
+    query.andWhere('urgency', normalizeEnum(filters.urgency, ROADSIDE_CALL_URGENCY, 'NORMAL'));
+  }
+  if (filters.driver_id) {
+    query.andWhere('driver_id', filters.driver_id);
+  }
+
+  return query.orderBy('opened_at', 'desc').limit(limit);
+}
+
+async function getCall(callId, context = {}) {
+  const call = await db('roadside_calls')
+    .where('id', callId)
+    .modify((qb) => scopeCallsQuery(qb, context))
+    .first();
+  if (!call) return null;
+
+  const [latestIntake, latestAssessment, latestDispatch, workOrderLink, recentEvents] = await Promise.all([
+    db('roadside_intakes').where({ call_id: callId }).first(),
+    db('roadside_ai_assessments').where({ call_id: callId }).orderBy('created_at', 'desc').first(),
+    db('roadside_dispatch_assignments').where({ call_id: callId }).orderBy('created_at', 'desc').first(),
+    db('roadside_work_order_links').where({ roadside_call_id: callId }).first(),
+    db('roadside_event_logs').where({ call_id: callId }).orderBy('occurred_at', 'desc').limit(50)
+  ]);
+
+  return {
+    ...call,
+    intake: latestIntake || null,
+    ai_assessment: latestAssessment || null,
+    dispatch: latestDispatch || null,
+    work_order_link: workOrderLink || null,
+    recent_events: recentEvents || []
+  };
+}
+
+async function setStatus(callId, status, userId = null, context = {}) {
+  const normalizedStatus = normalizeEnum(status, ROADSIDE_CALL_STATUS, 'OPEN');
+  return db.transaction(async (trx) => {
+    const call = await assertCallAccess(trx, callId, context, true);
+
+    const patch = {
+      status: normalizedStatus,
+      updated_at: trx.fn.now(),
+      updated_by: userId || call.updated_by
+    };
+    if (normalizedStatus === 'RESOLVED' || normalizedStatus === 'CANCELED') {
+      patch.closed_at = trx.fn.now();
+    }
+
+    await trx('roadside_calls').where({ id: callId }).update(patch);
+    await logEvent(trx, callId, 'STATUS_UPDATED', 'USER', userId, {
+      from: call.status,
+      to: normalizedStatus
+    });
+
+    return trx('roadside_calls').where({ id: callId }).first();
+  });
+}
+
+async function triage(callId, payload = {}, userId = null, context = {}) {
+  return db.transaction(async (trx) => {
+    await assertCallAccess(trx, callId, context, true);
+
+    const intakeSource = normalizeEnum(payload.intake_source, ROADSIDE_INTAKE_SOURCE, 'AI_AGENT');
+
+    await trx('roadside_intakes')
+      .insert({
+        call_id: callId,
+        intake_source: intakeSource,
+        intake_payload: payload.intake_payload || {},
+        symptoms: payload.symptoms || null,
+        requires_tow: !!payload.requires_tow,
+        safety_risk: !!payload.safety_risk,
+        recommended_action: payload.recommended_action || null
+      })
+      .onConflict('call_id')
+      .merge({
+        intake_source: intakeSource,
+        intake_payload: payload.intake_payload || {},
+        symptoms: payload.symptoms || null,
+        requires_tow: !!payload.requires_tow,
+        safety_risk: !!payload.safety_risk,
+        recommended_action: payload.recommended_action || null,
+        updated_at: trx.fn.now(),
+        captured_at: trx.fn.now()
+      });
+
+    const confidenceScore = payload.confidence_score == null ? null : Number(payload.confidence_score);
+    const [assessment] = await trx('roadside_ai_assessments')
+      .insert({
+        call_id: callId,
+        assessment_version: Number(payload.assessment_version || 1),
+        model_name: payload.model_name || null,
+        prompt_version: payload.prompt_version || null,
+        confidence_score: Number.isFinite(confidenceScore) ? confidenceScore : null,
+        risk_level: normalizeEnum(payload.risk_level, ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], 'LOW'),
+        requires_human_review: payload.requires_human_review == null
+          ? resolveConfidenceTier(confidenceScore) === 'LOW_CONFIDENCE'
+          : !!payload.requires_human_review,
+        reasoning: payload.reasoning || null,
+        recommendation: payload.recommendation || {}
+      })
+      .returning('*');
+
+    const callPatch = {
+      status: 'TRIAGED',
+      urgency: normalizeEnum(payload.urgency, ROADSIDE_CALL_URGENCY, 'NORMAL'),
+      updated_at: trx.fn.now(),
+      updated_by: userId
+    };
+    if (payload.issue_type) callPatch.issue_type = payload.issue_type;
+
+    await trx('roadside_calls')
+      .where({ id: callId })
+      .update(callPatch);
+
+    await logEvent(trx, callId, 'TRIAGE_COMPLETED', 'AI', userId, {
+      confidence_score: assessment.confidence_score,
+      risk_level: assessment.risk_level,
+      requires_human_review: assessment.requires_human_review
+    });
+
+    return getCall(callId, context);
+  });
+}
+
+async function assignDispatch(callId, payload = {}, userId = null, context = {}) {
+  return db.transaction(async (trx) => {
+    await assertCallAccess(trx, callId, context, true);
+
+    const [assignment] = await trx('roadside_dispatch_assignments')
+      .insert({
+        call_id: callId,
+        assigned_driver_id: payload.assigned_driver_id || null,
+        assigned_vendor_name: payload.assigned_vendor_name || null,
+        assigned_vendor_phone: payload.assigned_vendor_phone || null,
+        dispatch_status: normalizeEnum(payload.dispatch_status, ROADSIDE_DISPATCH_STATUS, 'PENDING'),
+        eta_minutes: payload.eta_minutes ?? null,
+        dispatched_at: payload.dispatched_at || trx.fn.now(),
+        notes: payload.notes || null,
+        created_by: userId
+      })
+      .returning('*');
+
+    await trx('roadside_calls').where({ id: callId }).update({
+      status: assignment.dispatch_status === 'CANCELED' ? 'CANCELED' : 'DISPATCHED',
+      updated_by: userId,
+      updated_at: trx.fn.now()
+    });
+
+    await logEvent(trx, callId, 'DISPATCH_ASSIGNED', 'DISPATCHER', userId, {
+      assignment_id: assignment.id,
+      dispatch_status: assignment.dispatch_status,
+      assigned_driver_id: assignment.assigned_driver_id,
+      assigned_vendor_name: assignment.assigned_vendor_name
+    });
+
+    return getCall(callId, context);
+  });
+}
+
+async function resolveCall(callId, payload = {}, userId = null, context = {}) {
+  return db.transaction(async (trx) => {
+    const call = await assertCallAccess(trx, callId, context, true);
+
+    await trx('roadside_calls').where({ id: callId }).update({
+      status: 'RESOLVED',
+      closed_at: payload.closed_at || trx.fn.now(),
+      updated_by: userId,
+      updated_at: trx.fn.now()
+    });
+
+    if (payload.payment) {
+      await trx('roadside_payments').insert({
+        call_id: callId,
+        payer_type: normalizeEnum(payload.payment.payer_type, ['COMPANY', 'DRIVER', 'CUSTOMER', 'INSURANCE', 'OTHER'], 'COMPANY'),
+        payment_status: normalizeEnum(payload.payment.payment_status, ['UNPAID', 'PENDING', 'AUTHORIZED', 'PAID', 'FAILED', 'REFUNDED'], 'UNPAID'),
+        amount: Number(payload.payment.amount || 0),
+        currency: payload.payment.currency || 'USD',
+        payment_method: payload.payment.payment_method || null,
+        external_reference: payload.payment.external_reference || null,
+        authorized_at: payload.payment.authorized_at || null,
+        paid_at: payload.payment.paid_at || null,
+        metadata: payload.payment.metadata || {}
+      });
+    }
+
+    await logEvent(trx, callId, 'CALL_RESOLVED', 'USER', userId, {
+      previous_status: call.status,
+      resolution: payload.resolution || null
+    });
+
+    return getCall(callId, context);
+  });
+}
+
+async function linkWorkOrder(callId, payload = {}, userId = null, context = {}) {
+  const call = await db('roadside_calls')
+    .where('id', callId)
+    .modify((qb) => scopeCallsQuery(qb, context))
+    .first();
+  if (!call) throw new Error('Roadside call not found');
+
+  let workOrderId = payload.work_order_id || null;
+  let failureReason = payload.failure_reason || null;
+
+  if (!workOrderId && payload.auto_create_work_order) {
+    try {
+      const created = await workOrdersService.createWorkOrder({
+        vehicleId: payload.vehicle_id || call.unit_id,
+        customerId: payload.customer_id || call.customer_id,
+        locationId: payload.location_id,
+        type: payload.work_order_type || 'OTHER',
+        priority: payload.work_order_priority || (call.urgency === 'CRITICAL' ? 'URGENT' : 'HIGH'),
+        status: payload.work_order_status || 'open',
+        description: payload.work_order_description || call.incident_summary || `Roadside call ${call.call_number}`,
+        odometerMiles: payload.odometer_miles || null
+      }, userId, context);
+      workOrderId = created?.id || null;
+    } catch (error) {
+      failureReason = error.message;
+      dtLogger.warn('roadside_work_order_auto_create_failed', {
+        callId,
+        error: error.message
+      });
+    }
+  }
+
+  return db.transaction(async (trx) => {
+    await assertCallAccess(trx, callId, context, true);
+
+    const fallbackStatus = workOrderId ? 'LINKED' : (failureReason ? 'FAILED' : 'PENDING');
+    const linkStatus = normalizeEnum(payload.link_status, ROADSIDE_WORK_ORDER_LINK_STATUS, fallbackStatus);
+
+    const [link] = await trx('roadside_work_order_links')
+      .insert({
+        roadside_call_id: callId,
+        work_order_id: workOrderId,
+        link_status: linkStatus,
+        failure_reason: failureReason,
+        linked_at: workOrderId ? trx.fn.now() : null
+      })
+      .onConflict('roadside_call_id')
+      .merge({
+        work_order_id: workOrderId,
+        link_status: linkStatus,
+        failure_reason: failureReason,
+        linked_at: workOrderId ? trx.fn.now() : null,
+        updated_at: trx.fn.now()
+      })
+      .returning('*');
+
+    await logEvent(trx, callId, 'WORK_ORDER_LINK_UPDATED', 'USER', userId, {
+      work_order_id: link.work_order_id,
+      link_status: link.link_status,
+      auto_create_work_order: !!payload.auto_create_work_order
+    });
+
+    return link;
+  });
+}
+
+async function createMediaUploadUrl(callId, payload = {}, userId = null, context = {}) {
+  const call = await db('roadside_calls')
+    .where('id', callId)
+    .modify((qb) => scopeCallsQuery(qb, context))
+    .first();
+  if (!call) throw new Error('Roadside call not found');
+
+  const safeFileName = String(payload.file_name || 'media-upload').replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const mediaType = normalizeEnum(payload.media_type, ['PHOTO', 'VIDEO', 'AUDIO', 'DOCUMENT'], 'PHOTO');
+  const key = `roadside/${callId}/${Date.now()}-${safeFileName}`;
+  const signed = await getSignedUploadUrl({
+    key,
+    contentType: payload.content_type || 'application/octet-stream',
+    expiresInSeconds: payload.expires_in_seconds || 900
+  });
+
+  await db('roadside_event_logs').insert({
+    call_id: callId,
+    actor_type: 'USER',
+    actor_id: userId || null,
+    event_type: 'MEDIA_UPLOAD_URL_CREATED',
+    event_payload: {
+      key: signed.key,
+      media_type: mediaType,
+      expires_in: signed.expiresIn
+    }
+  });
+
+  return {
+    upload_url: signed.url,
+    storage_key: signed.key,
+    expires_in: signed.expiresIn,
+    media_type: mediaType
+  };
+}
+
+async function createPublicMediaUploadUrl(token, payload = {}) {
+  const call = await getPublicCallByToken(token);
+  if (!call) throw new Error('Invalid or expired token');
+
+  const safeFileName = String(payload.file_name || 'media-upload').replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const mediaType = normalizeEnum(payload.media_type, ['PHOTO', 'VIDEO', 'AUDIO', 'DOCUMENT'], 'PHOTO');
+  const key = `roadside/${call.call_id}/public/${Date.now()}-${safeFileName}`;
+  const signed = await getSignedUploadUrl({
+    key,
+    contentType: payload.content_type || 'application/octet-stream',
+    expiresInSeconds: payload.expires_in_seconds || 900
+  });
+
+  await db('roadside_event_logs').insert({
+    call_id: call.call_id,
+    actor_type: 'DRIVER',
+    actor_id: payload.uploaded_by_driver_id || null,
+    event_type: 'PUBLIC_MEDIA_UPLOAD_URL_CREATED',
+    event_payload: {
+      key: signed.key,
+      media_type: mediaType,
+      expires_in: signed.expiresIn
+    }
+  });
+
+  return {
+    upload_url: signed.url,
+    storage_key: signed.key,
+    expires_in: signed.expiresIn,
+    media_type: mediaType,
+    call_id: call.call_id
+  };
+}
+
+async function createPublicToken(callId, options = {}, userId = null, context = {}) {
+  return db.transaction(async (trx) => {
+    await assertCallAccess(trx, callId, context, true);
+
+    const token = generateToken();
+    const tokenHash = hashToken(token);
+    const expiresAt = options.expires_at || new Date(Date.now() + (Number(options.ttl_hours || 24) * 60 * 60 * 1000));
+
+    await trx('roadside_public_link_tokens')
+      .where({ call_id: callId, status: 'ACTIVE' })
+      .update({ status: 'REVOKED' });
+
+    const [saved] = await trx('roadside_public_link_tokens')
+      .insert({
+        call_id: callId,
+        token_hash: tokenHash,
+        status: 'ACTIVE',
+        expires_at: expiresAt,
+        created_by: userId || null
+      })
+      .returning('*');
+
+    await logEvent(trx, callId, 'PUBLIC_LINK_CREATED', 'USER', userId, {
+      token_id: saved.id,
+      expires_at: saved.expires_at
+    });
+
+    const url = buildPublicRoadsideUrl(callId, token);
+    return { token, url, expires_at: saved.expires_at, token_record_id: saved.id };
+  });
+}
+
+async function notifyCall(callId, payload = {}, userId = null, context = {}) {
+  const call = await getCall(callId, context);
+  if (!call) throw new Error('Roadside call not found');
+
+  const toPhone = payload.phone || call.caller_phone || null;
+  const toEmail = payload.email || call.caller_email || null;
+  const via = payload.via || 'both';
+  const link = payload.link || null;
+
+  const smsBody = payload.sms_body || `Roadside update for ${call.call_number}: ${call.status}${link ? `\n${link}` : ''}`;
+  const emailSubject = payload.email_subject || `Roadside update: ${call.call_number}`;
+  const emailText = payload.email_text || `Status: ${call.status}\nUrgency: ${call.urgency}${link ? `\nLink: ${link}` : ''}`;
+
+  const [smsResult, emailResult] = await Promise.all([
+    via === 'sms' || via === 'both' ? notifications.sendSms(toPhone, smsBody) : Promise.resolve({ sent: false }),
+    via === 'email' || via === 'both'
+      ? notifications.sendEmail({ to: toEmail, subject: emailSubject, text: emailText })
+      : Promise.resolve({ sent: false })
+  ]);
+
+  await db('roadside_event_logs').insert({
+    call_id: callId,
+    actor_type: 'USER',
+    actor_id: userId || null,
+    event_type: 'NOTIFICATION_SENT',
+    event_payload: {
+      via,
+      sms: smsResult,
+      email: emailResult
+    }
+  });
+
+  return { sms: smsResult, email: emailResult };
+}
+
+async function getPublicCallByToken(token) {
+  const tokenHash = hashToken(token);
+  if (!tokenHash) return null;
+
+  const row = await db('roadside_public_link_tokens as t')
+    .join('roadside_calls as c', 'c.id', 't.call_id')
+    .where('t.token_hash', tokenHash)
+    .where('t.status', 'ACTIVE')
+    .where('t.expires_at', '>', db.fn.now())
+    .select(
+      't.id as token_id',
+      't.call_id',
+      'c.call_number',
+      'c.caller_name',
+      'c.caller_email',
+      'c.caller_phone',
+      'c.status',
+      'c.urgency',
+      'c.issue_type',
+      'c.incident_summary',
+      'c.location_snapshot',
+      'c.opened_at'
+    )
+    .first();
+
+  return row || null;
+}
+
+async function updatePublicContext(token, payload = {}) {
+  return db.transaction(async (trx) => {
+    const publicCall = await getPublicCallByToken(token);
+    if (!publicCall) throw new Error('Invalid or expired token');
+
+    const existingCall = await trx('roadside_calls').where({ id: publicCall.call_id }).first();
+    if (!existingCall) throw new Error('Roadside call not found');
+
+    const incomingSnapshot = {
+      company_name: payload.company_name || null,
+      payment_contact_name: payload.payment_contact_name || null,
+      payment_email: payload.payment_email || null,
+      payment_phone: payload.payment_phone || null,
+      unit_number: payload.unit_number || null,
+      dispatch_location_label: payload.dispatch_location_label || null,
+      shared_location: payload.location && Number.isFinite(Number(payload.location.latitude)) && Number.isFinite(Number(payload.location.longitude))
+        ? {
+            latitude: Number(payload.location.latitude),
+            longitude: Number(payload.location.longitude),
+            accuracy_meters: payload.location.accuracy_meters == null ? null : Number(payload.location.accuracy_meters),
+            captured_at: payload.location.captured_at || new Date().toISOString(),
+            source: payload.location.source || 'BROWSER_GEOLOCATION'
+          }
+        : null
+    };
+
+    const mergedSnapshot = {
+      ...(existingCall.location_snapshot || {}),
+      ...Object.fromEntries(Object.entries(incomingSnapshot).filter(([, v]) => v !== null && v !== ''))
+    };
+
+    await trx('roadside_calls')
+      .where({ id: publicCall.call_id })
+      .update({
+        caller_name: payload.caller_name || existingCall.caller_name,
+        caller_email: payload.caller_email || existingCall.caller_email,
+        caller_phone: payload.caller_phone || existingCall.caller_phone,
+        incident_summary: payload.summary || existingCall.incident_summary,
+        location_snapshot: mergedSnapshot,
+        updated_at: trx.fn.now()
+      });
+
+    if (incomingSnapshot.shared_location) {
+      await trx('roadside_locations').insert({
+        call_id: publicCall.call_id,
+        source: 'GPS',
+        latitude: incomingSnapshot.shared_location.latitude,
+        longitude: incomingSnapshot.shared_location.longitude,
+        accuracy_meters: incomingSnapshot.shared_location.accuracy_meters,
+        captured_at: incomingSnapshot.shared_location.captured_at,
+        raw_payload: {
+          source: incomingSnapshot.shared_location.source,
+          dispatch_location_label: payload.dispatch_location_label || null
+        }
+      });
+    }
+
+    await logEvent(trx, publicCall.call_id, 'PUBLIC_CONTEXT_UPDATED', 'DRIVER', payload.uploaded_by_driver_id || null, {
+      company_name: payload.company_name || null,
+      payment_contact_name: payload.payment_contact_name || null,
+      payment_email: payload.payment_email || null,
+      payment_phone: payload.payment_phone || null,
+      unit_number: payload.unit_number || null,
+      has_location: !!incomingSnapshot.shared_location
+    });
+
+    return trx('roadside_calls')
+      .where({ id: publicCall.call_id })
+      .select(
+        'id as call_id',
+        'call_number',
+        'caller_name',
+        'caller_email',
+        'caller_phone',
+        'status',
+        'urgency',
+        'issue_type',
+        'incident_summary',
+        'location_snapshot',
+        'opened_at'
+      )
+      .first();
+  });
+}
+
+async function addPublicMedia(token, payload = {}) {
+  return db.transaction(async (trx) => {
+    const publicCall = await getPublicCallByToken(token);
+    if (!publicCall) throw new Error('Invalid or expired token');
+
+    const [row] = await trx('roadside_media')
+      .insert({
+        call_id: publicCall.call_id,
+        session_id: payload.session_id || null,
+        media_type: normalizeEnum(payload.media_type, ['PHOTO', 'VIDEO', 'AUDIO', 'DOCUMENT'], 'PHOTO'),
+        storage_provider: payload.storage_provider || 'r2',
+        storage_key: payload.storage_key,
+        mime_type: payload.mime_type || null,
+        size_bytes: payload.size_bytes || null,
+        uploaded_by_driver_id: payload.uploaded_by_driver_id || null,
+        uploaded_by_user_id: null,
+        metadata: payload.metadata || {}
+      })
+      .returning('*');
+
+    await logEvent(trx, publicCall.call_id, 'PUBLIC_MEDIA_ADDED', 'DRIVER', payload.uploaded_by_driver_id || null, {
+      media_id: row.id,
+      media_type: row.media_type
+    });
+
+    return row;
+  });
+}
+
+async function addMedia(callId, payload = {}, userId = null, context = {}) {
+  return db.transaction(async (trx) => {
+    await assertCallAccess(trx, callId, context, true);
+    if (!payload?.storage_key) throw new Error('storage_key is required');
+
+    const [row] = await trx('roadside_media')
+      .insert({
+        call_id: callId,
+        session_id: payload.session_id || null,
+        media_type: normalizeEnum(payload.media_type, ['PHOTO', 'VIDEO', 'AUDIO', 'DOCUMENT'], 'PHOTO'),
+        storage_provider: payload.storage_provider || 'r2',
+        storage_key: payload.storage_key,
+        mime_type: payload.mime_type || null,
+        size_bytes: payload.size_bytes || null,
+        uploaded_by_driver_id: payload.uploaded_by_driver_id || null,
+        uploaded_by_user_id: userId || null,
+        metadata: payload.metadata || {}
+      })
+      .returning('*');
+
+    await logEvent(trx, callId, 'MEDIA_ADDED', 'USER', userId, {
+      media_id: row.id,
+      media_type: row.media_type
+    });
+
+    return row;
+  });
+}
+
+async function markPublicTokenUsed(token) {
+  const tokenHash = hashToken(token);
+  if (!tokenHash) return false;
+
+  const updated = await db('roadside_public_link_tokens')
+    .where({ token_hash: tokenHash, status: 'ACTIVE' })
+    .update({
+      status: 'USED',
+      used_at: db.fn.now()
+    });
+
+  return updated > 0;
+}
+
+async function getTimeline(callId, context = {}) {
+  const call = await db('roadside_calls')
+    .where('id', callId)
+    .modify((qb) => scopeCallsQuery(qb, context))
+    .first('id');
+
+  if (!call) return null;
+
+  const events = await db('roadside_event_logs')
+    .where({ call_id: callId })
+    .orderBy('occurred_at', 'asc');
+
+  const locations = await db('roadside_locations')
+    .where({ call_id: callId })
+    .orderBy('captured_at', 'asc');
+
+  return { call_id: callId, events, locations };
+}
+
+module.exports = {
+  createCall,
+  listCalls,
+  getCall,
+  setStatus,
+  triage,
+  assignDispatch,
+  resolveCall,
+  linkWorkOrder,
+  createMediaUploadUrl,
+  createPublicToken,
+  notifyCall,
+  getPublicCallByToken,
+  updatePublicContext,
+  createPublicMediaUploadUrl,
+  addMedia,
+  addPublicMedia,
+  markPublicTokenUsed,
+  getTimeline
+};

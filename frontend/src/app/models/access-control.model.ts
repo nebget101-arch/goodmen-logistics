@@ -53,6 +53,8 @@ export const PERMISSIONS = {
 
   // Fleet / maintenance
   MAINTENANCE_VIEW: 'maintenance.view',
+  ROADSIDE_VIEW: 'roadside.view',
+  ROADSIDE_MANAGE: 'roadside.manage',
   WORK_ORDERS_VIEW: 'work_orders.view',
   WORK_ORDERS_CREATE: 'work_orders.create',
   WORK_ORDERS_EDIT: 'work_orders.edit',
@@ -112,6 +114,7 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
   hos: [PERMISSIONS.HOS_VIEW],
   audit: [PERMISSIONS.AUDIT_VIEW],
   maintenance: [PERMISSIONS.MAINTENANCE_VIEW, PERMISSIONS.WORK_ORDERS_VIEW],
+  roadside: [PERMISSIONS.ROADSIDE_VIEW, PERMISSIONS.ROADSIDE_MANAGE],
   customers: [PERMISSIONS.CUSTOMERS_VIEW],
   parts: [PERMISSIONS.PARTS_VIEW, PERMISSIONS.INVENTORY_VIEW],
   barcodes: [PERMISSIONS.BARCODES_VIEW],

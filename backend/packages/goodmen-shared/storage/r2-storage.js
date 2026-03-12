@@ -109,6 +109,25 @@ async function getSignedDownloadUrl(key, expiresInSeconds) {
   );
 }
 
+async function getSignedUploadUrl({ key, contentType, expiresInSeconds }) {
+  if (!key) {
+    throw new Error('key is required for signed upload url');
+  }
+
+  const client = getClient();
+  const { bucket } = getR2Config();
+  const ttl = Number(expiresInSeconds || process.env.R2_SIGNED_URL_EXPIRES_SECONDS || 900);
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType || 'application/octet-stream'
+  });
+
+  const url = await getSignedUrl(client, command, { expiresIn: ttl });
+  return { url, key, expiresIn: ttl };
+}
+
 async function deleteObject(key) {
   const client = getClient();
   const { bucket } = getR2Config();
@@ -125,6 +144,7 @@ async function deleteObject(key) {
 module.exports = {
   uploadBuffer,
   uploadStream,
+  getSignedUploadUrl,
   getSignedDownloadUrl,
   deleteObject
 };

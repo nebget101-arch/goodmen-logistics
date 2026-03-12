@@ -1,0 +1,108 @@
+<div class="public-roadside">
+  <div class="hero">
+    <div class="hero-pill">
+      <span class="material-symbols-outlined">smart_toy</span>
+      FleetNeuron AI Incident Assistant
+    </div>
+    <h1>Roadside Support Upload Portal</h1>
+    <p>Upload photos, videos, or documents so dispatch can resolve your incident faster.</p>
+  </div>
+
+  <div class="card" *ngIf="loading">Loading roadside link...</div>
+
+  <div class="card error" *ngIf="!loading && errorMessage">{{ errorMessage }}</div>
+  <div class="card success" *ngIf="successMessage">{{ successMessage }}</div>
+
+  <div class="card" *ngIf="!loading && call">
+    <h2><span class="material-symbols-outlined">emergency_home</span> Roadside Incident</h2>
+    <p><strong>Call:</strong> {{ call.call_number }}</p>
+    <p><strong>Status:</strong> {{ call.status }}</p>
+    <p><strong>Urgency:</strong> {{ call.urgency }}</p>
+    <p><strong>Issue:</strong> {{ call.issue_type }}</p>
+    <p><strong>Summary:</strong> {{ call.incident_summary || 'N/A' }}</p>
+
+    <div class="ai-subcard">
+      <h3><span class="material-symbols-outlined">badge</span> Caller details</h3>
+      <div class="detail-grid">
+        <div><strong>Name</strong><span>{{ call.caller_name || 'Not provided' }}</span></div>
+        <div><strong>Email</strong><span>{{ call.caller_email || 'Not provided' }}</span></div>
+        <div><strong>Phone</strong><span>{{ call.caller_phone || 'Not provided' }}</span></div>
+        <div><strong>Summary</strong><span>{{ call.incident_summary || 'Not provided' }}</span></div>
+      </div>
+    </div>
+
+    <hr />
+    <h3><span class="material-symbols-outlined">payments</span> Dispatch + payment details</h3>
+    <div class="grid-2">
+      <label for="ctxCompanyName">Company name
+        <input id="ctxCompanyName" [(ngModel)]="contextForm.company_name" />
+      </label>
+      <label for="ctxUnitNumber">Unit number
+        <input id="ctxUnitNumber" [(ngModel)]="contextForm.unit_number" />
+      </label>
+      <label for="ctxPaymentContact">Contact making payment
+        <input id="ctxPaymentContact" [(ngModel)]="contextForm.payment_contact_name" />
+      </label>
+      <label for="ctxPaymentEmail">Payment contact email
+        <input id="ctxPaymentEmail" type="email" [(ngModel)]="contextForm.payment_email" />
+      </label>
+      <label for="ctxPaymentPhone">Payment contact phone
+        <input id="ctxPaymentPhone" [(ngModel)]="contextForm.payment_phone" />
+      </label>
+      <label for="ctxDispatchLabel">Dispatch location notes
+        <input id="ctxDispatchLabel" [(ngModel)]="contextForm.dispatch_location_label" placeholder="e.g. near exit 27, eastbound shoulder" />
+      </label>
+      <label for="ctxCallerName">Caller name
+        <input id="ctxCallerName" [(ngModel)]="contextForm.caller_name" />
+      </label>
+      <label for="ctxCallerEmail">Caller email
+        <input id="ctxCallerEmail" type="email" [(ngModel)]="contextForm.caller_email" />
+      </label>
+      <label for="ctxCallerPhone">Caller phone
+        <input id="ctxCallerPhone" [(ngModel)]="contextForm.caller_phone" />
+      </label>
+    </div>
+    <label for="ctxSummary">Updated summary
+      <textarea id="ctxSummary" rows="2" [(ngModel)]="contextForm.summary"></textarea>
+    </label>
+
+    <div class="actions actions-wrap">
+      <button type="button" class="btn-secondary" (click)="requestLocation()" [disabled]="savingContext || saving">
+        <span class="material-symbols-outlined">my_location</span>
+        Share current location
+      </button>
+      <button type="button" (click)="saveContext()" [disabled]="savingContext || saving">
+        <span class="material-symbols-outlined">save</span>
+        {{ savingContext ? 'Saving...' : 'Save details for dispatch' }}
+      </button>
+    </div>
+    <p class="location-status">
+      <span class="material-symbols-outlined">location_on</span>
+      {{ locationStatus }}
+    </p>
+
+    <div class="mini-map" *ngIf="previewLocation && mapEmbedUrl">
+      <iframe
+        title="Driver shared location"
+        loading="lazy"
+        [attr.src]="mapEmbedUrl"
+        referrerpolicy="no-referrer-when-downgrade"
+      ></iframe>
+      <a class="map-link" [href]="mapOpenUrl" target="_blank" rel="noopener noreferrer">
+        <span class="material-symbols-outlined">open_in_new</span>
+        Open full map
+      </a>
+    </div>
+
+    <hr />
+    <h3><span class="material-symbols-outlined">upload_file</span> Upload photo/video/document</h3>
+    <input id="publicRoadsideUpload" type="file" (change)="onUploadMedia($event)" [disabled]="saving" />
+
+    <div class="actions">
+      <button (click)="complete()" [disabled]="saving">
+        <span class="material-symbols-outlined">task_alt</span>
+        Done
+      </button>
+    </div>
+  </div>
+</div>

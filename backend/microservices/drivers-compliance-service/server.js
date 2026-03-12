@@ -62,6 +62,8 @@ const drugAlcoholRouter = require('@goodmen/shared/routes/drug-alcohol');
 const onboardingRouter = require('@goodmen/shared/routes/onboarding');
 const employmentApplicationRouter = require('@goodmen/shared/routes/employment-application');
 const publicOnboardingRouter = require('@goodmen/shared/routes/public-onboarding');
+const roadsideRouter = require('@goodmen/shared/routes/roadside');
+const publicRoadsideRouter = require('@goodmen/shared/routes/public-roadside');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 
@@ -74,7 +76,9 @@ app.use('/api/hos', authMiddleware, tenantContextMiddleware, hosRouter);
 app.use('/api/drug-alcohol', authMiddleware, tenantContextMiddleware, drugAlcoholRouter);
 app.use('/api/onboarding', authMiddleware, tenantContextMiddleware, onboardingRouter);
 app.use('/api/employment', authMiddleware, tenantContextMiddleware, employmentApplicationRouter);
+app.use('/api/roadside', authMiddleware, tenantContextMiddleware, roadsideRouter);
 app.use('/public/onboarding', publicOnboardingRouter);
+app.use('/public/roadside', publicRoadsideRouter);
 
 /**
  * @openapi

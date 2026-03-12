@@ -1,0 +1,185 @@
+<div class="trial-admin ai-admin-shell">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">FleetNeuron AI Admin</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">approval</span>
+        Trial Requests
+      </h1>
+      <p class="subtitle">Review inbound trial leads and approve requests for onboarding.</p>
+    </div>
+
+    <div class="header-actions">
+      <label class="field-inline" for="trialStatusFilter">
+        <span class="material-symbols-outlined">filter_alt</span>
+        <span>Status</span>
+      </label>
+      <select
+        id="trialStatusFilter"
+        class="form-select status-filter"
+        [ngModel]="selectedStatus"
+        (ngModelChange)="onStatusFilterChange($event)"
+      >
+        <option *ngFor="let s of statusOptions" [value]="s.value">{{ s.label }}</option>
+      </select>
+
+      <button type="button" class="btn btn-secondary" [disabled]="refreshing" (click)="loadTrialRequests(true)">
+        <span class="material-symbols-outlined">refresh</span>
+        {{ refreshing ? 'Refreshing…' : 'Refresh' }}
+      </button>
+    </div>
+  </header>
+
+  <div *ngIf="message" class="alert alert-success">
+    <span class="material-symbols-outlined">check_circle</span>
+    <span>{{ message }}</span>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ error }}</span>
+  </div>
+
+  <section class="panel ai-panel">
+    <div *ngIf="loading" class="loading ai-loading">Loading trial requests…</div>
+
+    <div class="table-wrap" *ngIf="!loading">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Created</th>
+            <th scope="col">Company</th>
+            <th scope="col">Contact</th>
+            <th scope="col">Plan</th>
+            <th scope="col">Fleet Size</th>
+            <th scope="col">Demo</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let record of records" [class.row-selected]="selectedRecord?.id === record.id">
+            <td>{{ formatDate(record.created_at) }}</td>
+            <td class="company-cell">{{ record.company_name }}</td>
+            <td>
+              <div class="contact-stack">
+                <span>{{ record.contact_name }}</span>
+                <a [href]="'mailto:' + record.email">{{ record.email }}</a>
+                <a [href]="'tel:' + record.phone">{{ record.phone }}</a>
+              </div>
+            </td>
+            <td>{{ planLabels[record.requested_plan] || record.requested_plan }}</td>
+            <td>{{ record.fleet_size || '—' }}</td>
+            <td>{{ record.wants_demo_assistance ? 'Yes' : 'No' }}</td>
+            <td>
+              <span class="status-pill" [ngClass]="statusClass(record.status)">{{ record.status }}</span>
+            </td>
+            <td>
+              <div class="action-group">
+                <button
+                  type="button"
+                  class="btn-sm btn-outline"
+                  [disabled]="actionLoadingId === record.id"
+                  (click)="selectRecord(record)"
+                >
+                  <span class="material-symbols-outlined">visibility</span>
+                  {{ selectedRecord?.id === record.id ? 'Hide' : 'View' }}
+                </button>
+
+                <button
+                  type="button"
+                  class="btn-sm btn-success"
+                  *ngIf="canApprove(record)"
+                  [disabled]="actionLoadingId === record.id"
+                  (click)="approve(record)"
+                >
+                  <span class="material-symbols-outlined">check</span>
+                  Approve
+                </button>
+
+                <button
+                  type="button"
+                  class="btn-sm btn-warn"
+                  *ngIf="canMarkContacted(record)"
+                  [disabled]="actionLoadingId === record.id"
+                  (click)="markContacted(record)"
+                >
+                  <span class="material-symbols-outlined">call</span>
+                  Contacted
+                </button>
+
+                <button
+                  type="button"
+                  class="btn-sm btn-danger"
+                  *ngIf="canReject(record)"
+                  [disabled]="actionLoadingId === record.id"
+                  (click)="reject(record)"
+                >
+                  <span class="material-symbols-outlined">close</span>
+                  Reject
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="empty-state" *ngIf="!loading && records.length === 0">
+      <span class="material-symbols-outlined">inbox</span>
+      No trial requests found for the selected filter.
+    </div>
+  </section>
+
+  <section class="panel ai-panel details-panel" *ngIf="selectedRecord">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">description</span>
+        Trial request details
+      </h2>
+    </div>
+
+    <div class="details-grid">
+      <div class="detail-item">
+        <span class="label">Company</span>
+        <span>{{ selectedRecord.company_name }}</span>
+      </div>
+      <div class="detail-item">
+        <span class="label">Contact</span>
+        <span>{{ selectedRecord.contact_name }}</span>
+      </div>
+      <div class="detail-item">
+        <span class="label">Email</span>
+        <a [href]="'mailto:' + selectedRecord.email">{{ selectedRecord.email }}</a>
+      </div>
+      <div class="detail-item">
+        <span class="label">Phone</span>
+        <a [href]="'tel:' + selectedRecord.phone">{{ selectedRecord.phone }}</a>
+      </div>
+      <div class="detail-item">
+        <span class="label">Plan</span>
+        <span>{{ planLabels[selectedRecord.requested_plan] || selectedRecord.requested_plan }}</span>
+      </div>
+      <div class="detail-item">
+        <span class="label">Status</span>
+        <span class="status-pill" [ngClass]="statusClass(selectedRecord.status)">{{ selectedRecord.status }}</span>
+      </div>
+      <div class="detail-item full">
+        <span class="label">Current system</span>
+        <span>{{ selectedRecord.current_system || '—' }}</span>
+      </div>
+      <div class="detail-item full">
+        <span class="label">Notes</span>
+        <p>{{ selectedRecord.notes || '—' }}</p>
+      </div>
+      <div class="detail-item">
+        <span class="label">Created</span>
+        <span>{{ formatDate(selectedRecord.created_at) }}</span>
+      </div>
+      <div class="detail-item">
+        <span class="label">Updated</span>
+        <span>{{ formatDate(selectedRecord.updated_at || selectedRecord.created_at) }}</span>
+      </div>
+    </div>
+  </section>
+</div>

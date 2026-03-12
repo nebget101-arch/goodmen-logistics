@@ -12,6 +12,7 @@
 const express = require('express');
 const router = express.Router();
 const trialRequestService = require('../services/trial-request-service');
+const trialRequestEmailService = require('../services/trial-request-email-service');
 const authMiddleware = require('../middleware/auth-middleware');
 const { PLANS, TRIAL_REQUEST_STATUSES } = require('../config/plans');
 
@@ -50,6 +51,13 @@ const { PLANS, TRIAL_REQUEST_STATUSES } = require('../config/plans');
 router.post('/', async (req, res) => {
   try {
     const record = await trialRequestService.createTrialRequest(req.body);
+
+    try {
+      await trialRequestEmailService.sendNewTrialRequestNotification(record);
+    } catch (emailErr) {
+      console.error('[trial-requests] email notification error:', emailErr.message);
+    }
+
     return res.status(201).json({
       success: true,
       message:

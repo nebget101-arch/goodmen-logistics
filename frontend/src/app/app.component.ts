@@ -62,7 +62,8 @@ export class AppComponent implements OnInit {
     return (
       url.startsWith('/home') ||
       url.startsWith('/login') ||
-      url.startsWith('/onboard/')
+      url.startsWith('/onboard/') ||
+      (url.startsWith('/roadside/') && url !== '/roadside')
     );
   }
 

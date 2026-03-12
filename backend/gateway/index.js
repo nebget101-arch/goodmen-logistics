@@ -47,7 +47,11 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     gateway: 'fleetneuron-api-gateway',
-    target: TARGET_BACKEND_URL
+    target: {
+      authUsers: AUTH_USERS_SERVICE_URL,
+      reporting: REPORTING_SERVICE_URL,
+      integrations: INTEGRATIONS_SERVICE_URL
+    }
   });
 });
 
@@ -97,6 +101,25 @@ app.use(
   '/api/communication-preferences',
   buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users')
 );
+// Explicit trial-request mapping to avoid mount-path rewrite ambiguity for nested /api/public paths.
+app.use(
+  '/api/public/trial-requests',
+  createProxyMiddleware({
+    target: AUTH_USERS_SERVICE_URL,
+    changeOrigin: true,
+    xfwd: true,
+    pathRewrite: (path) => `/api/public/trial-requests${path}`,
+    logLevel: isProd ? 'warn' : 'debug',
+    onError: (err, req, res) => {
+      // eslint-disable-next-line no-console
+      console.error('[gateway] trial-requests proxy error', err.message);
+      res.status(502).json({
+        error: 'Bad Gateway',
+        message: 'Unable to reach trial request API. Please try again later.'
+      });
+    }
+  })
+);
 // Public marketing endpoints (trial requests, plan metadata)
 app.use('/api/public', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/drivers', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
@@ -115,8 +138,13 @@ app.use(
   buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
 );
 app.use('/api/employment', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
+app.use('/api/roadside', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
 app.use(
   '/public/onboarding',
+  buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
+);
+app.use(
+  '/public/roadside',
   buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
 );
 app.use(
