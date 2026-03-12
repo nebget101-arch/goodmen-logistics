@@ -198,6 +198,8 @@ async function handleTwilioCallWebhook(req, res) {
 // POST/GET /webhooks/twilio/call?callId=...&q=...
 router.post('/webhooks/call', handleTwilioCallWebhook);
 router.get('/webhooks/call', handleTwilioCallWebhook);
+router.post('/webhooks/twilio/call', handleTwilioCallWebhook);
+router.get('/webhooks/twilio/call', handleTwilioCallWebhook);
 
 // Twilio webhook: Handle call status updates
 // POST /webhooks/twilio/status?callId=...
@@ -230,10 +232,65 @@ router.post('/webhooks/status', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+router.post('/webhooks/twilio/status', async (req, res) => {
+  try {
+    const statusData = twilioService.parseCallStatusWebhook(req);
+    let callId = req.query?.callId;
+
+    if (!callId && statusData.callSid) {
+      const call = await roadsideService.findCallByTwilioCallSid(statusData.callSid);
+      callId = call?.id;
+    }
+
+    dtLogger.info(`Twilio call status update for ${callId}`, {
+      callSid: statusData.callSid,
+      callStatus: statusData.callStatus,
+      callDuration: statusData.callDuration
+    });
+
+    if (callId) {
+      await roadsideService.logTwilioCallStatus(callId, statusData);
+      if (['completed', 'canceled', 'busy', 'failed', 'no-answer'].includes(String(statusData.callStatus || '').toLowerCase())) {
+        await roadsideService.endActiveSession(callId);
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    dtLogger.error('Twilio status webhook error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
 
 // Twilio webhook: Handle call recording completion
 // POST /webhooks/twilio/recording?callId=...
 router.post('/webhooks/recording', async (req, res) => {
+  try {
+    const recordingData = twilioService.parseRecordingWebhook(req);
+    let callId = req.query?.callId;
+
+    if (!callId && recordingData.callSid) {
+      const call = await roadsideService.findCallByTwilioCallSid(recordingData.callSid);
+      callId = call?.id;
+    }
+
+    dtLogger.info(`Twilio recording webhook for ${callId}`, {
+      recordingSid: recordingData.recordingSid,
+      recordingUrl: recordingData.recordingUrl,
+      recordingDuration: recordingData.recordingDuration
+    });
+
+    if (callId) {
+      await roadsideService.logTwilioRecording(callId, recordingData);
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    dtLogger.error('Twilio recording webhook error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+router.post('/webhooks/twilio/recording', async (req, res) => {
   try {
     const recordingData = twilioService.parseRecordingWebhook(req);
     let callId = req.query?.callId;
