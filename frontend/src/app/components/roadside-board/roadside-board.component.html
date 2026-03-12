@@ -1,0 +1,234 @@
+<div class="roadside-board">
+  <div class="header">
+    <div class="hero-pill">
+      <span class="material-symbols-outlined">auto_awesome</span>
+      FleetNeuron AI Dispatch Console
+    </div>
+    <h1>Roadside Service AI</h1>
+    <p>Real-time incident triage, dispatch, evidence capture, and work-order automation.</p>
+  </div>
+
+  <div class="alerts" *ngIf="errorMessage || successMessage">
+    <div class="alert error" *ngIf="errorMessage">{{ errorMessage }}</div>
+    <div class="alert success" *ngIf="successMessage">{{ successMessage }}</div>
+  </div>
+
+  <div class="layout">
+    <section class="panel">
+      <h2><span class="material-symbols-outlined">add_circle</span> Create Call</h2>
+      <div class="grid">
+        <label>Caller name <input [(ngModel)]="newCall.caller_name" /></label>
+        <label>Caller phone <input [(ngModel)]="newCall.caller_phone" /></label>
+        <label>Caller email <input [(ngModel)]="newCall.caller_email" /></label>
+        <label>Source
+          <select [(ngModel)]="newCall.source_channel">
+            <option>PHONE</option><option>SMS</option><option>APP</option><option>WEB</option><option>DISPATCH</option>
+          </select>
+        </label>
+        <label>Urgency
+          <select [(ngModel)]="newCall.urgency">
+            <option>LOW</option><option>NORMAL</option><option>HIGH</option><option>CRITICAL</option>
+          </select>
+        </label>
+        <label>Issue
+          <select [(ngModel)]="newCall.issue_type">
+            <option>OTHER</option><option>FLAT_TIRE</option><option>BATTERY</option><option>ENGINE</option><option>BRAKE</option>
+            <option>TRANSMISSION</option><option>ELECTRICAL</option><option>ACCIDENT</option><option>LOCKOUT</option>
+            <option>FUEL</option><option>TOW_REQUIRED</option>
+          </select>
+        </label>
+      </div>
+      <label>Summary
+        <textarea rows="3" [(ngModel)]="newCall.incident_summary"></textarea>
+      </label>
+      <button class="btn" (click)="createCall()" [disabled]="saving">
+        <span class="material-symbols-outlined">send</span>
+        Create
+      </button>
+    </section>
+
+    <section class="panel">
+      <h2><span class="material-symbols-outlined">list_alt</span> Open Calls</h2>
+      <button class="btn secondary" (click)="loadCalls()" [disabled]="loading">
+        <span class="material-symbols-outlined">refresh</span>
+        Refresh
+      </button>
+      <div class="list" *ngIf="!loading; else loadingTpl">
+        <button class="item" *ngFor="let c of calls" (click)="selectCall(c.id)">
+          <div><strong>{{ c.call_number }}</strong> · {{ c.status }}</div>
+          <div class="muted">{{ c.issue_type || 'OTHER' }} · {{ c.urgency }}</div>
+        </button>
+      </div>
+      <ng-template #loadingTpl><div class="muted">Loading...</div></ng-template>
+    </section>
+
+    <section class="panel" *ngIf="selectedCall">
+      <h2><span class="material-symbols-outlined">emergency_home</span> Selected: {{ selectedCall.call_number }}</h2>
+      <p class="muted">{{ selectedCall.incident_summary || 'No summary' }}</p>
+      <div class="actions">
+        <button class="btn secondary" (click)="setStatus('TRIAGED')"><span class="material-symbols-outlined">analytics</span> Set TRIAGED</button>
+        <button class="btn secondary" (click)="setStatus('DISPATCHED')"><span class="material-symbols-outlined">local_shipping</span> Set DISPATCHED</button>
+        <button class="btn secondary" (click)="setStatus('RESOLVED')"><span class="material-symbols-outlined">check_circle</span> Set RESOLVED</button>
+      </div>
+
+      <div class="actions">
+        <button class="btn" (click)="autoCreateWorkOrder()"><span class="material-symbols-outlined">build_circle</span> Auto-create Work Order</button>
+        <button class="btn" (click)="createPublicLink()"><span class="material-symbols-outlined">link</span> Create Public Link</button>
+      </div>
+
+      <div *ngIf="publicLink" class="public-link">
+        <label for="publicRoadsideLink">Public driver link</label>
+        <input id="publicRoadsideLink" [value]="publicLink" readonly />
+      </div>
+
+      <div class="upload">
+        <label for="privateRoadsideFile">Attach media</label>
+        <input id="privateRoadsideFile" type="file" (change)="onUploadPrivateMedia($event)" />
+      </div>
+    </section>
+
+    <section class="panel" *ngIf="selectedCall">
+      <h2><span class="material-symbols-outlined">contact_phone</span> Caller Profile</h2>
+      <div class="grid">
+        <label>Caller name
+          <input [value]="selectedCall.caller_name || 'Not provided'" readonly />
+        </label>
+        <label>Caller phone
+          <input [value]="selectedCall.caller_phone || 'Not provided'" readonly />
+        </label>
+        <label>Caller email
+          <input [value]="selectedCall.caller_email || 'Not provided'" readonly />
+        </label>
+        <label>Issue
+          <input [value]="selectedCall.issue_type || 'OTHER'" readonly />
+        </label>
+      </div>
+      <label>Summary
+        <textarea rows="2" [value]="selectedCall.incident_summary || 'No summary provided'" readonly></textarea>
+      </label>
+    </section>
+
+    <section class="panel" *ngIf="selectedCall">
+      <h2><span class="material-symbols-outlined">neurology</span> AI Triage</h2>
+      <div class="grid">
+        <label>Intake Source
+          <select [(ngModel)]="triageForm.intake_source">
+            <option>AI_AGENT</option><option>HUMAN_AGENT</option><option>DRIVER_SELF</option>
+          </select>
+        </label>
+        <label>Risk
+          <select [(ngModel)]="triageForm.risk_level">
+            <option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option>
+          </select>
+        </label>
+      </div>
+      <label>Symptoms <input [(ngModel)]="triageForm.symptoms" /></label>
+      <label>Recommended action <input [(ngModel)]="triageForm.recommended_action" /></label>
+      <label>Confidence <input type="number" min="0" max="100" [(ngModel)]="triageForm.confidence_score" /></label>
+      <div class="actions">
+        <label><input type="checkbox" [(ngModel)]="triageForm.requires_tow" /> Requires tow</label>
+        <label><input type="checkbox" [(ngModel)]="triageForm.safety_risk" /> Safety risk</label>
+      </div>
+      <button class="btn" (click)="applyTriage()"><span class="material-symbols-outlined">smart_toy</span> Apply triage</button>
+    </section>
+
+    <section class="panel" *ngIf="selectedCall">
+      <h2><span class="material-symbols-outlined">pin_drop</span> Dispatch</h2>
+      <p class="muted" *ngIf="selectedCall.dispatch">
+        Current dispatch: {{ selectedCall.dispatch.dispatch_status || 'PENDING' }} ·
+        {{ selectedCall.dispatch.assigned_vendor_name || 'No vendor' }} ·
+        ETA {{ selectedCall.dispatch.eta_minutes ?? 'N/A' }}
+      </p>
+      <div class="grid">
+        <label>Vendor <input [(ngModel)]="dispatchForm.assigned_vendor_name" /></label>
+        <label>Phone <input [(ngModel)]="dispatchForm.assigned_vendor_phone" /></label>
+        <label>Status
+          <select [(ngModel)]="dispatchForm.dispatch_status">
+            <option>PENDING</option><option>ACCEPTED</option><option>EN_ROUTE</option><option>ARRIVED</option><option>COMPLETED</option><option>CANCELED</option>
+          </select>
+        </label>
+        <label>ETA mins <input type="number" [(ngModel)]="dispatchForm.eta_minutes" /></label>
+      </div>
+      <label>Notes <textarea rows="2" [(ngModel)]="dispatchForm.notes"></textarea></label>
+      <button class="btn" (click)="assignDispatch()"><span class="material-symbols-outlined">route</span> Save dispatch</button>
+    </section>
+
+    <section class="panel" *ngIf="selectedCall">
+      <h2><span class="material-symbols-outlined">task_alt</span> Resolve</h2>
+      <label>Resolution <textarea rows="2" [(ngModel)]="resolveForm.resolution"></textarea></label>
+      <div class="grid">
+        <label>Amount <input type="number" [(ngModel)]="resolveForm.payment.amount" /></label>
+        <label>Payment status
+          <select [(ngModel)]="resolveForm.payment.payment_status">
+            <option>UNPAID</option><option>PENDING</option><option>AUTHORIZED</option><option>PAID</option><option>FAILED</option><option>REFUNDED</option>
+          </select>
+        </label>
+        <label>Payer
+          <select [(ngModel)]="resolveForm.payment.payer_type">
+            <option>COMPANY</option><option>DRIVER</option><option>CUSTOMER</option><option>INSURANCE</option><option>OTHER</option>
+          </select>
+        </label>
+        <label>Method <input [(ngModel)]="resolveForm.payment.payment_method" /></label>
+      </div>
+      <button class="btn" (click)="resolveSelectedCall()"><span class="material-symbols-outlined">done_all</span> Resolve call</button>
+    </section>
+
+    <section class="panel" *ngIf="selectedCall">
+      <h2><span class="material-symbols-outlined">timeline</span> Timeline</h2>
+
+      <div class="driver-details-card" *ngIf="hasSubmittedDriverDetails">
+        <h3><span class="material-symbols-outlined">account_balance_wallet</span> Driver-submitted details</h3>
+        <div class="detail-grid">
+          <div><strong>Company</strong><span>{{ submittedDriverDetails.company_name || '—' }}</span></div>
+          <div><strong>Unit number</strong><span>{{ submittedDriverDetails.unit_number || '—' }}</span></div>
+          <div><strong>Payment contact</strong><span>{{ submittedDriverDetails.payment_contact_name || '—' }}</span></div>
+          <div><strong>Payment email</strong><span>{{ submittedDriverDetails.payment_email || '—' }}</span></div>
+          <div><strong>Payment phone</strong><span>{{ submittedDriverDetails.payment_phone || '—' }}</span></div>
+          <div><strong>Dispatch notes</strong><span>{{ submittedDriverDetails.dispatch_location_label || '—' }}</span></div>
+        </div>
+      </div>
+
+      <div class="driver-details-card" *ngIf="selectedCall?.location_snapshot?.shared_location as geo">
+        <h3><span class="material-symbols-outlined">location_on</span> Dispatch location</h3>
+        <div class="detail-grid">
+          <div><strong>Coordinates</strong><span>{{ geo.latitude }}, {{ geo.longitude }}</span></div>
+          <div><strong>Accuracy</strong><span>{{ geo.accuracy_meters || 'N/A' }} m</span></div>
+          <div><strong>Captured</strong><span>{{ geo.captured_at | date:'short' }}</span></div>
+          <div><strong>Address</strong><span>{{ resolvingDispatchAddress ? 'Resolving address…' : (resolvedDispatchAddress || 'Address unavailable') }}</span></div>
+        </div>
+
+        <div class="mini-map" *ngIf="dispatchGeo && dispatchMapUrl">
+          <iframe
+            title="Dispatch location map"
+            loading="lazy"
+            [attr.src]="dispatchMapUrl"
+            referrerpolicy="no-referrer-when-downgrade"
+          ></iframe>
+          <a class="map-link" [href]="dispatchMapsExternalUrl" target="_blank" rel="noopener noreferrer">
+            <span class="material-symbols-outlined">open_in_new</span>
+            Open full map
+          </a>
+        </div>
+      </div>
+
+      <div class="list" *ngIf="timeline.length; else emptyTimeline">
+        <div class="item" *ngFor="let ev of timeline">
+          <div><strong>{{ ev.event_type }}</strong></div>
+          <div class="muted">{{ ev.occurred_at | date:'short' }} · {{ ev.actor_type }}</div>
+        </div>
+      </div>
+
+      <div class="list" *ngIf="timelineLocations.length">
+        <div class="item" *ngFor="let loc of timelineLocations | slice:0:5">
+          <div><strong>Location snapshot</strong></div>
+          <div class="muted">{{ loc.captured_at | date:'short' }} · {{ loc.latitude }}, {{ loc.longitude }}</div>
+          <div class="muted">{{ loc.resolved_address || 'Resolving address…' }}</div>
+        </div>
+      </div>
+
+      <ng-template #emptyTimeline>
+        <div class="muted">No timeline events yet.</div>
+      </ng-template>
+    </section>
+  </div>
+</div>

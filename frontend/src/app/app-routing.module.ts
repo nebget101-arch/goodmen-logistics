@@ -27,6 +27,9 @@ import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-poli
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
+import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
+import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
+import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
@@ -47,6 +50,12 @@ const routes: Routes = [
   { path: 'work-order/:id', component: WorkOrderComponent, canActivate: [AuthGuard] },
   { path: 'loads', component: LoadsDashboardComponent, canActivate: [AuthGuard] },
   { path: 'dispatch-board', component: DispatchBoardComponent, canActivate: [AuthGuard] },
+  {
+    path: 'roadside',
+    component: RoadsideBoardComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: ['roadside.view', 'roadside.manage'] }
+  },
   { path: 'audit', component: AuditComponent, canActivate: [AuthGuard] },
   { path: 'parts', component: PartsCatalogComponent, canActivate: [AuthGuard] },
   { path: 'barcodes', component: BarcodeManagementComponent, canActivate: [AuthGuard] },
@@ -56,6 +65,7 @@ const routes: Routes = [
   { path: 'inventory-reports', component: InventoryReportsComponent, canActivate: [AuthGuard] },
   // Public driver onboarding packet link (no AuthGuard)
   { path: 'onboard/:packetId', component: OnboardingPacketComponent },
+  { path: 'roadside/:callId', component: PublicRoadsideComponent },
   { path: 'customers', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
   { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
   { path: 'settlements', loadChildren: () => import('./settlements/settlements.module').then(m => m.SettlementsModule) },
@@ -65,6 +75,12 @@ const routes: Routes = [
   {
     path: 'admin/multi-mc',
     component: MultiMcAdminComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: ['roles.manage', 'access.admin', 'users.edit'] }
+  },
+  {
+    path: 'admin/trial-requests',
+    component: TrialRequestsAdminComponent,
     canActivate: [AuthGuard, PermissionGuard],
     data: { anyPermission: ['roles.manage', 'access.admin', 'users.edit'] }
   },

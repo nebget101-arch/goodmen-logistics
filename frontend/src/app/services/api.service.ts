@@ -809,6 +809,31 @@ export class ApiService {
       return this.http.post(`${this.baseUrl}/public/trial-requests`, payload);
     }
 
+    // Admin trial requests
+    listTrialRequests(params?: {
+      status?: 'new' | 'contacted' | 'approved' | 'rejected' | 'converted' | 'trial_created';
+      page?: number;
+      pageSize?: number;
+    }): Observable<any> {
+      const queryParts: string[] = [];
+      if (params?.status) queryParts.push(`status=${encodeURIComponent(params.status)}`);
+      if (params?.page) queryParts.push(`page=${params.page}`);
+      if (params?.pageSize) queryParts.push(`pageSize=${params.pageSize}`);
+      const query = queryParts.length ? `?${queryParts.join('&')}` : '';
+      return this.http.get(`${this.baseUrl}/public/trial-requests${query}`);
+    }
+
+    getTrialRequest(id: string): Observable<any> {
+      return this.http.get(`${this.baseUrl}/public/trial-requests/${encodeURIComponent(id)}`);
+    }
+
+    updateTrialRequestStatus(
+      id: string,
+      status: 'new' | 'contacted' | 'approved' | 'rejected' | 'converted' | 'trial_created'
+    ): Observable<any> {
+      return this.http.patch(`${this.baseUrl}/public/trial-requests/${encodeURIComponent(id)}/status`, { status });
+    }
+
   // ========== INVENTORY MANAGEMENT (PHASE 2) ==========
 
   // Parts Catalog

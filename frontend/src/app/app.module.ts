@@ -41,7 +41,10 @@ import { CommunicationPreferencesComponent } from './components/communication-pr
 import { DatePickerComponent } from './components/shared/date-picker/date-picker.component';
 import { InlineDateFilterComponent } from './components/shared/inline-date-filter/inline-date-filter.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
+import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
 import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
+import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
+import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
@@ -82,7 +85,10 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     DatePickerComponent,
     InlineDateFilterComponent,
     MultiMcAdminComponent
-    ,EmploymentApplicationComponent
+    ,TrialRequestsAdminComponent
+    ,EmploymentApplicationComponent,
+    RoadsideBoardComponent,
+    PublicRoadsideComponent
   ],
   imports: [
     BrowserModule,
