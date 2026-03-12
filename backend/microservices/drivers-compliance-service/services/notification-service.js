@@ -19,7 +19,13 @@ const FROM_EMAIL = process.env.ONBOARDING_FROM_EMAIL || 'FleetNeuron AI <noreply
 
 let twilioClient = null;
 if (TWILIO_SID && TWILIO_TOKEN) {
-  twilioClient = twilio(TWILIO_SID, TWILIO_TOKEN);
+  if (String(TWILIO_SID).startsWith('AC')) {
+    try {
+      twilioClient = twilio(TWILIO_SID, TWILIO_TOKEN);
+    } catch (_) {
+      twilioClient = null;
+    }
+  }
 }
 if (SENDGRID_KEY) {
   sgMail.setApiKey(SENDGRID_KEY);
@@ -49,7 +55,7 @@ async function sendSms(toPhone, body) {
   if (!twilioClient || !TWILIO_FROM) {
     return {
       sent: false,
-      error: 'SMS not configured (set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)'
+      error: 'SMS not configured (set TWILIO_ACCOUNT_SID starting with AC, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)'
     };
   }
   const to = toE164(toPhone);
