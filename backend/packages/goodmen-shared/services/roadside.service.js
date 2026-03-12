@@ -172,7 +172,7 @@ async function getOrCreateActiveSession(callId, options = {}) {
       session_status: 'ACTIVE',
       ai_model: options.ai_model || 'twilio-voice-intake',
       prompt_version: options.prompt_version || 'twilio-v1',
-      transcript: []
+      transcript: JSON.stringify([])
     })
     .returning('*');
 
@@ -203,13 +203,22 @@ async function appendSessionTranscript(callId, entry = {}, options = {}) {
           session_status: 'ACTIVE',
           ai_model: options.ai_model || 'twilio-voice-intake',
           prompt_version: options.prompt_version || 'twilio-v1',
-          transcript: []
+          transcript: JSON.stringify([])
         })
         .returning('*');
       session = created;
     }
 
-    const transcript = Array.isArray(session.transcript) ? [...session.transcript] : [];
+    let existingTranscript = session.transcript;
+    if (typeof existingTranscript === 'string') {
+      try {
+        existingTranscript = JSON.parse(existingTranscript);
+      } catch (_) {
+        existingTranscript = [];
+      }
+    }
+
+    const transcript = Array.isArray(existingTranscript) ? [...existingTranscript] : [];
     transcript.push({
       timestamp: new Date().toISOString(),
       role: entry.role || 'system',
@@ -224,7 +233,7 @@ async function appendSessionTranscript(callId, entry = {}, options = {}) {
     await trx('roadside_sessions')
       .where({ id: session.id })
       .update({
-        transcript,
+        transcript: JSON.stringify(transcript),
         updated_at: trx.fn.now()
       });
 
