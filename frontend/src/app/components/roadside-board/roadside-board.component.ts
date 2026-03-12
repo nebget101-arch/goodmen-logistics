@@ -131,6 +131,19 @@ export class RoadsideBoardComponent implements OnInit {
     });
   }
 
+  refreshSelectedCall(): void {
+    if (!this.selectedCall?.id) return;
+    this.roadsideService.getCall(this.selectedCall.id).subscribe({
+      next: (call) => {
+        this.selectedCall = call;
+        this.loadTimeline();
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to refresh call details';
+      }
+    });
+  }
+
   createPublicLink(): void {
     if (!this.selectedCall?.id) return;
     this.roadsideService.createPublicLink(this.selectedCall.id, { ttl_hours: 48 }).subscribe({

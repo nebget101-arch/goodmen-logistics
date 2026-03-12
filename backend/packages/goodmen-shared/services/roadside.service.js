@@ -28,11 +28,19 @@ const DEFAULT_INBOUND_AI_QUESTIONS = Object.freeze([
 
 function scopeCallsQuery(queryBuilder, context = {}, tableAlias = 'roadside_calls') {
   if (!context?.isGlobalAdmin && context?.tenantId) {
-    queryBuilder.andWhere(`${tableAlias}.tenant_id`, context.tenantId);
+    // Include tenant-owned calls AND unassigned inbound calls (tenant_id IS NULL)
+    queryBuilder.andWhere((qb) => {
+      qb.where(`${tableAlias}.tenant_id`, context.tenantId)
+        .orWhereNull(`${tableAlias}.tenant_id`);
+    });
   }
 
   if (!context?.isGlobalAdmin && context?.allowedOperatingEntityIds?.length) {
-    queryBuilder.whereIn(`${tableAlias}.operating_entity_id`, context.allowedOperatingEntityIds);
+    // Include entity-scoped calls AND unassigned inbound calls (operating_entity_id IS NULL)
+    queryBuilder.andWhere((qb) => {
+      qb.whereIn(`${tableAlias}.operating_entity_id`, context.allowedOperatingEntityIds)
+        .orWhereNull(`${tableAlias}.operating_entity_id`);
+    });
   }
 }
 

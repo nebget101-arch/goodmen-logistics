@@ -73,7 +73,12 @@
     </section>
 
     <section class="panel" *ngIf="selectedCall">
-      <h2><span class="material-symbols-outlined">emergency_home</span> Selected: {{ selectedCall.call_number }}</h2>
+      <h2>
+        <span class="material-symbols-outlined">emergency_home</span> Selected: {{ selectedCall.call_number }}
+        <button class="btn secondary icon-btn" style="margin-left:auto" (click)="refreshSelectedCall()" title="Refresh call details">
+          <span class="material-symbols-outlined">refresh</span>
+        </button>
+      </h2>
       <p class="muted">{{ selectedCall.incident_summary || 'No summary' }}</p>
       <div class="actions">
         <button class="btn secondary" (click)="setStatus('TRIAGED')"><span class="material-symbols-outlined">analytics</span> Set TRIAGED</button>
