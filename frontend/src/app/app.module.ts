@@ -45,6 +45,7 @@ import { TrialRequestsAdminComponent } from './components/trial-requests-admin/t
 import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
+import { RoadsideAiCallerComponent } from './components/roadside-ai-caller/roadside-ai-caller.component';
 
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
@@ -88,7 +89,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     ,TrialRequestsAdminComponent
     ,EmploymentApplicationComponent,
     RoadsideBoardComponent,
-    PublicRoadsideComponent
+    PublicRoadsideComponent,
+    RoadsideAiCallerComponent
   ],
   imports: [
     BrowserModule,
