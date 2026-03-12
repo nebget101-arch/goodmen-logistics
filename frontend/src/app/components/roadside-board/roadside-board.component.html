@@ -57,6 +57,16 @@
         <button class="item" *ngFor="let c of calls" (click)="selectCall(c.id)">
           <div><strong>{{ c.call_number }}</strong> · {{ c.status }}</div>
           <div class="muted">{{ c.issue_type || 'OTHER' }} · {{ c.urgency }}</div>
+          <div class="question-preview" *ngIf="c.ai_answers_preview?.length">
+            <div class="muted question-title">Driver answers captured</div>
+            <div class="answer-chip" *ngFor="let answerItem of c.ai_answers_preview">
+              <strong>Q{{ answerItem.question_index + 1 }}:</strong> {{ answerItem.answer }}
+            </div>
+          </div>
+          <div class="question-preview" *ngIf="!c.ai_answers_preview?.length && c.ai_questions_preview?.length">
+            <div class="muted question-title">AI intake prompts</div>
+            <div class="question-chip" *ngFor="let question of c.ai_questions_preview">{{ question }}</div>
+          </div>
         </button>
       </div>
       <ng-template #loadingTpl><div class="muted">Loading...</div></ng-template>
@@ -106,6 +116,30 @@
       <label>Summary
         <textarea rows="2" [value]="selectedCall.incident_summary || 'No summary provided'" readonly></textarea>
       </label>
+
+      <div class="driver-details-card" *ngIf="selectedCall.ai_qa_history?.length; else aiPromptOnly">
+        <h3><span class="material-symbols-outlined">support_agent</span> AI question / driver answer history</h3>
+        <div class="question-list">
+          <div class="question-row" *ngFor="let qa of selectedCall.ai_qa_history">
+            <span class="question-index">Q{{ qa.question_index + 1 }}</span>
+            <span>{{ qa.question || 'Question not captured' }}</span>
+            <span class="answer-index">A</span>
+            <span>{{ qa.answer || 'No answer captured yet' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <ng-template #aiPromptOnly>
+        <div class="driver-details-card" *ngIf="selectedCall.ai_questions?.length">
+          <h3><span class="material-symbols-outlined">support_agent</span> AI intake prompts</h3>
+          <div class="question-list">
+            <div class="question-row" *ngFor="let question of selectedCall.ai_questions; let i = index">
+              <span class="question-index">Q{{ i + 1 }}</span>
+              <span>{{ question }}</span>
+            </div>
+          </div>
+        </div>
+      </ng-template>
     </section>
 
     <section class="panel" *ngIf="selectedCall">

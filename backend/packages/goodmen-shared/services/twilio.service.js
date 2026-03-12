@@ -162,6 +162,35 @@ function generateAiTwiml({ message, collectDtmf, transferTo }) {
 }
 
 /**
+ * Generate TwiML for interactive Q&A with speech/DTMF gather.
+ * @param {object} options
+ * @param {string} [options.introMessage]
+ * @param {string} [options.question]
+ * @param {string} [options.actionUrl]
+ * @param {string} [options.finishMessage]
+ * @returns {string}
+ */
+function generateQuestionFlowTwiml({ introMessage, question, actionUrl, finishMessage }) {
+  let twiml = '<?xml version="1.0" encoding="UTF-8"?><Response>';
+
+  if (introMessage) {
+    twiml += `<Say voice="alice">${escapeXml(introMessage)}</Say>`;
+  }
+
+  if (question && actionUrl) {
+    twiml += `<Gather input="speech dtmf" timeout="6" speechTimeout="auto" method="POST" action="${escapeXml(actionUrl)}">`;
+    twiml += `<Say voice="alice">${escapeXml(question)}</Say>`;
+    twiml += '</Gather>';
+    twiml += '<Say voice="alice">I did not receive a response. We will continue and a dispatcher can follow up.</Say>';
+  } else if (finishMessage) {
+    twiml += `<Say voice="alice">${escapeXml(finishMessage)}</Say>`;
+  }
+
+  twiml += '</Response>';
+  return twiml;
+}
+
+/**
  * Escape XML special characters
  * @param {string} text
  * @returns {string}
@@ -233,6 +262,7 @@ module.exports = {
   getCallDetails,
   getCallRecordingUrl,
   generateAiTwiml,
+  generateQuestionFlowTwiml,
   escapeXml,
   toE164,
   parseIncomingCallWebhook,
