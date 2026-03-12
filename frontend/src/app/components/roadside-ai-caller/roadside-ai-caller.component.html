@@ -1,0 +1,215 @@
+<div class="ai-caller-container">
+  <div class="panel ai-call-panel">
+    <h3>
+      <material-symbols icon="phone" class="icon"></material-symbols>
+      AI Voice Call
+    </h3>
+
+    <div class="call-info">
+      <div class="info-row">
+        <strong>Caller:</strong> {{ callerName }} ({{ getFormattedPhone(callerPhone) }})
+      </div>
+      <div class="info-row" *ngIf="callInitiated">
+        <strong>Call SID:</strong>
+        <span class="call-sid">
+          {{ callSid }}
+          <material-symbols
+            icon="content_copy"
+            class="icon-button"
+            (click)="copyCallSid()"
+            title="Copy Call SID"
+          ></material-symbols>
+        </span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="greeting">Greeting Message (Optional):</label>
+      <textarea
+        id="greeting"
+        [(ngModel)]="greetingMessage"
+        placeholder="Custom AI greeting message to play when call connects"
+        rows="3"
+      ></textarea>
+    </div>
+
+    <button
+      class="btn btn-primary"
+      (click)="initiateAiCall()"
+      [disabled]="initiatingCall || callInitiated"
+    >
+      <material-symbols icon="call" class="icon"></material-symbols>
+      {{ callInitiated ? 'Call Initiated' : 'Initiate AI Call' }}
+    </button>
+
+    <div class="alert alert-error" *ngIf="callError">
+      <material-symbols icon="error" class="icon"></material-symbols>
+      {{ callError }}
+    </div>
+
+    <!-- Recording Section -->
+    <div class="recording-section" *ngIf="callInitiated">
+      <h4>
+        <material-symbols icon="radio_button_checked" class="icon"></material-symbols>
+        Call Recording
+      </h4>
+      <p class="text-muted">Recordings are available after call completes (up to 10 minutes)</p>
+
+      <button
+        class="btn btn-secondary"
+        (click)="fetchRecording()"
+        [disabled]="fetchingRecording"
+      >
+        <material-symbols icon="download" class="icon"></material-symbols>
+        Fetch Recording
+      </button>
+
+      <div *ngIf="recordingUrl" class="recording-available">
+        <material-symbols icon="check_circle" class="icon success"></material-symbols>
+        <p>Recording available</p>
+        <button
+          class="btn btn-secondary"
+          (click)="openRecording()"
+        >
+          <material-symbols icon="play_circle" class="icon"></material-symbols>
+          Play Recording
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notifications Panel -->
+  <div class="panel notifications-panel">
+    <h3>
+      <material-symbols icon="mail" class="icon"></material-symbols>
+      Notifications & Alerts
+    </h3>
+
+    <!-- Notify Dispatcher -->
+    <div class="notification-section">
+      <h4>
+        <material-symbols icon="notifications_active" class="icon"></material-symbols>
+        Notify Dispatcher(s)
+      </h4>
+
+      <div class="form-group">
+        <label for="dispatcher-emails">Dispatcher Email(s):</label>
+        <textarea
+          id="dispatcher-emails"
+          [(ngModel)]="dispatcherEmailsText"
+          placeholder="dispatcher1@company.com, dispatcher2@company.com"
+          rows="2"
+        ></textarea>
+      </div>
+
+      <button
+        class="btn btn-primary"
+        (click)="notifyDispatcher()"
+        [disabled]="notifyingDispatcher || dispatcherNotified"
+      >
+        <material-symbols icon="send" class="icon"></material-symbols>
+        {{ dispatcherNotified ? 'Dispatcher Notified' : 'Notify Dispatcher' }}
+      </button>
+
+      <div class="alert alert-error" *ngIf="dispatcherNotifyError">
+        {{ dispatcherNotifyError }}
+      </div>
+    </div>
+
+    <!-- Notify Dispatch Assigned -->
+    <div class="notification-section">
+      <h4>
+        <material-symbols icon="assignment" class="icon"></material-symbols>
+        Dispatch Assigned
+      </h4>
+      <p class="text-muted">Send notification when vendor/dispatch is assigned</p>
+
+      <button
+        class="btn btn-secondary"
+        (click)="notifyDispatchAssigned()"
+        [disabled]="notifyingDispatchAssigned"
+      >
+        <material-symbols icon="send" class="icon"></material-symbols>
+        Notify Driver & Vendor
+      </button>
+
+      <div class="alert alert-error" *ngIf="dispatchAssignedError">
+        {{ dispatchAssignedError }}
+      </div>
+    </div>
+
+    <!-- Notify Call Resolved -->
+    <div class="notification-section">
+      <h4>
+        <material-symbols icon="task_alt" class="icon"></material-symbols>
+        Call Resolved
+      </h4>
+      <p class="text-muted">Send resolution confirmation to driver</p>
+
+      <button
+        class="btn btn-secondary"
+        (click)="notifyCallResolved()"
+        [disabled]="notifyingResolved"
+      >
+        <material-symbols icon="send" class="icon"></material-symbols>
+        Notify Resolution
+      </button>
+
+      <div class="alert alert-error" *ngIf="callResolvedError">
+        {{ callResolvedError }}
+      </div>
+    </div>
+
+    <!-- Notify Payment Contact -->
+    <div class="notification-section">
+      <h4>
+        <material-symbols icon="payment" class="icon"></material-symbols>
+        Billing Notification
+      </h4>
+      <p class="text-muted">Send invoice and billing details to payment contact</p>
+
+      <div class="form-group">
+        <label for="payment-email">Payment Email:</label>
+        <input
+          id="payment-email"
+          type="email"
+          [(ngModel)]="paymentEmail"
+          placeholder="billing@company.com"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="estimated-cost">Estimated Cost (Optional):</label>
+        <input
+          id="estimated-cost"
+          type="text"
+          [(ngModel)]="estimatedCost"
+          placeholder="$150.00"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="invoice-url">Invoice URL (Optional):</label>
+        <input
+          id="invoice-url"
+          type="url"
+          [(ngModel)]="invoiceUrl"
+          placeholder="https://..."
+        />
+      </div>
+
+      <button
+        class="btn btn-secondary"
+        (click)="notifyPayment()"
+        [disabled]="notifyingPayment"
+      >
+        <material-symbols icon="send" class="icon"></material-symbols>
+        Send Billing Notification
+      </button>
+
+      <div class="alert alert-error" *ngIf="paymentNotifyError">
+        {{ paymentNotifyError }}
+      </div>
+    </div>
+  </div>
+</div>

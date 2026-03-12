@@ -4,6 +4,8 @@ const { generateToken, hashToken } = require('./token-service');
 const notifications = require('./notification-service');
 const { getSignedUploadUrl } = require('../storage/r2-storage');
 const workOrdersService = require('./work-orders.service');
+const twilioService = require('./twilio.service');
+const roadsideEmailService = require('./roadside-email.service');
 const {
   normalizeRoadsideCallDraft,
   normalizeEnum,
@@ -717,6 +719,227 @@ async function getTimeline(callId, context = {}) {
   return { call_id: callId, events, locations };
 }
 
+/**
+ * Initiate an AI voice call to a phone number
+ * Uses Twilio to make the call with TwiML instructions
+ * @param {string} callId - Roadside call ID
+ * @param {string} toPhone - Recipient phone number
+ * @param {object} options
+ * @param {string} [options.message] - Initial greeting message
+ * @param {boolean} [options.autoAnswer] - Whether AI should auto-answer (default: true)
+ * @param {string} [options.userId] - User ID initiating the call
+ * @returns {Promise<{ success: boolean, twilio_call_sid?: string, error?: string }>}
+ */
+async function initiateAiCall(callId, toPhone, options = {}) {
+  try {
+    const call = await db('roadside_calls').where('id', callId).first();
+    if (!call) throw new Error('Roadside call not found');
+
+    // Default greeting message
+    const defaultMessage = `Hello ${call.caller_name || 'there'}. This is FleetNeuron AI roadside support. We've received your incident report and are here to help. `;
+    const message = options.message || defaultMessage;
+
+    // Initiate Twilio call
+    const result = await twilioService.initiateCall({
+      toPhone,
+      callId,
+      callerName: call.caller_name,
+      message
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to initiate Twilio call');
+    }
+
+    // Log event
+    await db('roadside_event_logs').insert({
+      call_id: callId,
+      event_type: 'AI_CALL_INITIATED',
+      actor_type: options.userId ? 'USER' : 'SYSTEM',
+      actor_id: options.userId || null,
+      occurred_at: db.fn.now(),
+      details: {
+        twilio_call_sid: result.callSid,
+        to_phone: toPhone,
+        auto_answer: options.autoAnswer !== false
+      }
+    });
+
+    dtLogger.info(`AI call initiated for roadside call ${callId} - Twilio SID: ${result.callSid}`);
+    return { success: true, twilio_call_sid: result.callSid };
+  } catch (error) {
+    dtLogger.error(`Failed to initiate AI call for ${callId}: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send notification emails to dispatcher when a new call is created
+ * @param {string} callId - Roadside call ID
+ * @param {object} dispatcherContext - { emails: [], url: '' }
+ * @returns {Promise<object>} Result with sent boolean and error details
+ */
+async function notifyDispatcherNewCall(callId, dispatcherContext = {}) {
+  try {
+    const call = await db('roadside_calls').where('id', callId).first();
+    if (!call) throw new Error('Call not found');
+
+    if (!dispatcherContext.emails || dispatcherContext.emails.length === 0) {
+      dtLogger.debug(`No dispatcher emails configured for call ${callId}`);
+      return { sent: true, skipped: true };
+    }
+
+    const dispatcherUrl = dispatcherContext.url ? `${dispatcherContext.url}?callId=${callId}` : null;
+    const results = [];
+
+    for (const email of dispatcherContext.emails) {
+      const result = await roadsideEmailService.sendCallCreatedNotification({
+        dispatcherEmail: email,
+        callNumber: call.call_number,
+        callerName: call.caller_name,
+        callerPhone: call.caller_phone,
+        issueType: call.issue_type || 'Unknown',
+        urgency: call.urgency,
+        location: call.location_snapshot?.dispatch_location_label,
+        dispatcherUrl
+      });
+      results.push({ email, ...result });
+    }
+
+    return { sent: results.some(r => r.sent), results };
+  } catch (error) {
+    dtLogger.error(`Failed to notify dispatcher for call ${callId}: ${error.message}`);
+    return { sent: false, error: error.message };
+  }
+}
+
+/**
+ * Send notification emails when dispatch is assigned
+ * @param {string} callId - Roadside call ID
+ * @param {object} notificationConfig
+ * @param {string} [notificationConfig.driverEmail]
+ * @param {string} [notificationConfig.driverPhone]
+ * @param {string} [notificationConfig.vendorEmail]
+ * @param {string} [notificationConfig.publicPortalUrl]
+ * @returns {Promise<object>}
+ */
+async function notifyDispatchAssigned(callId, notificationConfig = {}) {
+  try {
+    const call = await db('roadside_calls').where('id', callId).first();
+    const dispatch = await db('roadside_dispatch_assignments')
+      .where('call_id', callId)
+      .orderBy('created_at', 'desc')
+      .first();
+
+    if (!call || !dispatch) throw new Error('Call or dispatch not found');
+
+    const result = await roadsideEmailService.sendDispatchAssignedNotification({
+      driverEmail: notificationConfig.driverEmail || call.caller_email,
+      driverPhone: notificationConfig.driverPhone || call.caller_phone,
+      callNumber: call.call_number,
+      vendorName: dispatch.assigned_vendor_name,
+      vendorPhone: dispatch.assigned_vendor_phone,
+      eta: dispatch.eta_minutes ? `${dispatch.eta_minutes} minutes` : 'TBD',
+      vendorEmail: notificationConfig.vendorEmail,
+      publicPortalUrl: notificationConfig.publicPortalUrl
+    });
+
+    dtLogger.info(`Dispatch assigned notification sent for call ${callId}`);
+    return result;
+  } catch (error) {
+    dtLogger.error(`Failed to notify dispatch assigned for call ${callId}: ${error.message}`);
+    return { sent: false, error: error.message };
+  }
+}
+
+/**
+ * Send notification emails when call is resolved
+ * @param {string} callId - Roadside call ID
+ * @param {object} notificationConfig
+ * @param {string} [notificationConfig.driverEmail]
+ * @param {string} [notificationConfig.resolutionNotes]
+ * @param {string} [notificationConfig.dispatcherEmail]
+ * @returns {Promise<object>}
+ */
+async function notifyCallResolved(callId, notificationConfig = {}) {
+  try {
+    const call = await db('roadside_calls').where('id', callId).first();
+    if (!call) throw new Error('Call not found');
+
+    const result = await roadsideEmailService.sendCallResolvedNotification({
+      driverEmail: notificationConfig.driverEmail || call.caller_email,
+      callNumber: call.call_number,
+      resolutionNotes: notificationConfig.resolutionNotes,
+      dispatcherEmail: notificationConfig.dispatcherEmail
+    });
+
+    dtLogger.info(`Call resolved notification sent for ${callId}`);
+    return result;
+  } catch (error) {
+    dtLogger.error(`Failed to notify call resolved for ${callId}: ${error.message}`);
+    return { sent: false, error: error.message };
+  }
+}
+
+/**
+ * Send billing/payment contact notification
+ * @param {string} callId - Roadside call ID
+ * @param {object} notificationConfig
+ * @param {string} [notificationConfig.paymentEmail]
+ * @param {string} [notificationConfig.estimatedCost]
+ * @param {string} [notificationConfig.invoiceUrl]
+ * @returns {Promise<object>}
+ */
+async function notifyPaymentContact(callId, notificationConfig = {}) {
+  try {
+    const call = await db('roadside_calls').where('id', callId).first();
+    if (!call) throw new Error('Call not found');
+
+    const paymentEmail = notificationConfig.paymentEmail ||
+      call.location_snapshot?.payment_email ||
+      call.caller_email;
+
+    if (!paymentEmail) {
+      return { sent: false, error: 'No payment email found' };
+    }
+
+    const result = await roadsideEmailService.sendPaymentContactNotification({
+      paymentEmail,
+      callNumber: call.call_number,
+      companyName: call.location_snapshot?.company_name || 'N/A',
+      estimatedCost: notificationConfig.estimatedCost,
+      invoiceUrl: notificationConfig.invoiceUrl
+    });
+
+    dtLogger.info(`Payment contact notification sent for ${callId}`);
+    return result;
+  } catch (error) {
+    dtLogger.error(`Failed to notify payment contact for ${callId}: ${error.message}`);
+    return { sent: false, error: error.message };
+  }
+}
+
+/**
+ * Get Twilio call recording URL
+ * @param {string} callId - Roadside call ID
+ * @returns {Promise<string|null>}
+ */
+async function getTwilioCallRecording(callId) {
+  try {
+    const event = await db('roadside_event_logs')
+      .where({ call_id: callId, event_type: 'AI_CALL_INITIATED' })
+      .first();
+
+    if (!event?.details?.twilio_call_sid) return null;
+
+    const recordingUrl = await twilioService.getCallRecordingUrl(event.details.twilio_call_sid);
+    return recordingUrl;
+  } catch (error) {
+    dtLogger.error(`Failed to get recording for ${callId}: ${error.message}`);
+    return null;
+  }
+}
+
 module.exports = {
   createCall,
   listCalls,
@@ -735,5 +958,11 @@ module.exports = {
   addMedia,
   addPublicMedia,
   markPublicTokenUsed,
-  getTimeline
+  getTimeline,
+  initiateAiCall,
+  notifyDispatcherNewCall,
+  notifyDispatchAssigned,
+  notifyCallResolved,
+  notifyPaymentContact,
+  getTwilioCallRecording
 };
