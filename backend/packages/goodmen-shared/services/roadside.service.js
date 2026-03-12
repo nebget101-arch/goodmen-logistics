@@ -17,6 +17,15 @@ const {
   resolveConfidenceTier
 } = require('./roadside-domain');
 
+const DEFAULT_INBOUND_AI_QUESTIONS = Object.freeze([
+  'Can you briefly describe what happened to the vehicle?',
+  'Is the driver currently in a safe location?',
+  'Are there immediate hazards such as smoke, leaking fluids, or traffic exposure?',
+  'What is the vehicle or unit number involved?',
+  'Do you need roadside repair, a tow, or both?',
+  'What is your exact location or nearest landmark?'
+]);
+
 function scopeCallsQuery(queryBuilder, context = {}, tableAlias = 'roadside_calls') {
   if (!context?.isGlobalAdmin && context?.tenantId) {
     queryBuilder.andWhere(`${tableAlias}.tenant_id`, context.tenantId);
@@ -71,6 +80,192 @@ async function logEvent(trx, callId, eventType, actorType = 'SYSTEM', actorId = 
   });
 }
 
+function getAiQuestionsFromCall(call = {}, events = []) {
+  const snapshotQuestions = call?.location_snapshot?.ai_intake?.questions;
+  if (Array.isArray(snapshotQuestions) && snapshotQuestions.length) {
+    return snapshotQuestions;
+  }
+
+  const eventQuestions = events.find((event) => Array.isArray(event?.event_payload?.questions))?.event_payload?.questions;
+  if (Array.isArray(eventQuestions) && eventQuestions.length) {
+    return eventQuestions;
+  }
+
+  return [];
+}
+
+function enrichCallWithAiQuestions(call = {}, events = []) {
+  const aiQuestions = getAiQuestionsFromCall(call, events);
+  return {
+    ...call,
+    ai_questions: aiQuestions,
+    ai_questions_preview: aiQuestions.slice(0, 3)
+  };
+}
+
+function buildQaHistory(transcript = []) {
+  if (!Array.isArray(transcript) || !transcript.length) return [];
+
+  const buckets = new Map();
+
+  transcript.forEach((entry) => {
+    const questionIndex = Number.isFinite(Number(entry?.question_index))
+      ? Number(entry.question_index)
+      : null;
+
+    if (questionIndex == null) return;
+
+    if (!buckets.has(questionIndex)) {
+      buckets.set(questionIndex, {
+        question_index: questionIndex,
+        question: null,
+        answer: null,
+        answer_confidence: null,
+        answer_input_type: null,
+        asked_at: null,
+        answered_at: null
+      });
+    }
+
+    const bucket = buckets.get(questionIndex);
+    if ((entry?.role === 'assistant' || entry?.type === 'question') && entry?.text) {
+      bucket.question = entry.text;
+      bucket.asked_at = entry.timestamp || bucket.asked_at;
+    }
+
+    if ((entry?.role === 'driver' || entry?.type === 'answer') && entry?.text) {
+      bucket.answer = entry.text;
+      bucket.answered_at = entry.timestamp || bucket.answered_at;
+      bucket.answer_confidence = entry.confidence ?? bucket.answer_confidence;
+      bucket.answer_input_type = entry.input_type || bucket.answer_input_type;
+    }
+  });
+
+  return Array.from(buckets.values()).sort((a, b) => a.question_index - b.question_index);
+}
+
+function enrichCallWithQaHistory(call = {}, transcript = []) {
+  const aiQaHistory = buildQaHistory(transcript);
+  const aiAnswersPreview = aiQaHistory
+    .filter((entry) => !!entry.answer)
+    .map((entry) => ({ question_index: entry.question_index, answer: entry.answer }))
+    .slice(0, 3);
+
+  return {
+    ...call,
+    ai_qa_history: aiQaHistory,
+    ai_answers_preview: aiAnswersPreview
+  };
+}
+
+async function getOrCreateActiveSession(callId, options = {}) {
+  let session = await db('roadside_sessions')
+    .where({ call_id: callId, session_status: 'ACTIVE' })
+    .orderBy('started_at', 'desc')
+    .first();
+
+  if (session) return session;
+
+  const [created] = await db('roadside_sessions')
+    .insert({
+      call_id: callId,
+      session_status: 'ACTIVE',
+      ai_model: options.ai_model || 'twilio-voice-intake',
+      prompt_version: options.prompt_version || 'twilio-v1',
+      transcript: []
+    })
+    .returning('*');
+
+  return created;
+}
+
+async function appendSessionTranscript(callId, entry = {}, options = {}) {
+  if (!callId) return null;
+
+  return db.transaction(async (trx) => {
+    let session = null;
+
+    if (options.sessionId) {
+      session = await trx('roadside_sessions').where({ id: options.sessionId }).first();
+    }
+
+    if (!session) {
+      session = await trx('roadside_sessions')
+        .where({ call_id: callId, session_status: 'ACTIVE' })
+        .orderBy('started_at', 'desc')
+        .first();
+    }
+
+    if (!session) {
+      const [created] = await trx('roadside_sessions')
+        .insert({
+          call_id: callId,
+          session_status: 'ACTIVE',
+          ai_model: options.ai_model || 'twilio-voice-intake',
+          prompt_version: options.prompt_version || 'twilio-v1',
+          transcript: []
+        })
+        .returning('*');
+      session = created;
+    }
+
+    const transcript = Array.isArray(session.transcript) ? [...session.transcript] : [];
+    transcript.push({
+      timestamp: new Date().toISOString(),
+      role: entry.role || 'system',
+      type: entry.type || null,
+      text: entry.text || '',
+      question_index: Number.isFinite(Number(entry.question_index)) ? Number(entry.question_index) : null,
+      call_sid: entry.call_sid || null,
+      input_type: entry.input_type || null,
+      confidence: entry.confidence ?? null
+    });
+
+    await trx('roadside_sessions')
+      .where({ id: session.id })
+      .update({
+        transcript,
+        updated_at: trx.fn.now()
+      });
+
+    return session.id;
+  });
+}
+
+async function appendInboundAiQuestion(callId, payload = {}) {
+  return appendSessionTranscript(callId, {
+    role: 'assistant',
+    type: 'question',
+    text: payload.question || '',
+    question_index: payload.question_index,
+    call_sid: payload.call_sid || null
+  });
+}
+
+async function appendInboundAiAnswer(callId, payload = {}) {
+  return appendSessionTranscript(callId, {
+    role: 'driver',
+    type: 'answer',
+    text: payload.answer || '',
+    question_index: payload.question_index,
+    call_sid: payload.call_sid || null,
+    input_type: payload.input_type || null,
+    confidence: payload.confidence ?? null
+  });
+}
+
+async function endActiveSession(callId) {
+  if (!callId) return;
+
+  await db('roadside_sessions')
+    .where({ call_id: callId, session_status: 'ACTIVE' })
+    .update({
+      session_status: 'ENDED',
+      ended_at: db.fn.now(),
+      updated_at: db.fn.now()
+    });
+}
+
 async function createCall(payload = {}, userId = null, context = {}) {
   return db.transaction(async (trx) => {
     const normalized = normalizeRoadsideCallDraft(payload);
@@ -109,6 +304,132 @@ async function createCall(payload = {}, userId = null, context = {}) {
   });
 }
 
+async function findCallByTwilioCallSid(callSid) {
+  if (!callSid) return null;
+
+  const event = await db('roadside_event_logs')
+    .whereRaw("event_payload ->> 'twilio_call_sid' = ?", [callSid])
+    .orderBy('occurred_at', 'desc')
+    .first('call_id');
+
+  if (!event?.call_id) return null;
+
+  return db('roadside_calls').where({ id: event.call_id }).first();
+}
+
+async function createInboundTwilioCall(callData = {}) {
+  const existingCall = await findCallByTwilioCallSid(callData.callSid);
+  if (existingCall) {
+    return existingCall;
+  }
+
+  return db.transaction(async (trx) => {
+    const normalized = normalizeRoadsideCallDraft({
+      source_channel: 'PHONE',
+      caller_phone: callData.from || null,
+      incident_summary: 'Inbound Twilio voice call received'
+    });
+    const aiQuestions = [...DEFAULT_INBOUND_AI_QUESTIONS];
+    const callNumber = await generateCallNumber(trx);
+
+    const [created] = await trx('roadside_calls')
+      .insert({
+        call_number: callNumber,
+        tenant_id: null,
+        operating_entity_id: null,
+        source_channel: normalized.source_channel,
+        caller_name: normalized.caller_name,
+        caller_phone: normalized.caller_phone,
+        caller_email: normalized.caller_email,
+        driver_id: null,
+        customer_id: null,
+        unit_id: null,
+        trailer_id: null,
+        issue_type: normalized.issue_type,
+        incident_summary: normalized.incident_summary,
+        urgency: normalized.urgency,
+        status: normalized.status,
+        location_snapshot: {
+          ai_intake: {
+            source: 'TWILIO_VOICE',
+            status: 'ASKED',
+            questions: aiQuestions
+          },
+          twilio: {
+            call_sid: callData.callSid || null,
+            account_sid: callData.accountSid || null,
+            to: callData.to || null,
+            from: callData.from || null,
+            direction: callData.direction || null,
+            initial_status: callData.callStatus || null,
+            api_version: callData.apiVersion || null
+          }
+        },
+        created_by: null,
+        updated_by: null
+      })
+      .returning('*');
+
+    await logEvent(trx, created.id, 'CALL_CREATED', 'SYSTEM', null, {
+      source_channel: created.source_channel,
+      urgency: created.urgency,
+      status: created.status,
+      created_from: 'TWILIO_INBOUND'
+    });
+
+    await logEvent(trx, created.id, 'TWILIO_INBOUND_CALL_RECEIVED', 'SYSTEM', null, {
+      twilio_call_sid: callData.callSid || null,
+      twilio_account_sid: callData.accountSid || null,
+      from_phone: callData.from || null,
+      to_phone: callData.to || null,
+      call_status: callData.callStatus || null,
+      direction: callData.direction || null,
+      api_version: callData.apiVersion || null,
+      questions: aiQuestions
+    });
+
+    return created;
+  });
+}
+
+async function logTwilioCallStatus(callId, statusData = {}) {
+  if (!callId) return;
+
+  await db('roadside_event_logs').insert({
+    call_id: callId,
+    event_type: 'TWILIO_CALL_STATUS_UPDATED',
+    actor_type: 'SYSTEM',
+    actor_id: null,
+    occurred_at: db.fn.now(),
+    event_payload: {
+      twilio_call_sid: statusData.callSid || null,
+      call_status: statusData.callStatus || null,
+      call_duration: statusData.callDuration || null,
+      recording_url: statusData.recordingUrl || null,
+      recording_sid: statusData.recordingSid || null
+    }
+  });
+}
+
+async function logTwilioRecording(callId, recordingData = {}) {
+  if (!callId) return;
+
+  await db('roadside_event_logs').insert({
+    call_id: callId,
+    event_type: 'TWILIO_RECORDING_AVAILABLE',
+    actor_type: 'SYSTEM',
+    actor_id: null,
+    occurred_at: db.fn.now(),
+    event_payload: {
+      twilio_call_sid: recordingData.callSid || null,
+      recording_sid: recordingData.recordingSid || null,
+      recording_url: recordingData.recordingUrl || null,
+      recording_status: recordingData.recordingStatus || null,
+      recording_duration: recordingData.recordingDuration || null
+    }
+  });
+}
+
 async function listCalls(filters = {}, context = {}) {
   const limit = Math.min(Math.max(Number(filters.limit || 25), 1), 100);
   const query = db('roadside_calls').modify((qb) => scopeCallsQuery(qb, context));
@@ -123,7 +444,26 @@ async function listCalls(filters = {}, context = {}) {
     query.andWhere('driver_id', filters.driver_id);
   }
 
-  return query.orderBy('opened_at', 'desc').limit(limit);
+  const rows = await query.orderBy('opened_at', 'desc').limit(limit);
+  if (!rows.length) return rows;
+
+  const callIds = rows.map((row) => row.id).filter(Boolean);
+  const sessions = await db('roadside_sessions')
+    .whereIn('call_id', callIds)
+    .orderBy('updated_at', 'desc');
+
+  const latestSessionByCallId = new Map();
+  sessions.forEach((session) => {
+    if (!latestSessionByCallId.has(session.call_id)) {
+      latestSessionByCallId.set(session.call_id, session);
+    }
+  });
+
+  return rows.map((row) => {
+    const base = enrichCallWithAiQuestions(row);
+    const session = latestSessionByCallId.get(row.id);
+    return enrichCallWithQaHistory(base, session?.transcript || []);
+  });
 }
 
 async function getCall(callId, context = {}) {
@@ -141,8 +481,18 @@ async function getCall(callId, context = {}) {
     db('roadside_event_logs').where({ call_id: callId }).orderBy('occurred_at', 'desc').limit(50)
   ]);
 
+  const latestSession = await db('roadside_sessions')
+    .where({ call_id: callId })
+    .orderBy('updated_at', 'desc')
+    .first();
+
+  const enrichedCall = enrichCallWithQaHistory(
+    enrichCallWithAiQuestions(call, recentEvents || []),
+    latestSession?.transcript || []
+  );
+
   return {
-    ...call,
+    ...enrichedCall,
     intake: latestIntake || null,
     ai_assessment: latestAssessment || null,
     dispatch: latestDispatch || null,
@@ -758,7 +1108,7 @@ async function initiateAiCall(callId, toPhone, options = {}) {
       actor_type: options.userId ? 'USER' : 'SYSTEM',
       actor_id: options.userId || null,
       occurred_at: db.fn.now(),
-      details: {
+      event_payload: {
         twilio_call_sid: result.callSid,
         to_phone: toPhone,
         auto_answer: options.autoAnswer !== false
@@ -930,9 +1280,10 @@ async function getTwilioCallRecording(callId) {
       .where({ call_id: callId, event_type: 'AI_CALL_INITIATED' })
       .first();
 
-    if (!event?.details?.twilio_call_sid) return null;
+    const twilioCallSid = event?.event_payload?.twilio_call_sid || event?.details?.twilio_call_sid;
+    if (!twilioCallSid) return null;
 
-    const recordingUrl = await twilioService.getCallRecordingUrl(event.details.twilio_call_sid);
+    const recordingUrl = await twilioService.getCallRecordingUrl(twilioCallSid);
     return recordingUrl;
   } catch (error) {
     dtLogger.error(`Failed to get recording for ${callId}: ${error.message}`);
@@ -959,6 +1310,15 @@ module.exports = {
   addPublicMedia,
   markPublicTokenUsed,
   getTimeline,
+  findCallByTwilioCallSid,
+  createInboundTwilioCall,
+  getOrCreateActiveSession,
+  appendSessionTranscript,
+  appendInboundAiQuestion,
+  appendInboundAiAnswer,
+  endActiveSession,
+  logTwilioCallStatus,
+  logTwilioRecording,
   initiateAiCall,
   notifyDispatcherNewCall,
   notifyDispatchAssigned,

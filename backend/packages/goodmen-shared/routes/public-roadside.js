@@ -97,20 +97,88 @@ router.post('/:callId/complete', async (req, res) => {
 // POST /webhooks/twilio/call?callId=...
 router.post('/webhooks/call', async (req, res) => {
   try {
-    const callId = req.query?.callId;
     const callData = twilioService.parseIncomingCallWebhook(req);
+    let call = null;
+    let callId = req.query?.callId;
+
+    const webhookBaseUrl = `${req.protocol}://${req.get('host')}${req.baseUrl}${req.path}`;
+    const questionIndexRaw = Number(req.query?.q);
+    const hasQuestionIndex = Number.isInteger(questionIndexRaw) && questionIndexRaw >= 0;
+
+    const speechAnswer = String(req.body?.SpeechResult || '').trim();
+    const digitAnswer = String(req.body?.Digits || '').trim();
+    const answerText = speechAnswer || digitAnswer;
+    const answerInputType = speechAnswer ? 'speech' : (digitAnswer ? 'dtmf' : null);
+    const confidence = Number.isFinite(Number(req.body?.Confidence)) ? Number(req.body.Confidence) : null;
+
+    if (callId) {
+      call = await roadsideService.getCall(callId, { isGlobalAdmin: true });
+    } else {
+      const created = await roadsideService.createInboundTwilioCall(callData);
+      callId = created?.id;
+      call = callId ? await roadsideService.getCall(callId, { isGlobalAdmin: true }) : null;
+    }
+
+    if (!callId || !call) {
+      throw new Error('Unable to resolve or create roadside call for Twilio webhook');
+    }
+
+    if (answerText && hasQuestionIndex) {
+      await roadsideService.appendInboundAiAnswer(callId, {
+        answer: answerText,
+        question_index: questionIndexRaw,
+        call_sid: callData.callSid,
+        input_type: answerInputType,
+        confidence
+      });
+
+      call = await roadsideService.getCall(callId, { isGlobalAdmin: true });
+    }
 
     dtLogger.info(`Twilio call webhook received for ${callId}`, {
       callSid: callData.callSid,
-      callStatus: callData.callStatus
+      callStatus: callData.callStatus,
+      from: callData.from,
+      questionIndex: hasQuestionIndex ? questionIndexRaw : null,
+      answerCaptured: !!answerText
     });
 
-    // Generate TwiML response for Twilio
-    const twiml = twilioService.generateAiTwiml({
-      message: `Thank you for calling FleetNeuron AI Roadside Support. Your call is being connected to our support team.`,
-      collectDtmf: null,
-      transferTo: null
-    });
+    const questions = Array.isArray(call?.ai_questions) ? call.ai_questions : [];
+    const nextQuestionIndex = hasQuestionIndex
+      ? (answerText ? questionIndexRaw + 1 : questionIndexRaw)
+      : 0;
+
+    let twiml = '';
+
+    if (nextQuestionIndex < questions.length) {
+      const nextQuestion = questions[nextQuestionIndex];
+      const alreadyLogged = Array.isArray(call?.ai_qa_history)
+        ? call.ai_qa_history.some((entry) => entry.question_index === nextQuestionIndex && !!entry.question)
+        : false;
+
+      if (!alreadyLogged) {
+        await roadsideService.appendInboundAiQuestion(callId, {
+          question: nextQuestion,
+          question_index: nextQuestionIndex,
+          call_sid: callData.callSid
+        });
+      }
+
+      const introMessage = !hasQuestionIndex
+        ? `Thank you for calling FleetNeuron AI Roadside Support. Your roadside request ${call.call_number || ''} has been created. Please answer a few quick questions.`
+        : (!answerText ? 'I did not hear a response. Please answer the next question.' : null);
+
+      const actionUrl = `${webhookBaseUrl}?callId=${encodeURIComponent(callId)}&q=${nextQuestionIndex}`;
+      twiml = twilioService.generateQuestionFlowTwiml({
+        introMessage,
+        question: nextQuestion,
+        actionUrl
+      });
+    } else {
+      twiml = twilioService.generateQuestionFlowTwiml({
+        finishMessage: 'Thank you. We captured your responses and will dispatch support shortly. Goodbye.'
+      });
+    }
 
     res.type('text/xml');
     res.send(twiml);
@@ -124,8 +192,13 @@ router.post('/webhooks/call', async (req, res) => {
 // POST /webhooks/twilio/status?callId=...
 router.post('/webhooks/status', async (req, res) => {
   try {
-    const callId = req.query?.callId;
     const statusData = twilioService.parseCallStatusWebhook(req);
+    let callId = req.query?.callId;
+
+    if (!callId && statusData.callSid) {
+      const call = await roadsideService.findCallByTwilioCallSid(statusData.callSid);
+      callId = call?.id;
+    }
 
     dtLogger.info(`Twilio call status update for ${callId}`, {
       callSid: statusData.callSid,
@@ -133,9 +206,12 @@ router.post('/webhooks/status', async (req, res) => {
       callDuration: statusData.callDuration
     });
 
-    // Log event in roadside call
-    // Update roadside_event_logs with call status
-    // This would be connected to the call data for analytics
+    if (callId) {
+      await roadsideService.logTwilioCallStatus(callId, statusData);
+      if (['completed', 'canceled', 'busy', 'failed', 'no-answer'].includes(String(statusData.callStatus || '').toLowerCase())) {
+        await roadsideService.endActiveSession(callId);
+      }
+    }
 
     res.json({ ok: true });
   } catch (error) {
@@ -148,8 +224,13 @@ router.post('/webhooks/status', async (req, res) => {
 // POST /webhooks/twilio/recording?callId=...
 router.post('/webhooks/recording', async (req, res) => {
   try {
-    const callId = req.query?.callId;
     const recordingData = twilioService.parseRecordingWebhook(req);
+    let callId = req.query?.callId;
+
+    if (!callId && recordingData.callSid) {
+      const call = await roadsideService.findCallByTwilioCallSid(recordingData.callSid);
+      callId = call?.id;
+    }
 
     dtLogger.info(`Twilio recording webhook for ${callId}`, {
       recordingSid: recordingData.recordingSid,
@@ -157,8 +238,9 @@ router.post('/webhooks/recording', async (req, res) => {
       recordingDuration: recordingData.recordingDuration
     });
 
-    // Store recording metadata in roadside_event_logs
-    // Create media record with recording URL
+    if (callId) {
+      await roadsideService.logTwilioRecording(callId, recordingData);
+    }
 
     res.json({ ok: true });
   } catch (error) {
