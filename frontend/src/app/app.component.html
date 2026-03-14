@@ -14,7 +14,7 @@
     <nav class="sidebar-nav" (click)="onSidebarNavClick($event); closeUserMenu()" (keydown.enter)="closeSidebar()">
       <ul class="nav-links">
         <ng-container *ngFor="let link of navTopLinks">
-          <li *ngIf="access.canSee(link.tab)">
+          <li *ngIf="canSeeLink(link)">
             <a [routerLink]="link.path" routerLinkActive="active">
               <span class="nav-icon material-symbols-outlined" *ngIf="link.icon">{{ link.icon }}</span>
               {{ link.label }}
@@ -80,12 +80,9 @@
               <span class="material-symbols-outlined">person_add</span> Add User
             </a>
           </ng-container>
-          <ng-container *ngIf="access.hasAnyPermission(['roles.manage', 'access.admin', 'users.edit'])">
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/multi-mc', ['roles.manage', 'access.admin', 'users.edit'])">
             <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">domain</span> Company Access Admin
-            </a>
-            <a routerLink="/admin/trial-requests" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
-              <span class="material-symbols-outlined">approval</span> Trial Requests
             </a>
           </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
@@ -139,12 +136,9 @@
               <span class="material-symbols-outlined">person_add</span> Add User
             </a>
           </ng-container>
-          <ng-container *ngIf="access.hasAnyPermission(['roles.manage', 'access.admin', 'users.edit'])">
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/multi-mc', ['roles.manage', 'access.admin', 'users.edit'])">
             <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">domain</span> Company Access Admin
-            </a>
-            <a routerLink="/admin/trial-requests" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
-              <span class="material-symbols-outlined">approval</span> Trial Requests
             </a>
           </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
@@ -170,10 +164,10 @@
       type="button"
         *ngIf="isLoggedIn() && !isShelllessRoute()"
       (click)="toggleAiChat()"
-      aria-label="Open FleetNeuron AI assistant"
+      aria-label="Open Ask Neuron assistant"
     >
-      <span class="material-symbols-outlined">chat</span>
-      <span class="ai-chat-launcher-label">Ask AI</span>
+      <span class="material-symbols-outlined">psychology_alt</span>
+      <span class="ai-chat-launcher-label">Ask Neuron</span>
     </button>
 
     <section class="ai-chat-panel" *ngIf="aiChatOpen && isLoggedIn() && !isShelllessRoute()">

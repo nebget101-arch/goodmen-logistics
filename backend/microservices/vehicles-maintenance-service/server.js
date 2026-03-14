@@ -62,6 +62,9 @@ const workOrdersRouter = require('@goodmen/shared/routes/work-orders-hub');
 const partsRouter = require('@goodmen/shared/routes/parts');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
+const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
+
+const requirePartsPlan = requirePlanAccess('/parts');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
@@ -69,7 +72,7 @@ app.use('/api/vehicles', authMiddleware, tenantContextMiddleware, vehiclesRouter
 app.use('/api/maintenance', authMiddleware, tenantContextMiddleware, maintenanceRouter);
 app.use('/api/equipment', authMiddleware, tenantContextMiddleware, equipmentRouter);
 app.use('/api/work-orders', authMiddleware, tenantContextMiddleware, workOrdersRouter);
-app.use('/api/parts', authMiddleware, tenantContextMiddleware, partsRouter);
+app.use('/api/parts', authMiddleware, tenantContextMiddleware, requirePartsPlan, partsRouter);
 
 /**
  * @openapi

@@ -320,6 +320,18 @@
   cursor: pointer;
 }
 
+.activation-link-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.activation-link-wrap a {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .btn-outline {
   border-color: rgba(100, 116, 139, 0.9);
 }

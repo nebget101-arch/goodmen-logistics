@@ -118,6 +118,17 @@
                   <span class="material-symbols-outlined">close</span>
                   Reject
                 </button>
+
+                <button
+                  type="button"
+                  class="btn-sm btn-outline"
+                  *ngIf="canGetSignupLink(record)"
+                  [disabled]="actionLoadingId === record.id"
+                  (click)="getActivationLink(record)"
+                >
+                  <span class="material-symbols-outlined">link</span>
+                  Get signup link
+                </button>
               </div>
             </td>
           </tr>
@@ -179,6 +190,27 @@
       <div class="detail-item">
         <span class="label">Updated</span>
         <span>{{ formatDate(selectedRecord.updated_at || selectedRecord.created_at) }}</span>
+      </div>
+
+      <div class="detail-item full" *ngIf="activationLink && activationRequestId === selectedRecord.id">
+        <span class="label">Manual signup link (fallback)</span>
+        <div class="activation-link-wrap">
+          <a [href]="activationLink" target="_blank" rel="noopener">{{ activationLink }}</a>
+          <button type="button" class="btn-sm btn-outline" (click)="copyActivationLink()">
+            <span class="material-symbols-outlined">content_copy</span>
+            Copy
+          </button>
+          <button
+            type="button"
+            class="btn-sm btn-outline"
+            [disabled]="actionLoadingId === selectedRecord.id"
+            (click)="getActivationLink(selectedRecord, true)"
+          >
+            <span class="material-symbols-outlined">sync</span>
+            Regenerate
+          </button>
+        </div>
+        <small *ngIf="activationExpiresAt">Expires: {{ formatDate(activationExpiresAt) }}</small>
       </div>
     </div>
   </section>

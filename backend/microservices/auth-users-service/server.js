@@ -1,11 +1,15 @@
-require('dotenv').config();
+const dotenv = require('dotenv');
+const path = require('path');
+
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
-const path = require('path');
+
 
 const dbConfig = require('@goodmen/shared/config/database');
 const knex = require('@goodmen/shared/config/knex');

@@ -43,6 +43,9 @@ export class TrialRequestsAdminComponent implements OnInit {
 
   selectedRecord: TrialRequestRecord | null = null;
   actionLoadingId: string | null = null;
+  activationLink = '';
+  activationExpiresAt = '';
+  activationRequestId = '';
 
   readonly statusOptions: Array<{ value: TrialRequestStatus | 'all'; label: string }> = [
     { value: 'all', label: 'All statuses' },
@@ -107,6 +110,80 @@ export class TrialRequestsAdminComponent implements OnInit {
     this.selectedRecord = this.selectedRecord?.id === record.id ? null : record;
   }
 
+  getActivationLink(record: TrialRequestRecord, regenerate = false): void {
+    this.error = '';
+    this.message = '';
+    this.actionLoadingId = record.id;
+
+    this.api.getTrialRequestActivationLink(record.id, regenerate).subscribe({
+      next: (res: any) => {
+        const data = res?.data || {};
+        this.activationLink = String(data.activationLink || '').trim();
+        this.activationExpiresAt = String(data.activationExpiresAt || '').trim();
+        this.activationRequestId = record.id;
+        this.actionLoadingId = null;
+
+        if (!this.activationLink) {
+          this.message = 'Activation link is not available for this request.';
+          return;
+        }
+
+        this.copyActivationLink(false)
+          .then((copied) => {
+            this.message = copied
+              ? 'Signup link generated and copied. Share it with the customer.'
+              : 'Signup link ready. Copy failed automatically — please use the Copy button.';
+          })
+          .catch(() => {
+            this.message = 'Signup link ready. Copy failed automatically — please use the Copy button.';
+          });
+      },
+      error: (err: any) => {
+        this.error = err?.error?.error || 'Failed to get activation link';
+        this.actionLoadingId = null;
+      }
+    });
+  }
+
+  async copyActivationLink(showSuccessMessage = true): Promise<boolean> {
+    if (!this.activationLink) return false;
+    const text = this.activationLink;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = text;
+        input.setAttribute('readonly', 'true');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(input);
+        if (!copied) throw new Error('Clipboard copy command failed');
+      }
+
+      if (showSuccessMessage) {
+        this.message = 'Activation link copied.';
+      }
+      return true;
+    } catch {
+      this.openCopyPrompt(text);
+      this.error = 'Auto-copy is blocked by your browser. A copy dialog was opened.';
+      return false;
+    }
+  }
+
+  private openCopyPrompt(text: string): void {
+    try {
+      window.prompt('Copy this signup link:', text);
+    } catch {
+      // no-op: keep existing message if prompt is not available
+    }
+  }
+
   approve(record: TrialRequestRecord): void {
     this.updateStatus(record, 'approved', 'Trial request approved.');
   }
@@ -135,8 +212,23 @@ export class TrialRequestsAdminComponent implements OnInit {
         if (this.selectedRecord?.id === record.id) {
           this.selectedRecord = { ...record, ...updated };
         }
+
+        if (status === 'approved') {
+          const activationLink = String(res?.emailDelivery?.activationLink || '').trim();
+          if (activationLink) {
+            this.activationLink = activationLink;
+            this.activationExpiresAt = String(res?.emailDelivery?.activationExpiresAt || '').trim();
+            this.activationRequestId = record.id;
+          }
+          const emailSent = Boolean(res?.emailDelivery?.requesterApprovedNotificationSent);
+          this.message = emailSent
+            ? `${successMessage} Approval email sent to requester.`
+            : `${successMessage} Approval email failed; share the activation link manually.`;
+        } else {
+          this.message = successMessage;
+        }
+
         this.actionLoadingId = null;
-        this.message = successMessage;
       },
       error: (err: any) => {
         this.error = err?.error?.error || 'Failed to update status';
@@ -155,6 +247,10 @@ export class TrialRequestsAdminComponent implements OnInit {
 
   canMarkContacted(record: TrialRequestRecord): boolean {
     return record.status === 'new';
+  }
+
+  canGetSignupLink(record: TrialRequestRecord): boolean {
+    return record.status === 'approved';
   }
 
   statusClass(status: TrialRequestStatus): string {

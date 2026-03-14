@@ -10,19 +10,34 @@ const PLANS = {
   basic: {
     id: 'basic',
     name: 'Basic',
-    tagline: 'Single carrier operations',
+    tagline: 'Core operations for one entity',
     description:
-      'Best for smaller fleets operating under one carrier authority and looking to digitize their core workflows.',
-    priceLabel: 'Contact Sales',
+      'Includes core dispatch, driver, compliance, and settlement workflows for a single operating entity.',
+    priceLabel: '2 users included + $50/additional user',
+    includedUsers: 2,
+    additionalUserPriceUsd: 50,
+    includedRoles: ['admin', 'dispatch'],
+    includedPages: [
+      '/dashboard',
+      '/loads',
+      '/dispatch-board',
+      '/drivers',
+      '/vehicles',
+      '/trailers',
+      '/hos',
+      '/drivers/dqf',
+      '/audit',
+      '/settlements',
+      '/settlements/scheduled-deductions',
+      '/settlements/equipment-owners'
+    ],
     highlighted: false,
     features: [
-      'One carrier tenant',
-      'Core dispatch tools',
-      'Basic driver workflows',
-      'Basic maintenance & work order support',
-      'Standard visibility & reporting',
-      'Limited AI workflows',
-      'Free trial available'
+      'Dashboard, Loads, Dispatch Board, Drivers',
+      'Trucks/Trailers, HOS, DQF, Audit',
+      'Settlements: Scheduled Payments + Equipment Owners',
+      '2 included users: Admin + Dispatch',
+      '$50 per additional user'
     ]
   },
   multi_mc: {
@@ -30,19 +45,33 @@ const PLANS = {
     name: 'Multi-MC',
     tagline: 'Multiple MCs, centralized control',
     description:
-      'Designed for businesses operating multiple MCs, entities, or business units that need centralized management and controlled access.',
-    priceLabel: 'Contact Sales',
+      'Everything in Basic plus multi-entity administration and broader role coverage for growing operations.',
+    priceLabel: '4 users included + $50/additional user',
+    includedUsers: 4,
+    additionalUserPriceUsd: 50,
+    includedRoles: ['admin', 'safety', 'dispatch', 'accounting'],
+    includedPages: [
+      '/dashboard',
+      '/loads',
+      '/dispatch-board',
+      '/drivers',
+      '/vehicles',
+      '/trailers',
+      '/hos',
+      '/drivers/dqf',
+      '/audit',
+      '/settlements/scheduled-deductions',
+      '/settlements/equipment-owners',
+      '/admin/multi-mc'
+    ],
     highlighted: true,
     badge: 'Most Popular',
     features: [
-      'Multi-tenant / multi-company support',
-      'Multiple MC support',
-      'Shared admin visibility',
-      'Role-aware company access controls',
-      'Cross-company operational visibility',
-      'Expanded reporting',
-      'Enhanced AI workflows',
-      'Free trial available'
+      'Everything in Basic',
+      'Multi-entity admin page access',
+      '4 included users: Admin, Safety, Dispatch, Accounting',
+      'Cross-entity operational management',
+      '$50 per additional user'
     ]
   },
   end_to_end: {
@@ -50,18 +79,42 @@ const PLANS = {
     name: 'End-to-End',
     tagline: 'Full platform, maximum coverage',
     description:
-      'Built for companies that want the full FleetNeuron platform across dispatch, safety, maintenance, inventory, AI workflows, and advanced operational control.',
-    priceLabel: 'Contact Sales',
+      'Everything in Multi-MC plus full inventory, accounting, reporting, and roadside AI with larger included seat count.',
+    priceLabel: '10 users included + $50/additional user',
+    includedUsers: 10,
+    additionalUserPriceUsd: 50,
+    includedRoles: ['admin', 'safety', 'dispatch', 'accounting'],
+    includedPages: [
+      '/dashboard',
+      '/loads',
+      '/dispatch-board',
+      '/drivers',
+      '/vehicles',
+      '/trailers',
+      '/hos',
+      '/drivers/dqf',
+      '/audit',
+      '/settlements/scheduled-deductions',
+      '/settlements/equipment-owners',
+      '/admin/multi-mc',
+      '/parts',
+      '/barcodes',
+      '/receiving',
+      '/inventory-transfers',
+      '/direct-sales',
+      '/inventory-reports',
+      '/invoices',
+      '/settlements',
+      '/reports',
+      '/roadside'
+    ],
     highlighted: false,
     features: [
       'Everything in Multi-MC',
-      'Full dispatch + safety + maintenance + inventory',
-      'Advanced AI automation support',
-      'Broader operational visibility',
-      'Implementation & onboarding support',
-      'API / integration readiness',
-      'Advanced permissions & workflow flexibility',
-      'Priority support'
+      'Inventory modules + accounting (invoices/settlements)',
+      'Reports + Roadside AI',
+      '10 included users',
+      '$50 per additional user'
     ]
   }
 };

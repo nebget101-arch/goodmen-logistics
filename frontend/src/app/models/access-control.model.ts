@@ -16,11 +16,27 @@ export interface AccessUser {
   email?: string;
 }
 
+export interface AccessSubscriptionPlan {
+  id: string;
+  name?: string;
+  tagline?: string;
+  description?: string;
+  priceLabel?: string;
+  includedUsers?: number;
+  additionalUserPriceUsd?: number;
+  includedRoles?: string[];
+  includedPages?: string[];
+  features?: string[];
+}
+
 export interface UserAccess {
   user: AccessUser;
   roles: string[];
   permissions: string[];
   locations: AccessLocation[];
+  tenantId?: string | null;
+  subscriptionPlanId?: string | null;
+  subscriptionPlan?: AccessSubscriptionPlan | null;
 }
 
 /**

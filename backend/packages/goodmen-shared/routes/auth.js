@@ -7,6 +7,7 @@ const authMiddleware = require('../middleware/auth-middleware');
 const knex = require('../internal/db').knex;
 const rbacService = require('../services/rbac-service');
 const tenantContextService = require('../services/tenant-context-service');
+const { PLANS } = require('../config/plans');
 
 // Secret for JWT (in production, use env var)
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
@@ -143,6 +144,14 @@ router.get('/me', authMiddleware, async (req, res) => {
       || defaultContext?.operatingEntity?.id
       || null;
 
+    let subscriptionPlanId = 'end_to_end';
+    if (sessionTenantId) {
+      const tenantRecord = await knex('tenants')
+        .where({ id: sessionTenantId })
+        .first('id', 'subscription_plan');
+      subscriptionPlanId = tenantRecord?.subscription_plan || 'end_to_end';
+    }
+
     res.json({
       success: true,
       data: {
@@ -158,6 +167,8 @@ router.get('/me', authMiddleware, async (req, res) => {
         permissions,
         locations,
         tenantId: sessionTenantId,
+        subscriptionPlanId,
+        subscriptionPlan: PLANS[subscriptionPlanId] || null,
         accessibleOperatingEntities: entities,
         selectedOperatingEntityId
       }

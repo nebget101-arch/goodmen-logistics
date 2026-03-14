@@ -16,10 +16,38 @@ const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM = process.env.TWILIO_PHONE_NUMBER;
 const TWIML_URL = process.env.TWILIO_TWIML_URL || 'http://localhost:3000/webhooks/twilio/call';
+const TWILIO_API_KEY_SID = process.env.TWILIO_API_KEY_SID || process.env.TWILIO_API_KEY;
+const TWILIO_API_KEY_SECRET = process.env.TWILIO_API_KEY_SECRET || process.env.TWILIO_API_SECRET;
+const TWILIO_API_ACCOUNT_SID = process.env.TWILIO_API_ACCOUNT_SID || process.env.TWILIO_MASTER_ACCOUNT_SID;
+
+function safePrefix(value) {
+  return String(value || '').trim().slice(0, 2).toUpperCase();
+}
 
 let twilioClient = null;
-if (TWILIO_SID && TWILIO_TOKEN) {
-  twilioClient = twilio(TWILIO_SID, TWILIO_TOKEN);
+try {
+  // Standard account SID + auth token auth
+  if (TWILIO_SID && TWILIO_TOKEN && safePrefix(TWILIO_SID) === 'AC') {
+    twilioClient = twilio(TWILIO_SID, TWILIO_TOKEN);
+  }
+
+  // API key auth (SK + secret + account SID option)
+  if (!twilioClient && TWILIO_API_KEY_SID && TWILIO_API_KEY_SECRET && TWILIO_API_ACCOUNT_SID) {
+    twilioClient = twilio(TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET, {
+      accountSid: TWILIO_API_ACCOUNT_SID
+    });
+  }
+
+  // Common misconfiguration: TWILIO_ACCOUNT_SID mistakenly set to SK...
+  if (!twilioClient && TWILIO_SID && safePrefix(TWILIO_SID) !== 'AC') {
+    dtLogger.warn(
+      `Twilio disabled: TWILIO_ACCOUNT_SID must start with AC for token auth (current prefix: ${safePrefix(TWILIO_SID) || 'N/A'}). ` +
+      'If using API keys, set TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET, and TWILIO_API_ACCOUNT_SID.'
+    );
+  }
+} catch (err) {
+  twilioClient = null;
+  dtLogger.warn(`Twilio client initialization failed; voice features disabled: ${err?.message || err}`);
 }
 
 /**
@@ -268,5 +296,5 @@ module.exports = {
   parseIncomingCallWebhook,
   parseCallStatusWebhook,
   parseRecordingWebhook,
-  isConfigured: () => !!(TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM)
+  isConfigured: () => !!(twilioClient && TWILIO_FROM)
 };

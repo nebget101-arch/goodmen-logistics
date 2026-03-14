@@ -1,0 +1,174 @@
+<div class="pub-page pub-trial-signup-page">
+  <nav class="pub-nav pub-nav-solid">
+    <div class="pub-nav-inner">
+      <button type="button" class="pub-brand pub-brand-btn" (click)="goHome()">
+        <span class="pub-brand-wordmark">FleetNeuron</span>
+        <span class="pub-brand-tag">AI fleet intelligence</span>
+      </button>
+
+      <ul class="pub-nav-links" [class.pub-nav-open]="mobileNavOpen">
+        <li><a routerLink="/privacy">Privacy</a></li>
+        <li><a routerLink="/terms">Terms</a></li>
+        <li><a routerLink="/communication-preferences">Communication preferences</a></li>
+        <li class="pub-nav-cta-item">
+          <button class="pub-btn-outline" (click)="goToLogin()">Sign In</button>
+        </li>
+      </ul>
+
+      <button class="pub-nav-hamburger" type="button" (click)="toggleMobileNav(); $event.stopPropagation()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <section class="signup-shell">
+    <div class="signup-glow signup-glow-left"></div>
+    <div class="signup-glow signup-glow-right"></div>
+
+    <div class="signup-card signup-status" *ngIf="loading">
+      <span class="material-symbols-outlined signup-loader">progress_activity</span>
+      <h1>Preparing your secure signup</h1>
+      <p>Please wait while we verify your invitation link.</p>
+    </div>
+
+    <div class="signup-card signup-status" *ngIf="!loading && loadingError">
+      <span class="material-symbols-outlined signup-status-icon error">error</span>
+      <h1>Link unavailable</h1>
+      <p>{{ loadingError }}</p>
+      <button type="button" class="pub-btn-outline" (click)="goHome()">Back to FleetNeuron</button>
+    </div>
+
+    <div class="signup-card signup-status" *ngIf="!loading && !loadingError && signupCompleted">
+      <span class="material-symbols-outlined signup-status-icon success">check_circle</span>
+      <h1>Account already activated</h1>
+      <p>Your trial account is ready. Sign in to continue.</p>
+      <div class="signup-account-chip" *ngIf="createdUsername">
+        <span class="material-symbols-outlined">person</span>
+        <span>{{ createdUsername }}</span>
+      </div>
+      <button type="button" class="pub-btn-primary" (click)="goToLogin()">
+        <span class="material-symbols-outlined">login</span>
+        Go to Sign In
+      </button>
+    </div>
+
+    <div class="signup-layout" *ngIf="!loading && !loadingError && !signupCompleted && context?.status === 'ready'">
+      <aside class="signup-card signup-info-panel">
+        <div class="signup-badge">
+          <span class="material-symbols-outlined">rocket_launch</span>
+          Approved trial invitation
+        </div>
+
+        <h1>Finish your FleetNeuron setup</h1>
+        <p>
+          Your company trial has been approved. Create your admin credentials to launch your AI-powered workspace.
+        </p>
+
+        <div class="signup-org">
+          <div>
+            <span class="material-symbols-outlined">apartment</span>
+            <span>{{ context?.companyName }}</span>
+          </div>
+          <div>
+            <span class="material-symbols-outlined">mail</span>
+            <span>{{ context?.email }}</span>
+          </div>
+          <div>
+            <span class="material-symbols-outlined">sell</span>
+            <span>{{ selectedPlan?.name || context?.requestedPlan }}</span>
+          </div>
+        </div>
+
+        <ul class="signup-benefits">
+          <li><span class="material-symbols-outlined">check_circle</span><span>AI dispatch and operations workflows</span></li>
+          <li><span class="material-symbols-outlined">check_circle</span><span>Secure admin access for your organization</span></li>
+          <li><span class="material-symbols-outlined">check_circle</span><span>Onboarding team support once you sign in</span></li>
+        </ul>
+
+        <div class="signup-plan" *ngIf="selectedPlan">
+          <h3>{{ selectedPlan.name }}</h3>
+          <p>{{ selectedPlan.description }}</p>
+          <div class="signup-plan-price">{{ selectedPlan.priceLabel }}</div>
+        </div>
+      </aside>
+
+      <div class="signup-card signup-form-panel">
+        <div class="signup-form-head">
+          <p class="signup-kicker">Admin account setup</p>
+          <h2>Create your admin login</h2>
+          <p class="signup-sub">Use a strong password. You can add users and configure roles after signing in.</p>
+        </div>
+
+        <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+          <div class="signup-row">
+            <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('firstName')">
+              <label for="firstName">First Name</label>
+              <div class="ai-input-wrap">
+                <span class="material-symbols-outlined">badge</span>
+                <input id="firstName" type="text" class="pub-form-input" formControlName="firstName" placeholder="John" autocomplete="given-name" />
+              </div>
+              <span class="pub-error-msg">{{ getFieldError('firstName') }}</span>
+            </div>
+
+            <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('lastName')">
+              <label for="lastName">Last Name</label>
+              <div class="ai-input-wrap">
+                <span class="material-symbols-outlined">badge</span>
+                <input id="lastName" type="text" class="pub-form-input" formControlName="lastName" placeholder="Smith" autocomplete="family-name" />
+              </div>
+              <span class="pub-error-msg">{{ getFieldError('lastName') }}</span>
+            </div>
+          </div>
+
+          <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('username')">
+            <label for="username">Preferred Username <span class="signup-optional">(optional)</span></label>
+            <div class="ai-input-wrap">
+              <span class="material-symbols-outlined">alternate_email</span>
+              <input id="username" type="text" class="pub-form-input" formControlName="username" placeholder="johnsmith" autocomplete="username" />
+            </div>
+            <span class="pub-error-msg">{{ getFieldError('username') }}</span>
+          </div>
+
+          <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('password')">
+            <label for="password">Password <span class="signup-required">*</span></label>
+            <div class="ai-input-wrap">
+              <span class="material-symbols-outlined">lock</span>
+              <input id="password" type="password" class="pub-form-input" formControlName="password" placeholder="At least 8 characters" autocomplete="new-password" />
+            </div>
+            <span class="pub-error-msg">{{ getFieldError('password') }}</span>
+          </div>
+
+          <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('confirmPassword') || !!passwordMismatchError">
+            <label for="confirmPassword">Confirm Password <span class="signup-required">*</span></label>
+            <div class="ai-input-wrap">
+              <span class="material-symbols-outlined">verified_user</span>
+              <input id="confirmPassword" type="password" class="pub-form-input" formControlName="confirmPassword" placeholder="Re-enter your password" autocomplete="new-password" />
+            </div>
+            <span class="pub-error-msg">{{ getFieldError('confirmPassword') || passwordMismatchError }}</span>
+          </div>
+
+          <div class="signup-password-hint">
+            <span class="material-symbols-outlined">security</span>
+            Use 8+ characters with a mix of letters, numbers, and symbols.
+          </div>
+
+          <div class="pub-submit-error" *ngIf="submitError">
+            <span class="material-symbols-outlined">error</span>
+            {{ submitError }}
+          </div>
+
+          <button type="submit" class="pub-btn-primary signup-submit" [disabled]="submitting">
+            <span *ngIf="!submitting" class="material-symbols-outlined">how_to_reg</span>
+            <span class="signup-spinner" *ngIf="submitting"></span>
+            {{ submitting ? 'Creating account…' : 'Create Trial Account' }}
+          </button>
+
+          <p class="signup-legal">
+            By continuing you agree to our <a routerLink="/privacy">Privacy Policy</a> and
+            <a routerLink="/terms">Terms of Service</a>.
+          </p>
+        </form>
+      </div>
+    </div>
+  </section>
+</div>

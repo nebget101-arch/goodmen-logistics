@@ -1,6 +1,12 @@
 'use strict';
 
+const path = require('path');
+const dotenv = require('dotenv');
 const sgMail = require('@sendgrid/mail');
+const { PLANS } = require('../config/plans');
+
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 
 const PLAN_LABELS = {
   basic: 'Basic',
@@ -26,6 +32,21 @@ function parseRecipientList(raw) {
 
 function formatBool(value) {
   return value ? 'Yes' : 'No';
+}
+
+function getAppHomeUrl() {
+  return (process.env.APP_BASE_URL || 'https://fleetneuron.com').replace(/\/$/, '');
+}
+
+function getEmailConfig() {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.ONBOARDING_FROM_EMAIL;
+  return { apiKey, fromEmail };
+}
+
+function getPlan(record) {
+  const planId = record?.requested_plan;
+  return PLANS[planId] || null;
 }
 
 function buildTrialRequestNotificationHtml(record, options = {}) {
@@ -146,8 +167,7 @@ function buildTrialRequestNotificationHtml(record, options = {}) {
 }
 
 async function sendNewTrialRequestNotification(record) {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
+  const { apiKey, fromEmail } = getEmailConfig();
   const toList = parseRecipientList(process.env.TRIAL_REQUEST_NOTIFY_TO || process.env.SALES_NOTIFY_EMAILS);
 
   if (!apiKey || !fromEmail || toList.length === 0) {
@@ -176,19 +196,221 @@ async function sendNewTrialRequestNotification(record) {
     `Review URL: ${reviewUrl}`
   ].join('\n');
 
-  await sgMail.send({
-    to: toList,
-    from: fromEmail,
-    replyTo: record?.email || undefined,
-    subject,
-    text,
-    html
-  });
+  try {
+    await sgMail.send({
+      to: toList,
+      from: fromEmail,
+      replyTo: record?.email || undefined,
+      subject,
+      text,
+      html
+    });
+    return { sent: true, to: toList };
+  } catch (err) {
+    const error = err?.response?.body?.errors?.[0]?.message || err?.message || String(err);
+    return { sent: false, reason: 'send_failed', error };
+  }
+}
 
-  return { sent: true, to: toList };
+function buildRequesterUnderReviewHtml(record, options = {}) {
+  const appHomeUrl = options.appHomeUrl || getAppHomeUrl();
+  const name = escapeHtml(record?.contact_name || 'there');
+  const company = escapeHtml(record?.company_name || 'your company');
+  const requestedPlan = escapeHtml(PLAN_LABELS[record?.requested_plan] || record?.requested_plan || 'selected plan');
+
+  return `
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trial Request Received</title>
+  </head>
+  <body style="margin:0;padding:0;background:#020617;font-family:Inter,Segoe UI,Arial,sans-serif;color:#e2e8f0;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;width:100%;border:1px solid rgba(45,212,191,.22);border-radius:18px;overflow:hidden;background:linear-gradient(180deg,#0f172a 0%, #020617 100%);">
+            <tr>
+              <td style="padding:28px;background:radial-gradient(circle at top left, rgba(34,197,94,.16), transparent 45%),radial-gradient(circle at top right, rgba(14,165,233,.18), transparent 42%);border-bottom:1px solid rgba(148,163,184,.16);">
+                <h1 style="margin:0 0 8px;font-size:26px;line-height:1.2;color:#f8fafc;">Your trial request is under review</h1>
+                <p style="margin:0;color:#94a3b8;font-size:14px;line-height:1.7;">Hi ${name}, thanks for your interest in FleetNeuron AI.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px;">
+                <p style="margin:0 0 14px;color:#e2e8f0;font-size:15px;line-height:1.8;">
+                  We received your request for <strong>${company}</strong> on the <strong>${requestedPlan}</strong> plan.
+                  Your request is currently <strong>under review</strong>.
+                </p>
+                <p style="margin:0 0 20px;color:#cbd5e1;font-size:15px;line-height:1.8;">
+                  One of our sales representatives will reach out to you soon.
+                </p>
+                <a href="${escapeHtml(appHomeUrl)}" style="display:inline-block;padding:12px 20px;border-radius:999px;background:linear-gradient(90deg,#22c55e,#0ea5e9);color:#ecfeff;font-weight:700;font-size:14px;text-decoration:none;">Visit FleetNeuron</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+async function sendRequesterUnderReviewEmail(record) {
+  const { apiKey, fromEmail } = getEmailConfig();
+  const to = String(record?.email || '').trim().toLowerCase();
+
+  if (!apiKey || !fromEmail || !to) {
+    return { sent: false, reason: 'email_not_configured' };
+  }
+
+  sgMail.setApiKey(apiKey);
+
+  const subject = 'We received your FleetNeuron trial request';
+  const html = buildRequesterUnderReviewHtml(record, { appHomeUrl: getAppHomeUrl() });
+  const text = [
+    `Hi ${record?.contact_name || 'there'},`,
+    '',
+    'Thank you for your FleetNeuron AI trial request.',
+    'Your request is under review and one of our sales representatives will reach out to you soon.',
+    '',
+    `Company: ${record?.company_name || ''}`,
+    `Plan: ${PLAN_LABELS[record?.requested_plan] || record?.requested_plan || ''}`,
+    '',
+    `Website: ${getAppHomeUrl()}`
+  ].join('\n');
+
+  try {
+    await sgMail.send({
+      to,
+      from: fromEmail,
+      subject,
+      text,
+      html
+    });
+    return { sent: true, to: [to] };
+  } catch (err) {
+    const error = err?.response?.body?.errors?.[0]?.message || err?.message || String(err);
+    return { sent: false, reason: 'send_failed', error };
+  }
+}
+
+function buildRequesterApprovedHtml(record, options = {}) {
+  const appHomeUrl = options.appHomeUrl || getAppHomeUrl();
+  const activationUrl = options.activationUrl || '';
+  const plan = getPlan(record);
+  const name = escapeHtml(record?.contact_name || 'there');
+  const company = escapeHtml(record?.company_name || 'your company');
+  const planName = escapeHtml(plan?.name || PLAN_LABELS[record?.requested_plan] || 'Selected Plan');
+  const planDescription = escapeHtml(plan?.description || 'Your approved FleetNeuron trial plan.');
+  const featureItems = Array.isArray(plan?.features) ? plan.features.slice(0, 6) : [];
+  const featureList = featureItems
+    .map((feature) => `<li style="margin:0 0 6px;color:#e2e8f0;font-size:14px;line-height:1.6;">${escapeHtml(feature)}</li>`)
+    .join('');
+  const safeActivationUrl = escapeHtml(activationUrl);
+
+  return `
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trial Request Approved</title>
+  </head>
+  <body style="margin:0;padding:0;background:#020617;font-family:Inter,Segoe UI,Arial,sans-serif;color:#e2e8f0;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;width:100%;border:1px solid rgba(45,212,191,.22);border-radius:18px;overflow:hidden;background:linear-gradient(180deg,#0f172a 0%, #020617 100%);">
+            <tr>
+              <td style="padding:28px;background:radial-gradient(circle at top left, rgba(34,197,94,.16), transparent 45%),radial-gradient(circle at top right, rgba(14,165,233,.18), transparent 42%);border-bottom:1px solid rgba(148,163,184,.16);">
+                <h1 style="margin:0 0 8px;font-size:26px;line-height:1.2;color:#f8fafc;">Your trial request is approved</h1>
+                <p style="margin:0;color:#94a3b8;font-size:14px;line-height:1.7;">Hi ${name}, great news from FleetNeuron AI.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px;">
+                <p style="margin:0 0 14px;color:#e2e8f0;font-size:15px;line-height:1.8;">
+                  Your signup request for <strong>${company}</strong> has been <strong>approved</strong>.
+                </p>
+                <div style="margin:0 0 18px;padding:14px 16px;border:1px solid rgba(148,163,184,.16);border-radius:12px;background:rgba(15,23,42,.58);">
+                  <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;font-weight:700;margin-bottom:8px;">Approved Plan</div>
+                  <div style="font-size:18px;line-height:1.4;color:#a5f3fc;font-weight:700;margin-bottom:6px;">${planName}</div>
+                  <div style="font-size:14px;line-height:1.7;color:#cbd5e1;">${planDescription}</div>
+                  ${featureList ? `<ul style="margin:12px 0 0;padding-left:18px;">${featureList}</ul>` : ''}
+                </div>
+                ${activationUrl ? `
+                <p style="margin:0 0 20px;color:#cbd5e1;font-size:15px;line-height:1.8;">
+                  Set your password and create your admin account to start your trial:
+                </p>
+                <a href="${safeActivationUrl}" style="display:inline-block;padding:12px 20px;border-radius:999px;background:linear-gradient(90deg,#22c55e,#0ea5e9);color:#ecfeff;font-weight:700;font-size:14px;text-decoration:none;">Create Trial Account</a>
+                <p style="margin:14px 0 0;color:#64748b;font-size:12px;line-height:1.6;word-break:break-all;">If the button does not work, copy this link: ${safeActivationUrl}</p>
+                ` : `
+                <p style="margin:0 0 20px;color:#cbd5e1;font-size:15px;line-height:1.8;">
+                  Our team will contact you with next steps shortly.
+                </p>
+                <a href="${escapeHtml(appHomeUrl)}" style="display:inline-block;padding:12px 20px;border-radius:999px;background:linear-gradient(90deg,#22c55e,#0ea5e9);color:#ecfeff;font-weight:700;font-size:14px;text-decoration:none;">Open FleetNeuron</a>
+                `}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+async function sendRequesterApprovedEmail(record, options = {}) {
+  const { apiKey, fromEmail } = getEmailConfig();
+  const to = String(record?.email || '').trim().toLowerCase();
+  const activationUrl = options.activationUrl || '';
+  const plan = getPlan(record);
+
+  if (!apiKey || !fromEmail || !to) {
+    return { sent: false, reason: 'email_not_configured' };
+  }
+
+  sgMail.setApiKey(apiKey);
+
+  const subject = 'Your FleetNeuron trial request is approved';
+  const html = buildRequesterApprovedHtml(record, { appHomeUrl: getAppHomeUrl(), activationUrl });
+  const text = [
+    `Hi ${record?.contact_name || 'there'},`,
+    '',
+    'Good news — your FleetNeuron AI trial signup request has been approved.',
+    activationUrl
+      ? 'Use the activation link below to create your trial admin account.'
+      : 'Our team will reach out with next steps shortly.',
+    '',
+    `Company: ${record?.company_name || ''}`,
+    `Plan: ${plan?.name || PLAN_LABELS[record?.requested_plan] || record?.requested_plan || ''}`,
+    ...(Array.isArray(plan?.features) ? plan.features.slice(0, 5).map((f) => `- ${f}`) : []),
+    ...(activationUrl ? ['', `Activation link: ${activationUrl}`] : []),
+    `Website: ${getAppHomeUrl()}`
+  ].join('\n');
+
+  try {
+    await sgMail.send({
+      to,
+      from: fromEmail,
+      subject,
+      text,
+      html
+    });
+    return { sent: true, to: [to] };
+  } catch (err) {
+    const error = err?.response?.body?.errors?.[0]?.message || err?.message || String(err);
+    return { sent: false, reason: 'send_failed', error };
+  }
 }
 
 module.exports = {
   buildTrialRequestNotificationHtml,
-  sendNewTrialRequestNotification
+  sendNewTrialRequestNotification,
+  buildRequesterUnderReviewHtml,
+  sendRequesterUnderReviewEmail,
+  buildRequesterApprovedHtml,
+  sendRequesterApprovedEmail
 };

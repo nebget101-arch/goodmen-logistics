@@ -11,7 +11,9 @@
  */
 
 const { knex } = require('../internal/db');
-const { VALID_PLAN_IDS, TRIAL_REQUEST_STATUSES } = require('../config/plans');
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
+const { VALID_PLAN_IDS, TRIAL_REQUEST_STATUSES, PLANS } = require('../config/plans');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -113,6 +115,320 @@ async function updateTrialRequestStatus(id, status) {
   return record;
 }
 
+function normalizeUsername(value) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '');
+  return normalized || null;
+}
+
+function buildSuggestedUsername(record) {
+  const fromEmail = String(record?.email || '').split('@')[0];
+  if (fromEmail) return fromEmail;
+
+  const contact = String(record?.contact_name || '').trim();
+  if (!contact) return 'trial-admin';
+  return contact.toLowerCase().replace(/\s+/g, '.');
+}
+
+async function generateUniqueUsername(trx, preferredBase) {
+  const base = normalizeUsername(preferredBase) || 'trial-admin';
+  let candidate = base;
+  let suffix = 1;
+
+  while (true) {
+    const existing = await trx('users').where({ username: candidate }).first('id');
+    if (!existing) return candidate;
+    suffix += 1;
+    candidate = `${base}${suffix}`;
+  }
+}
+
+function getSignupTokenTtlHours() {
+  const raw = parseInt(process.env.TRIAL_SIGNUP_TOKEN_TTL_HOURS, 10);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return 168; // 7 days
+}
+
+async function approveTrialRequest(id, approvedByUserId = null) {
+  const existing = await knex('trial_requests').where({ id }).first();
+  if (!existing) {
+    const err = new Error('Trial request not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (existing.status === 'trial_created') {
+    const err = new Error('Trial account is already provisioned for this request');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const token = crypto.randomBytes(24).toString('hex');
+  const ttlHours = getSignupTokenTtlHours();
+  const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+
+  const [record] = await knex('trial_requests')
+    .where('id', id)
+    .update({
+      status: 'approved',
+      approved_at: knex.fn.now(),
+      approved_by_user_id: approvedByUserId || null,
+      signup_token: token,
+      signup_token_expires_at: expiresAt,
+      updated_at: knex.fn.now()
+    })
+    .returning('*');
+
+  return record;
+}
+
+async function getOrCreateApprovedSignupToken(id, approvedByUserId = null, options = {}) {
+  const forceRegenerate = Boolean(options?.forceRegenerate);
+
+  const existing = await knex('trial_requests').where({ id }).first();
+  if (!existing) {
+    const err = new Error('Trial request not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (existing.status === 'trial_created' || existing.signup_completed_at) {
+    const err = new Error('Trial signup is already completed for this request');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (existing.status !== 'approved') {
+    const err = new Error('Trial request must be approved before generating a signup link');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const hasValidToken =
+    Boolean(existing.signup_token)
+    && (!existing.signup_token_expires_at || new Date(existing.signup_token_expires_at).getTime() > Date.now());
+
+  if (hasValidToken && !forceRegenerate) {
+    return existing;
+  }
+
+  const token = crypto.randomBytes(24).toString('hex');
+  const ttlHours = getSignupTokenTtlHours();
+  const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+
+  const [record] = await knex('trial_requests')
+    .where({ id })
+    .update({
+      approved_by_user_id: approvedByUserId || existing.approved_by_user_id || null,
+      signup_token: token,
+      signup_token_expires_at: expiresAt,
+      updated_at: knex.fn.now()
+    })
+    .returning('*');
+
+  return record;
+}
+
+async function getSignupContextByToken(token) {
+  const safeToken = String(token || '').trim();
+  if (!safeToken) {
+    const err = new Error('Signup token is required');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const record = await knex('trial_requests')
+    .where({ signup_token: safeToken })
+    .first();
+
+  if (!record) {
+    const err = new Error('Invalid signup token');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (record.status !== 'approved' && record.status !== 'trial_created') {
+    const err = new Error('This trial request is not approved for signup');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (record.signup_completed_at) {
+    return {
+      status: 'completed',
+      requestId: record.id,
+      companyName: record.company_name,
+      contactName: record.contact_name,
+      email: record.email,
+      requestedPlan: record.requested_plan,
+      plan: PLANS[record.requested_plan] || null
+    };
+  }
+
+  if (record.signup_token_expires_at && new Date(record.signup_token_expires_at).getTime() < Date.now()) {
+    const err = new Error('Signup token has expired');
+    err.statusCode = 410;
+    throw err;
+  }
+
+  return {
+    status: 'ready',
+    requestId: record.id,
+    companyName: record.company_name,
+    contactName: record.contact_name,
+    email: record.email,
+    requestedPlan: record.requested_plan,
+    plan: PLANS[record.requested_plan] || null,
+    expiresAt: record.signup_token_expires_at
+  };
+}
+
+async function completeSignupFromToken(token, payload = {}) {
+  const safeToken = String(token || '').trim();
+  if (!safeToken) {
+    const err = new Error('Signup token is required');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const password = String(payload.password || '');
+  if (password.length < 8) {
+    const err = new Error('Password must be at least 8 characters');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return knex.transaction(async (trx) => {
+    const record = await trx('trial_requests')
+      .where({ signup_token: safeToken })
+      .forUpdate()
+      .first();
+
+    if (!record) {
+      const err = new Error('Invalid signup token');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (record.signup_completed_at || record.status === 'trial_created') {
+      const err = new Error('Signup has already been completed');
+      err.statusCode = 409;
+      throw err;
+    }
+
+    if (record.status !== 'approved') {
+      const err = new Error('Trial request is not approved yet');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (record.signup_token_expires_at && new Date(record.signup_token_expires_at).getTime() < Date.now()) {
+      const err = new Error('Signup token has expired');
+      err.statusCode = 410;
+      throw err;
+    }
+
+    const normalizedEmail = String(record.email || '').trim().toLowerCase();
+    const emailExists = await trx('users').whereRaw('LOWER(email) = ?', [normalizedEmail]).first('id');
+    if (emailExists) {
+      const err = new Error('An account already exists for this email');
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const firstName = String(payload.firstName || '').trim() || null;
+    const lastName = String(payload.lastName || '').trim() || null;
+    const requestedUsername = String(payload.username || '').trim();
+    const usernameBase = requestedUsername || buildSuggestedUsername(record);
+    const username = await generateUniqueUsername(trx, usernameBase);
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const [tenant] = await trx('tenants')
+      .insert({
+        name: String(record.company_name || 'Trial Tenant').trim(),
+        legal_name: String(record.company_name || '').trim() || null,
+        status: 'active',
+        subscription_plan: record.requested_plan || 'basic'
+      })
+      .returning(['id', 'name']);
+
+    const [operatingEntity] = await trx('operating_entities')
+      .insert({
+        tenant_id: tenant.id,
+        entity_type: 'carrier',
+        name: String(record.company_name || 'Main').trim(),
+        legal_name: String(record.company_name || '').trim() || null,
+        email: normalizedEmail,
+        phone: String(record.phone || '').trim() || null,
+        is_active: true,
+        default_currency: 'USD'
+      })
+      .returning(['id', 'tenant_id', 'name']);
+
+    const [user] = await trx('users')
+      .insert({
+        username,
+        password_hash: passwordHash,
+        role: 'admin',
+        first_name: firstName,
+        last_name: lastName,
+        email: normalizedEmail,
+        tenant_id: tenant.id
+      })
+      .returning(['id', 'username', 'email', 'role']);
+
+    await trx('user_tenant_memberships')
+      .insert({
+        user_id: user.id,
+        tenant_id: tenant.id,
+        membership_role: 'owner',
+        is_default: true,
+        is_active: true
+      })
+      .onConflict(['user_id', 'tenant_id'])
+      .ignore();
+
+    await trx('user_operating_entities')
+      .insert({
+        user_id: user.id,
+        operating_entity_id: operatingEntity.id,
+        access_level: 'owner',
+        is_default: true,
+        is_active: true
+      })
+      .onConflict(['user_id', 'operating_entity_id'])
+      .ignore();
+
+    await trx('trial_requests')
+      .where({ id: record.id })
+      .update({
+        status: 'trial_created',
+        signup_completed_at: trx.fn.now(),
+        signup_token: null,
+        signup_token_expires_at: null,
+        created_tenant_id: tenant.id,
+        created_operating_entity_id: operatingEntity.id,
+        created_user_id: user.id,
+        updated_at: trx.fn.now()
+      });
+
+    return {
+      requestId: record.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      tenantId: tenant.id,
+      operatingEntityId: operatingEntity.id,
+      requestedPlan: record.requested_plan,
+      plan: PLANS[record.requested_plan] || null
+    };
+  });
+}
+
 /**
  * Get a single trial request by ID. Admin use only.
  * @param {string} id
@@ -126,5 +442,9 @@ module.exports = {
   createTrialRequest,
   listTrialRequests,
   updateTrialRequestStatus,
-  getTrialRequestById
+  approveTrialRequest,
+  getOrCreateApprovedSignupToken,
+  getTrialRequestById,
+  getSignupContextByToken,
+  completeSignupFromToken
 };

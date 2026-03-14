@@ -5,10 +5,12 @@ const db = require('../internal/db');
 const knex = require('../internal/db').knex;
 const baseAuth = require('../middleware/auth-middleware');
 const authWithRole = require('./auth-middleware');
+const requirePlanAccess = require('../middleware/plan-access-middleware');
 const { loadUserRbac, requirePermission, requireAnyPermission } = require('../middleware/rbac-middleware');
 
 const router = express.Router();
 const rbac = [baseAuth, loadUserRbac];
+const requireMultiMcPlan = requirePlanAccess('/admin/multi-mc');
 
 function normalizeUsername(value) {
   return (value || '').toString().trim().toLowerCase().replace(/\s+/g, '.');
@@ -71,7 +73,7 @@ router.get('/', rbac, requireAnyPermission(['users.view', 'users.manage', 'roles
 });
 
 // Operating entities list for admin management
-router.get('/operating-entities', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+router.get('/operating-entities', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
     const tenantId = req.context?.tenantId || null;
@@ -105,7 +107,7 @@ router.get('/operating-entities', rbac, requireAnyPermission(['users.manage', 'r
   }
 });
 
-router.post('/operating-entities', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+router.post('/operating-entities', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
     const tenantId = req.context?.tenantId || null;
@@ -155,7 +157,7 @@ router.post('/operating-entities', rbac, requireAnyPermission(['users.manage', '
   }
 });
 
-router.put('/operating-entities/:entityId', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+router.put('/operating-entities/:entityId', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
     const tenantId = req.context?.tenantId || null;
@@ -200,7 +202,7 @@ router.put('/operating-entities/:entityId', rbac, requireAnyPermission(['users.m
 });
 
 // User operating entity access list (for admin assign UI)
-router.get('/:id/operating-entities', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+router.get('/:id/operating-entities', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
     const tenantId = req.context?.tenantId || null;
@@ -233,7 +235,7 @@ router.get('/:id/operating-entities', rbac, requireAnyPermission(['users.manage'
 });
 
 // Replace user operating entity access and default
-router.put('/:id/operating-entities', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
+router.put('/:id/operating-entities', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
     const tenantId = req.context?.tenantId || null;

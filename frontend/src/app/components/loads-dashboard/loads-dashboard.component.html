@@ -6,14 +6,15 @@
       <p class="subtitle" *ngIf="activeOperatingEntityName">Company: {{ activeOperatingEntityName }}</p>
     </div>
 <div class="header-actions">
-        <div class="search-box">
-        <input type="text" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
+        <div class="search-box ai-search-box">
+        <input type="text" class="ai-search-input" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
       </div>
       <ng-container *ngIf="!isDriverRole">
         <div class="dropdown new-load-dropdown" (click)="$event.stopPropagation()" *appHasPermission="'loads.create'">
-          <button class="btn btn-primary" (click)="showNewLoadMenu = !showNewLoadMenu">
+          <button class="btn btn-primary btn-new-load-ai" (click)="showNewLoadMenu = !showNewLoadMenu">
+            <span class="material-symbols-outlined">local_shipping</span>
             New Load
-            <span class="material-symbols-outlined">expand_more</span>
+            <span class="material-symbols-outlined cta-caret">expand_more</span>
           </button>
           <div class="dropdown-menu new-load-menu" *ngIf="showNewLoadMenu">
             <button

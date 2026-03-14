@@ -12,6 +12,7 @@ import {
 } from '../models/access-control.model';
 
 const STORAGE_KEY_ACCESS = 'fleetneuron_access';
+const ALWAYS_ALLOWED_PATH_PREFIXES = ['/profile', '/users/create'];
 
 /**
  * Centralized RBAC: permissions, roles, and location-aware access.
@@ -71,7 +72,15 @@ export class AccessControlService {
     const locations: AccessLocation[] = Array.isArray(raw.locations)
       ? raw.locations.map((l: any) => ({ id: l.id ?? l.locationId, name: l.name ?? l.locationName ?? '' }))
       : [];
-    const access: UserAccess = { user, roles, permissions, locations };
+    const access: UserAccess = {
+      user,
+      roles,
+      permissions,
+      locations,
+      tenantId: raw.tenantId ?? null,
+      subscriptionPlanId: raw.subscriptionPlanId ?? null,
+      subscriptionPlan: raw.subscriptionPlan ?? null,
+    };
     this.setAccess(access);
     return access;
   }
@@ -192,6 +201,14 @@ export class AccessControlService {
     return this.access?.permissions ?? [];
   }
 
+  getSubscriptionPlanId(): string | null {
+    return this.access?.subscriptionPlanId ?? null;
+  }
+
+  getSubscriptionPlan(): UserAccess['subscriptionPlan'] {
+    return this.access?.subscriptionPlan ?? null;
+  }
+
   getLocations(): AccessLocation[] {
     return this.access?.locations ?? [];
   }
@@ -286,5 +303,40 @@ export class AccessControlService {
   /** Whether current user has any location restriction (false = can see all locations). */
   hasLocationRestriction(): boolean {
     return this.getAllowedLocationIds().length > 0;
+  }
+
+  canAccessUrl(url: string): boolean {
+    const normalized = this.normalizeUrl(url);
+    if (!normalized) return false;
+    if (ALWAYS_ALLOWED_PATH_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`))) {
+      return true;
+    }
+
+    // Backward compatibility for older cached access payloads where Basic plan
+    // includedPages might not yet include full settlements paths.
+    if (
+      this.getSubscriptionPlanId() === 'basic'
+      && (normalized === '/settlements' || normalized.startsWith('/settlements/'))
+    ) {
+      return true;
+    }
+
+    const plan = this.getSubscriptionPlan();
+    const allowedPages = Array.isArray(plan?.includedPages) ? plan?.includedPages ?? [] : [];
+    if (!allowedPages.length) return true;
+
+    return allowedPages.some((page) => {
+      const allowed = this.normalizeUrl(page);
+      return normalized === allowed || normalized.startsWith(`${allowed}/`);
+    });
+  }
+
+  private normalizeUrl(url: string): string {
+    const value = String(url || '').trim();
+    if (!value) return '';
+    const withoutQuery = value.split('?')[0].split('#')[0].trim();
+    if (!withoutQuery) return '';
+    const prefixed = withoutQuery.startsWith('/') ? withoutQuery : `/${withoutQuery}`;
+    return prefixed.length > 1 ? prefixed.replace(/\/+$/, '') : prefixed;
   }
 }

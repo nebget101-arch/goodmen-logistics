@@ -6,13 +6,14 @@ import { SettlementDetailComponent } from './settlement-detail/settlement-detail
 import { ScheduledDeductionsComponent } from './scheduled-deductions/scheduled-deductions.component';
 import { EquipmentOwnersComponent } from './equipment-owners/equipment-owners.component';
 import { AuthGuard } from '../auth.guard';
+import { PlanGuard } from '../guards/plan.guard';
 
 const routes: Routes = [
-  { path: '', component: SettlementListComponent, canActivate: [AuthGuard] },
-  { path: 'scheduled-deductions', component: ScheduledDeductionsComponent, canActivate: [AuthGuard] },
-  { path: 'equipment-owners', component: EquipmentOwnersComponent, canActivate: [AuthGuard] },
-  { path: 'new', component: SettlementWizardComponent, canActivate: [AuthGuard] },
-  { path: ':id', component: SettlementDetailComponent, canActivate: [AuthGuard] }
+  { path: '', component: SettlementListComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/settlements' } },
+  { path: 'scheduled-deductions', component: ScheduledDeductionsComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/settlements/scheduled-deductions' } },
+  { path: 'equipment-owners', component: EquipmentOwnersComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/settlements/equipment-owners' } },
+  { path: 'new', component: SettlementWizardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/settlements' } },
+  { path: ':id', component: SettlementDetailComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/settlements' } }
 ];
 
 @NgModule({
