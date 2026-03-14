@@ -3,7 +3,7 @@
     <div>
       <h1>Drivers</h1>
       <p class="subtitle">Dispatch view - core assignments and pay</p>
-      <p class="subtitle" *ngIf="activeOperatingEntityName">Current company context: {{ activeOperatingEntityName }} (driver roster remains tenant-wide).</p>
+      <p class="subtitle" *ngIf="activeOperatingEntityName">Current company context: {{ activeOperatingEntityName }}</p>
     </div>
     <div class="header-actions">
       <button type="button" class="btn btn-primary" (click)="openNew()">
@@ -24,7 +24,6 @@
           <th>Type</th>
           <th>Status</th>
           <th>Hire Date</th>
-          <th>Term Date</th>
           <th>Phone</th>
           <th>Email</th>
           <th>Truck</th>
@@ -51,8 +50,7 @@
               <option value="applicant">applicant</option>
             </select>
           </th>
-          <th><input type="text" placeholder="YYYY-MM-DD" [(ngModel)]="driverFilters.hireDate" /></th>
-          <th><input type="text" placeholder="YYYY-MM-DD" [(ngModel)]="driverFilters.termDate" /></th>
+          <th><input type="date" [(ngModel)]="driverFilters.hireDate" /></th>
           <th><input type="text" placeholder="Phone" [(ngModel)]="driverFilters.phone" /></th>
           <th><input type="text" placeholder="Email" [(ngModel)]="driverFilters.email" /></th>
           <th><input type="text" placeholder="Truck" [(ngModel)]="driverFilters.truck" /></th>
@@ -78,8 +76,7 @@
           </td>
           <td>{{ getDriverTypeLabel(d.driverType) }}</td>
           <td>{{ d.status }}</td>
-          <td>{{ d.hireDate || '--' }}</td>
-          <td>{{ d.terminationDate || '--' }}</td>
+          <td>{{ formatDateOnly(d.hireDate) || '--' }}</td>
           <td>{{ d.phone || '--' }}</td>
           <td>{{ d.email || '--' }}</td>
           <td>{{ d.truckUnitNumber || '--' }}</td>
@@ -284,7 +281,7 @@
                   [(ngModel)]="newDriver.trailerId"
                 >
                   <option value="">-- Select trailer --</option>
-                  <option *ngFor="let tr of trailers" [value]="tr.id">
+                  <option *ngFor="let tr of availableTrailers" [value]="tr.id">
                     {{ tr.unit_number }} - {{ tr.make }} {{ tr.model }}
                   </option>
                 </select>

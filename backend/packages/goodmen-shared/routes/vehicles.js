@@ -7,6 +7,20 @@ const dtLogger = require('../utils/logger');
 const { query } = require('../internal/db');
 const { getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 
+let vehiclesColumnSetCache = null;
+
+async function getVehiclesColumnSet() {
+  if (vehiclesColumnSetCache) return vehiclesColumnSetCache;
+  const result = await query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'vehicles'`
+  );
+  vehiclesColumnSetCache = new Set((result.rows || []).map((row) => row.column_name));
+  return vehiclesColumnSetCache;
+}
+
 // Protect all vehicles routes: admin, safety, and dispatch (dispatch needs read access for driver assignments)
 router.use(auth(['admin', 'safety', 'dispatch']));
 
@@ -167,12 +181,15 @@ router.get('/search', async (req, res) => {
 router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
-    // Apply operating_entity scoping when present and user is not a global admin
     const params = [];
     let sql = 'SELECT * FROM all_vehicles WHERE 1=1';
-    if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+    if (req.context?.tenantId) {
+      params.push(req.context.tenantId);
+      sql += ` AND tenant_id = $${params.length}`;
+    }
+    if (req.context?.operatingEntityId) {
       params.push(req.context.operatingEntityId);
-      sql += ` AND operating_entity_id = $${params.length}`;
+      sql += ` AND (operating_entity_id = $${params.length} OR LOWER(COALESCE(vehicle_type, '')) = 'trailer')`;
     }
     sql += ' ORDER BY unit_number';
     const result = await query(sql, params);
@@ -228,7 +245,8 @@ router.post('/', async (req, res) => {
       insurance_expiry, 
       registration_expiry,
       oos_reason,
-      vehicle_type
+      vehicle_type,
+      trailer_details
     } = req.body;
 
     if (!tenantId || !operatingEntityId) {
@@ -254,7 +272,17 @@ router.post('/', async (req, res) => {
         insurance_expiry, registration_expiry, oos_reason, finalVehicleType, tenantId, operatingEntityId
       ]
     );
-    await query('UPDATE vehicles SET is_company_owned = true WHERE id = $1', [result.rows[0].id]);
+
+    try {
+      const vehicleColumns = await getVehiclesColumnSet();
+      if (vehicleColumns.has('trailer_details') && trailer_details !== undefined) {
+        await query('UPDATE vehicles SET trailer_details = $1 WHERE id = $2', [trailer_details, result.rows[0].id]);
+      }
+    } catch (metaErr) {
+      console.warn('[vehicles] trailer_details persist skipped:', metaErr?.message || metaErr);
+    }
+
+    await query('UPDATE vehicles SET company_owned = true WHERE id = $1', [result.rows[0].id]);
     const duration = Date.now() - startTime;
     
     dtLogger.trackDatabase('INSERT', 'vehicles', duration, true, { vehicleId: result.rows[0].id });
@@ -277,6 +305,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const startTime = Date.now();
   try {
+    const vehicleColumns = await getVehiclesColumnSet();
     // Fields that should not be updated
     const excludedFields = ['id', 'created_at', 'updated_at', 'customer_id', 'source'];
     
@@ -285,7 +314,7 @@ router.put('/:id', async (req, res) => {
     let paramCount = 1;
     
     Object.keys(req.body).forEach(key => {
-      if (req.body[key] !== undefined && !excludedFields.includes(key)) {
+      if (req.body[key] !== undefined && !excludedFields.includes(key) && vehicleColumns.has(key)) {
         fields.push(`${key} = $${paramCount}`);
         values.push(req.body[key]);
         paramCount++;

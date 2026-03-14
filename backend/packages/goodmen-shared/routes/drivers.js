@@ -124,6 +124,7 @@ router.get('/', async (req, res) => {
   try {
     const view = (req.query.view || '').toString().trim().toLowerCase();
     const status = (req.query.status || '').toString().trim().toLowerCase();
+    const includeAllEntities = (req.query.includeAllEntities || '').toString().trim().toLowerCase() === 'true';
     const hasStatus = !!status;
 
     let result;
@@ -160,7 +161,7 @@ router.get('/', async (req, res) => {
       `;
       params.push(req.context?.tenantId || null);
       sql += ` WHERE d.tenant_id = $${params.length}`;
-      if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+      if (req.context?.operatingEntityId && !includeAllEntities) {
         params.push(req.context.operatingEntityId);
         sql += ` AND d.operating_entity_id = $${params.length}`;
       }
@@ -183,7 +184,7 @@ router.get('/', async (req, res) => {
       `;
       params.push(req.context?.tenantId || null);
       sql += ` WHERE d.tenant_id = $${params.length}`;
-      if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+      if (req.context?.operatingEntityId && !includeAllEntities) {
         params.push(req.context.operatingEntityId);
         sql += ` AND d.operating_entity_id = $${params.length}`;
       }
@@ -205,7 +206,7 @@ router.get('/', async (req, res) => {
         params.push(req.context?.tenantId || null);
         sql += ` WHERE tenant_id = $${params.length}`;
       }
-      if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+      if (req.context?.operatingEntityId && !includeAllEntities) {
         params.push(req.context.operatingEntityId);
         sql += ` AND operating_entity_id = $${params.length}`;
       }
@@ -237,7 +238,7 @@ router.get('/:id', async (req, res) => {
     // Enforce operating_entity scoping for single-driver fetch
     const singleParams = [driverId, req.context?.tenantId || null];
     let singleSql = 'SELECT * FROM drivers WHERE id = $1 AND tenant_id = $2';
-    if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+    if (req.context?.operatingEntityId) {
       singleParams.push(req.context.operatingEntityId);
       singleSql += ` AND operating_entity_id = $3`;
     }

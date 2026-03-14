@@ -75,6 +75,7 @@ export class DriversComponent implements OnInit, OnDestroy {
   activeOperatingEntityName = '';
 
   private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   constructor(
     private apiService: ApiService,
@@ -85,7 +86,6 @@ export class DriversComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.bindOperatingEntityContext();
-    this.loadDrivers();
     this.route.queryParams.subscribe(params => {
       const filter = params['filter'];
       const highlight = params['highlight'];
@@ -115,7 +115,25 @@ export class DriversComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((state) => {
         if (!state.isLoaded) return;
+
         this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          this.loadDrivers();
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          this.drivers = [];
+          this.selectedDriver = null;
+          this.editingDriver = null;
+          this.showDQFForm = false;
+          this.showAddForm = false;
+          this.loadDrivers();
+        }
       });
   }
 

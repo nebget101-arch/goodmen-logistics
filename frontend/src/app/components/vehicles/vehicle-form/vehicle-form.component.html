@@ -11,6 +11,196 @@
     <!-- Modal Body -->
     <div class="modal-body">
       <form (ngSubmit)="onSubmit()">
+        <ng-container *ngIf="isTrailerMode; else legacyVehicleForm">
+          <div class="trailer-layout">
+            <div class="left-col">
+              <div class="form-row trailer-top-row">
+                <div class="form-group">
+                  <label for="trailer-unit-number">Unit <span class="req">*</span></label>
+                  <input id="trailer-unit-number" type="text" class="form-control" [(ngModel)]="formData.unit_number" name="trailer_unit_number" [class.error]="errors.unit_number" />
+                  <small class="error-text" *ngIf="errors.unit_number">{{ errors.unit_number }}</small>
+                </div>
+
+                <div class="form-group trailer-type-group">
+                  <label for="trailer-type">Type <span class="req">*</span></label>
+                  <input
+                    id="trailer-type"
+                    type="text"
+                    class="form-control"
+                    [ngModel]="trailerTypeSearch"
+                    (ngModelChange)="trailerTypeSearch = $event; onTrailerTypeSearchInput()"
+                    name="trailerTypeSearch"
+                    placeholder="Search type code or name"
+                    autocomplete="off"
+                    (focus)="onTrailerTypeSearchFocus()"
+                    (blur)="onTrailerTypeSearchBlur()"
+                    [class.error]="errors.trailer_type"
+                  />
+                  <small class="error-text" *ngIf="errors.trailer_type">{{ errors.trailer_type }}</small>
+                  <div class="type-dropdown" *ngIf="trailerTypeDropdownOpen">
+                    <button
+                      type="button"
+                      class="type-option"
+                      *ngFor="let option of filteredTrailerTypeOptions"
+                      (mousedown)="$event.preventDefault()"
+                      (click)="selectTrailerType(option)"
+                    >
+                      <span class="type-code">{{ option.id }}</span>
+                      <span class="type-value">{{ option.value }}</span>
+                    </button>
+                    <div class="type-empty" *ngIf="filteredTrailerTypeOptions.length === 0">No matches</div>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="trailer-vin">Vin <span class="req">*</span></label>
+                  <input id="trailer-vin" type="text" class="form-control" [(ngModel)]="formData.vin" name="trailer_vin" maxlength="17" (input)="onVinChange()" [class.error]="errors.vin" />
+                  <small class="error-text" *ngIf="errors.vin">{{ errors.vin }}</small>
+                  <small class="help-text" *ngIf="vinDecoding">Decoding VIN...</small>
+                  <small class="help-text" *ngIf="!vinDecoding && vinDecodeMessage">{{ vinDecodeMessage }}</small>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="trailer-year">Year <span class="req">*</span></label>
+                  <input id="trailer-year" type="number" class="form-control" [(ngModel)]="formData.year" name="trailer_year" [class.error]="errors.year" />
+                  <small class="error-text" *ngIf="errors.year">{{ errors.year }}</small>
+                </div>
+
+                <div class="form-group">
+                  <label for="trailer-make">Make <span class="req">*</span></label>
+                  <input id="trailer-make" type="text" class="form-control" [(ngModel)]="formData.make" name="trailer_make" [class.error]="errors.make" />
+                  <small class="error-text" *ngIf="errors.make">{{ errors.make }}</small>
+                </div>
+
+                <div class="form-group">
+                  <label for="trailer-model">Model</label>
+                  <input id="trailer-model" type="text" class="form-control" [(ngModel)]="formData.model" name="trailer_model" />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="trailer-driver">Driver</label>
+                  <select id="trailer-driver" class="form-control" [(ngModel)]="trailerForm.assigned_driver_id" name="trailer_assigned_driver_id">
+                    <option value="">Select Driver</option>
+                    <option *ngFor="let d of drivers" [value]="d.id">{{ d.firstName }} {{ d.lastName }}</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="trailer-plate">Plate</label>
+                  <input id="trailer-plate" type="text" class="form-control" [(ngModel)]="formData.license_plate" name="trailer_license_plate" />
+                </div>
+
+                <div class="form-group">
+                  <label for="trailer-plate-state">Plate state</label>
+                  <select id="trailer-plate-state" class="form-control" [(ngModel)]="formData.state" name="trailer_state">
+                    <option value="">Select State</option>
+                    <option *ngFor="let state of states" [value]="state">{{ state }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="right-col">
+              <div class="form-group checkbox-line">
+                <label class="inline-check">
+                  <input type="checkbox" [checked]="isInactive" (change)="setInactive(($any($event.target)).checked)" />
+                  <span>Inactive</span>
+                </label>
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">Ownership</div>
+                <div class="ownership-row">
+                  <label class="inline-check">
+                    <input type="radio" name="trailer_ownership" [checked]="trailerForm.ownership === 'owned'" (change)="trailerForm.ownership = 'owned'" />
+                    <span>Owned</span>
+                  </label>
+                  <label class="inline-check">
+                    <input type="radio" name="trailer_ownership" [checked]="trailerForm.ownership === 'leased'" (change)="trailerForm.ownership = 'leased'" />
+                    <span>Leased</span>
+                  </label>
+                </div>
+              </div>
+
+              <ng-container *ngIf="trailerForm.ownership === 'owned'; else leasedFields">
+                <div class="form-group">
+                  <label for="purchase-date">Purchase Date</label>
+                  <input id="purchase-date" type="date" class="form-control" [(ngModel)]="trailerForm.purchase_date" name="trailer_purchase_date" />
+                </div>
+                <div class="form-group">
+                  <label for="purchase-price">Purchase Price</label>
+                  <input id="purchase-price" type="number" class="form-control" [(ngModel)]="trailerForm.purchase_price" name="trailer_purchase_price" min="0" step="0.01" />
+                </div>
+              </ng-container>
+
+              <ng-template #leasedFields>
+                <div class="form-group">
+                  <label for="lease-date">Lease Date</label>
+                  <input id="lease-date" type="date" class="form-control" [(ngModel)]="trailerForm.lease_date" name="trailer_lease_date" />
+                </div>
+                <div class="form-group">
+                  <label for="lessor-name">Lessor Name</label>
+                  <input id="lessor-name" type="text" class="form-control" [(ngModel)]="trailerForm.lessor_name" name="trailer_lessor_name" />
+                </div>
+                <div class="form-group">
+                  <label for="fid-number">FID #</label>
+                  <input id="fid-number" type="text" class="form-control" [(ngModel)]="trailerForm.fid_number" name="trailer_fid_number" />
+                </div>
+                <div class="form-group">
+                  <label for="lease-address">Address</label>
+                  <input id="lease-address" type="text" class="form-control" [(ngModel)]="trailerForm.address" name="trailer_address" />
+                </div>
+                <div class="form-group">
+                  <label for="lease-address-line2">Address Line 2</label>
+                  <input id="lease-address-line2" type="text" class="form-control" [(ngModel)]="trailerForm.address_line2" name="trailer_address_line2" />
+                </div>
+                <div class="form-group">
+                  <label for="lease-city">City</label>
+                  <input id="lease-city" type="text" class="form-control" [(ngModel)]="trailerForm.city" name="trailer_city" />
+                </div>
+                <div class="form-group">
+                  <label for="lease-state">State</label>
+                  <select id="lease-state" class="form-control" [(ngModel)]="trailerForm.lease_state" name="trailer_lease_state">
+                    <option value="">Select State</option>
+                    <option *ngFor="let state of states" [value]="state">{{ state }}</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="lease-zip">Zip</label>
+                  <input id="lease-zip" type="text" class="form-control" [(ngModel)]="trailerForm.zip" name="trailer_zip" />
+                </div>
+                <div class="form-group">
+                  <label for="lease-phone">Phone</label>
+                  <input id="lease-phone" type="text" class="form-control" [(ngModel)]="trailerForm.phone" name="trailer_phone" />
+                </div>
+              </ng-template>
+            </div>
+          </div>
+
+          <div class="form-section trailer-notes-section">
+            <div class="form-group full-width">
+              <label for="trailer-notes">Notes</label>
+              <textarea id="trailer-notes" class="form-control" rows="3" [(ngModel)]="trailerForm.notes" name="trailer_notes"></textarea>
+            </div>
+            <div class="form-group full-width">
+              <label for="trailer-history">History</label>
+              <textarea id="trailer-history" class="form-control" rows="3" [(ngModel)]="trailerForm.history" name="trailer_history"></textarea>
+            </div>
+          </div>
+
+          <div *ngIf="errors.submit" class="form-error">{{ errors.submit }}</div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="onClose()">Close</button>
+            <button type="submit" class="btn btn-primary" [disabled]="saving">{{ saving ? 'Saving...' : 'Save' }}</button>
+          </div>
+        </ng-container>
+
+        <ng-template #legacyVehicleForm>
         <!-- Basic Information -->
         <div class="form-section">
           <h3 class="section-title">Basic Information</h3>
@@ -323,6 +513,7 @@
             {{ saving ? 'Saving...' : (isEditMode ? 'Update Vehicle' : 'Add Vehicle') }}
           </button>
         </div>
+        </ng-template>
       </form>
     </div>
   </div>

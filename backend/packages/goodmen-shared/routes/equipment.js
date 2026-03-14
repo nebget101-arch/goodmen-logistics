@@ -15,6 +15,10 @@ router.get('/', async (req, res) => {
       FROM all_vehicles
       WHERE 1=1
     `;
+    if (req.context?.tenantId) {
+      params.push(req.context.tenantId);
+      sql += ` AND tenant_id = $${params.length}`;
+    }
     if (type) {
       params.push(type);
       sql += ` AND LOWER(vehicle_type) = $${params.length}`;
@@ -24,10 +28,13 @@ router.get('/', async (req, res) => {
       params.push(normalizedStatus);
       sql += ` AND LOWER(status) = $${params.length}`;
     }
-    // Apply operating entity scoping: if request has an operatingEntityId and user is not global admin
-    if (req.context && req.context.operatingEntityId && !req.context.isGlobalAdmin) {
+    if (req.context?.operatingEntityId) {
       params.push(req.context.operatingEntityId);
-      sql += ` AND operating_entity_id = $${params.length}`;
+      if (type === 'trailer') {
+        sql += ` AND (operating_entity_id = $${params.length} OR LOWER(COALESCE(vehicle_type, '')) = 'trailer')`;
+      } else {
+        sql += ` AND operating_entity_id = $${params.length}`;
+      }
     }
     sql += ' ORDER BY unit_number';
     const result = await query(sql, params);

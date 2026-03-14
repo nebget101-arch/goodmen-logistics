@@ -146,9 +146,10 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/drivers`);
   }
 
-  getDispatchDrivers(status?: string): Observable<any> {
+  getDispatchDrivers(status?: string, includeAllEntities = false): Observable<any> {
     const params: any = { view: 'dispatch' };
     if (status) params.status = status;
+    if (includeAllEntities) params.includeAllEntities = 'true';
     return this.http.get(`${this.baseUrl}/drivers`, { params });
   }
 
