@@ -835,6 +835,25 @@ export class ApiService {
       return this.http.patch(`${this.baseUrl}/public/trial-requests/${encodeURIComponent(id)}/status`, { status });
     }
 
+    getTrialSignupContext(token: string): Observable<any> {
+      return this.http.get(`${this.baseUrl}/public/trial-requests/signup/${encodeURIComponent(token)}`);
+    }
+
+    completeTrialSignup(
+      token: string,
+      payload: {
+        password: string;
+        username?: string;
+        firstName?: string;
+        lastName?: string;
+      }
+    ): Observable<any> {
+      return this.http.post(
+        `${this.baseUrl}/public/trial-requests/signup/${encodeURIComponent(token)}/complete`,
+        payload
+      );
+    }
+
   // ========== INVENTORY MANAGEMENT (PHASE 2) ==========
 
   // Parts Catalog

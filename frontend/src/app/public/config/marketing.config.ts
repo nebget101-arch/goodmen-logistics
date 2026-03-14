@@ -435,19 +435,17 @@ export const MARKETING_PLANS: MarketingPlan[] = [
   {
     id: 'basic',
     name: 'Basic',
-    tagline: 'Single carrier operations',
+    tagline: 'Core operations for one entity',
     description:
-      'Best for smaller fleets operating under one carrier authority and looking to digitize their core workflows.',
-    priceLabel: 'Contact Sales',
+      'Includes dashboard, dispatch, compliance, and settlement workflows for one operating entity.',
+    priceLabel: '2 users included + $50/additional user',
     highlighted: false,
     features: [
-      { text: 'One carrier tenant' },
-      { text: 'Core dispatch tools' },
-      { text: 'Basic driver workflows' },
-      { text: 'Basic maintenance & work order support' },
-      { text: 'Standard visibility & reporting' },
-      { text: 'Limited AI workflows' },
-      { text: 'Free trial available', highlight: true }
+      { text: 'Dashboard, Loads, Dispatch Board, Drivers' },
+      { text: 'Trucks/Trailers, HOS, DQF, Audit' },
+      { text: 'Settlements: Scheduled Payments + Equipment Owners' },
+      { text: '2 included users: Admin + Dispatch', highlight: true },
+      { text: '$50 per additional user', highlight: true }
     ]
   },
   {
@@ -455,19 +453,16 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     name: 'Multi-MC',
     tagline: 'Multiple MCs, centralized control',
     description:
-      'Designed for businesses operating multiple MCs, entities, or business units that need centralized management and controlled access.',
-    priceLabel: 'Contact Sales',
+      'Everything in Basic plus multi-entity administration and broader role coverage.',
+    priceLabel: '4 users included + $50/additional user',
     highlighted: true,
     badge: 'Most Popular',
     features: [
-      { text: 'Multi-tenant / multi-company support', highlight: true },
-      { text: 'Multiple MC support', highlight: true },
-      { text: 'Shared admin visibility' },
-      { text: 'Role-aware company access controls' },
-      { text: 'Cross-company operational visibility' },
-      { text: 'Expanded reporting' },
-      { text: 'Enhanced AI workflows' },
-      { text: 'Free trial available', highlight: true }
+      { text: 'Everything in Basic' },
+      { text: 'Multi-entity admin page (/admin/multi-mc)', highlight: true },
+      { text: '4 included users: Admin, Safety, Dispatch, Accounting', highlight: true },
+      { text: 'Cross-entity operational management' },
+      { text: '$50 per additional user', highlight: true }
     ]
   },
   {
@@ -475,18 +470,15 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     name: 'End-to-End',
     tagline: 'Full platform, maximum coverage',
     description:
-      'Built for companies that want the full FleetNeuron platform across dispatch, safety, maintenance, inventory, AI workflows, and advanced operational control.',
-    priceLabel: 'Contact Sales',
+      'Everything in Multi-MC plus inventory, accounting, reports, and roadside AI with larger user access.',
+    priceLabel: '10 users included + $50/additional user',
     highlighted: false,
     features: [
       { text: 'Everything in Multi-MC' },
-      { text: 'Full dispatch + safety + maintenance + inventory' },
-      { text: 'Advanced AI automation support', highlight: true },
-      { text: 'Broader operational visibility' },
-      { text: 'Implementation & onboarding support' },
-      { text: 'API / integration readiness' },
-      { text: 'Advanced permissions & workflow flexibility' },
-      { text: 'Priority support' }
+      { text: 'Inventory modules + accounting (invoices/settlements)' },
+      { text: 'Reports + Roadside AI', highlight: true },
+      { text: '10 included users', highlight: true },
+      { text: '$50 per additional user', highlight: true }
     ]
   }
 ];

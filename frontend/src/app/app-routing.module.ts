@@ -14,6 +14,7 @@ import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { AuthGuard } from './auth.guard';
 import { PermissionGuard } from './guards/permission.guard';
+import { PlanGuard } from './guards/plan.guard';
 import { UserCreateComponent } from './components/user-create/user-create.component';
 import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
@@ -39,30 +40,30 @@ const routes: Routes = [
     path: 'home',
     loadChildren: () => import('./public/public.module').then(m => m.PublicModule)
   },
-  { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard] },
-  { path: 'drivers', component: DispatchDriversComponent, canActivate: [AuthGuard] },
-  { path: 'drivers/dqf', component: DriversComponent, canActivate: [AuthGuard] },
-  { path: 'vehicles', component: VehiclesComponent, canActivate: [AuthGuard], data: { vehicleType: 'truck' } },
-  { path: 'trailers', component: VehiclesComponent, canActivate: [AuthGuard], data: { vehicleType: 'trailer' } },
-  { path: 'hos', component: HosComponent, canActivate: [AuthGuard] },
-  { path: 'maintenance', component: MaintenanceComponent, canActivate: [AuthGuard] },
-  { path: 'work-order', component: WorkOrderComponent, canActivate: [AuthGuard] },
-  { path: 'work-order/:id', component: WorkOrderComponent, canActivate: [AuthGuard] },
-  { path: 'loads', component: LoadsDashboardComponent, canActivate: [AuthGuard] },
-  { path: 'dispatch-board', component: DispatchBoardComponent, canActivate: [AuthGuard] },
+  { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/dashboard' } },
+  { path: 'drivers', component: DispatchDriversComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/drivers' } },
+  { path: 'drivers/dqf', component: DriversComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/drivers/dqf' } },
+  { path: 'vehicles', component: VehiclesComponent, canActivate: [AuthGuard, PlanGuard], data: { vehicleType: 'truck', planPath: '/vehicles' } },
+  { path: 'trailers', component: VehiclesComponent, canActivate: [AuthGuard, PlanGuard], data: { vehicleType: 'trailer', planPath: '/trailers' } },
+  { path: 'hos', component: HosComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/hos' } },
+  { path: 'maintenance', component: MaintenanceComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/maintenance' } },
+  { path: 'work-order', component: WorkOrderComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/work-order' } },
+  { path: 'work-order/:id', component: WorkOrderComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/work-order' } },
+  { path: 'loads', component: LoadsDashboardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/loads' } },
+  { path: 'dispatch-board', component: DispatchBoardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/dispatch-board' } },
   {
     path: 'roadside',
     component: RoadsideBoardComponent,
-    canActivate: [AuthGuard, PermissionGuard],
-    data: { anyPermission: ['roadside.view', 'roadside.manage'] }
+    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
+    data: { anyPermission: ['roadside.view', 'roadside.manage'], planPath: '/roadside' }
   },
-  { path: 'audit', component: AuditComponent, canActivate: [AuthGuard] },
-  { path: 'parts', component: PartsCatalogComponent, canActivate: [AuthGuard] },
-  { path: 'barcodes', component: BarcodeManagementComponent, canActivate: [AuthGuard] },
-  { path: 'receiving', component: WarehouseReceivingComponent, canActivate: [AuthGuard] },
-  { path: 'inventory-transfers', component: InventoryTransfersComponent, canActivate: [AuthGuard] },
-  { path: 'direct-sales', component: DirectSalesComponent, canActivate: [AuthGuard] },
-  { path: 'inventory-reports', component: InventoryReportsComponent, canActivate: [AuthGuard] },
+  { path: 'audit', component: AuditComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/audit' } },
+  { path: 'parts', component: PartsCatalogComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/parts' } },
+  { path: 'barcodes', component: BarcodeManagementComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/barcodes' } },
+  { path: 'receiving', component: WarehouseReceivingComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/receiving' } },
+  { path: 'inventory-transfers', component: InventoryTransfersComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-transfers' } },
+  { path: 'direct-sales', component: DirectSalesComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/direct-sales' } },
+  { path: 'inventory-reports', component: InventoryReportsComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-reports' } },
   // Public driver onboarding packet link (no AuthGuard)
   { path: 'onboard/:packetId', component: OnboardingPacketComponent },
   { path: 'roadside/:callId', component: PublicRoadsideComponent },
@@ -75,8 +76,8 @@ const routes: Routes = [
   {
     path: 'admin/multi-mc',
     component: MultiMcAdminComponent,
-    canActivate: [AuthGuard, PermissionGuard],
-    data: { anyPermission: ['roles.manage', 'access.admin', 'users.edit'] }
+    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
+    data: { anyPermission: ['roles.manage', 'access.admin', 'users.edit'], planPath: '/admin/multi-mc' }
   },
   {
     path: 'admin/trial-requests',

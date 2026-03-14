@@ -167,16 +167,18 @@ export class AppComponent implements OnInit {
 
   /** Whether a nav section should be visible (uses tab or tabs from config). */
   canSeeSection(section: NavSection): boolean {
-    if (section.tabs?.length) return this.access.canSeeAny(section.tabs);
-    if (section.tab) return this.access.canSee(section.tab);
-    return false;
+    return section.children.some((child) => this.canSeeLink(child));
   }
 
   /** Whether a section child link should be visible (optional role filter). */
   canSeeLink(link: NavLink): boolean {
     if (!this.access.canSee(link.tab)) return false;
     if (link.roles?.length) return this.access.hasAnyRole(link.roles);
-    return true;
+    return this.access.canAccessUrl(link.path);
+  }
+
+  canSeeAdminMenuLink(path: string, permissionCodes: string[]): boolean {
+    return this.access.hasAnyPermission(permissionCodes) && this.access.canAccessUrl(path);
   }
 
   getSectionExpanded(index: number): boolean {

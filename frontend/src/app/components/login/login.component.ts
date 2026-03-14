@@ -38,8 +38,16 @@ export class LoginComponent {
           }
         }
         this.accessControl.setAccessFromLoginResponse(res);
-        this.operatingEntityContext.bootstrapFromSessionIfNeeded(true, { force: true });
-        this.router.navigate(['/dashboard']);
+        this.accessControl.loadAccess().subscribe({
+          next: () => {
+            this.operatingEntityContext.bootstrapFromSessionIfNeeded(true, { force: true });
+            this.router.navigate(['/dashboard']);
+          },
+          error: () => {
+            this.operatingEntityContext.bootstrapFromSessionIfNeeded(true, { force: true });
+            this.router.navigate(['/dashboard']);
+          }
+        });
       },
       error: (err) => {
         const msg = err?.error?.error ?? err?.error?.detail ?? err?.message;

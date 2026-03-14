@@ -16,6 +16,22 @@ const trialRequestEmailService = require('../services/trial-request-email-servic
 const authMiddleware = require('../middleware/auth-middleware');
 const { PLANS, TRIAL_REQUEST_STATUSES } = require('../config/plans');
 
+function getPublicAppBaseUrl() {
+  return (process.env.APP_BASE_URL || 'https://fleetneuron.com').replace(/\/$/, '');
+}
+
+function buildTrialSignupUrl(token) {
+  const safeToken = String(token || '').trim();
+  if (!safeToken) return null;
+
+  const template = String(process.env.TRIAL_SIGNUP_URL_TEMPLATE || '').trim();
+  if (template.includes('{token}')) {
+    return template.replace('{token}', encodeURIComponent(safeToken));
+  }
+
+  return `${getPublicAppBaseUrl()}/trial-signup?token=${encodeURIComponent(safeToken)}`;
+}
+
 // ─── PUBLIC: Submit a trial request ──────────────────────────────────────────
 
 /**
@@ -51,18 +67,40 @@ const { PLANS, TRIAL_REQUEST_STATUSES } = require('../config/plans');
 router.post('/', async (req, res) => {
   try {
     const record = await trialRequestService.createTrialRequest(req.body);
+    let internalEmailResult = { sent: false, reason: 'not_attempted' };
+    let requesterEmailResult = { sent: false, reason: 'not_attempted' };
 
     try {
-      await trialRequestEmailService.sendNewTrialRequestNotification(record);
+      internalEmailResult = await trialRequestEmailService.sendNewTrialRequestNotification(record);
+      if (!internalEmailResult?.sent) {
+        console.warn('[trial-requests] internal email not sent:', internalEmailResult);
+      }
     } catch (emailErr) {
       console.error('[trial-requests] email notification error:', emailErr.message);
+    }
+
+    try {
+      requesterEmailResult = await trialRequestEmailService.sendRequesterUnderReviewEmail(record);
+      if (!requesterEmailResult?.sent) {
+        console.warn('[trial-requests] requester email not sent:', requesterEmailResult);
+      }
+    } catch (emailErr) {
+      console.error('[trial-requests] requester email error:', emailErr.message);
     }
 
     return res.status(201).json({
       success: true,
       message:
         'Your trial request has been received. Our team will reach out to you shortly.',
-      id: record.id
+      id: record.id,
+      emailDelivery: {
+        internalNotificationSent: Boolean(internalEmailResult?.sent),
+        requesterNotificationSent: Boolean(requesterEmailResult?.sent),
+        internalReason: internalEmailResult?.reason || null,
+        requesterReason: requesterEmailResult?.reason || null,
+        internalError: internalEmailResult?.error || null,
+        requesterError: requesterEmailResult?.error || null
+      }
     });
   } catch (err) {
     if (err.statusCode === 400) {
@@ -84,6 +122,40 @@ router.post('/', async (req, res) => {
 
 router.get('/plans', (_req, res) => {
   return res.json({ success: true, data: PLANS });
+});
+
+// ─── PUBLIC: Read signup context by approved token ─────────────────────────
+
+router.get('/signup/:token', async (req, res) => {
+  try {
+    const data = await trialRequestService.getSignupContextByToken(req.params.token);
+    return res.json({ success: true, data });
+  } catch (err) {
+    if ([400, 404, 409, 410].includes(err.statusCode)) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    console.error('[trial-requests] signup context error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to load signup details' });
+  }
+});
+
+// ─── PUBLIC: Complete approved trial signup ─────────────────────────────────
+
+router.post('/signup/:token/complete', async (req, res) => {
+  try {
+    const data = await trialRequestService.completeSignupFromToken(req.params.token, req.body || {});
+    return res.status(201).json({
+      success: true,
+      message: 'Trial account created successfully. You can now sign in.',
+      data
+    });
+  } catch (err) {
+    if ([400, 404, 409, 410].includes(err.statusCode)) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    console.error('[trial-requests] complete signup error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to create trial account' });
+  }
 });
 
 // ─── ADMIN: List trial requests ───────────────────────────────────────────────
@@ -127,10 +199,41 @@ router.patch('/:id/status', authMiddleware, async (req, res) => {
         error: `status is required. Valid values: ${TRIAL_REQUEST_STATUSES.join(', ')}`
       });
     }
-    const record = await trialRequestService.updateTrialRequestStatus(req.params.id, status);
-    return res.json({ success: true, data: record });
+    const record = status === 'approved'
+      ? await trialRequestService.approveTrialRequest(req.params.id, req.user?.id || null)
+      : await trialRequestService.updateTrialRequestStatus(req.params.id, status);
+    let requesterApprovedEmailResult = { sent: false, reason: 'not_attempted' };
+    let activationUrl = null;
+
+    if (status === 'approved') {
+      activationUrl = buildTrialSignupUrl(record.signup_token);
+      try {
+        requesterApprovedEmailResult = await trialRequestEmailService.sendRequesterApprovedEmail(record, {
+          activationUrl
+        });
+        if (!requesterApprovedEmailResult?.sent) {
+          console.warn('[trial-requests] requester approved email not sent:', requesterApprovedEmailResult);
+        }
+      } catch (emailErr) {
+        console.error('[trial-requests] requester approved email error:', emailErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: record,
+      emailDelivery: status === 'approved'
+        ? {
+            requesterApprovedNotificationSent: Boolean(requesterApprovedEmailResult?.sent),
+            requesterReason: requesterApprovedEmailResult?.reason || null,
+            requesterError: requesterApprovedEmailResult?.error || null,
+            activationLink: activationUrl,
+            activationExpiresAt: record.signup_token_expires_at || null
+          }
+        : undefined
+    });
   } catch (err) {
-    if (err.statusCode === 400 || err.statusCode === 404) {
+    if (err.statusCode === 400 || err.statusCode === 404 || err.statusCode === 409) {
       return res.status(err.statusCode).json({ success: false, error: err.message });
     }
     console.error('[trial-requests] update status error:', err.message);
