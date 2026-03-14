@@ -10,7 +10,7 @@
         (click)="openAddVehicleForm()"
         aria-label="Add new vehicle"
         type="button">
-        <span class="material-symbols-outlined">add</span>
+        <span class="material-symbols-outlined">{{ vehicleType === 'trailer' ? 'airport_shuttle' : 'local_shipping' }}</span>
         {{ addLabel }}
       </button>
     </div>

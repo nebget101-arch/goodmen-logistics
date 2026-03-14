@@ -7,7 +7,7 @@
     </div>
     <div class="header-actions">
       <button type="button" class="btn-primary" (click)="createNew()">
-        <span class="material-symbols-outlined">add_circle</span>
+        <span class="material-symbols-outlined">receipt_long</span>
         New settlement
       </button>
     </div>
@@ -87,7 +87,10 @@
     <div *ngIf="!loading && settlements.length === 0" class="empty-state">
       <span class="material-symbols-outlined empty-icon">receipt_long</span>
       <p>No settlements match your filters.</p>
-      <button type="button" class="btn-primary" (click)="createNew()">Create first settlement</button>
+      <button type="button" class="btn-ai" (click)="createNew()">
+        <span class="material-symbols-outlined">auto_awesome</span>
+        Create first settlement
+      </button>
     </div>
   </div>
 </div>

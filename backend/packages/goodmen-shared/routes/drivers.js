@@ -124,7 +124,6 @@ router.get('/', async (req, res) => {
   try {
     const view = (req.query.view || '').toString().trim().toLowerCase();
     const status = (req.query.status || '').toString().trim().toLowerCase();
-    const includeAllEntities = (req.query.includeAllEntities || '').toString().trim().toLowerCase() === 'true';
     const hasStatus = !!status;
 
     let result;
@@ -161,7 +160,7 @@ router.get('/', async (req, res) => {
       `;
       params.push(req.context?.tenantId || null);
       sql += ` WHERE d.tenant_id = $${params.length}`;
-      if (req.context?.operatingEntityId && !includeAllEntities) {
+      if (req.context?.operatingEntityId) {
         params.push(req.context.operatingEntityId);
         sql += ` AND d.operating_entity_id = $${params.length}`;
       }
@@ -184,7 +183,7 @@ router.get('/', async (req, res) => {
       `;
       params.push(req.context?.tenantId || null);
       sql += ` WHERE d.tenant_id = $${params.length}`;
-      if (req.context?.operatingEntityId && !includeAllEntities) {
+      if (req.context?.operatingEntityId) {
         params.push(req.context.operatingEntityId);
         sql += ` AND d.operating_entity_id = $${params.length}`;
       }
@@ -206,7 +205,7 @@ router.get('/', async (req, res) => {
         params.push(req.context?.tenantId || null);
         sql += ` WHERE tenant_id = $${params.length}`;
       }
-      if (req.context?.operatingEntityId && !includeAllEntities) {
+      if (req.context?.operatingEntityId) {
         params.push(req.context.operatingEntityId);
         sql += ` AND operating_entity_id = $${params.length}`;
       }

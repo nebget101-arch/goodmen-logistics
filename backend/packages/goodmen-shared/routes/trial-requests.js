@@ -16,11 +16,22 @@ const trialRequestEmailService = require('../services/trial-request-email-servic
 const authMiddleware = require('../middleware/auth-middleware');
 const { PLANS, TRIAL_REQUEST_STATUSES } = require('../config/plans');
 
-function getPublicAppBaseUrl() {
-  return (process.env.APP_BASE_URL || 'https://fleetneuron.com').replace(/\/$/, '');
+function getPublicAppBaseUrl(req) {
+  const configured = String(
+    process.env.TRIAL_PUBLIC_BASE_URL
+    || process.env.PUBLIC_APP_BASE_URL
+    || process.env.APP_BASE_URL
+    || ''
+  ).trim();
+  if (configured) return configured.replace(/\/$/, '');
+
+  const origin = String(req?.headers?.origin || '').trim();
+  if (origin) return origin.replace(/\/$/, '');
+
+  return 'https://fleetneuron.com';
 }
 
-function buildTrialSignupUrl(token) {
+function buildTrialSignupUrl(token, req) {
   const safeToken = String(token || '').trim();
   if (!safeToken) return null;
 
@@ -29,7 +40,7 @@ function buildTrialSignupUrl(token) {
     return template.replace('{token}', encodeURIComponent(safeToken));
   }
 
-  return `${getPublicAppBaseUrl()}/trial-signup?token=${encodeURIComponent(safeToken)}`;
+  return `${getPublicAppBaseUrl(req)}/trial-signup?token=${encodeURIComponent(safeToken)}`;
 }
 
 // ─── PUBLIC: Submit a trial request ──────────────────────────────────────────
@@ -175,6 +186,39 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
+// ─── ADMIN: Get (or regenerate) activation link for approved request ───────
+
+router.get('/:id/activation-link', authMiddleware, async (req, res) => {
+  try {
+    const forceRegenerate = String(req.query.regenerate || '').toLowerCase() === 'true';
+    const record = await trialRequestService.getOrCreateApprovedSignupToken(
+      req.params.id,
+      req.user?.id || null,
+      { forceRegenerate }
+    );
+
+    const activationLink = buildTrialSignupUrl(record.signup_token, req);
+    return res.json({
+      success: true,
+      data: {
+        id: record.id,
+        status: record.status,
+        requestedPlan: record.requested_plan,
+        contactName: record.contact_name,
+        email: record.email,
+        activationLink,
+        activationExpiresAt: record.signup_token_expires_at || null
+      }
+    });
+  } catch (err) {
+    if ([400, 404, 409].includes(err.statusCode)) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    console.error('[trial-requests] activation link error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to generate activation link' });
+  }
+});
+
 // ─── ADMIN: Get single trial request ─────────────────────────────────────────
 
 router.get('/:id', authMiddleware, async (req, res) => {
@@ -206,7 +250,7 @@ router.patch('/:id/status', authMiddleware, async (req, res) => {
     let activationUrl = null;
 
     if (status === 'approved') {
-      activationUrl = buildTrialSignupUrl(record.signup_token);
+      activationUrl = buildTrialSignupUrl(record.signup_token, req);
       try {
         requesterApprovedEmailResult = await trialRequestEmailService.sendRequesterApprovedEmail(record, {
           activationUrl

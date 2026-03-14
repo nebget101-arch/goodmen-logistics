@@ -28,7 +28,6 @@ import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-poli
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
-import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 
@@ -39,6 +38,16 @@ const routes: Routes = [
   {
     path: 'home',
     loadChildren: () => import('./public/public.module').then(m => m.PublicModule)
+  },
+  {
+    path: 'trial-signup',
+    redirectTo: '/home/trial-signup',
+    pathMatch: 'full'
+  },
+  {
+    path: 'trial-signup/:token',
+    redirectTo: '/home/trial-signup/:token',
+    pathMatch: 'full'
   },
   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/dashboard' } },
   { path: 'drivers', component: DispatchDriversComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/drivers' } },
@@ -78,12 +87,6 @@ const routes: Routes = [
     component: MultiMcAdminComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
     data: { anyPermission: ['roles.manage', 'access.admin', 'users.edit'], planPath: '/admin/multi-mc' }
-  },
-  {
-    path: 'admin/trial-requests',
-    component: TrialRequestsAdminComponent,
-    canActivate: [AuthGuard, PermissionGuard],
-    data: { anyPermission: ['roles.manage', 'access.admin', 'users.edit'] }
   },
   { path: 'login', component: LoginComponent },
   { path: 'privacy', component: PrivacyPolicyComponent },

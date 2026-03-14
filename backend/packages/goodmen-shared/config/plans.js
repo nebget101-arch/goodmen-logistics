@@ -27,6 +27,7 @@ const PLANS = {
       '/hos',
       '/drivers/dqf',
       '/audit',
+      '/settlements',
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners'
     ],

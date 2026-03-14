@@ -55,6 +55,7 @@ This directory contains all essential documents for the multi-agent development 
 | **[GIT-WORKFLOW-QUICK-REFERENCE.md](./GIT-WORKFLOW-QUICK-REFERENCE.md)** | Git commands, commit conventions, branch naming, collaboration scenarios | **Day 1 - Required, then daily reference** |
 | **[TEAM-STATUS-DAILY.md](./TEAM-STATUS-DAILY.md)** | Daily status update template - each agent updates their section | **Daily** |
 | **[TEAM-COLLABORATION-PLAN.md](./TEAM-COLLABORATION-PLAN.md)** | Sprint workflow, release process, success metrics | **Week 1** |
+| **[README_PRODUCTION_READY_AND_E2E_TEST_PLAN.md](./README_PRODUCTION_READY_AND_E2E_TEST_PLAN.md)** | Single-file production readiness checklist + end-to-end test plan | **Before go-live** |
 
 ### 🔌 API & Integration
 

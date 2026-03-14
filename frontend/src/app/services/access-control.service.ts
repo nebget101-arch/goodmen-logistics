@@ -12,7 +12,7 @@ import {
 } from '../models/access-control.model';
 
 const STORAGE_KEY_ACCESS = 'fleetneuron_access';
-const ALWAYS_ALLOWED_PATH_PREFIXES = ['/profile', '/users/create', '/admin/trial-requests'];
+const ALWAYS_ALLOWED_PATH_PREFIXES = ['/profile', '/users/create'];
 
 /**
  * Centralized RBAC: permissions, roles, and location-aware access.
@@ -309,6 +309,15 @@ export class AccessControlService {
     const normalized = this.normalizeUrl(url);
     if (!normalized) return false;
     if (ALWAYS_ALLOWED_PATH_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`))) {
+      return true;
+    }
+
+    // Backward compatibility for older cached access payloads where Basic plan
+    // includedPages might not yet include full settlements paths.
+    if (
+      this.getSubscriptionPlanId() === 'basic'
+      && (normalized === '/settlements' || normalized.startsWith('/settlements/'))
+    ) {
       return true;
     }
 

@@ -13,7 +13,6 @@ import { OperatingEntityContextService } from '../../services/operating-entity-c
 })
 export class DispatchDriversComponent implements OnInit, OnDestroy {
   drivers: any[] = [];
-  tenantWideDispatchDrivers: any[] = [];
   loading = true;
   showNewModal = false;
   saving = false;
@@ -265,19 +264,16 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
           this.lastOperatingEntityId = nextId;
           this.loadDrivers();
           this.loadVehicles();
-          this.loadTenantWideDispatchDrivers();
           return;
         }
 
         if (this.lastOperatingEntityId !== nextId) {
           this.lastOperatingEntityId = nextId;
           this.drivers = [];
-          this.tenantWideDispatchDrivers = [];
           this.trucks = [];
           this.trailers = [];
           this.loadDrivers();
           this.loadVehicles();
-          this.loadTenantWideDispatchDrivers();
         }
       });
   }
@@ -379,25 +375,13 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     });
   }
 
-  loadTenantWideDispatchDrivers(): void {
-    this.apiService.getDispatchDrivers(undefined, true).subscribe({
-      next: (data) => {
-        this.tenantWideDispatchDrivers = data || [];
-      },
-      error: (err) => {
-        console.error('Error loading tenant-wide dispatch drivers', err);
-        this.tenantWideDispatchDrivers = [];
-      }
-    });
-  }
-
   private normalizeId(value: any): string {
     return (value ?? '').toString().trim();
   }
 
   private getEditingDriverAssignedTrailerId(): string {
     if (!this.editingDriverId) return '';
-    const current = (this.tenantWideDispatchDrivers || this.drivers || []).find(
+    const current = (this.drivers || []).find(
       (d: any) => this.normalizeId(d?.id) === this.normalizeId(this.editingDriverId)
     );
     return this.normalizeId(current?.trailerId ?? current?.trailer_id);
@@ -406,11 +390,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   get availableTrailers(): any[] {
     const assignedToOtherDrivers = new Set<string>();
 
-    const assignmentSource = (this.tenantWideDispatchDrivers || []).length
-      ? this.tenantWideDispatchDrivers
-      : (this.drivers || []);
-
-    assignmentSource.forEach((d: any) => {
+    (this.drivers || []).forEach((d: any) => {
       const driverId = this.normalizeId(d?.id);
       if (this.editingDriverId && driverId === this.normalizeId(this.editingDriverId)) {
         return;

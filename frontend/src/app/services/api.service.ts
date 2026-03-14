@@ -835,6 +835,11 @@ export class ApiService {
       return this.http.patch(`${this.baseUrl}/public/trial-requests/${encodeURIComponent(id)}/status`, { status });
     }
 
+    getTrialRequestActivationLink(id: string, regenerate = false): Observable<any> {
+      const query = regenerate ? '?regenerate=true' : '';
+      return this.http.get(`${this.baseUrl}/public/trial-requests/${encodeURIComponent(id)}/activation-link${query}`);
+    }
+
     getTrialSignupContext(token: string): Observable<any> {
       return this.http.get(`${this.baseUrl}/public/trial-requests/signup/${encodeURIComponent(token)}`);
     }

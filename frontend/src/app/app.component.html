@@ -85,11 +85,6 @@
               <span class="material-symbols-outlined">domain</span> Company Access Admin
             </a>
           </ng-container>
-          <ng-container *ngIf="access.hasAnyPermission(['roles.manage', 'access.admin', 'users.edit'])">
-            <a routerLink="/admin/trial-requests" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
-              <span class="material-symbols-outlined">approval</span> Trial Requests
-            </a>
-          </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
             <span class="material-symbols-outlined">logout</span> Logout
           </button>
@@ -146,11 +141,6 @@
               <span class="material-symbols-outlined">domain</span> Company Access Admin
             </a>
           </ng-container>
-          <ng-container *ngIf="access.hasAnyPermission(['roles.manage', 'access.admin', 'users.edit'])">
-            <a routerLink="/admin/trial-requests" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
-              <span class="material-symbols-outlined">approval</span> Trial Requests
-            </a>
-          </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
             <span class="material-symbols-outlined">logout</span> Logout
           </button>
@@ -174,10 +164,10 @@
       type="button"
         *ngIf="isLoggedIn() && !isShelllessRoute()"
       (click)="toggleAiChat()"
-      aria-label="Open FleetNeuron AI assistant"
+      aria-label="Open Ask Neuron assistant"
     >
-      <span class="material-symbols-outlined">chat</span>
-      <span class="ai-chat-launcher-label">Ask AI</span>
+      <span class="material-symbols-outlined">psychology_alt</span>
+      <span class="ai-chat-launcher-label">Ask Neuron</span>
     </button>
 
     <section class="ai-chat-panel" *ngIf="aiChatOpen && isLoggedIn() && !isShelllessRoute()">

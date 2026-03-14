@@ -193,7 +193,7 @@ export class AppComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    if (this.isLoggedIn() && !this.access.isLoaded()) {
+    if (this.isLoggedIn()) {
       this.access.loadAccess().subscribe();
     }
     this.operatingEntityContext.bootstrapFromSessionIfNeeded(this.isLoggedIn());

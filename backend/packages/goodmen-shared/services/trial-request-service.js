@@ -186,6 +186,53 @@ async function approveTrialRequest(id, approvedByUserId = null) {
   return record;
 }
 
+async function getOrCreateApprovedSignupToken(id, approvedByUserId = null, options = {}) {
+  const forceRegenerate = Boolean(options?.forceRegenerate);
+
+  const existing = await knex('trial_requests').where({ id }).first();
+  if (!existing) {
+    const err = new Error('Trial request not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (existing.status === 'trial_created' || existing.signup_completed_at) {
+    const err = new Error('Trial signup is already completed for this request');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (existing.status !== 'approved') {
+    const err = new Error('Trial request must be approved before generating a signup link');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const hasValidToken =
+    Boolean(existing.signup_token)
+    && (!existing.signup_token_expires_at || new Date(existing.signup_token_expires_at).getTime() > Date.now());
+
+  if (hasValidToken && !forceRegenerate) {
+    return existing;
+  }
+
+  const token = crypto.randomBytes(24).toString('hex');
+  const ttlHours = getSignupTokenTtlHours();
+  const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+
+  const [record] = await knex('trial_requests')
+    .where({ id })
+    .update({
+      approved_by_user_id: approvedByUserId || existing.approved_by_user_id || null,
+      signup_token: token,
+      signup_token_expires_at: expiresAt,
+      updated_at: knex.fn.now()
+    })
+    .returning('*');
+
+  return record;
+}
+
 async function getSignupContextByToken(token) {
   const safeToken = String(token || '').trim();
   if (!safeToken) {
@@ -396,6 +443,7 @@ module.exports = {
   listTrialRequests,
   updateTrialRequestStatus,
   approveTrialRequest,
+  getOrCreateApprovedSignupToken,
   getTrialRequestById,
   getSignupContextByToken,
   completeSignupFromToken
