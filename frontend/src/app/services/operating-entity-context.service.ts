@@ -70,8 +70,10 @@ export class OperatingEntityContextService {
     this.applyNormalizedState(normalized, true);
   }
 
-  bootstrapFromSessionIfNeeded(isAuthenticated: boolean): void {
-    if (!isAuthenticated || this.bootstrapStarted) return;
+  bootstrapFromSessionIfNeeded(isAuthenticated: boolean, options?: { force?: boolean }): void {
+    const force = !!options?.force;
+    if (!isAuthenticated) return;
+    if (this.bootstrapStarted && !force) return;
     this.bootstrapStarted = true;
 
     // Do not pre-apply storage value before session/entity list is known.
@@ -92,6 +94,7 @@ export class OperatingEntityContextService {
       if (normalized) {
         this.applyNormalizedState(normalized, true);
       } else {
+        this.bootstrapStarted = false;
         this.state$.next({
           ...this.snapshot,
           isLoaded: true

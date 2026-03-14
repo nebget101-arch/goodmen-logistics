@@ -13,6 +13,7 @@ import { OperatingEntityContextService } from '../../services/operating-entity-c
 })
 export class DispatchDriversComponent implements OnInit, OnDestroy {
   drivers: any[] = [];
+  tenantWideDispatchDrivers: any[] = [];
   loading = true;
   showNewModal = false;
   saving = false;
@@ -27,7 +28,6 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     type: string;
     status: string;
     hireDate: string;
-    termDate: string;
     phone: string;
     email: string;
     truck: string;
@@ -39,7 +39,6 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     type: '',
     status: '',
     hireDate: '',
-    termDate: '',
     phone: '',
     email: '',
     truck: '',
@@ -235,6 +234,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
 
   activeOperatingEntityName = '';
   private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   constructor(
     private apiService: ApiService,
@@ -244,8 +244,6 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.bindOperatingEntityContext();
-    this.loadDrivers();
-    this.loadVehicles();
     this.loadAllPayees();
   }
 
@@ -259,7 +257,28 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((state) => {
         if (!state.isLoaded) return;
+
         this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          this.loadDrivers();
+          this.loadVehicles();
+          this.loadTenantWideDispatchDrivers();
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          this.drivers = [];
+          this.tenantWideDispatchDrivers = [];
+          this.trucks = [];
+          this.trailers = [];
+          this.loadDrivers();
+          this.loadVehicles();
+          this.loadTenantWideDispatchDrivers();
+        }
       });
   }
 
@@ -292,10 +311,6 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       if (f.hireDate) {
         const val = d.hireDate ? this.normalizeDate(d.hireDate) : '';
         if (!val.includes(f.hireDate)) return false;
-      }
-      if (f.termDate) {
-        const val = d.terminationDate ? this.normalizeDate(d.terminationDate) : '';
-        if (!val.includes(f.termDate)) return false;
       }
       if (f.phone) {
         const val = (d.phone || '').toString().toLowerCase();
@@ -361,6 +376,58 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
         this.trucks = [];
         this.trailers = [];
       }
+    });
+  }
+
+  loadTenantWideDispatchDrivers(): void {
+    this.apiService.getDispatchDrivers(undefined, true).subscribe({
+      next: (data) => {
+        this.tenantWideDispatchDrivers = data || [];
+      },
+      error: (err) => {
+        console.error('Error loading tenant-wide dispatch drivers', err);
+        this.tenantWideDispatchDrivers = [];
+      }
+    });
+  }
+
+  private normalizeId(value: any): string {
+    return (value ?? '').toString().trim();
+  }
+
+  private getEditingDriverAssignedTrailerId(): string {
+    if (!this.editingDriverId) return '';
+    const current = (this.tenantWideDispatchDrivers || this.drivers || []).find(
+      (d: any) => this.normalizeId(d?.id) === this.normalizeId(this.editingDriverId)
+    );
+    return this.normalizeId(current?.trailerId ?? current?.trailer_id);
+  }
+
+  get availableTrailers(): any[] {
+    const assignedToOtherDrivers = new Set<string>();
+
+    const assignmentSource = (this.tenantWideDispatchDrivers || []).length
+      ? this.tenantWideDispatchDrivers
+      : (this.drivers || []);
+
+    assignmentSource.forEach((d: any) => {
+      const driverId = this.normalizeId(d?.id);
+      if (this.editingDriverId && driverId === this.normalizeId(this.editingDriverId)) {
+        return;
+      }
+      const trailerId = this.normalizeId(d?.trailerId ?? d?.trailer_id);
+      if (trailerId) assignedToOtherDrivers.add(trailerId);
+    });
+
+    const selectedTrailerId = this.normalizeId(this.newDriver?.trailerId);
+    const editingDriverTrailerId = this.getEditingDriverAssignedTrailerId();
+
+    return (this.trailers || []).filter((tr: any) => {
+      const id = this.normalizeId(tr?.id);
+      if (!id) return false;
+      if (selectedTrailerId && id === selectedTrailerId) return true;
+      if (editingDriverTrailerId && id === editingDriverTrailerId) return true;
+      return !assignedToOtherDrivers.has(id);
     });
   }
 
@@ -499,6 +566,10 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return '';
     return d.toISOString().slice(0, 10);
+  }
+
+  formatDateOnly(value: any): string {
+    return this.normalizeDate(value);
   }
 
   private parseDate(value: any): Date | null {
