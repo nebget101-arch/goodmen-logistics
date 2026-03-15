@@ -535,18 +535,37 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
     }
 
     await knex.transaction(async (trx) => {
-      await trx('users').insert({
+      const [
+        hasFirstName,
+        hasLastName,
+        hasEmail,
+        hasTenantId,
+        hasCreatedAt,
+        hasUpdatedAt
+      ] = await Promise.all([
+        trx.schema.hasColumn('users', 'first_name'),
+        trx.schema.hasColumn('users', 'last_name'),
+        trx.schema.hasColumn('users', 'email'),
+        trx.schema.hasColumn('users', 'tenant_id'),
+        trx.schema.hasColumn('users', 'created_at'),
+        trx.schema.hasColumn('users', 'updated_at')
+      ]);
+
+      const userInsertPayload = {
         id,
         username: resolvedUsername,
         password_hash,
-        role: legacyRoleForUsersColumn,
-        first_name: firstName || null,
-        last_name: lastName || null,
-        email: email || null,
-        tenant_id: tenantId,
-        created_at: knex.fn.now(),
-        updated_at: knex.fn.now()
-      });
+        role: legacyRoleForUsersColumn
+      };
+
+      if (hasFirstName) userInsertPayload.first_name = firstName || null;
+      if (hasLastName) userInsertPayload.last_name = lastName || null;
+      if (hasEmail) userInsertPayload.email = email || null;
+      if (hasTenantId) userInsertPayload.tenant_id = tenantId;
+      if (hasCreatedAt) userInsertPayload.created_at = knex.fn.now();
+      if (hasUpdatedAt) userInsertPayload.updated_at = knex.fn.now();
+
+      await trx('users').insert(userInsertPayload);
 
       const [hasRolesTable, hasUserRolesTable] = await Promise.all([
         trx.schema.hasTable('roles'),
@@ -580,9 +599,29 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
 
     res.status(201).json({ message: 'User created successfully.', username: resolvedUsername });
   } catch (err) {
+    if (err?.code === '23505') {
+      const detail = String(err?.detail || '').toLowerCase();
+      const constraint = String(err?.constraint || '').toLowerCase();
+
+      if (detail.includes('(username)') || constraint.includes('username')) {
+        return res.status(409).json({ error: 'Username already exists.' });
+      }
+
+      if (detail.includes('(email)') || constraint.includes('email')) {
+        return res.status(409).json({ error: 'Email already exists.' });
+      }
+
+      return res.status(409).json({ error: 'Duplicate value violates a unique constraint.' });
+    }
+
+    if (err?.code === '22P02') {
+      return res.status(400).json({ error: 'Invalid id format in request payload.' });
+    }
+
     if (String(err?.message || '').includes('invalid for this tenant')) {
       return res.status(400).json({ error: err.message });
     }
+    console.error('[users] create failed', err);
     res.status(500).json({ error: 'Failed to create user.' });
   }
 });
