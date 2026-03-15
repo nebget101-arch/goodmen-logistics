@@ -145,11 +145,13 @@ router.get('/me', authMiddleware, async (req, res) => {
       || null;
 
     let subscriptionPlanId = 'basic';
+    let tenantName = null;
     if (sessionTenantId) {
       const tenantRecord = await knex('tenants')
         .where({ id: sessionTenantId })
-        .first('id', 'subscription_plan');
+        .first('id', 'name', 'subscription_plan');
       subscriptionPlanId = normalizePlanId(tenantRecord?.subscription_plan, 'basic');
+      tenantName = tenantRecord?.name || null;
     }
 
     res.json({
@@ -167,6 +169,7 @@ router.get('/me', authMiddleware, async (req, res) => {
         permissions,
         locations,
         tenantId: sessionTenantId,
+        tenantName,
         subscriptionPlanId,
         subscriptionPlan: PLANS[normalizePlanId(subscriptionPlanId, 'basic')] || null,
         accessibleOperatingEntities: entities,

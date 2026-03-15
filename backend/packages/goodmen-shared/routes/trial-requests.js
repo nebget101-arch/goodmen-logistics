@@ -14,7 +14,68 @@ const router = express.Router();
 const trialRequestService = require('../services/trial-request-service');
 const trialRequestEmailService = require('../services/trial-request-email-service');
 const authMiddleware = require('../middleware/auth-middleware');
+const rbacService = require('../services/rbac-service');
 const { PLANS, TRIAL_REQUEST_STATUSES } = require('../config/plans');
+
+const INTERNAL_TRIAL_ADMIN_TENANT_NAME = 'FleetNeuron Default Tenant';
+
+async function requireInternalTrialAdmin(req, res, next) {
+  try {
+    const userId = req.user?.id || req.user?.sub;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const user = await trialRequestService.getUserTenantContext?.(userId);
+    let tenantName = user?.tenantName || null;
+
+    if (!tenantName) {
+      const membership = await trialRequestService.getDefaultTenantMembership?.(userId);
+      tenantName = membership?.tenantName || null;
+    }
+
+    if (!tenantName) {
+      const knex = require('../config/knex');
+      const membership = await knex('user_tenant_memberships as utm')
+        .join('tenants as t', 't.id', 'utm.tenant_id')
+        .where('utm.user_id', userId)
+        .andWhere('utm.is_active', true)
+        .orderBy('utm.is_default', 'desc')
+        .orderBy('utm.created_at', 'asc')
+        .select('t.name')
+        .first();
+
+      tenantName = membership?.name || null;
+
+      if (!tenantName) {
+        const legacyUser = await knex('users as u')
+          .leftJoin('tenants as t', 't.id', 'u.tenant_id')
+          .where('u.id', userId)
+          .select('t.name as tenant_name')
+          .first();
+        tenantName = legacyUser?.tenant_name || null;
+      }
+    }
+
+    if (String(tenantName || '').trim() !== INTERNAL_TRIAL_ADMIN_TENANT_NAME) {
+      return res.status(403).json({ success: false, error: 'Forbidden: trial request admin is limited to the internal demo tenant' });
+    }
+
+    const roles = await rbacService.getRolesForUser(userId).catch(() => []);
+    const roleCodes = new Set((roles || []).map((role) => String(role.code || '').trim().toLowerCase()));
+    const legacyRole = String(req.user?.role || '').trim().toLowerCase();
+    const isAllowed = roleCodes.has('super_admin') || roleCodes.has('company_admin') || legacyRole === 'admin';
+
+    if (!isAllowed) {
+      return res.status(403).json({ success: false, error: 'Forbidden: insufficient admin access for trial request management' });
+    }
+
+    return next();
+  } catch (err) {
+    console.error('[trial-requests] authz error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to validate trial request admin access' });
+  }
+}
 
 function getPublicAppBaseUrl(req) {
   const configured = String(
@@ -171,7 +232,7 @@ router.post('/signup/:token/complete', async (req, res) => {
 
 // ─── ADMIN: List trial requests ───────────────────────────────────────────────
 
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
     const { status, page, pageSize } = req.query;
     const records = await trialRequestService.listTrialRequests({
@@ -188,7 +249,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
 // ─── ADMIN: Get (or regenerate) activation link for approved request ───────
 
-router.get('/:id/activation-link', authMiddleware, async (req, res) => {
+router.get('/:id/activation-link', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
     const forceRegenerate = String(req.query.regenerate || '').toLowerCase() === 'true';
     const record = await trialRequestService.getOrCreateApprovedSignupToken(
@@ -221,7 +282,7 @@ router.get('/:id/activation-link', authMiddleware, async (req, res) => {
 
 // ─── ADMIN: Get single trial request ─────────────────────────────────────────
 
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
     const record = await trialRequestService.getTrialRequestById(req.params.id);
     if (!record) return res.status(404).json({ success: false, error: 'Not found' });
@@ -234,7 +295,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
 // ─── ADMIN: Update status ─────────────────────────────────────────────────────
 
-router.patch('/:id/status', authMiddleware, async (req, res) => {
+router.patch('/:id/status', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
     const { status } = req.body;
     if (!status) {

@@ -28,9 +28,11 @@ import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-poli
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
+import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 import { PERMISSIONS } from './models/access-control.model';
+import { InternalTrialAdminGuard } from './guards/internal-trial-admin.guard';
 
 const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
@@ -140,6 +142,11 @@ const routes: Routes = [
     component: MultiMcAdminComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
     data: { anyPermission: [PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.USERS_EDIT], planPath: '/admin/multi-mc' }
+  },
+  {
+    path: 'admin/trial-requests',
+    component: TrialRequestsAdminComponent,
+    canActivate: [AuthGuard, InternalTrialAdminGuard]
   },
   { path: 'login', component: LoginComponent },
   { path: 'privacy', component: PrivacyPolicyComponent },

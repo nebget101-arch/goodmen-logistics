@@ -183,6 +183,10 @@ export class AppComponent implements OnInit {
     return this.access.hasAnyPermission(permissionCodes) && this.access.canAccessUrl(path);
   }
 
+  canSeeTrialRequestsAdmin(): boolean {
+    return this.access.canAccessTrialRequestsAdmin();
+  }
+
   getSectionExpanded(index: number): boolean {
     return this.sectionExpanded[index] ?? true;
   }

@@ -85,6 +85,11 @@
               <span class="material-symbols-outlined">domain</span> Company Access Admin
             </a>
           </ng-container>
+          <ng-container *ngIf="canSeeTrialRequestsAdmin()">
+            <a routerLink="/admin/trial-requests" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">approval</span> Trial Requests Admin
+            </a>
+          </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
             <span class="material-symbols-outlined">logout</span> Logout
           </button>
@@ -139,6 +144,11 @@
           <ng-container *ngIf="canSeeAdminMenuLink('/admin/multi-mc', adminMenuPermissions)">
             <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">domain</span> Company Access Admin
+            </a>
+          </ng-container>
+          <ng-container *ngIf="canSeeTrialRequestsAdmin()">
+            <a routerLink="/admin/trial-requests" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">approval</span> Trial Requests Admin
             </a>
           </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
