@@ -38,6 +38,7 @@ export class AppComponent implements OnInit {
   readonly navSections = NAV_SECTIONS;
   readonly navAddUser = NAV_ADD_USER;
   readonly adminMenuPermissions = [PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.USERS_EDIT];
+  private readonly authTransitionStorageKey = 'fleetneuron_auth_transitioning';
   /** Section expand state by index (Equipment=0, Safety=1, Fleet=2, Inventory=3, Accounting=4). */
   sectionExpanded: boolean[] = [true, true, true, true, true];
 
@@ -52,6 +53,14 @@ export class AppComponent implements OnInit {
 
   isLoggedIn(): boolean {
     return !!localStorage.getItem('token');
+  }
+
+  isAuthTransitioning(): boolean {
+    return sessionStorage.getItem(this.authTransitionStorageKey) === '1';
+  }
+
+  shouldRenderProtectedShell(): boolean {
+    return this.isLoggedIn() && !this.isShelllessRoute() && !this.isAuthTransitioning();
   }
 
   getCurrentRoute(): string {
@@ -199,6 +208,9 @@ export class AppComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    if (!this.isLoggedIn()) {
+      sessionStorage.removeItem(this.authTransitionStorageKey);
+    }
     if (this.isLoggedIn()) {
       this.access.loadAccess().subscribe();
     }

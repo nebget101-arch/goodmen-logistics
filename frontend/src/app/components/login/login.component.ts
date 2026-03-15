@@ -13,6 +13,8 @@ export class LoginComponent {
   username = '';
   password = '';
   error = '';
+  isSigningIn = false;
+  private readonly authTransitionStorageKey = 'fleetneuron_auth_transitioning';
 
   constructor(
     private api: ApiService,
@@ -22,6 +24,11 @@ export class LoginComponent {
   ) {}
 
   login(): void {
+    if (this.isSigningIn) return;
+    this.isSigningIn = true;
+    this.error = '';
+    sessionStorage.setItem(this.authTransitionStorageKey, '1');
+
     this.api.login(this.username, this.password).subscribe({
       next: (res) => {
         localStorage.setItem('token', res.token);
@@ -38,10 +45,29 @@ export class LoginComponent {
           }
         }
         this.accessControl.setAccessFromLoginResponse(res);
-        this.operatingEntityContext.bootstrapFromSessionIfNeeded(true, { force: true });
-        this.router.navigate(['/dashboard']);
+
+        // Important: hydrate canonical RBAC + subscription plan context from /auth/me
+        // immediately after login so plan-gated pages are hidden/shown correctly
+        // without requiring a manual refresh.
+        this.accessControl.loadAccess().subscribe({
+          next: () => {
+            this.operatingEntityContext.bootstrapFromSessionIfNeeded(true, { force: true });
+            sessionStorage.removeItem(this.authTransitionStorageKey);
+            this.isSigningIn = false;
+            this.router.navigate(['/dashboard']);
+          },
+          error: () => {
+            // loadAccess() catches and maps to null, but keep a safe fallback.
+            this.operatingEntityContext.bootstrapFromSessionIfNeeded(true, { force: true });
+            sessionStorage.removeItem(this.authTransitionStorageKey);
+            this.isSigningIn = false;
+            this.router.navigate(['/dashboard']);
+          }
+        });
       },
       error: (err) => {
+        sessionStorage.removeItem(this.authTransitionStorageKey);
+        this.isSigningIn = false;
         const msg = err?.error?.error ?? err?.error?.detail ?? err?.message;
         const isServerError = err?.status >= 500;
         this.error =
