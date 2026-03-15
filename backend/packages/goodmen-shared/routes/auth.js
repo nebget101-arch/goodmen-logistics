@@ -51,6 +51,9 @@ router.post('/login', async (req, res) => {
   try {
     const user = await userDb.getUserByUsername(username);
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    if (Object.prototype.hasOwnProperty.call(user, 'is_active') && user.is_active === false) {
+      return res.status(403).json({ error: 'User account is inactive. Contact your administrator.' });
+    }
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
     const token = jwt.sign(

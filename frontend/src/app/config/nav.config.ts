@@ -84,6 +84,7 @@ export const NAV_TOP_LINKS: NavLink[] = [
   { path: '/dispatch-board', label: 'Dispatch Board', icon: 'calendar_view_month', tab: 'loads' },
   { path: '/roadside', label: 'Roadside AI', icon: 'emergency_home', tab: 'roadside' },
   { path: '/drivers', label: 'Drivers', icon: 'badge', tab: 'drivers' },
+  { path: '/users', label: 'Users', icon: 'group', tab: 'users' },
 ];
 
 /** Single link for "Add User" - shown when user has users_create. */

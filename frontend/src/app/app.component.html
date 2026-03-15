@@ -75,11 +75,6 @@
           <a routerLink="/profile" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
             <span class="material-symbols-outlined">person</span> Profile
           </a>
-          <ng-container *ngIf="access.canSee(navAddUser.tab)">
-            <a routerLink="/users/create" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
-              <span class="material-symbols-outlined">person_add</span> Add User
-            </a>
-          </ng-container>
           <ng-container *ngIf="canSeeAdminMenuLink('/admin/multi-mc', adminMenuPermissions)">
             <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">domain</span> Company Access Admin
@@ -136,11 +131,6 @@
           <a routerLink="/profile" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
             <span class="material-symbols-outlined">person</span> Profile
           </a>
-          <ng-container *ngIf="access.canSee(navAddUser.tab)">
-            <a routerLink="/users/create" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
-              <span class="material-symbols-outlined">person_add</span> Add User
-            </a>
-          </ng-container>
           <ng-container *ngIf="canSeeAdminMenuLink('/admin/multi-mc', adminMenuPermissions)">
             <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">domain</span> Company Access Admin

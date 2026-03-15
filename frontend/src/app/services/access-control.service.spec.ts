@@ -66,4 +66,16 @@ describe('AccessControlService RBAC compatibility', () => {
     expect(service.hasPermission(PERMISSIONS.CUSTOMERS_VIEW)).toBeTrue();
     expect(service.hasPermission(PERMISSIONS.LOADS_VIEW)).toBeFalse();
   });
+
+  it('derives permissions from roles when backend sends an empty permissions array', () => {
+    service.setAccessFromLoginResponse({
+      roles: ['dispatcher', 'dispatch_manager'],
+      user: { id: 'u6' },
+      permissions: []
+    });
+
+    expect(service.canSee('loads')).toBeTrue();
+    expect(service.canSee('drivers')).toBeTrue();
+    expect(service.canSee('settlements')).toBeFalse();
+  });
 });

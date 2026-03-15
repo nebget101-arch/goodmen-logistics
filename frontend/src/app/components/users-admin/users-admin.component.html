@@ -1,0 +1,223 @@
+<div class="users-admin-shell">
+  <header class="users-admin-header">
+    <div>
+      <h1>User Management</h1>
+      <p class="users-admin-subtitle">Manage users, review plan-aligned roles, and understand page access for your workspace.</p>
+    </div>
+
+    <div class="users-admin-actions">
+      <div class="plan-summary-pill">
+        <span class="material-symbols-outlined">group</span>
+        <span>{{ currentUserCount }} users · {{ includedUsersLabel }}</span>
+      </div>
+      <button type="button" class="btn btn-primary" [disabled]="isAtOrAboveIncludedUserLimit" (click)="addUser()">
+        <span class="material-symbols-outlined">person_add</span>
+        Add User
+      </button>
+    </div>
+  </header>
+
+  <div *ngIf="error" class="alert alert-error">{{ error }}</div>
+  <div *ngIf="isAtOrAboveIncludedUserLimit && userLimitMessage" class="alert alert-warning">{{ userLimitMessage }}</div>
+
+  <section class="users-admin-panel">
+    <div class="tabs-row">
+      <button type="button" class="tab-btn" [class.active]="activeTab === 'users'" (click)="setActiveTab('users')">
+        Users
+      </button>
+      <button type="button" class="tab-btn" [class.active]="activeTab === 'roles'" (click)="setActiveTab('roles')">
+        Roles
+      </button>
+    </div>
+
+    <ng-container *ngIf="activeTab === 'users'; else rolesTab">
+      <div class="toolbar-row">
+        <div class="search-box">
+          <span class="material-symbols-outlined">search</span>
+          <input
+            [(ngModel)]="searchQuery"
+            type="search"
+            class="form-input"
+            placeholder="Search users by name, email, username, or role"
+          />
+        </div>
+        <button type="button" class="btn btn-secondary" [disabled]="loadingUsers" (click)="loadUsers()">
+          <span class="material-symbols-outlined">refresh</span>
+          {{ loadingUsers ? 'Refreshing…' : 'Refresh' }}
+        </button>
+      </div>
+
+      <div class="users-table-wrap" *ngIf="!loadingUsers; else loadingState">
+        <table class="users-table" *ngIf="filteredUsers.length; else emptyUsers">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Primary role</th>
+              <th>All roles</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let user of filteredUsers; trackBy: trackByUserId">
+              <td>
+                <div class="user-name-cell">
+                  <strong>{{ formatUserName(user) }}</strong>
+                  <span>&#64;{{ user.username }}</span>
+                </div>
+              </td>
+              <td>{{ user.email || '—' }}</td>
+              <td>{{ getPrimaryRoleLabel(user) }}</td>
+              <td>
+                <div class="role-badges">
+                  <span class="role-badge" *ngFor="let role of getUserRoleLabels(user)">{{ role }}</span>
+                </div>
+              </td>
+              <td>
+                <span class="status-pill" [class.inactive]="user.is_active === false">{{ getUserStatusLabel(user) }}</span>
+              </td>
+              <td>{{ formatDate(user.created_at) }}</td>
+              <td>
+                <div class="row-actions">
+                  <button type="button" class="btn btn-secondary btn-sm ai-action-btn view" (click)="viewUser(user)">
+                    <span class="material-symbols-outlined">visibility</span>
+                    <span>View</span>
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm ai-action-btn edit" [disabled]="!canManageUsers()" (click)="openEditUser(user)">
+                    <span class="material-symbols-outlined">edit</span>
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm ai-action-btn inactivate"
+                    [disabled]="!canManageUsers() || actionLoadingUserId === user.id"
+                    (click)="toggleUserActive(user)"
+                  >
+                    <span class="material-symbols-outlined">{{ user.is_active === false ? 'check_circle' : 'block' }}</span>
+                    <span>{{ user.is_active === false ? 'Activate' : 'Inactivate' }}</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </ng-container>
+
+    <ng-template #rolesTab>
+      <div class="roles-summary-banner">
+        <div>
+          <h2>{{ planName }} role access</h2>
+          <p>Only roles available to this client plan are shown below, along with the pages each role can access in the current subscription.</p>
+        </div>
+      </div>
+
+      <div class="roles-grid">
+        <article class="role-card" *ngFor="let summary of roleAccessSummaries">
+          <header class="role-card-header">
+            <div>
+              <h3>{{ summary.role.label }}</h3>
+              <p>{{ summary.role.description || 'Role-based access profile.' }}</p>
+            </div>
+            <span class="role-group-pill">{{ summary.role.group }}</span>
+          </header>
+
+          <div class="role-card-body">
+            <div class="page-access-meta">
+              <strong>{{ summary.pages.length }}</strong>
+              <span>pages available on this plan</span>
+            </div>
+
+            <div class="page-badges" *ngIf="summary.pages.length; else noPages">
+              <span class="page-badge" *ngFor="let page of summary.pages">{{ page.label }}</span>
+            </div>
+            <ng-template #noPages>
+              <p class="empty-role-pages">No enabled pages for this role in the current plan.</p>
+            </ng-template>
+          </div>
+        </article>
+      </div>
+    </ng-template>
+  </section>
+
+  <ng-template #loadingState>
+    <div class="loading-state">Loading users…</div>
+  </ng-template>
+
+  <ng-template #emptyUsers>
+    <div class="empty-state">
+      <span class="material-symbols-outlined">group_off</span>
+      <p>No users match your search.</p>
+    </div>
+  </ng-template>
+
+  <div class="modal-backdrop" *ngIf="viewingUser" (click)="closeViewModal()" (keydown.enter)="closeViewModal()">
+    <div class="modal-card" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>User Details</h3>
+        <button type="button" class="icon-btn" (click)="closeViewModal()">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="modal-body" *ngIf="viewingUser as user">
+        <p><strong>Name:</strong> {{ formatUserName(user) }}</p>
+        <p><strong>Username:</strong> &#64;{{ user.username }}</p>
+        <p><strong>Email:</strong> {{ user.email || '—' }}</p>
+        <p><strong>Status:</strong> {{ getUserStatusLabel(user) }}</p>
+        <p><strong>Roles:</strong> {{ getUserRoleLabels(user).join(', ') || '—' }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="editingUser" (click)="closeEditModal()" (keydown.enter)="closeEditModal()">
+    <div class="modal-card" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Edit User</h3>
+        <button type="button" class="icon-btn" (click)="closeEditModal()">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <label class="modal-field">
+          <span>Username</span>
+          <input [(ngModel)]="editForm.username" class="form-input" />
+        </label>
+        <label class="modal-field">
+          <span>First Name</span>
+          <input [(ngModel)]="editForm.firstName" class="form-input" />
+        </label>
+        <label class="modal-field">
+          <span>Last Name</span>
+          <input [(ngModel)]="editForm.lastName" class="form-input" />
+        </label>
+        <label class="modal-field">
+          <span>Email</span>
+          <input [(ngModel)]="editForm.email" type="email" class="form-input" />
+        </label>
+
+        <div class="modal-field">
+          <span>Roles</span>
+          <div class="role-badges">
+            <button
+              type="button"
+              class="role-badge role-toggle"
+              *ngFor="let role of visibleRoles"
+              [class.selected]="editForm.roles.includes(role.value)"
+              (click)="toggleEditRole(role.value)"
+            >
+              {{ role.label }}
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeEditModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" [disabled]="savingEdit" (click)="saveUserEdit()">
+          {{ savingEdit ? 'Saving…' : 'Save Changes' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
