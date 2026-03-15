@@ -35,6 +35,7 @@
             [(ngModel)]="username"
             name="username"
             required
+            [disabled]="isSigningIn"
             autocomplete="username"
             placeholder="john.doe@company.com"
           >
@@ -50,14 +51,15 @@
             name="password"
             type="password"
             required
+            [disabled]="isSigningIn"
             autocomplete="current-password"
             placeholder="••••••••"
           >
         </div>
       </label>
 
-      <button type="submit" class="login-button">
-        <span>Continue</span>
+      <button type="submit" class="login-button" [disabled]="isSigningIn">
+        <span>{{ isSigningIn ? 'Signing in…' : 'Continue' }}</span>
         <span class="login-button-glow"></span>
       </button>
 

@@ -1,12 +1,12 @@
 <div class="app-shell">
   <div
     class="sidebar-backdrop"
-    *ngIf="isLoggedIn() && !isShelllessRoute() && sidebarOpen"
+    *ngIf="shouldRenderProtectedShell() && sidebarOpen"
     (click)="closeSidebar()"
     (keydown.escape)="closeSidebar()"
   ></div>
 
-  <aside class="sidebar" *ngIf="isLoggedIn() && !isShelllessRoute()" [class.mobile-open]="sidebarOpen">
+  <aside class="sidebar" *ngIf="shouldRenderProtectedShell()" [class.mobile-open]="sidebarOpen">
     <div class="sidebar-header brand-block">
       <span class="brand-wordmark">FleetNeuron</span>
       <span class="brand-tagline">AI fleet intelligence</span>
@@ -99,7 +99,7 @@
   </aside>
 
   <main class="content" [class.public-content]="isShelllessRoute()" (click)="closeUserMenu()" (keydown.escape)="closeUserMenu()">
-    <div class="mobile-topbar" *ngIf="isLoggedIn() && !isShelllessRoute()">
+    <div class="mobile-topbar" *ngIf="shouldRenderProtectedShell()">
       <button class="mobile-menu-btn" type="button" (click)="toggleSidebar()" [attr.aria-expanded]="sidebarOpen" aria-label="Toggle menu">
         ☰
       </button>
@@ -172,7 +172,7 @@
     <button
       class="ai-chat-launcher"
       type="button"
-        *ngIf="isLoggedIn() && !isShelllessRoute()"
+        *ngIf="shouldRenderProtectedShell()"
       (click)="toggleAiChat()"
       aria-label="Open Ask Neuron assistant"
     >
@@ -180,7 +180,7 @@
       <span class="ai-chat-launcher-label">Ask Neuron</span>
     </button>
 
-    <section class="ai-chat-panel" *ngIf="aiChatOpen && isLoggedIn() && !isShelllessRoute()">
+    <section class="ai-chat-panel" *ngIf="aiChatOpen && shouldRenderProtectedShell()">
       <header class="ai-chat-header">
         <div>
           <h3>FleetNeuron AI assistant</h3>
