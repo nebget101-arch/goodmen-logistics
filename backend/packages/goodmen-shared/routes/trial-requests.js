@@ -101,7 +101,7 @@ function buildTrialSignupUrl(token, req) {
     return template.replace('{token}', encodeURIComponent(safeToken));
   }
 
-  return `${getPublicAppBaseUrl(req)}/trial-signup?token=${encodeURIComponent(safeToken)}`;
+  return `${getPublicAppBaseUrl(req)}/trial-signup/${encodeURIComponent(safeToken)}`;
 }
 
 // ─── PUBLIC: Submit a trial request ──────────────────────────────────────────
