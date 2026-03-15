@@ -415,17 +415,17 @@
             class="pub-pricing-cta pub-btn-primary"
             [class.pub-pricing-cta-featured]="plan.highlighted"
             type="button"
-            (click)="navigateToTrial(plan.id)"
+            (click)="handlePlanCta(plan)"
           >
-            <span class="material-symbols-outlined">rocket_launch</span>
-            Start Free Trial
+            <span class="material-symbols-outlined">{{ plan.ctaAction === 'contact' ? 'contact_support' : 'rocket_launch' }}</span>
+            {{ plan.ctaLabel || 'Start Free Trial' }}
           </button>
         </div>
       </div>
 
       <p class="pub-pricing-note">
-        All plans include a free trial period. Pricing is custom based on fleet size and requirements.
-        <button type="button" class="pub-inline-link-btn" (click)="navigateToTrial()">Contact our team</button> to discuss your needs.
+        Need tailored onboarding, integrations, or multi-location deployment?
+        <button type="button" class="pub-inline-link-btn" (click)="navigateToContact()">Contact our team</button> and we'll help design your rollout.
       </p>
     </div>
   </section>

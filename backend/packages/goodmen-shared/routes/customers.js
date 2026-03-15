@@ -38,7 +38,8 @@ router.get('/fmcsainfo/:dot', authMiddleware, async (req, res) => {
 });
 
 // POST /api/customers
-router.post('/', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting']), async (req, res) => {
+// shop_clerk and shop_manager may create customers (shop operations).
+router.post('/', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
   try {
     const { customer, errors } = await customersService.createCustomer(req.body, req.user?.id);
     if (errors) return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -74,7 +75,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/customers/:id
-router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting']), async (req, res) => {
+router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
   try {
     const { customer, errors, error } = await customersService.updateCustomer(req.params.id, req.body, req.user?.id);
     if (errors) return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -87,7 +88,8 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'acc
 });
 
 // PATCH /api/customers/:id/status
-router.patch('/:id/status', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting']), async (req, res) => {
+// shop_manager can change customer status; shop_clerk cannot.
+router.patch('/:id/status', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'service_writer']), async (req, res) => {
   try {
     const { status } = req.body;
     const { customer, error } = await customersService.setCustomerStatus(req.params.id, status, req.user?.id);
@@ -112,7 +114,7 @@ router.delete('/:id', authMiddleware, requireRole(['admin']), async (req, res) =
 });
 
 // Notes
-router.post('/:id/notes', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting']), async (req, res) => {
+router.post('/:id/notes', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
   try {
     const { note, error } = await customersService.addNote(req.params.id, req.body, req.user?.id);
     if (error) return res.status(400).json({ error });

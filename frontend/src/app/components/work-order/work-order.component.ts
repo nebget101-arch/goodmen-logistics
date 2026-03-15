@@ -4,6 +4,8 @@ import { ApiService } from '../../services/api.service';
 import { CreditService } from '../../services/credit.service';
 import { lastValueFrom } from 'rxjs';
 import * as QRCode from 'qrcode';
+import { PermissionHelperService } from '../../services/permission-helper.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 
 @Component({
   selector: 'app-work-order',
@@ -11,6 +13,7 @@ import * as QRCode from 'qrcode';
   styleUrls: ['./work-order.component.css']
 })
 export class WorkOrderComponent implements OnInit, OnDestroy {
+  readonly perms = PERMISSIONS;
   private readonly partsTaxRate = 8.5;
   vehicles: any[] = [];
   files: File[] = [];
@@ -88,7 +91,13 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   aiTriageError: string = '';
   aiTriageResult: any = null;
 
-  constructor(private apiService: ApiService, private route: ActivatedRoute, private router: Router, private creditService: CreditService) { }
+  constructor(
+    private apiService: ApiService,
+    private route: ActivatedRoute,
+    private router: Router,
+    private creditService: CreditService,
+    private permissions: PermissionHelperService
+  ) { }
 
   ngOnInit(): void {
     const nav = this.router.getCurrentNavigation();
@@ -421,6 +430,10 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   }
 
   createCustomer(): void {
+    if (!this.canCreateCustomerInline()) {
+      this.newCustomerError = 'You do not have permission to create customers.';
+      return;
+    }
     this.newCustomerError = '';
     if (!this.newCustomer.company_name || !this.newCustomer.dot_number) {
       this.newCustomerError = 'Company name and DOT number are required.';
@@ -620,6 +633,10 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   }
 
   openAddVehicleModal(): void {
+    if (!this.canCreateVehicleInline()) {
+      this.newCustomerVehicleError = 'You do not have permission to create vehicles.';
+      return;
+    }
     this.newCustomerVehicleError = '';
     this.newVehicleOwnership = this.workOrder.customerId ? 'customer' : 'company';
     this.newCustomerVehicle = {
@@ -714,6 +731,10 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   }
 
   createVehicleFromWorkOrder(): void {
+    if (!this.canCreateVehicleInline()) {
+      this.newCustomerVehicleError = 'You do not have permission to create vehicles.';
+      return;
+    }
     this.newCustomerVehicleError = '';
     if (!this.newCustomerVehicle.vin) {
       this.newCustomerVehicleError = 'VIN is required.';
@@ -1079,6 +1100,15 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   }
 
   submitWorkOrder(): void {
+    if (!this.canEditWorkOrder()) {
+      this.workOrderSaveError = 'You do not have permission to edit work orders.';
+      return;
+    }
+    if (this.isClosingStatusSelected() && !this.canCloseWorkOrder()) {
+      this.workOrderSaveError = 'Only manager-level users can close a work order.';
+      return;
+    }
+
     this.workOrderSaveError = '';
     this.workOrderSaveSuccess = '';
     this.setRequestedByFromCurrentUser();
@@ -1147,6 +1177,10 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   }
 
   generateInvoice(): void {
+    if (!this.canGenerateDraftInvoiceFromWorkOrder()) {
+      this.creditCheckError = 'You do not have permission to create draft invoices.';
+      return;
+    }
     if (!this.workOrderId) return;
     
     // Create invoice with credit flag
@@ -1205,6 +1239,10 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   }
 
   uploadDocument(event: any): void {
+    if (!this.canUploadWorkOrderDocument()) {
+      this.workOrderSaveError = 'You do not have permission to upload documents.';
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file || !this.workOrderId) return;
     this.apiService.uploadWorkOrderDocument(this.workOrderId, file).subscribe({
@@ -1214,7 +1252,36 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
 
   canGenerateInvoice(): boolean {
     const status = (this.workOrder?.status || '').toString().toUpperCase();
-    return status === 'COMPLETED';
+    return status === 'COMPLETED' && this.canGenerateDraftInvoiceFromWorkOrder();
+  }
+
+  canCreateCustomerInline(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.CUSTOMERS_CREATE, PERMISSIONS.CUSTOMERS_EDIT]);
+  }
+
+  canCreateVehicleInline(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.VEHICLES_CREATE, PERMISSIONS.VEHICLES_EDIT]);
+  }
+
+  canEditWorkOrder(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.WORK_ORDERS_EDIT, PERMISSIONS.WORK_ORDERS_CREATE]);
+  }
+
+  canCloseWorkOrder(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.WORK_ORDERS_CLOSE, PERMISSIONS.WORK_ORDERS_FINALIZE]);
+  }
+
+  canGenerateDraftInvoiceFromWorkOrder(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.INVOICES_CREATE, PERMISSIONS.INVOICES_EDIT]);
+  }
+
+  canUploadWorkOrderDocument(): boolean {
+    return this.permissions.hasPermission(PERMISSIONS.DOCUMENTS_UPLOAD);
+  }
+
+  private isClosingStatusSelected(): boolean {
+    const status = (this.workOrder?.status || '').toString().toUpperCase();
+    return status === 'CLOSED';
   }
 
   reservePart(): void {

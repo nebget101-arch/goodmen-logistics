@@ -12,14 +12,14 @@
       <div class="toolbar-grid">
         <div class="field">
           <label for="xf-from">From</label>
-          <select id="xf-from" class="form-control" [(ngModel)]="fromLocationId">
+          <select id="xf-from" class="form-control" [(ngModel)]="fromLocationId" [disabled]="!canCreateTransfer()">
             <option value="">-- Select --</option>
             <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
           </select>
         </div>
         <div class="field">
           <label for="xf-to">To</label>
-          <select id="xf-to" class="form-control" [(ngModel)]="toLocationId">
+          <select id="xf-to" class="form-control" [(ngModel)]="toLocationId" [disabled]="!canCreateTransfer()">
             <option value="">-- Select --</option>
             <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
           </select>
@@ -27,11 +27,31 @@
         <div class="field scan-field">
           <label for="xf-scan">Scan barcode</label>
           <div class="scan-input-group">
-            <input #scanInput id="xf-scan" type="text" class="form-control scan-input" [(ngModel)]="scanCode" (keyup.enter)="addByScan()" placeholder="Scan or type, then Enter" />
+            <input #scanInput id="xf-scan" type="text" class="form-control scan-input" [(ngModel)]="scanCode" (keyup.enter)="addByScan()" placeholder="Scan or type, then Enter" [disabled]="!canCreateTransfer()" />
             <input #decodeFileInput type="file" accept="image/*" class="input-file-hidden" (change)="onDecodeImage($event)" />
-            <button type="button" class="btn-upload" (click)="triggerDecodeImage()" title="Decode barcode from photo">Upload photo</button>
-            <button type="button" *ngIf="!bridgeConnected" class="btn-phone" (click)="startPhoneBridge()" title="Use phone as scanner">Scan with phone</button>
-            <button type="button" *ngIf="bridgeConnected" class="btn-phone connected" (click)="stopPhoneBridge()" title="Disconnect phone">Connected</button>
+            <button
+              type="button"
+              class="btn-upload"
+              (click)="triggerDecodeImage()"
+              [disabled]="!canCreateTransfer()"
+              [title]="!canCreateTransfer() ? 'You do not have permission to add transfer lines.' : 'Decode barcode from photo'"
+            >Upload photo</button>
+            <button
+              type="button"
+              *ngIf="!bridgeConnected"
+              class="btn-phone"
+              (click)="startPhoneBridge()"
+              [disabled]="!canCreateTransfer()"
+              [title]="!canCreateTransfer() ? 'You do not have permission to create transfers.' : 'Use phone as scanner'"
+            >Scan with phone</button>
+            <button
+              type="button"
+              *ngIf="bridgeConnected"
+              class="btn-phone connected"
+              (click)="stopPhoneBridge()"
+              [disabled]="!canCreateTransfer()"
+              [title]="!canCreateTransfer() ? 'You do not have permission to create transfers.' : 'Disconnect phone'"
+            >Connected</button>
           </div>
         </div>
       </div>
@@ -60,8 +80,16 @@
             <tr *ngFor="let line of lines; let i = index">
               <td>{{ line.sku }}</td>
               <td>{{ line.name }}</td>
-              <td><input type="number" min="1" class="form-control inline-input" [(ngModel)]="line.qty" /></td>
-              <td><button type="button" class="btn-remove" (click)="removeLine(i)">Remove</button></td>
+              <td><input type="number" min="1" class="form-control inline-input" [(ngModel)]="line.qty" [disabled]="!canCreateTransfer()" /></td>
+              <td>
+                <button
+                  type="button"
+                  class="btn-remove"
+                  (click)="removeLine(i)"
+                  [disabled]="!canCreateTransfer()"
+                  [title]="!canCreateTransfer() ? 'You do not have permission to modify transfer lines.' : ''"
+                >Remove</button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -69,7 +97,13 @@
     </div>
 
     <div class="form-actions">
-      <button type="button" class="btn-primary" [disabled]="submitting || lines.length === 0" (click)="createTransfer()">
+      <button
+        type="button"
+        class="btn-primary"
+        [disabled]="submitting || lines.length === 0 || !canCreateTransfer()"
+        [title]="!canCreateTransfer() ? 'You do not have permission to create transfers.' : ''"
+        (click)="createTransfer()"
+      >
         {{ submitting ? 'Creating...' : 'Create + Send Transfer' }}
       </button>
     </div>
@@ -77,8 +111,14 @@
     <div class="receive-section">
       <h3 class="section-title">Receive transfer</h3>
       <div class="receive-row">
-        <input id="xf-receive-id" type="text" class="form-control" [(ngModel)]="receiveTransferId" placeholder="Transfer ID" />
-        <button type="button" class="btn-secondary" (click)="receiveTransfer()">Receive</button>
+        <input id="xf-receive-id" type="text" class="form-control" [(ngModel)]="receiveTransferId" placeholder="Transfer ID" [disabled]="!canReceiveTransfer()" />
+        <button
+          type="button"
+          class="btn-secondary"
+          (click)="receiveTransfer()"
+          [disabled]="!canReceiveTransfer()"
+          [title]="!canReceiveTransfer() ? 'You do not have permission to receive transfers.' : ''"
+        >Receive</button>
       </div>
     </div>
   </div>

@@ -7,10 +7,21 @@ const baseAuth = require('../middleware/auth-middleware');
 const authWithRole = require('./auth-middleware');
 const requirePlanAccess = require('../middleware/plan-access-middleware');
 const { loadUserRbac, requirePermission, requireAnyPermission } = require('../middleware/rbac-middleware');
+const { normalizePlanId } = require('../config/plans');
 
 const router = express.Router();
 const rbac = [baseAuth, loadUserRbac];
 const requireMultiMcPlan = requirePlanAccess('/admin/multi-mc');
+
+function supportsLocationScoping(planId) {
+  return planId === 'end_to_end' || planId === 'enterprise';
+}
+
+async function getTenantPlanForTenant(tenantId) {
+  if (!tenantId) return 'basic';
+  const tenantRow = await knex('tenants').where({ id: tenantId }).first('subscription_plan');
+  return normalizePlanId(tenantRow?.subscription_plan, 'basic');
+}
 
 function normalizeUsername(value) {
   return (value || '').toString().trim().toLowerCase().replace(/\s+/g, '.');
@@ -306,11 +317,18 @@ router.get('/technicians', async (req, res) => {
 router.get('/:id/access', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
-    const user = await knex('users').where('id', req.params.id).first('id');
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const user = await knex('users').where({ id: req.params.id, tenant_id: tenantId }).first('id');
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
     const [roles, locationRows] = await Promise.all([
       knex('user_roles as ur').join('roles as r', 'ur.role_id', 'r.id').where('ur.user_id', req.params.id).select('r.id', 'r.code', 'r.name'),
-      knex('user_locations as ul').join('locations as l', 'ul.location_id', 'l.id').where('ul.user_id', req.params.id).select('l.id', 'l.code', 'l.name')
+      knex('user_locations as ul')
+        .join('locations as l', 'ul.location_id', 'l.id')
+        .where('ul.user_id', req.params.id)
+        .andWhere('l.tenant_id', tenantId)
+        .select('l.id', 'l.code', 'l.name')
     ]);
     res.json({ success: true, data: { userId: req.params.id, roles, locations: locationRows } });
   } catch (err) {
@@ -340,14 +358,37 @@ router.put('/:id/roles', rbac, requirePermission('users.manage'), async (req, re
 router.put('/:id/locations', rbac, requirePermission('users.manage'), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
-    const user = await knex('users').where('id', req.params.id).first('id');
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const planId = await getTenantPlanForTenant(tenantId);
+    if (!supportsLocationScoping(planId)) {
+      return res.status(403).json({ success: false, error: 'Location assignment is available only for Advanced and Enterprise plans' });
+    }
+
+    const user = await knex('users').where({ id: req.params.id, tenant_id: tenantId }).first('id');
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
     const locationIds = Array.isArray(req.body.locationIds) ? req.body.locationIds : [];
+    if (locationIds.length > 0) {
+      const validLocations = await knex('locations')
+        .where('tenant_id', tenantId)
+        .whereIn('id', locationIds)
+        .select('id');
+      if (validLocations.length !== locationIds.length) {
+        return res.status(400).json({ success: false, error: 'One or more locations are invalid for this tenant' });
+      }
+    }
+
     await knex('user_locations').where('user_id', req.params.id).del();
     if (locationIds.length) {
       await knex('user_locations').insert(locationIds.map((lid) => ({ user_id: req.params.id, location_id: lid })));
     }
-    const locations = await knex('user_locations as ul').join('locations as l', 'ul.location_id', 'l.id').where('ul.user_id', req.params.id).select('l.id', 'l.code', 'l.name');
+    const locations = await knex('user_locations as ul')
+      .join('locations as l', 'ul.location_id', 'l.id')
+      .where('ul.user_id', req.params.id)
+      .andWhere('l.tenant_id', tenantId)
+      .select('l.id', 'l.code', 'l.name');
     res.json({ success: true, data: locations });
   } catch (err) {
     console.error('[users] put locations failed', err);
@@ -373,7 +414,7 @@ router.get('/:id', async (req, res) => {
 
 // Only admin can create users (legacy role check; RBAC users.manage can be added later)
 router.post('/', authWithRole(['admin']), async (req, res) => {
-  const { username, password, role, firstName, lastName, email } = req.body;
+  const { username, password, role, firstName, lastName, email, locationIds } = req.body;
   if (!password || !role) {
     return res.status(400).json({ error: 'Password and role are required.' });
   }
@@ -381,6 +422,19 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
     return res.status(400).json({ error: 'Invalid role.' });
   }
   try {
+    const actorUserId = req.user?.id || req.user?.sub;
+    if (!actorUserId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const actor = await knex('users').where({ id: actorUserId }).first('tenant_id');
+    const tenantId = actor?.tenant_id || null;
+    if (!tenantId) {
+      return res.status(403).json({ error: 'Tenant context missing' });
+    }
+
+    const tenantPlanId = await getTenantPlanForTenant(tenantId);
+
     let resolvedUsername = normalizeUsername(username);
     if (!resolvedUsername) {
       const base = `${(firstName || '').trim()}.${(lastName || '').trim()}`;
@@ -396,12 +450,50 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
     }
     const password_hash = await bcrypt.hash(password, 10);
     const id = uuidv4();
-    await db.query(
-      'INSERT INTO users (id, username, password_hash, role, first_name, last_name, email, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())',
-      [id, resolvedUsername, password_hash, role, firstName || null, lastName || null, email || null]
-    );
+
+    const normalizedLocationIds = Array.isArray(locationIds)
+      ? locationIds.map((x) => String(x || '').trim()).filter(Boolean)
+      : [];
+
+    if (normalizedLocationIds.length > 0 && !supportsLocationScoping(tenantPlanId)) {
+      return res.status(400).json({ error: 'Locations are available only for Advanced and Enterprise plans.' });
+    }
+
+    await knex.transaction(async (trx) => {
+      await trx('users').insert({
+        id,
+        username: resolvedUsername,
+        password_hash,
+        role,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        email: email || null,
+        tenant_id: tenantId,
+        created_at: knex.fn.now(),
+        updated_at: knex.fn.now()
+      });
+
+      if (normalizedLocationIds.length > 0) {
+        const validLocations = await trx('locations')
+          .where('tenant_id', tenantId)
+          .whereIn('id', normalizedLocationIds)
+          .select('id');
+
+        if (validLocations.length !== normalizedLocationIds.length) {
+          throw new Error('One or more locations are invalid for this tenant.');
+        }
+
+        await trx('user_locations').insert(
+          normalizedLocationIds.map((locationId) => ({ user_id: id, location_id: locationId }))
+        );
+      }
+    });
+
     res.status(201).json({ message: 'User created successfully.', username: resolvedUsername });
   } catch (err) {
+    if (String(err?.message || '').includes('invalid for this tenant')) {
+      return res.status(400).json({ error: err.message });
+    }
     res.status(500).json({ error: 'Failed to create user.' });
   }
 });

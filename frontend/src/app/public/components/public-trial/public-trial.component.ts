@@ -10,7 +10,7 @@ import { MARKETING_PLANS, FLEET_SIZE_OPTIONS } from '../../config/marketing.conf
   styleUrls: ['./public-trial.component.css']
 })
 export class PublicTrialComponent implements OnInit {
-  plans = MARKETING_PLANS;
+  plans = MARKETING_PLANS.filter(plan => plan.trialEligible !== false);
   fleetSizeOptions = FLEET_SIZE_OPTIONS;
   mobileNavOpen = false;
   currentYear = new Date().getFullYear();

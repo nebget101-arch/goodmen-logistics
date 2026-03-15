@@ -21,8 +21,20 @@
       <div class="actions">
         <button type="button" class="btn-primary" (click)="downloadPdf()">Download PDF</button>
         <button type="button" class="btn-secondary" (click)="generatePdf()">Generate PDF</button>
-        <button type="button" class="btn-outline" (click)="markSent()" [disabled]="invoice.status !== 'DRAFT'">Mark Sent</button>
-        <button type="button" class="btn-danger" (click)="voidInvoice()" [disabled]="invoice.status === 'VOID'">Void</button>
+        <button
+          type="button"
+          class="btn-outline"
+          (click)="markSent()"
+          [disabled]="invoice.status !== 'DRAFT' || !canMarkSent()"
+          [title]="!canMarkSent() ? 'You do not have permission to post/send invoices.' : ''"
+        >Mark Sent</button>
+        <button
+          type="button"
+          class="btn-danger"
+          (click)="voidInvoice()"
+          [disabled]="invoice.status === 'VOID' || !canVoidInvoice()"
+          [title]="!canVoidInvoice() ? 'You do not have permission to void invoices.' : ''"
+        >Void</button>
       </div>
     </div>
 
@@ -112,7 +124,13 @@
         </select>
         <input type="text" class="form-control" placeholder="Reference" [(ngModel)]="paymentForm.referenceNumber" />
         <input type="text" class="form-control" placeholder="Memo" [(ngModel)]="paymentForm.memo" />
-        <button type="button" class="btn-primary" (click)="addPayment()">Add Payment</button>
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="addPayment()"
+          [disabled]="!canRecordPayment()"
+          [title]="!canRecordPayment() ? 'You do not have permission to record payments.' : ''"
+        >Add Payment</button>
       </div>
     </div>
 
@@ -145,7 +163,13 @@
       <h3 class="section-title">Documents</h3>
       <div class="upload-row">
         <input type="file" #fileInput (change)="uploadDoc($event)" class="input-file-hidden" />
-        <button type="button" class="btn-outline" (click)="fileInput.click()">Upload document</button>
+        <button
+          type="button"
+          class="btn-outline"
+          (click)="fileInput.click()"
+          [disabled]="!canUploadDocument()"
+          [title]="!canUploadDocument() ? 'You do not have permission to upload documents.' : ''"
+        >Upload document</button>
       </div>
       <ul class="doc-list" *ngIf="documents.length > 0">
         <li *ngFor="let doc of documents">

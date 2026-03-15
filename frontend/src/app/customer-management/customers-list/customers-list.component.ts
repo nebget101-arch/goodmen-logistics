@@ -2,6 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { CustomerService } from '../../services/customer.service';
 import { ApiService } from '../../services/api.service';
+import { PermissionHelperService } from '../../services/permission-helper.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 
 @Component({
   selector: 'app-customers-list',
@@ -9,6 +11,7 @@ import { ApiService } from '../../services/api.service';
   styleUrls: ['./customers-list.component.css']
 })
 export class CustomersListComponent implements OnInit {
+  readonly perms = PERMISSIONS;
   customers: any[] = [];
   loading = false;
   error = '';
@@ -47,7 +50,8 @@ export class CustomersListComponent implements OnInit {
   constructor(
     private customerService: CustomerService,
     private router: Router,
-    private apiService: ApiService
+    private apiService: ApiService,
+    private permissions: PermissionHelperService
   ) {}
 
   ngOnInit(): void {
@@ -91,10 +95,18 @@ export class CustomersListComponent implements OnInit {
   }
 
   goToNew(): void {
+    if (!this.canCreateCustomer()) {
+      this.error = 'You do not have permission to create customers.';
+      return;
+    }
     this.router.navigate(['/customers/new']);
   }
 
   goToBulkUpload(): void {
+    if (!this.canCreateCustomer()) {
+      this.error = 'You do not have permission to bulk upload customers.';
+      return;
+    }
     this.router.navigate(['/customers/bulk-upload']);
   }
 
@@ -103,15 +115,31 @@ export class CustomersListComponent implements OnInit {
   }
 
   editCustomer(id: string): void {
+    if (!this.canEditCustomer()) {
+      this.error = 'You do not have permission to edit customers.';
+      return;
+    }
     this.router.navigate(['/customers', id, 'edit']);
   }
 
   toggleStatus(customer: any): void {
+    if (!this.canEditCustomer()) {
+      this.error = 'You do not have permission to change customer status.';
+      return;
+    }
     const nextStatus = customer.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     this.customerService.setStatus(customer.id, nextStatus).subscribe({
       next: () => this.loadCustomers(),
       error: () => this.loadCustomers()
     });
+  }
+
+  canCreateCustomer(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.CUSTOMERS_CREATE, PERMISSIONS.CUSTOMERS_EDIT]);
+  }
+
+  canEditCustomer(): boolean {
+    return this.permissions.hasPermission(PERMISSIONS.CUSTOMERS_EDIT);
   }
 
   previousPage(): void {

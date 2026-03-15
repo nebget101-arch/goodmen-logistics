@@ -33,11 +33,37 @@ export interface UserAccess {
   user: AccessUser;
   roles: string[];
   permissions: string[];
+  /**
+   * Optional scoped permission map from backend.
+   * Example: { 'invoices.view': ['own', 'location:abc123'] }
+   */
+  permissionScopes?: Record<string, string[]>;
   locations: AccessLocation[];
   tenantId?: string | null;
   subscriptionPlanId?: string | null;
   subscriptionPlan?: AccessSubscriptionPlan | null;
 }
+
+/**
+ * Canonical role constants used by frontend RBAC checks.
+ * Keep additive/backward-compatible with legacy role values.
+ */
+export const ROLES = {
+  SUPER_ADMIN: 'super_admin',
+  ADMIN: 'admin',
+  COMPANY_ADMIN: 'company_admin',
+  DISPATCHER: 'dispatcher',
+  SAFETY_MANAGER: 'safety_manager',
+  ACCOUNTING: 'accounting',
+  SHOP_MANAGER: 'shop_manager',
+  SHOP_CLERK: 'shop_clerk',
+  TECHNICIAN: 'technician',
+  PARTS_MANAGER: 'parts_manager',
+  DRIVER: 'driver',
+  CUSTOMER: 'customer',
+} as const;
+
+export type RoleCode = typeof ROLES[keyof typeof ROLES];
 
 /**
  * Permission codes used across the app.
@@ -87,6 +113,52 @@ export const PERMISSIONS = {
   INVOICES_FINALIZE: 'invoices.finalize',
   INVOICES_EXPORT: 'invoices.export',
 
+  // Shop clerk / shop operations
+  // Work orders — granular
+  WORK_ORDERS_ASSIGN: 'work_orders.assign',
+  WORK_ORDERS_APPROVE: 'work_orders.approve',
+  WORK_ORDERS_CLOSE: 'work_orders.close',
+
+  // Work order lines
+  WORK_ORDER_LINES_VIEW: 'work_order_lines.view',
+  WORK_ORDER_LINES_CREATE: 'work_order_lines.create',
+  WORK_ORDER_LINES_EDIT: 'work_order_lines.edit',
+
+  // Estimates
+  ESTIMATES_VIEW: 'estimates.view',
+  ESTIMATES_CREATE: 'estimates.create',
+  ESTIMATES_EDIT: 'estimates.edit',
+  ESTIMATES_CONVERT: 'estimates.convert',
+  ESTIMATES_APPROVE: 'estimates.approve',
+
+  // Appointments
+  APPOINTMENTS_VIEW: 'appointments.view',
+  APPOINTMENTS_CREATE: 'appointments.create',
+  APPOINTMENTS_EDIT: 'appointments.edit',
+
+  // Invoice finalization (separate from view/create/edit)
+  INVOICES_POST: 'invoices.post',
+  INVOICES_VOID: 'invoices.void',
+
+  // Payments
+  PAYMENTS_VIEW: 'payments.view',
+  PAYMENTS_CREATE: 'payments.create',
+  PAYMENTS_REFUND: 'payments.refund',
+
+  // Documents
+  DOCUMENTS_VIEW: 'documents.view',
+  DOCUMENTS_UPLOAD: 'documents.upload',
+
+  // Discounts
+  DISCOUNTS_APPROVE: 'discounts.approve',
+
+  // Shop reports
+  REPORTS_SHOP: 'reports.shop',
+
+  // Customers / vehicles explicit create
+  CUSTOMERS_CREATE: 'customers.create',
+  VEHICLES_CREATE: 'vehicles.create',
+
   // Settlements / payroll
   SETTLEMENTS_VIEW: 'settlements.view',
   SETTLEMENTS_CREATE: 'settlements.create',
@@ -135,7 +207,7 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
   parts: [PERMISSIONS.PARTS_VIEW, PERMISSIONS.INVENTORY_VIEW],
   barcodes: [PERMISSIONS.BARCODES_VIEW],
   receiving: [PERMISSIONS.RECEIVING_VIEW, PERMISSIONS.PARTS_RECEIVE],
-  transfers: [PERMISSIONS.INVENTORY_VIEW, PERMISSIONS.INVENTORY_TRANSFER],
+  transfers: [PERMISSIONS.INVENTORY_TRANSFER, PERMISSIONS.INVENTORY_ADJUST],
   sales: [PERMISSIONS.SALES_VIEW],
   inventory_reports: [PERMISSIONS.INVENTORY_REPORTS_VIEW, PERMISSIONS.PARTS_VIEW],
   invoices: [PERMISSIONS.INVOICES_VIEW],

@@ -44,13 +44,16 @@ export interface PlanFeature {
 }
 
 export interface MarketingPlan {
-  id: 'basic' | 'multi_mc' | 'end_to_end';
+  id: 'basic' | 'multi_mc' | 'end_to_end' | 'enterprise';
   name: string;
   tagline: string;
   description: string;
   priceLabel: string;
   highlighted: boolean;
   badge?: string;
+  ctaLabel?: string;
+  ctaAction?: 'trial' | 'contact';
+  trialEligible?: boolean;
   features: PlanFeature[];
 }
 
@@ -434,51 +437,74 @@ export const AI_BENEFITS: AiBenefit[] = [
 export const MARKETING_PLANS: MarketingPlan[] = [
   {
     id: 'basic',
-    name: 'Basic',
-    tagline: 'Core operations for one entity',
+    name: 'Starter',
+    tagline: 'Essential fleet operations',
     description:
       'Includes dashboard, dispatch, compliance, and settlement workflows for one operating entity.',
-    priceLabel: '2 users included + $50/additional user',
+    priceLabel: '$149/mo',
     highlighted: false,
+    ctaLabel: 'Start Free Trial',
+    ctaAction: 'trial',
+    trialEligible: true,
     features: [
       { text: 'Dashboard, Loads, Dispatch Board, Drivers' },
       { text: 'Trucks/Trailers, HOS, DQF, Audit' },
       { text: 'Settlements: Scheduled Payments + Equipment Owners' },
-      { text: '2 included users: Admin + Dispatch', highlight: true },
-      { text: '$50 per additional user', highlight: true }
+      { text: 'Best for growing single-entity fleets', highlight: true }
     ]
   },
   {
     id: 'multi_mc',
-    name: 'Multi-MC',
-    tagline: 'Multiple MCs, centralized control',
+    name: 'Professional',
+    tagline: 'Multi-entity control and scale',
     description:
       'Everything in Basic plus multi-entity administration and broader role coverage.',
-    priceLabel: '4 users included + $50/additional user',
+    priceLabel: '$349/mo',
     highlighted: true,
     badge: 'Most Popular',
+    ctaLabel: 'Start Free Trial',
+    ctaAction: 'trial',
+    trialEligible: true,
     features: [
       { text: 'Everything in Basic' },
       { text: 'Multi-entity admin page (/admin/multi-mc)', highlight: true },
-      { text: '4 included users: Admin, Safety, Dispatch, Accounting', highlight: true },
       { text: 'Cross-entity operational management' },
-      { text: '$50 per additional user', highlight: true }
+      { text: 'Best for teams running multiple MCs', highlight: true }
     ]
   },
   {
     id: 'end_to_end',
-    name: 'End-to-End',
+    name: 'Advanced',
     tagline: 'Full platform, maximum coverage',
     description:
       'Everything in Multi-MC plus inventory, accounting, reports, and roadside AI with larger user access.',
-    priceLabel: '10 users included + $50/additional user',
+    priceLabel: '$799/mo',
     highlighted: false,
+    ctaLabel: 'Start Free Trial',
+    ctaAction: 'trial',
+    trialEligible: true,
     features: [
       { text: 'Everything in Multi-MC' },
       { text: 'Inventory modules + accounting (invoices/settlements)' },
       { text: 'Reports + Roadside AI', highlight: true },
-      { text: '10 included users', highlight: true },
-      { text: '$50 per additional user', highlight: true }
+      { text: 'Built for high-volume operations', highlight: true }
+    ]
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    tagline: 'Tailored architecture and support',
+    description:
+      'Custom implementation, onboarding, and integrations for complex operations.',
+    priceLabel: "Let's talk",
+    highlighted: false,
+    ctaLabel: "Let's Talk",
+    ctaAction: 'contact',
+    trialEligible: false,
+    features: [
+      { text: 'Custom onboarding and migration support' },
+      { text: 'Dedicated success and solution engineering', highlight: true },
+      { text: 'Tailored integrations and workflows' }
     ]
   }
 ];

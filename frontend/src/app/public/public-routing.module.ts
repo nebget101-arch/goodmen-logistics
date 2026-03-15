@@ -3,6 +3,7 @@ import { RouterModule, Routes } from '@angular/router';
 import { PublicHomeComponent } from './components/public-home/public-home.component';
 import { PublicTrialComponent } from './components/public-trial/public-trial.component';
 import { PublicTrialSignupComponent } from './components/public-trial-signup/public-trial-signup.component';
+import { PublicContactComponent } from './components/public-contact/public-contact.component';
 
 const routes: Routes = [
   {
@@ -13,6 +14,10 @@ const routes: Routes = [
   {
     path: 'trial',
     component: PublicTrialComponent
+  },
+  {
+    path: 'contact',
+    component: PublicContactComponent
   },
   {
     path: 'trial-signup',

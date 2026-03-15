@@ -46,8 +46,9 @@
           Roles
         </h3>
         <p class="form-section-desc">What the user can do. Multiple roles allowed.</p>
+        <p class="form-section-desc" *ngIf="isBasicOrMultiMcPlan">Role options are plan-limited.</p>
         <div class="roles-grid">
-          <label *ngFor="let r of rbacRoles" class="role-chip" [class.selected]="roles.includes(r.value)">
+          <label *ngFor="let r of visibleRbacRoles" class="role-chip" [class.selected]="roles.includes(r.value)">
             <input type="checkbox" [value]="r.value" [checked]="roles.includes(r.value)" (change)="toggleRole(r.value)" />
             <span>{{ r.label }}</span>
           </label>
@@ -57,7 +58,7 @@
         </div>
       </div>
 
-      <div class="form-section">
+      <div class="form-section" *ngIf="supportsLocationAssignment; else locationsPlanNotice">
         <h3 class="form-section-title">
           <span class="material-symbols-outlined">location_on</span>
           Locations
@@ -70,6 +71,16 @@
         </div>
         <small class="form-hint">Ctrl/Cmd + click to select multiple</small>
       </div>
+
+      <ng-template #locationsPlanNotice>
+        <div class="form-section">
+          <h3 class="form-section-title">
+            <span class="material-symbols-outlined">location_on</span>
+            Locations
+          </h3>
+          <p class="form-section-desc">Location assignment is available only on Advanced and Enterprise plans.</p>
+        </div>
+      </ng-template>
 
       <div *ngIf="message" class="alert alert-success">{{ message }}</div>
       <div *ngIf="error" class="alert alert-error">{{ error }}</div>

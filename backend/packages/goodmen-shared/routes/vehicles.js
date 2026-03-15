@@ -21,8 +21,14 @@ async function getVehiclesColumnSet() {
   return vehiclesColumnSetCache;
 }
 
-// Protect all vehicles routes: admin, safety, and dispatch (dispatch needs read access for driver assignments)
-router.use(auth(['admin', 'safety', 'dispatch']));
+// Protect all vehicles routes.
+// Extended with shop roles so shop workers can view/create customer vehicles.
+// Original admin, safety, and dispatch access is unchanged.
+router.use(auth([
+  'admin', 'safety', 'dispatch',
+  'shop_manager', 'service_writer', 'service_advisor',
+  'shop_clerk', 'mechanic', 'technician',
+]));
 
 // GET decode VIN using NHTSA vPIC
 router.get('/decode-vin/:vin', async (req, res) => {
@@ -121,8 +127,12 @@ router.post('/customer', async (req, res) => {
 
 
 
-// Protect all vehicles routes: admin, safety, and dispatch (duplicate guard for older code paths)
-router.use(auth(['admin', 'safety', 'dispatch']));
+// Protect all vehicles routes (duplicate guard — extended with shop roles for consistency).
+router.use(auth([
+  'admin', 'safety', 'dispatch',
+  'shop_manager', 'service_writer', 'service_advisor',
+  'shop_clerk', 'mechanic', 'technician',
+]));
 
 
 

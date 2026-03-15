@@ -9,12 +9,47 @@ const db = require('../internal/db').knex;
 
 const SUPER_ADMIN_ROLE_CODE = 'super_admin';
 
+/**
+ * Maps legacy users.role string values to canonical RBAC role codes.
+ *
+ * Used only as a fallback when a user has NO rows in user_roles (i.e. migration
+ * hasn't backfilled them yet). Once user_roles is populated for a user this
+ * mapping is irrelevant for that user.
+ *
+ * Rules:
+ *  - Keep all existing mappings unchanged (backward compat).
+ *  - New role codes that match their JWT claim directly are listed explicitly so
+ *    that legacy users whose users.role column already contains the new code also
+ *    resolve correctly.
+ */
 const LEGACY_TO_ROLE_CODE = {
+  // Pre-existing legacy mappings — do NOT change these
   admin: 'super_admin',
   safety: 'safety_manager',
   fleet: 'dispatcher',
   dispatch: 'dispatcher',
-  driver: 'driver'
+  driver: 'driver',
+
+  // Shop roles: users.role column may already contain the canonical code.
+  // Listed here so getLegacyRoleCodeForUser() returns them correctly.
+  shop_manager:      'shop_manager',
+  shop_clerk:        'shop_clerk',
+  service_writer:    'service_writer',
+  service_advisor:   'service_writer',  // old alias → service_writer role
+  mechanic:          'mechanic',
+  technician:        'technician',
+  parts_manager:     'parts_manager',
+  parts_clerk:       'parts_clerk',
+  inventory_auditor: 'inventory_auditor',
+
+  // Accounting variants
+  accounting:        'carrier_accountant',  // old alias
+  carrier_accountant: 'carrier_accountant',
+  company_accountant: 'company_accountant',
+
+  // Other
+  executive_read_only: 'executive_read_only',
+  customer:            'customer',
 };
 
 async function getLegacyRoleCodeForUser(userId) {

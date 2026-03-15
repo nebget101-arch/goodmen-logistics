@@ -6,12 +6,14 @@ import { PublicRoutingModule } from './public-routing.module';
 import { PublicHomeComponent } from './components/public-home/public-home.component';
 import { PublicTrialComponent } from './components/public-trial/public-trial.component';
 import { PublicTrialSignupComponent } from './components/public-trial-signup/public-trial-signup.component';
+import { PublicContactComponent } from './components/public-contact/public-contact.component';
 
 @NgModule({
   declarations: [
     PublicHomeComponent,
     PublicTrialComponent,
-    PublicTrialSignupComponent
+    PublicTrialSignupComponent,
+    PublicContactComponent
   ],
   imports: [
     CommonModule,

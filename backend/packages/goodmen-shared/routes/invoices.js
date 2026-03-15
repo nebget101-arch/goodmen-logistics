@@ -12,12 +12,32 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 function requireRole(allowedRoles) {
   return (req, res, next) => {
-    const role = req.user?.role || 'technician';
-    if (!allowedRoles.includes(role)) {
+    const role = (req.user?.role || 'technician').toString().trim().toLowerCase();
+    const allowed = allowedRoles.map((r) => r.toString().trim().toLowerCase());
+    if (!allowed.includes(role)) {
       return res.status(403).json({ error: 'Forbidden: insufficient role' });
     }
     next();
   };
+}
+
+/**
+ * Manager-only roles: allowed to post, void, and refund on invoices.
+ * shop_clerk is intentionally excluded — they may only work on draft invoices.
+ * Backward-compat: admin and accounting retain full access.
+ */
+const INVOICE_MANAGER_ROLES = [
+  'admin', 'super_admin',
+  'shop_manager',
+  'carrier_accountant', 'company_accountant', 'accounting',
+];
+
+/**
+ * Blocks the request unless the user's role is in INVOICE_MANAGER_ROLES.
+ * Used to protect invoice finalization endpoints (post, void, refund).
+ */
+function requireInvoiceManagerRole() {
+  return requireRole(INVOICE_MANAGER_ROLES);
 }
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -29,7 +49,8 @@ router.param('id', (req, res, next, id) => {
   next();
 });
 
-router.post('/from-work-order/:workOrderId', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
+// shop_clerk may generate a draft invoice from a completed work order.
+router.post('/from-work-order/:workOrderId', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'shop_manager', 'service_writer', 'shop_clerk']), async (req, res) => {
   try {
     const invoice = await invoicesService.createInvoiceFromWorkOrder(req.params.workOrderId, req.body || {}, req.user?.id, req.context || null);
     res.status(201).json({ success: true, data: invoice });
@@ -39,7 +60,8 @@ router.post('/from-work-order/:workOrderId', authMiddleware, requireRole(['admin
   }
 });
 
-router.post('/', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
+// shop_clerk may create manual draft invoices (post/void still require manager).
+router.post('/', authMiddleware, requireRole(['admin', 'accounting', 'shop_manager', 'service_writer', 'service_advisor', 'shop_clerk']), async (req, res) => {
   try {
     const invoice = await invoicesService.createManualInvoice(req.body || {}, req.user?.id, req.context || null);
     res.status(201).json({ success: true, data: invoice });
@@ -70,7 +92,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-router.put('/:id', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
+// shop_clerk may edit draft invoices. Posting/voiding is enforced separately on PATCH /:id/status.
+router.put('/:id', authMiddleware, requireRole(['admin', 'accounting', 'shop_manager', 'service_writer', 'service_advisor', 'shop_clerk']), async (req, res) => {
   try {
     const invoice = await invoicesService.updateInvoiceDraft(req.params.id, req.body || {}, req.user?.id, req.context || null);
     res.json({ success: true, data: invoice });
@@ -80,7 +103,26 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'accounting']), async (
   }
 });
 
-router.patch('/:id/status', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
+// Status transitions:
+//   draft → posted:  requires manager role (admin, shop_manager, accounting).
+//   posted → void:   requires manager role.
+//   Other transitions (e.g. partially_paid → paid): any shop role may trigger.
+router.patch('/:id/status', authMiddleware,
+  requireRole(['admin', 'accounting', 'service_advisor', 'shop_manager', 'service_writer', 'shop_clerk']),
+  // Finalize guard: blocks shop_clerk from posting or voiding
+  (req, res, next) => {
+    const targetStatus = (req.body?.status || '').toString().trim().toLowerCase();
+    const FINALIZE_STATUSES = ['posted', 'void'];
+    if (!FINALIZE_STATUSES.includes(targetStatus)) return next();
+    const role = (req.user?.role || '').toString().trim().toLowerCase();
+    if (INVOICE_MANAGER_ROLES.map(r => r.toLowerCase()).includes(role)) return next();
+    return res.status(403).json({
+      error: 'Forbidden: only managers may post or void invoices',
+      targetStatus,
+      requiredRoles: INVOICE_MANAGER_ROLES,
+    });
+  },
+  async (req, res) => {
   try {
     const invoice = await invoicesService.setInvoiceStatus(req.params.id, req.body?.status, req.body?.reason, req.user?.id, req.context || null);
     res.json({ success: true, data: invoice });
@@ -91,7 +133,7 @@ router.patch('/:id/status', authMiddleware, requireRole(['admin', 'accounting', 
 });
 
 // Line items (optional)
-router.post('/:id/line-items', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
+router.post('/:id/line-items', authMiddleware, requireRole(['admin', 'accounting', 'shop_manager', 'service_writer', 'service_advisor', 'shop_clerk']), async (req, res) => {
   try {
     const item = await invoicesService.addLineItem(req.params.id, req.body || {}, req.context || null);
     res.status(201).json({ success: true, data: item });
@@ -101,7 +143,7 @@ router.post('/:id/line-items', authMiddleware, requireRole(['admin', 'accounting
   }
 });
 
-router.put('/:id/line-items/:lineItemId', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
+router.put('/:id/line-items/:lineItemId', authMiddleware, requireRole(['admin', 'accounting', 'shop_manager', 'service_writer', 'service_advisor', 'shop_clerk']), async (req, res) => {
   try {
     const item = await invoicesService.updateLineItem(req.params.id, req.params.lineItemId, req.body || {}, req.context || null);
     res.json({ success: true, data: item });
@@ -111,7 +153,8 @@ router.put('/:id/line-items/:lineItemId', authMiddleware, requireRole(['admin', 
   }
 });
 
-router.delete('/:id/line-items/:lineItemId', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
+// Line item delete is manager-only; shop_clerk may not remove line items.
+router.delete('/:id/line-items/:lineItemId', authMiddleware, requireInvoiceManagerRole(), async (req, res) => {
   try {
     await invoicesService.deleteLineItem(req.params.id, req.params.lineItemId, req.context || null);
     res.json({ success: true });
@@ -122,7 +165,8 @@ router.delete('/:id/line-items/:lineItemId', authMiddleware, requireRole(['admin
 });
 
 // Payments
-router.post('/:id/payments', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
+// shop_clerk may record a payment (create); refunding is manager-only (see DELETE below).
+router.post('/:id/payments', authMiddleware, requireRole(['admin', 'accounting', 'shop_manager', 'service_writer', 'service_advisor', 'shop_clerk']), async (req, res) => {
   try {
     const invoice = await invoicesService.addPayment(req.params.id, req.body || {}, req.user?.id, req.context || null);
     res.status(201).json({ success: true, data: invoice });
@@ -151,7 +195,8 @@ router.get('/:id/payments', authMiddleware, async (req, res) => {
   }
 });
 
-router.delete('/:id/payments/:paymentId', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
+// Payment delete = refund action: manager-only; shop_clerk is blocked.
+router.delete('/:id/payments/:paymentId', authMiddleware, requireInvoiceManagerRole(), async (req, res) => {
   try {
     const invoice = await invoicesService.deletePayment(req.params.id, req.params.paymentId, req.context || null);
     res.json({ success: true, data: invoice });
@@ -220,7 +265,8 @@ router.get('/:id/pdf', authMiddleware, async (req, res) => {
 });
 
 // Documents
-router.post('/:id/documents', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), upload.single('file'), async (req, res) => {
+// shop_clerk may upload supporting documents for an invoice.
+router.post('/:id/documents', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'shop_manager', 'service_writer', 'shop_clerk']), upload.single('file'), async (req, res) => {
   try {
     const invoice = await db('invoices')
       .where({ id: req.params.id })

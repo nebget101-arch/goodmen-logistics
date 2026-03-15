@@ -6,6 +6,7 @@ import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.s
 import { AccessControlService } from './services/access-control.service';
 import { OperatingEntityContextService } from './services/operating-entity-context.service';
 import { NAV_TOP_LINKS, NAV_SECTIONS, NAV_ADD_USER, NavSection, NavLink } from './config/nav.config';
+import { PERMISSIONS } from './models/access-control.model';
 
 @Component({
   selector: 'app-root',
@@ -36,6 +37,7 @@ export class AppComponent implements OnInit {
   readonly navTopLinks = NAV_TOP_LINKS;
   readonly navSections = NAV_SECTIONS;
   readonly navAddUser = NAV_ADD_USER;
+  readonly adminMenuPermissions = [PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.USERS_EDIT];
   /** Section expand state by index (Equipment=0, Safety=1, Fleet=2, Inventory=3, Accounting=4). */
   sectionExpanded: boolean[] = [true, true, true, true, true];
 

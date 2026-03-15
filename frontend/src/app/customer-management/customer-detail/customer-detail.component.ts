@@ -6,6 +6,8 @@ import { InvoiceService } from '../../services/invoice.service';
 import { CreditService } from '../../services/credit.service';
 import { ApiService } from '../../services/api.service';
 import * as QRCode from 'qrcode';
+import { PermissionHelperService } from '../../services/permission-helper.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 
 @Component({
   selector: 'app-customer-detail',
@@ -13,6 +15,7 @@ import * as QRCode from 'qrcode';
   styleUrls: ['./customer-detail.component.css']
 })
 export class CustomerDetailComponent implements OnInit, OnDestroy {
+  readonly perms = PERMISSIONS;
   customer: any;
   pricing: any;
   alerts: any;
@@ -68,7 +71,8 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
     private invoiceService: InvoiceService,
     private creditService: CreditService,
     private fb: FormBuilder,
-    private apiService: ApiService
+    private apiService: ApiService,
+    private permissions: PermissionHelperService
   ) {
     this.pricingForm = this.fb.group({
       labor_rate_multiplier: [null],
@@ -186,6 +190,10 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
   }
 
   addCustomerVehicle(): void {
+    if (!this.canCreateCustomerVehicle()) {
+      this.newVehicleError = 'You do not have permission to add customer vehicles.';
+      return;
+    }
     if (!this.customer?.id) return;
     this.newVehicleError = '';
     this.newVehicleSuccess = '';
@@ -324,11 +332,19 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
   }
 
   editCustomer(): void {
+    if (!this.canEditCustomer()) {
+      this.error = 'You do not have permission to edit customers.';
+      return;
+    }
     if (!this.customer?.id) return;
     this.router.navigate(['/customers', this.customer.id, 'edit']);
   }
 
   savePricingRules(): void {
+    if (!this.canManagePricing()) {
+      alert('You do not have permission to update pricing rules.');
+      return;
+    }
     if (!this.customer?.id || !this.pricingForm.valid) return;
     
     const pricingData = this.pricingForm.getRawValue();
@@ -384,6 +400,10 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
   }
 
   updateCreditLimit(): void {
+    if (!this.canManageCreditLimit()) {
+      alert('You do not have permission to update credit limits.');
+      return;
+    }
     if (!this.customer?.id || this.newCreditLimit === null) return;
     
     this.updatingCreditLimit = true;
@@ -412,6 +432,22 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
     if (percent >= 90) return 'danger';
     if (percent >= 75) return 'warning';
     return 'success';
+  }
+
+  canEditCustomer(): boolean {
+    return this.permissions.hasPermission(PERMISSIONS.CUSTOMERS_EDIT);
+  }
+
+  canCreateCustomerVehicle(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.VEHICLES_CREATE, PERMISSIONS.VEHICLES_EDIT]);
+  }
+
+  canManagePricing(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.INVOICES_EDIT, PERMISSIONS.DISCOUNTS_APPROVE]);
+  }
+
+  canManageCreditLimit(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.INVOICES_EDIT, PERMISSIONS.ACCESS_ADMIN]);
   }
 
   Math = Math;
