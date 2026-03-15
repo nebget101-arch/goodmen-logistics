@@ -16,6 +16,7 @@ import { AuthGuard } from './auth.guard';
 import { PermissionGuard } from './guards/permission.guard';
 import { PlanGuard } from './guards/plan.guard';
 import { UserCreateComponent } from './components/user-create/user-create.component';
+import { UsersAdminComponent } from './components/users-admin/users-admin.component';
 import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
 import { BarcodeManagementComponent } from './components/barcode-management/barcode-management.component';
@@ -136,6 +137,12 @@ const routes: Routes = [
   { path: 'settlements', loadChildren: () => import('./settlements/settlements.module').then(m => m.SettlementsModule) },
   { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
+  {
+    path: 'users',
+    component: UsersAdminComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: [PERMISSIONS.USERS_VIEW, PERMISSIONS.USERS_CREATE, PERMISSIONS.USERS_EDIT, PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN] }
+  },
   { path: 'users/create', component: UserCreateComponent, canActivate: [AuthGuard, PermissionGuard], data: { permission: PERMISSIONS.USERS_CREATE } },
   {
     path: 'admin/multi-mc',

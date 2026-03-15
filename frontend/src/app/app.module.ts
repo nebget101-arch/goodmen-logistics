@@ -25,6 +25,7 @@ import { DispatchBoardComponent } from './components/dispatch-board/dispatch-boa
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
 import { UserCreateComponent } from './components/user-create/user-create.component';
+import { UsersAdminComponent } from './components/users-admin/users-admin.component';
 import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
 import { BarcodeManagementComponent } from './components/barcode-management/barcode-management.component';
@@ -68,6 +69,7 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     DispatchBoardComponent,
     AuditComponent,
     LoginComponent,
+    UsersAdminComponent,
     UserCreateComponent,
     ProfileComponent,
     WorkOrderComponent,

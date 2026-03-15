@@ -80,6 +80,25 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/users/${id}`);
   }
 
+  updateUser(
+    id: string,
+    payload: {
+      username?: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      email?: string | null;
+      role?: string;
+      roles?: string[];
+      is_active?: boolean;
+    }
+  ): Observable<any> {
+    return this.http.put(`${this.baseUrl}/users/${id}`, payload);
+  }
+
+  setUserActive(id: string, isActive: boolean): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/users/${id}/status`, { is_active: isActive });
+  }
+
   listUsers(): Observable<any> {
     return this.http.get(`${this.baseUrl}/users`);
   }

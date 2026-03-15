@@ -7,7 +7,7 @@ const baseAuth = require('../middleware/auth-middleware');
 const authWithRole = require('./auth-middleware');
 const requirePlanAccess = require('../middleware/plan-access-middleware');
 const { loadUserRbac, requirePermission, requireAnyPermission } = require('../middleware/rbac-middleware');
-const { normalizePlanId } = require('../config/plans');
+const { normalizePlanId, PLANS } = require('../config/plans');
 
 const router = express.Router();
 const rbac = [baseAuth, loadUserRbac];
@@ -21,6 +21,46 @@ async function getTenantPlanForTenant(tenantId) {
   if (!tenantId) return 'basic';
   const tenantRow = await knex('tenants').where({ id: tenantId }).first('subscription_plan');
   return normalizePlanId(tenantRow?.subscription_plan, 'basic');
+}
+
+function getIncludedUsersForPlan(planId) {
+  const normalized = normalizePlanId(planId, 'basic');
+  const plan = PLANS[normalized] || null;
+  const includedUsers = Number(plan?.includedUsers);
+  if (!Number.isFinite(includedUsers) || includedUsers <= 0) return null;
+  return includedUsers;
+}
+
+async function countActiveUsersForTenant(knexClient, tenantId) {
+  if (!tenantId) return 0;
+  const hasUsers = await knexClient.schema.hasTable('users');
+  if (!hasUsers) return 0;
+
+  const hasIsActive = await knexClient.schema.hasColumn('users', 'is_active');
+  const row = await knexClient('users')
+    .where({ tenant_id: tenantId })
+    .modify((qb) => {
+      if (hasIsActive) qb.andWhere('is_active', true);
+    })
+    .count({ count: 'id' })
+    .first();
+
+  const count = Number(row?.count || 0);
+  return Number.isFinite(count) ? count : 0;
+}
+
+async function assertActiveSeatAvailable(knexClient, tenantId) {
+  const tenantPlanId = await getTenantPlanForTenant(tenantId);
+  const seatLimit = getIncludedUsersForPlan(tenantPlanId);
+  if (!seatLimit) return;
+
+  const activeUsers = await countActiveUsersForTenant(knexClient, tenantId);
+  if (activeUsers >= seatLimit) {
+    const err = new Error('User limit reached for your current plan. Contact support to add more users.');
+    err.statusCode = 409;
+    err.code = 'PLAN_USER_LIMIT_REACHED';
+    throw err;
+  }
 }
 
 function normalizeUsername(value) {
@@ -78,6 +118,95 @@ function mapCanonicalRoleToLegacyRole(canonicalRoleCode) {
   return 'fleet';
 }
 
+function normalizeRoleCodeList(roleInputs = []) {
+  return Array.from(
+    new Set(
+      (Array.isArray(roleInputs) ? roleInputs : [])
+        .map((value) => normalizeRoleCode(value))
+        .filter(Boolean)
+    )
+  );
+}
+
+async function resolveRoleRowsByCode(knexClient, roleCodes = []) {
+  if (!Array.isArray(roleCodes) || roleCodes.length === 0) return [];
+  return knexClient('roles').whereIn('code', roleCodes).select('id', 'code', 'name');
+}
+
+async function ensureUsersIsActiveColumn(knexClient) {
+  const hasUsers = await knexClient.schema.hasTable('users');
+  if (!hasUsers) return false;
+
+  const hasIsActive = await knexClient.schema.hasColumn('users', 'is_active');
+  if (hasIsActive) return true;
+
+  try {
+    await knexClient.schema.alterTable('users', (table) => {
+      table.boolean('is_active').notNullable().defaultTo(true);
+    });
+    await knexClient.raw('UPDATE users SET is_active = true WHERE is_active IS NULL');
+    await knexClient.raw('CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active)');
+    return true;
+  } catch (err) {
+    console.error('[users] failed to auto-add users.is_active column:', err?.message || err);
+    return false;
+  }
+}
+
+async function userHasAdminPrivileges(knexClient, tenantId, userId) {
+  if (!tenantId || !userId) return false;
+
+  const user = await knexClient('users')
+    .where({ id: userId, tenant_id: tenantId })
+    .first('id', 'role');
+
+  if (!user) return false;
+  if (String(user.role || '').trim().toLowerCase() === 'admin') return true;
+
+  const [hasUserRoles, hasRoles] = await Promise.all([
+    knexClient.schema.hasTable('user_roles'),
+    knexClient.schema.hasTable('roles')
+  ]);
+  if (!hasUserRoles || !hasRoles) return false;
+
+  const adminRole = await knexClient('user_roles as ur')
+    .join('roles as r', 'ur.role_id', 'r.id')
+    .where('ur.user_id', userId)
+    .whereIn('r.code', ['super_admin', 'company_admin'])
+    .first('r.id');
+
+  return Boolean(adminRole);
+}
+
+async function countActiveTenantAdmins(knexClient, tenantId) {
+  if (!tenantId) return 0;
+
+  const hasIsActive = await knexClient.schema.hasColumn('users', 'is_active');
+  const [hasUserRoles, hasRoles] = await Promise.all([
+    knexClient.schema.hasTable('user_roles'),
+    knexClient.schema.hasTable('roles')
+  ]);
+
+  const row = await knexClient('users as u')
+    .leftJoin('user_roles as ur', 'ur.user_id', 'u.id')
+    .leftJoin('roles as r', 'ur.role_id', 'r.id')
+    .where('u.tenant_id', tenantId)
+    .modify((qb) => {
+      if (hasIsActive) qb.andWhere('u.is_active', true);
+    })
+    .andWhere(function whereAdmin() {
+      this.whereRaw("LOWER(COALESCE(u.role, '')) = 'admin'");
+      if (hasUserRoles && hasRoles) {
+        this.orWhereIn('r.code', ['super_admin', 'company_admin']);
+      }
+    })
+    .countDistinct({ count: 'u.id' })
+    .first();
+
+  const count = Number(row?.count || 0);
+  return Number.isFinite(count) ? count : 0;
+}
+
 async function generateUniqueUsername(base, dbClient) {
   const normalized = normalizeUsername(base);
   if (!normalized) return '';
@@ -117,6 +246,10 @@ router.get('/', rbac, requireAnyPermission(['users.view', 'users.manage', 'roles
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
     const tenantId = req.context?.tenantId || null;
+    const hasIsActive = await knex.schema.hasColumn('users', 'is_active');
+
+    const selectColumns = ['id', 'username', 'first_name', 'last_name', 'email', 'role', 'tenant_id', 'created_at'];
+    if (hasIsActive) selectColumns.push('is_active');
 
     const rows = await knex('users')
       .modify((qb) => {
@@ -125,9 +258,35 @@ router.get('/', rbac, requireAnyPermission(['users.view', 'users.manage', 'roles
       .orderBy('first_name', 'asc')
       .orderBy('last_name', 'asc')
       .orderBy('username', 'asc')
-      .select('id', 'username', 'first_name', 'last_name', 'email', 'role', 'tenant_id', 'created_at');
+      .select(selectColumns);
 
-    res.json({ success: true, data: rows });
+    const userIds = rows.map((row) => row.id).filter(Boolean);
+    const [hasUserRoles, hasRoles] = await Promise.all([
+      knex.schema.hasTable('user_roles'),
+      knex.schema.hasTable('roles')
+    ]);
+
+    let rolesByUserId = new Map();
+    if (userIds.length > 0 && hasUserRoles && hasRoles) {
+      const roleRows = await knex('user_roles as ur')
+        .join('roles as r', 'ur.role_id', 'r.id')
+        .whereIn('ur.user_id', userIds)
+        .select('ur.user_id', 'r.code', 'r.name');
+
+      rolesByUserId = roleRows.reduce((map, row) => {
+        const existing = map.get(row.user_id) || [];
+        existing.push({ code: row.code, name: row.name });
+        map.set(row.user_id, existing);
+        return map;
+      }, new Map());
+    }
+
+    const enrichedRows = rows.map((row) => ({
+      ...row,
+      roles: rolesByUserId.get(row.id) || []
+    }));
+
+    res.json({ success: true, data: enrichedRows });
   } catch (err) {
     console.error('[users] list failed', err);
     res.status(500).json({ success: false, error: err.message });
@@ -447,19 +606,274 @@ router.put('/:id/locations', rbac, requirePermission('users.manage'), async (req
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.patch('/:id/status', rbac, requirePermission('users.manage'), async (req, res) => {
   try {
-    const { id } = req.params;
-    const user = await db.query(
-      'SELECT id, username, first_name, last_name, email, role FROM users WHERE id = $1',
-      [id]
-    );
-    if (user.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found.' });
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const hasIsActive = await ensureUsersIsActiveColumn(knex);
+    if (!hasIsActive) {
+      return res.status(400).json({ success: false, error: 'User activation status is not supported on this database version' });
     }
-    res.json({ success: true, data: user.rows[0] });
+
+    const requested = req.body?.is_active;
+    if (typeof requested !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'is_active boolean is required' });
+    }
+
+    const actorId = req.user?.id || req.user?.sub;
+    if (actorId && String(actorId) === String(req.params.id) && requested === false) {
+      return res.status(400).json({ success: false, error: 'You cannot inactivate your own account.' });
+    }
+
+    const existingUser = await knex('users')
+      .where({ id: req.params.id, tenant_id: tenantId })
+      .first('id', 'role', 'is_active');
+    if (!existingUser) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    if (requested === false && existingUser.is_active !== false) {
+      const targetIsAdmin = await userHasAdminPrivileges(knex, tenantId, req.params.id);
+      if (targetIsAdmin) {
+        const activeAdminCount = await countActiveTenantAdmins(knex, tenantId);
+        if (activeAdminCount <= 1) {
+          return res.status(400).json({ success: false, error: 'Cannot inactivate the last active admin user.' });
+        }
+      }
+    }
+
+    if (requested === true && existingUser.is_active === false) {
+      await assertActiveSeatAvailable(knex, tenantId);
+    }
+
+    const hasUpdatedAt = await knex.schema.hasColumn('users', 'updated_at');
+    const statusUpdatePayload = { is_active: requested };
+    if (hasUpdatedAt) statusUpdatePayload.updated_at = knex.fn.now();
+
+    const [updated] = await knex('users')
+      .where({ id: req.params.id, tenant_id: tenantId })
+      .update(statusUpdatePayload)
+      .returning(['id', 'username', 'first_name', 'last_name', 'email', 'role', 'tenant_id', 'created_at', 'is_active']);
+
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    return res.json({ success: true, data: updated });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch user.' });
+    console.error('[users] patch status failed', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/:id', rbac, requireAnyPermission(['users.view', 'users.manage', 'roles.manage']), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const hasIsActiveForSelect = await knex.schema.hasColumn('users', 'is_active');
+    const selectColumns = ['id', 'username', 'first_name', 'last_name', 'email', 'role', 'tenant_id', 'created_at'];
+    if (hasIsActiveForSelect) selectColumns.push('is_active');
+
+    const user = await knex('users')
+      .where({ id: req.params.id, tenant_id: tenantId })
+      .first(selectColumns);
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    const [hasUserRoles, hasRoles] = await Promise.all([
+      knex.schema.hasTable('user_roles'),
+      knex.schema.hasTable('roles')
+    ]);
+
+    let roles = [];
+    if (hasUserRoles && hasRoles) {
+      roles = await knex('user_roles as ur')
+        .join('roles as r', 'ur.role_id', 'r.id')
+        .where('ur.user_id', req.params.id)
+        .select('r.id', 'r.code', 'r.name');
+    }
+
+    res.json({ success: true, data: { ...user, roles } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch user.' });
+  }
+});
+
+router.put('/:id', rbac, requirePermission('users.manage'), async (req, res) => {
+  try {
+    if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+
+    const existingUser = await knex('users').where({ id: req.params.id, tenant_id: tenantId }).first('id', 'role', 'username', 'is_active');
+    if (!existingUser) return res.status(404).json({ success: false, error: 'User not found' });
+
+    const actorId = req.user?.id || req.user?.sub;
+    if (actorId && String(actorId) === String(req.params.id) && req.body?.is_active === false) {
+      return res.status(400).json({ success: false, error: 'You cannot inactivate your own account.' });
+    }
+
+    const roleInputs = Array.isArray(req.body?.roles) && req.body.roles.length
+      ? req.body.roles
+      : (req.body?.role ? [req.body.role] : []);
+
+    const normalizedRoleCodes = normalizeRoleCodeList(roleInputs);
+    const invalidRoleCodes = normalizedRoleCodes.filter((code) => !ALLOWED_CANONICAL_ROLE_CODES.has(code));
+    if (invalidRoleCodes.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid role.',
+        details: {
+          invalidRoles: invalidRoleCodes,
+          allowedRoles: Array.from(ALLOWED_CANONICAL_ROLE_CODES)
+        }
+      });
+    }
+
+    const hasIsActiveCompat = await ensureUsersIsActiveColumn(knex);
+
+    const [
+      hasFirstName,
+      hasLastName,
+      hasEmail,
+      hasUpdatedAt,
+      hasRolesTable,
+      hasUserRolesTable
+    ] = await Promise.all([
+      knex.schema.hasColumn('users', 'first_name'),
+      knex.schema.hasColumn('users', 'last_name'),
+      knex.schema.hasColumn('users', 'email'),
+      knex.schema.hasColumn('users', 'updated_at'),
+      knex.schema.hasTable('roles'),
+      knex.schema.hasTable('user_roles')
+    ]);
+
+    const hasIsActive = hasIsActiveCompat || (await knex.schema.hasColumn('users', 'is_active'));
+
+    const requestedIsActive = Object.prototype.hasOwnProperty.call(req.body || {}, 'is_active')
+      ? !!req.body.is_active
+      : undefined;
+
+    if (hasIsActive && requestedIsActive === false && existingUser.is_active !== false) {
+      const targetIsAdmin = await userHasAdminPrivileges(knex, tenantId, req.params.id);
+      if (targetIsAdmin) {
+        const activeAdminCount = await countActiveTenantAdmins(knex, tenantId);
+        if (activeAdminCount <= 1) {
+          return res.status(400).json({ success: false, error: 'Cannot inactivate the last active admin user.' });
+        }
+      }
+    }
+
+    if (hasIsActive && requestedIsActive === true && existingUser.is_active === false) {
+      await assertActiveSeatAvailable(knex, tenantId);
+    }
+
+    await knex.transaction(async (trx) => {
+      const updates = {};
+
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, 'username')) {
+        const candidate = normalizeUsername(req.body.username);
+        if (!candidate) throw new Error('Username cannot be empty');
+        const duplicate = await trx('users')
+          .whereRaw('LOWER(username) = ?', [candidate])
+          .andWhereNot('id', req.params.id)
+          .first('id');
+        if (duplicate) {
+          const err = new Error('Username already exists.');
+          err.statusCode = 409;
+          throw err;
+        }
+        updates.username = candidate;
+      }
+
+      if (hasFirstName && Object.prototype.hasOwnProperty.call(req.body || {}, 'firstName')) {
+        const value = req.body.firstName;
+        updates.first_name = value == null ? null : String(value).trim() || null;
+      }
+
+      if (hasLastName && Object.prototype.hasOwnProperty.call(req.body || {}, 'lastName')) {
+        const value = req.body.lastName;
+        updates.last_name = value == null ? null : String(value).trim() || null;
+      }
+
+      if (hasEmail && Object.prototype.hasOwnProperty.call(req.body || {}, 'email')) {
+        const normalizedEmail = req.body.email == null ? null : String(req.body.email).trim().toLowerCase() || null;
+        if (normalizedEmail) {
+          const duplicateEmail = await trx('users')
+            .whereRaw('LOWER(email) = ?', [normalizedEmail])
+            .andWhereNot('id', req.params.id)
+            .first('id');
+          if (duplicateEmail) {
+            const err = new Error('Email already exists.');
+            err.statusCode = 409;
+            throw err;
+          }
+        }
+        updates.email = normalizedEmail;
+      }
+
+      if (hasIsActive && Object.prototype.hasOwnProperty.call(req.body || {}, 'is_active')) {
+        updates.is_active = !!req.body.is_active;
+      }
+
+      if (normalizedRoleCodes.length > 0) {
+        updates.role = mapCanonicalRoleToLegacyRole(normalizedRoleCodes[0]);
+      }
+
+      if (Object.keys(updates).length > 0) {
+        if (hasUpdatedAt) updates.updated_at = knex.fn.now();
+        await trx('users').where({ id: req.params.id, tenant_id: tenantId }).update(updates);
+      }
+
+      if (normalizedRoleCodes.length > 0 && hasRolesTable && hasUserRolesTable) {
+        const roleRows = await resolveRoleRowsByCode(trx, normalizedRoleCodes);
+        await trx('user_roles').where('user_id', req.params.id).del();
+        if (roleRows.length > 0) {
+          await trx('user_roles').insert(roleRows.map((row) => ({ user_id: req.params.id, role_id: row.id })));
+        }
+      }
+    });
+
+    const hasIsActiveForSelect = await knex.schema.hasColumn('users', 'is_active');
+    const selectColumns = ['id', 'username', 'first_name', 'last_name', 'email', 'role', 'tenant_id', 'created_at'];
+    if (hasIsActiveForSelect) selectColumns.push('is_active');
+
+    const updated = await knex('users').where({ id: req.params.id, tenant_id: tenantId }).first(selectColumns);
+    const [hasUserRoles, hasRoles] = await Promise.all([
+      knex.schema.hasTable('user_roles'),
+      knex.schema.hasTable('roles')
+    ]);
+    let roles = [];
+    if (hasUserRoles && hasRoles) {
+      roles = await knex('user_roles as ur')
+        .join('roles as r', 'ur.role_id', 'r.id')
+        .where('ur.user_id', req.params.id)
+        .select('r.id', 'r.code', 'r.name');
+    }
+
+    return res.json({ success: true, data: { ...updated, roles } });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    if (err?.code === '23505') {
+      const detail = String(err?.detail || '').toLowerCase();
+      const constraint = String(err?.constraint || '').toLowerCase();
+      if (detail.includes('(username)') || constraint.includes('username')) {
+        return res.status(409).json({ success: false, error: 'Username already exists.' });
+      }
+      if (detail.includes('(email)') || constraint.includes('email')) {
+        return res.status(409).json({ success: false, error: 'Email already exists.' });
+      }
+    }
+    console.error('[users] update failed', err);
+    return res.status(500).json({ success: false, error: 'Failed to update user.' });
   }
 });
 
@@ -508,6 +922,8 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
       return res.status(403).json({ error: 'Tenant context missing' });
     }
 
+    await assertActiveSeatAvailable(knex, tenantId);
+
     const tenantPlanId = await getTenantPlanForTenant(tenantId);
 
     let resolvedUsername = normalizeUsername(username);
@@ -541,14 +957,16 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
         hasEmail,
         hasTenantId,
         hasCreatedAt,
-        hasUpdatedAt
+        hasUpdatedAt,
+        hasIsActive
       ] = await Promise.all([
         trx.schema.hasColumn('users', 'first_name'),
         trx.schema.hasColumn('users', 'last_name'),
         trx.schema.hasColumn('users', 'email'),
         trx.schema.hasColumn('users', 'tenant_id'),
         trx.schema.hasColumn('users', 'created_at'),
-        trx.schema.hasColumn('users', 'updated_at')
+        trx.schema.hasColumn('users', 'updated_at'),
+        trx.schema.hasColumn('users', 'is_active')
       ]);
 
       const userInsertPayload = {
@@ -562,6 +980,7 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
       if (hasLastName) userInsertPayload.last_name = lastName || null;
       if (hasEmail) userInsertPayload.email = email || null;
       if (hasTenantId) userInsertPayload.tenant_id = tenantId;
+      if (hasIsActive) userInsertPayload.is_active = true;
       if (hasCreatedAt) userInsertPayload.created_at = knex.fn.now();
       if (hasUpdatedAt) userInsertPayload.updated_at = knex.fn.now();
 
@@ -599,6 +1018,9 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
 
     res.status(201).json({ message: 'User created successfully.', username: resolvedUsername });
   } catch (err) {
+    if (err?.statusCode === 409 && err?.code === 'PLAN_USER_LIMIT_REACHED') {
+      return res.status(409).json({ error: err.message, code: err.code });
+    }
     if (err?.code === '23505') {
       const detail = String(err?.detail || '').toLowerCase();
       const constraint = String(err?.constraint || '').toLowerCase();

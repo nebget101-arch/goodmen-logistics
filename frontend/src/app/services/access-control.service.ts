@@ -13,7 +13,7 @@ import {
 } from '../models/access-control.model';
 
 const STORAGE_KEY_ACCESS = 'fleetneuron_access';
-const ALWAYS_ALLOWED_PATH_PREFIXES = ['/profile', '/users/create'];
+const ALWAYS_ALLOWED_PATH_PREFIXES = ['/profile', '/users', '/users/create'];
 const INTERNAL_TRIAL_ADMIN_TENANT_NAME = 'fleetneuron default tenant';
 
 /**

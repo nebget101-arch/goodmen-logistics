@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { AccessControlService } from '../../services/access-control.service';
-import { RBAC_ROLES } from '../../config/rbac-roles.config';
+import { RBAC_ROLES, getVisibleRbacRolesForPlan } from '../../config/rbac-roles.config';
 
 @Component({
   selector: 'app-user-create',
@@ -55,14 +55,7 @@ export class UserCreateComponent implements OnInit {
   }
 
   get visibleRbacRoles() {
-    if (!this.isBasicOrMultiMcPlan) {
-      return this.rbacRoles;
-    }
-    return this.rbacRoles.filter((role) => {
-      if (role.group === 'shop' || role.group === 'parts') return false;
-      if (role.value === 'company_accountant' || role.value === 'customer' || role.value === 'admin') return false;
-      return true;
-    });
+    return getVisibleRbacRolesForPlan(this.currentPlanId);
   }
 
   private normalizeSelectedRolesForPlan(): void {
