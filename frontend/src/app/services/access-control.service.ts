@@ -14,6 +14,7 @@ import {
 
 const STORAGE_KEY_ACCESS = 'fleetneuron_access';
 const ALWAYS_ALLOWED_PATH_PREFIXES = ['/profile', '/users/create'];
+const INTERNAL_TRIAL_ADMIN_TENANT_NAME = 'fleetneuron default tenant';
 
 /**
  * Centralized RBAC: permissions, roles, and location-aware access.
@@ -80,6 +81,7 @@ export class AccessControlService {
       permissionScopes: raw.permissionScopes ?? raw.scopedPermissions ?? undefined,
       locations,
       tenantId: raw.tenantId ?? null,
+      tenantName: raw.tenantName ?? null,
       subscriptionPlanId: raw.subscriptionPlanId ?? null,
       subscriptionPlan: raw.subscriptionPlan ?? null,
     };
@@ -240,6 +242,10 @@ export class AccessControlService {
     return this.access?.subscriptionPlanId ?? null;
   }
 
+  getTenantName(): string | null {
+    return this.access?.tenantName ?? null;
+  }
+
   getSubscriptionPlan(): UserAccess['subscriptionPlan'] {
     return this.access?.subscriptionPlan ?? null;
   }
@@ -364,6 +370,15 @@ export class AccessControlService {
       const allowed = this.normalizeUrl(page);
       return normalized === allowed || normalized.startsWith(`${allowed}/`);
     });
+  }
+
+  isInternalTrialAdminTenant(): boolean {
+    return String(this.getTenantName() || '').trim().toLowerCase() === INTERNAL_TRIAL_ADMIN_TENANT_NAME;
+  }
+
+  canAccessTrialRequestsAdmin(): boolean {
+    if (!this.isInternalTrialAdminTenant()) return false;
+    return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COMPANY_ADMIN]);
   }
 
   private normalizeUrl(url: string): string {

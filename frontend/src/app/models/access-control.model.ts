@@ -40,6 +40,7 @@ export interface UserAccess {
   permissionScopes?: Record<string, string[]>;
   locations: AccessLocation[];
   tenantId?: string | null;
+  tenantName?: string | null;
   subscriptionPlanId?: string | null;
   subscriptionPlan?: AccessSubscriptionPlan | null;
 }
