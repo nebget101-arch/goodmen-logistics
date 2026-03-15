@@ -293,6 +293,25 @@ router.get('/:id', authMiddleware, requireInternalTrialAdmin, async (req, res) =
   }
 });
 
+// ─── ADMIN: Reset tenant admin password (internal support action) ───────────
+
+router.post('/:id/reset-tenant-admin-password', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
+  try {
+    const result = await trialRequestService.resetTenantAdminPassword(req.params.id);
+    return res.json({
+      success: true,
+      message: 'Tenant admin password reset successfully',
+      data: result
+    });
+  } catch (err) {
+    if ([400, 404, 409].includes(err.statusCode)) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    console.error('[trial-requests] reset tenant admin password error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to reset tenant admin password' });
+  }
+});
+
 // ─── ADMIN: Update status ─────────────────────────────────────────────────────
 
 router.patch('/:id/status', authMiddleware, requireInternalTrialAdmin, async (req, res) => {

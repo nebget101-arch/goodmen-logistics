@@ -46,6 +46,10 @@ export class TrialRequestsAdminComponent implements OnInit {
   activationLink = '';
   activationExpiresAt = '';
   activationRequestId = '';
+  tempPassword = '';
+  tempPasswordRequestId = '';
+  tempPasswordUsername = '';
+  tempPasswordEmail = '';
 
   readonly statusOptions: Array<{ value: TrialRequestStatus | 'all'; label: string }> = [
     { value: 'all', label: 'All statuses' },
@@ -192,6 +196,47 @@ export class TrialRequestsAdminComponent implements OnInit {
     this.updateStatus(record, 'approved', 'Trial request approved.');
   }
 
+  resetTenantAdminPassword(record: TrialRequestRecord): void {
+    const confirmed = window.confirm(
+      'Reset this tenant admin password now? A new temporary password will be generated and shown once.'
+    );
+    if (!confirmed) return;
+
+    this.error = '';
+    this.message = '';
+    this.actionLoadingId = record.id;
+
+    this.api.resetTenantAdminPassword(record.id).subscribe({
+      next: (res: any) => {
+        const data = res?.data || {};
+        this.tempPassword = String(data.temporaryPassword || '').trim();
+        this.tempPasswordUsername = String(data.username || '').trim();
+        this.tempPasswordEmail = String(data.email || '').trim();
+        this.tempPasswordRequestId = record.id;
+        this.actionLoadingId = null;
+
+        if (!this.tempPassword) {
+          this.message = 'Password reset completed, but no temporary password was returned.';
+          return;
+        }
+
+        this.copyTemporaryPassword(false)
+          .then((copied) => {
+            this.message = copied
+              ? 'Tenant admin password reset and temporary password copied.'
+              : 'Tenant admin password reset. Copy failed automatically — please use the Copy button.';
+          })
+          .catch(() => {
+            this.message = 'Tenant admin password reset. Copy failed automatically — please use the Copy button.';
+          });
+      },
+      error: (err: any) => {
+        this.error = err?.error?.error || 'Failed to reset tenant admin password';
+        this.actionLoadingId = null;
+      }
+    });
+  }
+
   reject(record: TrialRequestRecord): void {
     this.updateStatus(record, 'rejected', 'Trial request rejected.');
   }
@@ -255,6 +300,45 @@ export class TrialRequestsAdminComponent implements OnInit {
 
   canGetSignupLink(record: TrialRequestRecord): boolean {
     return record.status === 'approved';
+  }
+
+  canResetTenantAdminPassword(record: TrialRequestRecord): boolean {
+    return record.status === 'trial_created';
+  }
+
+  async copyTemporaryPassword(showSuccessMessage = true): Promise<boolean> {
+    if (!this.tempPassword) return false;
+    const copied = await this.copyTextToClipboard(this.tempPassword);
+    if (showSuccessMessage && copied) {
+      this.message = 'Temporary password copied.';
+    }
+    return copied;
+  }
+
+  private async copyTextToClipboard(text: string): Promise<boolean> {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = text;
+        input.setAttribute('readonly', 'true');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(input);
+        if (!copied) throw new Error('Clipboard copy command failed');
+      }
+
+      this.error = '';
+      return true;
+    } catch {
+      this.openCopyPrompt(text);
+      this.error = '';
+      return false;
+    }
   }
 
   statusClass(status: TrialRequestStatus): string {

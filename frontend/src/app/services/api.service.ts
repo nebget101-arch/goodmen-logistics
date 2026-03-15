@@ -840,6 +840,13 @@ export class ApiService {
       return this.http.get(`${this.baseUrl}/public/trial-requests/${encodeURIComponent(id)}/activation-link${query}`);
     }
 
+    resetTenantAdminPassword(trialRequestId: string): Observable<any> {
+      return this.http.post(
+        `${this.baseUrl}/public/trial-requests/${encodeURIComponent(trialRequestId)}/reset-tenant-admin-password`,
+        {}
+      );
+    }
+
     getTrialSignupContext(token: string): Observable<any> {
       return this.http.get(`${this.baseUrl}/public/trial-requests/signup/${encodeURIComponent(token)}`);
     }
