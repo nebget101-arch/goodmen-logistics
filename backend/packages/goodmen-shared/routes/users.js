@@ -27,6 +27,57 @@ function normalizeUsername(value) {
   return (value || '').toString().trim().toLowerCase().replace(/\s+/g, '.');
 }
 
+const LEGACY_ROLE_TO_CANONICAL = {
+  admin: 'super_admin',
+  safety: 'safety_manager',
+  fleet: 'dispatcher',
+  dispatch: 'dispatcher',
+  driver: 'driver',
+  accounting: 'carrier_accountant',
+  service_advisor: 'service_writer'
+};
+
+const CANONICAL_ROLE_ALIASES = {
+  company_admin: 'super_admin'
+};
+
+const ALLOWED_CANONICAL_ROLE_CODES = new Set([
+  'super_admin',
+  'executive_read_only',
+  'dispatch_manager',
+  'dispatcher',
+  'safety_manager',
+  'carrier_accountant',
+  'shop_manager',
+  'service_writer',
+  'shop_clerk',
+  'mechanic',
+  'technician',
+  'parts_manager',
+  'parts_clerk',
+  'inventory_auditor',
+  'company_accountant',
+  'driver',
+  'customer'
+]);
+
+function normalizeRoleCode(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return null;
+  const mappedLegacy = LEGACY_ROLE_TO_CANONICAL[raw] || raw;
+  return CANONICAL_ROLE_ALIASES[mappedLegacy] || mappedLegacy;
+}
+
+function mapCanonicalRoleToLegacyRole(canonicalRoleCode) {
+  const code = normalizeRoleCode(canonicalRoleCode) || 'dispatcher';
+  if (code === 'super_admin' || code === 'executive_read_only') return 'admin';
+  if (code === 'dispatch_manager' || code === 'dispatcher') return 'dispatch';
+  if (code === 'safety_manager') return 'safety';
+  if (code === 'driver') return 'driver';
+  // For shop/parts/accounting/future roles, keep backward-compatible legacy fallback.
+  return 'fleet';
+}
+
 async function generateUniqueUsername(base, dbClient) {
   const normalized = normalizeUsername(base);
   if (!normalized) return '';
@@ -415,12 +466,36 @@ router.get('/:id', async (req, res) => {
 // Only admin can create users (legacy role check; RBAC users.manage can be added later)
 router.post('/', authWithRole(['admin']), async (req, res) => {
   const { username, password, role, firstName, lastName, email, locationIds } = req.body;
-  if (!password || !role) {
+  const roleInputs = Array.isArray(req.body?.roles) && req.body.roles.length
+    ? req.body.roles
+    : (role ? [role] : []);
+
+  if (!password || roleInputs.length === 0) {
     return res.status(400).json({ error: 'Password and role are required.' });
   }
-  if (!['admin', 'safety', 'fleet', 'dispatch'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role.' });
+
+  const normalizedRoleCodes = Array.from(
+    new Set(
+      roleInputs
+        .map((value) => normalizeRoleCode(value))
+        .filter((value) => Boolean(value))
+    )
+  );
+
+  const invalidRoleCodes = normalizedRoleCodes.filter((code) => !ALLOWED_CANONICAL_ROLE_CODES.has(code));
+  if (invalidRoleCodes.length > 0 || normalizedRoleCodes.length === 0) {
+    return res.status(400).json({
+      error: 'Invalid role.',
+      details: {
+        invalidRoles: invalidRoleCodes,
+        allowedRoles: Array.from(ALLOWED_CANONICAL_ROLE_CODES)
+      }
+    });
   }
+
+  const primaryRoleCode = normalizedRoleCodes[0];
+  const legacyRoleForUsersColumn = mapCanonicalRoleToLegacyRole(primaryRoleCode);
+
   try {
     const actorUserId = req.user?.id || req.user?.sub;
     if (!actorUserId) {
@@ -464,7 +539,7 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
         id,
         username: resolvedUsername,
         password_hash,
-        role,
+        role: legacyRoleForUsersColumn,
         first_name: firstName || null,
         last_name: lastName || null,
         email: email || null,
@@ -472,6 +547,20 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
         created_at: knex.fn.now(),
         updated_at: knex.fn.now()
       });
+
+      const [hasRolesTable, hasUserRolesTable] = await Promise.all([
+        trx.schema.hasTable('roles'),
+        trx.schema.hasTable('user_roles')
+      ]);
+
+      if (hasRolesTable && hasUserRolesTable) {
+        const roleRows = await trx('roles').whereIn('code', normalizedRoleCodes).select('id', 'code');
+        if (roleRows.length > 0) {
+          await trx('user_roles').insert(
+            roleRows.map((row) => ({ user_id: id, role_id: row.id }))
+          );
+        }
+      }
 
       if (normalizedLocationIds.length > 0) {
         const validLocations = await trx('locations')
