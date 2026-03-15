@@ -129,6 +129,17 @@
                   <span class="material-symbols-outlined">link</span>
                   Get signup link
                 </button>
+
+                <button
+                  type="button"
+                  class="btn-sm btn-outline"
+                  *ngIf="canResetTenantAdminPassword(record)"
+                  [disabled]="actionLoadingId === record.id"
+                  (click)="resetTenantAdminPassword(record)"
+                >
+                  <span class="material-symbols-outlined">lock_reset</span>
+                  Reset admin password
+                </button>
               </div>
             </td>
           </tr>
@@ -211,6 +222,19 @@
           </button>
         </div>
         <small *ngIf="activationExpiresAt">Expires: {{ formatDate(activationExpiresAt) }}</small>
+      </div>
+
+      <div class="detail-item full" *ngIf="tempPassword && tempPasswordRequestId === selectedRecord.id">
+        <span class="label">Temporary tenant admin password</span>
+        <div class="activation-link-wrap">
+          <span><strong>Username:</strong> {{ tempPasswordUsername || '—' }}</span>
+          <span><strong>Email:</strong> {{ tempPasswordEmail || '—' }}</span>
+          <span><strong>Temp password:</strong> {{ tempPassword }}</span>
+          <button type="button" class="btn-sm btn-outline" (click)="copyTemporaryPassword()">
+            <span class="material-symbols-outlined">content_copy</span>
+            Copy
+          </button>
+        </div>
       </div>
     </div>
   </section>

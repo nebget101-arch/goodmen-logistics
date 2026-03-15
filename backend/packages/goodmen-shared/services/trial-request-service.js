@@ -153,6 +153,12 @@ function getSignupTokenTtlHours() {
   return 168; // 7 days
 }
 
+function generateTemporaryPassword() {
+  const randomPart = crypto.randomBytes(8).toString('base64url');
+  const numericPart = String(Math.floor(100 + Math.random() * 900));
+  return `Fn!${randomPart}${numericPart}`;
+}
+
 async function approveTrialRequest(id, approvedByUserId = null) {
   const existing = await knex('trial_requests').where({ id }).first();
   if (!existing) {
@@ -438,6 +444,69 @@ async function getTrialRequestById(id) {
   return knex('trial_requests').where('id', id).first();
 }
 
+async function resetTenantAdminPassword(trialRequestId) {
+  const safeId = String(trialRequestId || '').trim();
+  if (!safeId) {
+    const err = new Error('Trial request id is required');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return knex.transaction(async (trx) => {
+    const record = await trx('trial_requests')
+      .where({ id: safeId })
+      .forUpdate()
+      .first();
+
+    if (!record) {
+      const err = new Error('Trial request not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (record.status !== 'trial_created' || !record.created_user_id) {
+      const err = new Error('Tenant admin account is not available for password reset yet');
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const user = await trx('users')
+      .where({ id: record.created_user_id })
+      .first(['id', 'username', 'email', 'tenant_id']);
+
+    if (!user) {
+      const err = new Error('Tenant admin user not found for this trial request');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (record.created_tenant_id && user.tenant_id && String(record.created_tenant_id) !== String(user.tenant_id)) {
+      const err = new Error('Tenant admin account mapping mismatch for this trial request');
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
+    await trx('users')
+      .where({ id: user.id })
+      .update({ password_hash: passwordHash });
+
+    await trx('trial_requests')
+      .where({ id: record.id })
+      .update({ updated_at: trx.fn.now() });
+
+    return {
+      requestId: record.id,
+      userId: user.id,
+      username: user.username,
+      email: user.email,
+      temporaryPassword
+    };
+  });
+}
+
 module.exports = {
   createTrialRequest,
   listTrialRequests,
@@ -446,5 +515,6 @@ module.exports = {
   getOrCreateApprovedSignupToken,
   getTrialRequestById,
   getSignupContextByToken,
-  completeSignupFromToken
+  completeSignupFromToken,
+  resetTenantAdminPassword
 };
