@@ -168,10 +168,14 @@ export class TrialRequestsAdminComponent implements OnInit {
       if (showSuccessMessage) {
         this.message = 'Activation link copied.';
       }
+      this.error = '';
       return true;
     } catch {
       this.openCopyPrompt(text);
-      this.error = 'Auto-copy is blocked by your browser. A copy dialog was opened.';
+      this.error = '';
+      if (showSuccessMessage) {
+        this.message = 'Clipboard access is blocked by your browser. A manual copy dialog was opened.';
+      }
       return false;
     }
   }
