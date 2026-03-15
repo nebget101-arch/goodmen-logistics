@@ -2,6 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { debounceTime, Subject } from 'rxjs';
+import { PermissionHelperService } from '../../services/permission-helper.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 
 interface Vehicle {
   id: string;
@@ -32,6 +34,7 @@ type SortOrder = 'asc' | 'desc';
   styleUrls: ['./vehicles.component.css']
 })
 export class VehiclesComponent implements OnInit {
+  readonly perms = PERMISSIONS;
   // Data state
   allVehicles: Vehicle[] = [];
   filteredVehicles: Vehicle[] = [];
@@ -73,7 +76,11 @@ export class VehiclesComponent implements OnInit {
 
   vehicleType: 'truck' | 'trailer' = 'truck';
 
-  constructor(private apiService: ApiService, private route: ActivatedRoute) { }
+  constructor(
+    private apiService: ApiService,
+    private route: ActivatedRoute,
+    private permissions: PermissionHelperService
+  ) { }
 
   ngOnInit(): void {
     this.route.data.subscribe(data => {
@@ -330,13 +337,23 @@ export class VehiclesComponent implements OnInit {
   }
 
   openAddVehicleForm(): void {
+    if (!this.canCreateVehicle()) return;
     this.selectedVehicle = null;
     this.showVehicleForm = true;
   }
 
   openEditVehicleForm(vehicle: Vehicle): void {
+    if (!this.canEditVehicle()) return;
     this.selectedVehicle = vehicle;
     this.showVehicleForm = true;
+  }
+
+  canCreateVehicle(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.VEHICLES_CREATE, PERMISSIONS.VEHICLES_EDIT]);
+  }
+
+  canEditVehicle(): boolean {
+    return this.permissions.hasPermission(PERMISSIONS.VEHICLES_EDIT);
   }
 
   closeVehicleForm(): void {

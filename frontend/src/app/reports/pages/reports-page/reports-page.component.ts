@@ -5,6 +5,8 @@ import { OperatingEntityContextService } from '../../../services/operating-entit
 import { ReportFilters, FinancialSummary, WorkOrderSummary, KpiSummary } from '../../reports.models';
 import { Subject, forkJoin, EMPTY, of } from 'rxjs';
 import { takeUntil, catchError, finalize } from 'rxjs/operators';
+import { PermissionHelperService } from '../../../services/permission-helper.service';
+import { PERMISSIONS } from '../../../models/access-control.model';
 
 @Component({
   selector: 'app-reports-page',
@@ -162,7 +164,8 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private reportsService: ReportsService,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private permissions: PermissionHelperService
   ) {}
 
   ngOnInit(): void {
@@ -577,6 +580,15 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
   }
 
   canSeeTab(tab: string): boolean {
+    // Prefer permission-driven checks first.
+    if (tab === 'dashboard' && this.permissions.hasAnyPermission([PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.REPORTS_VIEW, PERMISSIONS.REPORTS_SHOP])) return true;
+    if (tab === 'financial' && this.permissions.hasPermission(PERMISSIONS.REPORTS_VIEW)) return true;
+    if (tab === 'workOrders' && this.permissions.hasAnyPermission([PERMISSIONS.WORK_ORDERS_VIEW, PERMISSIONS.REPORTS_SHOP])) return true;
+    if (tab === 'inventory' && this.permissions.hasAnyPermission([PERMISSIONS.INVENTORY_REPORTS_VIEW, PERMISSIONS.INVENTORY_VIEW, PERMISSIONS.REPORTS_SHOP])) return true;
+    if (tab === 'customers' && this.permissions.hasAnyPermission([PERMISSIONS.CUSTOMERS_VIEW, PERMISSIONS.REPORTS_VIEW])) return true;
+    if (tab === 'vehicles' && this.permissions.hasAnyPermission([PERMISSIONS.VEHICLES_VIEW, PERMISSIONS.REPORTS_VIEW])) return true;
+
+    // Legacy role fallback.
     if (!this.role) return false;
     if (this.role === 'admin') return true;
     if (tab === 'financial') return this.role === 'accounting';
@@ -621,7 +633,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
   }
 
   get showAllTabs(): boolean {
-    return this.role === 'admin';
+    return this.permissions.hasAnyPermission([PERMISSIONS.REPORTS_VIEW]) || this.role === 'admin';
   }
 
   private formatNumber(value: any): number {

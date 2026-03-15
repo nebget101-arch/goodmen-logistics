@@ -21,6 +21,29 @@ function requireRole(allowedRoles) {
   };
 }
 
+/**
+ * Roles that may finalize work orders (approve, close, void).
+ * shop_clerk may NOT close or approve; only shop_manager/admin can.
+ */
+const WO_MANAGER_ROLES = ['admin', 'super_admin', 'shop_manager', 'carrier_accountant', 'accounting'];
+
+/**
+ * Status guard: blocks shop_clerk from transitioning to restricted statuses
+ * (closed, approved, void). Other status transitions are allowed for all shop roles.
+ */
+function requireManagerForFinalStatus(req, res, next) {
+  const targetStatus = (req.body?.status || '').toString().trim().toLowerCase();
+  const RESTRICTED = ['closed', 'approved', 'void'];
+  if (!RESTRICTED.includes(targetStatus)) return next();
+  const role = (req.user?.role || '').toString().trim().toLowerCase();
+  if (WO_MANAGER_ROLES.includes(role)) return next();
+  return res.status(403).json({
+    error: 'Forbidden: only managers may close, approve, or void work orders',
+    targetStatus,
+    requiredRoles: WO_MANAGER_ROLES,
+  });
+}
+
 const upload = multer({ storage: multer.memoryStorage() });
 const bulkUpload = multer({
   storage: multer.memoryStorage(),
@@ -131,7 +154,7 @@ async function resolveUserIdByUsername(username) {
   return user ? user.id : null;
 }
 
-router.get('/bulk-upload/template', authMiddleware, requireRole(['admin', 'service_advisor']), (_req, res) => {
+router.get('/bulk-upload/template', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'shop_clerk', 'service_writer']), (_req, res) => {
   try {
     const wb = XLSX.utils.book_new();
     const templateData = [
@@ -189,7 +212,7 @@ router.get('/bulk-upload/template', authMiddleware, requireRole(['admin', 'servi
   }
 });
 
-router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advisor']), bulkUpload.single('file'), async (req, res) => {
+router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'shop_clerk', 'service_writer']), bulkUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file provided' });
@@ -311,7 +334,7 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-router.post('/', authMiddleware, requireRole(['admin', 'service_advisor']), async (req, res) => {
+router.post('/', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic', 'technician']), async (req, res) => {
   try {
     const workOrder = await workOrdersService.createWorkOrder(req.body || {}, req.user?.id, req.context || null);
     res.status(201).json({ success: true, data: workOrder });
@@ -332,7 +355,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor']), async (req, res) => {
+router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic', 'technician']), async (req, res) => {
   try {
     const payload = req.body || {};
     const normalizeUuidInput = (value) => {
@@ -353,7 +376,12 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor']), as
   }
 });
 
-router.patch('/:id/status', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
+// Status transitions: shop_clerk may set open/in_progress/waiting_parts/completed/ready_to_invoice.
+// closed/approved/void require manager role (enforced by requireManagerForFinalStatus).
+router.patch('/:id/status', authMiddleware,
+  requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']),
+  requireManagerForFinalStatus,
+  async (req, res) => {
   try {
     const workOrder = await workOrdersService.updateWorkOrderStatus(req.params.id, req.body?.status, req.user?.role);
     res.json({ success: true, data: workOrder });
@@ -364,7 +392,7 @@ router.patch('/:id/status', authMiddleware, requireRole(['admin', 'service_advis
 });
 
 // Labor
-router.post('/:id/labor', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
+router.post('/:id/labor', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const line = await workOrdersService.addLaborLine(req.params.id, req.body || {});
     res.status(201).json({ success: true, data: line });
@@ -374,7 +402,7 @@ router.post('/:id/labor', authMiddleware, requireRole(['admin', 'service_advisor
   }
 });
 
-router.put('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
+router.put('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const line = await workOrdersService.updateLaborLine(req.params.id, req.params.laborId, req.body || {});
     res.json({ success: true, data: line });
@@ -384,7 +412,8 @@ router.put('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'service
   }
 });
 
-router.delete('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'service_advisor']), async (req, res) => {
+// Labor delete is manager-only; shop_clerk cannot remove labor lines.
+router.delete('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'service_writer']), async (req, res) => {
   try {
     await workOrdersService.deleteLaborLine(req.params.id, req.params.laborId);
     res.json({ success: true });
@@ -395,7 +424,7 @@ router.delete('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'serv
 });
 
 // Parts
-router.post('/:id/parts', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
+router.post('/:id/parts', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const line = await workOrdersService.reservePart(req.params.id, req.body || {}, req.user?.id);
     res.status(201).json({ success: true, data: line });
@@ -405,7 +434,7 @@ router.post('/:id/parts', authMiddleware, requireRole(['admin', 'service_advisor
   }
 });
 
-router.post('/:id/parts/scan', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
+router.post('/:id/parts/scan', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const result = await workOrdersService.reservePartsFromBarcodes(req.params.id, req.body || {}, req.user?.id);
     res.status(201).json({ success: true, data: result });
@@ -415,7 +444,7 @@ router.post('/:id/parts/scan', authMiddleware, requireRole(['admin', 'service_ad
   }
 });
 
-router.post('/:id/parts/:partLineId/issue', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
+router.post('/:id/parts/:partLineId/issue', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const updated = await workOrdersService.issuePart(req.params.id, req.params.partLineId, req.body || {}, req.user?.id);
     res.json({ success: true, data: updated });
@@ -425,7 +454,7 @@ router.post('/:id/parts/:partLineId/issue', authMiddleware, requireRole(['admin'
   }
 });
 
-router.post('/:id/parts/:partLineId/return', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
+router.post('/:id/parts/:partLineId/return', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const updated = await workOrdersService.returnPart(req.params.id, req.params.partLineId, req.body || {}, req.user?.id);
     res.json({ success: true, data: updated });
@@ -436,7 +465,8 @@ router.post('/:id/parts/:partLineId/return', authMiddleware, requireRole(['admin
 });
 
 // Charges
-router.put('/:id/charges', authMiddleware, requireRole(['admin', 'service_advisor']), async (req, res) => {
+// Charge/pricing updates: shop_manager and above only (not shop_clerk).
+router.put('/:id/charges', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'service_writer']), async (req, res) => {
   try {
     const workOrder = await workOrdersService.updateCharges(req.params.id, req.body || {});
     res.json({ success: true, data: workOrder });
@@ -447,7 +477,8 @@ router.put('/:id/charges', authMiddleware, requireRole(['admin', 'service_adviso
 });
 
 // Invoice integration
-router.post('/:id/generate-invoice', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting']), async (req, res) => {
+// shop_clerk may generate a draft invoice from a work order (draft status; posting still requires manager).
+router.post('/:id/generate-invoice', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
   try {
     const invoice = await workOrdersService.generateInvoiceForWorkOrder(req.params.id, req.user?.id, req.body, req.context || null);
     res.status(201).json({ success: true, data: invoice });
@@ -469,7 +500,7 @@ router.get('/:id/invoices', authMiddleware, async (req, res) => {
 });
 
 // Documents
-router.post('/:id/documents', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), upload.single('file'), async (req, res) => {
+router.post('/:id/documents', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'File is required' });

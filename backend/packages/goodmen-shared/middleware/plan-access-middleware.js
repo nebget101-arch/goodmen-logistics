@@ -1,7 +1,7 @@
 'use strict';
 
 const knex = require('../config/knex');
-const { PLANS } = require('../config/plans');
+const { PLANS, normalizePlanId } = require('../config/plans');
 
 const PLAN_CACHE_TTL_MS = 60 * 1000;
 const tenantPlanCache = new Map();
@@ -40,7 +40,7 @@ async function getTenantPlanId(knexClient, tenantId) {
     .where({ id: tenantId })
     .first('subscription_plan');
 
-  const planId = tenant?.subscription_plan || 'end_to_end';
+  const planId = normalizePlanId(tenant?.subscription_plan, 'basic');
   tenantPlanCache.set(tenantId, { planId, expiresAt: now + PLAN_CACHE_TTL_MS });
   return planId;
 }
@@ -116,7 +116,8 @@ async function writePlanDeniedAudit(knexClient, req, {
 }
 
 function isPlanPathAllowed(planId, requiredPath) {
-  const plan = PLANS[planId] || PLANS.end_to_end;
+  const safePlanId = normalizePlanId(planId, 'basic');
+  const plan = PLANS[safePlanId] || PLANS.basic;
   const allowedPages = Array.isArray(plan?.includedPages) ? plan.includedPages : [];
   const normalizedRequiredPath = normalizePath(requiredPath);
   if (!normalizedRequiredPath) return true;
@@ -134,7 +135,7 @@ function isPlanPathAllowed(planId, requiredPath) {
 function createPlanAccessMiddleware(requiredPathOrResolver, options = {}) {
   const {
     knexClient = knex,
-    fallbackPlanId = 'end_to_end',
+    fallbackPlanId = 'basic',
     denyStatusCode = 403,
     allowWhenTenantMissing = true
   } = options;
@@ -154,7 +155,7 @@ function createPlanAccessMiddleware(requiredPathOrResolver, options = {}) {
         });
       }
 
-      const planId = await getTenantPlanId(knexClient, tenantId).catch(() => fallbackPlanId);
+      const planId = await getTenantPlanId(knexClient, tenantId).catch(() => normalizePlanId(fallbackPlanId, 'basic'));
       if (isPlanPathAllowed(planId, requiredPath)) {
         return next();
       }

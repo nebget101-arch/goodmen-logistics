@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
+const tenantContextMiddleware = require('../middleware/tenant-context-middleware');
 const knex = require('../config/knex');
 const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 const { buildSettlementPdf } = require('../utils/settlement-pdf');
@@ -96,8 +97,34 @@ function requireRole(allowedRoles) {
   };
 }
 
-router.use(authMiddleware);
+router.use(authMiddleware, tenantContextMiddleware);
 const settlementRoles = ['admin', 'carrier_accountant', 'dispatch_manager'];
+
+async function getRequestTenantId(req) {
+  if (req.context?.tenantId) return req.context.tenantId;
+  if (req.user?.tenant_id) return req.user.tenant_id;
+
+  const userId = req.user?.id || req.user?.sub;
+  if (!userId) return null;
+
+  const memberships = await knex('user_tenant_memberships')
+    .where({ user_id: userId, is_active: true })
+    .orderBy('is_default', 'desc')
+    .orderBy('created_at', 'asc')
+    .select('tenant_id');
+  if (memberships.length > 0) {
+    return memberships[0].tenant_id;
+  }
+
+  const user = await knex('users').where({ id: userId }).first('tenant_id');
+  return user?.tenant_id || null;
+}
+
+function applyTenantFilter(qb, tenantId, column = 'tenant_id') {
+  if (tenantId) {
+    qb.andWhere(column, tenantId);
+  }
+}
 
 function normalizePayeeType(type) {
   const t = (type || '').toString().trim().toLowerCase();
@@ -129,7 +156,7 @@ function includeIfColumnExists(payload, columns, key, value) {
   if (columns.has(key)) payload[key] = value;
 }
 
-async function findOrCreatePayeeByName({ trx, name, requestedType, email, phone }) {
+async function findOrCreatePayeeByName({ trx, tenantId, name, requestedType, email, phone }) {
   const trimmedName = (name || '').toString().trim();
   if (!trimmedName) return null;
 
@@ -137,6 +164,7 @@ async function findOrCreatePayeeByName({ trx, name, requestedType, email, phone 
   const existing = await trx('payees')
     .whereRaw('LOWER(TRIM(name)) = LOWER(TRIM(?))', [trimmedName])
     .andWhere('type', normalizedType)
+    .modify((qb) => applyTenantFilter(qb, tenantId, 'tenant_id'))
     .first();
 
   if (existing) {
@@ -149,6 +177,7 @@ async function findOrCreatePayeeByName({ trx, name, requestedType, email, phone 
       name: trimmedName,
       email: email || null,
       phone: phone || null,
+      tenant_id: tenantId || null,
       is_active: true
     })
     .returning('*');
@@ -173,9 +202,12 @@ router.get('/', requireRole(settlementRoles), (_req, res) => {
 // ---------- Payees ----------
 router.get('/payees', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const { type, search, is_active, limit = 50 } = req.query;
     const normalizedType = normalizePayeeType(type);
-    let q = knex('payees');
+    let q = knex('payees').where('tenant_id', tenantId);
     if (normalizedType) q = q.where('type', normalizedType);
     if (is_active !== undefined) q = q.where('is_active', is_active === 'true' || is_active === true);
     if (search) q = q.where('name', 'ilike', `%${search}%`);
@@ -190,6 +222,9 @@ router.get('/payees', requireRole(settlementRoles), async (req, res) => {
 // Search endpoint for Payable To / Additional Payee dropdowns
 router.get('/payees/search', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const term = (req.query.q || req.query.search || '').toString().trim();
     const role = (req.query.role || 'all').toString().trim().toLowerCase(); // primary | additional | all
     const includeInactive = req.query.include_inactive === 'true' || req.query.include_inactive === true;
@@ -203,6 +238,7 @@ router.get('/payees/search', requireRole(settlementRoles), async (req, res) => {
     }
 
     let q = knex('payees')
+      .where('tenant_id', tenantId)
       .whereIn('type', allowedTypes)
       .orderBy('name', 'asc')
       .limit(limit);
@@ -229,6 +265,9 @@ router.get('/payees/search', requireRole(settlementRoles), async (req, res) => {
 
 router.post('/payees', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const {
       type,
       name,
@@ -259,6 +298,7 @@ router.post('/payees', requireRole(settlementRoles), async (req, res) => {
       contact_id: contact_id || null,
       email: email || null,
       phone: phone || null,
+      tenant_id: tenantId,
       is_active: is_active !== false
     };
 
@@ -288,6 +328,9 @@ router.post('/payees', requireRole(settlementRoles), async (req, res) => {
 // Explicit create endpoint used by Driver Edit UI
 router.post('/payees/equipment-owner', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const {
       name,
       email,
@@ -316,6 +359,7 @@ router.post('/payees/equipment-owner', requireRole(settlementRoles), async (req,
       const existing = await trx('payees')
         .whereRaw('LOWER(TRIM(name)) = LOWER(TRIM(?))', [trimmedName])
         .andWhere('type', 'owner')
+        .andWhere('tenant_id', tenantId)
         .first();
 
       if (existing) {
@@ -327,6 +371,7 @@ router.post('/payees/equipment-owner', requireRole(settlementRoles), async (req,
         name: trimmedName,
         email: email || null,
         phone: phone || null,
+        tenant_id: tenantId,
         is_active: true
       };
 
@@ -359,7 +404,10 @@ router.post('/payees/equipment-owner', requireRole(settlementRoles), async (req,
 
 router.get('/payees/:id', requireRole(settlementRoles), async (req, res) => {
   try {
-    const row = await knex('payees').where({ id: req.params.id }).first();
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
+    const row = await knex('payees').where({ id: req.params.id, tenant_id: tenantId }).first();
     if (!row) return res.status(404).json({ error: 'Payee not found' });
     res.json(row);
   } catch (err) {
@@ -369,6 +417,9 @@ router.get('/payees/:id', requireRole(settlementRoles), async (req, res) => {
 
 router.put('/payees/:id', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const {
       type,
       name,
@@ -418,7 +469,7 @@ router.put('/payees/:id', requireRole(settlementRoles), async (req, res) => {
     if (columns.has('settlement_template_type') && settlement_template_type !== undefined) updates.settlement_template_type = settlement_template_type;
 
     const [row] = await knex('payees')
-      .where({ id: req.params.id })
+      .where({ id: req.params.id, tenant_id: tenantId })
       .update(updates)
       .returning('*');
     if (!row) return res.status(404).json({ error: 'Payee not found' });
@@ -506,16 +557,19 @@ router.put('/compensation-profiles/:id', requireRole(settlementRoles), async (re
 // ---------- Driver payee assignments ----------
 router.get('/drivers/:driverId/payee-assignment', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const asOf = req.query.asOf || new Date().toISOString().slice(0, 10);
     const assignment = await getActivePayeeAssignment(knex, req.params.driverId, asOf);
     if (!assignment) return res.status(404).json({ error: 'No active payee assignment' });
     
     // Fetch payee details
     const primaryPayee = assignment.primary_payee_id
-      ? await knex('payees').where({ id: assignment.primary_payee_id }).first()
+      ? await knex('payees').where({ id: assignment.primary_payee_id, tenant_id: tenantId }).first()
       : null;
     const additionalPayee = assignment.additional_payee_id
-      ? await knex('payees').where({ id: assignment.additional_payee_id }).first()
+      ? await knex('payees').where({ id: assignment.additional_payee_id, tenant_id: tenantId }).first()
       : null;
     
     res.json({
@@ -530,7 +584,20 @@ router.get('/drivers/:driverId/payee-assignment', requireRole(settlementRoles), 
 
 router.post('/drivers/:driverId/payee-assignments', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const { primary_payee_id, additional_payee_id, rule_type, effective_start_date, effective_end_date } = req.body;
+
+    if (primary_payee_id) {
+      const primaryPayee = await knex('payees').where({ id: primary_payee_id, tenant_id: tenantId }).first('id');
+      if (!primaryPayee) return res.status(400).json({ error: 'Primary payee does not belong to this tenant' });
+    }
+    if (additional_payee_id) {
+      const additionalPayee = await knex('payees').where({ id: additional_payee_id, tenant_id: tenantId }).first('id');
+      if (!additionalPayee) return res.status(400).json({ error: 'Additional payee does not belong to this tenant' });
+    }
+
     const [row] = await knex('driver_payee_assignments')
       .insert({
         driver_id: req.params.driverId,
@@ -538,7 +605,8 @@ router.post('/drivers/:driverId/payee-assignments', requireRole(settlementRoles)
         additional_payee_id: additional_payee_id ?? null,
         rule_type: rule_type || 'custom',
         effective_start_date: effective_start_date || new Date().toISOString().slice(0, 10),
-        effective_end_date: effective_end_date ?? null
+        effective_end_date: effective_end_date ?? null,
+        tenant_id: tenantId
       })
       .returning('*');
     res.status(201).json(row);
@@ -553,6 +621,9 @@ router.post('/drivers/:driverId/payee-assignments', requireRole(settlementRoles)
 // - creates missing equipment owner payees on the fly
 router.post('/drivers/:driverId/payee-assignment/resolve', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const {
       primary_payee_id,
       primary_payee_name,
@@ -570,10 +641,11 @@ router.post('/drivers/:driverId/payee-assignment/resolve', requireRole(settlemen
       let additional = null;
 
       if (primary_payee_id) {
-        primary = await trx('payees').where({ id: primary_payee_id }).first();
+        primary = await trx('payees').where({ id: primary_payee_id, tenant_id: tenantId }).first();
       } else if (primary_payee_name) {
         primary = await findOrCreatePayeeByName({
           trx,
+          tenantId,
           name: primary_payee_name,
           requestedType: primary_payee_type || 'driver'
         });
@@ -586,10 +658,11 @@ router.post('/drivers/:driverId/payee-assignment/resolve', requireRole(settlemen
       }
 
       if (additional_payee_id) {
-        additional = await trx('payees').where({ id: additional_payee_id }).first();
+        additional = await trx('payees').where({ id: additional_payee_id, tenant_id: tenantId }).first();
       } else if (additional_payee_name) {
         additional = await findOrCreatePayeeByName({
           trx,
+          tenantId,
           name: additional_payee_name,
           requestedType: additional_payee_type || 'owner'
         });
@@ -602,7 +675,8 @@ router.post('/drivers/:driverId/payee-assignment/resolve', requireRole(settlemen
           additional_payee_id: additional?.id || null,
           rule_type: rule_type || 'custom',
           effective_start_date: effective_start_date || new Date().toISOString().slice(0, 10),
-          effective_end_date: effective_end_date ?? null
+          effective_end_date: effective_end_date ?? null,
+          tenant_id: tenantId
         })
         .returning('*');
 
@@ -686,10 +760,14 @@ router.post('/drivers/:driverId/expense-responsibility', requireRole(settlementR
 // ---------- Recurring deductions ----------
 router.get('/recurring-deductions', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const { driver_id, payee_id, payee_ids, enabled } = req.query;
     let q = knex('recurring_deduction_rules as rdr')
       .leftJoin('drivers as d', 'd.id', 'rdr.driver_id')
       .leftJoin('payees as p', 'p.id', 'rdr.payee_id')
+      .where('rdr.tenant_id', tenantId)
       .select(
         'rdr.*',
         knex.raw("concat_ws(' ', d.first_name, d.last_name) as driver_name"),
@@ -723,6 +801,9 @@ router.get('/recurring-deductions', requireRole(settlementRoles), async (req, re
 
 router.post('/recurring-deductions', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const body = req.body;
     const [row] = await knex('recurring_deduction_rules')
       .insert({
@@ -738,6 +819,7 @@ router.post('/recurring-deductions', requireRole(settlementRoles), async (req, r
         end_date: body.end_date ?? null,
         source_type: body.source_type ?? null,
         applies_when: body.applies_when ?? 'always',
+        tenant_id: tenantId,
         enabled: body.enabled !== false
       })
       .returning('*');
@@ -749,6 +831,9 @@ router.post('/recurring-deductions', requireRole(settlementRoles), async (req, r
 
 router.patch('/recurring-deductions/:id', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const body = req.body;
     const updates = { updated_at: knex.fn.now() };
     if (body.driver_id !== undefined) updates.driver_id = body.driver_id || null;
@@ -764,7 +849,10 @@ router.patch('/recurring-deductions/:id', requireRole(settlementRoles), async (r
     if (body.end_date !== undefined) updates.end_date = body.end_date;
     if (body.source_type !== undefined) updates.source_type = body.source_type ?? null;
     if (body.applies_when !== undefined) updates.applies_when = body.applies_when ?? 'always';
-    const [row] = await knex('recurring_deduction_rules').where({ id: req.params.id }).update(updates).returning('*');
+    const [row] = await knex('recurring_deduction_rules')
+      .where({ id: req.params.id, tenant_id: tenantId })
+      .update(updates)
+      .returning('*');
     if (!row) return res.status(404).json({ error: 'Not found' });
     res.json(row);
   } catch (err) {
@@ -774,12 +862,15 @@ router.patch('/recurring-deductions/:id', requireRole(settlementRoles), async (r
 
 router.delete('/recurring-deductions/:id', requireRole(settlementRoles), async (req, res) => {
   try {
+    const tenantId = await getRequestTenantId(req);
+    if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
+
     const { id } = req.params;
 
-    const existing = await knex('recurring_deduction_rules').where({ id }).first();
+    const existing = await knex('recurring_deduction_rules').where({ id, tenant_id: tenantId }).first();
     if (!existing) return res.status(404).json({ error: 'Not found' });
 
-    await knex('recurring_deduction_rules').where({ id }).del();
+    await knex('recurring_deduction_rules').where({ id, tenant_id: tenantId }).del();
     return res.json({ success: true, message: 'Recurring deduction deleted' });
   } catch (err) {
     return res.status(500).json({ error: err.message });

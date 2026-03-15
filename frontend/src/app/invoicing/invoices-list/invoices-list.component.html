@@ -11,7 +11,13 @@
         {{ activeOperatingEntityName }}
       </p>
     </div>
-    <button type="button" class="btn btn-primary ai-glow-btn new-invoice-btn" (click)="createInvoice()">
+    <button
+      type="button"
+      class="btn btn-primary ai-glow-btn new-invoice-btn"
+      (click)="createInvoice()"
+      [disabled]="!canCreateDraftInvoice()"
+      [title]="!canCreateDraftInvoice() ? 'You do not have permission to create draft invoices.' : ''"
+    >
       <span class="material-symbols-outlined">auto_awesome</span>
       New Invoice
     </button>

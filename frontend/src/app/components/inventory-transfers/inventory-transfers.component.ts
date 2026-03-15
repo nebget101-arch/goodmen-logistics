@@ -1,5 +1,7 @@
 import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { ApiService } from '../../services/api.service';
+import { PermissionHelperService } from '../../services/permission-helper.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 import * as QRCode from 'qrcode';
 
 @Component({
@@ -29,8 +31,23 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
   bridgeConnected = false;
   qrCodeDataUrl = '';
   private bridgeEvents?: EventSource;
+  readonly perms = PERMISSIONS;
 
-  constructor(private api: ApiService) {}
+  constructor(
+    private api: ApiService,
+    private readonly permissionHelper: PermissionHelperService
+  ) {}
+
+  canCreateTransfer(): boolean {
+    return this.permissionHelper.hasPermission(this.perms.INVENTORY_TRANSFER);
+  }
+
+  canReceiveTransfer(): boolean {
+    return this.permissionHelper.hasAnyPermission([
+      this.perms.INVENTORY_ADJUST,
+      this.perms.INVENTORY_TRANSFER,
+    ]);
+  }
 
   ngOnInit(): void {
     this.api.getLocations().subscribe({
@@ -53,6 +70,10 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
   }
 
   addByScan(): void {
+    if (!this.canCreateTransfer()) {
+      this.error = 'You do not have permission to add transfer lines.';
+      return;
+    }
     this.clearMessages();
     const code = this.scanCode.trim();
     if (!code) return;
@@ -87,6 +108,10 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
   }
 
   startPhoneBridge(): void {
+    if (!this.canCreateTransfer()) {
+      this.error = 'You do not have permission to create transfers.';
+      return;
+    }
     this.clearMessages();
     this.stopPhoneBridge();
     this.api.createScanBridgeSession().subscribe({
@@ -149,10 +174,18 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
   }
 
   triggerDecodeImage(): void {
+    if (!this.canCreateTransfer()) {
+      this.error = 'You do not have permission to add transfer lines.';
+      return;
+    }
     this.decodeFileInput?.nativeElement?.click();
   }
 
   onDecodeImage(event: Event): void {
+    if (!this.canCreateTransfer()) {
+      this.error = 'You do not have permission to add transfer lines.';
+      return;
+    }
     const input = event.target as HTMLInputElement;
     const file = input?.files?.[0];
     if (!file) return;
@@ -176,6 +209,10 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
   }
 
   createTransfer(): void {
+    if (!this.canCreateTransfer()) {
+      this.error = 'You do not have permission to create transfers.';
+      return;
+    }
     this.clearMessages();
     if (!this.fromLocationId || !this.toLocationId) {
       this.error = 'Select source and destination locations';
@@ -212,6 +249,10 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
   }
 
   receiveTransfer(): void {
+    if (!this.canReceiveTransfer()) {
+      this.error = 'You do not have permission to receive transfers.';
+      return;
+    }
     this.clearMessages();
     if (!this.receiveTransferId.trim()) {
       this.error = 'Transfer ID is required';
@@ -225,6 +266,10 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
   }
 
   removeLine(index: number): void {
+    if (!this.canCreateTransfer()) {
+      this.error = 'You do not have permission to modify transfer lines.';
+      return;
+    }
     this.lines.splice(index, 1);
   }
 

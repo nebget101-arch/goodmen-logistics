@@ -17,8 +17,14 @@ async function getCustomerPricing(customerId) {
   return result.rows[0] || null;
 }
 
-// Protect all work order routes: admin, fleet
-router.use(auth(['admin', 'fleet']));
+// Protect all work order routes.
+// Extended with shop roles (shop_manager, service_writer, shop_clerk, mechanic, technician)
+// while preserving the original admin + fleet access unchanged.
+router.use(auth([
+  'admin', 'fleet',
+  'shop_manager', 'service_writer', 'service_advisor',
+  'shop_clerk', 'mechanic', 'technician',
+]));
 
 // POST create new work order (stored in maintenance_records)
 router.post('/', async (req, res) => {

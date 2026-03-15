@@ -5,6 +5,8 @@ import { InvoiceService } from '../../services/invoice.service';
 import { CustomerService } from '../../services/customer.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { PermissionHelperService } from '../../services/permission-helper.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 
 @Component({
   selector: 'app-invoice-detail',
@@ -12,6 +14,7 @@ import { OperatingEntityContextService } from '../../services/operating-entity-c
   styleUrls: ['./invoice-detail.component.css']
 })
 export class InvoiceDetailComponent implements OnInit, OnDestroy {
+  readonly perms = PERMISSIONS;
   invoice: any;
   customer: any;
   location: any;
@@ -40,7 +43,8 @@ export class InvoiceDetailComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private invoiceService: InvoiceService,
     private customerService: CustomerService,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private permissions: PermissionHelperService
   ) {}
 
   ngOnInit(): void {
@@ -122,6 +126,10 @@ export class InvoiceDetailComponent implements OnInit, OnDestroy {
   }
 
   markSent(): void {
+    if (!this.canMarkSent()) {
+      this.error = 'You do not have permission to post/send invoices.';
+      return;
+    }
     if (!this.invoice?.id) return;
     this.invoiceService.updateStatus(this.invoice.id, 'SENT').subscribe({
       next: () => this.loadInvoice(this.invoice.id)
@@ -129,6 +137,10 @@ export class InvoiceDetailComponent implements OnInit, OnDestroy {
   }
 
   voidInvoice(): void {
+    if (!this.canVoidInvoice()) {
+      this.error = 'You do not have permission to void invoices.';
+      return;
+    }
     if (!this.invoice?.id) return;
     const reason = prompt('Reason for void?');
     if (!reason) return;
@@ -138,6 +150,10 @@ export class InvoiceDetailComponent implements OnInit, OnDestroy {
   }
 
   addPayment(): void {
+    if (!this.canRecordPayment()) {
+      this.error = 'You do not have permission to record payments.';
+      return;
+    }
     if (!this.invoice?.id) return;
     this.invoiceService.addPayment(this.invoice.id, this.paymentForm).subscribe({
       next: () => {
@@ -189,6 +205,10 @@ export class InvoiceDetailComponent implements OnInit, OnDestroy {
   }
 
   uploadDoc(event: any): void {
+    if (!this.canUploadDocument()) {
+      this.error = 'You do not have permission to upload documents.';
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file || !this.invoice?.id) return;
     this.invoiceService.uploadDocument(this.invoice.id, file).subscribe({
@@ -222,5 +242,21 @@ export class InvoiceDetailComponent implements OnInit, OnDestroy {
   joinYearMakeModel(v: any): string {
     if (!v) return '';
     return [v.year, v.make, v.model].filter(x => x != null && x !== '').join(' ');
+  }
+
+  canMarkSent(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.INVOICES_POST, PERMISSIONS.INVOICES_FINALIZE]);
+  }
+
+  canVoidInvoice(): boolean {
+    return this.permissions.hasPermission(PERMISSIONS.INVOICES_VOID);
+  }
+
+  canRecordPayment(): boolean {
+    return this.permissions.hasPermission(PERMISSIONS.PAYMENTS_CREATE);
+  }
+
+  canUploadDocument(): boolean {
+    return this.permissions.hasPermission(PERMISSIONS.DOCUMENTS_UPLOAD);
   }
 }

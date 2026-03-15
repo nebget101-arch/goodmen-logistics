@@ -122,7 +122,13 @@
 
     <div class="actions">
       <button type="button" class="btn btn-secondary" (click)="cancel()">Cancel</button>
-      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="loading">Save</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="save()"
+        [disabled]="loading || !canSave()"
+        [title]="!canSave() ? 'You do not have permission for this action.' : ''"
+      >Save</button>
     </div>
   </form>
   </div>

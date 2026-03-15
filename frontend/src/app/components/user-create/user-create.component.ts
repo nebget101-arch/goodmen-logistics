@@ -42,7 +42,42 @@ export class UserCreateComponent implements OnInit {
     return this.access.getFilteredLocations(this.allLocations);
   }
 
+  get currentPlanId(): string {
+    return String(this.access.getSubscriptionPlanId() || '').trim().toLowerCase();
+  }
+
+  get supportsLocationAssignment(): boolean {
+    return this.currentPlanId === 'end_to_end' || this.currentPlanId === 'enterprise';
+  }
+
+  get isBasicOrMultiMcPlan(): boolean {
+    return this.currentPlanId === 'basic' || this.currentPlanId === 'multi_mc';
+  }
+
+  get visibleRbacRoles() {
+    if (!this.isBasicOrMultiMcPlan) {
+      return this.rbacRoles;
+    }
+    return this.rbacRoles.filter((role) => {
+      if (role.group === 'shop' || role.group === 'parts') return false;
+      if (role.value === 'company_accountant' || role.value === 'customer' || role.value === 'admin') return false;
+      return true;
+    });
+  }
+
+  private normalizeSelectedRolesForPlan(): void {
+    if (!this.isBasicOrMultiMcPlan) return;
+    const allowed = new Set(this.visibleRbacRoles.map((role) => role.value));
+    this.roles = this.roles.filter((role) => allowed.has(role));
+    if (!this.roles.length) {
+      this.roles = ['dispatcher'];
+    }
+  }
+
   toggleRole(role: string): void {
+    if (this.isBasicOrMultiMcPlan && !this.visibleRbacRoles.some((r) => r.value === role)) {
+      return;
+    }
     const idx = this.roles.indexOf(role);
     if (idx >= 0) {
       this.roles = this.roles.filter((r) => r !== role);
@@ -52,6 +87,14 @@ export class UserCreateComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.normalizeSelectedRolesForPlan();
+
+    if (!this.supportsLocationAssignment) {
+      this.allLocations = [];
+      this.selectedLocationIds = [];
+      return;
+    }
+
     this.api.getLocations().subscribe({
       next: (data: any) => {
         const rows = Array.isArray(data) ? data : data?.rows ?? data?.data ?? [];
@@ -63,6 +106,7 @@ export class UserCreateComponent implements OnInit {
   createUser(): void {
     this.message = '';
     this.error = '';
+    this.normalizeSelectedRolesForPlan();
     if (!this.password?.trim()) {
       this.error = 'Password is required.';
       return;
@@ -81,7 +125,7 @@ export class UserCreateComponent implements OnInit {
       lastName: this.lastName.trim(),
       email: this.email?.trim() || undefined,
     };
-    if (this.selectedLocationIds.length) {
+    if (this.supportsLocationAssignment && this.selectedLocationIds.length) {
       payload.locationIds = this.selectedLocationIds;
     }
     this.api.createUser(payload).subscribe({

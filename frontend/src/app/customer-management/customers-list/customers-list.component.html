@@ -8,10 +8,20 @@
       <button class="btn btn-outline" (click)="loadAiAnalysis()" [disabled]="aiAnalysisLoading || !customers.length">
         <span class="material-symbols-outlined">analytics</span> {{ aiAnalysisLoading ? 'Analyzing…' : 'AI Analysis' }}
       </button>
-      <button class="btn btn-secondary" (click)="goToBulkUpload()">
+      <button
+        class="btn btn-secondary"
+        (click)="goToBulkUpload()"
+        [disabled]="!canCreateCustomer()"
+        [title]="!canCreateCustomer() ? 'You do not have permission to bulk upload customers.' : ''"
+      >
         <span class="material-symbols-outlined">upload_file</span> Bulk Upload
       </button>
-      <button class="btn btn-primary" (click)="goToNew()">
+      <button
+        class="btn btn-primary"
+        (click)="goToNew()"
+        [disabled]="!canCreateCustomer()"
+        [title]="!canCreateCustomer() ? 'You do not have permission to create customers.' : ''"
+      >
         <span class="material-symbols-outlined">add</span> New Customer
       </button>
     </div>
@@ -106,8 +116,18 @@
           <td>{{ c.last_service_date ? (c.last_service_date | date:'shortDate') : '—' }}</td>
           <td>
             <button class="btn-action btn-view" (click)="viewCustomer(c.id)">View</button>
-            <button class="btn-action btn-edit" (click)="editCustomer(c.id)">Edit</button>
-            <button class="btn-action btn-status" (click)="toggleStatus(c)">
+            <button
+              class="btn-action btn-edit"
+              (click)="editCustomer(c.id)"
+              [disabled]="!canEditCustomer()"
+              [title]="!canEditCustomer() ? 'You do not have permission to edit customers.' : ''"
+            >Edit</button>
+            <button
+              class="btn-action btn-status"
+              (click)="toggleStatus(c)"
+              [disabled]="!canEditCustomer()"
+              [title]="!canEditCustomer() ? 'You do not have permission to change customer status.' : ''"
+            >
               {{ c.status === 'ACTIVE' ? 'Deactivate' : 'Activate' }}
             </button>
           </td>

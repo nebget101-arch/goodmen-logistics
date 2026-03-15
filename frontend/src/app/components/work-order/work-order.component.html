@@ -82,7 +82,13 @@
             </div>
           </div>
           <div class="col">
-            <button type="button" class="btn btn-outline-primary" (click)="showNewCustomerModal = true">Add New Customer</button>
+            <button
+              type="button"
+              class="btn btn-outline-primary"
+              (click)="showNewCustomerModal = true"
+              [disabled]="!canCreateCustomerInline()"
+              [title]="!canCreateCustomerInline() ? 'You do not have permission to create customers.' : ''"
+            >Add New Customer</button>
           </div>
         </div>
         <div *ngIf="customerSearchError" class="alert alert-danger mt-2">{{customerSearchError}}</div>
@@ -134,7 +140,13 @@
             </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" (click)="showNewCustomerModal = false">Cancel</button>
-            <button type="button" class="btn btn-primary" (click)="createCustomer()">Create</button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              (click)="createCustomer()"
+              [disabled]="!canCreateCustomerInline()"
+              [title]="!canCreateCustomerInline() ? 'You do not have permission to create customers.' : ''"
+            >Create</button>
           </div>
         </div>
       </div>
@@ -176,7 +188,7 @@
               <option value="IN_PROGRESS">In Progress</option>
               <option value="WAITING_PARTS">Waiting Parts</option>
               <option value="COMPLETED">Completed</option>
-              <option value="CLOSED">Closed</option>
+              <option value="CLOSED" [disabled]="!canCloseWorkOrder()">Closed</option>
               <option value="CANCELED">Canceled</option>
             </select>
           </div>
@@ -245,7 +257,13 @@
                 </div>
               </div>
             </div>
-            <button type="button" class="btn btn-outline-primary mb-2" (click)="openAddVehicleModal()">Add Vehicle</button>
+            <button
+              type="button"
+              class="btn btn-outline-primary mb-2"
+              (click)="openAddVehicleModal()"
+              [disabled]="!canCreateVehicleInline()"
+              [title]="!canCreateVehicleInline() ? 'You do not have permission to create vehicles.' : ''"
+            >Add Vehicle</button>
             <!-- Add Customer Vehicle Modal -->
             <div class="modal-backdrop" *ngIf="showNewCustomerVehicleModal" (click)="showNewCustomerVehicleModal = false">
               <div class="modal wo-modal" (click)="$event.stopPropagation()">
@@ -855,7 +873,14 @@
         <div class="row" style="margin-top: 12px;">
           <div class="col">
             <label for="workOrderDocuments">Work Order Documents</label>
-            <input id="workOrderDocuments" type="file" class="form-control" (change)="uploadDocument($event)">
+            <input
+              id="workOrderDocuments"
+              type="file"
+              class="form-control"
+              (change)="uploadDocument($event)"
+              [disabled]="!canUploadWorkOrderDocument()"
+              [title]="!canUploadWorkOrderDocument() ? 'You do not have permission to upload documents.' : ''"
+            >
             <ul style="margin-top: 8px;">
               <li *ngFor="let doc of documents">{{ doc.file_name }}</li>
             </ul>
@@ -934,7 +959,12 @@
       <div *ngIf="workOrderSaveSuccess" class="alert alert-success mt-3">{{workOrderSaveSuccess}}</div>
       <div class="form-actions">
         <button type="button" class="btn btn-secondary" (click)="cancelWorkOrder()">Cancel</button>
-        <button type="submit" class="btn btn-success">Save Work Order</button>
+        <button
+          type="submit"
+          class="btn btn-success"
+          [disabled]="!canEditWorkOrder() || ((workOrder?.status || '').toString().toUpperCase() === 'CLOSED' && !canCloseWorkOrder())"
+          [title]="!canEditWorkOrder() ? 'You do not have permission to edit work orders.' : (((workOrder?.status || '').toString().toUpperCase() === 'CLOSED' && !canCloseWorkOrder()) ? 'Only manager-level users can close a work order.' : '')"
+        >Save Work Order</button>
       </div>
     </form>
   </div>

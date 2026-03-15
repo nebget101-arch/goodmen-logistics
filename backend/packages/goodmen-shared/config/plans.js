@@ -9,11 +9,11 @@
 const PLANS = {
   basic: {
     id: 'basic',
-    name: 'Basic',
-    tagline: 'Core operations for one entity',
+    name: 'Starter',
+    tagline: 'Essential fleet operations',
     description:
       'Includes core dispatch, driver, compliance, and settlement workflows for a single operating entity.',
-    priceLabel: '2 users included + $50/additional user',
+    priceLabel: '$149/mo',
     includedUsers: 2,
     additionalUserPriceUsd: 50,
     includedRoles: ['admin', 'dispatch'],
@@ -42,11 +42,11 @@ const PLANS = {
   },
   multi_mc: {
     id: 'multi_mc',
-    name: 'Multi-MC',
-    tagline: 'Multiple MCs, centralized control',
+    name: 'Professional',
+    tagline: 'Multi-entity control and scale',
     description:
       'Everything in Basic plus multi-entity administration and broader role coverage for growing operations.',
-    priceLabel: '4 users included + $50/additional user',
+    priceLabel: '$349/mo',
     includedUsers: 4,
     additionalUserPriceUsd: 50,
     includedRoles: ['admin', 'safety', 'dispatch', 'accounting'],
@@ -76,11 +76,11 @@ const PLANS = {
   },
   end_to_end: {
     id: 'end_to_end',
-    name: 'End-to-End',
+    name: 'Advanced',
     tagline: 'Full platform, maximum coverage',
     description:
       'Everything in Multi-MC plus full inventory, accounting, reporting, and roadside AI with larger included seat count.',
-    priceLabel: '10 users included + $50/additional user',
+    priceLabel: '$799/mo',
     includedUsers: 10,
     additionalUserPriceUsd: 50,
     includedRoles: ['admin', 'safety', 'dispatch', 'accounting'],
@@ -116,7 +116,59 @@ const PLANS = {
       '10 included users',
       '$50 per additional user'
     ]
+  },
+  enterprise: {
+    id: 'enterprise',
+    name: 'Enterprise',
+    tagline: 'Enterprise operations and controls',
+    description:
+      'Everything in Advanced with enterprise support, governance, and large-scale rollout flexibility.',
+    priceLabel: 'Contact us',
+    includedUsers: 25,
+    additionalUserPriceUsd: 0,
+    includedRoles: ['admin', 'safety', 'dispatch', 'accounting'],
+    includedPages: [
+      '/dashboard',
+      '/loads',
+      '/dispatch-board',
+      '/drivers',
+      '/vehicles',
+      '/trailers',
+      '/hos',
+      '/drivers/dqf',
+      '/audit',
+      '/settlements/scheduled-deductions',
+      '/settlements/equipment-owners',
+      '/admin/multi-mc',
+      '/parts',
+      '/barcodes',
+      '/receiving',
+      '/inventory-transfers',
+      '/direct-sales',
+      '/inventory-reports',
+      '/invoices',
+      '/settlements',
+      '/reports',
+      '/roadside'
+    ],
+    highlighted: false,
+    features: [
+      'Everything in Advanced',
+      'Enterprise onboarding and governance controls',
+      'Priority support and rollout planning',
+      'Large user capacity'
+    ]
   }
+};
+
+const PLAN_ID_ALIASES = {
+  starter: 'basic',
+  basic: 'basic',
+  professional: 'multi_mc',
+  multi_mc: 'multi_mc',
+  advanced: 'end_to_end',
+  end_to_end: 'end_to_end',
+  enterprise: 'enterprise'
 };
 
 const VALID_PLAN_IDS = Object.keys(PLANS);
@@ -130,4 +182,13 @@ const TRIAL_REQUEST_STATUSES = [
   'trial_created'
 ];
 
-module.exports = { PLANS, VALID_PLAN_IDS, TRIAL_REQUEST_STATUSES };
+function normalizePlanId(rawPlanId, fallbackPlanId = 'basic') {
+  const normalized = String(rawPlanId || '').trim().toLowerCase();
+  const mapped = PLAN_ID_ALIASES[normalized] || normalized;
+  if (mapped && PLANS[mapped]) {
+    return mapped;
+  }
+  return PLANS[fallbackPlanId] ? fallbackPlanId : 'basic';
+}
+
+module.exports = { PLANS, VALID_PLAN_IDS, TRIAL_REQUEST_STATUSES, normalizePlanId };

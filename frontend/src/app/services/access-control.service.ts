@@ -8,6 +8,7 @@ import {
   AccessUser,
   AccessLocation,
   PERMISSIONS,
+  ROLES,
   TAB_PERMISSIONS,
 } from '../models/access-control.model';
 
@@ -76,6 +77,7 @@ export class AccessControlService {
       user,
       roles,
       permissions,
+      permissionScopes: raw.permissionScopes ?? raw.scopedPermissions ?? undefined,
       locations,
       tenantId: raw.tenantId ?? null,
       subscriptionPlanId: raw.subscriptionPlanId ?? null,
@@ -90,7 +92,7 @@ export class AccessControlService {
     const set = new Set<string>();
     const r = (role: string) => roles.includes(role);
 
-    if (r('super_admin') || r('admin')) {
+    if (r(ROLES.SUPER_ADMIN) || r(ROLES.ADMIN) || r(ROLES.COMPANY_ADMIN)) {
       Object.values(PERMISSIONS).forEach((p) => set.add(p));
       return Array.from(set);
     }
@@ -117,6 +119,39 @@ export class AccessControlService {
       set.add(PERMISSIONS.DASHBOARD_VIEW).add(PERMISSIONS.MAINTENANCE_VIEW).add(PERMISSIONS.WORK_ORDERS_VIEW).add(PERMISSIONS.WORK_ORDERS_CREATE).add(PERMISSIONS.WORK_ORDERS_EDIT).add(PERMISSIONS.WORK_ORDERS_FINALIZE);
       set.add(PERMISSIONS.CUSTOMERS_VIEW).add(PERMISSIONS.INVOICES_VIEW).add(PERMISSIONS.INVOICES_CREATE).add(PERMISSIONS.PARTS_VIEW).add(PERMISSIONS.INVENTORY_REPORTS_VIEW);
       set.add(PERMISSIONS.ROADSIDE_VIEW).add(PERMISSIONS.ROADSIDE_MANAGE);
+    }
+    if (r('shop_clerk')) {
+      // Operational shop access: create/view/edit customers, vehicles, work orders,
+      // estimates, draft invoices, payments (view/create), and documents.
+      // Intentionally excludes: post/void invoices, adjust inventory, approve discounts,
+      // close/approve work orders, refund payments, settlements, users/roles.
+      set.add(PERMISSIONS.DASHBOARD_VIEW)
+        .add(PERMISSIONS.MAINTENANCE_VIEW)
+        .add(PERMISSIONS.CUSTOMERS_VIEW).add(PERMISSIONS.CUSTOMERS_CREATE).add(PERMISSIONS.CUSTOMERS_EDIT)
+        .add(PERMISSIONS.VEHICLES_VIEW).add(PERMISSIONS.VEHICLES_CREATE).add(PERMISSIONS.VEHICLES_EDIT)
+        .add(PERMISSIONS.WORK_ORDERS_VIEW).add(PERMISSIONS.WORK_ORDERS_CREATE).add(PERMISSIONS.WORK_ORDERS_EDIT).add(PERMISSIONS.WORK_ORDERS_ASSIGN)
+        .add(PERMISSIONS.WORK_ORDER_LINES_VIEW).add(PERMISSIONS.WORK_ORDER_LINES_CREATE).add(PERMISSIONS.WORK_ORDER_LINES_EDIT)
+        .add(PERMISSIONS.ESTIMATES_VIEW).add(PERMISSIONS.ESTIMATES_CREATE).add(PERMISSIONS.ESTIMATES_EDIT).add(PERMISSIONS.ESTIMATES_CONVERT)
+        .add(PERMISSIONS.APPOINTMENTS_VIEW).add(PERMISSIONS.APPOINTMENTS_CREATE).add(PERMISSIONS.APPOINTMENTS_EDIT)
+        .add(PERMISSIONS.INVOICES_VIEW).add(PERMISSIONS.INVOICES_CREATE).add(PERMISSIONS.INVOICES_EDIT)
+        .add(PERMISSIONS.PAYMENTS_VIEW).add(PERMISSIONS.PAYMENTS_CREATE)
+        .add(PERMISSIONS.INVENTORY_VIEW)
+        .add(PERMISSIONS.PARTS_VIEW)
+        .add(PERMISSIONS.DOCUMENTS_VIEW).add(PERMISSIONS.DOCUMENTS_UPLOAD);
+    }
+    if (r('shop_manager')) {
+      // shop_manager is a superset of shop_clerk plus all finalization permissions.
+      set.add(PERMISSIONS.CUSTOMERS_CREATE).add(PERMISSIONS.VEHICLES_CREATE)
+        .add(PERMISSIONS.WORK_ORDERS_ASSIGN).add(PERMISSIONS.WORK_ORDERS_APPROVE).add(PERMISSIONS.WORK_ORDERS_CLOSE)
+        .add(PERMISSIONS.WORK_ORDER_LINES_VIEW).add(PERMISSIONS.WORK_ORDER_LINES_CREATE).add(PERMISSIONS.WORK_ORDER_LINES_EDIT)
+        .add(PERMISSIONS.ESTIMATES_VIEW).add(PERMISSIONS.ESTIMATES_CREATE).add(PERMISSIONS.ESTIMATES_EDIT)
+        .add(PERMISSIONS.ESTIMATES_CONVERT).add(PERMISSIONS.ESTIMATES_APPROVE)
+        .add(PERMISSIONS.APPOINTMENTS_VIEW).add(PERMISSIONS.APPOINTMENTS_CREATE).add(PERMISSIONS.APPOINTMENTS_EDIT)
+        .add(PERMISSIONS.INVOICES_POST).add(PERMISSIONS.INVOICES_VOID).add(PERMISSIONS.INVOICES_CREATE).add(PERMISSIONS.INVOICES_EDIT)
+        .add(PERMISSIONS.PAYMENTS_VIEW).add(PERMISSIONS.PAYMENTS_CREATE).add(PERMISSIONS.PAYMENTS_REFUND)
+        .add(PERMISSIONS.DOCUMENTS_VIEW).add(PERMISSIONS.DOCUMENTS_UPLOAD)
+        .add(PERMISSIONS.DISCOUNTS_APPROVE)
+        .add(PERMISSIONS.REPORTS_SHOP);
     }
     if (r('mechanic')) {
       set.add(PERMISSIONS.MAINTENANCE_VIEW).add(PERMISSIONS.WORK_ORDERS_VIEW).add(PERMISSIONS.WORK_ORDERS_EDIT);
@@ -224,7 +259,7 @@ export class AccessControlService {
     if (!code) return false;
     const perms = this.getPermissions();
     if (perms.includes(code)) return true;
-    if (this.hasRole('super_admin') || this.hasRole('admin')) return true;
+    if (this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COMPANY_ADMIN])) return true;
     return false;
   }
 

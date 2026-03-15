@@ -6,7 +6,12 @@
         {{ customer.status }}
       </span>
     </div>
-    <button class="btn btn-primary" (click)="editCustomer()">
+    <button
+      class="btn btn-primary"
+      (click)="editCustomer()"
+      [disabled]="!canEditCustomer()"
+      [title]="!canEditCustomer() ? 'You do not have permission to edit customers.' : ''"
+    >
       <span class="material-symbols-outlined">edit</span> Edit
     </button>
   </div>
@@ -23,9 +28,23 @@
     <button type="button" class="tab-btn" [class.active]="activeTab === 'overview'" (click)="activeTab = 'overview'">Overview</button>
     <button type="button" class="tab-btn" [class.active]="activeTab === 'work-orders'" (click)="activeTab = 'work-orders'">Work Orders</button>
     <button type="button" class="tab-btn" [class.active]="activeTab === 'invoices'" (click)="activeTab = 'invoices'">Invoices</button>
-    <button type="button" class="tab-btn" [class.active]="activeTab === 'credit'" (click)="activeTab = 'credit'">Credit</button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === 'credit'"
+      (click)="activeTab = 'credit'"
+      [disabled]="!canManageCreditLimit()"
+      [title]="!canManageCreditLimit() ? 'You do not have permission to manage customer credit settings.' : ''"
+    >Credit</button>
     <button type="button" class="tab-btn" [class.active]="activeTab === 'service-history'" (click)="activeTab = 'service-history'">Service History</button>
-    <button type="button" class="tab-btn" [class.active]="activeTab === 'pricing'" (click)="activeTab = 'pricing'">Pricing</button>
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === 'pricing'"
+      (click)="activeTab = 'pricing'"
+      [disabled]="!canManagePricing()"
+      [title]="!canManagePricing() ? 'You do not have permission to update pricing rules.' : ''"
+    >Pricing</button>
     <button type="button" class="tab-btn" [class.active]="activeTab === 'vehicles'" (click)="activeTab = 'vehicles'">Vehicles</button>
     <button type="button" class="tab-btn" [class.active]="activeTab === 'notes'" (click)="activeTab = 'notes'">Notes</button>
   </div>
@@ -137,7 +156,8 @@
                  [disabled]="updatingCreditLimit" min="0" step="100">
         </div>
         <button class="btn btn-primary" (click)="updateCreditLimit()" 
-                [disabled]="updatingCreditLimit || newCreditLimit === null">
+          [disabled]="updatingCreditLimit || newCreditLimit === null || !canManageCreditLimit()"
+          [title]="!canManageCreditLimit() ? 'You do not have permission to update credit limits.' : ''">
           {{ updatingCreditLimit ? 'Updating...' : 'Update Credit Limit' }}
         </button>
         <span class="text-success" *ngIf="creditLimitSuccess">✓ Credit limit updated successfully</span>
@@ -245,7 +265,13 @@
           <label>End Date (Optional)</label>
           <input type="date" class="form-control" formControlName="end_date">
         </div>
-        <button type="button" class="btn btn-primary" (click)="savePricingRules()">Save Pricing</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="savePricingRules()"
+          [disabled]="!canManagePricing()"
+          [title]="!canManagePricing() ? 'You do not have permission to update pricing rules.' : ''"
+        >Save Pricing</button>
         <span class="text-success" *ngIf="pricingSuccess">✓ Pricing rules saved successfully</span>
       </form>
     </div>
@@ -255,7 +281,13 @@
     <div class="vehicle-add">
       <div style="display:flex; align-items:center; justify-content: space-between;">
         <h4>Add Customer Vehicle</h4>
-        <button class="btn btn-outline-primary" type="button" (click)="toggleAddVehicleForm()">
+        <button
+          class="btn btn-outline-primary"
+          type="button"
+          (click)="toggleAddVehicleForm()"
+          [disabled]="!canCreateCustomerVehicle()"
+          [title]="!canCreateCustomerVehicle() ? 'You do not have permission to add customer vehicles.' : ''"
+        >
           {{ showAddVehicleForm ? 'Cancel' : 'Add Vehicle' }}
         </button>
       </div>
@@ -319,7 +351,13 @@
       <div *ngIf="newVehicleError" class="text-danger" style="margin-top: 6px;">{{ newVehicleError }}</div>
       <div *ngIf="newVehicleSuccess" class="text-success" style="margin-top: 6px;">{{ newVehicleSuccess }}</div>
 
-      <button class="btn btn-primary" style="margin-top: 10px;" (click)="addCustomerVehicle()">Save Vehicle</button>
+      <button
+        class="btn btn-primary"
+        style="margin-top: 10px;"
+        (click)="addCustomerVehicle()"
+        [disabled]="!canCreateCustomerVehicle()"
+        [title]="!canCreateCustomerVehicle() ? 'You do not have permission to add customer vehicles.' : ''"
+      >Save Vehicle</button>
       <hr />
     </div>
     <div *ngIf="vehicles && vehicles.length > 0">

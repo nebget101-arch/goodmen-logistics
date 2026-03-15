@@ -1,0 +1,94 @@
+<div class="pub-page pub-contact-page">
+  <nav class="pub-nav pub-nav-solid">
+    <div class="pub-nav-inner">
+      <button type="button" class="pub-brand pub-brand-btn" (click)="goHome()">
+        <span class="pub-brand-wordmark">FleetNeuron</span>
+        <span class="pub-brand-tag">AI fleet intelligence</span>
+      </button>
+
+      <ul class="pub-nav-links" [class.pub-nav-open]="mobileNavOpen">
+        <li><a routerLink="/privacy">Privacy</a></li>
+        <li><a routerLink="/terms">Terms</a></li>
+        <li class="pub-nav-cta-item"><button class="pub-btn-outline" (click)="goToLogin()">Sign In</button></li>
+      </ul>
+
+      <button class="pub-nav-hamburger" type="button" (click)="toggleMobileNav(); $event.stopPropagation()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <section class="pub-contact-shell">
+    <div class="pub-contact-glow pub-contact-glow-left"></div>
+    <div class="pub-contact-glow pub-contact-glow-right"></div>
+
+    <div class="pub-contact-layout">
+      <div class="pub-contact-copy">
+        <div class="pub-contact-badge">
+          <span class="material-symbols-outlined">handshake</span>
+          Enterprise conversations
+        </div>
+
+        <h1>
+          Let's design your
+          <span class="pub-gradient-text">FleetNeuron Enterprise</span>
+          rollout
+        </h1>
+
+        <p>
+          Tell us about your fleet, entities, integrations, and onboarding timeline.
+          Our team will help map the right architecture and implementation plan.
+        </p>
+
+        <ul class="pub-contact-points">
+          <li><span class="material-symbols-outlined">check_circle</span><span>Custom onboarding and migration strategy</span></li>
+          <li><span class="material-symbols-outlined">check_circle</span><span>Integration planning for your existing stack</span></li>
+          <li><span class="material-symbols-outlined">check_circle</span><span>Dedicated implementation and success support</span></li>
+        </ul>
+      </div>
+
+      <div class="pub-contact-card">
+        <h2>Contact us</h2>
+        <p class="pub-contact-sub">We usually respond within one business day.</p>
+
+        <div class="pub-contact-action-list">
+          <a class="pub-contact-action" href="mailto:sales@fleetneuron.com">
+            <span class="material-symbols-outlined">mail</span>
+            <div>
+              <span class="label">Email sales</span>
+              <span class="value">sales&#64;fleetneuron.com</span>
+            </div>
+          </a>
+
+          <a class="pub-contact-action" href="tel:+18005551234">
+            <span class="material-symbols-outlined">call</span>
+            <div>
+              <span class="label">Call us</span>
+              <span class="value">+1 (800) 555-1234</span>
+            </div>
+          </a>
+        </div>
+
+        <div class="pub-contact-cta-row">
+          <button class="pub-btn-primary" type="button" (click)="goToTrial()">
+            <span class="material-symbols-outlined">rocket_launch</span>
+            Start Trial Request
+          </button>
+          <button class="pub-btn-outline" type="button" (click)="goHome()">Back to pricing</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="pub-footer pub-footer-minimal">
+    <div class="pub-footer-minimal-inner">
+      <span class="pub-brand-wordmark">FleetNeuron</span>
+      <span class="pub-footer-copy">© {{ currentYear }} FleetNeuron. All rights reserved.</span>
+      <div class="pub-footer-minimal-links">
+        <a routerLink="/privacy">Privacy</a>
+        <span>·</span>
+        <a routerLink="/terms">Terms</a>
+      </div>
+    </div>
+  </footer>
+</div>

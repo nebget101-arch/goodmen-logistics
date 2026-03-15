@@ -54,6 +54,18 @@ export class PublicHomeComponent implements OnInit {
     }
   }
 
+  navigateToContact(): void {
+    this.router.navigate(['/home/contact']);
+  }
+
+  handlePlanCta(plan: { id: string; ctaAction?: 'trial' | 'contact' }): void {
+    if (plan?.ctaAction === 'contact' || plan?.id === 'enterprise') {
+      this.navigateToContact();
+      return;
+    }
+    this.navigateToTrial(plan?.id);
+  }
+
   goToLogin(): void {
     this.router.navigate(['/login']);
   }

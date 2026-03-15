@@ -2,6 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CustomerService } from '../../services/customer.service';
+import { PermissionHelperService } from '../../services/permission-helper.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 
 @Component({
   selector: 'app-customer-form',
@@ -9,6 +11,7 @@ import { CustomerService } from '../../services/customer.service';
   styleUrls: ['./customer-form.component.css']
 })
 export class CustomerFormComponent implements OnInit {
+  readonly perms = PERMISSIONS;
   form: FormGroup;
   loading = false;
   error = '';
@@ -23,7 +26,8 @@ export class CustomerFormComponent implements OnInit {
     private fb: FormBuilder,
     private route: ActivatedRoute,
     private router: Router,
-    private customerService: CustomerService
+    private customerService: CustomerService,
+    private permissions: PermissionHelperService
   ) {
     this.form = this.fb.group({
       company_name: ['', Validators.required],
@@ -75,6 +79,13 @@ export class CustomerFormComponent implements OnInit {
   }
 
   save(): void {
+    if (!this.canSave()) {
+      this.error = this.customerId
+        ? 'You do not have permission to edit customers.'
+        : 'You do not have permission to create customers.';
+      return;
+    }
+
     if (this.form.invalid) {
       this.error = 'Please fill required fields';
       return;
@@ -118,5 +129,12 @@ export class CustomerFormComponent implements OnInit {
     } else {
       this.router.navigate(['/customers']);
     }
+  }
+
+  canSave(): boolean {
+    if (this.customerId) {
+      return this.permissions.hasPermission(PERMISSIONS.CUSTOMERS_EDIT);
+    }
+    return this.permissions.hasAnyPermission([PERMISSIONS.CUSTOMERS_CREATE, PERMISSIONS.CUSTOMERS_EDIT]);
   }
 }

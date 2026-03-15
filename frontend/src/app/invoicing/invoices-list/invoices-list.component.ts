@@ -5,6 +5,8 @@ import { InvoiceService } from '../../services/invoice.service';
 import { CustomerService } from '../../services/customer.service';
 import { ApiService } from '../../services/api.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { PermissionHelperService } from '../../services/permission-helper.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 
 @Component({
   selector: 'app-invoices-list',
@@ -12,6 +14,7 @@ import { OperatingEntityContextService } from '../../services/operating-entity-c
   styleUrls: ['./invoices-list.component.css']
 })
 export class InvoicesListComponent implements OnInit, OnDestroy {
+  readonly perms = PERMISSIONS;
   invoices: any[] = [];
   customers: any[] = [];
   locations: any[] = [];
@@ -38,7 +41,8 @@ export class InvoicesListComponent implements OnInit, OnDestroy {
     private customerService: CustomerService,
     private apiService: ApiService,
     private router: Router,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private permissions: PermissionHelperService
   ) {}
 
   ngOnInit(): void {
@@ -112,6 +116,11 @@ export class InvoicesListComponent implements OnInit, OnDestroy {
   }
 
   createInvoice(): void {
+    if (!this.canCreateDraftInvoice()) {
+      this.error = 'You do not have permission to create draft invoices.';
+      return;
+    }
+
     this.error = '';
     const customerId = this.filters.customerId;
     const locationId = this.filters.locationId;
@@ -149,5 +158,9 @@ export class InvoicesListComponent implements OnInit, OnDestroy {
     if (normalized.includes('paid')) return 'paid';
     if (normalized.includes('overdue') || normalized.includes('void')) return 'overdue';
     return 'draft';
+  }
+
+  canCreateDraftInvoice(): boolean {
+    return this.permissions.hasAnyPermission([PERMISSIONS.INVOICES_CREATE, PERMISSIONS.INVOICES_EDIT]);
   }
 }
