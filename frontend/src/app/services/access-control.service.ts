@@ -70,7 +70,12 @@ export class AccessControlService {
     const user = raw.user ?? { id: raw.userId ?? raw.id ?? '', firstName: raw.firstName, lastName: raw.lastName, username: raw.username, email: raw.email };
     let roles: string[] = Array.isArray(raw.roles) ? raw.roles.map((r: string) => String(r).toLowerCase().trim()) : [];
     if (roles.length === 0 && raw.role) roles = [String(raw.role).toLowerCase().trim()];
-    const permissions: string[] = Array.isArray(raw.permissions) ? raw.permissions : this.derivePermissionsFromRoles(roles, raw);
+    const providedPermissions: string[] = Array.isArray(raw.permissions)
+      ? raw.permissions.map((permission: any) => String(permission || '').trim()).filter(Boolean)
+      : [];
+    const permissions: string[] = providedPermissions.length > 0
+      ? providedPermissions
+      : this.derivePermissionsFromRoles(roles, raw);
     const locations: AccessLocation[] = Array.isArray(raw.locations)
       ? raw.locations.map((l: any) => ({ id: l.id ?? l.locationId, name: l.name ?? l.locationName ?? '' }))
       : [];
