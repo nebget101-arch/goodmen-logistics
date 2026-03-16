@@ -1,0 +1,164 @@
+.reports-page {
+  min-height: 400px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(239,68,68,.08), transparent 45%),
+    radial-gradient(circle at 100% 80%, rgba(59,130,246,.08), transparent 45%);
+}
+
+.page-header { margin-bottom: 14px; }
+
+.hero-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: .75rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #c7d2fe;
+  border: 1px solid rgba(99,102,241,.35);
+  background: radial-gradient(circle at 0 0, rgba(99,102,241,.25), transparent 55%), rgba(15,23,42,.7);
+  margin-bottom: 10px;
+}
+
+.hero-pill .material-symbols-outlined { font-size: 16px; color: #a5b4fc; }
+
+.page-header h2 {
+  margin: 0 0 6px;
+  font-size: 1.45rem;
+  color: #f8fafc;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-icon { font-size: 24px; color: #ef4444; }
+.page-sub { margin: 0; color: #94a3b8; font-size: .87rem; }
+
+.filters-card {
+  border: 1px solid rgba(148,163,184,.2);
+  background: rgba(15,23,42,.65);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 18px;
+}
+
+.filters-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+
+.form-row-inline { display: flex; flex-direction: column; gap: 6px; }
+
+.form-row-inline label {
+  font-size: .76rem;
+  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.form-row-inline label .material-symbols-outlined { font-size: 15px; color: #64748b; }
+
+.filter-input {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(148,163,184,.24);
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: .85rem;
+}
+
+.filter-input:focus {
+  outline: none;
+  border-color: rgba(239,68,68,.5);
+  box-shadow: 0 0 0 1px rgba(239,68,68,.3);
+}
+
+.loading-state { color: #94a3b8; padding: 20px 0; }
+.alert-error { background: rgba(239,68,68,.15); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
+
+.report-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+.report-card {
+  background: radial-gradient(circle at 0 0, rgba(59,130,246,.14), transparent 55%), rgba(15,23,42,.72);
+  border: 1px solid rgba(148,163,184,.14);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.report-card:hover {
+  border-color: rgba(239,68,68,.35);
+  background: radial-gradient(circle at 0 0, rgba(239,68,68,.12), transparent 55%), rgba(15,23,42,.78);
+}
+
+.report-card.full { grid-column: 1 / -1; }
+
+.report-card h3 {
+  margin: 0;
+  font-size: .95rem;
+  color: #f1f5f9;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.report-card h3 .material-symbols-outlined { font-size: 18px; color: #ef4444; }
+
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+
+.mini-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+
+.mini-table th {
+  color: #64748b;
+  text-transform: uppercase;
+  font-size: .7rem;
+  letter-spacing: .04em;
+  text-align: left;
+  border-bottom: 1px solid rgba(148,163,184,.16);
+  padding: 8px;
+}
+
+.mini-table td {
+  border-bottom: 1px solid rgba(148,163,184,.08);
+  padding: 8px;
+  color: #cbd5e1;
+}
+
+.mini-table tbody tr:hover td {
+  background: rgba(255,255,255,.03);
+}
+
+.empty-cell { text-align: center; color: #64748b; padding: 20px; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: .84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s, transform .15s;
+}
+
+.btn:hover { opacity: .9; transform: translateY(-1px); }
+.btn .material-symbols-outlined { font-size: 17px; }
+
+.btn-danger {
+  background: #ef4444;
+  color: #fff;
+}
+
+.btn-secondary {
+  background: rgba(148,163,184,.15);
+  color: #cbd5e1;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: #64748b;
+  border: 1px solid rgba(148,163,184,.18);
+}
+
+.btn-sm { padding: 7px 11px; font-size: .78rem; }

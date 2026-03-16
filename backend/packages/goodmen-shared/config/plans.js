@@ -27,6 +27,7 @@ const PLANS = {
       '/hos',
       '/drivers/dqf',
       '/audit',
+      '/compliance/ifta',
       '/fuel',
       '/settlements',
       '/settlements/scheduled-deductions',
@@ -61,6 +62,7 @@ const PLANS = {
       '/hos',
       '/drivers/dqf',
       '/audit',
+      '/compliance/ifta',
       '/fuel',
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners',
@@ -96,6 +98,7 @@ const PLANS = {
       '/hos',
       '/drivers/dqf',
       '/audit',
+      '/compliance/ifta',
       '/fuel',
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners',
@@ -109,7 +112,9 @@ const PLANS = {
       '/invoices',
       '/settlements',
       '/reports',
-      '/roadside'
+      '/roadside',
+      '/finance/lease-to-own',
+      '/finance/fleet-financing-dashboard'
     ],
     highlighted: false,
     features: [
@@ -140,6 +145,7 @@ const PLANS = {
       '/hos',
       '/drivers/dqf',
       '/audit',
+      '/compliance/ifta',
       '/fuel',
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners',
@@ -153,7 +159,9 @@ const PLANS = {
       '/invoices',
       '/settlements',
       '/reports',
-      '/roadside'
+      '/roadside',
+      '/finance/lease-to-own',
+      '/finance/fleet-financing-dashboard'
     ],
     highlighted: false,
     features: [

@@ -12,19 +12,26 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB limit
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
+    // Allow common image formats (ID documents), PDFs, and Word docs
+    const allowedTypes = /jpeg|jpg|png|pdf|doc|docx|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
     
     if (mimetype && extname) {
       return cb(null, true);
     } else {
-      cb(new Error('Only PDF, images, and Word documents are allowed!'));
+      cb(new Error('Only PDF, images (JPEG, PNG, GIF, WebP), and Word documents are allowed!'));
     }
   }
 });
 
 // POST upload DQF document
+// Supported documentTypes: 
+// - driver_license_front, driver_license_back
+// - medical_card_front, medical_card_back, green_card
+// - drug_test_result
+// - release_of_info
+// - employment_application, mvr_authorization, etc.
 router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {

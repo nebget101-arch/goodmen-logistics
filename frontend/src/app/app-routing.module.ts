@@ -163,6 +163,52 @@ const routes: Routes = [
       ]
     }
   },
+  {
+    path: 'finance/lease-to-own',
+    loadChildren: () => import('./lease-financing/lease-financing.module').then(m => m.LeaseFinancingModule),
+    canActivate: [AuthGuard, PermissionGuard],
+    data: {
+      anyPermission: [
+        PERMISSIONS.LEASE_FINANCING_VIEW,
+        PERMISSIONS.LEASE_FINANCING_CREATE,
+        PERMISSIONS.LEASE_FINANCING_EDIT,
+        PERMISSIONS.LEASE_FINANCING_DASHBOARD_VIEW,
+        PERMISSIONS.LEASE_FINANCING_DRIVER_VIEW,
+      ]
+    }
+  },
+  {
+    path: 'safety',
+    loadChildren: () => import('./safety/safety.module').then(m => m.SafetyModule),
+    canActivate: [AuthGuard, PermissionGuard],
+    data: {
+      anyPermission: [
+        PERMISSIONS.SAFETY_INCIDENTS_VIEW,
+        PERMISSIONS.SAFETY_INCIDENTS_CREATE,
+        PERMISSIONS.SAFETY_INCIDENTS_EDIT,
+        PERMISSIONS.SAFETY_CLAIMS_VIEW,
+        PERMISSIONS.SAFETY_CLAIMS_CREATE,
+        PERMISSIONS.SAFETY_CLAIMS_EDIT,
+        PERMISSIONS.SAFETY_REPORTS_VIEW,
+      ]
+    }
+  },
+  {
+    path: 'compliance/ifta',
+    loadChildren: () => import('./compliance/compliance.module').then(m => m.ComplianceModule),
+    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
+    data: {
+      planPath: '/compliance/ifta',
+      anyPermission: [
+        PERMISSIONS.IFTA_VIEW,
+        PERMISSIONS.IFTA_EDIT,
+        PERMISSIONS.IFTA_IMPORT,
+        PERMISSIONS.IFTA_RUN_AI_REVIEW,
+        PERMISSIONS.IFTA_FINALIZE,
+        PERMISSIONS.IFTA_EXPORT,
+      ]
+    }
+  },
   { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   {

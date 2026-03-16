@@ -15,6 +15,10 @@ import {
 const STORAGE_KEY_ACCESS = 'fleetneuron_access';
 const ALWAYS_ALLOWED_PATH_PREFIXES = ['/profile', '/users', '/users/create'];
 const INTERNAL_TRIAL_ADMIN_TENANT_NAME = 'fleetneuron default tenant';
+const FEATURE_PLAN_ACCESS: Record<string, string[]> = {
+  lease_to_own_financing: ['end_to_end', 'enterprise'],
+  fleet_financing_dashboard: ['end_to_end', 'enterprise'],
+};
 
 /**
  * Centralized RBAC: permissions, roles, and location-aware access.
@@ -125,6 +129,17 @@ export class AccessControlService {
         .add(PERMISSIONS.FUEL_TRANSACTIONS_EDIT).add(PERMISSIONS.FUEL_EXCEPTIONS_RESOLVE).add(PERMISSIONS.FUEL_REPORTS_VIEW);
       set.add(PERMISSIONS.TOLLS_VIEW).add(PERMISSIONS.TOLLS_IMPORT).add(PERMISSIONS.TOLLS_ACCOUNTS_MANAGE)
         .add(PERMISSIONS.TOLLS_TRANSACTIONS_EDIT).add(PERMISSIONS.TOLLS_EXCEPTIONS_RESOLVE).add(PERMISSIONS.TOLLS_REPORTS_VIEW);
+      set.add(PERMISSIONS.IFTA_VIEW).add(PERMISSIONS.IFTA_EDIT).add(PERMISSIONS.IFTA_IMPORT)
+        .add(PERMISSIONS.IFTA_RUN_AI_REVIEW).add(PERMISSIONS.IFTA_FINALIZE).add(PERMISSIONS.IFTA_EXPORT);
+      set.add(PERMISSIONS.LEASE_FINANCING_VIEW).add(PERMISSIONS.LEASE_FINANCING_CREATE).add(PERMISSIONS.LEASE_FINANCING_EDIT)
+        .add(PERMISSIONS.LEASE_FINANCING_ACTIVATE).add(PERMISSIONS.LEASE_FINANCING_PAYMENTS_MANAGE)
+        .add(PERMISSIONS.LEASE_FINANCING_DASHBOARD_VIEW).add(PERMISSIONS.LEASE_FINANCING_DRIVER_VIEW);
+    }
+    if (r('finance_manager')) {
+      set.add(PERMISSIONS.DASHBOARD_VIEW).add(PERMISSIONS.REPORTS_VIEW)
+        .add(PERMISSIONS.LEASE_FINANCING_VIEW).add(PERMISSIONS.LEASE_FINANCING_CREATE).add(PERMISSIONS.LEASE_FINANCING_EDIT)
+        .add(PERMISSIONS.LEASE_FINANCING_ACTIVATE).add(PERMISSIONS.LEASE_FINANCING_TERMINATE)
+        .add(PERMISSIONS.LEASE_FINANCING_PAYMENTS_MANAGE).add(PERMISSIONS.LEASE_FINANCING_DASHBOARD_VIEW);
     }
     if (r('shop_manager') || r('service_writer')) {
       set.add(PERMISSIONS.DASHBOARD_VIEW).add(PERMISSIONS.MAINTENANCE_VIEW).add(PERMISSIONS.WORK_ORDERS_VIEW).add(PERMISSIONS.WORK_ORDERS_CREATE).add(PERMISSIONS.WORK_ORDERS_EDIT).add(PERMISSIONS.WORK_ORDERS_FINALIZE);
@@ -287,6 +302,18 @@ export class AccessControlService {
     ) {
       return true;
     }
+    if (
+      code.startsWith('lease.financing.')
+      && this.hasAnyRole(['carrier_accountant', 'accounting', 'company_accountant', 'finance_manager'])
+    ) {
+      return true;
+    }
+    if (
+      code.startsWith('ifta.')
+      && this.hasAnyRole(['carrier_accountant', 'accounting', 'company_accountant', 'finance_manager'])
+    ) {
+      return true;
+    }
     return false;
   }
 
@@ -365,6 +392,15 @@ export class AccessControlService {
   /** Whether current user has any location restriction (false = can see all locations). */
   hasLocationRestriction(): boolean {
     return this.getAllowedLocationIds().length > 0;
+  }
+
+  hasFeatureAccess(featureKey: string): boolean {
+    const normalized = String(featureKey || '').trim().toLowerCase();
+    if (!normalized) return false;
+    const allowedPlans = FEATURE_PLAN_ACCESS[normalized];
+    if (!allowedPlans?.length) return true;
+    const planId = String(this.getSubscriptionPlanId() || '').trim().toLowerCase();
+    return allowedPlans.includes(planId);
   }
 
   canAccessUrl(url: string): boolean {

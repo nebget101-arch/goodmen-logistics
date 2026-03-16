@@ -8,6 +8,9 @@ const {
   computeLoadPay,
   recalculateSettlementTotals
 } = require('./settlement-calculation');
+const {
+  applyLeaseDeductionForSettlement
+} = require('./lease-financing-service');
 
 const DELIVERED_STATUSES = ['DELIVERED'];
 const SETTLEMENT_NUMBER_PREFIX = 'STL';
@@ -698,6 +701,11 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
       });
     }
   }
+
+  // Apply lease-to-own deduction idempotently for active agreements.
+  await applyLeaseDeductionForSettlement(knex, settlement).catch((err) => {
+    console.warn('[settlement] lease deduction skipped', err?.message || err);
+  });
 
   const loadItems = await knex('settlement_load_items').where({ settlement_id: settlementId });
   const adjustmentItems = await knex('settlement_adjustment_items').where({ settlement_id: settlementId });

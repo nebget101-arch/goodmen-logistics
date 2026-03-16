@@ -1,0 +1,28 @@
+<div class="safety-shell">
+  <header class="safety-header">
+    <div class="safety-title-row">
+      <span class="material-symbols-outlined safety-icon">shield</span>
+      <div>
+        <h1>Claims &amp; Accidents</h1>
+        <p class="safety-subtitle">Manage fleet incidents, insurance claims, follow-up tasks, and reporting.</p>
+      </div>
+    </div>
+  </header>
+
+  <nav class="safety-tabs">
+    <button
+      *ngFor="let tab of tabs"
+      type="button"
+      class="safety-tab"
+      [class.active]="activeTab === tab.path"
+      (click)="navigate(tab)"
+    >
+      <span class="material-symbols-outlined">{{ tab.icon }}</span>
+      <span>{{ tab.label }}</span>
+    </button>
+  </nav>
+
+  <div class="safety-content">
+    <router-outlet></router-outlet>
+  </div>
+</div>

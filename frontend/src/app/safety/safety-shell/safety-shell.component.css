@@ -1,0 +1,68 @@
+/* Safety module shell – dark-tech theme with red/orange safety palette */
+.safety-shell {
+  min-height: calc(100vh - 64px);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(239,68,68,.07), transparent 52%),
+    radial-gradient(circle at 100% 80%, rgba(249,115,22,.08), transparent 52%),
+    #020617;
+  color: #e5e7eb;
+}
+
+.safety-header {
+  padding: 24px clamp(16px,4vw,36px) 0;
+}
+
+.safety-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.safety-icon {
+  font-size: 36px;
+  color: #ef4444;
+}
+
+.safety-title-row h1 {
+  margin: 0 0 4px;
+  font-size: clamp(1.65rem,2.4vw,2rem);
+}
+
+.safety-subtitle {
+  margin: 0;
+  color: #94a3b8;
+  font-size: .9rem;
+}
+
+.safety-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 clamp(16px,4vw,36px);
+  border-bottom: 1px solid rgba(148,163,184,.15);
+  overflow-x: auto;
+}
+
+.safety-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: .88rem;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s;
+}
+
+.safety-tab .material-symbols-outlined { font-size: 18px; }
+.safety-tab:hover { color: #e5e7eb; }
+.safety-tab.active { color: #ef4444; border-bottom-color: #ef4444; }
+
+.safety-content {
+  padding: 28px clamp(16px,4vw,36px);
+}

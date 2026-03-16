@@ -1,0 +1,152 @@
+<div class="claims-page">
+  <div class="page-header">
+    <div>
+      <h2>Claims</h2>
+      <p class="page-sub">{{ total }} total claims</p>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-row">
+    <select class="filter-select" [(ngModel)]="filters.status" (change)="applyFilters()">
+      <option value="">All Statuses</option>
+      <option *ngFor="let s of STATUSES" [value]="s">{{ s | titlecase }}</option>
+    </select>
+    <select class="filter-select" [(ngModel)]="filters.claim_type" (change)="applyFilters()">
+      <option value="">All Claim Types</option>
+      <option *ngFor="let t of CLAIM_TYPES" [value]="t">{{ t | titlecase }}</option>
+    </select>
+    <label class="checkbox-chip">
+      <input type="checkbox" [(ngModel)]="filters.overdue_only" (change)="applyFilters()"> Overdue follow-up only
+    </label>
+    <button type="button" class="btn btn-sm btn-ghost" (click)="clearFilters()">Clear</button>
+  </div>
+
+  <div *ngIf="loading" class="loading-state">Loading claims…</div>
+  <div *ngIf="error" class="alert-error">{{ error }}</div>
+
+  <div class="table-wrap" *ngIf="!loading">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Claim #</th>
+          <th>External #</th>
+          <th>Status</th>
+          <th>Type</th>
+          <th>Carrier</th>
+          <th>Adjuster</th>
+          <th>Reserve</th>
+          <th>Paid</th>
+          <th>Net Loss</th>
+          <th>Follow-up</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="claims.length === 0">
+          <td colspan="11" class="empty-row">No claims found.</td>
+        </tr>
+        <tr *ngFor="let claim of claims" class="data-row" (click)="openClaim(claim)">
+          <td class="claim-num">{{ claim.internal_claim_number }}</td>
+          <td>{{ claim.external_claim_number || '—' }}</td>
+          <td><span class="status-badge" [ngClass]="statusClass(claim.status)">{{ claim.status | titlecase }}</span></td>
+          <td><span class="type-badge" [ngClass]="claimTypeClass(claim.claim_type)">{{ claim.claim_type | titlecase }}</span></td>
+          <td>{{ claim.insurance_carrier || '—' }}</td>
+          <td>{{ claim.adjuster_name || '—' }}</td>
+          <td>{{ claim.reserve_amount ? (claim.reserve_amount | currency:'USD':'symbol':'1.0-0') : '—' }}</td>
+          <td>{{ claim.paid_amount ? (claim.paid_amount | currency:'USD':'symbol':'1.0-0') : '—' }}</td>
+          <td>{{ claim.net_loss_amount ? (claim.net_loss_amount | currency:'USD':'symbol':'1.0-0') : '—' }}</td>
+          <td>{{ claim.next_followup_date ? (claim.next_followup_date | date:'shortDate') : '—' }}</td>
+          <td class="action-cell"><span class="material-symbols-outlined row-arrow">arrow_forward_ios</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" *ngIf="!loading && total > pageSize">
+    <button type="button" class="page-btn" [disabled]="page === 1" (click)="prevPage()">← Prev</button>
+    <span class="page-info">Page {{ page }} of {{ pages }}</span>
+    <button type="button" class="page-btn" [disabled]="page >= pages" (click)="nextPage()">Next →</button>
+  </div>
+</div>
+
+<!-- Claim detail drawer -->
+<div class="drawer-backdrop" *ngIf="selectedClaim" (click)="closeDrawer()"></div>
+<div class="drawer" *ngIf="selectedClaim">
+  <div class="drawer-header">
+    <h3>{{ selectedClaim.internal_claim_number || 'Claim Detail' }}</h3>
+    <button type="button" class="close-btn" (click)="closeDrawer()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <div class="drawer-body">
+    <div class="form-row-2">
+      <div class="form-row">
+        <label>Status</label>
+        <select class="form-input" [(ngModel)]="selectedClaim.status">
+          <option *ngFor="let s of STATUSES" [value]="s">{{ s | titlecase }}</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Claim Type</label>
+        <select class="form-input" [(ngModel)]="selectedClaim.claim_type">
+          <option *ngFor="let t of CLAIM_TYPES" [value]="t">{{ t | titlecase }}</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row"><label>External Claim #</label><input type="text" class="form-input" [(ngModel)]="selectedClaim.external_claim_number"></div>
+    <div class="form-row"><label>Insurance Carrier</label><input type="text" class="form-input" [(ngModel)]="selectedClaim.insurance_carrier"></div>
+
+    <div class="form-row-2">
+      <div class="form-row"><label>Adjuster Name</label><input type="text" class="form-input" [(ngModel)]="selectedClaim.adjuster_name"></div>
+      <div class="form-row"><label>Adjuster Email</label><input type="email" class="form-input" [(ngModel)]="selectedClaim.adjuster_email"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Adjuster Phone</label><input type="text" class="form-input" [(ngModel)]="selectedClaim.adjuster_phone"></div>
+      <div class="form-row"><label>Policy Number</label><input type="text" class="form-input" [(ngModel)]="selectedClaim.policy_number"></div>
+    </div>
+
+    <h4 class="section-title">Financials</h4>
+    <div class="form-row-2">
+      <div class="form-row"><label>Deductible</label><input type="number" class="form-input" [ngModel]="parseMoney(selectedClaim.deductible_amount)" (ngModelChange)="selectedClaim.deductible_amount = $event"></div>
+      <div class="form-row"><label>Reserve</label><input type="number" class="form-input" [ngModel]="parseMoney(selectedClaim.reserve_amount)" (ngModelChange)="selectedClaim.reserve_amount = $event"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Paid</label><input type="number" class="form-input" [ngModel]="parseMoney(selectedClaim.paid_amount)" (ngModelChange)="selectedClaim.paid_amount = $event"></div>
+      <div class="form-row"><label>Recovery</label><input type="number" class="form-input" [ngModel]="parseMoney(selectedClaim.recovery_amount)" (ngModelChange)="selectedClaim.recovery_amount = $event"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Settlement</label><input type="number" class="form-input" [ngModel]="parseMoney(selectedClaim.settlement_amount)" (ngModelChange)="selectedClaim.settlement_amount = $event"></div>
+      <div class="form-row"><label>Net Loss</label><input type="number" class="form-input" [ngModel]="parseMoney(selectedClaim.net_loss_amount)" (ngModelChange)="selectedClaim.net_loss_amount = $event"></div>
+    </div>
+
+    <h4 class="section-title">Flags & Dates</h4>
+    <div class="flags-row">
+      <label class="checkbox-label"><input type="checkbox" [(ngModel)]="selectedClaim.coverage_verified"> Coverage verified</label>
+      <label class="checkbox-label"><input type="checkbox" [(ngModel)]="selectedClaim.liability_accepted"> Liability accepted</label>
+      <label class="checkbox-label"><input type="checkbox" [(ngModel)]="selectedClaim.litigation_flag"> Litigation flag</label>
+    </div>
+
+    <div class="form-row"><label>Attorney Assigned</label><input type="text" class="form-input" [(ngModel)]="selectedClaim.attorney_assigned"></div>
+
+    <div class="form-row-2">
+      <div class="form-row"><label>Opened Date</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.opened_date"></div>
+      <div class="form-row"><label>Submitted Date</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.submitted_date"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Closed Date</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.closed_date"></div>
+      <div class="form-row"><label>Next Follow-up</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.next_followup_date"></div>
+    </div>
+    <div class="form-row"><label>Last Contacted</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.last_contacted_date"></div>
+
+    <div class="form-row"><label>Notes</label><textarea class="form-input form-textarea" rows="4" [(ngModel)]="selectedClaim.notes"></textarea></div>
+  </div>
+
+  <div class="drawer-footer">
+    <button type="button" class="btn btn-secondary" (click)="closeDrawer()">Cancel</button>
+    <button type="button" class="btn btn-danger" [disabled]="saving" (click)="saveClaim()">{{ saving ? 'Saving…' : 'Save Claim' }}</button>
+  </div>
+</div>

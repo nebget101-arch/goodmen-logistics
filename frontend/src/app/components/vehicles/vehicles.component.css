@@ -1042,6 +1042,112 @@
   font-weight: 600;
 }
 
+.vehicles-details-modal .safety-history-section {
+  border-left-color: rgba(239, 68, 68, 0.7);
+}
+
+.vehicles-details-modal .safety-history-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.vehicles-details-modal .safety-kpi {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.vehicles-details-modal .safety-kpi-label {
+  display: block;
+  color: var(--text-light);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.vehicles-details-modal .safety-kpi-value {
+  display: block;
+  color: #f8fafc;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.vehicles-details-modal .safety-history-meta {
+  margin-top: 8px;
+  color: var(--text-light);
+  font-size: 12px;
+}
+
+.vehicles-details-modal .safety-history-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vehicles-details-modal .safety-history-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.vehicles-details-modal .safety-incident-number {
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.vehicles-details-modal .safety-incident-date {
+  color: var(--text-light);
+  font-size: 12px;
+}
+
+.vehicles-details-modal .safety-incident-status {
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.vehicles-details-modal .safety-status-open {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.vehicles-details-modal .safety-status-closed {
+  background: rgba(148, 163, 184, 0.22);
+  color: #cbd5e1;
+}
+
+.vehicles-details-modal .safety-history-loading,
+.vehicles-details-modal .safety-history-error {
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+.vehicles-details-modal .safety-history-error {
+  color: #fca5a5;
+}
+
+.vehicles-details-modal .safety-history-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: #93c5fd;
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.vehicles-details-modal .safety-history-link:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 768px) {
   .vehicles-details-modal .details-grid {
     grid-template-columns: 1fr;
@@ -1049,5 +1155,9 @@
   .vehicles-details-modal.modal-container {
     width: 95%;
     max-height: 95vh;
+  }
+  .vehicles-details-modal .safety-history-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }
