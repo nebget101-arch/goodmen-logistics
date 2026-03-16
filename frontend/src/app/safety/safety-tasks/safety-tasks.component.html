@@ -1,0 +1,56 @@
+<div class="tasks-page">
+  <div class="page-header">
+    <h2>Follow-up Tasks</h2>
+    <p class="page-sub">Track overdue safety follow-ups and claim actions.</p>
+  </div>
+
+  <div class="filters-row">
+    <label class="checkbox-chip">
+      <input type="checkbox" [(ngModel)]="filters.overdue_only" (change)="load()"> Overdue only
+    </label>
+    <select class="filter-select" [(ngModel)]="filters.status" (change)="load()">
+      <option value="">All statuses</option>
+      <option value="open">Open</option>
+      <option value="in_progress">In progress</option>
+      <option value="completed">Completed</option>
+      <option value="overdue">Overdue</option>
+    </select>
+    <input class="filter-input" type="text" placeholder="Assigned to (user id)" [(ngModel)]="filters.assigned_to" (keyup.enter)="load()">
+    <button type="button" class="btn btn-sm btn-secondary" (click)="load()">Apply</button>
+    <button type="button" class="btn btn-sm btn-ghost" (click)="clearFilters()">Clear</button>
+  </div>
+
+  <div *ngIf="loading" class="loading-state">Loading tasks…</div>
+  <div *ngIf="error" class="alert-error">{{ error }}</div>
+
+  <div class="task-list" *ngIf="!loading">
+    <div *ngIf="tasks.length === 0" class="empty-state">No tasks match your filters.</div>
+
+    <div *ngFor="let task of tasks" class="task-card" [class.task-completed-card]="task.status === 'completed'">
+      <div class="task-header">
+        <span class="task-status" [ngClass]="statusClass(task.status)">{{ task.status | titlecase }}</span>
+        <span class="task-title">{{ task.title }}</span>
+        <span class="incident-ref">{{ task.incident_number }}</span>
+      </div>
+
+      <div class="task-meta">
+        <span>Type: {{ task.incident_type | titlecase }}</span>
+        <span [ngClass]="dueClass(task)">Due: {{ task.due_date ? (task.due_date | date:'shortDate') : 'N/A' }}</span>
+      </div>
+
+      <p class="task-desc" *ngIf="task.description">{{ task.description }}</p>
+
+      <div class="task-actions">
+        <button
+          type="button"
+          class="btn btn-sm btn-primary"
+          *ngIf="task.status !== 'completed'"
+          (click)="markCompleted(task)"
+        >
+          <span class="material-symbols-outlined">task_alt</span>
+          Mark completed
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

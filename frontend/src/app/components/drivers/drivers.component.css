@@ -573,8 +573,140 @@
   gap: 6px;
 }
 
+.drivers-dashboard .safety-history-widget {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 12px;
+  background: radial-gradient(circle at 0 0, rgba(239, 68, 68, 0.12), transparent 56%), rgba(15, 23, 42, 0.9);
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.drivers-dashboard .safety-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.drivers-dashboard .safety-history-header h4 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: #f1f5f9;
+}
+
+.drivers-dashboard .safety-history-link {
+  color: #93c5fd;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.drivers-dashboard .safety-history-link:hover {
+  text-decoration: underline;
+}
+
+.drivers-dashboard .safety-history-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.drivers-dashboard .safety-kpi {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(30, 41, 59, 0.55);
+}
+
+.drivers-dashboard .safety-kpi-label {
+  display: block;
+  color: var(--text-light);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.drivers-dashboard .safety-kpi-value {
+  display: block;
+  color: #f8fafc;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.drivers-dashboard .safety-history-meta {
+  margin-top: 8px;
+  color: var(--text-light);
+  font-size: 12px;
+}
+
+.drivers-dashboard .safety-history-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drivers-dashboard .safety-history-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.drivers-dashboard .safety-incident-number {
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.drivers-dashboard .safety-incident-date {
+  color: var(--text-light);
+  font-size: 12px;
+}
+
+.drivers-dashboard .safety-incident-status {
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.drivers-dashboard .safety-status-open {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.drivers-dashboard .safety-status-closed {
+  background: rgba(148, 163, 184, 0.22);
+  color: #cbd5e1;
+}
+
+.drivers-dashboard .safety-history-loading,
+.drivers-dashboard .safety-history-error {
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+.drivers-dashboard .safety-history-error {
+  color: #fca5a5;
+}
+
 @media (max-width: 768px) {
   .drivers-dashboard .dqf-grid-2 {
     grid-template-columns: 1fr;
+  }
+
+  .drivers-dashboard .safety-history-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }

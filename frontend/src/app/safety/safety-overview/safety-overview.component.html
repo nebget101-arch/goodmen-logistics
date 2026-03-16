@@ -1,0 +1,82 @@
+<div *ngIf="loading" class="loading-state">Loading safety overview…</div>
+<div *ngIf="error" class="alert-error">{{ error }}</div>
+
+<ng-container *ngIf="!loading && overview">
+  <!-- KPI cards -->
+  <div class="kpi-row">
+    <div class="kpi-card kpi-danger" [class.kpi-warn]="overview!.openIncidents > 0" (click)="goToAccidents()" style="cursor:pointer">
+      <span class="material-symbols-outlined kpi-icon">car_crash</span>
+      <span class="kpi-label">Open Incidents</span>
+      <span class="kpi-value">{{ overview!.openIncidents }}</span>
+      <span class="kpi-sub">Click to view all</span>
+    </div>
+    <div class="kpi-card" [class.kpi-warn]="overview!.openClaims > 0" (click)="goToClaims()" style="cursor:pointer">
+      <span class="material-symbols-outlined kpi-icon">description</span>
+      <span class="kpi-label">Open Claims</span>
+      <span class="kpi-value">{{ overview!.openClaims }}</span>
+      <span class="kpi-sub">Click to view all</span>
+    </div>
+    <div class="kpi-card" [class.kpi-warn]="overview!.overdueFollowUps > 0" (click)="goToTasks()" style="cursor:pointer">
+      <span class="material-symbols-outlined kpi-icon">event_busy</span>
+      <span class="kpi-label">Overdue Follow-ups</span>
+      <span class="kpi-value">{{ overview!.overdueFollowUps }}</span>
+      <span class="kpi-sub">Click to manage tasks</span>
+    </div>
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon">trending_down</span>
+      <span class="kpi-label">Total Est. Loss</span>
+      <span class="kpi-value">{{ fmt(overview!.totalEstimatedLoss) }}</span>
+      <span class="kpi-sub">All open incidents</span>
+    </div>
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon">payments</span>
+      <span class="kpi-label">Total Paid (Claims)</span>
+      <span class="kpi-value">{{ fmt(overview!.totalPaid) }}</span>
+      <span class="kpi-sub">All claims</span>
+    </div>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="action-row">
+    <button type="button" class="btn btn-danger" (click)="newIncident()">
+      <span class="material-symbols-outlined">add</span> New Incident
+    </button>
+    <button type="button" class="btn btn-secondary" (click)="load()">
+      <span class="material-symbols-outlined">refresh</span> Refresh
+    </button>
+  </div>
+
+  <!-- Info panels -->
+  <div class="info-panels">
+    <div class="info-panel">
+      <h3>Quick Reference</h3>
+      <ul class="ref-list">
+        <li><span class="material-symbols-outlined">info</span> DOT recordable incidents require filing within 30 days</li>
+        <li><span class="material-symbols-outlined">warning</span> HAZMAT incidents require immediate notification</li>
+        <li><span class="material-symbols-outlined">gavel</span> Litigation-risk incidents should have counsel notified</li>
+        <li><span class="material-symbols-outlined">task_alt</span> Preventable incidents require corrective action documentation</li>
+      </ul>
+    </div>
+    <div class="info-panel">
+      <h3>Navigate</h3>
+      <div class="nav-quick-links">
+        <button type="button" class="nav-quick-link" (click)="goToAccidents()">
+          <span class="material-symbols-outlined">car_crash</span>
+          <span>Accidents &amp; Incidents</span>
+        </button>
+        <button type="button" class="nav-quick-link" (click)="goToClaims()">
+          <span class="material-symbols-outlined">description</span>
+          <span>Insurance Claims</span>
+        </button>
+        <button type="button" class="nav-quick-link" (click)="goToTasks()">
+          <span class="material-symbols-outlined">checklist</span>
+          <span>Follow-up Tasks</span>
+        </button>
+        <button type="button" class="nav-quick-link" [routerLink]="['/safety/reports']">
+          <span class="material-symbols-outlined">analytics</span>
+          <span>Reports</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</ng-container>

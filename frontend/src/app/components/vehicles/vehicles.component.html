@@ -384,6 +384,53 @@
             <span class="detail-value">{{ selectedVehicleDetails.next_pm_mileage ? (selectedVehicleDetails.next_pm_mileage | number:'1.0-0') : 'N/A' }} miles</span>
           </div>
         </div>
+
+        <!-- Safety history summary -->
+        <div class="detail-section safety-history-section">
+          <h3 class="section-title">Accident History Summary</h3>
+
+          <div *ngIf="equipmentSafetyLoading" class="safety-history-loading">Loading accident history…</div>
+          <div *ngIf="equipmentSafetyError" class="safety-history-error">{{ equipmentSafetyError }}</div>
+
+          <ng-container *ngIf="!equipmentSafetyLoading && !equipmentSafetyError">
+            <div class="safety-history-kpis">
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">Total</span>
+                <span class="safety-kpi-value">{{ equipmentSafetySummary.totalIncidents }}</span>
+              </div>
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">Open</span>
+                <span class="safety-kpi-value">{{ equipmentSafetySummary.openIncidents }}</span>
+              </div>
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">Preventable</span>
+                <span class="safety-kpi-value">{{ equipmentSafetySummary.preventableIncidents }}</span>
+              </div>
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">DOT</span>
+                <span class="safety-kpi-value">{{ equipmentSafetySummary.dotRecordableIncidents }}</span>
+              </div>
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">Est. Loss</span>
+                <span class="safety-kpi-value">{{ equipmentSafetySummary.totalEstimatedLoss | currency:'USD':'symbol':'1.0-0' }}</span>
+              </div>
+            </div>
+
+            <div class="safety-history-meta" *ngIf="equipmentSafetySummary.lastIncidentDate">
+              Last incident: {{ equipmentSafetySummary.lastIncidentDate | date:'mediumDate' }}
+            </div>
+
+            <div class="safety-history-list" *ngIf="equipmentSafetySummary.recentIncidents.length > 0">
+              <div class="safety-history-item" *ngFor="let inc of equipmentSafetySummary.recentIncidents">
+                <span class="safety-incident-number">{{ inc.incident_number }}</span>
+                <span class="safety-incident-date">{{ inc.incident_date | date:'shortDate' }}</span>
+                <span class="safety-incident-status" [ngClass]="safetyStatusClass(inc.status)">{{ inc.status | titlecase }}</span>
+              </div>
+            </div>
+
+            <a class="safety-history-link" href="/safety/accidents" target="_blank" rel="noopener">Open Safety Module</a>
+          </ng-container>
+        </div>
       </div>
 
       <div class="modal-actions">

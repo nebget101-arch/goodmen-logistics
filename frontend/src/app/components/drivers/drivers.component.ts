@@ -74,6 +74,26 @@ export class DriversComponent implements OnInit, OnDestroy {
   highlightDriverId: string | null = null;
   activeOperatingEntityName = '';
 
+  driverSafetyLoading = false;
+  driverSafetyError = '';
+  driverSafetySummary: {
+    totalIncidents: number;
+    openIncidents: number;
+    preventableIncidents: number;
+    dotRecordableIncidents: number;
+    totalEstimatedLoss: number;
+    lastIncidentDate: string | null;
+    recentIncidents: any[];
+  } = {
+    totalIncidents: 0,
+    openIncidents: 0,
+    preventableIncidents: 0,
+    dotRecordableIncidents: 0,
+    totalEstimatedLoss: 0,
+    lastIncidentDate: null,
+    recentIncidents: []
+  };
+
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
 
@@ -406,6 +426,7 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.editingDriver = null;
     this.loadDQFStatus(driver);
     this.loadDriverDocuments(driver.id);
+    this.loadDriverSafetySummary(driver.id);
   }
 
   loadDriverDocuments(driverId: string): void {
@@ -535,6 +556,52 @@ export class DriversComponent implements OnInit, OnDestroy {
   closeDQFForm(): void {
     this.showDQFForm = false;
     this.selectedDriver = null;
+    this.driverSafetyError = '';
+    this.driverSafetySummary = {
+      totalIncidents: 0,
+      openIncidents: 0,
+      preventableIncidents: 0,
+      dotRecordableIncidents: 0,
+      totalEstimatedLoss: 0,
+      lastIncidentDate: null,
+      recentIncidents: []
+    };
+  }
+
+  loadDriverSafetySummary(driverId: string): void {
+    if (!driverId) return;
+    this.driverSafetyLoading = true;
+    this.driverSafetyError = '';
+
+    this.apiService.getSafetyIncidents({ driver_id: driverId, page: 1, pageSize: 100 }).subscribe({
+      next: (resp: any) => {
+        const incidents = Array.isArray(resp?.data) ? resp.data : [];
+        const sorted = [...incidents].sort((a: any, b: any) => {
+          const aTime = new Date(a?.incident_date || 0).getTime();
+          const bTime = new Date(b?.incident_date || 0).getTime();
+          return bTime - aTime;
+        });
+
+        this.driverSafetySummary = {
+          totalIncidents: incidents.length,
+          openIncidents: incidents.filter((i: any) => i?.status && i.status !== 'closed').length,
+          preventableIncidents: incidents.filter((i: any) => i?.preventability === 'preventable').length,
+          dotRecordableIncidents: incidents.filter((i: any) => !!i?.dot_recordable).length,
+          totalEstimatedLoss: incidents.reduce((sum: number, i: any) => sum + Number(i?.estimated_loss_amount || 0), 0),
+          lastIncidentDate: sorted[0]?.incident_date || null,
+          recentIncidents: sorted.slice(0, 3)
+        };
+        this.driverSafetyLoading = false;
+      },
+      error: () => {
+        this.driverSafetyError = 'Unable to load accident history summary.';
+        this.driverSafetyLoading = false;
+      }
+    });
+  }
+
+  safetyStatusClass(status: string): string {
+    return status === 'closed' ? 'safety-status-closed' : 'safety-status-open';
   }
 
   loadDQFStatus(driver: any): void {

@@ -203,6 +203,29 @@ export const PERMISSIONS = {
   TOLLS_TRANSACTIONS_EDIT: 'tolls.transactions.edit',
   TOLLS_EXCEPTIONS_RESOLVE: 'tolls.exceptions.resolve',
   TOLLS_REPORTS_VIEW: 'tolls.reports.view',
+
+  // Lease-to-own financing module
+  LEASE_FINANCING_VIEW: 'lease.financing.view',
+  LEASE_FINANCING_CREATE: 'lease.financing.create',
+  LEASE_FINANCING_EDIT: 'lease.financing.edit',
+  LEASE_FINANCING_ACTIVATE: 'lease.financing.activate',
+  LEASE_FINANCING_TERMINATE: 'lease.financing.terminate',
+  LEASE_FINANCING_PAYMENTS_MANAGE: 'lease.financing.payments.manage',
+  LEASE_FINANCING_DASHBOARD_VIEW: 'lease.financing.dashboard.view',
+  LEASE_FINANCING_DRIVER_VIEW: 'lease.financing.driver.view',
+
+  // Safety – Claims & Accidents module
+  SAFETY_INCIDENTS_VIEW: 'safety.incidents.view',
+  SAFETY_INCIDENTS_CREATE: 'safety.incidents.create',
+  SAFETY_INCIDENTS_EDIT: 'safety.incidents.edit',
+  SAFETY_INCIDENTS_CLOSE: 'safety.incidents.close',
+  SAFETY_CLAIMS_VIEW: 'safety.claims.view',
+  SAFETY_CLAIMS_CREATE: 'safety.claims.create',
+  SAFETY_CLAIMS_EDIT: 'safety.claims.edit',
+  SAFETY_CLAIMS_FINANCIALS_VIEW: 'safety.claims.financials.view',
+  SAFETY_CLAIMS_FINANCIALS_EDIT: 'safety.claims.financials.edit',
+  SAFETY_DOCUMENTS_UPLOAD: 'safety.documents.upload',
+  SAFETY_REPORTS_VIEW: 'safety.reports.view',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
@@ -234,4 +257,12 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
   users_create: [PERMISSIONS.USERS_CREATE, PERMISSIONS.USERS_VIEW],
   fuel: [PERMISSIONS.FUEL_VIEW, PERMISSIONS.FUEL_IMPORT, PERMISSIONS.FUEL_CARDS_MANAGE, PERMISSIONS.FUEL_REPORTS_VIEW],
   tolls: [PERMISSIONS.TOLLS_VIEW, PERMISSIONS.TOLLS_IMPORT, PERMISSIONS.TOLLS_ACCOUNTS_MANAGE, PERMISSIONS.TOLLS_REPORTS_VIEW],
+  lease_financing: [
+    PERMISSIONS.LEASE_FINANCING_VIEW,
+    PERMISSIONS.LEASE_FINANCING_CREATE,
+    PERMISSIONS.LEASE_FINANCING_EDIT,
+    PERMISSIONS.LEASE_FINANCING_DASHBOARD_VIEW,
+    PERMISSIONS.LEASE_FINANCING_DRIVER_VIEW,
+  ],
+  safety_claims: [PERMISSIONS.SAFETY_INCIDENTS_VIEW, PERMISSIONS.SAFETY_CLAIMS_VIEW, PERMISSIONS.SAFETY_REPORTS_VIEW],
 };

@@ -1152,6 +1152,83 @@ export class ApiService {
     });
   }
 
+  // Safety: Claims & Accidents
+  getSafetyOverview(): Observable<any> {
+    return this.http.get(`${this.baseUrl}/safety/overview`);
+  }
+
+  getSafetyIncidents(filters?: Record<string, any>): Observable<any> {
+    const params = new URLSearchParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.set(key, String(value));
+      }
+    });
+    const query = params.toString();
+    const url = query ? `${this.baseUrl}/safety/incidents?${query}` : `${this.baseUrl}/safety/incidents`;
+    return this.http.get(url);
+  }
+
+  createSafetyIncident(payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/safety/incidents`, payload);
+  }
+
+  getSafetyIncidentById(id: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/safety/incidents/${id}`);
+  }
+
+  updateSafetyIncident(id: string, payload: any): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/safety/incidents/${id}`, payload);
+  }
+
+  closeSafetyIncident(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/safety/incidents/${id}`);
+  }
+
+  getSafetyClaims(filters?: Record<string, any>): Observable<any> {
+    const params = new URLSearchParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.set(key, String(value));
+      }
+    });
+    const query = params.toString();
+    const url = query ? `${this.baseUrl}/safety/claims?${query}` : `${this.baseUrl}/safety/claims`;
+    return this.http.get(url);
+  }
+
+  getSafetyClaimById(id: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/safety/claims/${id}`);
+  }
+
+  updateSafetyClaim(id: string, payload: any): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/safety/claims/${id}`, payload);
+  }
+
+  getSafetyTasks(filters?: Record<string, any>): Observable<any> {
+    const params = new URLSearchParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.set(key, String(value));
+      }
+    });
+    const query = params.toString();
+    const url = query ? `${this.baseUrl}/safety/tasks?${query}` : `${this.baseUrl}/safety/tasks`;
+    return this.http.get(url);
+  }
+
+  getSafetyReports(filters?: Record<string, any>): Observable<any> {
+    const params = new URLSearchParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.set(key, String(value));
+      }
+    });
+    const query = params.toString();
+    const url = query ? `${this.baseUrl}/safety/reports?${query}` : `${this.baseUrl}/safety/reports`;
+    return this.http.get(url);
+  }
+
   // AI-powered helpers
   triageWorkOrder(payload: {
     description: string;

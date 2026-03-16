@@ -182,6 +182,7 @@ export class AppComponent implements OnInit {
 
   /** Whether a section child link should be visible (optional role filter). */
   canSeeLink(link: NavLink): boolean {
+    if (link.featureFlag && !this.access.hasFeatureAccess(link.featureFlag)) return false;
     if (!this.access.canSee(link.tab)) return false;
     if (link.roles?.length) return this.access.hasAnyRole(link.roles);
     return this.access.canAccessUrl(link.path);

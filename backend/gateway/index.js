@@ -139,6 +139,7 @@ app.use(
 );
 app.use('/api/employment', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
 app.use('/api/roadside', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
+app.use('/api/safety', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
 app.use(
   '/public/onboarding',
   buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
@@ -187,6 +188,8 @@ app.use(
 );
 app.use('/api/fuel', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/tolls', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/lease-agreements', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/lease-financing', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/loads', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/brokers', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/locations', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));

@@ -1,0 +1,124 @@
+<div class="reports-page">
+  <div class="page-header">
+    <h2>Safety Reports</h2>
+    <p class="page-sub">Trend and cost visibility for incidents and claims.</p>
+  </div>
+
+  <div class="filters-row">
+    <div class="form-row-inline">
+      <label>From</label>
+      <input type="date" class="filter-input" [(ngModel)]="filters.dateFrom">
+    </div>
+    <div class="form-row-inline">
+      <label>To</label>
+      <input type="date" class="filter-input" [(ngModel)]="filters.dateTo">
+    </div>
+    <button type="button" class="btn btn-sm btn-secondary" (click)="load()">Apply</button>
+    <button type="button" class="btn btn-sm btn-ghost" (click)="clearFilters()">Clear</button>
+  </div>
+
+  <div *ngIf="loading" class="loading-state">Loading reports…</div>
+  <div *ngIf="error" class="alert-error">{{ error }}</div>
+
+  <ng-container *ngIf="!loading && reports">
+    <div class="report-grid">
+      <section class="report-card">
+        <div class="card-head">
+          <h3>Incidents by Month</h3>
+        </div>
+        <table class="mini-table">
+          <thead><tr><th>Month</th><th>Count</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let r of reports.incidentsByMonth">
+              <td>{{ r.month }}</td>
+              <td>{{ r.count }}</td>
+            </tr>
+            <tr *ngIf="(reports.incidentsByMonth || []).length === 0"><td colspan="2" class="empty-cell">No data</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="report-card">
+        <h3>Claims by Status</h3>
+        <table class="mini-table">
+          <thead><tr><th>Status</th><th>Count</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let r of reports.claimsByStatus">
+              <td>{{ r.status | titlecase }}</td>
+              <td>{{ r.count }}</td>
+            </tr>
+            <tr *ngIf="(reports.claimsByStatus || []).length === 0"><td colspan="2" class="empty-cell">No data</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="report-card">
+        <h3>Preventable vs Non-Preventable</h3>
+        <table class="mini-table">
+          <thead><tr><th>Type</th><th>Count</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let r of reports.preventability">
+              <td>{{ r.preventability | titlecase }}</td>
+              <td>{{ r.count }}</td>
+            </tr>
+            <tr *ngIf="(reports.preventability || []).length === 0"><td colspan="2" class="empty-cell">No data</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="report-card">
+        <h3>Loss by Claim Type</h3>
+        <table class="mini-table">
+          <thead><tr><th>Claim Type</th><th>Paid</th><th>Loss</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let r of reports.lossByClaimType">
+              <td>{{ r.claim_type | titlecase }}</td>
+              <td>{{ (r.total_paid || 0) | currency:'USD':'symbol':'1.0-0' }}</td>
+              <td>{{ (r.total_loss || 0) | currency:'USD':'symbol':'1.0-0' }}</td>
+            </tr>
+            <tr *ngIf="(reports.lossByClaimType || []).length === 0"><td colspan="3" class="empty-cell">No data</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="report-card full">
+        <div class="card-head">
+          <h3>Top Cost Incidents</h3>
+          <button type="button" class="btn btn-sm btn-secondary" (click)="exportTopCostCsv()">Export CSV</button>
+        </div>
+        <table class="mini-table">
+          <thead><tr><th>Incident #</th><th>Date</th><th>Type</th><th>Estimated Loss</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let r of reports.topCostIncidents">
+              <td>{{ r.incident_number }}</td>
+              <td>{{ r.incident_date | date:'shortDate' }}</td>
+              <td>{{ r.incident_type | titlecase }}</td>
+              <td>{{ r.estimated_loss_amount | currency:'USD':'symbol':'1.0-0' }}</td>
+            </tr>
+            <tr *ngIf="(reports.topCostIncidents || []).length === 0"><td colspan="4" class="empty-cell">No data</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="report-card full">
+        <div class="card-head">
+          <h3>Claim Aging</h3>
+          <button type="button" class="btn btn-sm btn-secondary" (click)="exportClaimAgingCsv()">Export CSV</button>
+        </div>
+        <table class="mini-table">
+          <thead><tr><th>Claim #</th><th>Status</th><th>Type</th><th>Opened</th><th>Carrier</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let r of reports.claimAging">
+              <td>{{ r.internal_claim_number }}</td>
+              <td>{{ r.status | titlecase }}</td>
+              <td>{{ r.claim_type | titlecase }}</td>
+              <td>{{ r.opened_date ? (r.opened_date | date:'shortDate') : '—' }}</td>
+              <td>{{ r.insurance_carrier || '—' }}</td>
+            </tr>
+            <tr *ngIf="(reports.claimAging || []).length === 0"><td colspan="5" class="empty-cell">No data</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </ng-container>
+</div>

@@ -1,0 +1,371 @@
+<div *ngIf="loading" class="loading-state">Loading incident…</div>
+<div *ngIf="error" class="alert-error">{{ error }}</div>
+
+<ng-container *ngIf="!loading && incident">
+  <!-- Top bar -->
+  <div class="detail-topbar">
+    <button type="button" class="back-btn" (click)="back()">
+      <span class="material-symbols-outlined">arrow_back</span> Accidents
+    </button>
+    <div class="detail-title-area">
+      <h2>{{ incident.incident_number }}</h2>
+      <span class="status-badge" [ngClass]="statusClass(incident.status)">{{ incident.status | titlecase }}</span>
+      <span class="sev-badge" [ngClass]="severityClass(incident.severity)" *ngIf="incident.severity">{{ incident.severity | titlecase }}</span>
+      <span class="dot-chip" *ngIf="incident.dot_recordable">DOT Recordable</span>
+      <span class="hazmat-chip" *ngIf="incident.hazmat_involved">HAZMAT</span>
+      <span class="lit-chip" *ngIf="incident.litigation_risk">Litigation Risk</span>
+    </div>
+    <div class="detail-actions">
+      <button type="button" class="btn btn-sm btn-secondary" *ngIf="!editMode && incident.status !== 'closed'" (click)="startEdit()">
+        <span class="material-symbols-outlined">edit</span> Edit
+      </button>
+      <button type="button" class="btn btn-sm btn-ghost" *ngIf="incident.status !== 'closed'" (click)="closeIncident()">
+        <span class="material-symbols-outlined">lock</span> Close Incident
+      </button>
+    </div>
+  </div>
+
+  <!-- Inner tabs -->
+  <nav class="inner-tabs">
+    <button *ngFor="let tab of tabs" type="button" class="inner-tab" [class.active]="activeTab === tab.key" (click)="loadTab(tab.key)">
+      <span class="material-symbols-outlined">{{ tab.icon }}</span>{{ tab.label }}
+    </button>
+  </nav>
+
+  <!-- ─ SUMMARY tab ─ -->
+  <div *ngIf="activeTab === 'summary'" class="tab-content">
+    <div *ngIf="saveError" class="alert-error">{{ saveError }}</div>
+
+    <ng-container *ngIf="!editMode">
+      <div class="detail-grid">
+        <div class="detail-field"><span class="field-label">Incident Type</span><span class="field-val">{{ incident.incident_type | titlecase }}</span></div>
+        <div class="detail-field"><span class="field-label">Date</span><span class="field-val">{{ incident.incident_date | date:'medium' }}</span></div>
+        <div class="detail-field"><span class="field-label">Preventability</span><span class="field-val">{{ incident.preventability | titlecase }}</span></div>
+        <div class="detail-field"><span class="field-label">Est. Loss</span><span class="field-val">{{ incident.estimated_loss_amount | currency:'USD':'symbol':'1.0-0' }}</span></div>
+        <div class="detail-field"><span class="field-label">Police Report #</span><span class="field-val">{{ incident.police_report_number || '—' }}</span></div>
+        <div class="detail-field"><span class="field-label">Police Dept.</span><span class="field-val">{{ incident.police_department || '—' }}</span></div>
+        <div class="detail-field"><span class="field-label">Close Date</span><span class="field-val">{{ incident.close_date ? (incident.close_date | date:'mediumDate') : '—' }}</span></div>
+      </div>
+      <div class="detail-section" *ngIf="incident.narrative">
+        <h4>Narrative</h4>
+        <p class="narrative-text">{{ incident.narrative }}</p>
+      </div>
+      <div class="detail-section" *ngIf="incident.internal_summary">
+        <h4>Internal Summary</h4>
+        <p class="narrative-text">{{ incident.internal_summary }}</p>
+      </div>
+      <div class="detail-section" *ngIf="incident.root_cause || incident.corrective_action">
+        <h4>Investigation</h4>
+        <div class="detail-grid" *ngIf="incident.root_cause">
+          <div class="detail-field full"><span class="field-label">Root Cause</span><p class="narrative-text">{{ incident.root_cause }}</p></div>
+        </div>
+        <div class="detail-grid" *ngIf="incident.corrective_action">
+          <div class="detail-field full"><span class="field-label">Corrective Action</span><p class="narrative-text">{{ incident.corrective_action }}</p></div>
+        </div>
+      </div>
+      <!-- Notes -->
+      <div class="detail-section">
+        <h4>Notes</h4>
+        <div class="note-composer">
+          <select class="form-input form-input-sm" [(ngModel)]="noteType">
+            <option *ngFor="let t of NOTE_TYPES" [value]="t">{{ t | titlecase }}</option>
+          </select>
+          <textarea class="form-input note-input" [(ngModel)]="newNote" rows="2" placeholder="Add a note…"></textarea>
+          <button type="button" class="btn btn-sm btn-primary" (click)="addNote()" [disabled]="!newNote.trim()">Add Note</button>
+        </div>
+        <div *ngFor="let note of notes" class="note-card">
+          <div class="note-header">
+            <span class="note-type-badge">{{ note.note_type | titlecase }}</span>
+            <span class="note-date">{{ note.created_at | date:'short' }}</span>
+          </div>
+          <p class="note-content">{{ note.content }}</p>
+        </div>
+        <div *ngIf="notes.length === 0" class="empty-hint">No notes yet.</div>
+      </div>
+    </ng-container>
+
+    <!-- Edit form -->
+    <ng-container *ngIf="editMode">
+      <div class="edit-form">
+        <div class="form-row-2">
+          <div class="form-row"><label>Incident Type</label>
+            <select class="form-input" [(ngModel)]="editForm.incident_type">
+              <option *ngFor="let t of TYPES" [value]="t">{{ t | titlecase }}</option>
+            </select>
+          </div>
+          <div class="form-row"><label>Status</label>
+            <select class="form-input" [(ngModel)]="editForm.status">
+              <option *ngFor="let s of STATUSES" [value]="s">{{ s | titlecase }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div class="form-row"><label>Severity</label>
+            <select class="form-input" [(ngModel)]="editForm.severity">
+              <option *ngFor="let s of SEVERITIES" [value]="s">{{ s | titlecase }}</option>
+            </select>
+          </div>
+          <div class="form-row"><label>Preventability</label>
+            <select class="form-input" [(ngModel)]="editForm.preventability">
+              <option *ngFor="let p of PREVENTABILITIES" [value]="p">{{ p | titlecase }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="flags-row">
+          <label class="checkbox-label"><input type="checkbox" [(ngModel)]="editForm.dot_recordable"> DOT Recordable</label>
+          <label class="checkbox-label"><input type="checkbox" [(ngModel)]="editForm.hazmat_involved"> HAZMAT</label>
+          <label class="checkbox-label"><input type="checkbox" [(ngModel)]="editForm.litigation_risk"> Litigation Risk</label>
+        </div>
+        <div class="form-row"><label>Est. Loss Amount ($)</label>
+          <input type="number" class="form-input" [(ngModel)]="editForm.estimated_loss_amount">
+        </div>
+        <div class="form-row-2">
+          <div class="form-row"><label>Police Report #</label><input type="text" class="form-input" [(ngModel)]="editForm.police_report_number"></div>
+          <div class="form-row"><label>Police Department</label><input type="text" class="form-input" [(ngModel)]="editForm.police_department"></div>
+        </div>
+        <div class="form-row"><label>Citation Info</label><input type="text" class="form-input" [(ngModel)]="editForm.citation_info"></div>
+        <div class="form-row"><label>Narrative</label><textarea class="form-input form-textarea" [(ngModel)]="editForm.narrative" rows="4"></textarea></div>
+        <div class="form-row"><label>Internal Summary</label><textarea class="form-input form-textarea" [(ngModel)]="editForm.internal_summary" rows="3"></textarea></div>
+        <div class="form-row"><label>Root Cause</label><textarea class="form-input form-textarea" [(ngModel)]="editForm.root_cause" rows="3"></textarea></div>
+        <div class="form-row"><label>Corrective Action</label><textarea class="form-input form-textarea" [(ngModel)]="editForm.corrective_action" rows="3"></textarea></div>
+        <div class="edit-actions">
+          <button type="button" class="btn btn-ghost" (click)="cancelEdit()">Cancel</button>
+          <button type="button" class="btn btn-primary" [disabled]="saving" (click)="saveEdit()">{{ saving ? 'Saving…' : 'Save Changes' }}</button>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+
+  <!-- ─ SCENE tab ─ -->
+  <div *ngIf="activeTab === 'scene'" class="tab-content">
+    <div class="detail-grid">
+      <div class="detail-field"><span class="field-label">Address</span><span class="field-val">{{ incident.location_address || '—' }}</span></div>
+      <div class="detail-field"><span class="field-label">City</span><span class="field-val">{{ incident.location_city || '—' }}</span></div>
+      <div class="detail-field"><span class="field-label">State</span><span class="field-val">{{ incident.location_state || '—' }}</span></div>
+      <div class="detail-field"><span class="field-label">ZIP</span><span class="field-val">{{ incident.location_zip || '—' }}</span></div>
+      <div class="detail-field"><span class="field-label">Weather</span><span class="field-val">{{ incident.weather_condition || '—' }}</span></div>
+      <div class="detail-field"><span class="field-label">Road Condition</span><span class="field-val">{{ incident.road_condition || '—' }}</span></div>
+      <div class="detail-field"><span class="field-label">Light Condition</span><span class="field-val">{{ incident.light_condition || '—' }}</span></div>
+    </div>
+    <div *ngIf="incident.location_lat && incident.location_lng" class="map-placeholder">
+      <span class="material-symbols-outlined">map</span>
+      <span>{{ incident.location_lat }}, {{ incident.location_lng }}</span>
+    </div>
+  </div>
+
+  <!-- ─ PARTIES tab ─ -->
+  <div *ngIf="activeTab === 'parties'" class="tab-content">
+    <div class="tab-section-header">
+      <h4>Third Parties</h4>
+      <button type="button" class="btn btn-sm btn-secondary" (click)="showPartyForm = !showPartyForm">
+        <span class="material-symbols-outlined">add</span> Add Party
+      </button>
+    </div>
+    <div *ngIf="showPartyForm" class="sub-form">
+      <div class="form-row-2">
+        <div class="form-row"><label>Party Type</label>
+          <select class="form-input" [(ngModel)]="partyForm.party_type">
+            <option *ngFor="let t of PARTY_TYPES" [value]="t">{{ t | titlecase }}</option>
+          </select>
+        </div>
+        <div class="form-row"><label>Name</label><input type="text" class="form-input" [(ngModel)]="partyForm.name"></div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row"><label>Phone</label><input type="text" class="form-input" [(ngModel)]="partyForm.phone"></div>
+        <div class="form-row"><label>Insurance Carrier</label><input type="text" class="form-input" [(ngModel)]="partyForm.insurance_carrier"></div>
+      </div>
+      <div class="form-row"><label>Injury / Property Damage</label><textarea class="form-input form-textarea" [(ngModel)]="partyForm.injury_description" rows="2"></textarea></div>
+      <div class="sub-form-actions">
+        <button type="button" class="btn btn-sm btn-ghost" (click)="showPartyForm = false">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" (click)="addParty()">Add</button>
+      </div>
+    </div>
+    <div *ngFor="let p of parties" class="party-card">
+      <div class="party-card-header">
+        <span class="party-type-badge">{{ p.party_type | titlecase }}</span>
+        <span class="party-name">{{ p.name || '—' }}</span>
+        <button type="button" class="icon-btn" (click)="deleteParty(p.id)"><span class="material-symbols-outlined">delete</span></button>
+      </div>
+      <div class="party-details">
+        <span *ngIf="p.phone">📞 {{ p.phone }}</span>
+        <span *ngIf="p.insurance_carrier">🛡️ {{ p.insurance_carrier }}</span>
+        <span *ngIf="p.policy_number">Policy: {{ p.policy_number }}</span>
+      </div>
+      <p *ngIf="p.injury_description" class="party-injury">{{ p.injury_description }}</p>
+    </div>
+    <div *ngIf="parties.length === 0 && !showPartyForm" class="empty-hint">No third parties recorded.</div>
+
+    <div class="tab-section-header" style="margin-top:24px">
+      <h4>Witnesses</h4>
+      <button type="button" class="btn btn-sm btn-secondary" (click)="showWitnessForm = !showWitnessForm">
+        <span class="material-symbols-outlined">add</span> Add Witness
+      </button>
+    </div>
+    <div *ngIf="showWitnessForm" class="sub-form">
+      <div class="form-row-2">
+        <div class="form-row"><label>Name</label><input type="text" class="form-input" [(ngModel)]="witnessForm.name"></div>
+        <div class="form-row"><label>Phone</label><input type="text" class="form-input" [(ngModel)]="witnessForm.phone"></div>
+      </div>
+      <div class="form-row"><label>Statement</label><textarea class="form-input form-textarea" [(ngModel)]="witnessForm.statement" rows="3"></textarea></div>
+      <div class="sub-form-actions">
+        <button type="button" class="btn btn-sm btn-ghost" (click)="showWitnessForm = false">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" (click)="addWitness()">Add</button>
+      </div>
+    </div>
+    <div *ngFor="let w of witnesses" class="party-card">
+      <div class="party-card-header">
+        <span class="party-name">{{ w.name || '—' }}</span>
+        <button type="button" class="icon-btn" (click)="deleteWitness(w.id)"><span class="material-symbols-outlined">delete</span></button>
+      </div>
+      <p *ngIf="w.statement" class="party-injury">{{ w.statement }}</p>
+    </div>
+    <div *ngIf="witnesses.length === 0 && !showWitnessForm" class="empty-hint">No witnesses recorded.</div>
+  </div>
+
+  <!-- ─ DAMAGE / INJURY tab ─ -->
+  <div *ngIf="activeTab === 'damage'" class="tab-content">
+    <div class="detail-grid">
+      <div class="detail-field full">
+        <span class="field-label">Injury Description</span>
+        <p class="narrative-text">{{ incident.injury_description || 'None reported.' }}</p>
+      </div>
+      <div class="detail-field full">
+        <span class="field-label">Cargo Damage Description</span>
+        <p class="narrative-text">{{ incident.cargo_damage_description || 'None reported.' }}</p>
+      </div>
+      <div class="detail-field">
+        <span class="field-label">Estimated Loss</span>
+        <span class="field-val">{{ incident.estimated_loss_amount | currency:'USD':'symbol':'1.0-0' }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─ DOCUMENTS tab ─ -->
+  <div *ngIf="activeTab === 'documents'" class="tab-content">
+    <div class="upload-row">
+      <select class="form-input form-input-sm" [(ngModel)]="docType">
+        <option *ngFor="let t of DOC_TYPES" [value]="t">{{ t | titlecase }}</option>
+      </select>
+      <input type="file" class="file-input" id="docFileInput" (change)="onDocFileChange($event)">
+      <label for="docFileInput" class="btn btn-sm btn-secondary">
+        <span class="material-symbols-outlined">attach_file</span>
+        {{ docFile ? docFile.name : 'Choose File' }}
+      </label>
+      <button type="button" class="btn btn-sm btn-primary" [disabled]="!docFile || uploadingDoc" (click)="uploadDoc()">
+        {{ uploadingDoc ? 'Uploading…' : 'Upload' }}
+      </button>
+    </div>
+    <div class="doc-list">
+      <div *ngFor="let doc of documents" class="doc-card">
+        <span class="material-symbols-outlined doc-icon">
+          {{ doc.mime_type?.startsWith('image/') ? 'image' : 'description' }}
+        </span>
+        <div class="doc-info">
+          <span class="doc-name">{{ doc.file_name }}</span>
+          <span class="doc-meta">{{ doc.document_type | titlecase }} · {{ doc.created_at | date:'shortDate' }}</span>
+        </div>
+        <button type="button" class="icon-btn" (click)="deleteDoc(doc.id)"><span class="material-symbols-outlined">delete</span></button>
+      </div>
+      <div *ngIf="documents.length === 0" class="empty-hint">No documents uploaded yet.</div>
+    </div>
+  </div>
+
+  <!-- ─ TASKS tab ─ -->
+  <div *ngIf="activeTab === 'tasks'" class="tab-content">
+    <div class="tab-section-header">
+      <h4>Follow-up Tasks</h4>
+      <button type="button" class="btn btn-sm btn-secondary" (click)="showTaskForm = !showTaskForm">
+        <span class="material-symbols-outlined">add</span> Add Task
+      </button>
+    </div>
+    <div *ngIf="showTaskForm" class="sub-form">
+      <div class="form-row"><label>Title *</label><input type="text" class="form-input" [(ngModel)]="taskForm.title"></div>
+      <div class="form-row-2">
+        <div class="form-row"><label>Due Date</label><input type="date" class="form-input" [(ngModel)]="taskForm.due_date"></div>
+      </div>
+      <div class="form-row"><label>Description</label><textarea class="form-input form-textarea" [(ngModel)]="taskForm.description" rows="2"></textarea></div>
+      <div class="sub-form-actions">
+        <button type="button" class="btn btn-sm btn-ghost" (click)="showTaskForm = false">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" (click)="addTask()" [disabled]="!taskForm.title">Add Task</button>
+      </div>
+    </div>
+    <div *ngFor="let task of tasks" class="task-card" [class.task-done-card]="task.status === 'completed'">
+      <div class="task-card-header">
+        <span class="task-badge" [ngClass]="taskStatusClass(task.status)">{{ task.status | titlecase }}</span>
+        <span class="task-title">{{ task.title }}</span>
+        <span class="task-due" *ngIf="task.due_date">Due: {{ task.due_date | date:'shortDate' }}</span>
+      </div>
+      <p *ngIf="task.description" class="task-desc">{{ task.description }}</p>
+      <div class="task-actions">
+        <button *ngIf="task.status !== 'completed'" type="button" class="btn btn-sm btn-ghost" (click)="completeTask(task)">
+          <span class="material-symbols-outlined">check</span> Complete
+        </button>
+        <button type="button" class="btn btn-sm btn-ghost" (click)="deleteTask(task.id)">
+          <span class="material-symbols-outlined">delete</span>
+        </button>
+      </div>
+    </div>
+    <div *ngIf="tasks.length === 0 && !showTaskForm" class="empty-hint">No tasks yet.</div>
+  </div>
+
+  <!-- ─ CLAIMS tab ─ -->
+  <div *ngIf="activeTab === 'claims'" class="tab-content">
+    <div class="tab-section-header">
+      <h4>Linked Insurance Claims</h4>
+      <button type="button" class="btn btn-sm btn-secondary" (click)="showClaimForm = !showClaimForm">
+        <span class="material-symbols-outlined">add</span> New Claim
+      </button>
+    </div>
+    <div *ngIf="showClaimForm" class="sub-form">
+      <div class="form-row-2">
+        <div class="form-row"><label>Claim Type</label>
+          <select class="form-input" [(ngModel)]="claimForm.claim_type">
+            <option *ngFor="let t of CLAIM_TYPES" [value]="t">{{ t | titlecase }}</option>
+          </select>
+        </div>
+        <div class="form-row"><label>Insurance Carrier</label><input type="text" class="form-input" [(ngModel)]="claimForm.insurance_carrier"></div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row"><label>Adjuster Name</label><input type="text" class="form-input" [(ngModel)]="claimForm.adjuster_name"></div>
+        <div class="form-row"><label>Policy Number</label><input type="text" class="form-input" [(ngModel)]="claimForm.policy_number"></div>
+      </div>
+      <div class="form-row"><label>External Claim #</label><input type="text" class="form-input" [(ngModel)]="claimForm.external_claim_number"></div>
+      <div class="sub-form-actions">
+        <button type="button" class="btn btn-sm btn-ghost" (click)="showClaimForm = false">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" [disabled]="savingClaim" (click)="addClaim()">{{ savingClaim ? 'Creating…' : 'Create Claim' }}</button>
+      </div>
+    </div>
+    <div *ngFor="let claim of claims" class="claim-row" (click)="viewClaim(claim.id)">
+      <div class="claim-row-left">
+        <span class="claim-num">{{ claim.internal_claim_number }}</span>
+        <span class="claim-type-badge">{{ claim.claim_type | titlecase }}</span>
+        <span class="status-badge" [ngClass]="claimStatusClass(claim.status)">{{ claim.status | titlecase }}</span>
+      </div>
+      <div class="claim-row-right">
+        <span>{{ claim.insurance_carrier || '—' }}</span>
+        <span class="material-symbols-outlined">arrow_forward_ios</span>
+      </div>
+    </div>
+    <div *ngIf="claims.length === 0 && !showClaimForm" class="empty-hint">No claims linked to this incident.</div>
+  </div>
+
+  <!-- ─ AUDIT LOG tab ─ -->
+  <div *ngIf="activeTab === 'audit'" class="tab-content">
+    <div class="audit-list">
+      <div *ngFor="let entry of auditLog" class="audit-entry">
+        <div class="audit-meta">
+          <span class="audit-action">{{ entry.action | titlecase }}</span>
+          <span class="audit-date">{{ entry.created_at | date:'medium' }}</span>
+          <span class="audit-actor" *ngIf="entry.actor_name">by {{ entry.actor_name }}</span>
+        </div>
+        <div class="audit-change" *ngIf="entry.field_name">
+          <span class="field-label">{{ entry.field_name }}</span>:
+          <span class="old-val">{{ entry.old_value || 'empty' }}</span>
+          <span class="material-symbols-outlined">arrow_forward</span>
+          <span class="new-val">{{ entry.new_value }}</span>
+        </div>
+      </div>
+      <div *ngIf="auditLog.length === 0" class="empty-hint">No audit entries yet.</div>
+    </div>
+  </div>
+</ng-container>

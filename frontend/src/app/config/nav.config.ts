@@ -8,6 +8,8 @@ export interface NavLink {
   icon?: string;
   /** Permission tab key (see TAB_PERMISSIONS in access-control.model) */
   tab: string;
+  /** Optional plan-gated feature key (handled by access-control feature map). */
+  featureFlag?: string;
   /** Optional: only show for specific roles (e.g. dispatch sees "Drivers" as dispatch view). */
   roles?: string[];
 }
@@ -35,11 +37,12 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     sectionLabel: 'Safety',
     sectionIcon: 'shield_person',
-    tabs: ['hos', 'audit', 'drivers'],
+    tabs: ['hos', 'audit', 'drivers', 'safety_claims'],
     children: [
       { path: '/hos', label: 'HOS', tab: 'hos' },
       { path: '/drivers/dqf', label: 'DQF', tab: 'drivers' },
       { path: '/audit', label: 'Audit', tab: 'audit' },
+      { path: '/safety', label: 'Claims & Accidents', tab: 'safety_claims' },
     ],
   },
   {
@@ -67,12 +70,14 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     sectionLabel: 'Accounting',
     sectionIcon: 'account_balance',
-    tabs: ['invoices', 'settlements'],
+    tabs: ['invoices', 'settlements', 'lease_financing'],
     children: [
       { path: '/invoices', label: 'Invoices', tab: 'invoices' },
       { path: '/settlements', label: 'Settlements', tab: 'settlements' },
       { path: '/settlements/scheduled-deductions', label: 'Scheduled Payments', tab: 'settlements' },
       { path: '/settlements/equipment-owners', label: 'Equipment Owners', tab: 'settlements' },
+      { path: '/finance/lease-to-own', label: 'Lease to Own', tab: 'lease_financing', featureFlag: 'lease_to_own_financing' },
+      { path: '/finance/lease-to-own/dashboard', label: 'Financing Dashboard', tab: 'lease_financing', featureFlag: 'fleet_financing_dashboard' },
     ],
   },
   {

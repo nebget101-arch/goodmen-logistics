@@ -370,6 +370,56 @@
         <button class="dqf-close-btn" type="button" (click)="closeDQFForm()" [disabled]="saving">✕</button>
       </div>
       <div class="dqf-modal-body">
+        <section class="safety-history-widget">
+          <div class="safety-history-header">
+            <h4>
+              <span class="material-symbols-outlined">car_crash</span>
+              Accident History Summary
+            </h4>
+            <a class="safety-history-link" href="/safety/accidents" target="_blank" rel="noopener">Open Safety Module</a>
+          </div>
+
+          <div *ngIf="driverSafetyLoading" class="safety-history-loading">Loading accident history…</div>
+          <div *ngIf="driverSafetyError" class="safety-history-error">{{ driverSafetyError }}</div>
+
+          <ng-container *ngIf="!driverSafetyLoading && !driverSafetyError">
+            <div class="safety-history-kpis">
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">Total Incidents</span>
+                <span class="safety-kpi-value">{{ driverSafetySummary.totalIncidents }}</span>
+              </div>
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">Open</span>
+                <span class="safety-kpi-value">{{ driverSafetySummary.openIncidents }}</span>
+              </div>
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">Preventable</span>
+                <span class="safety-kpi-value">{{ driverSafetySummary.preventableIncidents }}</span>
+              </div>
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">DOT Recordable</span>
+                <span class="safety-kpi-value">{{ driverSafetySummary.dotRecordableIncidents }}</span>
+              </div>
+              <div class="safety-kpi">
+                <span class="safety-kpi-label">Est. Loss</span>
+                <span class="safety-kpi-value">{{ driverSafetySummary.totalEstimatedLoss | currency:'USD':'symbol':'1.0-0' }}</span>
+              </div>
+            </div>
+
+            <div class="safety-history-meta" *ngIf="driverSafetySummary.lastIncidentDate">
+              Last incident: {{ driverSafetySummary.lastIncidentDate | date:'mediumDate' }}
+            </div>
+
+            <div class="safety-history-list" *ngIf="driverSafetySummary.recentIncidents.length > 0">
+              <div class="safety-history-item" *ngFor="let inc of driverSafetySummary.recentIncidents">
+                <span class="safety-incident-number">{{ inc.incident_number }}</span>
+                <span class="safety-incident-date">{{ inc.incident_date | date:'shortDate' }}</span>
+                <span class="safety-incident-status" [ngClass]="safetyStatusClass(inc.status)">{{ inc.status | titlecase }}</span>
+              </div>
+            </div>
+          </ng-container>
+        </section>
+
         <div class="dqf-checklist">
         <!-- Application for Employment -->
         <div class="dqf-checklist-item">

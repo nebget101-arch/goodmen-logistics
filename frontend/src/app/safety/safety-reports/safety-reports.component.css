@@ -1,0 +1,53 @@
+.reports-page { min-height: 400px; }
+.page-header { margin-bottom: 16px; }
+.page-header h2 { margin: 0 0 4px; font-size: 1.35rem; }
+.page-sub { margin: 0; color: #64748b; font-size: .84rem; }
+
+.filters-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px; }
+.form-row-inline { display: flex; flex-direction: column; gap: 4px; }
+.form-row-inline label { font-size: .78rem; color: #94a3b8; }
+.filter-input {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(148,163,184,.2);
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: .85rem;
+}
+
+.loading-state { color: #94a3b8; padding: 20px 0; }
+.alert-error { background: rgba(239,68,68,.15); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
+
+.report-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.report-card {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(148,163,184,.12);
+  border-radius: 10px;
+  padding: 12px;
+}
+.report-card.full { grid-column: 1 / -1; }
+.report-card h3 { margin: 0 0 10px; font-size: .95rem; color: #f1f5f9; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+
+.mini-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.mini-table th {
+  color: #64748b;
+  text-transform: uppercase;
+  font-size: .7rem;
+  letter-spacing: .04em;
+  text-align: left;
+  border-bottom: 1px solid rgba(148,163,184,.12);
+  padding: 8px;
+}
+.mini-table td {
+  border-bottom: 1px solid rgba(148,163,184,.06);
+  padding: 8px;
+  color: #cbd5e1;
+}
+.empty-cell { text-align: center; color: #64748b; padding: 20px; }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: none; border-radius: 8px; font-size: .84rem; font-weight: 600; cursor: pointer; }
+.btn:hover { opacity: .86; }
+.btn-secondary { background: rgba(148,163,184,.15); color: #cbd5e1; }
+.btn-ghost { background: transparent; color: #64748b; }
+.btn-sm { padding: 6px 10px; font-size: .78rem; }

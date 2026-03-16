@@ -109,7 +109,9 @@ const PLANS = {
       '/invoices',
       '/settlements',
       '/reports',
-      '/roadside'
+      '/roadside',
+      '/finance/lease-to-own',
+      '/finance/fleet-financing-dashboard'
     ],
     highlighted: false,
     features: [
@@ -153,7 +155,9 @@ const PLANS = {
       '/invoices',
       '/settlements',
       '/reports',
-      '/roadside'
+      '/roadside',
+      '/finance/lease-to-own',
+      '/finance/fleet-financing-dashboard'
     ],
     highlighted: false,
     features: [

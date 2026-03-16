@@ -1,0 +1,31 @@
+import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { SafetyRoutingModule } from './safety-routing.module';
+
+import { SafetyShellComponent } from './safety-shell/safety-shell.component';
+import { SafetyOverviewComponent } from './safety-overview/safety-overview.component';
+import { SafetyAccidentsComponent } from './safety-accidents/safety-accidents.component';
+import { SafetyAccidentDetailComponent } from './safety-accident-detail/safety-accident-detail.component';
+import { SafetyClaimsComponent } from './safety-claims/safety-claims.component';
+import { SafetyTasksComponent } from './safety-tasks/safety-tasks.component';
+import { SafetyReportsComponent } from './safety-reports/safety-reports.component';
+
+@NgModule({
+  declarations: [
+    SafetyShellComponent,
+    SafetyOverviewComponent,
+    SafetyAccidentsComponent,
+    SafetyAccidentDetailComponent,
+    SafetyClaimsComponent,
+    SafetyTasksComponent,
+    SafetyReportsComponent,
+  ],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ReactiveFormsModule,
+    SafetyRoutingModule,
+  ]
+})
+export class SafetyModule {}

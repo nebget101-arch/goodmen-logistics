@@ -57,6 +57,26 @@ export class VehiclesComponent implements OnInit {
   showVehicleDetails = false;
   sortOrder: SortOrder = 'asc';
 
+  equipmentSafetyLoading = false;
+  equipmentSafetyError = '';
+  equipmentSafetySummary: {
+    totalIncidents: number;
+    openIncidents: number;
+    preventableIncidents: number;
+    dotRecordableIncidents: number;
+    totalEstimatedLoss: number;
+    lastIncidentDate: string | null;
+    recentIncidents: any[];
+  } = {
+    totalIncidents: 0,
+    openIncidents: 0,
+    preventableIncidents: 0,
+    dotRecordableIncidents: 0,
+    totalEstimatedLoss: 0,
+    lastIncidentDate: null,
+    recentIncidents: []
+  };
+
   // Pagination state
   currentPage = 1;
   itemsPerPage = 100;
@@ -426,10 +446,57 @@ export class VehiclesComponent implements OnInit {
   openVehicleDetails(vehicle: Vehicle): void {
     this.selectedVehicleDetails = vehicle;
     this.showVehicleDetails = true;
+    this.loadEquipmentSafetySummary(vehicle.id);
   }
 
   closeVehicleDetails(): void {
     this.showVehicleDetails = false;
     this.selectedVehicleDetails = null;
+    this.equipmentSafetyError = '';
+    this.equipmentSafetySummary = {
+      totalIncidents: 0,
+      openIncidents: 0,
+      preventableIncidents: 0,
+      dotRecordableIncidents: 0,
+      totalEstimatedLoss: 0,
+      lastIncidentDate: null,
+      recentIncidents: []
+    };
+  }
+
+  loadEquipmentSafetySummary(vehicleId: string): void {
+    if (!vehicleId) return;
+    this.equipmentSafetyLoading = true;
+    this.equipmentSafetyError = '';
+
+    this.apiService.getSafetyIncidents({ vehicle_id: vehicleId, page: 1, pageSize: 100 }).subscribe({
+      next: (resp: any) => {
+        const incidents = Array.isArray(resp?.data) ? resp.data : [];
+        const sorted = [...incidents].sort((a: any, b: any) => {
+          const aTime = new Date(a?.incident_date || 0).getTime();
+          const bTime = new Date(b?.incident_date || 0).getTime();
+          return bTime - aTime;
+        });
+
+        this.equipmentSafetySummary = {
+          totalIncidents: incidents.length,
+          openIncidents: incidents.filter((i: any) => i?.status && i.status !== 'closed').length,
+          preventableIncidents: incidents.filter((i: any) => i?.preventability === 'preventable').length,
+          dotRecordableIncidents: incidents.filter((i: any) => !!i?.dot_recordable).length,
+          totalEstimatedLoss: incidents.reduce((sum: number, i: any) => sum + Number(i?.estimated_loss_amount || 0), 0),
+          lastIncidentDate: sorted[0]?.incident_date || null,
+          recentIncidents: sorted.slice(0, 3)
+        };
+        this.equipmentSafetyLoading = false;
+      },
+      error: () => {
+        this.equipmentSafetyError = 'Unable to load accident history summary.';
+        this.equipmentSafetyLoading = false;
+      }
+    });
+  }
+
+  safetyStatusClass(status: string): string {
+    return status === 'closed' ? 'safety-status-closed' : 'safety-status-open';
   }
 }

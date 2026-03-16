@@ -1,0 +1,165 @@
+<div class="accidents-page">
+  <!-- Header row -->
+  <div class="page-header">
+    <div>
+      <h2>Accidents &amp; Incidents</h2>
+      <p class="page-sub">{{ total }} total incidents</p>
+    </div>
+    <button type="button" class="btn btn-danger" (click)="openForm()">
+      <span class="material-symbols-outlined">add</span> New Incident
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-row">
+    <input class="filter-input" type="text" placeholder="Search by #, city, narrative…" [(ngModel)]="filters.search" (keyup.enter)="applyFilters()">
+    <select class="filter-select" [(ngModel)]="filters.status" (change)="applyFilters()">
+      <option value="">All Statuses</option>
+      <option *ngFor="let s of STATUSES" [value]="s">{{ s | titlecase }}</option>
+    </select>
+    <select class="filter-select" [(ngModel)]="filters.severity" (change)="applyFilters()">
+      <option value="">All Severities</option>
+      <option *ngFor="let s of SEVERITIES" [value]="s">{{ s | titlecase }}</option>
+    </select>
+    <select class="filter-select" [(ngModel)]="filters.incident_type" (change)="applyFilters()">
+      <option value="">All Types</option>
+      <option *ngFor="let t of TYPES" [value]="t">{{ t | titlecase }}</option>
+    </select>
+    <button type="button" class="btn btn-sm btn-secondary" (click)="applyFilters()">
+      <span class="material-symbols-outlined">search</span>
+    </button>
+    <button type="button" class="btn btn-sm btn-ghost" (click)="clearFilters()">Clear</button>
+  </div>
+
+  <!-- Loading / error -->
+  <div *ngIf="loading" class="loading-state">Loading incidents…</div>
+  <div *ngIf="error" class="alert-error">{{ error }}</div>
+
+  <!-- Table -->
+  <div class="table-wrap" *ngIf="!loading">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Incident #</th>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Severity</th>
+          <th>Status</th>
+          <th>Location</th>
+          <th>Driver</th>
+          <th>Est. Loss</th>
+          <th>DOT</th>
+          <th>Prev.</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="incidents.length === 0">
+          <td colspan="11" class="empty-row">No incidents found. Click "New Incident" to get started.</td>
+        </tr>
+        <tr *ngFor="let inc of incidents" class="data-row" (click)="openDetail(inc.id)">
+          <td class="incident-num">{{ inc.incident_number }}</td>
+          <td>{{ inc.incident_date | date:'MM/dd/yyyy' }}</td>
+          <td><span class="type-badge">{{ inc.incident_type | titlecase }}</span></td>
+          <td><span class="sev-badge" [ngClass]="severityClass(inc.severity)">{{ inc.severity | titlecase }}</span></td>
+          <td><span class="status-badge" [ngClass]="statusClass(inc.status)">{{ inc.status | titlecase }}</span></td>
+          <td>{{ inc.location_city }}{{ inc.location_state ? ', ' + inc.location_state : '' }}</td>
+          <td>{{ inc.driver_name || '—' }}</td>
+          <td>{{ inc.estimated_loss_amount ? (inc.estimated_loss_amount | currency:'USD':'symbol':'1.0-0') : '—' }}</td>
+          <td>
+            <span class="material-symbols-outlined dot-flag" [class.dot-yes]="inc.dot_recordable" title="DOT Recordable">
+              {{ inc.dot_recordable ? 'check_circle' : 'radio_button_unchecked' }}
+            </span>
+          </td>
+          <td><span class="prev-badge" [class.preventable]="inc.preventability === 'preventable'">{{ inc.preventability | titlecase }}</span></td>
+          <td class="action-cell">
+            <span class="material-symbols-outlined row-arrow">arrow_forward_ios</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" *ngIf="!loading && total > pageSize">
+    <button type="button" class="page-btn" [disabled]="page === 1" (click)="prevPage()">← Prev</button>
+    <span class="page-info">Page {{ page }} of {{ pages }}</span>
+    <button type="button" class="page-btn" [disabled]="page >= pages" (click)="nextPage()">Next →</button>
+  </div>
+</div>
+
+<!-- New incident drawer -->
+<div class="drawer-backdrop" *ngIf="showForm" (click)="closeForm()"></div>
+<div class="drawer" *ngIf="showForm">
+  <div class="drawer-header">
+    <h3>New Incident</h3>
+    <button type="button" class="close-btn" (click)="closeForm()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <div class="drawer-body">
+    <div *ngIf="formError" class="alert-error">{{ formError }}</div>
+
+    <div class="form-row">
+      <label>Incident Date *</label>
+      <input type="datetime-local" class="form-input" [(ngModel)]="form.incident_date">
+    </div>
+    <div class="form-row">
+      <label>Incident Type *</label>
+      <select class="form-input" [(ngModel)]="form.incident_type">
+        <option *ngFor="let t of TYPES" [value]="t">{{ t | titlecase }}</option>
+      </select>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row">
+        <label>Severity</label>
+        <select class="form-input" [(ngModel)]="form.severity">
+          <option *ngFor="let s of SEVERITIES" [value]="s">{{ s | titlecase }}</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Preventability</label>
+        <select class="form-input" [(ngModel)]="form.preventability">
+          <option *ngFor="let p of PREVENTABILITIES" [value]="p">{{ p | titlecase }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row-3 flags-row">
+      <label class="checkbox-label">
+        <input type="checkbox" [(ngModel)]="form.dot_recordable"> DOT Recordable
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" [(ngModel)]="form.hazmat_involved"> HAZMAT
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" [(ngModel)]="form.litigation_risk"> Litigation Risk
+      </label>
+    </div>
+    <div class="form-row">
+      <label>Address</label>
+      <input type="text" class="form-input" [(ngModel)]="form.location_address" placeholder="Street address">
+    </div>
+    <div class="form-row-2">
+      <div class="form-row">
+        <label>City</label>
+        <input type="text" class="form-input" [(ngModel)]="form.location_city">
+      </div>
+      <div class="form-row">
+        <label>State</label>
+        <input type="text" class="form-input" [(ngModel)]="form.location_state" maxlength="2">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Narrative</label>
+      <textarea class="form-input form-textarea" [(ngModel)]="form.narrative" rows="4" placeholder="Brief description of the incident…"></textarea>
+    </div>
+  </div>
+
+  <div class="drawer-footer">
+    <button type="button" class="btn btn-secondary" (click)="closeForm()">Cancel</button>
+    <button type="button" class="btn btn-danger" [disabled]="saving" (click)="saveIncident()">
+      {{ saving ? 'Creating…' : 'Create Incident' }}
+    </button>
+  </div>
+</div>
