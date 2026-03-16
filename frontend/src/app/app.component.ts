@@ -38,8 +38,8 @@ export class AppComponent implements OnInit {
   readonly navSections = NAV_SECTIONS;
   readonly adminMenuPermissions = [PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.USERS_EDIT];
   private readonly authTransitionStorageKey = 'fleetneuron_auth_transitioning';
-  /** Section expand state by index (Equipment=0, Safety=1, Fleet=2, Inventory=3, Accounting=4). */
-  sectionExpanded: boolean[] = [true, true, true, true, true];
+  /** Section expand state aligned to current nav section count (default collapsed). */
+  sectionExpanded: boolean[] = this.navSections.map(() => false);
 
   constructor(
     private router: Router,

@@ -3,6 +3,10 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const db = require('../internal/db').knex;
+const PDFDocument = require('pdfkit');
+
+const v2Cache = new Map();
+const V2_CACHE_TTL_MS = 60 * 1000;
 
 let hasCompletedAtPromise = null;
 function hasCompletedAtColumn() {
@@ -1063,6 +1067,495 @@ router.get('/invoices/aging', authMiddleware, requireRole(['admin', 'accounting'
 		res.json({ success: true, data: { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0 } });
 	} catch (error) {
 		dtLogger.error('invoice_aging_report_failed', { error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
+const V2_ALLOWED_ROLES = ['admin', 'accounting', 'dispatcher', 'dispatch', 'owner_operator'];
+
+function parseV2Filters(req) {
+	const now = new Date();
+	const defaultFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+	return {
+		startDate: req.query.startDate || defaultFrom.toISOString().slice(0, 10),
+		endDate: req.query.endDate || now.toISOString().slice(0, 10),
+		dispatcherId: req.query.dispatcherId || null,
+		driverId: req.query.driverId || null,
+		status: req.query.status || null,
+		period: ['day', 'week', 'month'].includes((req.query.period || '').toLowerCase()) ? req.query.period.toLowerCase() : 'week',
+		limit: Math.min(parseInt(req.query.limit || '200', 10) || 200, 1000),
+		offset: Math.max(parseInt(req.query.offset || '0', 10) || 0, 0)
+	};
+}
+
+function cacheKey(req, reportKey, filters) {
+	return JSON.stringify({
+		reportKey,
+		tenantId: req.context?.tenantId || null,
+		operatingEntityId: req.context?.operatingEntityId || null,
+		filters
+	});
+}
+
+async function withV2Cache(req, reportKey, filters, builder) {
+	const key = cacheKey(req, reportKey, filters);
+	const cached = v2Cache.get(key);
+	if (cached && (Date.now() - cached.at) < V2_CACHE_TTL_MS) {
+		return cached.payload;
+	}
+	const payload = await builder();
+	v2Cache.set(key, { at: Date.now(), payload });
+	return payload;
+}
+
+function applyContextSql(tableAlias, req, params) {
+	const clauses = [];
+	if (req.context?.tenantId) {
+		params.push(req.context.tenantId);
+		clauses.push(`${tableAlias}.tenant_id = ?`);
+	}
+	if (req.context?.operatingEntityId) {
+		params.push(req.context.operatingEntityId);
+		clauses.push(`${tableAlias}.operating_entity_id = ?`);
+	}
+	return clauses;
+}
+
+function periodExpression(period, dateSql) {
+	if (period === 'month') return `to_char(date_trunc('month', ${dateSql}), 'YYYY-MM-01')`;
+	if (period === 'day') return `to_char(date_trunc('day', ${dateSql}), 'YYYY-MM-DD')`;
+	return `to_char(date_trunc('week', ${dateSql}), 'YYYY-MM-DD')`;
+}
+
+async function buildOverview(req, filters) {
+	const revenueParams = [filters.startDate, filters.endDate];
+	const revenueClauses = ['l.completed_date IS NOT NULL', 'l.completed_date BETWEEN ? AND ?'];
+	revenueClauses.push(...applyContextSql('l', req, revenueParams));
+	if (filters.dispatcherId) {
+		revenueParams.push(filters.dispatcherId);
+		revenueClauses.push('l.dispatcher_user_id = ?');
+	}
+	if (filters.driverId) {
+		revenueParams.push(filters.driverId);
+		revenueClauses.push('l.driver_id = ?');
+	}
+	if (filters.status) {
+		revenueParams.push(filters.status);
+		revenueClauses.push('l.status = ?');
+	}
+
+	const revenueRow = (await db.raw(`
+		SELECT COALESCE(SUM(l.rate), 0)::numeric AS revenue
+		FROM loads l
+		WHERE ${revenueClauses.join(' AND ')}
+	`, revenueParams)).rows[0] || { revenue: 0 };
+
+	const adjustmentExpenseRow = (await db.raw(`
+		SELECT COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE amount END), 0)::numeric AS amount
+		FROM settlement_adjustment_items sai
+		JOIN settlements s ON s.id = sai.settlement_id
+		JOIN payroll_periods pp ON pp.id = s.payroll_period_id
+		WHERE pp.period_end BETWEEN ? AND ?
+	`, [filters.startDate, filters.endDate])).rows[0] || { amount: 0 };
+
+	const fuelParams = [filters.startDate, filters.endDate];
+	const fuelClauses = ['ft.transaction_date BETWEEN ? AND ?'];
+	fuelClauses.push(...applyContextSql('ft', req, fuelParams));
+	const fuelExpenseRow = (await db.raw(`
+		SELECT COALESCE(SUM(ft.amount), 0)::numeric AS amount
+		FROM fuel_transactions ft
+		WHERE ${fuelClauses.join(' AND ')}
+	`, fuelParams)).rows[0] || { amount: 0 };
+
+	const revenue = Number(revenueRow.revenue || 0);
+	const expenses = Number(adjustmentExpenseRow.amount || 0) + Number(fuelExpenseRow.amount || 0);
+	const grossProfit = revenue - expenses;
+
+	const trend = (await db.raw(`
+		SELECT
+			${periodExpression(filters.period, 'l.completed_date')} AS period,
+			COALESCE(SUM(l.rate), 0)::numeric AS revenue,
+			0::numeric AS expenses,
+			COALESCE(SUM(l.rate), 0)::numeric AS gross_profit
+		FROM loads l
+		WHERE ${revenueClauses.join(' AND ')}
+		GROUP BY 1
+		ORDER BY 1 ASC
+	`, revenueParams)).rows;
+
+	return {
+		success: true,
+		cards: [
+			{ key: 'revenue', label: 'Revenue', value: revenue },
+			{ key: 'expenses', label: 'Expenses', value: expenses },
+			{ key: 'gross_profit', label: 'Gross Profit', value: grossProfit }
+		],
+		data: trend,
+		summary: { revenue, expenses, grossProfit }
+	};
+}
+
+async function buildEmails(req, filters) {
+	const params = [filters.startDate, filters.endDate];
+	const clauses = [
+		"ie.created_at::date BETWEEN ? AND ?",
+		"LOWER(ie.event_type) LIKE '%email%'"
+	];
+	if (req.context?.tenantId) {
+		params.push(req.context.tenantId);
+		clauses.push('i.tenant_id = ?');
+	}
+	if (req.context?.operatingEntityId) {
+		params.push(req.context.operatingEntityId);
+		clauses.push('i.operating_entity_id = ?');
+	}
+
+	const rows = (await db.raw(`
+		SELECT ie.created_at::date AS event_date, ie.event_type, i.invoice_number, COUNT(*)::int AS count
+		FROM invoice_events ie
+		JOIN invoices i ON i.id = ie.invoice_id
+		WHERE ${clauses.join(' AND ')}
+		GROUP BY 1,2,3
+		ORDER BY 1 DESC, 2 ASC
+		LIMIT ${filters.limit} OFFSET ${filters.offset}
+	`, params)).rows;
+
+	return { success: true, data: rows, cards: [{ key: 'emails', label: 'Email Events', value: rows.reduce((a, b) => a + Number(b.count || 0), 0) }] };
+}
+
+async function buildTotalRevenue(req, filters) {
+	const params = [filters.startDate, filters.endDate];
+	const clauses = ['l.completed_date BETWEEN ? AND ?'];
+	clauses.push(...applyContextSql('l', req, params));
+	if (filters.dispatcherId) {
+		params.push(filters.dispatcherId);
+		clauses.push('l.dispatcher_user_id = ?');
+	}
+	if (filters.driverId) {
+		params.push(filters.driverId);
+		clauses.push('l.driver_id = ?');
+	}
+
+	const rows = (await db.raw(`
+		SELECT
+			${periodExpression(filters.period, 'l.completed_date')} AS period,
+			COUNT(*)::int AS loads_count,
+			COALESCE(SUM(l.rate), 0)::numeric AS total_revenue
+		FROM loads l
+		WHERE ${clauses.join(' AND ')}
+		GROUP BY 1
+		ORDER BY 1 ASC
+	`, params)).rows;
+	const totalRevenue = rows.reduce((sum, r) => sum + Number(r.total_revenue || 0), 0);
+	return { success: true, data: rows, cards: [{ key: 'total_revenue', label: 'Total Revenue', value: totalRevenue }] };
+}
+
+async function buildRatePerMile(req, filters) {
+	const params = [filters.startDate, filters.endDate];
+	const clauses = ['COALESCE(sli.delivery_date, s.date) BETWEEN ? AND ?'];
+	clauses.push(...applyContextSql('s', req, params));
+	if (filters.driverId) {
+		params.push(filters.driverId);
+		clauses.push('s.driver_id = ?');
+	}
+	const rows = (await db.raw(`
+		SELECT
+			${periodExpression(filters.period, 'COALESCE(sli.delivery_date, s.date)')} AS period,
+			COALESCE(SUM(sli.loaded_miles), 0)::numeric AS loaded_miles,
+			COALESCE(SUM(sli.gross_amount), 0)::numeric AS revenue,
+			CASE WHEN COALESCE(SUM(sli.loaded_miles),0) > 0
+				THEN (SUM(sli.gross_amount) / SUM(sli.loaded_miles))::numeric
+				ELSE 0::numeric
+			END AS rpm
+		FROM settlement_load_items sli
+		JOIN settlements s ON s.id = sli.settlement_id
+		WHERE ${clauses.join(' AND ')}
+		GROUP BY 1
+		ORDER BY 1 ASC
+	`, params)).rows;
+	return { success: true, data: rows };
+}
+
+async function buildRevenueByDispatcher(req, filters) {
+	const params = [filters.startDate, filters.endDate];
+	const clauses = ['l.completed_date BETWEEN ? AND ?'];
+	clauses.push(...applyContextSql('l', req, params));
+	if (filters.dispatcherId) {
+		params.push(filters.dispatcherId);
+		clauses.push('l.dispatcher_user_id = ?');
+	}
+	if (filters.driverId) {
+		params.push(filters.driverId);
+		clauses.push('l.driver_id = ?');
+	}
+	const rows = (await db.raw(`
+		SELECT
+			COALESCE(CONCAT_WS(' ', u.first_name, u.last_name), u.username, 'Unassigned') AS dispatcher_name,
+			COUNT(*)::int AS loads_count,
+			COALESCE(SUM(l.rate), 0)::numeric AS total_revenue,
+			COALESCE(AVG(l.rate), 0)::numeric AS avg_revenue_per_load
+		FROM loads l
+		LEFT JOIN users u ON u.id = l.dispatcher_user_id
+		WHERE ${clauses.join(' AND ')}
+		GROUP BY 1
+		ORDER BY total_revenue DESC
+		LIMIT ${filters.limit} OFFSET ${filters.offset}
+	`, params)).rows;
+	return { success: true, data: rows };
+}
+
+async function buildPaymentSummary(req, filters) {
+	const params = [filters.startDate, filters.endDate];
+	const clauses = ['ip.payment_date BETWEEN ? AND ?'];
+	if (req.context?.tenantId) {
+		params.push(req.context.tenantId);
+		clauses.push('i.tenant_id = ?');
+	}
+	if (req.context?.operatingEntityId) {
+		params.push(req.context.operatingEntityId);
+		clauses.push('i.operating_entity_id = ?');
+	}
+	const rows = (await db.raw(`
+		SELECT
+			ip.method,
+			COUNT(*)::int AS payment_count,
+			COALESCE(SUM(ip.amount), 0)::numeric AS total_paid
+		FROM invoice_payments ip
+		JOIN invoices i ON i.id = ip.invoice_id
+		WHERE ${clauses.join(' AND ')}
+		GROUP BY ip.method
+		ORDER BY total_paid DESC
+	`, params)).rows;
+
+	const outstandingParams = [];
+	const outstandingClauses = ["i.status <> 'VOID'"];
+	if (req.context?.tenantId) {
+		outstandingParams.push(req.context.tenantId);
+		outstandingClauses.push('i.tenant_id = ?');
+	}
+	if (req.context?.operatingEntityId) {
+		outstandingParams.push(req.context.operatingEntityId);
+		outstandingClauses.push('i.operating_entity_id = ?');
+	}
+	const outstandingRows = await db.raw(`
+		SELECT COALESCE(SUM(i.balance_due), 0)::numeric AS outstanding
+		FROM invoices i
+		WHERE ${outstandingClauses.join(' AND ')}
+	`, outstandingParams);
+	const totalPaid = rows.reduce((sum, r) => sum + Number(r.total_paid || 0), 0);
+	const outstanding = Number(outstandingRows.rows[0]?.outstanding || 0);
+	return {
+		success: true,
+		data: rows,
+		cards: [
+			{ key: 'paid', label: 'Total Paid', value: totalPaid },
+			{ key: 'outstanding', label: 'Outstanding', value: outstanding }
+		]
+	};
+}
+
+async function buildExpenses(req, filters) {
+	const params = [filters.startDate, filters.endDate];
+	if (req.context?.tenantId) params.push(req.context.tenantId);
+	if (req.context?.operatingEntityId) params.push(req.context.operatingEntityId);
+	const rows = (await db.raw(`
+		WITH adjustments AS (
+			SELECT
+				COALESCE(epc.name, sai.description, 'Uncategorized') AS category,
+				'settlement_adjustment' AS source,
+				COUNT(*)::int AS expense_count,
+				COALESCE(SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END), 0)::numeric AS total_amount
+			FROM settlement_adjustment_items sai
+			LEFT JOIN expense_payment_categories epc ON epc.id = sai.category_id
+			JOIN settlements s ON s.id = sai.settlement_id
+			JOIN payroll_periods pp ON pp.id = s.payroll_period_id
+			WHERE pp.period_end BETWEEN ? AND ?
+			GROUP BY 1,2
+		),
+		fuel AS (
+			SELECT
+				'Fuel'::text AS category,
+				'fuel_transaction'::text AS source,
+				COUNT(*)::int AS expense_count,
+				COALESCE(SUM(ft.amount), 0)::numeric AS total_amount
+			FROM fuel_transactions ft
+			WHERE ft.transaction_date BETWEEN ? AND ?
+			${req.context?.tenantId ? 'AND ft.tenant_id = ?' : ''}
+			${req.context?.operatingEntityId ? 'AND ft.operating_entity_id = ?' : ''}
+		)
+		SELECT * FROM adjustments
+		UNION ALL
+		SELECT * FROM fuel
+		ORDER BY total_amount DESC
+	`, params)).rows;
+
+	const total = rows.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
+	return { success: true, data: rows, cards: [{ key: 'expense_total', label: 'Total Expenses', value: total }] };
+}
+
+async function buildGrossProfit(req, filters) {
+	const revenue = await buildTotalRevenue(req, filters);
+	const expenses = await buildExpenses(req, filters);
+	const expenseTotal = Number(expenses.cards?.[0]?.value || 0);
+	const revenueTotal = Number(revenue.cards?.[0]?.value || 0);
+
+	const rows = revenue.data.map((r) => ({
+		period: r.period,
+		revenue: Number(r.total_revenue || 0),
+		expenses: 0,
+		gross_profit: Number(r.total_revenue || 0),
+		margin_pct: 100
+	}));
+
+	return {
+		success: true,
+		data: rows,
+		cards: [
+			{ key: 'revenue', label: 'Revenue', value: revenueTotal },
+			{ key: 'expenses', label: 'Expenses', value: expenseTotal },
+			{ key: 'gross_profit', label: 'Gross Profit', value: revenueTotal - expenseTotal }
+		]
+	};
+}
+
+async function buildGrossProfitPerLoad(req, filters) {
+	const params = [filters.startDate, filters.endDate];
+	const clauses = ['l.completed_date BETWEEN ? AND ?'];
+	clauses.push(...applyContextSql('l', req, params));
+	if (filters.dispatcherId) {
+		params.push(filters.dispatcherId);
+		clauses.push('l.dispatcher_user_id = ?');
+	}
+	if (filters.driverId) {
+		params.push(filters.driverId);
+		clauses.push('l.driver_id = ?');
+	}
+	const rows = (await db.raw(`
+		SELECT
+			l.id,
+			l.load_number,
+			l.completed_date,
+			COALESCE(l.rate, 0)::numeric AS revenue,
+			(
+				COALESCE((SELECT SUM(ft.amount) FROM fuel_transactions ft WHERE ft.load_id = l.id), 0)
+				+
+				COALESCE((SELECT SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END)
+				FROM settlement_adjustment_items sai
+				WHERE sai.source_reference_type = 'load' AND sai.source_reference_id::text = l.id::text), 0)
+			)::numeric AS expenses,
+			(
+				COALESCE(l.rate, 0)
+				-
+				COALESCE((SELECT SUM(ft.amount) FROM fuel_transactions ft WHERE ft.load_id = l.id), 0)
+			)::numeric AS gross_profit
+		FROM loads l
+		WHERE ${clauses.join(' AND ')}
+		ORDER BY l.completed_date DESC
+		LIMIT ${filters.limit} OFFSET ${filters.offset}
+	`, params)).rows;
+	return { success: true, data: rows };
+}
+
+async function buildProfitLoss(req, filters) {
+	const totalRevenue = await buildTotalRevenue(req, filters);
+	const expenses = await buildExpenses(req, filters);
+	const rows = totalRevenue.data.map((r) => ({
+		period: r.period,
+		revenue: Number(r.total_revenue || 0),
+		cost_of_operations: 0,
+		gross_profit: Number(r.total_revenue || 0)
+	}));
+	const revenueTotal = Number(totalRevenue.cards?.[0]?.value || 0);
+	const costTotal = Number(expenses.cards?.[0]?.value || 0);
+	return {
+		success: true,
+		data: rows,
+		cards: [
+			{ key: 'revenue', label: 'Revenue', value: revenueTotal },
+			{ key: 'cost_of_operations', label: 'Cost of Operations', value: costTotal },
+			{ key: 'gross_profit', label: 'Gross Profit', value: revenueTotal - costTotal }
+		]
+	};
+}
+
+const v2Builders = {
+	overview: buildOverview,
+	emails: buildEmails,
+	'total-revenue': buildTotalRevenue,
+	'rate-per-mile': buildRatePerMile,
+	'revenue-by-dispatcher': buildRevenueByDispatcher,
+	'payment-summary': buildPaymentSummary,
+	expenses: buildExpenses,
+	'gross-profit': buildGrossProfit,
+	'gross-profit-per-load': buildGrossProfitPerLoad,
+	'profit-loss': buildProfitLoss
+};
+
+for (const [key, builder] of Object.entries(v2Builders)) {
+	router.get(`/v2/${key}`, authMiddleware, requireRole(V2_ALLOWED_ROLES), async (req, res) => {
+		try {
+			const filters = parseV2Filters(req);
+			const payload = await withV2Cache(req, key, filters, () => builder(req, filters));
+			res.json({
+				...payload,
+				meta: {
+					generatedAt: new Date().toISOString(),
+					reportKey: key,
+					filters
+				}
+			});
+		} catch (error) {
+			dtLogger.error('reports_v2_failed', { reportKey: key, error: error.message });
+			res.status(500).json({ error: error.message });
+		}
+	});
+}
+
+function toCsv(rows) {
+	if (!Array.isArray(rows) || !rows.length) return 'No data\n';
+	const headers = Object.keys(rows[0]);
+	const escape = (v) => {
+		const s = v === null || v === undefined ? '' : String(v);
+		if (s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+		return s;
+	};
+	return [headers.join(','), ...rows.map((r) => headers.map((h) => escape(r[h])).join(','))].join('\n');
+}
+
+router.get('/v2/export/:reportKey', authMiddleware, requireRole(V2_ALLOWED_ROLES), async (req, res) => {
+	try {
+		const reportKey = req.params.reportKey;
+		const format = (req.query.format || 'csv').toString().toLowerCase();
+		const builder = v2Builders[reportKey];
+		if (!builder) return res.status(404).json({ error: 'Unknown report key' });
+		const filters = parseV2Filters(req);
+		const payload = await builder(req, filters);
+		const rows = payload?.data || [];
+
+		if (format === 'pdf') {
+			res.setHeader('Content-Type', 'application/pdf');
+			res.setHeader('Content-Disposition', `attachment; filename="${reportKey}.pdf"`);
+			const doc = new PDFDocument({ margin: 40, size: 'A4' });
+			doc.pipe(res);
+			doc.fontSize(16).text(`FleetNeuron Report: ${reportKey}`);
+			doc.moveDown(0.5);
+			doc.fontSize(10).text(`Generated: ${new Date().toISOString()}`);
+			doc.fontSize(10).text(`Date Range: ${filters.startDate} to ${filters.endDate}`);
+			doc.moveDown();
+			const preview = rows.slice(0, 40);
+			preview.forEach((row, index) => {
+				doc.fontSize(9).text(`${index + 1}. ${JSON.stringify(row)}`);
+			});
+			doc.end();
+			return;
+		}
+
+		const csv = toCsv(rows);
+		res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+		res.setHeader('Content-Disposition', `attachment; filename="${reportKey}.csv"`);
+		res.send(csv);
+	} catch (error) {
+		dtLogger.error('reports_v2_export_failed', { error: error.message, report: req.params.reportKey });
 		res.status(500).json({ error: error.message });
 	}
 });

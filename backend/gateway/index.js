@@ -186,6 +186,7 @@ app.use(
   })
 );
 app.use('/api/fuel', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/tolls', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/loads', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/brokers', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/locations', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));

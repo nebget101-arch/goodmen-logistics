@@ -88,11 +88,26 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/fuel/exceptions', label: 'Exceptions', tab: 'fuel' },
     ],
   },
+  {
+    sectionLabel: 'Tolls',
+    sectionIcon: 'toll',
+    tabs: ['tolls'],
+    children: [
+      { path: '/tolls', label: 'Overview', tab: 'tolls' },
+      { path: '/tolls/transactions', label: 'Transactions', tab: 'tolls' },
+      { path: '/tolls/import', label: 'Import', tab: 'tolls' },
+      { path: '/tolls/history', label: 'Import History', tab: 'tolls' },
+      { path: '/tolls/accounts', label: 'Accounts', tab: 'tolls' },
+      { path: '/tolls/devices', label: 'Devices', tab: 'tolls' },
+      { path: '/tolls/exceptions', label: 'Exceptions', tab: 'tolls' },
+    ],
+  },
 ];
 
 /** Top-level links (no section). */
 export const NAV_TOP_LINKS: NavLink[] = [
   { path: '/dashboard', label: 'Dashboard', icon: 'dashboard', tab: 'dashboard' },
+  { path: '/reports', label: 'Reports', icon: 'analytics', tab: 'reports' },
   { path: '/loads', label: 'Loads', icon: 'route', tab: 'loads' },
   { path: '/dispatch-board', label: 'Dispatch Board', icon: 'calendar_view_month', tab: 'loads' },
   { path: '/roadside', label: 'Roadside AI', icon: 'emergency_home', tab: 'roadside' },

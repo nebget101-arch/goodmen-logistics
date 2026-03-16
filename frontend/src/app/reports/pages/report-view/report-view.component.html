@@ -1,0 +1,48 @@
+<section class="report-view card">
+  <header class="report-header">
+    <div>
+      <h2>
+        <span class="material-symbols-outlined title-icon">query_stats</span>
+        {{ config.title }}
+      </h2>
+      <p>{{ config.subtitle }}</p>
+    </div>
+    <div class="report-actions">
+      <button type="button" class="btn btn-export" (click)="exportAs('csv')">
+        <span class="material-symbols-outlined">table_view</span>
+        Export CSV
+      </button>
+      <button type="button" class="btn btn-export" (click)="exportAs('pdf')">
+        <span class="material-symbols-outlined">picture_as_pdf</span>
+        Export PDF
+      </button>
+    </div>
+  </header>
+
+  <div class="cards" *ngIf="cards.length">
+    <article class="kpi-card" *ngFor="let card of cards">
+      <span class="kpi-label">{{ card.label }}</span>
+      <span class="kpi-value">{{ format(card.value, 'currency') }}</span>
+      <small *ngIf="card.changePct !== undefined" [class.neg]="card.changePct < 0">{{ card.changePct }}%</small>
+    </article>
+  </div>
+
+  <p class="error" *ngIf="error"><span class="material-symbols-outlined">error</span> {{ error }}</p>
+  <p class="loading" *ngIf="isLoading">Loading {{ config.title }}...</p>
+
+  <div class="table-wrap" *ngIf="!isLoading">
+    <table>
+      <thead>
+        <tr>
+          <th *ngFor="let c of asColumns()">{{ c.label }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of rows; trackBy: trackByIndex">
+          <td *ngFor="let c of asColumns()">{{ format(row[c.key], c.type) }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="empty" *ngIf="rows.length === 0">No records found for selected filters.</div>
+  </div>
+</section>

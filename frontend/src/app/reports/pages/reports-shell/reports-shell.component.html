@@ -1,0 +1,63 @@
+<section class="reports-shell">
+  <header class="hero">
+    <div>
+      <h1><span class="material-symbols-outlined hero-icon">auto_awesome</span> AI Reports Center</h1>
+      <p>Operational and financial intelligence across revenue, payments, margins, and expenses.</p>
+    </div>
+  </header>
+
+  <div class="filters card">
+    <label>
+      Start Date
+      <input type="date" [(ngModel)]="filters.startDate" />
+    </label>
+    <label>
+      End Date
+      <input type="date" [(ngModel)]="filters.endDate" />
+    </label>
+    <label>
+      Dispatcher ID
+      <input type="text" [(ngModel)]="filters.dispatcherId" placeholder="optional" />
+    </label>
+    <label>
+      Driver ID
+      <input type="text" [(ngModel)]="filters.driverId" placeholder="optional" />
+    </label>
+    <label>
+      Status
+      <input type="text" [(ngModel)]="filters.status" placeholder="optional" />
+    </label>
+    <label>
+      Group By
+      <select [(ngModel)]="filters.period">
+        <option value="day">Day</option>
+        <option value="week">Week</option>
+        <option value="month">Month</option>
+      </select>
+    </label>
+    <div class="actions">
+      <button type="button" class="btn btn-ai btn-ai-primary" (click)="applyFilters()">
+        <span class="material-symbols-outlined">tune</span>
+        Apply
+      </button>
+      <button type="button" class="btn btn-ai btn-ai-secondary" (click)="clearFilters()">
+        <span class="material-symbols-outlined">restart_alt</span>
+        Reset
+      </button>
+    </div>
+  </div>
+
+  <nav class="report-nav card">
+    <a
+      *ngFor="let item of navItems"
+      [routerLink]="item.path"
+      routerLinkActive="active"
+      class="report-nav-link"
+    >
+      <span class="material-symbols-outlined nav-chip-icon">analytics</span>
+      {{ item.label }}
+    </a>
+  </nav>
+
+  <router-outlet></router-outlet>
+</section>

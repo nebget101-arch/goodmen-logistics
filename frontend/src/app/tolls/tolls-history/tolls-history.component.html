@@ -1,0 +1,25 @@
+<div *ngIf="loading">Loading history…</div>
+<div *ngIf="error" class="error">{{ error }}</div>
+
+<table *ngIf="!loading && !error" class="simple-table">
+  <thead>
+    <tr>
+      <th>Provider</th>
+      <th>File</th>
+      <th>Status</th>
+      <th>Total</th>
+      <th>Success</th>
+      <th>Failed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let row of rows">
+      <td>{{ row.provider_name }}</td>
+      <td>{{ row.source_file_name }}</td>
+      <td>{{ row.import_status }}</td>
+      <td>{{ row.total_rows }}</td>
+      <td>{{ row.success_rows }}</td>
+      <td>{{ row.failed_rows }}</td>
+    </tr>
+  </tbody>
+</table>

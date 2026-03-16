@@ -1,0 +1,21 @@
+<div *ngIf="loading">Loading accounts…</div>
+<div *ngIf="error" class="error">{{ error }}</div>
+
+<table *ngIf="!loading && !error" class="simple-table">
+  <thead>
+    <tr>
+      <th>Provider</th>
+      <th>Name</th>
+      <th>Account</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let row of rows">
+      <td>{{ row.provider_name }}</td>
+      <td>{{ row.display_name }}</td>
+      <td>{{ row.account_number_masked || '—' }}</td>
+      <td>{{ row.status }}</td>
+    </tr>
+  </tbody>
+</table>
