@@ -1,0 +1,87 @@
+<div class="exc-page">
+  <div class="page-header">
+    <div class="left">
+      <h1><span class="material-symbols-outlined">warning</span> Fuel Exceptions</h1>
+      <span class="count-badge" *ngIf="!loading">{{ rows.length }} open</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn-ghost" (click)="reprocess()" [disabled]="reprocessLoading || loading">
+        <span *ngIf="reprocessLoading" class="spinner-sm"></span>
+        <span *ngIf="!reprocessLoading" class="material-symbols-outlined">sync</span>
+        {{ reprocessLoading ? 'Reprocessing…' : 'Reprocess Unmatched' }}
+      </button>
+      <button class="btn-ghost" (click)="load()" [disabled]="loading">
+        <span class="material-symbols-outlined">refresh</span> Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="error-banner" *ngIf="error">
+    <span class="material-symbols-outlined">error</span> {{ error }}
+  </div>
+
+  <div class="bulk-bar" *ngIf="selected.size > 0">
+    <span><strong>{{ selected.size }}</strong> selected</span>
+    <div class="bulk-actions">
+      <button class="btn-primary" (click)="bulkResolve('resolved')" [disabled]="bulkLoading">
+        <span *ngIf="bulkLoading" class="spinner-sm"></span>
+        <span *ngIf="!bulkLoading">Mark Resolved</span>
+      </button>
+      <button class="btn-ghost" (click)="bulkResolve('ignored')" [disabled]="bulkLoading">Ignore</button>
+    </div>
+  </div>
+
+  <div class="loading-state" *ngIf="loading">
+    <div class="spinner"></div> Loading exceptions…
+  </div>
+
+  <div class="table-wrap" *ngIf="!loading && rows.length > 0">
+    <table class="exc-table">
+      <thead>
+        <tr>
+          <th><input type="checkbox" [checked]="allSelected" (change)="toggleSelectAll($event)" /></th>
+          <th>Type</th>
+          <th>Message</th>
+          <th>Status</th>
+          <th>Date</th>
+          <th>Provider</th>
+          <th>Card</th>
+          <th>Truck / Driver</th>
+          <th>Amount</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of rows">
+          <td>
+            <input type="checkbox" [checked]="selected.has(row.id)" (change)="toggleSelect(row.id)" />
+          </td>
+          <td>
+            <span class="type-badge" [ngClass]="typeClass(row.exception_type)">{{ row.exception_type }}</span>
+          </td>
+          <td class="msg-cell">{{ row.exception_message || '—' }}</td>
+          <td>
+            <span class="pill" [ngClass]="statusClass(row.resolution_status)">{{ row.resolution_status }}</span>
+          </td>
+          <td>{{ row.transaction_date || '—' }}</td>
+          <td>{{ row.provider_name || '—' }}</td>
+          <td>{{ row.card_number_masked || '—' }}</td>
+          <td>
+            <div class="small">Truck: {{ row.unit_number_raw || '—' }}</div>
+            <div class="small">Driver: {{ row.driver_name_raw || '—' }}</div>
+          </td>
+          <td class="num-col">${{ row.amount | number:'1.2-2' }}</td>
+          <td class="actions-cell">
+            <button class="action-btn ok" (click)="resolveOne(row, 'resolved')" [disabled]="resolvingId === row.id">Resolve</button>
+            <button class="action-btn" (click)="resolveOne(row, 'ignored')" [disabled]="resolvingId === row.id">Ignore</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" *ngIf="!loading && rows.length === 0">
+    <span class="material-symbols-outlined empty-icon">task_alt</span>
+    <p>Great news — no open fuel exceptions.</p>
+  </div>
+</div>

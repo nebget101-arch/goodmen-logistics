@@ -60,6 +60,7 @@ const swaggerOptions = {
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const loadsRouter = require(path.join(sharedRoot, 'routes', 'loads'));
+const fuelRouter = require(path.join(sharedRoot, 'routes', 'fuel'));
 const brokersRouter = require(path.join(sharedRoot, 'routes', 'brokers'));
 const locationsRouter = require(path.join(sharedRoot, 'routes', 'locations'));
 const geoRouter = require(path.join(sharedRoot, 'routes', 'geo'));
@@ -86,6 +87,7 @@ const requireSettlementsPlan = requirePlanAccess((req) => {
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+app.use('/api/fuel', authMiddleware, tenantContextMiddleware, fuelRouter);
 app.use('/api/loads', authMiddleware, tenantContextMiddleware, loadsRouter);
 app.use('/api/brokers', authMiddleware, tenantContextMiddleware, brokersRouter);
 app.use('/api/locations', authMiddleware, tenantContextMiddleware, locationsRouter);

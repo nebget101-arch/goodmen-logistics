@@ -1,0 +1,73 @@
+/* Shared fuel module shell styles — dark-tech theme */
+.fuel-shell {
+  min-height: calc(100vh - 64px);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(251,191,36,.08), transparent 52%),
+    radial-gradient(circle at 100% 80%, rgba(234,88,12,.1), transparent 52%),
+    #020617;
+  color: #e5e7eb;
+}
+
+.fuel-header {
+  padding: 24px clamp(16px,4vw,36px) 0;
+}
+
+.fuel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.fuel-icon {
+  font-size: 36px;
+  color: #fbbf24;
+}
+
+.fuel-title-row h1 {
+  margin: 0 0 4px;
+  font-size: clamp(1.65rem,2.4vw,2rem);
+}
+
+.fuel-subtitle {
+  margin: 0;
+  color: #94a3b8;
+  font-size: .9rem;
+}
+
+.fuel-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 clamp(16px,4vw,36px);
+  border-bottom: 1px solid rgba(148,163,184,.15);
+  overflow-x: auto;
+}
+
+.fuel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: .88rem;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s;
+}
+
+.fuel-tab .material-symbols-outlined { font-size: 18px; }
+
+.fuel-tab:hover { color: #e5e7eb; }
+
+.fuel-tab.active {
+  color: #fbbf24;
+  border-bottom-color: #fbbf24;
+}
+
+.fuel-content {
+  padding: 28px clamp(16px,4vw,36px);
+}

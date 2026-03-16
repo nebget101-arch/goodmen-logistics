@@ -1,0 +1,230 @@
+<div class="txn-page">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <h1><span class="material-symbols-outlined">receipt_long</span> Fuel Transactions</h1>
+      <span class="total-badge" *ngIf="!loading">{{ total | number }} records</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn-ghost" (click)="exportCsv()" [disabled]="loading || rows.length === 0">
+        <span class="material-symbols-outlined">download</span> Export CSV
+      </button>
+      <button class="btn-primary" (click)="goToImport()">
+        <span class="material-symbols-outlined">upload_file</span> Import Fuel
+      </button>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>From</label>
+      <input type="date" [(ngModel)]="dateFrom" (change)="applyFilters()" class="filter-input" />
+    </div>
+    <div class="filter-group">
+      <label>To</label>
+      <input type="date" [(ngModel)]="dateTo" (change)="applyFilters()" class="filter-input" />
+    </div>
+    <div class="filter-group">
+      <label>Provider</label>
+      <input type="text" [(ngModel)]="provider" placeholder="EFS, Comdata…" class="filter-input" (keyup.enter)="applyFilters()" />
+    </div>
+    <div class="filter-group">
+      <label>Matched</label>
+      <select [(ngModel)]="matchedStatus" (change)="applyFilters()" class="filter-input">
+        <option value="">All</option>
+        <option value="matched">Matched</option>
+        <option value="partial">Partial</option>
+        <option value="unmatched">Unmatched</option>
+        <option value="manual">Manual</option>
+      </select>
+    </div>
+    <button class="btn-ghost btn-sm" (click)="clearFilters()">
+      <span class="material-symbols-outlined">filter_alt_off</span>
+    </button>
+  </div>
+
+  <!-- Error -->
+  <div class="error-banner" *ngIf="error">
+    <span class="material-symbols-outlined">error</span> {{ error }}
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-state" *ngIf="loading">
+    <div class="spinner"></div>
+    <span>Loading transactions…</span>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap" *ngIf="!loading && rows.length > 0">
+    <table class="txn-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Provider</th>
+          <th>Card</th>
+          <th>Truck</th>
+          <th>Driver</th>
+          <th>Vendor</th>
+          <th>Location</th>
+          <th class="num-col">Gallons</th>
+          <th class="num-col">Amount</th>
+          <th class="num-col">PPG</th>
+          <th>Matched</th>
+          <th>Settlement</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let txn of rows" (click)="openDrawer(txn)" class="txn-row">
+          <td class="date-cell">{{ txn.transaction_date }}</td>
+          <td class="provider-cell">{{ txn.provider_name }}</td>
+          <td class="card-cell">{{ txn.card_number_masked || '—' }}</td>
+          <td class="unit-cell">
+            <span *ngIf="txn.truck_display">{{ txn.truck_display }}</span>
+            <span *ngIf="!txn.truck_display && txn.unit_number_raw" class="unmatched-value">{{ txn.unit_number_raw }}</span>
+            <span *ngIf="!txn.truck_display && !txn.unit_number_raw" class="empty-dash">—</span>
+          </td>
+          <td class="driver-cell">
+            <span *ngIf="txn.driver_display">{{ txn.driver_display }}</span>
+            <span *ngIf="!txn.driver_display && txn.driver_name_raw" class="unmatched-value">{{ txn.driver_name_raw }}</span>
+            <span *ngIf="!txn.driver_display && !txn.driver_name_raw" class="empty-dash">—</span>
+          </td>
+          <td>{{ txn.vendor_name || '—' }}</td>
+          <td class="loc-cell">
+            <span *ngIf="txn.city || txn.state">{{ txn.city }}{{ txn.city && txn.state ? ', ' : '' }}{{ txn.state }}</span>
+            <span *ngIf="!txn.city && !txn.state" class="empty-dash">—</span>
+          </td>
+          <td class="num-col">{{ txn.gallons | number:'1.3-3' }}</td>
+          <td class="num-col amt-cell">${{ txn.amount | number:'1.2-2' }}</td>
+          <td class="num-col">
+            <span *ngIf="txn.price_per_gallon">${{ txn.price_per_gallon | number:'1.3-3' }}</span>
+            <span *ngIf="!txn.price_per_gallon" class="empty-dash">—</span>
+          </td>
+          <td (click)="$event.stopPropagation()">
+            <span class="pill" [ngClass]="matchClass(txn.matched_status)">{{ txn.matched_status }}</span>
+          </td>
+          <td (click)="$event.stopPropagation()">
+            <span class="pill" [ngClass]="settlementClass(txn.settlement_link_status)">{{ txn.settlement_link_status }}</span>
+          </td>
+          <td class="actions-cell" (click)="$event.stopPropagation()">
+            <button class="action-btn" title="Delete" (click)="deleteTransaction(txn)"
+              [disabled]="deletingId === txn.id">
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Empty State -->
+  <div class="empty-state" *ngIf="!loading && rows.length === 0">
+    <span class="material-symbols-outlined empty-icon">local_gas_station</span>
+    <p>No transactions found.</p>
+    <button class="btn-primary" (click)="goToImport()">Import Fuel Data</button>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" *ngIf="!loading && total > pageSize">
+    <button class="btn-ghost btn-sm" (click)="prevPage()" [disabled]="pageOffset === 0">
+      <span class="material-symbols-outlined">chevron_left</span>
+    </button>
+    <span class="page-info">Page {{ pageNumber }} of {{ totalPages }} · {{ total | number }} total</span>
+    <button class="btn-ghost btn-sm" (click)="nextPage()" [disabled]="pageOffset + pageSize >= total">
+      <span class="material-symbols-outlined">chevron_right</span>
+    </button>
+  </div>
+
+</div>
+
+<!-- Detail Drawer Overlay -->
+<div class="drawer-overlay" *ngIf="drawerTxn" (click)="closeDrawer()"></div>
+<div class="detail-drawer" *ngIf="drawerTxn">
+  <div class="drawer-header">
+    <h3>Transaction Detail</h3>
+    <button class="close-btn" (click)="closeDrawer()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+  <div class="drawer-body">
+
+    <div class="detail-section">
+      <div class="detail-label">Date</div>
+      <div class="detail-value">{{ drawerTxn!.transaction_date }}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Provider</div>
+      <div class="detail-value">{{ drawerTxn!.provider_name }}</div>
+    </div>
+    <div class="detail-section" *ngIf="drawerTxn!.card_number_masked">
+      <div class="detail-label">Card</div>
+      <div class="detail-value">{{ drawerTxn!.card_number_masked }}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Truck</div>
+      <div class="detail-value">{{ drawerTxn!.truck_display || drawerTxn!.unit_number_raw || '—' }}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Driver</div>
+      <div class="detail-value">{{ drawerTxn!.driver_display || drawerTxn!.driver_name_raw || '—' }}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Vendor</div>
+      <div class="detail-value">{{ drawerTxn!.vendor_name || '—' }}</div>
+    </div>
+    <div class="detail-section" *ngIf="drawerTxn!.city || drawerTxn!.state">
+      <div class="detail-label">Location</div>
+      <div class="detail-value">{{ drawerTxn!.city }}{{ drawerTxn!.city && drawerTxn!.state ? ', ' : '' }}{{ drawerTxn!.state }}</div>
+    </div>
+    <div class="detail-row-2">
+      <div class="detail-section">
+        <div class="detail-label">Gallons</div>
+        <div class="detail-value amber">{{ drawerTxn!.gallons | number:'1.3-3' }}</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-label">Amount</div>
+        <div class="detail-value amber">${{ drawerTxn!.amount | number:'1.2-2' }}</div>
+      </div>
+      <div class="detail-section" *ngIf="drawerTxn!.price_per_gallon">
+        <div class="detail-label">PPG</div>
+        <div class="detail-value">${{ drawerTxn!.price_per_gallon | number:'1.3-3' }}</div>
+      </div>
+    </div>
+    <div class="detail-row-2" *ngIf="drawerTxn!.odometer">
+      <div class="detail-section">
+        <div class="detail-label">Odometer</div>
+        <div class="detail-value">{{ drawerTxn!.odometer | number }}</div>
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Match Status</div>
+      <div class="detail-value"><span class="pill" [ngClass]="matchClass(drawerTxn!.matched_status)">{{ drawerTxn!.matched_status }}</span></div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Settlement</div>
+      <div class="detail-value"><span class="pill" [ngClass]="settlementClass(drawerTxn!.settlement_link_status)">{{ drawerTxn!.settlement_link_status }}</span></div>
+    </div>
+    <div class="detail-section" *ngIf="drawerTxn!.notes">
+      <div class="detail-label">Notes</div>
+      <div class="detail-value notes-value">{{ drawerTxn!.notes }}</div>
+    </div>
+
+    <div class="drawer-exceptions" *ngIf="drawerLoading">
+      <div class="spinner-sm"></div> Loading exceptions…
+    </div>
+    <div class="drawer-exceptions" *ngIf="!drawerLoading && drawerExceptions.length > 0">
+      <div class="exc-section-title">
+        <span class="material-symbols-outlined">warning</span> Exceptions
+      </div>
+      <div class="exc-item" *ngFor="let ex of drawerExceptions">
+        <span class="exc-type">{{ ex.exception_type }}</span>
+        <span class="exc-msg">{{ ex.exception_message }}</span>
+        <span class="pill pill-green" *ngIf="ex.resolution_status === 'resolved'">resolved</span>
+        <span class="pill pill-yellow" *ngIf="ex.resolution_status === 'open'">open</span>
+      </div>
+    </div>
+
+  </div>
+</div>

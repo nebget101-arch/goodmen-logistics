@@ -1,0 +1,11 @@
+Transaction Date,Gallons,Total Amount,Truck Unit,Driver Name,Card Number,Vendor / Station,City,State,Price Per Gallon,Odometer,Product Type,Posted Date,Provider Name,External Transaction ID
+2026-03-01,120.50,468.34,TRK-201,John Carter,****4432,Pilot Travel Center,Dallas,TX,3.886,452130,Diesel,2026-03-02,EFS,EFS-9001001
+2026-03-01,96.20,374.21,TRK-087,Sarah White,****7731,Love's Travel Stop,Oklahoma City,OK,3.890,334411,Diesel,2026-03-02,Comdata,CMD-550778
+2026-03-02,132.00,519.42,TRK-315,Michael Reed,****1948,TA Truck Service,Tulsa,OK,3.935,518902,Diesel,2026-03-03,WEX,WEX-193004
+2026-03-02,88.75,346.22,TRK-144,Emily Stone,****6615,Petro Stopping Center,Little Rock,AR,3.901,287560,Diesel,2026-03-03,RTS,RTS-884120
+2026-03-03,104.10,404.95,TRK-220,Daniel Cook,****2250,Pilot Travel Center,Memphis,TN,3.890,402244,Diesel,2026-03-04,EFS,EFS-9001002
+2026-03-03,115.40,450.06,TRK-102,Amanda Lee,****9090,Love's Travel Stop,Springfield,MO,3.900,371902,Diesel,2026-03-04,Comdata,CMD-550779
+2026-03-04,127.85,503.35,TRK-309,Chris Adams,****1209,TA Truck Service,Kansas City,MO,3.938,499180,Diesel,2026-03-05,WEX,WEX-193005
+2026-03-04,90.50,353.67,TRK-055,Olivia Young,****3044,Petro Stopping Center,Shreveport,LA,3.908,265119,Diesel,2026-03-05,RTS,RTS-884121
+2026-03-05,111.30,436.52,TRK-198,Jason Hill,****7788,Pilot Travel Center,Nashville,TN,3.922,428900,Diesel,2026-03-06,EFS,EFS-9001003
+2026-03-05,98.95,386.39,TRK-261,Grace Baker,****5521,Love's Travel Stop,St. Louis,MO,3.905,390870,Diesel,2026-03-06,Comdata,CMD-550780

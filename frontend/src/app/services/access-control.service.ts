@@ -121,6 +121,8 @@ export class AccessControlService {
     if (r('carrier_accountant') || r('accounting') || r('company_accountant')) {
       set.add(PERMISSIONS.DASHBOARD_VIEW).add(PERMISSIONS.CUSTOMERS_VIEW).add(PERMISSIONS.INVOICES_VIEW).add(PERMISSIONS.INVOICES_CREATE).add(PERMISSIONS.INVOICES_EDIT).add(PERMISSIONS.INVOICES_EXPORT);
       set.add(PERMISSIONS.SALES_VIEW).add(PERMISSIONS.INVENTORY_REPORTS_VIEW);
+      set.add(PERMISSIONS.FUEL_VIEW).add(PERMISSIONS.FUEL_IMPORT).add(PERMISSIONS.FUEL_CARDS_MANAGE)
+        .add(PERMISSIONS.FUEL_TRANSACTIONS_EDIT).add(PERMISSIONS.FUEL_EXCEPTIONS_RESOLVE).add(PERMISSIONS.FUEL_REPORTS_VIEW);
     }
     if (r('shop_manager') || r('service_writer')) {
       set.add(PERMISSIONS.DASHBOARD_VIEW).add(PERMISSIONS.MAINTENANCE_VIEW).add(PERMISSIONS.WORK_ORDERS_VIEW).add(PERMISSIONS.WORK_ORDERS_CREATE).add(PERMISSIONS.WORK_ORDERS_EDIT).add(PERMISSIONS.WORK_ORDERS_FINALIZE);
@@ -271,6 +273,12 @@ export class AccessControlService {
     const perms = this.getPermissions();
     if (perms.includes(code)) return true;
     if (this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COMPANY_ADMIN])) return true;
+    if (
+      code.startsWith('fuel.')
+      && this.hasAnyRole(['carrier_accountant', 'accounting', 'company_accountant'])
+    ) {
+      return true;
+    }
     return false;
   }
 

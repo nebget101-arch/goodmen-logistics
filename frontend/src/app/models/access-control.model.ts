@@ -187,6 +187,14 @@ export const PERMISSIONS = {
   USERS_EDIT: 'users.edit',
   ROLES_MANAGE: 'roles.manage',
   ACCESS_ADMIN: 'access.admin',
+
+  // Fuel import module
+  FUEL_VIEW: 'fuel.view',
+  FUEL_IMPORT: 'fuel.import',
+  FUEL_CARDS_MANAGE: 'fuel.cards.manage',
+  FUEL_TRANSACTIONS_EDIT: 'fuel.transactions.edit',
+  FUEL_EXCEPTIONS_RESOLVE: 'fuel.exceptions.resolve',
+  FUEL_REPORTS_VIEW: 'fuel.reports.view',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
@@ -215,4 +223,5 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
   settlements: [PERMISSIONS.SETTLEMENTS_VIEW],
   users: [PERMISSIONS.USERS_VIEW, PERMISSIONS.USERS_CREATE, PERMISSIONS.USERS_EDIT, PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN],
   users_create: [PERMISSIONS.USERS_CREATE, PERMISSIONS.USERS_VIEW],
+  fuel: [PERMISSIONS.FUEL_VIEW, PERMISSIONS.FUEL_IMPORT, PERMISSIONS.FUEL_CARDS_MANAGE, PERMISSIONS.FUEL_REPORTS_VIEW],
 };

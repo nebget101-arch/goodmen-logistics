@@ -1,0 +1,162 @@
+<div class="history-page">
+
+  <div class="page-header">
+    <h1><span class="material-symbols-outlined">history</span> Import History</h1>
+    <button class="btn-ghost" (click)="load()" [disabled]="loading">
+      <span class="material-symbols-outlined">refresh</span> Refresh
+    </button>
+  </div>
+
+  <div class="error-banner" *ngIf="error">
+    <span class="material-symbols-outlined">error</span> {{ error }}
+  </div>
+
+  <div class="loading-state" *ngIf="loading">
+    <div class="spinner"></div> Loading import history…
+  </div>
+
+  <div class="table-wrap" *ngIf="!loading && batches.length > 0">
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>Started</th>
+          <th>File</th>
+          <th>Provider</th>
+          <th class="num-col">Total</th>
+          <th class="num-col">Success</th>
+          <th class="num-col">Warnings</th>
+          <th class="num-col">Failed</th>
+          <th>Status</th>
+          <th>By</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let b of batches" class="history-row" (click)="openDetail(b)">
+          <td class="date-cell">{{ formatDate(b.started_at) }}</td>
+          <td class="file-cell" [title]="b.source_file_name">{{ b.source_file_name }}</td>
+          <td>{{ b.provider_name }}</td>
+          <td class="num-col">{{ b.total_rows || 0 }}</td>
+          <td class="num-col green-val">{{ b.success_rows || 0 }}</td>
+          <td class="num-col warn-val">{{ b.warning_rows || 0 }}</td>
+          <td class="num-col err-val">{{ b.failed_rows || 0 }}</td>
+          <td (click)="$event.stopPropagation()">
+            <span class="pill" [ngClass]="statusClass(b.import_status)">{{ b.import_status }}</span>
+          </td>
+          <td class="by-cell">{{ b.imported_by_user_id || '—' }}</td>
+          <td (click)="$event.stopPropagation()">
+            <button class="action-btn" (click)="openDetail(b)" title="View detail">
+              <span class="material-symbols-outlined">open_in_new</span>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" *ngIf="!loading && batches.length === 0">
+    <span class="material-symbols-outlined empty-icon">history</span>
+    <p>No import history yet.</p>
+  </div>
+
+</div>
+
+<!-- Detail Modal Overlay -->
+<div class="modal-overlay" *ngIf="detailBatch" (click)="closeDetail()"></div>
+<div class="detail-modal" *ngIf="detailBatch">
+  <div class="modal-header">
+    <div class="modal-title-group">
+      <h3>Batch Detail</h3>
+      <span class="pill" [ngClass]="statusClass(detailBatch.import_status)">{{ detailBatch.import_status }}</span>
+    </div>
+    <button class="close-btn" (click)="closeDetail()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <div class="modal-meta">
+    <div class="meta-item">
+      <span class="meta-label">File</span>
+      <span class="meta-value">{{ detailBatch.source_file_name }}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Provider</span>
+      <span class="meta-value">{{ detailBatch.provider_name }}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Started</span>
+      <span class="meta-value">{{ formatDate(detailBatch.started_at) }}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Completed</span>
+      <span class="meta-value">{{ detailBatch.completed_at ? formatDate(detailBatch.completed_at) : '—' }}</span>
+    </div>
+  </div>
+
+  <div class="batch-stats">
+    <div class="bstat green"><strong>{{ detailBatch.success_rows || 0 }}</strong> success</div>
+    <div class="bstat yellow"><strong>{{ detailBatch.warning_rows || 0 }}</strong> warnings</div>
+    <div class="bstat red"><strong>{{ detailBatch.failed_rows || 0 }}</strong> failed</div>
+    <div class="bstat purple"><strong>{{ successRate }}</strong> success rate</div>
+  </div>
+
+  <div class="modal-filter-bar">
+    <button class="filter-tab" [class.active]="detailFilter === 'all'" (click)="detailFilter = 'all'">All Rows</button>
+    <button class="filter-tab warn" [class.active]="detailFilter === 'warning'" (click)="detailFilter = 'warning'">Warnings</button>
+    <button class="filter-tab err" [class.active]="detailFilter === 'invalid'" (click)="detailFilter = 'invalid'">Errors</button>
+  </div>
+
+  <div class="loading-state" *ngIf="detailLoading">
+    <div class="spinner-sm"></div> Loading rows…
+  </div>
+
+  <div class="detail-table-wrap" *ngIf="!detailLoading">
+    <table class="detail-table" *ngIf="pagedDetailRows.length > 0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Date</th>
+          <th>Vendor</th>
+          <th>Gallons</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th>Issues</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of pagedDetailRows">
+          <td class="muted-val">{{ row.row_number }}</td>
+          <td>{{ row.normalized_payload?.transaction_date || '—' }}</td>
+          <td>{{ row.normalized_payload?.vendor_name || '—' }}</td>
+          <td class="num-col">{{ row.normalized_payload?.gallons | number:'1.3-3' }}</td>
+          <td class="num-col amber-val">${{ row.normalized_payload?.amount | number:'1.2-2' }}</td>
+          <td>
+            <span class="pill" [ngClass]="rowStatusClass(row.row_status)">{{ row.row_status }}</span>
+          </td>
+          <td class="issues-cell">
+            <div *ngFor="let e of (row.validation_errors || [])">
+              <span class="issue-badge error">{{ e }}</span>
+            </div>
+            <div *ngFor="let w of (row.warnings || [])">
+              <span class="issue-badge warn">{{ w }}</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="empty-state-sm" *ngIf="pagedDetailRows.length === 0">
+      No rows match the current filter.
+    </div>
+  </div>
+
+  <div class="modal-pagination" *ngIf="detailTotalPages > 1">
+    <button class="btn-ghost btn-sm" (click)="detailPage = detailPage - 1" [disabled]="detailPage === 0">
+      <span class="material-symbols-outlined">chevron_left</span>
+    </button>
+    <span class="page-info">{{ detailPage + 1 }} / {{ detailTotalPages }}</span>
+    <button class="btn-ghost btn-sm" (click)="detailPage = detailPage + 1" [disabled]="detailPage >= detailTotalPages - 1">
+      <span class="material-symbols-outlined">chevron_right</span>
+    </button>
+  </div>
+</div>
