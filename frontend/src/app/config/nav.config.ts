@@ -75,6 +75,19 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/settlements/equipment-owners', label: 'Equipment Owners', tab: 'settlements' },
     ],
   },
+  {
+    sectionLabel: 'Fuel',
+    sectionIcon: 'local_gas_station',
+    tabs: ['fuel'],
+    children: [
+      { path: '/fuel', label: 'Overview', tab: 'fuel' },
+      { path: '/fuel/transactions', label: 'Transactions', tab: 'fuel' },
+      { path: '/fuel/import', label: 'Import', tab: 'fuel' },
+      { path: '/fuel/history', label: 'Import History', tab: 'fuel' },
+      { path: '/fuel/cards', label: 'Fuel Cards', tab: 'fuel' },
+      { path: '/fuel/exceptions', label: 'Exceptions', tab: 'fuel' },
+    ],
+  },
 ];
 
 /** Top-level links (no section). */

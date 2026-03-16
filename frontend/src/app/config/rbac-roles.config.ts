@@ -38,7 +38,7 @@ export function getVisibleRbacRolesForPlan(planId: string | null | undefined): R
 
   return RBAC_ROLES.filter((role) => {
     if (role.group === 'shop' || role.group === 'parts') return false;
-    if (role.value === 'company_accountant' || role.value === 'customer' || role.value === 'admin') return false;
+    if (role.value === 'customer' || role.value === 'admin') return false;
     return true;
   });
 }

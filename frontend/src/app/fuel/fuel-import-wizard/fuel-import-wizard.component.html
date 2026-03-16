@@ -1,0 +1,344 @@
+<div class="wizard-page">
+
+  <!-- Progress Rail -->
+  <div class="progress-rail">
+    <div class="rail-inner">
+      <div *ngFor="let s of steps; let i = index"
+           class="rail-step"
+           [class.active]="currentStep === s"
+           [class.done]="stepIndex > i"
+           (click)="goToStep(s)">
+        <div class="rail-bubble">
+          <span class="material-symbols-outlined" *ngIf="stepIndex > i">check</span>
+          <span *ngIf="stepIndex <= i">{{ i + 1 }}</span>
+        </div>
+        <span class="rail-label">{{ stepLabels[s] }}</span>
+        <div class="rail-line" *ngIf="i < steps.length - 1"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step Panels -->
+  <div class="wizard-body">
+
+    <!-- ──────────── STEP 1: Provider ──────────── -->
+    <div class="step-panel" *ngIf="currentStep === 'provider'">
+      <div class="step-heading">
+        <h2>Select Fuel Card Provider</h2>
+        <p>Choose the company that issued your fuel cards. This loads the correct column mapping template.</p>
+      </div>
+      <div class="provider-grid">
+          <div *ngFor="let t of providerTemplates"
+             class="provider-card"
+             [class.selected]="selectedProviderKey === t.key"
+             (click)="selectProvider(t.key, providerLabel(t))">
+          <span class="material-symbols-outlined provider-icon">local_gas_station</span>
+           <div class="provider-name">{{ providerLabel(t) }}</div>
+           <div class="provider-hint">{{ providerDescription(t) }}</div>
+          <div class="provider-check" *ngIf="selectedProviderKey === t.key">
+            <span class="material-symbols-outlined">check_circle</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-footer">
+        <button class="btn-primary" (click)="nextFromProvider()">
+          Continue <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ──────────── STEP 2: Upload ──────────── -->
+    <div class="step-panel" *ngIf="currentStep === 'upload'">
+      <div class="step-heading">
+        <h2>Upload File</h2>
+        <p>Accepted formats: <strong>CSV</strong> or <strong>Excel (.xlsx)</strong> — max 10 MB.</p>
+      </div>
+
+      <div class="drop-zone"
+           [class.drag-over]="dragOver"
+           [class.has-file]="!!selectedFile"
+           (dragover)="onDragOver($event)"
+           (dragleave)="onDragLeave()"
+           (drop)="onDrop($event)">
+        <div class="drop-inner" *ngIf="!selectedFile">
+          <span class="material-symbols-outlined drop-icon">upload_file</span>
+          <p>Drag &amp; drop your file here</p>
+          <span class="drop-or">or</span>
+          <label class="browse-btn">
+            Browse Files
+            <input type="file" accept=".csv,.xlsx,.xls" (change)="onFileChange($event)" hidden />
+          </label>
+        </div>
+        <div class="drop-inner" *ngIf="selectedFile">
+          <span class="material-symbols-outlined drop-icon green-icon">check_circle</span>
+          <p class="file-name">{{ selectedFile.name }}</p>
+          <span class="file-size">{{ (selectedFile.size / 1024).toFixed(1) }} KB</span>
+          <label class="browse-btn btn-ghost-sm">
+            Change File
+            <input type="file" accept=".csv,.xlsx,.xls" (change)="onFileChange($event)" hidden />
+          </label>
+        </div>
+      </div>
+
+      <div class="error-banner" *ngIf="previewError">
+        <span class="material-symbols-outlined">error</span> {{ previewError }}
+      </div>
+
+      <div class="template-hint">
+        <span class="material-symbols-outlined">info</span>
+        Need a template?
+        <button class="link-btn" (click)="downloadTemplate()">Download CSV template for {{ selectedProviderName }}</button>
+      </div>
+
+      <div class="step-footer">
+        <button class="btn-ghost" (click)="currentStep = 'provider'">
+          <span class="material-symbols-outlined">arrow_back</span> Back
+        </button>
+        <button class="btn-primary" (click)="nextFromUpload()" [disabled]="!selectedFile || previewLoading">
+          <span *ngIf="previewLoading" class="spinner-sm"></span>
+          <span *ngIf="!previewLoading">Preview File <span class="material-symbols-outlined">arrow_forward</span></span>
+          <span *ngIf="previewLoading">Parsing…</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ──────────── STEP 3: Preview ──────────── -->
+    <div class="step-panel" *ngIf="currentStep === 'preview' && previewResult">
+      <div class="step-heading">
+        <h2>File Preview</h2>
+        <p>Review the detected columns and first few rows before mapping.</p>
+      </div>
+
+      <div class="preview-summary">
+        <div class="summary-chip">
+          <span class="material-symbols-outlined">table_rows</span>
+          <strong>{{ previewResult.totalRows }}</strong> rows detected
+        </div>
+        <div class="summary-chip">
+          <span class="material-symbols-outlined">view_column</span>
+          <strong>{{ previewResult.headers.length }}</strong> columns
+        </div>
+        <div class="summary-chip">
+          <span class="material-symbols-outlined">corporate_fare</span>
+          Template: <strong>{{ selectedProviderName }}</strong>
+        </div>
+      </div>
+
+      <div class="preview-table-wrap">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              <th *ngFor="let h of previewResult.headers">{{ h }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of previewResult.preview">
+              <td *ngFor="let h of previewResult.headers">{{ row.raw[h] }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="step-footer">
+        <button class="btn-ghost" (click)="currentStep = 'upload'">
+          <span class="material-symbols-outlined">arrow_back</span> Back
+        </button>
+        <button class="btn-primary" (click)="nextFromPreview()">
+          Map Columns <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ──────────── STEP 4: Map ──────────── -->
+    <div class="step-panel" *ngIf="currentStep === 'map'">
+      <div class="step-heading">
+        <h2>Map Columns</h2>
+        <p>Match each FleetNeuron field to a column in your file. <span class="req-badge">Required</span> fields must be mapped.</p>
+      </div>
+
+      <div class="card-assoc">
+        <label>Associate with Fuel Card Account (optional)</label>
+        <select [(ngModel)]="selectedCardId" class="filter-input">
+          <option value="">— None —</option>
+          <option *ngFor="let c of cards" [value]="c.id">{{ c.display_name }} ({{ c.provider_name }})</option>
+        </select>
+      </div>
+
+      <div class="map-grid">
+        <div *ngFor="let field of normalizedFields" class="map-row">
+          <div class="map-field-info">
+            <span class="map-field-name">{{ field.label }}</span>
+            <span class="req-badge" *ngIf="field.required">req</span>
+            <span class="opt-badge" *ngIf="!field.required">opt</span>
+          </div>
+          <div class="map-arrow">
+            <span class="material-symbols-outlined">arrow_forward</span>
+          </div>
+          <select class="filter-input map-select"
+                  [(ngModel)]="columnMap[field.key]">
+            <option value="">— Skip —</option>
+            <option *ngFor="let h of previewResult?.headers" [value]="h">{{ h }}</option>
+          </select>
+          <span class="map-status-icon material-symbols-outlined" *ngIf="columnMap[field.key]">check_circle</span>
+          <span class="map-status-icon material-symbols-outlined warn" *ngIf="!columnMap[field.key] && field.required">error</span>
+        </div>
+      </div>
+
+      <div class="map-warnings" *ngIf="requiredUnmapped.length > 0">
+        <span class="material-symbols-outlined">warning</span>
+        Still required: <strong>{{ requiredUnmapped.join(', ') }}</strong>
+      </div>
+
+      <div class="step-footer">
+        <button class="btn-ghost" (click)="currentStep = 'preview'">
+          <span class="material-symbols-outlined">arrow_back</span> Back
+        </button>
+        <button class="btn-primary" (click)="nextFromMap()" [disabled]="!canProceedFromMap">
+          Validate Rows <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ──────────── STEP 5: Validate ──────────── -->
+    <div class="step-panel" *ngIf="currentStep === 'validate'">
+      <div class="step-heading">
+        <h2>Validation Results</h2>
+        <p>Review issues before importing. Errors must be resolved; warnings can be overridden.</p>
+      </div>
+
+      <div class="loading-state" *ngIf="stageLoading">
+        <div class="spinner"></div> Staging and validating rows…
+      </div>
+
+      <div class="error-banner" *ngIf="stageError">
+        <span class="material-symbols-outlined">error</span> {{ stageError }}
+      </div>
+
+      <div *ngIf="stageResult && !stageLoading">
+        <div class="validation-summary">
+          <div class="vsummary-chip green">
+            <span class="material-symbols-outlined">check_circle</span>
+            <strong>{{ stageResult.successCount }}</strong> valid
+          </div>
+          <div class="vsummary-chip yellow">
+            <span class="material-symbols-outlined">warning</span>
+            <strong>{{ stageResult.warningCount }}</strong> warnings
+          </div>
+          <div class="vsummary-chip red">
+            <span class="material-symbols-outlined">error</span>
+            <strong>{{ stageResult.failedCount }}</strong> errors
+          </div>
+        </div>
+
+        <div class="override-check" *ngIf="hasWarnings && !hasErrors">
+          <label class="check-label">
+            <input type="checkbox" [(ngModel)]="importWarnings" />
+            Import rows with warnings anyway
+          </label>
+        </div>
+
+        <div class="error-note" *ngIf="hasErrors">
+          <span class="material-symbols-outlined">info</span>
+          Rows with <strong>errors</strong> will be skipped. Only valid (and optionally warning) rows will be imported.
+          <label class="check-label" style="margin-top:10px">
+            <input type="checkbox" [(ngModel)]="importWarnings" />
+            Also import rows with warnings
+          </label>
+        </div>
+      </div>
+
+      <div class="step-footer" *ngIf="!stageLoading && stageResult">
+        <button class="btn-ghost" (click)="currentStep = 'map'">
+          <span class="material-symbols-outlined">arrow_back</span> Back
+        </button>
+        <button class="btn-primary" (click)="nextFromValidate()"
+          [disabled]="stageResult.successCount === 0 && !(importWarnings && stageResult.warningCount > 0)">
+          Proceed to Import <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ──────────── STEP 6: Import Confirmation ──────────── -->
+    <div class="step-panel" *ngIf="currentStep === 'import'">
+      <div class="step-heading">
+        <h2>Ready to Import</h2>
+        <p>Review the summary below, then click <strong>Import Now</strong> to commit transactions to the database.</p>
+      </div>
+
+      <div class="import-confirm-box" *ngIf="stageResult">
+        <div class="icb-row">
+          <span class="icb-label">Provider</span>
+          <span class="icb-value">{{ selectedProviderName }}</span>
+        </div>
+        <div class="icb-row">
+          <span class="icb-label">File</span>
+          <span class="icb-value">{{ selectedFile?.name }}</span>
+        </div>
+        <div class="icb-row">
+          <span class="icb-label">Rows to import</span>
+          <span class="icb-value amber">
+            {{ stageResult.successCount + (importWarnings ? stageResult.warningCount : 0) }}
+          </span>
+        </div>
+        <div class="icb-row" *ngIf="stageResult.failedCount > 0">
+          <span class="icb-label">Error rows skipped</span>
+          <span class="icb-value warn">{{ stageResult.failedCount }}</span>
+        </div>
+      </div>
+
+      <div class="error-banner" *ngIf="commitError">
+        <span class="material-symbols-outlined">error</span> {{ commitError }}
+      </div>
+
+      <div class="step-footer">
+        <button class="btn-ghost" (click)="currentStep = 'validate'" [disabled]="commitLoading">
+          <span class="material-symbols-outlined">arrow_back</span> Back
+        </button>
+        <button class="btn-primary btn-amber-solid" (click)="doCommit()" [disabled]="commitLoading">
+          <span *ngIf="commitLoading" class="spinner-sm"></span>
+          <span *ngIf="!commitLoading"><span class="material-symbols-outlined">upload</span> Import Now</span>
+          <span *ngIf="commitLoading">Importing…</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ──────────── STEP 7: Result ──────────── -->
+    <div class="step-panel result-panel" *ngIf="currentStep === 'result' && commitResult">
+      <span class="material-symbols-outlined result-icon">check_circle</span>
+      <h2>Import Complete!</h2>
+
+      <div class="result-grid">
+        <div class="result-stat">
+          <span class="rs-number green">{{ commitResult.imported }}</span>
+          <span class="rs-label">Imported</span>
+        </div>
+        <div class="result-stat">
+          <span class="rs-number yellow">{{ commitResult.exceptions }}</span>
+          <span class="rs-label">Exceptions</span>
+        </div>
+        <div class="result-stat">
+          <span class="rs-number muted">{{ commitResult.skipped }}</span>
+          <span class="rs-label">Skipped</span>
+        </div>
+      </div>
+
+      <p class="result-note" *ngIf="commitResult.exceptions > 0">
+        <span class="material-symbols-outlined">info</span>
+        {{ commitResult.exceptions }} transactions could not be matched to a truck or driver. Review them in the Exceptions queue.
+      </p>
+
+      <div class="result-actions">
+        <button class="btn-primary" (click)="goToTransactions()">
+          <span class="material-symbols-outlined">receipt_long</span> View Transactions
+        </button>
+        <button class="btn-ghost" (click)="goToExceptions()" *ngIf="commitResult.exceptions > 0">
+          <span class="material-symbols-outlined">warning</span> Resolve Exceptions
+        </button>
+        <button class="btn-ghost" (click)="startOver()">
+          <span class="material-symbols-outlined">refresh</span> Import Another
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>

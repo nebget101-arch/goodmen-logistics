@@ -135,6 +135,20 @@ const routes: Routes = [
   { path: 'customers', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
   { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
   { path: 'settlements', loadChildren: () => import('./settlements/settlements.module').then(m => m.SettlementsModule) },
+  {
+    path: 'fuel',
+    loadChildren: () => import('./fuel/fuel.module').then(m => m.FuelModule),
+    canActivate: [AuthGuard, PermissionGuard],
+    data: {
+      anyPermission: [
+        PERMISSIONS.FUEL_VIEW,
+        PERMISSIONS.FUEL_IMPORT,
+        PERMISSIONS.FUEL_CARDS_MANAGE,
+        PERMISSIONS.FUEL_EXCEPTIONS_RESOLVE,
+        PERMISSIONS.FUEL_REPORTS_VIEW
+      ]
+    }
+  },
   { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   {

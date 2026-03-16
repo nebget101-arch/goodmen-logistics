@@ -1,0 +1,119 @@
+<div class="cards-page">
+  <div class="page-header">
+    <h1><span class="material-symbols-outlined">credit_card</span> Fuel Card Accounts</h1>
+    <button class="btn-primary" (click)="openCreate()">
+      <span class="material-symbols-outlined">add</span> Add Account
+    </button>
+  </div>
+
+  <div class="error-banner" *ngIf="error">
+    <span class="material-symbols-outlined">error</span> {{ error }}
+  </div>
+
+  <div class="loading-state" *ngIf="loading">
+    <div class="spinner"></div> Loading fuel cards…
+  </div>
+
+  <div class="table-wrap" *ngIf="!loading && cards.length > 0">
+    <table class="cards-table">
+      <thead>
+        <tr>
+          <th>Display Name</th>
+          <th>Provider</th>
+          <th>Account</th>
+          <th>Import Method</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let card of cards">
+          <td>
+            <div class="title-cell">{{ card.display_name }}</div>
+            <div class="notes" *ngIf="card.notes">{{ card.notes }}</div>
+          </td>
+          <td>{{ card.provider_name }}</td>
+          <td>{{ card.account_number_masked || '—' }}</td>
+          <td class="mono">{{ card.import_method }}</td>
+          <td>
+            <span class="pill" [ngClass]="statusClass(card.status)">{{ card.status }}</span>
+          </td>
+          <td class="date-cell">{{ card.created_at | date:'medium' }}</td>
+          <td class="actions-cell">
+            <button class="action-btn" (click)="openEdit(card)">
+              <span class="material-symbols-outlined">edit</span>
+            </button>
+            <button class="action-btn danger" *ngIf="card.status === 'active'" (click)="deactivate(card)">
+              <span class="material-symbols-outlined">block</span>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" *ngIf="!loading && cards.length === 0">
+    <span class="material-symbols-outlined empty-icon">credit_card</span>
+    <p>No fuel card accounts yet.</p>
+    <button class="btn-primary" (click)="openCreate()">Add first account</button>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" *ngIf="showModal" (click)="closeModal()"></div>
+<div class="modal" *ngIf="showModal">
+  <div class="modal-header">
+    <h3>{{ editing ? 'Edit Fuel Card Account' : 'Add Fuel Card Account' }}</h3>
+    <button class="close-btn" (click)="closeModal()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <form [formGroup]="form" (ngSubmit)="save()" class="form-grid">
+    <label>
+      Provider Name
+      <input type="text" formControlName="provider_name" />
+    </label>
+
+    <label>
+      Display Name
+      <input type="text" formControlName="display_name" />
+    </label>
+
+    <label>
+      Account # (masked)
+      <input type="text" formControlName="account_number_masked" placeholder="****1234" />
+    </label>
+
+    <label>
+      Import Method
+      <select formControlName="import_method">
+        <option value="csv_upload">CSV Upload</option>
+        <option value="api">API</option>
+        <option value="manual">Manual</option>
+      </select>
+    </label>
+
+    <label>
+      Status
+      <select formControlName="status">
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+      </select>
+    </label>
+
+    <label class="full-row">
+      Notes
+      <textarea rows="3" formControlName="notes"></textarea>
+    </label>
+
+    <div class="modal-actions full-row">
+      <button type="button" class="btn-ghost" (click)="closeModal()" [disabled]="saving">Cancel</button>
+      <button type="submit" class="btn-primary" [disabled]="saving">
+        <span *ngIf="saving" class="spinner-sm"></span>
+        <span *ngIf="!saving">{{ editing ? 'Save Changes' : 'Create Account' }}</span>
+      </button>
+    </div>
+  </form>
+</div>

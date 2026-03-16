@@ -27,6 +27,7 @@ const PLANS = {
       '/hos',
       '/drivers/dqf',
       '/audit',
+      '/fuel',
       '/settlements',
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners'
@@ -60,6 +61,7 @@ const PLANS = {
       '/hos',
       '/drivers/dqf',
       '/audit',
+      '/fuel',
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners',
       '/admin/multi-mc'
@@ -94,6 +96,7 @@ const PLANS = {
       '/hos',
       '/drivers/dqf',
       '/audit',
+      '/fuel',
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners',
       '/admin/multi-mc',
@@ -137,6 +140,7 @@ const PLANS = {
       '/hos',
       '/drivers/dqf',
       '/audit',
+      '/fuel',
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners',
       '/admin/multi-mc',

@@ -1,0 +1,95 @@
+<div *ngIf="loading" class="loading-state">Loading overview…</div>
+<div *ngIf="error" class="alert alert-error">{{ error }}</div>
+
+<ng-container *ngIf="!loading && overview">
+  <!-- ─ KPI row ─ -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <span class="kpi-label">This Week – Spend</span>
+      <span class="kpi-value">{{ fmtCurrency(overview!.week.totalAmount) }}</span>
+      <span class="kpi-sub">{{ fmt(overview!.week.totalGallons, 1) }} gal · {{ overview!.week.count }} transactions</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">This Month – Spend</span>
+      <span class="kpi-value">{{ fmtCurrency(overview!.month.totalAmount) }}</span>
+      <span class="kpi-sub">{{ fmt(overview!.month.totalGallons, 1) }} gal · {{ overview!.month.count }} transactions</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">Avg Price / Gallon</span>
+      <span class="kpi-value">${{ fmt(overview!.month.avgPpg) }}</span>
+      <span class="kpi-sub">30-day rolling average</span>
+    </div>
+    <div class="kpi-card" [class.kpi-warn]="overview!.unmatchedTransactions > 0" (click)="goToTransactions()" style="cursor:pointer">
+      <span class="kpi-label">Unmatched Transactions</span>
+      <span class="kpi-value">{{ overview!.unmatchedTransactions }}</span>
+      <span class="kpi-sub">Click to view</span>
+    </div>
+    <div class="kpi-card" [class.kpi-warn]="overview!.openExceptions > 0" (click)="goToExceptions()" style="cursor:pointer">
+      <span class="kpi-label">Open Exceptions</span>
+      <span class="kpi-value">{{ overview!.openExceptions }}</span>
+      <span class="kpi-sub">Needs attention</span>
+    </div>
+  </div>
+
+  <!-- ─ Action buttons ─ -->
+  <div class="action-row">
+    <button type="button" class="btn btn-primary" (click)="goToImport()">
+      <span class="material-symbols-outlined">upload_file</span> Import Fuel File
+    </button>
+    <button type="button" class="btn btn-secondary" (click)="load()">
+      <span class="material-symbols-outlined">refresh</span> Refresh
+    </button>
+  </div>
+
+  <!-- ─ Bottom panels ─ -->
+  <div class="panels-row">
+    <!-- Top vendors -->
+    <div class="panel">
+      <h3>Top Vendors (30 days)</h3>
+      <div *ngIf="overview!.topVendors.length === 0" class="empty-panel">No data</div>
+      <table *ngIf="overview!.topVendors.length" class="mini-table">
+        <thead><tr><th>Vendor</th><th>Spend</th><th>Transactions</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let v of overview!.topVendors">
+            <td>{{ v.name }}</td>
+            <td>{{ fmtCurrency(v.total) }}</td>
+            <td>{{ v.count }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- By state -->
+    <div class="panel">
+      <h3>Fuel by State (30 days)</h3>
+      <div *ngIf="overview!.byState.length === 0" class="empty-panel">No state data – ensure state column is mapped</div>
+      <table *ngIf="overview!.byState.length" class="mini-table">
+        <thead><tr><th>State</th><th>Gallons</th><th>Spend</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let s of overview!.byState">
+            <td><span class="state-badge">{{ s.state }}</span></td>
+            <td>{{ fmt(s.gallons, 1) }}</td>
+            <td>{{ fmtCurrency(s.amount) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Last import -->
+    <div class="panel">
+      <h3>Last Import</h3>
+      <ng-container *ngIf="overview!.lastBatch; else noImport">
+        <p><strong>File:</strong> {{ overview!.lastBatch!.source_file_name }}</p>
+        <p>
+          <strong>Status:</strong>
+          <span class="status-pill" [ngClass]="importStatusClass">{{ overview!.lastBatch!.import_status }}</span>
+        </p>
+        <p><strong>Rows:</strong> {{ overview!.lastBatch!.total_rows }} total · {{ overview!.lastBatch!.success_rows }} ok · {{ overview!.lastBatch!.failed_rows }} failed</p>
+        <p><strong>Date:</strong> {{ overview!.lastBatch!.started_at | date:'medium' }}</p>
+      </ng-container>
+      <ng-template #noImport>
+        <div class="empty-panel">No imports yet. <a (click)="goToImport()" class="link-btn">Start your first import →</a></div>
+      </ng-template>
+    </div>
+  </div>
+</ng-container>
