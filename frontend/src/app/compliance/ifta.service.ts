@@ -75,8 +75,18 @@ export class IftaService {
     return this.http.post(`${this.base}/quarters/${id}/recalculate`, {});
   }
 
-  runAiReview(id: string): Observable<{ readiness_score: number; findings: Array<Partial<IftaFinding>>; narrative: string }> {
-    return this.http.post<{ readiness_score: number; findings: Array<Partial<IftaFinding>>; narrative: string }>(`${this.base}/quarters/${id}/run-ai-review`, {});
+  runAiReview(
+    id: string,
+    payload?: {
+      selected_truck_ids?: string[];
+      source?: string;
+      triggered_at?: string;
+    }
+  ): Observable<{ readiness_score: number; findings: Array<Partial<IftaFinding>>; narrative: string }> {
+    const body = payload && Object.keys(payload).length > 0
+      ? payload
+      : { source: 'ifta-ui', triggered_at: new Date().toISOString() };
+    return this.http.post<{ readiness_score: number; findings: Array<Partial<IftaFinding>>; narrative: string }>(`${this.base}/quarters/${id}/run-ai-review`, body);
   }
 
   listFindings(id: string): Observable<IftaFinding[]> {

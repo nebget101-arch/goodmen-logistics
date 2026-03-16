@@ -54,6 +54,64 @@ async function getQuarterById(quarterId, tenantId, operatingEntityId = null, trx
   return q.first();
 }
 
+async function loadTrucksForTenant(tenantId, trx = knex) {
+  const candidates = ['vehicles', 'all_vehicles'];
+
+  for (const table of candidates) {
+    // Check relation exists (table or view) without raising SQL errors.
+    // eslint-disable-next-line no-await-in-loop
+    const colsRes = await trx('information_schema.columns')
+      .select('column_name')
+      .where({ table_name: table });
+
+    if (!colsRes.length) {
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+
+    const colSet = new Set(colsRes.map((r) => String(r.column_name || '').toLowerCase()));
+    if (!colSet.has('id') || !colSet.has('unit_number')) {
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+
+    const q = trx(table).select('id', 'unit_number');
+    if (colSet.has('status')) q.select('status');
+    if (colSet.has('is_active')) q.select('is_active');
+    if (colSet.has('tenant_id')) q.where({ tenant_id: tenantId });
+
+    // eslint-disable-next-line no-await-in-loop
+    const rows = await q;
+    return rows.map((r) => ({
+      id: r.id,
+      unit_number: r.unit_number,
+      status: r.status ?? null,
+      is_active: r.is_active ?? null,
+    }));
+  }
+
+  return [];
+}
+
+async function loadIftaEntries(tableName, { quarterId, tenantId, operatingEntityId = null, trx = knex }) {
+  const colsRes = await trx('information_schema.columns')
+    .select('column_name')
+    .where({ table_name: tableName });
+  if (!colsRes.length) return [];
+
+  const colSet = new Set(colsRes.map((r) => String(r.column_name || '').toLowerCase()));
+  const q = trx(tableName);
+
+  if (colSet.has('quarter_id')) q.where({ quarter_id: quarterId });
+  if (colSet.has('tenant_id')) q.andWhere({ tenant_id: tenantId });
+  if (colSet.has('is_deleted')) q.andWhere('is_deleted', false);
+  if (operatingEntityId && colSet.has('operating_entity_id')) {
+    q.andWhere('operating_entity_id', operatingEntityId);
+  }
+
+  return q;
+}
+
 async function listJurisdictionRates(trx = knex) {
   const rows = await trx('ifta_tax_rates')
     .where('effective_from', '<=', trx.fn.now())
@@ -76,17 +134,19 @@ async function computeAndPersistQuarterSummary({ quarterId, tenantId, operatingE
   const quarter = await getQuarterById(quarterId, tenantId, operatingEntityId, executor);
   if (!quarter) throw new Error('IFTA quarter not found');
 
-  const milesQuery = executor('ifta_miles_entries')
-    .where({ quarter_id: quarterId, tenant_id: tenantId, is_deleted: false });
-  const fuelQuery = executor('ifta_fuel_entries')
-    .where({ quarter_id: quarterId, tenant_id: tenantId, is_deleted: false });
-
-  if (operatingEntityId) {
-    milesQuery.andWhere('operating_entity_id', operatingEntityId);
-    fuelQuery.andWhere('operating_entity_id', operatingEntityId);
-  }
-
-  const [mileRows, fuelRows] = await Promise.all([milesQuery, fuelQuery]);
+  // Fetch sequentially so a single SQL error is surfaced directly (and not masked by 25P02).
+  const mileRows = await loadIftaEntries('ifta_miles_entries', {
+    quarterId,
+    tenantId,
+    operatingEntityId,
+    trx: executor,
+  });
+  const fuelRows = await loadIftaEntries('ifta_fuel_entries', {
+    quarterId,
+    tenantId,
+    operatingEntityId,
+    trx: executor,
+  });
 
   const rates = await listJurisdictionRates(executor);
 
@@ -216,18 +276,19 @@ async function buildValidationFindings({ quarterId, tenantId, operatingEntityId 
   const quarter = await getQuarterById(quarterId, tenantId, operatingEntityId, trx);
   if (!quarter) throw new Error('IFTA quarter not found');
 
-  const milesBase = trx('ifta_miles_entries').where({ quarter_id: quarterId, tenant_id: tenantId, is_deleted: false });
-  const fuelBase = trx('ifta_fuel_entries').where({ quarter_id: quarterId, tenant_id: tenantId, is_deleted: false });
-  if (operatingEntityId) {
-    milesBase.andWhere('operating_entity_id', operatingEntityId);
-    fuelBase.andWhere('operating_entity_id', operatingEntityId);
-  }
-
-  const [mileRows, fuelRows, trucks] = await Promise.all([
-    milesBase,
-    fuelBase,
-    trx('vehicles').select('id', 'unit_number', 'status', 'is_active').where({ tenant_id: tenantId })
-  ]);
+  const mileRows = await loadIftaEntries('ifta_miles_entries', {
+    quarterId,
+    tenantId,
+    operatingEntityId,
+    trx,
+  });
+  const fuelRows = await loadIftaEntries('ifta_fuel_entries', {
+    quarterId,
+    tenantId,
+    operatingEntityId,
+    trx,
+  });
+  const trucks = await loadTrucksForTenant(tenantId, trx);
 
   const findings = [];
   const selectedTruckIds = Array.isArray(quarter.selected_truck_ids) ? quarter.selected_truck_ids : [];
