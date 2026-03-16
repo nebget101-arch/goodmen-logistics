@@ -193,6 +193,22 @@ const routes: Routes = [
       ]
     }
   },
+  {
+    path: 'compliance/ifta',
+    loadChildren: () => import('./compliance/compliance.module').then(m => m.ComplianceModule),
+    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
+    data: {
+      planPath: '/compliance/ifta',
+      anyPermission: [
+        PERMISSIONS.IFTA_VIEW,
+        PERMISSIONS.IFTA_EDIT,
+        PERMISSIONS.IFTA_IMPORT,
+        PERMISSIONS.IFTA_RUN_AI_REVIEW,
+        PERMISSIONS.IFTA_FINALIZE,
+        PERMISSIONS.IFTA_EXPORT,
+      ]
+    }
+  },
   { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   {

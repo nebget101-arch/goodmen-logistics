@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { PDFDocument, StandardFonts } = require('pdf-lib');
+const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
 function safeDate(value) {
   if (!value) return '';
@@ -161,8 +161,194 @@ async function buildMvrAuthorizationPdf({ driver, mvr, signature }) {
   return Buffer.from(pdfBytes);
 }
 
+async function buildReleaseOfInformationPdf({ driver, employers }) {
+  // Create a new PDF document
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([612, 792]); // Letter size
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const fullName = [
+    driver?.first_name || '',
+    driver?.last_name || ''
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  let yPos = 750;
+  const margin = 50;
+  const lineHeight = 14;
+  const pageWidth = 612;
+  const textWidth = pageWidth - 2 * margin;
+
+  // Title
+  page.drawText('AUTHORIZATION FOR RELEASE OF INFORMATION', {
+    x: margin,
+    y: yPos,
+    size: 14,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+  yPos -= lineHeight * 2;
+
+  // Driver info section
+  page.drawText('SECTION I – EMPLOYEE INFORMATION', {
+    x: margin,
+    y: yPos,
+    size: 11,
+    font: boldFont,
+    color: rgb(0, 0, 0)
+  });
+  yPos -= lineHeight * 1.5;
+
+  page.drawText(`Full Name: ${fullName}`, {
+    x: margin,
+    y: yPos,
+    size: 10,
+    font
+  });
+  yPos -= lineHeight;
+
+  if (driver?.email) {
+    page.drawText(`Email: ${driver.email}`, {
+      x: margin,
+      y: yPos,
+      size: 10,
+      font
+    });
+    yPos -= lineHeight;
+  }
+
+  if (driver?.phone) {
+    page.drawText(`Phone: ${driver.phone}`, {
+      x: margin,
+      y: yPos,
+      size: 10,
+      font
+    });
+    yPos -= lineHeight;
+  }
+
+  page.drawText(`Date of Signature: ${new Date().toISOString().slice(0, 10)}`, {
+    x: margin,
+    y: yPos,
+    size: 10,
+    font
+  });
+  yPos -= lineHeight * 2;
+
+  // Employers section
+  if (employers && Array.isArray(employers) && employers.length > 0) {
+    page.drawText('SECTION II – PREVIOUS EMPLOYERS', {
+      x: margin,
+      y: yPos,
+      size: 11,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
+    yPos -= lineHeight * 1.5;
+
+    employers.forEach((emp, idx) => {
+      const empNum = idx + 1;
+      page.drawText(`Employer ${empNum}:`, {
+        x: margin,
+        y: yPos,
+        size: 10,
+        font: boldFont
+      });
+      yPos -= lineHeight;
+
+      if (emp.employer_name) {
+        page.drawText(`Name: ${emp.employer_name}`, {
+          x: margin + 20,
+          y: yPos,
+          size: 9,
+          font
+        });
+        yPos -= lineHeight;
+      }
+
+      if (emp.contact_name || emp.contact_phone) {
+        const contactLine = [emp.contact_name, emp.contact_phone].filter(Boolean).join(' | ');
+        page.drawText(`Contact: ${contactLine}`, {
+          x: margin + 20,
+          y: yPos,
+          size: 9,
+          font
+        });
+        yPos -= lineHeight;
+      }
+
+      if (emp.start_date || emp.end_date) {
+        const dateRange = [safeDate(emp.start_date), safeDate(emp.end_date)].filter(Boolean).join(' to ');
+        page.drawText(`Period: ${dateRange}`, {
+          x: margin + 20,
+          y: yPos,
+          size: 9,
+          font
+        });
+        yPos -= lineHeight;
+      }
+
+      if (emp.reason_for_leaving) {
+        page.drawText(`Reason for Leaving: ${emp.reason_for_leaving}`, {
+          x: margin + 20,
+          y: yPos,
+          size: 9,
+          font
+        });
+        yPos -= lineHeight;
+      }
+
+      yPos -= lineHeight * 0.5; // spacing between employers
+    });
+
+    yPos -= lineHeight;
+  }
+
+  // Authorization text
+  const authText = [
+    'I authorize the above-named employer(s) to release information about my',
+    'employment, including dates of employment, position, salary, and reason for',
+    'termination, to the requesting company or its authorized representatives.'
+  ];
+
+  authText.forEach((line) => {
+    page.drawText(line, {
+      x: margin,
+      y: yPos,
+      size: 9,
+      font,
+      maxWidth: textWidth
+    });
+    yPos -= lineHeight;
+  });
+
+  yPos -= lineHeight * 1.5;
+
+  // Signature line
+  page.drawText('Employee Signature: _________________________________', {
+    x: margin,
+    y: yPos,
+    size: 10,
+    font
+  });
+  yPos -= lineHeight * 1.5;
+
+  page.drawText('Date: _________________________________', {
+    x: margin,
+    y: yPos,
+    size: 10,
+    font
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
+}
+
 module.exports = {
   buildEmploymentApplicationPdf,
-  buildMvrAuthorizationPdf
+  buildMvrAuthorizationPdf,
+  buildReleaseOfInformationPdf
 };
 

@@ -107,6 +107,14 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/tolls/exceptions', label: 'Exceptions', tab: 'tolls' },
     ],
   },
+  {
+    sectionLabel: 'Compliance',
+    sectionIcon: 'gavel',
+    tabs: ['compliance'],
+    children: [
+      { path: '/compliance/ifta', label: 'IFTA Quarterly', tab: 'compliance' },
+    ],
+  },
 ];
 
 /** Top-level links (no section). */

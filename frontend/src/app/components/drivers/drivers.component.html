@@ -421,6 +421,81 @@
         </section>
 
         <div class="dqf-checklist">
+
+        <!-- Dynamic requirements from API -->
+        <div *ngIf="dqfRequirementsLoading" class="dqf-loading">
+          <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
+          Loading requirements…
+        </div>
+
+        <!-- DQF Completeness bar when loaded -->
+        <div *ngIf="!dqfRequirementsLoading && dqfRequirements.length > 0" class="dqf-completeness-bar-wrapper">
+          <div class="dqf-completeness-header">
+            <span>DQF Completeness</span>
+            <span class="dqf-completeness-pct">{{ dqfCompleteness }}%</span>
+          </div>
+          <div class="dqf-completeness-bar-track">
+            <div class="dqf-completeness-bar-fill" [style.width.%]="dqfCompleteness"></div>
+          </div>
+        </div>
+
+        <!-- Dynamic requirement rows -->
+        <ng-container *ngIf="!dqfRequirementsLoading && dqfRequirements.length > 0">
+          <div *ngFor="let req of dqfRequirements" class="dqf-req-row" [ngClass]="'dqf-status-' + req.status">
+            <div class="dqf-req-main">
+              <span class="material-symbols-outlined dqf-req-icon"
+                [style.color]="req.status === 'complete' ? '#22c55e' :
+                               req.status === 'received' ? '#3b82f6' :
+                               req.status === 'sent' ? '#f59e0b' : '#ef4444'">
+                {{ req.status === 'complete' ? 'task_alt' :
+                   req.status === 'received' ? 'download_done' :
+                   req.status === 'sent' ? 'send' : 'cancel' }}
+              </span>
+              <div class="dqf-req-info">
+                <span class="dqf-req-label">{{ req.label }}</span>
+                <span class="dqf-req-meta" *ngIf="req.last_updated_at">
+                  Updated {{ req.last_updated_at | date:'shortDate' }}
+                </span>
+              </div>
+              <div class="dqf-req-actions">
+                <!-- Upload button for document-based requirements -->
+                <ng-container *ngIf="isDqfDocumentReq(req.key)">
+                  <label class="dqf-upload-btn" [class.uploading]="uploadingDocuments[req.key]">
+                    <span class="material-symbols-outlined" style="font-size:15px;">upload_file</span>
+                    {{ uploadingDocuments[req.key] ? 'Uploading…' : 'Upload' }}
+                    <input type="file" (change)="onDQFFileSelectedForKey($event, req.key)"
+                           accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
+                  </label>
+                </ng-container>
+                <!-- Status buttons for manual status requirements -->
+                <ng-container *ngIf="!isDqfDocumentReq(req.key)">
+                  <button class="dqf-status-btn"
+                          *ngIf="req.status !== 'complete'"
+                          [class.active]="updateingRequirementKey === req.key"
+                          (click)="updateRequirementStatus(req, 'complete')">
+                    <span class="material-symbols-outlined" style="font-size:14px;">check_circle</span> Mark Done
+                  </button>
+                  <button class="dqf-status-btn dqf-status-btn-gray"
+                          *ngIf="req.status === 'complete'"
+                          (click)="updateRequirementStatus(req, 'missing')">
+                    <span class="material-symbols-outlined" style="font-size:14px;">undo</span> Undo
+                  </button>
+                </ng-container>
+                <!-- Evidence link if document attached -->
+                <a *ngIf="req.evidence_document_id"
+                   class="dqf-evidence-link"
+                   href="#" (click)="downloadEvidenceDoc(req.evidence_document_id); $event.preventDefault()">
+                  <span class="material-symbols-outlined" style="font-size:14px;">attach_file</span> Evidence
+                </a>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+
+        <div class="dqf-section-divider" *ngIf="dqfRequirements.length > 0">
+          <span>Legacy Checklist Items</span>
+        </div>
+
         <!-- Application for Employment -->
         <div class="dqf-checklist-item">
           <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">

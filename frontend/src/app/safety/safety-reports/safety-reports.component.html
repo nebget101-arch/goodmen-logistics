@@ -1,20 +1,41 @@
 <div class="reports-page">
   <div class="page-header">
-    <h2>Safety Reports</h2>
+    <div class="hero-pill">
+      <span class="material-symbols-outlined">auto_awesome</span>
+      FleetNeuron AI Insights
+    </div>
+    <h2>
+      <span class="material-symbols-outlined title-icon">analytics</span>
+      Safety Reports
+    </h2>
     <p class="page-sub">Trend and cost visibility for incidents and claims.</p>
   </div>
 
-  <div class="filters-row">
-    <div class="form-row-inline">
-      <label>From</label>
-      <input type="date" class="filter-input" [(ngModel)]="filters.dateFrom">
+  <div class="filters-card">
+    <div class="filters-row">
+      <div class="form-row-inline">
+        <label for="safetyReportsDateFrom">
+          <span class="material-symbols-outlined">calendar_month</span>
+          From
+        </label>
+        <input id="safetyReportsDateFrom" type="date" class="filter-input" [(ngModel)]="filters.dateFrom">
+      </div>
+      <div class="form-row-inline">
+        <label for="safetyReportsDateTo">
+          <span class="material-symbols-outlined">event</span>
+          To
+        </label>
+        <input id="safetyReportsDateTo" type="date" class="filter-input" [(ngModel)]="filters.dateTo">
+      </div>
+      <button type="button" class="btn btn-sm btn-danger" (click)="load()">
+        <span class="material-symbols-outlined">tune</span>
+        Apply
+      </button>
+      <button type="button" class="btn btn-sm btn-ghost" (click)="clearFilters()">
+        <span class="material-symbols-outlined">refresh</span>
+        Clear
+      </button>
     </div>
-    <div class="form-row-inline">
-      <label>To</label>
-      <input type="date" class="filter-input" [(ngModel)]="filters.dateTo">
-    </div>
-    <button type="button" class="btn btn-sm btn-secondary" (click)="load()">Apply</button>
-    <button type="button" class="btn btn-sm btn-ghost" (click)="clearFilters()">Clear</button>
   </div>
 
   <div *ngIf="loading" class="loading-state">Loading reports…</div>
@@ -24,7 +45,10 @@
     <div class="report-grid">
       <section class="report-card">
         <div class="card-head">
-          <h3>Incidents by Month</h3>
+          <h3>
+            <span class="material-symbols-outlined">bar_chart</span>
+            Incidents by Month
+          </h3>
         </div>
         <table class="mini-table">
           <thead><tr><th>Month</th><th>Count</th></tr></thead>
@@ -39,7 +63,10 @@
       </section>
 
       <section class="report-card">
-        <h3>Claims by Status</h3>
+        <h3>
+          <span class="material-symbols-outlined">monitoring</span>
+          Claims by Status
+        </h3>
         <table class="mini-table">
           <thead><tr><th>Status</th><th>Count</th></tr></thead>
           <tbody>
@@ -53,7 +80,10 @@
       </section>
 
       <section class="report-card">
-        <h3>Preventable vs Non-Preventable</h3>
+        <h3>
+          <span class="material-symbols-outlined">rule</span>
+          Preventable vs Non-Preventable
+        </h3>
         <table class="mini-table">
           <thead><tr><th>Type</th><th>Count</th></tr></thead>
           <tbody>
@@ -67,7 +97,10 @@
       </section>
 
       <section class="report-card">
-        <h3>Loss by Claim Type</h3>
+        <h3>
+          <span class="material-symbols-outlined">trending_down</span>
+          Loss by Claim Type
+        </h3>
         <table class="mini-table">
           <thead><tr><th>Claim Type</th><th>Paid</th><th>Loss</th></tr></thead>
           <tbody>
@@ -83,8 +116,14 @@
 
       <section class="report-card full">
         <div class="card-head">
-          <h3>Top Cost Incidents</h3>
-          <button type="button" class="btn btn-sm btn-secondary" (click)="exportTopCostCsv()">Export CSV</button>
+          <h3>
+            <span class="material-symbols-outlined">attach_money</span>
+            Top Cost Incidents
+          </h3>
+          <button type="button" class="btn btn-sm btn-secondary" (click)="exportTopCostCsv()">
+            <span class="material-symbols-outlined">download</span>
+            Export CSV
+          </button>
         </div>
         <table class="mini-table">
           <thead><tr><th>Incident #</th><th>Date</th><th>Type</th><th>Estimated Loss</th></tr></thead>
@@ -102,8 +141,14 @@
 
       <section class="report-card full">
         <div class="card-head">
-          <h3>Claim Aging</h3>
-          <button type="button" class="btn btn-sm btn-secondary" (click)="exportClaimAgingCsv()">Export CSV</button>
+          <h3>
+            <span class="material-symbols-outlined">hourglass_top</span>
+            Claim Aging
+          </h3>
+          <button type="button" class="btn btn-sm btn-secondary" (click)="exportClaimAgingCsv()">
+            <span class="material-symbols-outlined">download</span>
+            Export CSV
+          </button>
         </div>
         <table class="mini-table">
           <thead><tr><th>Claim #</th><th>Status</th><th>Type</th><th>Opened</th><th>Carrier</th></tr></thead>

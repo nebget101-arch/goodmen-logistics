@@ -94,6 +94,12 @@ export class DriversComponent implements OnInit, OnDestroy {
     recentIncidents: []
   };
 
+  // Dynamic DQF requirements
+  dqfRequirements: any[] = [];
+  dqfRequirementsLoading = false;
+  dqfCompleteness = 0;
+  updateingRequirementKey: string | null = null;
+
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
 
@@ -605,25 +611,140 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   loadDQFStatus(driver: any): void {
-    // Calculate DQF completeness based on available data
-    const checks = [
-      !!driver.email,
-      !!driver.cdlNumber,
-      !!driver.cdlExpiry && new Date(driver.cdlExpiry) > new Date(),
-      !!driver.medicalCertExpiry && new Date(driver.medicalCertExpiry) > new Date(),
-      driver.clearinghouseStatus === 'eligible',
-      !!driver.hireDate
+    // Load dynamic DQF requirements from server
+    this.dqfRequirementsLoading = true;
+    this.apiService.getDqfDriver(driver.id).subscribe({
+      next: (response) => {
+        const dqfData = response?.dqf || {};
+        this.dqfRequirements = dqfData.requirements || [];
+        this.dqfCompleteness = dqfData.completeness || 0;
+        this.dqfRequirementsLoading = false;
+
+        // Keep legacy form for backward compat
+        this.dqfForm = {
+          applicationComplete: !!driver.email && !!driver.phone,
+          mvrComplete: !!driver.cdlNumber,
+          roadTestComplete: !!driver.hireDate,
+          medicalCertComplete: !!driver.medicalCertExpiry && new Date(driver.medicalCertExpiry) > new Date(),
+          annualReviewComplete: false,
+          clearinghouseConsentComplete: driver.clearinghouseStatus === 'eligible',
+          notes: ''
+        };
+      },
+      error: (err) => {
+        console.error('Error loading DQF requirements', err);
+        this.dqfRequirementsLoading = false;
+        // Fallback to legacy calculation
+        this.dqfRequirements = [];
+        this.dqfCompleteness = driver.dqfCompleteness || 0;
+      }
+    });
+  }
+
+  updateRequirementStatus(requirement: any, newStatus: string): void {
+    if (!this.selectedDriver) return;
+
+    this.updateingRequirementKey = requirement.key;
+    this.apiService.updateDqfRequirementStatus(
+      this.selectedDriver.id,
+      requirement.key,
+      {
+        status: newStatus as any,
+        note: `Updated via drivers form`
+      }
+    ).subscribe({
+      next: (response) => {
+        // Update local requirement
+        const idx = this.dqfRequirements.findIndex(r => r.key === requirement.key);
+        if (idx >= 0) {
+          this.dqfRequirements[idx].status = newStatus;
+        }
+        this.updateingRequirementKey = null;
+        // Refresh completeness
+        const total = this.dqfRequirements.reduce((sum, r) => sum + (r.weight || 1), 0);
+        const done = this.dqfRequirements.filter(r => r.status === 'complete').reduce((sum, r) => sum + (r.weight || 1), 0);
+        this.dqfCompleteness = total > 0 ? Math.round((done / total) * 100) : 0;
+      },
+      error: (err) => {
+        console.error('Error updating requirement', err);
+        alert('Failed to update requirement status');
+        this.updateingRequirementKey = null;
+      }
+    });
+  }
+
+  /** Returns true for requirements that need an uploaded document as evidence */
+  isDqfDocumentReq(key: string): boolean {
+    const docKeys = [
+      'driver_license_front_on_file', 'driver_license_back_on_file',
+      'medical_card_front_on_file', 'medical_card_back_on_file',
+      'green_card_on_file', 'pre_employment_drug_test_completed',
+      'release_of_info_signed'
     ];
-    
-    this.dqfForm = {
-      applicationComplete: !!driver.email && !!driver.phone,
-      mvrComplete: !!driver.cdlNumber,
-      roadTestComplete: !!driver.hireDate,
-      medicalCertComplete: !!driver.medicalCertExpiry && new Date(driver.medicalCertExpiry) > new Date(),
-      annualReviewComplete: false,
-      clearinghouseConsentComplete: driver.clearinghouseStatus === 'eligible',
-      notes: ''
+    return docKeys.includes(key);
+  }
+
+  onDQFFileSelectedForKey(event: any, requirementKey: string): void {
+    const file = event.target.files[0];
+    if (!file || !this.selectedDriver) return;
+
+    const docTypeMap: Record<string, string> = {
+      driver_license_front_on_file: 'driver_license_front',
+      driver_license_back_on_file: 'driver_license_back',
+      medical_card_front_on_file: 'medical_card_front',
+      medical_card_back_on_file: 'medical_card_back',
+      green_card_on_file: 'green_card',
+      pre_employment_drug_test_completed: 'drug_test_result',
+      release_of_info_signed: 'release_of_info'
     };
+
+    const docType = docTypeMap[requirementKey] || requirementKey;
+    this.uploadingDocuments[requirementKey] = true;
+
+    this.apiService.uploadDQFDocument(this.selectedDriver.id, docType, file).subscribe({
+      next: (response: any) => {
+        this.uploadingDocuments[requirementKey] = false;
+        event.target.value = '';
+        // Auto-mark requirement complete with evidence
+        const docId = response?.document?.id;
+        this.apiService.updateDqfRequirementStatus(this.selectedDriver.id, requirementKey, {
+          status: 'complete',
+          evidenceDocumentId: docId,
+          note: `Document uploaded: ${file.name}`
+        }).subscribe({
+          next: () => {
+            const idx = this.dqfRequirements.findIndex(r => r.key === requirementKey);
+            if (idx >= 0) {
+              this.dqfRequirements[idx].status = 'complete';
+              this.dqfRequirements[idx].evidence_document_id = docId;
+            }
+          },
+          error: () => {}
+        });
+      },
+      error: (error: any) => {
+        console.error('Error uploading document:', error);
+        alert('Failed to upload document. Please try again.');
+        this.uploadingDocuments[requirementKey] = false;
+        event.target.value = '';
+      }
+    });
+  }
+
+  downloadEvidenceDoc(documentId: string): void {
+    this.apiService.downloadDriverGeneratedDocumentBlob(documentId).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'evidence.pdf';
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => {
+        alert('Failed to download evidence document');
+      }
+    });
   }
 
   saveDQFForm(): void {

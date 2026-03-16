@@ -70,6 +70,7 @@ const creditRouter = require(path.join(sharedRoot, 'routes', 'credit'));
 const dbExampleRouter = require(path.join(sharedRoot, 'routes', 'db-example'));
 const settlementsRouter = require(path.join(sharedRoot, 'routes', 'settlements'));
 const leaseFinancingRouter = require(path.join(sharedRoot, 'routes', 'lease-financing'));
+const iftaRouter = require(path.join(sharedRoot, 'routes', 'ifta'));
 const expensePaymentCategoriesRouter = require(path.join(sharedRoot, 'routes', 'expense-payment-categories'));
 const authMiddleware = require(path.join(sharedRoot, 'middleware', 'auth-middleware'));
 const tenantContextMiddleware = require(path.join(sharedRoot, 'middleware', 'tenant-context-middleware'));
@@ -93,6 +94,7 @@ const requireLeaseFinancingPlan = requirePlanAccess((req) => {
   }
   return '/finance/lease-to-own';
 });
+const requireIftaPlan = requirePlanAccess('/compliance/ifta');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
@@ -107,6 +109,7 @@ app.use('/api/credit', authMiddleware, tenantContextMiddleware, creditRouter);
 app.use('/api/db-example', authMiddleware, tenantContextMiddleware, dbExampleRouter);
 app.use('/api/settlements', authMiddleware, tenantContextMiddleware, requireSettlementsPlan, settlementsRouter);
 app.use('/api', authMiddleware, tenantContextMiddleware, requireLeaseFinancingPlan, leaseFinancingRouter);
+app.use('/api', authMiddleware, tenantContextMiddleware, requireIftaPlan, iftaRouter);
 app.use('/api/expense-payment-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
 
 /**

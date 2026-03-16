@@ -736,6 +736,27 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/dqf/drivers/${driverId}`);
   }
 
+  updateDqfRequirementStatus(
+    driverId: string,
+    requirementKey: string,
+    payload: {
+      status: 'missing' | 'sent' | 'received' | 'complete';
+      evidenceDocumentId?: string;
+      note?: string;
+    }
+  ): Observable<any> {
+    return this.http.post(
+      `${this.baseUrl}/dqf/requirement/${driverId}/${requirementKey}`,
+      payload
+    );
+  }
+
+  getDqfRequirementChanges(driverId: string, requirementKey: string): Observable<any> {
+    return this.http.get(
+      `${this.baseUrl}/dqf/requirement/${driverId}/${requirementKey}/changes`
+    );
+  }
+
   createOnboardingPacket(driverId: string, driverPayload?: any): Observable<any> {
     const body: any = {};
     if (driverId) {

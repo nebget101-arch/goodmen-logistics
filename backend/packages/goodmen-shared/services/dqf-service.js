@@ -60,8 +60,21 @@ async function computeAndUpdateDqfCompleteness(driverId) {
   return completeness;
 }
 
+async function logStatusChange(driverId, requirementKey, oldStatus, newStatus, changedByUserId, note) {
+  if (!driverId || !requirementKey || !newStatus) {
+    throw new Error('driverId, requirementKey, and newStatus are required');
+  }
+
+  await query(
+    `INSERT INTO dqf_status_changes (driver_id, requirement_key, old_status, new_status, changed_by_user_id, note)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [driverId, requirementKey, oldStatus || 'missing', newStatus, changedByUserId || null, note || null]
+  );
+}
+
 module.exports = {
   upsertRequirementStatus,
-  computeAndUpdateDqfCompleteness
+  computeAndUpdateDqfCompleteness,
+  logStatusChange
 };
 

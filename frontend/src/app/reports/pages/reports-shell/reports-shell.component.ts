@@ -76,6 +76,23 @@ export class ReportsShellComponent implements OnInit, OnDestroy {
     });
   }
 
+  readonly navIconMap: Record<string, string> = {
+    'overview':               'dashboard',
+    'emails':                 'mail',
+    'total-revenue':          'attach_money',
+    'rate-per-mile':          'speed',
+    'revenue-by-dispatcher':  'groups',
+    'payment-summary':        'payments',
+    'expenses':               'trending_down',
+    'gross-profit':           'trending_up',
+    'gross-profit-per-load':  'local_shipping',
+    'profit-loss':            'balance'
+  };
+
+  navIcon(key: string): string {
+    return this.navIconMap[key] ?? 'analytics';
+  }
+
   private toQueryParams(filters: ReportFilters): Params {
     return {
       startDate: filters.startDate || null,

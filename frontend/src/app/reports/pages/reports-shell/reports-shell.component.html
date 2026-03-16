@@ -1,63 +1,78 @@
 <section class="reports-shell">
+
+  <!-- ── Hero ── -->
   <header class="hero">
-    <div>
-      <h1><span class="material-symbols-outlined hero-icon">auto_awesome</span> AI Reports Center</h1>
-      <p>Operational and financial intelligence across revenue, payments, margins, and expenses.</p>
+    <div class="hero-pill">
+      <span class="material-symbols-outlined">auto_awesome</span> FleetNeuron AI Insights
     </div>
+    <h1 class="hero-title">
+      <span class="material-symbols-outlined hero-icon">insert_chart</span>
+      AI Reports Center
+    </h1>
+    <p class="hero-sub">Operational and financial intelligence across revenue, payments, margins, and expenses.</p>
   </header>
 
-  <div class="filters card">
-    <label>
-      Start Date
-      <input type="date" [(ngModel)]="filters.startDate" />
-    </label>
-    <label>
-      End Date
-      <input type="date" [(ngModel)]="filters.endDate" />
-    </label>
-    <label>
-      Dispatcher ID
-      <input type="text" [(ngModel)]="filters.dispatcherId" placeholder="optional" />
-    </label>
-    <label>
-      Driver ID
-      <input type="text" [(ngModel)]="filters.driverId" placeholder="optional" />
-    </label>
-    <label>
-      Status
-      <input type="text" [(ngModel)]="filters.status" placeholder="optional" />
-    </label>
-    <label>
-      Group By
-      <select [(ngModel)]="filters.period">
-        <option value="day">Day</option>
-        <option value="week">Week</option>
-        <option value="month">Month</option>
-      </select>
-    </label>
-    <div class="actions">
-      <button type="button" class="btn btn-ai btn-ai-primary" (click)="applyFilters()">
-        <span class="material-symbols-outlined">tune</span>
-        Apply
-      </button>
-      <button type="button" class="btn btn-ai btn-ai-secondary" (click)="clearFilters()">
-        <span class="material-symbols-outlined">restart_alt</span>
-        Reset
-      </button>
+  <!-- ── Filters ── -->
+  <div class="filters-card">
+    <div class="filters-grid">
+      <label for="rptStartDate">
+        <span class="material-symbols-outlined filter-icon">calendar_month</span> Start Date
+        <input id="rptStartDate" type="date" [(ngModel)]="filters.startDate" />
+      </label>
+      <label for="rptEndDate">
+        <span class="material-symbols-outlined filter-icon">calendar_month</span> End Date
+        <input id="rptEndDate" type="date" [(ngModel)]="filters.endDate" />
+      </label>
+      <label for="rptDispatcher">
+        <span class="material-symbols-outlined filter-icon">person_pin</span> Dispatcher ID
+        <input id="rptDispatcher" type="text" [(ngModel)]="filters.dispatcherId" placeholder="optional" />
+      </label>
+      <label for="rptDriver">
+        <span class="material-symbols-outlined filter-icon">local_shipping</span> Driver ID
+        <input id="rptDriver" type="text" [(ngModel)]="filters.driverId" placeholder="optional" />
+      </label>
+      <label for="rptStatus">
+        <span class="material-symbols-outlined filter-icon">flag</span> Status
+        <input id="rptStatus" type="text" [(ngModel)]="filters.status" placeholder="optional" />
+      </label>
+      <label for="rptGroupBy">
+        <span class="material-symbols-outlined filter-icon">date_range</span> Group By
+        <select id="rptGroupBy" [(ngModel)]="filters.period">
+          <option value="day">Day</option>
+          <option value="week">Week</option>
+          <option value="month">Month</option>
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button type="button" class="btn btn-primary" (click)="applyFilters()">
+          <span class="material-symbols-outlined">tune</span> Apply
+        </button>
+        <button type="button" class="btn btn-ghost" (click)="clearFilters()">
+          <span class="material-symbols-outlined">restart_alt</span> Reset
+        </button>
+      </div>
     </div>
   </div>
 
-  <nav class="report-nav card">
+  <!-- ── Nav Pills ── -->
+  <nav class="report-nav">
     <a
       *ngFor="let item of navItems"
       [routerLink]="item.path"
       routerLinkActive="active"
       class="report-nav-link"
     >
-      <span class="material-symbols-outlined nav-chip-icon">analytics</span>
+      <span class="material-symbols-outlined nav-icon">{{ navIcon(item.key) }}</span>
       {{ item.label }}
     </a>
   </nav>
 
   <router-outlet></router-outlet>
+
+  <!-- ── Footer Badge ── -->
+  <div class="ai-footer-badge">
+    <span class="material-symbols-outlined">verified_user</span>
+    PROTECTED BY FLEETNEURON AI ANOMALY DETECTION
+  </div>
+
 </section>

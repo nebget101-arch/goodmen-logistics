@@ -1,0 +1,335 @@
+<section class="ifta-page">
+  <header class="ifta-header card">
+    <div class="header-content">
+      <h1><span class="icon-badge">📋</span> IFTA Quarterly Filing</h1>
+      <p class="workflow-text">Create Quarter → Import Data → Validate → AI Review → Fix Issues → Finalize → Export</p>
+    </div>
+    <div class="status-group">
+      <span class="status-badge" [class.status-draft]="hasStatus('draft')" [class.status-review]="hasStatus('under_review')" [class.status-finalized]="hasStatus('finalized')" [class.status-exported]="hasStatus('exported')">
+        <span class="badge-dot"></span>
+        {{ statusBadge | uppercase }}
+      </span>
+      <button class="btn-ai ai-glow-btn" (click)="runAiReview()" [disabled]="!selectedQuarterId || saving" title="Run AI analysis on quarter data">
+        <span class="material-symbols-outlined">psychology</span>
+        <span>AI Review</span>
+      </button>
+      <button class="btn-secondary" (click)="finalizeQuarter()" [disabled]="!selectedQuarterId || saving" title="Finalize and lock quarter">
+        <span class="material-symbols-outlined">check_circle</span>
+        <span>Finalize</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="alert error" *ngIf="error"><span class="material-symbols-outlined alert-icon">error</span> {{ error }}</div>
+  <div class="alert success" *ngIf="success"><span class="material-symbols-outlined alert-icon">check_circle</span> {{ success }}</div>
+
+  <section class="card controls-panel">
+    <h3 class="section-header"><span class="material-symbols-outlined">tune</span> Setup Quarter</h3>
+    <div class="controls-grid">
+      <div class="field">
+        <label for="iftaQuarterSelect">Quarter</label>
+        <select id="iftaQuarterSelect" [(ngModel)]="quarter">
+          <option [ngValue]="1">Q1</option>
+          <option [ngValue]="2">Q2</option>
+          <option [ngValue]="3">Q3</option>
+          <option [ngValue]="4">Q4</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="iftaTaxYearInput">Tax year</label>
+        <input id="iftaTaxYearInput" type="number" [(ngModel)]="taxYear" min="2000" max="2100" />
+      </div>
+      <div class="field">
+        <label for="iftaEntityInput">Filing entity</label>
+        <input id="iftaEntityInput" [(ngModel)]="filingEntityName" placeholder="e.g., ABC Logistics Inc" />
+      </div>
+      <div class="field grow">
+        <label for="iftaQuarterExistingSelect">Load existing</label>
+        <select id="iftaQuarterExistingSelect" [(ngModel)]="selectedQuarterId" (ngModelChange)="selectQuarter($event)">
+          <option [ngValue]="''">Select a quarter...</option>
+          <option *ngFor="let q of quarters" [ngValue]="q.id">Q{{ q.quarter }} {{ q.tax_year }} • {{ q.filing_entity_name || 'Entity' }} • {{ q.status }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="control-actions">
+      <button class="btn-ai ai-glow-btn" (click)="createQuarter()" [disabled]="saving">
+        <span class="material-symbols-outlined">add_circle</span>
+        <span>New Quarter</span>
+      </button>
+      <button class="btn-secondary" (click)="saveQuarterMeta()" [disabled]="!selectedQuarterId || saving">
+        <span class="material-symbols-outlined">save</span>
+        <span>Save Meta</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 class="section-header"><span class="material-symbols-outlined">local_shipping</span> Select trucks</h3>
+    <div class="search-wrapper">
+      <span class="material-symbols-outlined search-icon">search</span>
+      <input class="search" placeholder="Filter trucks by unit..." [(ngModel)]="truckFilter" />
+    </div>
+    <div class="truck-grid">
+      <label *ngFor="let t of filteredTrucks" class="truck-chip" [class.inactive]="t.status === 'inactive'" [title]="t.status">
+        <input type="checkbox" [checked]="selectedTruckIds.includes(t.id)" (change)="toggleTruck(t.id, $any($event.target).checked)" />
+        <span class="truck-unit">{{ t.unit }}</span>
+        <small class="truck-status">{{ t.status }}</small>
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-header-row">
+      <h3 class="section-header"><span class="material-symbols-outlined">straighten</span> Miles by jurisdiction</h3>
+      <label class="btn-secondary file-upload">
+        <span class="material-symbols-outlined">upload_file</span>
+        <span>Import CSV</span>
+        <input type="file" accept=".csv" (change)="importMilesCsv($event)" />
+      </label>
+    </div>
+
+    <div class="inline-form">
+      <input class="form-input" placeholder="Unit" [(ngModel)]="newMiles.unit" />
+      <input class="form-input" placeholder="ST" maxlength="2" [(ngModel)]="newMiles.jurisdiction" title="State abbreviation" />
+      <input type="number" class="form-input" placeholder="Taxable miles" [(ngModel)]="newMiles.taxable_miles" />
+      <input type="number" class="form-input" placeholder="Non-taxable" [(ngModel)]="newMiles.non_taxable_miles" />
+      <input type="number" class="form-input" placeholder="Total" [(ngModel)]="newMiles.total_miles" />
+      <input class="form-input" placeholder="Source" [(ngModel)]="newMiles.source" />
+      <input class="form-input" placeholder="Notes" [(ngModel)]="newMiles.notes" />
+      <button class="btn-ai ai-glow-btn" (click)="addMilesRow()" title="Add miles entry">
+        <span class="material-symbols-outlined">add</span>
+      </button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Unit</th>
+            <th>State</th>
+            <th>Taxable</th>
+            <th>Non-taxable</th>
+            <th>Total</th>
+            <th>Source</th>
+            <th>Notes</th>
+            <th style="width: 40px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of milesRows">
+            <td><input class="cell-input" [(ngModel)]="row.unit" (ngModelChange)="queueMilesUpdate(row)" /></td>
+            <td><input class="cell-input" [(ngModel)]="row.jurisdiction" maxlength="2" (ngModelChange)="queueMilesUpdate(row)" /></td>
+            <td><input type="number" class="cell-input" [(ngModel)]="row.taxable_miles" (ngModelChange)="queueMilesUpdate(row)" /></td>
+            <td><input type="number" class="cell-input" [(ngModel)]="row.non_taxable_miles" (ngModelChange)="queueMilesUpdate(row)" /></td>
+            <td><input type="number" class="cell-input" [(ngModel)]="row.total_miles" (ngModelChange)="queueMilesUpdate(row)" /></td>
+            <td><input class="cell-input" [(ngModel)]="row.source" (ngModelChange)="queueMilesUpdate(row)" /></td>
+            <td><input class="cell-input" [(ngModel)]="row.notes" (ngModelChange)="queueMilesUpdate(row)" /></td>
+            <td><button class="btn-icon-danger" (click)="deleteMilesRow(row.id)" title="Delete row"><span class="material-symbols-outlined">close</span></button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pager">
+      <span class="pager-info">Rows {{ milesFrom }} - {{ milesTo }} of {{ milesTotal }}</span>
+      <div class="pager-controls">
+        <button class="btn-secondary btn-sm" (click)="loadMiles(milesOffset - pageSize)" [disabled]="milesOffset === 0" title="Previous page">
+          <span class="material-symbols-outlined">chevron_left</span>
+        </button>
+        <button class="btn-secondary btn-sm" (click)="loadMiles(milesOffset + pageSize)" [disabled]="milesOffset + pageSize >= milesTotal" title="Next page">
+          <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-header-row">
+      <h3 class="section-header"><span class="material-symbols-outlined">local_gas_station</span> Fuel purchases</h3>
+      <label class="btn-secondary file-upload">
+        <span class="material-symbols-outlined">upload_file</span>
+        <span>Import CSV</span>
+        <input type="file" accept=".csv" (change)="importFuelCsv($event)" />
+      </label>
+    </div>
+
+    <div class="inline-form">
+      <input type="date" class="form-input" [(ngModel)]="newFuel.purchase_date" />
+      <input class="form-input" placeholder="Unit" [(ngModel)]="newFuel.unit" />
+      <input class="form-input" placeholder="ST" maxlength="2" [(ngModel)]="newFuel.jurisdiction" title="State abbreviation" />
+      <input class="form-input" placeholder="Vendor" [(ngModel)]="newFuel.vendor" />
+      <input class="form-input" placeholder="Receipt #" [(ngModel)]="newFuel.receipt_invoice_number" />
+      <input type="number" class="form-input" placeholder="Gallons" [(ngModel)]="newFuel.gallons" />
+      <input type="number" class="form-input" placeholder="Amount" [(ngModel)]="newFuel.amount" />
+      <input class="form-input" placeholder="Fuel type" [(ngModel)]="newFuel.fuel_type" />
+      <label class="checkbox-label">
+        <input type="checkbox" [(ngModel)]="newFuel.tax_paid" />
+        <span>Tax paid</span>
+      </label>
+      <input class="form-input" placeholder="Attachment URL" [(ngModel)]="newFuel.attachment_link" />
+      <button class="btn-ai ai-glow-btn" (click)="addFuelRow()" title="Add fuel entry">
+        <span class="material-symbols-outlined">add</span>
+      </button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Unit</th>
+            <th>State</th>
+            <th>Vendor</th>
+            <th>Receipt</th>
+            <th>Gallons</th>
+            <th>Amount</th>
+            <th>Fuel type</th>
+            <th>Tax paid</th>
+            <th>Attachment</th>
+            <th style="width: 40px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of fuelRows" [class.warn-row]="row.duplicate_suspected">
+            <td><input type="date" class="cell-input" [(ngModel)]="row.purchase_date" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td><input class="cell-input" [(ngModel)]="row.unit" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td><input class="cell-input" [(ngModel)]="row.jurisdiction" maxlength="2" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td><input class="cell-input" [(ngModel)]="row.vendor" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td><input class="cell-input" [(ngModel)]="row.receipt_invoice_number" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td><input type="number" class="cell-input" [(ngModel)]="row.gallons" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td><input type="number" class="cell-input" [(ngModel)]="row.amount" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td><input class="cell-input" [(ngModel)]="row.fuel_type" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td><input type="checkbox" [(ngModel)]="row.tax_paid" (ngModelChange)="queueFuelUpdate(row)" style="cursor: pointer;" /></td>
+            <td><input class="cell-input" [(ngModel)]="row.attachment_link" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td><button class="btn-icon-danger" (click)="deleteFuelRow(row.id)" title="Delete row"><span class="material-symbols-outlined">close</span></button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pager">
+      <span class="pager-info">Rows {{ fuelFrom }} - {{ fuelTo }} of {{ fuelTotal }}</span>
+      <div class="pager-controls">
+        <button class="btn-secondary btn-sm" (click)="loadFuel(fuelOffset - pageSize)" [disabled]="fuelOffset === 0" title="Previous page">
+          <span class="material-symbols-outlined">chevron_left</span>
+        </button>
+        <button class="btn-secondary btn-sm" (click)="loadFuel(fuelOffset + pageSize)" [disabled]="fuelOffset + pageSize >= fuelTotal" title="Next page">
+          <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card findings-section">
+    <h3 class="section-header"><span class="material-symbols-outlined">smart_toy</span> AI analysis findings</h3>
+    <div class="findings" *ngIf="findings.length; else noFindings">
+      <article *ngFor="let f of findings" class="finding-card" [class.blocker]="f.severity === 'blocker'" [class.warning]="f.severity === 'warning'" [class.resolved]="f.resolved">
+        <div class="finding-header">
+          <div class="finding-title">
+            <span class="severity-badge" [class.badge-blocker]="f.severity === 'blocker'" [class.badge-warning]="f.severity === 'warning'" [class.badge-info]="f.severity === 'info'">{{ f.severity }}</span>
+            <strong>{{ f.title }}</strong>
+          </div>
+          <span class="status-indicator" *ngIf="!f.resolved"><span class="pulse"></span> Active</span>
+          <span class="status-indicator resolved" *ngIf="f.resolved"><span class="material-symbols-outlined">done</span> Resolved</span>
+        </div>
+        <p class="finding-details">{{ f.details }}</p>
+        <button class="btn-secondary" *ngIf="!f.resolved" (click)="resolveFinding(f)">
+          <span class="material-symbols-outlined">check</span>
+          <span>Mark resolved</span>
+        </button>
+      </article>
+    </div>
+    <ng-template #noFindings>
+      <p class="empty-state"><span class="material-symbols-outlined">info</span> No findings yet. Run AI review after importing data.</p>
+    </ng-template>
+  </section>
+
+  <section class="card">
+    <h3 class="section-header"><span class="material-symbols-outlined">assessment</span> IFTA report preview</h3>
+    <div class="summary-cards-grid">
+      <div class="summary-card">
+        <span class="card-icon">📍</span>
+        <span class="card-label">Total fleet miles</span>
+        <strong class="card-value">{{ reportCards.total_fleet_miles | number:'1.0-2' }}</strong>
+      </div>
+      <div class="summary-card">
+        <span class="card-icon">⛽</span>
+        <span class="card-label">Total gallons</span>
+        <strong class="card-value">{{ reportCards.total_gallons | number:'1.0-2' }}</strong>
+      </div>
+      <div class="summary-card">
+        <span class="card-icon">🚗</span>
+        <span class="card-label">Fleet MPG</span>
+        <strong class="card-value">{{ reportCards.fleet_mpg | number:'1.2-4' }}</strong>
+      </div>
+      <div class="summary-card highlight">
+        <span class="card-icon">💰</span>
+        <span class="card-label">Total due / credit</span>
+        <strong class="card-value">{{ reportCards.total_due_credit | number:'1.2-2' }}</strong>
+      </div>
+      <div class="summary-card">
+        <span class="card-icon">⚠️</span>
+        <span class="card-label">Open warnings</span>
+        <strong class="card-value">{{ reportCards.open_warnings }}</strong>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Jurisdiction</th>
+            <th>Total miles</th>
+            <th>Taxable miles</th>
+            <th>Tax-paid gallons</th>
+            <th>Net taxable gallons</th>
+            <th>Tax rate</th>
+            <th>Tax due / credit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of summaryRows">
+            <td><strong>{{ s.jurisdiction }}</strong></td>
+            <td>{{ s.total_miles | number:'1.0-2' }}</td>
+            <td>{{ s.taxable_miles | number:'1.0-2' }}</td>
+            <td>{{ s.tax_paid_gallons | number:'1.0-2' }}</td>
+            <td>{{ s.net_taxable_gallons | number:'1.0-2' }}</td>
+            <td>{{ s.tax_rate | number:'1.4-6' }}</td>
+            <td class="amount">{{ s.tax_due_credit | number:'1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <article class="ai-narrative" *ngIf="aiNarrative">
+      <h4><span class="material-symbols-outlined">notes</span> AI quarter narrative</h4>
+      <p>{{ aiNarrative }}</p>
+    </article>
+  </section>
+
+  <section class="card export-section">
+    <h3 class="section-header"><span class="material-symbols-outlined">download</span> Export filing</h3>
+    <div class="export-grid">
+      <button class="btn-ai ai-glow-btn" (click)="exportPdf()" [disabled]="!selectedQuarterId">
+        <span class="material-symbols-outlined">picture_as_pdf</span>
+        <span>PDF Summary</span>
+      </button>
+      <button class="btn-secondary" (click)="exportCsv('miles')" [disabled]="!selectedQuarterId">
+        <span class="material-symbols-outlined">table_chart</span>
+        <span>CSV Miles</span>
+      </button>
+      <button class="btn-secondary" (click)="exportCsv('fuel')" [disabled]="!selectedQuarterId">
+        <span class="material-symbols-outlined">table_chart</span>
+        <span>CSV Fuel</span>
+      </button>
+      <button class="btn-secondary" (click)="exportCsv('jurisdiction-summary')" [disabled]="!selectedQuarterId">
+        <span class="material-symbols-outlined">table_chart</span>
+        <span>CSV Summary</span>
+      </button>
+      <button class="btn-secondary" (click)="exportPayloadJson()" [disabled]="!selectedQuarterId">
+        <span class="material-symbols-outlined">data_object</span>
+        <span>Filing JSON</span>
+      </button>
+    </div>
+  </section>
+</section>

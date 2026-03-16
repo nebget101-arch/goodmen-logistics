@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require('./auth-middleware');
 const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
+const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange } = require('../services/dqf-service');
 
 // Admin / safety only
 router.use(auth(['admin', 'safety']));
@@ -140,6 +141,87 @@ router.get('/documents/:id/download', async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Error downloading driver document:', error);
     return res.status(500).json({ message: 'Failed to download document' });
+  }
+});
+
+// POST /api/dqf/requirement/:driverId/:requirementKey - Update a requirement status manually
+router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
+  try {
+    const { driverId, requirementKey } = req.params;
+    const { status, evidenceDocumentId, note } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ message: 'status is required' });
+    }
+
+    // Get current status for audit log
+    const currentRes = await query(
+      'SELECT status FROM dqf_driver_status WHERE driver_id = $1 AND requirement_key = $2',
+      [driverId, requirementKey]
+    );
+    const oldStatus = currentRes.rows.length > 0 ? currentRes.rows[0].status : 'missing';
+
+    // Update the requirement
+    await upsertRequirementStatus(driverId, requirementKey, status, evidenceDocumentId || null);
+
+    // Log the change
+    const userId = req.user?.id || null;
+    await logStatusChange(driverId, requirementKey, oldStatus, status, userId, note || null);
+
+    // Recompute DQF completeness
+    await computeAndUpdateDqfCompleteness(driverId);
+
+    return res.json({
+      message: 'Requirement status updated',
+      driverId,
+      requirementKey,
+      oldStatus,
+      newStatus: status
+    });
+  } catch (error) {
+    dtLogger.error('dqf_update_requirement_failed', error, {
+      driverId: req.params.driverId,
+      requirementKey: req.params.requirementKey
+    });
+    // eslint-disable-next-line no-console
+    console.error('Error in POST /api/dqf/requirement/:driverId/:requirementKey', error);
+    return res.status(500).json({ message: 'Failed to update requirement status' });
+  }
+});
+
+// GET /api/dqf/requirement/:driverId/:requirementKey/changes - Get change history for a requirement
+router.get('/requirement/:driverId/:requirementKey/changes', async (req, res) => {
+  try {
+    const { driverId, requirementKey } = req.params;
+
+    const result = await query(
+      `SELECT
+         id,
+         requirement_key,
+         old_status,
+         new_status,
+         changed_by_user_id,
+         changed_at,
+         note
+       FROM dqf_status_changes
+       WHERE driver_id = $1 AND requirement_key = $2
+       ORDER BY changed_at DESC`,
+      [driverId, requirementKey]
+    );
+
+    return res.json({
+      driverId,
+      requirementKey,
+      changes: result.rows
+    });
+  } catch (error) {
+    dtLogger.error('dqf_get_changes_failed', error, {
+      driverId: req.params.driverId,
+      requirementKey: req.params.requirementKey
+    });
+    // eslint-disable-next-line no-console
+    console.error('Error in GET /api/dqf/requirement/:driverId/:requirementKey/changes', error);
+    return res.status(500).json({ message: 'Failed to fetch requirement changes' });
   }
 });
 

@@ -129,6 +129,8 @@ export class AccessControlService {
         .add(PERMISSIONS.FUEL_TRANSACTIONS_EDIT).add(PERMISSIONS.FUEL_EXCEPTIONS_RESOLVE).add(PERMISSIONS.FUEL_REPORTS_VIEW);
       set.add(PERMISSIONS.TOLLS_VIEW).add(PERMISSIONS.TOLLS_IMPORT).add(PERMISSIONS.TOLLS_ACCOUNTS_MANAGE)
         .add(PERMISSIONS.TOLLS_TRANSACTIONS_EDIT).add(PERMISSIONS.TOLLS_EXCEPTIONS_RESOLVE).add(PERMISSIONS.TOLLS_REPORTS_VIEW);
+      set.add(PERMISSIONS.IFTA_VIEW).add(PERMISSIONS.IFTA_EDIT).add(PERMISSIONS.IFTA_IMPORT)
+        .add(PERMISSIONS.IFTA_RUN_AI_REVIEW).add(PERMISSIONS.IFTA_FINALIZE).add(PERMISSIONS.IFTA_EXPORT);
       set.add(PERMISSIONS.LEASE_FINANCING_VIEW).add(PERMISSIONS.LEASE_FINANCING_CREATE).add(PERMISSIONS.LEASE_FINANCING_EDIT)
         .add(PERMISSIONS.LEASE_FINANCING_ACTIVATE).add(PERMISSIONS.LEASE_FINANCING_PAYMENTS_MANAGE)
         .add(PERMISSIONS.LEASE_FINANCING_DASHBOARD_VIEW).add(PERMISSIONS.LEASE_FINANCING_DRIVER_VIEW);
@@ -302,6 +304,12 @@ export class AccessControlService {
     }
     if (
       code.startsWith('lease.financing.')
+      && this.hasAnyRole(['carrier_accountant', 'accounting', 'company_accountant', 'finance_manager'])
+    ) {
+      return true;
+    }
+    if (
+      code.startsWith('ifta.')
       && this.hasAnyRole(['carrier_accountant', 'accounting', 'company_accountant', 'finance_manager'])
     ) {
       return true;
