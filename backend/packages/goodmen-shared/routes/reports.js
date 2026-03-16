@@ -3,7 +3,6 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const db = require('../internal/db').knex;
-const PDFDocument = require('pdfkit');
 
 const v2Cache = new Map();
 const V2_CACHE_TTL_MS = 60 * 1000;
@@ -1533,6 +1532,14 @@ router.get('/v2/export/:reportKey', authMiddleware, requireRole(V2_ALLOWED_ROLES
 		const rows = payload?.data || [];
 
 		if (format === 'pdf') {
+			let PDFDocument;
+			try {
+				PDFDocument = require('pdfkit');
+			} catch (err) {
+				dtLogger.error('reports_v2_pdfkit_missing', { error: err.message });
+				return res.status(501).json({ error: 'PDF export is temporarily unavailable on this environment. Please use CSV export.' });
+			}
+
 			res.setHeader('Content-Type', 'application/pdf');
 			res.setHeader('Content-Disposition', `attachment; filename="${reportKey}.pdf"`);
 			const doc = new PDFDocument({ margin: 40, size: 'A4' });
