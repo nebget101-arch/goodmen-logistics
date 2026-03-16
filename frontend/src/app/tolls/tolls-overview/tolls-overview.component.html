@@ -1,0 +1,14 @@
+<div *ngIf="loading">Loading toll overview…</div>
+<div *ngIf="error" class="error">{{ error }}</div>
+
+<div *ngIf="!loading && !error && overview" class="grid">
+  <article class="card"><h4>Accounts</h4><p>{{ overview.cards.accounts }}</p></article>
+  <article class="card"><h4>Devices</h4><p>{{ overview.cards.devices }}</p></article>
+  <article class="card"><h4>Transactions</h4><p>{{ overview.cards.transactions }}</p></article>
+  <article class="card"><h4>Open Exceptions</h4><p>{{ overview.cards.openExceptions }}</p></article>
+</div>
+
+<section *ngIf="overview?.lastBatch" class="last-batch">
+  <h4>Last Import Batch</h4>
+  <p>{{ overview?.lastBatch?.source_file_name }} • {{ overview?.lastBatch?.import_status }}</p>
+</section>

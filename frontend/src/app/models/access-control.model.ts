@@ -195,6 +195,14 @@ export const PERMISSIONS = {
   FUEL_TRANSACTIONS_EDIT: 'fuel.transactions.edit',
   FUEL_EXCEPTIONS_RESOLVE: 'fuel.exceptions.resolve',
   FUEL_REPORTS_VIEW: 'fuel.reports.view',
+
+  // Toll import module
+  TOLLS_VIEW: 'tolls.view',
+  TOLLS_IMPORT: 'tolls.import',
+  TOLLS_ACCOUNTS_MANAGE: 'tolls.accounts.manage',
+  TOLLS_TRANSACTIONS_EDIT: 'tolls.transactions.edit',
+  TOLLS_EXCEPTIONS_RESOLVE: 'tolls.exceptions.resolve',
+  TOLLS_REPORTS_VIEW: 'tolls.reports.view',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
@@ -205,6 +213,7 @@ export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
  */
 export const TAB_PERMISSIONS: Record<string, string[]> = {
   dashboard: [PERMISSIONS.DASHBOARD_VIEW],
+  reports: [PERMISSIONS.REPORTS_VIEW, PERMISSIONS.REPORTS_SHOP],
   loads: [PERMISSIONS.LOADS_VIEW],
   drivers: [PERMISSIONS.DRIVERS_VIEW],
   vehicles: [PERMISSIONS.VEHICLES_VIEW],
@@ -224,4 +233,5 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
   users: [PERMISSIONS.USERS_VIEW, PERMISSIONS.USERS_CREATE, PERMISSIONS.USERS_EDIT, PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN],
   users_create: [PERMISSIONS.USERS_CREATE, PERMISSIONS.USERS_VIEW],
   fuel: [PERMISSIONS.FUEL_VIEW, PERMISSIONS.FUEL_IMPORT, PERMISSIONS.FUEL_CARDS_MANAGE, PERMISSIONS.FUEL_REPORTS_VIEW],
+  tolls: [PERMISSIONS.TOLLS_VIEW, PERMISSIONS.TOLLS_IMPORT, PERMISSIONS.TOLLS_ACCOUNTS_MANAGE, PERMISSIONS.TOLLS_REPORTS_VIEW],
 };

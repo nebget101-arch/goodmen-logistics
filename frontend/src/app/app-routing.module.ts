@@ -149,6 +149,20 @@ const routes: Routes = [
       ]
     }
   },
+  {
+    path: 'tolls',
+    loadChildren: () => import('./tolls/tolls.module').then(m => m.TollsModule),
+    canActivate: [AuthGuard, PermissionGuard],
+    data: {
+      anyPermission: [
+        PERMISSIONS.TOLLS_VIEW,
+        PERMISSIONS.TOLLS_IMPORT,
+        PERMISSIONS.TOLLS_ACCOUNTS_MANAGE,
+        PERMISSIONS.TOLLS_EXCEPTIONS_RESOLVE,
+        PERMISSIONS.TOLLS_REPORTS_VIEW
+      ]
+    }
+  },
   { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   {

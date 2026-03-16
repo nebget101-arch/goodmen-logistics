@@ -1,0 +1,41 @@
+.tolls-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.tolls-header h2 {
+  margin: 0;
+}
+
+.tolls-header p {
+  margin: 0.35rem 0 0;
+  opacity: 0.8;
+}
+
+.tolls-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tab-btn {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  border-color: rgba(80, 160, 255, 0.9);
+  background: rgba(80, 160, 255, 0.2);
+}
+
+.material-icons {
+  font-size: 18px;
+}

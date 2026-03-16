@@ -1,0 +1,21 @@
+<section class="tolls-shell">
+  <header class="tolls-header">
+    <h2>Tolls</h2>
+    <p>Phase 1 scaffold is active. Core import and settlement flows come next phases.</p>
+  </header>
+
+  <nav class="tolls-tabs">
+    <button
+      *ngFor="let tab of tabs"
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === tab.path"
+      (click)="navigate(tab.path)"
+    >
+      <span class="material-icons">{{ tab.icon }}</span>
+      <span>{{ tab.label }}</span>
+    </button>
+  </nav>
+
+  <router-outlet></router-outlet>
+</section>

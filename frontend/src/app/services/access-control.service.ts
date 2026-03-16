@@ -123,6 +123,8 @@ export class AccessControlService {
       set.add(PERMISSIONS.SALES_VIEW).add(PERMISSIONS.INVENTORY_REPORTS_VIEW);
       set.add(PERMISSIONS.FUEL_VIEW).add(PERMISSIONS.FUEL_IMPORT).add(PERMISSIONS.FUEL_CARDS_MANAGE)
         .add(PERMISSIONS.FUEL_TRANSACTIONS_EDIT).add(PERMISSIONS.FUEL_EXCEPTIONS_RESOLVE).add(PERMISSIONS.FUEL_REPORTS_VIEW);
+      set.add(PERMISSIONS.TOLLS_VIEW).add(PERMISSIONS.TOLLS_IMPORT).add(PERMISSIONS.TOLLS_ACCOUNTS_MANAGE)
+        .add(PERMISSIONS.TOLLS_TRANSACTIONS_EDIT).add(PERMISSIONS.TOLLS_EXCEPTIONS_RESOLVE).add(PERMISSIONS.TOLLS_REPORTS_VIEW);
     }
     if (r('shop_manager') || r('service_writer')) {
       set.add(PERMISSIONS.DASHBOARD_VIEW).add(PERMISSIONS.MAINTENANCE_VIEW).add(PERMISSIONS.WORK_ORDERS_VIEW).add(PERMISSIONS.WORK_ORDERS_CREATE).add(PERMISSIONS.WORK_ORDERS_EDIT).add(PERMISSIONS.WORK_ORDERS_FINALIZE);
@@ -279,6 +281,12 @@ export class AccessControlService {
     ) {
       return true;
     }
+    if (
+      code.startsWith('tolls.')
+      && this.hasAnyRole(['carrier_accountant', 'accounting', 'company_accountant'])
+    ) {
+      return true;
+    }
     return false;
   }
 
@@ -365,6 +373,8 @@ export class AccessControlService {
     if (ALWAYS_ALLOWED_PATH_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`))) {
       return true;
     }
+    // Admins and company admins bypass subscription plan page restrictions.
+    if (this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COMPANY_ADMIN])) return true;
 
     // Backward compatibility for older cached access payloads where Basic plan
     // includedPages might not yet include full settlements paths.

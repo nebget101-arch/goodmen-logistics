@@ -1,0 +1,27 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 0.8rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.card h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.card p {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.error { color: #ff8f8f; }
+.last-batch { margin-top: 0.75rem; }

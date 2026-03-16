@@ -1,0 +1,23 @@
+<div *ngIf="loading">Loading devices…</div>
+<div *ngIf="error" class="error">{{ error }}</div>
+
+<table *ngIf="!loading && !error" class="simple-table">
+  <thead>
+    <tr>
+      <th>Device</th>
+      <th>Plate</th>
+      <th>Truck</th>
+      <th>Driver</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let row of rows">
+      <td>{{ row.device_number_masked || '—' }}</td>
+      <td>{{ row.plate_number || '—' }}</td>
+      <td>{{ row.truck_id || '—' }}</td>
+      <td>{{ row.driver_id || '—' }}</td>
+      <td>{{ row.status }}</td>
+    </tr>
+  </tbody>
+</table>

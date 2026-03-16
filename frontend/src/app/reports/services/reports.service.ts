@@ -1,15 +1,33 @@
 import { Injectable } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
-import { ReportFilters } from '../reports.models';
+import { environment } from '../../../environments/environment';
+import { ReportFilters, ReportKey, ReportResponse } from '../reports.models';
 
 @Injectable({ providedIn: 'root' })
 export class ReportsService {
-  constructor() {}
+  private readonly baseUrl = `${environment.apiUrl}/reports/v2`;
+
+  constructor(private http: HttpClient) {}
 
   invalidateCache(): void {
-    // Stub: clear any client cache when filters change
+    // server-side cache is key-based; frontend keeps this hook for future client caching
   }
 
+  getReport<T = Record<string, unknown>>(endpoint: string, filters: ReportFilters): Observable<ReportResponse<T>> {
+    return this.http.get<ReportResponse<T>>(`${this.baseUrl}/${endpoint}`, {
+      params: this.toParams(filters)
+    });
+  }
+
+  exportReport(reportKey: ReportKey, format: 'csv' | 'pdf', filters: ReportFilters): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/export/${reportKey}`, {
+      params: this.toParams(filters).set('format', format),
+      responseType: 'blob'
+    });
+  }
+
+  // Legacy compatibility methods for old reports component.
   getDashboardKpis(_filters: ReportFilters): Observable<{ success: boolean; data: unknown }> {
     return of({ success: true, data: null });
   }
@@ -60,5 +78,15 @@ export class ReportsService {
 
   getCustomerAging(_params: ReportFilters): Observable<{ success: boolean; data: unknown[] }> {
     return of({ success: true, data: [] });
+  }
+
+  private toParams(filters: ReportFilters): HttpParams {
+    let params = new HttpParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params = params.set(key, String(value));
+      }
+    });
+    return params;
   }
 }

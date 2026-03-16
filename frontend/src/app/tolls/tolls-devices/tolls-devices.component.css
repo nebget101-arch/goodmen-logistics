@@ -1,0 +1,3 @@
+.simple-table { width: 100%; border-collapse: collapse; }
+.simple-table th, .simple-table td { border-bottom: 1px solid rgba(255,255,255,.12); padding: .5rem; text-align: left; }
+.error { color: #ff8f8f; }
