@@ -360,6 +360,102 @@ export const MARKETING_FEATURES: MarketingFeature[] = [
     }
   },
   {
+    icon: 'account_balance_wallet',
+    title: 'Lease-to-Own & Financing',
+    description: 'Run lease agreement lifecycles, payment schedules, and fleet financing visibility.',
+    details: [
+      'Finance teams can create, activate, and track lease-to-own agreements with clear installment visibility and agreement-level risk tracking.',
+      'The financing dashboard highlights exposure, overdue accounts, and trends so teams can act before balances drift out of policy.',
+      'Driver and back-office views stay aligned on balances, payment history, and next due milestones.'
+    ],
+    capabilities: [
+      'Lease agreement creation, activation, and termination controls',
+      'Installment schedules with manual payment recording',
+      'Agreement risk snapshots and financing dashboard visibility',
+      'Driver-facing lease progress and payment history view'
+    ],
+    mock: {
+      navLabel: 'Financing Console',
+      title: 'Lease portfolio health',
+      subtitle: 'Monitor active agreements, due payments, and risk posture in one place.',
+      insight: 'One agreement is approaching overdue threshold; send reminder now to avoid escalation.',
+      metrics: [
+        { label: 'Active leases', value: '16', tone: 'blue' },
+        { label: 'Due this week', value: '5', tone: 'amber' },
+        { label: 'Paid on time', value: '92%', tone: 'green' }
+      ],
+      rows: [
+        { status: 'Current', tone: 'green', primary: 'LTO-2026-00001 · Sam Brown', secondary: 'Truck 0002 · Next due Mar 23', meta: '$754 due' },
+        { status: 'Watch', tone: 'amber', primary: 'LTO-2025-00114 · M. Hill', secondary: '2 partial payments this cycle', meta: 'Review risk' },
+        { status: 'Updated', tone: 'blue', primary: 'Portfolio summary refreshed', secondary: 'Collections + settlements synced', meta: 'Live now' }
+      ]
+    }
+  },
+  {
+    icon: 'local_gas_station',
+    title: 'Fuel Management & Controls',
+    description: 'Track fuel activity, imports, cards, and exceptions with better accountability.',
+    details: [
+      'Fuel operations can import transactions, reconcile card usage, and quickly isolate anomalies from one workflow.',
+      'Exception handling gives accounting and operations a shared queue for missing receipts, suspicious spend, and policy exceptions.',
+      'Teams can move from reactive review to proactive oversight with centralized fuel visibility.'
+    ],
+    capabilities: [
+      'Fuel transaction imports and historical audit trail',
+      'Fuel card and account management workflows',
+      'Exception queue for policy and anomaly handling',
+      'Fuel analytics support for operational cost control'
+    ],
+    mock: {
+      navLabel: 'Fuel Center',
+      title: 'Fuel spend oversight',
+      subtitle: 'Monitor transactions, cards, and flagged fuel events by entity.',
+      insight: 'AI flagged 3 fill-ups outside expected MPG range; two require manager review.',
+      metrics: [
+        { label: 'Transactions', value: '412', tone: 'blue' },
+        { label: 'Open exceptions', value: '9', tone: 'amber' },
+        { label: 'Cleared today', value: '7', tone: 'green' }
+      ],
+      rows: [
+        { status: 'Flagged', tone: 'amber', primary: 'Truck 271 · Card 9042', secondary: '58 gal in 42 min window', meta: 'Needs receipt' },
+        { status: 'Reviewed', tone: 'green', primary: 'Truck 119 · Normalized', secondary: 'Odometer mismatch corrected', meta: 'Closed' },
+        { status: 'Imported', tone: 'blue', primary: 'Weekly fuel batch', secondary: 'Provider file posted', meta: '118 records' }
+      ]
+    }
+  },
+  {
+    icon: 'toll',
+    title: 'Tolls & IFTA Compliance',
+    description: 'Manage toll activity and quarterly IFTA readiness from one compliance workflow.',
+    details: [
+      'Operations and compliance teams can import tolls, reconcile transactions, and track account/device health in one place.',
+      'IFTA quarterly workflow supports data preparation, AI review, and final export-ready records for filing cycles.',
+      'Centralizing toll and mileage tax operations reduces manual reconciliation burden and filing risk.'
+    ],
+    capabilities: [
+      'Toll imports, account/device tracking, and exception workflows',
+      'IFTA quarterly review workflow with AI-assisted checks',
+      'Export-ready compliance data for filing cycles',
+      'Unified visibility for accounting + compliance teams'
+    ],
+    mock: {
+      navLabel: 'Compliance Console',
+      title: 'Tolls + IFTA quarterly workspace',
+      subtitle: 'Reconcile toll events and prepare tax filing data with confidence.',
+      insight: 'Quarter Q1 is 94% ready; resolve two jurisdiction gaps before final export.',
+      metrics: [
+        { label: 'Toll events', value: '1.8k', tone: 'blue' },
+        { label: 'IFTA gaps', value: '2', tone: 'amber' },
+        { label: 'Ready states', value: '34', tone: 'green' }
+      ],
+      rows: [
+        { status: 'Review', tone: 'amber', primary: 'Q1 · IFTA jurisdiction mismatch', secondary: 'Truck 551 · NV miles pending', meta: 'Fix required' },
+        { status: 'Ready', tone: 'green', primary: 'Q1 · Summary worksheet', secondary: 'Validated by compliance lead', meta: 'Export enabled' },
+        { status: 'Imported', tone: 'blue', primary: 'Toll account TX-17', secondary: 'Daily feed synced', meta: '312 records' }
+      ]
+    }
+  },
+  {
     icon: 'smartphone',
     title: 'Mobile-Friendly Access',
     description: 'Enable teams to work from anywhere with a responsive, modern interface.',
@@ -440,16 +536,18 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     name: 'Starter',
     tagline: 'Essential fleet operations',
     description:
-      'Includes dashboard, dispatch, compliance, and settlement workflows for one operating entity.',
+      'Core day-to-day operations for a single company entity with dispatch, safety, and accounting basics.',
     priceLabel: '$149/mo',
     highlighted: false,
     ctaLabel: 'Start Free Trial',
     ctaAction: 'trial',
     trialEligible: true,
     features: [
-      { text: 'Dashboard, Loads, Dispatch Board, Drivers' },
-      { text: 'Trucks/Trailers, HOS, DQF, Audit' },
-      { text: 'Settlements: Scheduled Payments + Equipment Owners' },
+      { text: 'Dashboard, Loads, Dispatch Board, Drivers, Customers' },
+      { text: 'Trucks/Trailers, HOS, DQF, Safety Claims & Audit' },
+      { text: 'Fuel suite + tolls workflows (transactions, imports, exceptions)' },
+      { text: 'Parts, receiving, and inventory transfer workflows' },
+      { text: 'Invoices + settlements (including scheduled payments/equipment owners)' },
       { text: 'Best for growing single-entity fleets', highlight: true }
     ]
   },
@@ -458,7 +556,7 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     name: 'Professional',
     tagline: 'Multi-entity control and scale',
     description:
-      'Everything in Basic plus multi-entity administration and broader role coverage.',
+      'Everything in Starter plus multi-company operations and cross-entity administration controls.',
     priceLabel: '$349/mo',
     highlighted: true,
     badge: 'Most Popular',
@@ -466,9 +564,11 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     ctaAction: 'trial',
     trialEligible: true,
     features: [
-      { text: 'Everything in Basic' },
-      { text: 'Multi-entity admin page (/admin/multi-mc)', highlight: true },
-      { text: 'Cross-entity operational management' },
+      { text: 'Everything in Starter' },
+      { text: 'Multi-entity admin and company-aware user access', highlight: true },
+      { text: 'Cross-entity dispatch, safety, and operational management' },
+      { text: 'IFTA quarterly compliance workflow', highlight: true },
+      { text: 'Shared visibility with entity-scoped controls for teams' },
       { text: 'Best for teams running multiple MCs', highlight: true }
     ]
   },
@@ -477,15 +577,16 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     name: 'Advanced',
     tagline: 'Full platform, maximum coverage',
     description:
-      'Everything in Multi-MC plus inventory, accounting, reports, and roadside AI with larger user access.',
+      'Everything in Professional plus maintenance/work-orders, lease-to-own financing, and expanded analytics/AI workflows.',
     priceLabel: '$799/mo',
     highlighted: false,
     ctaLabel: 'Start Free Trial',
     ctaAction: 'trial',
     trialEligible: true,
     features: [
-      { text: 'Everything in Multi-MC' },
-      { text: 'Inventory modules + accounting (invoices/settlements)' },
+      { text: 'Everything in Professional' },
+      { text: 'Maintenance + work-order module access', highlight: true },
+      { text: 'Lease-to-own + financing dashboard modules', highlight: true },
       { text: 'Reports + Roadside AI', highlight: true },
       { text: 'Built for high-volume operations', highlight: true }
     ]
@@ -502,6 +603,7 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     ctaAction: 'contact',
     trialEligible: false,
     features: [
+      { text: 'Everything in Advanced' },
       { text: 'Custom onboarding and migration support' },
       { text: 'Dedicated success and solution engineering', highlight: true },
       { text: 'Tailored integrations and workflows' }
