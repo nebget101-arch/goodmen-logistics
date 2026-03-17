@@ -35,7 +35,7 @@ Users log in with JWT; roles (e.g. admin, safety, fleet, dispatch, technician, p
 - **Entry**: `frontend/src/main.ts` → `AppModule` → `AppComponent`.
 - **Shell**: `frontend/src/app/app.component.ts` and `.html`. Contains:
   - Sidebar (role-based nav), main content area with `<router-outlet>`, footer
-  - Global “Ask AI” floating button and AI chat panel (when logged in)
+  - Global “Ask Neuron” floating button (AI icon) and AI chat panel (when logged in)
   - Onboarding “Send Packet” modal
 - **Routing**: `frontend/src/app/app-routing.module.ts`. Key routes:
   - `/dashboard` – Dashboard

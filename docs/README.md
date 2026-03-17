@@ -70,6 +70,7 @@ This directory contains all essential documents for the multi-agent development 
 | Document | Purpose | When to Use |
 |----------|---------|-------------|
 | **[APPLICATION-KNOWLEDGE-FOR-AI.md](./APPLICATION-KNOWLEDGE-FOR-AI.md)** | High-level overview of FleetNeuron features, routes, architecture | Reference when working on new features |
+| **[RECENT_PLATFORM_UPDATES_2026-03.md](./RECENT_PLATFORM_UPDATES_2026-03.md)** | Latest behavior/UI/access/deployment changes completed in March 2026 | Read first before implementing adjacent changes |
 | **[RBAC.md](./RBAC.md)** | Role-Based Access Control system documentation | When implementing auth/permissions |
 | **[DOCKER-QUICK-START.md](./DOCKER-QUICK-START.md)** | Docker setup and troubleshooting | When setting up local environment |
 
