@@ -1,5 +1,7 @@
 # RBAC_SETUP.md — FleetNeuron Role-Based Access Control
 
+> ✅ This is the authoritative RBAC document. Last updated: March 2026
+
 ## Overview
 
 FleetNeuron uses a layered RBAC system that supports both a legacy single-role JWT claim
@@ -7,7 +9,7 @@ and a full normalized DB permission model. Both coexist and are backward-compati
 
 ---
 
-## Roles
+## Current Roles
 
 | Role Code            | Description |
 |----------------------|-------------|
@@ -30,6 +32,68 @@ and a full normalized DB permission model. Both coexist and are backward-compati
 | `inventory_auditor`  | View-only inventory and cycle counts |
 | `driver`             | Portal: own profile and assigned loads (future) |
 | `customer`           | Portal: own invoices, work orders (future) |
+
+### Compatibility / alias role values still seen in legacy flows
+
+These values may still appear in `users.role` and are mapped by backend compatibility logic:
+
+- `admin` → `super_admin`
+- `safety` → `safety_manager`
+- `fleet` / `dispatch` → `dispatcher`
+- `service_advisor` → `service_writer`
+- `accounting` → typically treated as accounting-capable and mapped to accountant-style access
+
+---
+
+## Current Permissions
+
+FleetNeuron permission codes use `module.action` (for example: `loads.view`, `work_orders.edit`).
+
+### Core RBAC permission model
+
+The foundational permission model was created by:
+
+- `20260307000000_create_rbac_tables.js` (creates `roles`, `permissions`, `role_permissions`, `user_roles`, `user_locations`)
+- `01_rbac_seed.js` (initial role and permission grid)
+
+### Permission families currently in use
+
+1. **Core operations (seeded baseline)**
+   - Loads, drivers, DQF, HOS, work orders, parts, inventory, invoices, reports, users/roles, settlements, etc.
+2. **Shop operations expansion (shop_clerk phase)**
+   - `work_orders.close`
+   - `work_order_lines.*`
+   - `estimates.*`
+   - `appointments.*`
+   - `invoices.post`, `invoices.void`
+   - `payments.*`
+   - `documents.*`
+   - `discounts.*`
+   - `reports.shop`
+3. **Safety claims module**
+   - `safety.incidents.*`, `safety.claims.*`, `safety.documents.upload`, `safety.reports.view`
+4. **Lease financing module**
+   - `lease.financing.*`, including payments/dashboard/driver visibility
+5. **IFTA module**
+   - `ifta.view`, `ifta.edit`, `ifta.import`, `ifta.run_ai_review`, `ifta.finalize`, `ifta.export`
+
+### How to verify the effective permission list (authoritative runtime check)
+
+```sql
+SELECT code, module, action
+FROM permissions
+ORDER BY code;
+```
+
+To verify role mappings:
+
+```sql
+SELECT r.code AS role, p.code AS permission
+FROM role_permissions rp
+JOIN roles r ON r.id = rp.role_id
+JOIN permissions p ON p.id = rp.permission_id
+ORDER BY r.code, p.code;
+```
 
 ---
 
@@ -93,6 +157,61 @@ These did **not** exist in the original `module × action` grid from `01_rbac_se
 | `documents.view/upload/delete` | Document management |
 | `discounts.view/approve` | Discount rules and approvals |
 | `reports.shop` | Shop performance reports |
+
+---
+
+## How to Add a New Role
+
+Use this workflow to add a new role safely without breaking existing access behavior.
+
+### 1) Define the role and permission intent
+
+- Pick a stable role code (`snake_case`, e.g. `fleet_finance_analyst`).
+- Define what the role can **view**, **mutate**, and what it is explicitly **blocked** from.
+- Prefer reusing existing permissions before adding new permission codes.
+
+### 2) Add schema/data migration(s) if needed
+
+If only a role is needed (no new permission codes):
+- Add a migration that inserts role row in `roles` idempotently.
+
+If new permission codes are needed:
+- Add migration to upsert into `permissions` (idempotent by `code`).
+- If appropriate, assign permissions in migration to existing roles via `role_permissions` (idempotent insert).
+
+### 3) Add/extend seed assignment
+
+- Update or create seed file to map role → permission codes.
+- Keep seed idempotent.
+- For shop-style role patterns, mirror approach used in `06_shop_clerk_seed.js`.
+
+### 4) Update backend compatibility mapping
+
+- Update `backend/packages/goodmen-shared/services/rbac-service.js` (`LEGACY_TO_ROLE_CODE`) if old `users.role` values should map to the new role.
+- Keep backward compatibility for existing JWTs/routes that still read `req.user.role`.
+
+### 5) Guard routes and status transitions
+
+- Use permission middleware (`loadUserRbac`, `requirePermission`, `requireAnyPermission`) for new code.
+- If needed, add role-based status guards (similar to invoice/work-order finalize guards).
+
+### 6) Update frontend access derivation
+
+- Add permission constants in `frontend/src/app/models/access-control.model.ts`.
+- Update role fallback derivation in `frontend/src/app/services/access-control.service.ts`.
+
+### 7) Validate
+
+- Run migrations + seeds locally.
+- Verify role and permissions in DB with SQL checks above.
+- Add/execute tests (unit + integration) for allowed and blocked actions.
+
+### 8) Document
+
+- Update this file (`RBAC_SETUP.md`) in:
+   - `## Current Roles`
+   - `## Current Permissions`
+   - `## RBAC Evolution History`
 
 ---
 
@@ -268,3 +387,48 @@ Shop-level location scoping (restricting a shop_clerk to specific shop locations
 by the existing `user_locations` table + `requireLocationAccess` middleware from `rbac-middleware.js`.
 To restrict a shop_clerk to a single location, add a row to `user_locations` for that user
 and use `requireLocationAccess(...)` on location-sensitive routes.
+
+---
+
+## RBAC Evolution History
+
+### 1) Original RBAC introduction (dual-layer model)
+
+- **Migration:** `20260307000000_create_rbac_tables.js`
+- **What changed:** Introduced normalized RBAC tables (`roles`, `permissions`, `role_permissions`, `user_roles`, `user_locations`) and location/division support.
+- **Compatibility:** Did **not** remove legacy `users.role`; system remained dual-layer (legacy single-role + normalized RBAC).
+
+### 2) Legacy-role backfill bridge
+
+- **Migration:** `20260307000001_backfill_user_roles_from_legacy_role.js`
+- **What changed:** Backfilled `user_roles` from `users.role` for existing users.
+- **Why:** Preserve existing users while enabling gradual migration to permission-based checks.
+
+### 3) shop_clerk role expansion (RBAC Phase 2)
+
+- **Date:** March 14, 2026
+- **Migration:** `20260314200000_add_shop_clerk_permissions.js`
+- **What changed:**
+   - Added role: `shop_clerk`
+   - Added granular shop permissions (appointments, estimates, line-item controls, posting/void controls, payments, documents, discounts, shop reports)
+   - Kept existing roles untouched (additive approach)
+- **Why it was added:** Separate operational shop work from manager-only finalization/approval duties.
+- **Permission assignment note:** Role-to-permission assignments handled in seed `06_shop_clerk_seed.js`.
+
+### 4) Safety Claims permissions
+
+- **Date:** March 16, 2026
+- **Migration:** `20260316000500_add_safety_claims_permissions.js`
+- **What changed:** Added `safety.*` incident/claims/document/report permissions and mapped them to admin/safety roles.
+
+### 5) Lease Financing permissions
+
+- **Date:** March 16, 2026
+- **Migration:** `20260316014000_add_lease_financing_permissions.js`
+- **What changed:** Added `lease.financing.*` permissions and default role assignments for finance/accounting/admin roles (plus driver/owner-operator visibility).
+
+### 6) IFTA permissions
+
+- **Date:** March 16, 2026
+- **Migration:** `20260316194000_add_ifta_permissions.js`
+- **What changed:** Added `ifta.*` permissions and assigned them to accounting/admin/finance roles, with view-only visibility for dispatcher/safety roles.

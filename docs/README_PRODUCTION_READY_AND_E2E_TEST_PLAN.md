@@ -17,6 +17,18 @@ This document consolidates:
 
 ## 2) Current State Snapshot
 
+## FleetNeuron Feature Status — Updated March 2026
+
+| Feature | Code Status | Test Status | Deployed | Notes |
+|---------|------------|-------------|----------|-------|
+| Driver & DQF Management | ✅ Complete | 🚧 Partial | ✅ Yes | |
+| Vehicle Maintenance | ✅ Complete | 🚧 Partial | ✅ Yes | |
+| Load Management | ✅ Complete | 🚧 Partial | ✅ Yes | |
+| Payroll/Settlement | ❌ Not Started | ❌ None | ❌ No | Migration pending |
+| Twilio/SendGrid | 🚧 Code only | ❌ Untested | ❌ No | Needs E2E test |
+| Employment Application Module | 🚧 Scaffold only | ❌ None | ❌ No | End-to-end implementation pending |
+| Android Driver App | ❌ Not Started | ❌ None | ❌ No | Planned only |
+
 ### Confirmed working foundation
 - Microservices + gateway + database migrations are operational.
 - Public trial request flow, admin review flow, and signup token flow are implemented.

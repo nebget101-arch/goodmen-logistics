@@ -1,3 +1,9 @@
+> ⚠️ **ARCHIVED / LEGACY DOCUMENT**
+> This document describes the original RBAC design and is kept for historical reference only.
+> **Do not use this as a reference for current implementation.**
+> The current, authoritative RBAC documentation is in [`RBAC_SETUP.md`](./RBAC_SETUP.md).
+> Archived: March 2026
+
 # RBAC (Role-Based Access Control)
 
 This document describes the RBAC system for the Fleet / Dispatch / Shop / Parts platform.
