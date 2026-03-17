@@ -17,6 +17,18 @@ This document consolidates:
 
 ## 2) Current State Snapshot
 
+## FleetNeuron Feature Status — Updated March 2026
+
+| Feature | Code Status | Test Status | Deployed | Notes |
+|---------|------------|-------------|----------|-------|
+| Driver & DQF Management | ✅ Complete | 🚧 Partial | ✅ Yes | |
+| Vehicle Maintenance | ✅ Complete | 🚧 Partial | ✅ Yes | |
+| Load Management | ✅ Complete | 🚧 Partial | ✅ Yes | |
+| Payroll/Settlement | ❌ Not Started | ❌ None | ❌ No | Migration pending |
+| Twilio/SendGrid | 🚧 Code only | ❌ Untested | ❌ No | Needs E2E test |
+| Employment Application Module | 🚧 Scaffold only | ❌ None | ❌ No | End-to-end implementation pending |
+| Android Driver App | ❌ Not Started | ❌ None | ❌ No | Planned only |
+
 ### Confirmed working foundation
 - Microservices + gateway + database migrations are operational.
 - Public trial request flow, admin review flow, and signup token flow are implemented.
@@ -24,7 +36,7 @@ This document consolidates:
 - Core modules are routed and available under authenticated app routes.
 
 ### Must-complete before go-live (P0)
-1. **Settlments UI live API wiring** (remove mocks/TODO).
+1. **Settlements UI live API wiring** (remove mocks/TODO).
 2. **Settlement email endpoint** implementation (currently returns placeholder response only).
 3. **Onboarding completion gaps** (employment autosave real endpoint, MVR phase placeholder removal).
 4. **Loads dashboard financial add-ons** (lumper/detention/other additions + merge docs TODOs).
@@ -39,7 +51,7 @@ This document consolidates:
 - Trial signup page via activation token.
 
 ### Admin/business flows
-- Trial requests admin queue.
+- Internal trial management APIs (admin UI can be enabled for internal operations when needed).
 - Authentication, plan/permission guards.
 - Core fleet operations (loads, dispatch, drivers, vehicles, trailers, HOS, audit).
 - Settlements, invoicing, reports, inventory, roadside workflows (based on plan and role access).
@@ -99,10 +111,10 @@ Prepare:
 ## 5.2 Phase B: Admin Trial Queue + Approval
 
 ### TRIAL-E2E-003: Admin can view and filter trial requests
-**Entry:** Admin route for trial requests.  
+**Entry:** Internal admin UI (if enabled) or admin API calls.  
 **Steps:**
 1. Login as authorized admin.
-2. Open trial-request admin page.
+2. Open trial-request admin page (if enabled) or call admin list endpoint.
 3. Filter by status values (`new`, `contacted`, `approved`, etc.).
 
 **Expected:**
@@ -169,7 +181,7 @@ Prepare:
 Run this matrix for each plan created via trial flow:
 
 ### BASIC plan user
-Should access core pages only (dispatch/compliance baseline).
+Should access core pages (dispatch/compliance baseline) and settlements.
 
 ### MULTI_MC plan user
 Should additionally access multi-entity admin flow.

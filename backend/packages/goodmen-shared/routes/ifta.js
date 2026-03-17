@@ -841,11 +841,7 @@ router.post('/ifta/quarters/:id/run-ai-review', canRunAi, async (req, res) => {
   } catch (err) {
     await trx.rollback();
     dtLogger.error('ifta_ai_review_failed', err);
-    res.status(500).json({
-      error: 'Failed to run AI review',
-      message: err?.message || 'Unknown error',
-      code: err?.code || null,
-    });
+    res.status(500).json({ error: 'Failed to run AI review' });
   }
 });
 

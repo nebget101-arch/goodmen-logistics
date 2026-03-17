@@ -448,11 +448,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
   runAiReview(): void {
     if (!this.selectedQuarterId) return;
     this.saving = true;
-    this.ifta.runAiReview(this.selectedQuarterId, {
-      selected_truck_ids: this.selectedTruckIds,
-      source: 'ifta-quarterly-ui',
-      triggered_at: new Date().toISOString(),
-    }).subscribe({
+    this.ifta.runAiReview(this.selectedQuarterId).subscribe({
       next: (resp) => {
         this.saving = false;
         this.success = 'AI review completed.';
@@ -463,7 +459,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.saving = false;
-        this.error = err?.error?.message || err?.error?.error || 'Failed to run AI review';
+        this.error = err?.error?.error || 'Failed to run AI review';
       }
     });
   }

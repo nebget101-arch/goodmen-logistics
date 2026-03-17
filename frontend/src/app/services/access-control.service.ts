@@ -19,6 +19,10 @@ const FEATURE_PLAN_ACCESS: Record<string, string[]> = {
   lease_to_own_financing: ['end_to_end', 'enterprise'],
   fleet_financing_dashboard: ['end_to_end', 'enterprise'],
 };
+const MAINTENANCE_BLOCKED_PLANS = ['basic', 'multi_mc'];
+const MAINTENANCE_BLOCKED_PATH_PREFIXES = ['/maintenance', '/work-order'];
+const IFTA_BLOCKED_PLANS = ['basic'];
+const IFTA_BLOCKED_PATH_PREFIXES = ['/compliance/ifta'];
 
 /**
  * Centralized RBAC: permissions, roles, and location-aware access.
@@ -287,6 +291,14 @@ export class AccessControlService {
 
   hasPermission(code: string): boolean {
     if (!code) return false;
+
+    if (this.isStarterOrProfessionalPlan() && this.isMaintenancePermission(code)) {
+      return false;
+    }
+    if (this.isStarterPlan() && this.isIftaPermission(code)) {
+      return false;
+    }
+
     const perms = this.getPermissions();
     if (perms.includes(code)) return true;
     if (this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COMPANY_ADMIN])) return true;
@@ -421,6 +433,13 @@ export class AccessControlService {
       return true;
     }
 
+    if (this.isStarterOrProfessionalPlan() && this.isMaintenancePath(normalized)) {
+      return false;
+    }
+    if (this.isStarterPlan() && this.isIftaPath(normalized)) {
+      return false;
+    }
+
     const plan = this.getSubscriptionPlan();
     const allowedPages = Array.isArray(plan?.includedPages) ? plan?.includedPages ?? [] : [];
     if (!allowedPages.length) return true;
@@ -447,5 +466,36 @@ export class AccessControlService {
     if (!withoutQuery) return '';
     const prefixed = withoutQuery.startsWith('/') ? withoutQuery : `/${withoutQuery}`;
     return prefixed.length > 1 ? prefixed.replace(/\/+$/, '') : prefixed;
+  }
+
+  private isStarterOrProfessionalPlan(): boolean {
+    const planId = String(this.getSubscriptionPlanId() || '').trim().toLowerCase();
+    return MAINTENANCE_BLOCKED_PLANS.includes(planId);
+  }
+
+  private isMaintenancePermission(code: string): boolean {
+    const normalized = String(code || '').trim().toLowerCase();
+    return normalized.startsWith('maintenance.')
+      || normalized.startsWith('work_orders.')
+      || normalized.startsWith('work_order_lines.')
+      || normalized.startsWith('estimates.')
+      || normalized.startsWith('appointments.');
+  }
+
+  private isMaintenancePath(path: string): boolean {
+    return MAINTENANCE_BLOCKED_PATH_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+  }
+
+  private isStarterPlan(): boolean {
+    const planId = String(this.getSubscriptionPlanId() || '').trim().toLowerCase();
+    return IFTA_BLOCKED_PLANS.includes(planId);
+  }
+
+  private isIftaPermission(code: string): boolean {
+    return String(code || '').trim().toLowerCase().startsWith('ifta.');
+  }
+
+  private isIftaPath(path: string): boolean {
+    return IFTA_BLOCKED_PATH_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
   }
 }

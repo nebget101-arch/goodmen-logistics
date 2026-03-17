@@ -70,6 +70,7 @@ This directory contains all essential documents for the multi-agent development 
 | Document | Purpose | When to Use |
 |----------|---------|-------------|
 | **[APPLICATION-KNOWLEDGE-FOR-AI.md](./APPLICATION-KNOWLEDGE-FOR-AI.md)** | High-level overview of FleetNeuron features, routes, architecture | Reference when working on new features |
+| **[RECENT_PLATFORM_UPDATES_2026-03.md](./RECENT_PLATFORM_UPDATES_2026-03.md)** | Latest behavior/UI/access/deployment changes completed in March 2026 | Read first before implementing adjacent changes |
 | **[RBAC.md](./RBAC.md)** | Role-Based Access Control system documentation | When implementing auth/permissions |
 | **[DOCKER-QUICK-START.md](./DOCKER-QUICK-START.md)** | Docker setup and troubleshooting | When setting up local environment |
 
@@ -81,6 +82,41 @@ This directory contains all essential documents for the multi-agent development 
 | **[PAYROLL-SETTLEMENT-UI-REVIEW-AND-CONTRACTS.md](./PAYROLL-SETTLEMENT-UI-REVIEW-AND-CONTRACTS.md)** | Settlement UI specifications | When building settlement frontend |
 | **[drivers-technicians-design-and-implementation-plan.md](./drivers-technicians-design-and-implementation-plan.md)** | Driver/technician module design | Reference for driver-related features |
 | **[ai-assistant-requirements.md](./ai-assistant-requirements.md)** | AI assistant feature requirements | Reference for AI chat features |
+
+---
+
+## Planned Features (Not Yet Implemented)
+
+> These features are designed and documented but have **NOT** been coded yet.
+> Do not reference these as "complete" in status reports.
+
+### Payroll & Settlement System
+- **Planned scope:** full compensation model, recurring deductions, settlement lifecycle (create/recalculate/approve/void), and PDF/email completion hardening across phases.
+- **Design docs:**
+   - [PAYROLL-SETTLEMENT-PHASE1-AUDIT-AND-PROPOSAL.md](./PAYROLL-SETTLEMENT-PHASE1-AUDIT-AND-PROPOSAL.md)
+   - [PAYROLL-SETTLEMENT-UI-REVIEW-AND-CONTRACTS.md](./PAYROLL-SETTLEMENT-UI-REVIEW-AND-CONTRACTS.md)
+
+### Employment Application Module
+- **Current state:** Phase 1 employment application flow is implemented.
+- **Planned (not yet implemented):** Phase 2 MVR authorization + MVR PDF generation/upload + DQF completion integration.
+- **Reference docs:**
+   - [EMPLOYMENT-APPLICATION-PHASE1-NOTES.md](./EMPLOYMENT-APPLICATION-PHASE1-NOTES.md)
+   - [drivers-technicians-design-and-implementation-plan.md](./drivers-technicians-design-and-implementation-plan.md)
+
+### Android Driver App
+- **Planned scope:** native Android app structure and driver-focused workflows (load/status/doc experience), with parity against iOS/web contracts.
+- **Current state:** Android app is planned and not yet started in this repo.
+- **Reference docs:**
+   - [BACKEND-ANALYSIS-AND-COLLABORATION-STRATEGY.md](./BACKEND-ANALYSIS-AND-COLLABORATION-STRATEGY.md)
+   - [EXECUTIVE-SUMMARY.md](./EXECUTIVE-SUMMARY.md)
+   - [TEAM-COLLABORATION-PLAN.md](./TEAM-COLLABORATION-PLAN.md)
+
+### Other Planned Items
+- Driver self-service role and “my documents/my onboarding status” experience (future item in driver workflow plan).
+- Technician UX enhancements beyond core enablement (technician dashboard widgets and advanced role-focused UX polish).
+- Roadside follow-on enhancements called out in implementation docs as future/planned items.
+
+Use these documents for planning only; confirm implementation status in code and release notes before reporting completion.
 
 ### 🐛 Troubleshooting
 
