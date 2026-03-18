@@ -65,6 +65,11 @@ export interface BrokerOption {
   street?: string | null;
   zip?: string | null;
   country?: string | null;
+  credit_score?: string | number | null;
+  payment_rating?: string | null;
+  broker_notes?: string | null;
+  is_blocked?: boolean;
+  is_preferred?: boolean;
 }
 
 @Injectable({
@@ -183,10 +188,28 @@ export class LoadsService {
     authority_type: string;
     status: string;
     notes: string;
+    broker_notes: string;
+    credit_score: string | number;
+    payment_rating: string;
+    is_blocked: boolean;
+    is_preferred: boolean;
   }>): Observable<{ success: boolean; data: BrokerOption }> {
     const body: any = { ...payload };
     if (payload?.companyName && !body.legal_name) body.legal_name = payload.companyName;
     return this.http.post<{ success: boolean; data: BrokerOption }>(`${this.baseUrl}/brokers`, body);
+  }
+
+  saveBrokerOverride(payload: Partial<{
+    broker_id: string;
+    brokerId: string;
+    credit_score: string | number;
+    payment_rating: string;
+    broker_notes: string;
+    notes: string;
+    is_blocked: boolean;
+    is_preferred: boolean;
+  }>): Observable<{ success: boolean; data: BrokerOption }> {
+    return this.http.post<{ success: boolean; data: BrokerOption }>(`${this.baseUrl}/brokers/overrides`, payload);
   }
 
   bulkUploadRateConfirmations(files: File[]): Observable<{ success: boolean; results: Array<{ success: boolean; data?: LoadDetail; error?: string; filename: string }> }> {
