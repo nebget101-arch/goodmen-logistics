@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Paused</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #374151; background: #f9fafb; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
+        .header { background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 24px; text-align: center; }
+        .logo { font-size: 24px; font-weight: 700; color: #ffffff; margin: 0; }
+        .content { padding: 32px 24px; }
+        .section { margin-bottom: 24px; }
+        .text { font-size: 14px; color: #4b5563; margin-bottom: 12px; line-height: 1.6; }
+        .alert-box { background: #fff1f2; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 4px; margin: 16px 0; font-size: 14px; color: #881337; font-weight: 600; }
+        .grace-info { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 4px; margin: 12px 0; font-size: 13px; color: #92400e; line-height: 1.6; }
+        .button { display: inline-block; background: #6366f1; color: #ffffff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; margin-top: 12px; }
+        .button:hover { background: #4f46e5; }
+        .footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 16px 24px; text-align: center; font-size: 12px; color: #6b7280; }
+        .footer-link { color: #6366f1; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="logo">FleetNeuron</h1>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <p class="text">Hi {{tenantName}},</p>
+            </div>
+
+            <div class="alert-box">
+                ⏸️ Your account has been paused<br>
+                Payment could not be collected
+            </div>
+
+            <div class="section">
+                <p class="text">We were unable to charge your payment method after {{attemptCount}} attempts. Your account is now paused to prevent additional charges.</p>
+            </div>
+
+            <div class="grace-info">
+                <strong>⏱️ You have {{gracePeriodDays}} days to resume your account</strong><br>
+                Account will be fully deactivated on {{deactivationDate}} if payment is not collected.
+            </div>
+
+            <div class="section">
+                <p class="text"><strong>What's paused:</strong></p>
+                <ul style="font-size: 14px; color: #4b5563; margin: 12px 0;">
+                    <li>All API calls and integrations</li>
+                    <li>New data ingestion</li>
+                    <li>Scheduled reports</li>
+                    <li>Automated workflows</li>
+                </ul>
+                <p class="text">Your data is still securely stored and your dashboards remain accessible in read-only mode.</p>
+            </div>
+
+            <div class="section">
+                <p class="text"><strong>Resolve this now:</strong></p>
+                <a href="{{updatePaymentUrl}}" class="button">Update Payment Method →</a>
+            </div>
+
+            <div class="section">
+                <p class="text">If you need to update your billing information or discuss a payment plan, our support team can help:</p>
+                <p class="text">📧 {{supportEmail}}<br>
+                🕒 {{supportHours}}</p>
+            </div>
+
+            <div class="section">
+                <p class="text">Facing financial difficulties? <a href="{{contactSalesUrl}}" style="color: #6366f1;">Talk to our sales team</a> about alternative payment options or plans that work for you.</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>FleetNeuron AI • AI fleet intelligence<br>
+            <a href="https://fleetneuron.com" class="footer-link">Website</a> | 
+            <a href="https://fleetneuron.com/contact" class="footer-link">Contact</a></p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trial Started</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #374151; background: #f9fafb; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
+        .header { background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 24px; text-align: center; }
+        .logo { font-size: 24px; font-weight: 700; color: #ffffff; margin: 0; }
+        .content { padding: 32px 24px; }
+        .section { margin-bottom: 24px; }
+        .text { font-size: 14px; color: #4b5563; margin-bottom: 12px; line-height: 1.6; }
+        .welcome-box { background: #dbeafe; border-left: 4px solid #2563eb; padding: 12px 16px; border-radius: 4px; margin: 16px 0; font-size: 14px; color: #1e40af; font-weight: 600; }
+        .feature-box { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; border-radius: 4px; margin: 12px 0; font-size: 13px; color: #166534; }
+        .button { display: inline-block; background: #6366f1; color: #ffffff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; margin-top: 12px; }
+        .button:hover { background: #4f46e5; }
+        .timer { font-size: 16px; font-weight: 700; color: #2563eb; margin: 8px 0; }
+        .footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 16px 24px; text-align: center; font-size: 12px; color: #6b7280; }
+        .footer-link { color: #6366f1; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="logo">FleetNeuron</h1>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <p class="text">Hi {{tenantName}},</p>
+            </div>
+
+            <div class="welcome-box">
+                🎉 Welcome to FleetNeuron!<br>
+                Your {{trialDays}}-day free trial is now active
+            </div>
+
+            <div class="section">
+                <p class="text">Great choice! You now have full access to all FleetNeuron features. No credit card required.</p>
+            </div>
+
+            <div class="section">
+                <div class="timer">{{trialDays}} days remaining</div>
+                <p class="text">Trial ends on {{trialEndDate}} at {{trialEndTime}} UTC</p>
+            </div>
+
+            <div class="section">
+                <p class="text"><strong>Get started:</strong></p>
+                <a href="{{dashboardUrl}}" class="button">Open Your Dashboard →</a>
+            </div>
+
+            <div class="section">
+                <p class="text"><strong>Available in your trial:</strong></p>
+                <div class="feature-box">✓ Full AI fleet intelligence access</div>
+                <div class="feature-box">✓ All integrations and APIs</div>
+                <div class="feature-box">✓ Priority support</div>
+                <div class="feature-box">✓ {{trialDays}}-day data retention</div>
+            </div>
+
+            <div class="section">
+                <p class="text"><strong>Quick tips to get the most out of your trial:</strong></p>
+                <ul style="font-size: 14px; color: #4b5563; margin: 12px 0;">
+                    <li><a href="{{gettingStartedUrl}}" style="color: #6366f1;">Getting Started Guide</a> – Learn the basics in 10 minutes</li>
+                    <li><a href="{{videoTutorialsUrl}}" style="color: #6366f1;">Video Tutorials</a> – See FleetNeuron in action</li>
+                    <li><a href="{{integrationDocsUrl}}" style="color: #6366f1;">Integration Docs</a> – Connect your systems</li>
+                    <li><a href="{{contactSalesUrl}}" style="color: #6366f1;">Talk to Sales</a> – Get personalized guidance</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <p class="text">Need help? Our support team is available 24/7 at {{supportEmail}}</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>FleetNeuron AI • AI fleet intelligence<br>
+            <a href="https://fleetneuron.com" class="footer-link">Website</a> | 
+            <a href="https://fleetneuron.com/contact" class="footer-link">Contact</a></p>
+        </div>
+    </div>
+</body>
+</html>

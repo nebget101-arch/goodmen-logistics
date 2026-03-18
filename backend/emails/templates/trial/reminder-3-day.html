@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Only 3 Days Left</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #374151; background: #f9fafb; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
+        .header { background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); padding: 24px; text-align: center; }
+        .logo { font-size: 24px; font-weight: 700; color: #ffffff; margin: 0; }
+        .content { padding: 32px 24px; }
+        .section { margin-bottom: 24px; }
+        .section-title { font-size: 18px; font-weight: 600; color: #7f1d1d; margin-bottom: 12px; }
+        .text { font-size: 14px; color: #4b5563; margin-bottom: 12px; line-height: 1.6; }
+        .urgent-box { background: #fef2f2; border: 2px solid #dc2626; padding: 16px; border-radius: 4px; margin: 16px 0; font-size: 14px; color: #7f1d1d; font-weight: 600; }
+        .button { display: inline-block; background: #dc2626; color: #ffffff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; margin-top: 12px; }
+        .button:hover { background: #b91c1c; }
+        .footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 16px 24px; text-align: center; font-size: 12px; color: #6b7280; }
+        .footer-link { color: #6366f1; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">
+            <h1 class="logo">FleetNeuron</h1>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <p class="text">Hi {{tenantName}},</p>
+            </div>
+
+            <div class="urgent-box">
+                ⚠️ <strong>Only 3 Days Left!</strong><br>
+                Your trial ends on {{trialEndDate}}. Add your payment method now to avoid interruption.
+            </div>
+
+            <div class="section">
+                <p class="text">If you don't add a payment method by {{trialEndDate}}, your account will be paused and you'll lose access to your fleet data.</p>
+                <p class="text"><strong>It takes less than a minute to add your card.</strong></p>
+            </div>
+
+            <div class="section">
+                <a href="{{addCardUrl}}" class="button">Add Payment Method Now →</a>
+            </div>
+
+            <div class="section">
+                <p class="text">Your {{planName}} plan is {{planAmount}}/month. We'll charge you starting {{trialEndDate}}.</p>
+                <p class="text">Need help? Contact our support team anytime.</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>FleetNeuron AI • AI fleet intelligence<br>
+            <a href="https://fleetneuron.com" class="footer-link">Website</a> | 
+            <a href="https://fleetneuron.com/contact" class="footer-link">Contact</a></p>
+        </div>
+    </div>
+</body>
+</html>

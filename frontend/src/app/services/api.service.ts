@@ -906,6 +906,27 @@ export class ApiService {
       );
     }
 
+    // Billing / trial card setup
+    getBillingTrialStatus(): Observable<any> {
+      return this.http.get(`${this.baseUrl}/billing/trial-status`);
+    }
+
+    createBillingSetupIntent(): Observable<any> {
+      return this.http.post(`${this.baseUrl}/billing/setup-intent`, {});
+    }
+
+    confirmBillingPaymentMethod(paymentMethodId: string): Observable<any> {
+      return this.http.post(`${this.baseUrl}/billing/payment-method/confirm`, { paymentMethodId });
+    }
+
+    getBillingPaymentMethod(): Observable<any> {
+      return this.http.get(`${this.baseUrl}/billing/payment-method`);
+    }
+
+    removeBillingPaymentMethod(): Observable<any> {
+      return this.http.delete(`${this.baseUrl}/billing/payment-method`);
+    }
+
   // ========== INVENTORY MANAGEMENT (PHASE 2) ==========
 
   // Parts Catalog

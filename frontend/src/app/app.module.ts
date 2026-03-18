@@ -7,6 +7,7 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatDialogModule } from '@angular/material/dialog';
 import { CommonModule } from '@angular/common';
 import { AppRoutingModule } from './app-routing.module';
 
@@ -47,6 +48,9 @@ import { EmploymentApplicationComponent } from './onboarding/employment-applicat
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 import { RoadsideAiCallerComponent } from './components/roadside-ai-caller/roadside-ai-caller.component';
+import { PaymentMethodFormComponent } from './billing/payment-method-form/payment-method-form.component';
+import { TrialBannerComponent } from './shared/trial-banner/trial-banner.component';
+import { BillingComponent } from './billing/billing.component';
 
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
@@ -92,7 +96,10 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     ,EmploymentApplicationComponent,
     RoadsideBoardComponent,
     PublicRoadsideComponent,
-    RoadsideAiCallerComponent
+    RoadsideAiCallerComponent,
+    PaymentMethodFormComponent,
+    TrialBannerComponent,
+    BillingComponent
   ],
   imports: [
     BrowserModule,
@@ -105,7 +112,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     MatDatepickerModule,
     MatNativeDateModule,
     MatFormFieldModule,
-    MatInputModule
+    MatInputModule,
+    MatDialogModule
   ],
   providers: [
     {

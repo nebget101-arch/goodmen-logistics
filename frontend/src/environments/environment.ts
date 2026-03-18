@@ -4,5 +4,8 @@
 export const environment = {
   production: false,
   // Local API Gateway (FleetNeuron)
-  apiUrl: 'http://localhost:4000/api'
+  apiUrl: 'http://localhost:4000/api',
+  STRIPE_PUBLISHABLE_KEY: 'pk_test_replace_with_real_key',
+  // Stripe publishable key for browser-side Stripe Elements
+  stripePublishableKey: 'pk_test_replace_with_real_key'
 };

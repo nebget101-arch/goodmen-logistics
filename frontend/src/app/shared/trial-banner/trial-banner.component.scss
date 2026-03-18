@@ -1,0 +1,90 @@
+.trial-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  flex-wrap: wrap;
+
+  .banner-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .banner-text {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* ── State A — Amber (trial, no card) ── */
+.banner-amber {
+  background: #fffbeb;
+  border-bottom: 2px solid #f59e0b;
+  color: #92400e;
+
+  .banner-cta {
+    background: #f59e0b;
+    color: #fff;
+
+    &:hover {
+      background: #d97706;
+    }
+  }
+}
+
+/* ── State B — Teal (trial, card saved) ── */
+.banner-teal {
+  background: #f0fdfa;
+  border-bottom: 2px solid #14b8a6;
+  color: #134e4a;
+
+  .banner-cta-outline {
+    background: transparent;
+    border: 1.5px solid #14b8a6;
+    color: #0f766e;
+
+    &:hover {
+      background: #ccfbf1;
+    }
+  }
+}
+
+/* ── State C — Red (expired) ── */
+.banner-red {
+  background: #fff1f2;
+  border-bottom: 2px solid #f43f5e;
+  color: #881337;
+
+  .banner-cta {
+    background: #f43f5e;
+    color: #fff;
+
+    &:hover {
+      background: #e11d48;
+    }
+  }
+}
+
+/* ── CTA button base ── */
+.banner-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, opacity 0.15s;
+  flex-shrink: 0;
+
+  &:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+}

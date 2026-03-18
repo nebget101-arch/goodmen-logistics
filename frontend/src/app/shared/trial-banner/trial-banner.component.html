@@ -1,0 +1,51 @@
+<ng-container [ngSwitch]="bannerVariant">
+
+  <!-- ── State A: Trial active, no payment method saved ── -->
+  <div *ngSwitchCase="'state-a'" class="trial-banner banner-amber" role="alert" aria-live="polite">
+    <span class="banner-icon">🕐</span>
+    <span class="banner-text">
+      You're on your free trial —
+      <strong>{{ state?.daysRemaining }}</strong>
+      day{{ state?.daysRemaining === 1 ? '' : 's' }} remaining
+      (ends <strong>{{ state?.trialEnd | date:'mediumDate' }}</strong>).
+      You won't be charged until {{ state?.trialEnd | date:'mediumDate' }}.
+    </span>
+    <button class="banner-cta" type="button" (click)="openPaymentDialog()">
+      Add payment method →
+    </button>
+  </div>
+
+  <!-- ── State B: Trial active, card saved ── -->
+  <div *ngSwitchCase="'state-b'" class="trial-banner banner-teal" role="status">
+    <span class="banner-icon">✅</span>
+    <span class="banner-text">
+      Trial active — your payment method is saved.
+      <ng-container *ngIf="state?.planAmount !== null && state?.planAmount !== undefined">
+        You'll be charged <strong>{{ state?.planAmount | currency }}</strong>
+        on <strong>{{ state?.trialEnd | date:'mediumDate' }}</strong>.
+      </ng-container>
+      <ng-container *ngIf="state?.planAmount === null || state?.planAmount === undefined">
+        You'll be charged on <strong>{{ state?.trialEnd | date:'mediumDate' }}</strong>.
+      </ng-container>
+      No action needed.
+    </span>
+    <button class="banner-cta banner-cta-outline" type="button" (click)="openPaymentDialog()">
+      Manage card
+    </button>
+  </div>
+
+  <!-- ── State C: Trial expired ── -->
+  <div *ngSwitchCase="'state-c'" class="trial-banner banner-red" role="alert" aria-live="assertive">
+    <span class="banner-icon">⚠️</span>
+    <span class="banner-text">
+      Your trial has ended.
+    </span>
+    <button class="banner-cta" type="button" (click)="openPaymentDialog()">
+      Add payment method → to reactivate your account
+    </button>
+  </div>
+
+  <!-- hidden for 'converted' subscribers and non-trial users -->
+  <ng-container *ngSwitchDefault></ng-container>
+
+</ng-container>
