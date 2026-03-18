@@ -13,6 +13,7 @@ const express = require('express');
 const router = express.Router();
 const trialRequestService = require('../services/trial-request-service');
 const trialRequestEmailService = require('../services/trial-request-email-service');
+const trialService = require('../services/trialService');
 const authMiddleware = require('../middleware/auth-middleware');
 const rbacService = require('../services/rbac-service');
 const { PLANS, TRIAL_REQUEST_STATUSES } = require('../config/plans');
@@ -316,7 +317,7 @@ router.post('/:id/reset-tenant-admin-password', authMiddleware, requireInternalT
 
 router.patch('/:id/status', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, subscriptionId, trialDays } = req.body;
     if (!status) {
       return res.status(400).json({
         success: false,
@@ -326,6 +327,26 @@ router.patch('/:id/status', authMiddleware, requireInternalTrialAdmin, async (re
     const record = status === 'approved'
       ? await trialRequestService.approveTrialRequest(req.params.id, req.user?.id || null)
       : await trialRequestService.updateTrialRequestStatus(req.params.id, status);
+
+    const actorUserId = req.user?.id || req.user?.sub || null;
+
+    // FN-72: activate trial state when admin marks approved/converted and a tenant exists.
+    if ((status === 'approved' || status === 'converted') && record?.created_tenant_id) {
+      await trialService.activateTrial(
+        record.created_tenant_id,
+        record.requested_plan || 'basic',
+        Number.isFinite(Number(trialDays)) ? Number(trialDays) : 14,
+        actorUserId
+      );
+
+      if (status === 'converted') {
+        const safeSubscriptionId = String(subscriptionId || '').trim();
+        if (safeSubscriptionId) {
+          await trialService.markConverted(record.created_tenant_id, safeSubscriptionId, actorUserId);
+        }
+      }
+    }
+
     let requesterApprovedEmailResult = { sent: false, reason: 'not_attempted' };
     let activationUrl = null;
 

@@ -14,6 +14,16 @@ function tenantId(req) {
   return req.context?.tenantId || req.user?.tenantId || null;
 }
 
+function operatingEntityId(req) {
+  return req.context?.operatingEntityId || null;
+}
+
+function applyOperatingEntityFilter(query, req, column = 'operating_entity_id') {
+  const oeId = operatingEntityId(req);
+  if (oeId) query.where(column, oeId);
+  return query;
+}
+
 function requireTenant(req, res) {
   const tid = tenantId(req);
   if (!tid) {
@@ -41,13 +51,18 @@ router.get('/overview', async (req, res) => {
     const tid = requireTenant(req, res);
     if (!tid) return;
 
-    const [accounts] = await knex('toll_accounts').where({ tenant_id: tid }).count('* as count');
-    const [devices] = await knex('toll_devices').where({ tenant_id: tid }).count('* as count');
-    const [transactions] = await knex('toll_transactions').where({ tenant_id: tid }).count('* as count');
-    const [openExceptions] = await knex('toll_transaction_exceptions').where({ tenant_id: tid, resolution_status: 'open' }).count('* as count');
+    const [accounts] = await applyOperatingEntityFilter(knex('toll_accounts').where({ tenant_id: tid }), req).count('* as count');
+    const [devices] = await applyOperatingEntityFilter(knex('toll_devices').where({ tenant_id: tid }), req).count('* as count');
+    const [transactions] = await applyOperatingEntityFilter(knex('toll_transactions').where({ tenant_id: tid }), req).count('* as count');
+    const [openExceptions] = await knex('toll_transaction_exceptions as e')
+      .join('toll_transactions as tt', 'tt.id', 'e.toll_transaction_id')
+      .where({ 'e.tenant_id': tid, 'e.resolution_status': 'open' })
+      .modify((qb) => applyOperatingEntityFilter(qb, req, 'tt.operating_entity_id'))
+      .count('* as count');
 
     const lastBatch = await knex('toll_import_batches')
       .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .orderBy('started_at', 'desc')
       .first(['id', 'provider_name', 'source_file_name', 'import_status', 'started_at', 'total_rows', 'success_rows', 'failed_rows']);
 
@@ -71,7 +86,7 @@ router.get('/accounts', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
     if (!tid) return;
-    const rows = await knex('toll_accounts').where({ tenant_id: tid }).orderBy('created_at', 'desc');
+    const rows = await applyOperatingEntityFilter(knex('toll_accounts').where({ tenant_id: tid }), req).orderBy('created_at', 'desc');
     res.json(rows);
   } catch (error) {
     dtLogger.error('tolls_accounts_list_failed', error);
@@ -84,7 +99,7 @@ router.post('/accounts', async (req, res) => {
     const tid = requireTenant(req, res);
     if (!tid) return;
 
-    const { provider_name, display_name, account_number_masked, import_method, operating_entity_id, notes } = req.body || {};
+    const { provider_name, display_name, account_number_masked, import_method, notes } = req.body || {};
     if (!provider_name || !display_name) {
       return res.status(400).json({ error: 'provider_name and display_name are required' });
     }
@@ -92,7 +107,7 @@ router.post('/accounts', async (req, res) => {
     const [row] = await knex('toll_accounts')
       .insert({
         tenant_id: tid,
-        operating_entity_id: operating_entity_id || null,
+        operating_entity_id: operatingEntityId(req),
         provider_name,
         display_name,
         account_number_masked: account_number_masked || null,
@@ -122,7 +137,10 @@ router.patch('/accounts/:id', async (req, res) => {
     patch.updated_at = new Date();
 
     const [row] = await knex('toll_accounts')
-      .where({ id: req.params.id, tenant_id: tid })
+      .modify((qb) => {
+        qb.where({ id: req.params.id, tenant_id: tid });
+        applyOperatingEntityFilter(qb, req);
+      })
       .update(patch)
       .returning('*');
 
@@ -138,7 +156,7 @@ router.get('/devices', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
     if (!tid) return;
-    const rows = await knex('toll_devices').where({ tenant_id: tid }).orderBy('created_at', 'desc');
+    const rows = await applyOperatingEntityFilter(knex('toll_devices').where({ tenant_id: tid }), req).orderBy('created_at', 'desc');
     res.json(rows);
   } catch (error) {
     dtLogger.error('tolls_devices_list_failed', error);
@@ -154,10 +172,16 @@ router.post('/devices', async (req, res) => {
     const { toll_account_id, device_number_masked, plate_number, truck_id, trailer_id, driver_id, effective_start_date, effective_end_date, notes } = req.body || {};
     if (!toll_account_id) return res.status(400).json({ error: 'toll_account_id is required' });
 
+    const account = await applyOperatingEntityFilter(
+      knex('toll_accounts').where({ id: toll_account_id, tenant_id: tid }),
+      req
+    ).first(['id']);
+    if (!account) return res.status(404).json({ error: 'Toll account not found' });
+
     const [row] = await knex('toll_devices')
       .insert({
         tenant_id: tid,
-        operating_entity_id: req.body?.operating_entity_id || null,
+        operating_entity_id: operatingEntityId(req),
         toll_account_id,
         device_number_masked: device_number_masked || null,
         plate_number: plate_number || null,
@@ -193,7 +217,10 @@ router.patch('/devices/:id', async (req, res) => {
     patch.updated_at = new Date();
 
     const [row] = await knex('toll_devices')
-      .where({ id: req.params.id, tenant_id: tid })
+      .modify((qb) => {
+        qb.where({ id: req.params.id, tenant_id: tid });
+        applyOperatingEntityFilter(qb, req);
+      })
       .update(patch)
       .returning('*');
 
@@ -205,7 +232,7 @@ router.patch('/devices/:id', async (req, res) => {
   }
 });
 
-router.get('/import/batches', async (req, res) => {
+async function listImportBatches(req, res) {
   try {
     const tid = requireTenant(req, res);
     if (!tid) return;
@@ -214,15 +241,104 @@ router.get('/import/batches', async (req, res) => {
 
     const rows = await knex('toll_import_batches')
       .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .orderBy('started_at', 'desc')
       .limit(limit)
       .offset(offset);
 
-    const [{ total }] = await knex('toll_import_batches').where({ tenant_id: tid }).count('* as total');
+    const [{ total }] = await applyOperatingEntityFilter(knex('toll_import_batches').where({ tenant_id: tid }), req).count('* as total');
     res.json({ rows, total: Number(total || 0) });
   } catch (error) {
     dtLogger.error('tolls_batches_list_failed', error);
     res.status(500).json({ error: 'Failed to fetch toll import batches' });
+  }
+}
+
+router.get('/import', listImportBatches);
+router.get('/history', listImportBatches);
+router.get('/import/batches', listImportBatches);
+
+router.get('/transactions', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+    const { limit = 50, offset = 0, date_from, date_to, driver_id, truck_id, batch_id, status } = req.query;
+
+    let q = applyOperatingEntityFilter(
+      knex('toll_transactions as tt')
+        .leftJoin('vehicles as v', 'v.id', 'tt.truck_id')
+        .leftJoin('drivers as d', 'd.id', 'tt.driver_id')
+        .where('tt.tenant_id', tid),
+      req,
+      'tt.operating_entity_id'
+    )
+      .select(
+        'tt.*',
+        knex.raw("COALESCE(v.unit_number, v.license_plate, tt.unit_number_raw) AS truck_display"),
+        knex.raw("COALESCE(d.first_name || ' ' || d.last_name, tt.driver_name_raw) AS driver_display")
+      )
+      .orderBy('tt.transaction_date', 'desc');
+
+    if (date_from) q = q.where('tt.transaction_date', '>=', date_from);
+    if (date_to) q = q.where('tt.transaction_date', '<=', date_to);
+    if (driver_id) q = q.where('tt.driver_id', driver_id);
+    if (truck_id) q = q.where('tt.truck_id', truck_id);
+    if (batch_id) q = q.where('tt.source_batch_id', batch_id);
+    if (status) q = q.where('tt.validation_status', status);
+
+    const total = await applyOperatingEntityFilter(
+      knex('toll_transactions').where('tenant_id', tid),
+      req
+    )
+      .modify((qb) => {
+        if (date_from) qb.where('transaction_date', '>=', date_from);
+        if (date_to) qb.where('transaction_date', '<=', date_to);
+        if (driver_id) qb.where('driver_id', driver_id);
+        if (truck_id) qb.where('truck_id', truck_id);
+        if (batch_id) qb.where('source_batch_id', batch_id);
+        if (status) qb.where('validation_status', status);
+      })
+      .count('* as total')
+      .first();
+
+    const rows = await q.limit(Number(limit)).offset(Number(offset));
+    res.json({ rows, total: Number(total?.total || 0) });
+  } catch (error) {
+    dtLogger.error('tolls_transactions_list_failed', error);
+    res.status(500).json({ error: 'Failed to fetch toll transactions' });
+  }
+});
+
+router.get('/exceptions', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+    const { limit = 50, offset = 0, status } = req.query;
+
+    let q = knex('toll_transaction_exceptions as e')
+      .join('toll_transactions as tt', 'tt.id', 'e.toll_transaction_id')
+      .where('e.tenant_id', tid)
+      .modify((qb) => applyOperatingEntityFilter(qb, req, 'tt.operating_entity_id'))
+      .select('e.*', 'tt.transaction_date', 'tt.provider_name', 'tt.plaza_name', 'tt.amount', 'tt.unit_number_raw', 'tt.driver_name_raw')
+      .orderBy('e.created_at', 'desc');
+
+    if (status) q = q.where('e.resolution_status', status);
+
+    const total = await knex('toll_transaction_exceptions as e')
+      .join('toll_transactions as tt', 'tt.id', 'e.toll_transaction_id')
+      .where('e.tenant_id', tid)
+      .modify((qb) => applyOperatingEntityFilter(qb, req, 'tt.operating_entity_id'))
+      .modify((qb) => {
+        if (status) qb.where('e.resolution_status', status);
+      })
+      .count('* as total')
+      .first();
+
+    const rows = await q.limit(Number(limit)).offset(Number(offset));
+    res.json({ rows, total: Number(total?.total || 0) });
+  } catch (error) {
+    dtLogger.error('tolls_exceptions_list_failed', error);
+    res.status(500).json({ error: 'Failed to fetch toll exceptions' });
   }
 });
 

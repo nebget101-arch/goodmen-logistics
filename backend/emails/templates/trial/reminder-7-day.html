@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>7 Days Left in Your Trial</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #374151; background: #f9fafb; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
+        .header { background: linear-gradient(135deg, #1e40af 0%, #0f766e 100%); padding: 24px; text-align: center; }
+        .logo { font-size: 24px; font-weight: 700; color: #ffffff; margin: 0; }
+        .content { padding: 32px 24px; }
+        .section { margin-bottom: 24px; }
+        .section-title { font-size: 18px; font-weight: 600; color: #111827; margin-bottom: 12px; }
+        .text { font-size: 14px; color: #4b5563; margin-bottom: 12px; line-height: 1.6; }
+        .warning-box { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 4px; margin: 16px 0; font-size: 14px; color: #92400e; font-weight: 600; }
+        .info-box { background: #f0f9ff; border-left: 4px solid #0284c7; padding: 12px 16px; border-radius: 4px; margin: 16px 0; font-size: 13px; color: #075985; }
+        .button { display: inline-block; background: #6366f1; color: #ffffff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; margin-top: 12px; }
+        .button:hover { background: #4f46e5; }
+        .footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 16px 24px; text-align: center; font-size: 12px; color: #6b7280; }
+        .footer-link { color: #6366f1; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header" style="background: linear-gradient(135deg, #1e40af 0%, #0f766e 100%);">
+            <h1 class="logo">FleetNeuron</h1>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <p class="text">Hi {{tenantName}},</p>
+                <p class="text">You have <strong>7 days left</strong> in your free trial. Your trial ends on <strong>{{trialEndDate}}</strong>.</p>
+            </div>
+
+            <div class="warning-box">
+                🕐 Only 7 days remaining — your {{planName}} plan is {{planAmount}}/mo
+            </div>
+
+            <div class="section">
+                <p class="text"><strong>To keep your account active after the trial ends, you need to add a payment method.</strong></p>
+                <p class="text">Without a payment method, your account will be paused on {{trialEndDate}} and you won't have access to your fleet data.</p>
+            </div>
+
+            <div class="info-box">
+                ℹ️ We won't charge you until {{trialEndDate}} — we just need it on file to continue your service.
+            </div>
+
+            <div class="section">
+                <a href="{{addCardUrl}}" class="button">Add Payment Method Now →</a>
+            </div>
+
+            <div class="section">
+                <p class="text">Questions? Our support team is here to help. Visit our <a href="https://fleetneuron.com/help" style="color: #6366f1;">help center</a> anytime.</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>FleetNeuron AI • AI fleet intelligence<br>
+            <a href="https://fleetneuron.com" class="footer-link">Website</a> | 
+            <a href="https://fleetneuron.com/privacy" class="footer-link">Privacy</a></p>
+        </div>
+    </div>
+</body>
+</html>

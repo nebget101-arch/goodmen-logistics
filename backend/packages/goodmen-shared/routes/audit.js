@@ -4,6 +4,37 @@ const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
 const auth = require('./auth-middleware');
 
+async function listScopedAuditTrail(req, res) {
+  const params = [];
+  const where = [];
+
+  if (req.context && req.context.tenantId) {
+    params.push(req.context.tenantId);
+    where.push(`tenant_id = $${params.length}`);
+  }
+
+  if (req.context?.operatingEntityId) {
+    params.push(req.context.operatingEntityId);
+    where.push(`operating_entity_id = $${params.length}`);
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const sql = `SELECT * FROM audit_logs ${whereClause} ORDER BY created_at DESC`;
+
+  try {
+    const result = await query(sql, params);
+    return res.json(result.rows);
+  } catch (err) {
+    if (err && err.code === '42703') {
+      console.warn('audit_trail_scope_missing_columns, falling back to unscoped audit trail', { error: err.message });
+      res.setHeader('X-Debug-Audit-Scope', 'fallback-unscoped');
+      const fallback = await query(`SELECT * FROM audit_logs ORDER BY created_at DESC`);
+      return res.json(fallback.rows);
+    }
+    throw err;
+  }
+}
+
 // GET application logs (from dtLogger buffer)
 router.get('/logs', (req, res) => {
   try {
@@ -27,39 +58,20 @@ router.get('/logs', (req, res) => {
 // GET audit trail
 router.get('/trail', async (req, res) => {
   try {
-    const params = [];
-    const where = [];
-
-    if (req.context && req.context.tenantId) {
-      params.push(req.context.tenantId);
-      where.push(`tenant_id = $${params.length}`);
-    }
-
-    if (req.context && !req.context.isGlobalAdmin && req.context.operatingEntityId) {
-      params.push(req.context.operatingEntityId);
-      where.push(`operating_entity_id = $${params.length}`);
-    }
-
-    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const sql = `SELECT * FROM audit_logs ${whereClause} ORDER BY created_at DESC`;
-
-    try {
-      const result = await query(sql, params);
-      res.json(result.rows);
-    } catch (err) {
-      // If the audit_logs table doesn't have tenant_id/operating_entity_id, fall back
-      // to an unscoped trail to avoid crashing the endpoint. Log and expose a debug header.
-      if (err && err.code === '42703') {
-        console.warn('audit_trail_scope_missing_columns, falling back to unscoped audit trail', { error: err.message });
-        res.setHeader('X-Debug-Audit-Scope', 'fallback-unscoped');
-        const fallback = await query(`SELECT * FROM audit_logs ORDER BY created_at DESC`);
-        return res.json(fallback.rows);
-      }
-      throw err;
-    }
+    return await listScopedAuditTrail(req, res);
   } catch (error) {
     console.error('Error fetching audit trail:', error);
     res.status(500).json({ message: 'Failed to fetch audit trail' });
+  }
+});
+
+// GET audit list (alias for /trail)
+router.get('/', async (req, res) => {
+  try {
+    return await listScopedAuditTrail(req, res);
+  } catch (error) {
+    console.error('Error fetching audit list:', error);
+    return res.status(500).json({ message: 'Failed to fetch audit list' });
   }
 });
 

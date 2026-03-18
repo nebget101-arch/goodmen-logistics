@@ -1,0 +1,40 @@
+<section class="payment-method-form">
+  <div class="state" *ngIf="loading">Loading billing details…</div>
+
+  <div class="state error" *ngIf="!loading && error">{{ error }}</div>
+  <div class="state success" *ngIf="!loading && success">{{ success }}</div>
+
+  <ng-container *ngIf="!loading">
+    <div class="trial-message" *ngIf="trialStatus">
+      By saving your card, you authorize FleetNeuron to charge you
+      <strong *ngIf="planAmount !== null">{{ planAmount | currency:'USD':'symbol':'1.0-2' }}</strong>
+      <strong *ngIf="planAmount === null">your selected plan amount</strong>
+      on
+      <strong *ngIf="trialStatus?.trial_end">{{ trialStatus?.trial_end | date:'mediumDate' }}</strong>
+      <strong *ngIf="!trialStatus?.trial_end">the end of your trial</strong>.
+      No charge will be made today.
+    </div>
+
+    <div class="saved-card" *ngIf="hasCard">
+      <p>
+        Saved card:
+        <strong>{{ cardBrand || 'Card' | titlecase }}</strong>
+        ending in
+        <strong>{{ cardLast4 || '••••' }}</strong>
+        <span *ngIf="cardExpMonth && cardExpYear">(exp {{ cardExpMonth }}/{{ cardExpYear }})</span>
+      </p>
+      <button type="button" class="btn danger" (click)="removeCard()" [disabled]="removing">
+        {{ removing ? 'Removing…' : 'Remove card' }}
+      </button>
+    </div>
+
+    <form class="card-form" (ngSubmit)="saveCard()">
+      <label for="card-element">Card details</label>
+      <div id="card-element" #cardElementRef class="card-element"></div>
+
+      <button type="submit" class="btn primary" [disabled]="saving">
+        {{ saving ? 'Saving…' : 'Save card' }}
+      </button>
+    </form>
+  </ng-container>
+</section>

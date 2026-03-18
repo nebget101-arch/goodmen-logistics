@@ -11,12 +11,21 @@ router.use(auth(['admin', 'safety']));
 router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
+    const params = [];
+    let whereClause = '';
+    if (req.context?.operatingEntityId) {
+      params.push(req.context.operatingEntityId);
+      whereClause = `WHERE d.operating_entity_id = $${params.length}`;
+    }
+    
     const result = await query(`
       SELECT hr.*, d.first_name || ' ' || d.last_name as "driverName"
       FROM hos_records hr
       JOIN drivers d ON hr.driver_id = d.id
+      ${whereClause}
       ORDER BY hr.record_date DESC
-    `);
+    `, params);
+    
     const duration = Date.now() - startTime;
     
     dtLogger.trackDatabase('SELECT', 'hos_records', duration, true, { count: result.rows.length });
@@ -37,6 +46,13 @@ router.get('/', async (req, res) => {
 router.get('/driver/:driverId', async (req, res) => {
   const startTime = Date.now();
   try {
+    if (req.context?.operatingEntityId) {
+      const driverRes = await query('SELECT operating_entity_id FROM drivers WHERE id = $1', [req.params.driverId]);
+      if (driverRes.rows.length === 0 || driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+        return res.status(404).json({ message: 'Driver not found' });
+      }
+    }
+
     const result = await query(`
       SELECT hr.*, d.first_name || ' ' || d.last_name as "driverName"
       FROM hos_records hr
@@ -44,6 +60,7 @@ router.get('/driver/:driverId', async (req, res) => {
       WHERE hr.driver_id = $1
       ORDER BY hr.record_date DESC
     `, [req.params.driverId]);
+    
     const duration = Date.now() - startTime;
     
     dtLogger.trackDatabase('SELECT', 'hos_records', duration, true, { driverId: req.params.driverId, count: result.rows.length });
@@ -64,13 +81,21 @@ router.get('/driver/:driverId', async (req, res) => {
 router.get('/date/:date', async (req, res) => {
   const startTime = Date.now();
   try {
+    const params = [req.params.date];
+    let whereClause = 'WHERE DATE(hr.record_date) = $1';
+    if (req.context?.operatingEntityId) {
+      params.push(req.context.operatingEntityId);
+      whereClause += ` AND d.operating_entity_id = $${params.length}`;
+    }
+    
     const result = await query(`
       SELECT hr.*, d.first_name || ' ' || d.last_name as "driverName"
       FROM hos_records hr
       JOIN drivers d ON hr.driver_id = d.id
-      WHERE DATE(hr.record_date) = $1
+      ${whereClause}
       ORDER BY hr.record_date DESC
-    `, [req.params.date]);
+    `, params);
+    
     const duration = Date.now() - startTime;
     
     dtLogger.trackDatabase('SELECT', 'hos_records', duration, true, { date: req.params.date, count: result.rows.length });
@@ -91,13 +116,21 @@ router.get('/date/:date', async (req, res) => {
 router.get('/violations', async (req, res) => {
   const startTime = Date.now();
   try {
+    const params = [];
+    let whereClause = 'WHERE hr.violations IS NOT NULL AND hr.violations != \'[]\'';
+    if (req.context?.operatingEntityId) {
+      params.push(req.context.operatingEntityId);
+      whereClause += ` AND d.operating_entity_id = $${params.length}`;
+    }
+    
     const result = await query(`
       SELECT hr.*, d.first_name || ' ' || d.last_name as "driverName"
       FROM hos_records hr
       JOIN drivers d ON hr.driver_id = d.id
-      WHERE hr.violations IS NOT NULL AND hr.violations != '[]'
+      ${whereClause}
       ORDER BY hr.record_date DESC
-    `);
+    `, params);
+    
     const duration = Date.now() - startTime;
     
     dtLogger.trackDatabase('SELECT', 'hos_records', duration, true, { count: result.rows.length });
@@ -119,6 +152,17 @@ router.post('/', async (req, res) => {
   const startTime = Date.now();
   try {
     const { driverId, recordDate, onDutyHours, drivingHours, violations } = req.body;
+        // Validate driver belongs to active OE
+        if (req.context?.operatingEntityId) {
+          const driverRes = await query('SELECT operating_entity_id FROM drivers WHERE id = $1', [driverId]);
+          if (driverRes.rows.length === 0) {
+            return res.status(404).json({ message: 'Driver not found' });
+          }
+          if (driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+            return res.status(404).json({ message: 'Driver not found' });
+          }
+        }
+    
     
     const result = await query(`
       INSERT INTO hos_records (driver_id, record_date, on_duty_hours, driving_hours, violations)

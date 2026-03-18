@@ -8,6 +8,45 @@ const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChang
 // Admin / safety only
 router.use(auth(['admin', 'safety']));
 
+// GET /api/dqf - list DQF documents scoped through drivers
+router.get('/', async (req, res) => {
+  const start = Date.now();
+  try {
+    const params = [];
+    const where = [];
+
+    if (req.context?.tenantId) {
+      params.push(req.context.tenantId);
+      where.push(`dr.tenant_id = $${params.length}`);
+    }
+    if (req.context?.operatingEntityId) {
+      params.push(req.context.operatingEntityId);
+      where.push(`dr.operating_entity_id = $${params.length}`);
+    }
+
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const result = await query(
+      `SELECT dd.*, dr.first_name, dr.last_name, dr.operating_entity_id
+       FROM dqf_documents dd
+       JOIN drivers dr ON dr.id = dd.driver_id
+       ${whereClause}
+       ORDER BY dd.created_at DESC`,
+      params
+    );
+
+    const duration = Date.now() - start;
+    dtLogger.trackDatabase('SELECT', 'dqf_documents', duration, true, { count: result.rows.length });
+    dtLogger.trackRequest('GET', '/api/dqf', 200, duration, { count: result.rows.length });
+
+    return res.json(result.rows);
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('dqf_list_failed', error);
+    dtLogger.trackRequest('GET', '/api/dqf', 500, duration);
+    return res.status(500).json({ message: 'Failed to load DQF records' });
+  }
+});
+
 // GET /api/dqf/drivers/:driverId
 router.get('/drivers/:driverId', async (req, res) => {
   const start = Date.now();
@@ -17,6 +56,7 @@ router.get('/drivers/:driverId', async (req, res) => {
     const driverRes = await query(
       `SELECT
          id,
+         operating_entity_id,
          first_name,
          last_name,
          email,
@@ -37,7 +77,11 @@ router.get('/drivers/:driverId', async (req, res) => {
     if (driverRes.rows.length === 0) {
       return res.status(404).json({ message: 'Driver not found' });
     }
-
+    // Validate OE access: ensure driver belongs to active OE context
+    const driver = driverRes.rows[0];
+    if (req.context?.operatingEntityId && driver.operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
     const requirementsRes = await query(
       `SELECT
          r.key,
@@ -113,6 +157,21 @@ router.get('/documents/:id/download', async (req, res) => {
       return res.status(404).json({ message: 'Document not found' });
     }
 
+    // Validate OE access through the parent driver
+    const driverRes = await query(
+      `SELECT dr.operating_entity_id
+         FROM driver_documents dd
+         JOIN drivers dr ON dr.id = dd.driver_id
+        WHERE dd.id = $1::uuid`,
+      [id]
+    );
+    if (driverRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+    if (req.context?.operatingEntityId && driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
     const docRow = result.rows[0];
     let bytes = docRow.bytes;
 
@@ -149,6 +208,19 @@ router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
   try {
     const { driverId, requirementKey } = req.params;
     const { status, evidenceDocumentId, note } = req.body;
+
+    const driverScopeRes = await query(
+      `SELECT id, operating_entity_id
+         FROM drivers
+        WHERE id = $1`,
+      [driverId]
+    );
+    if (driverScopeRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    if (req.context?.operatingEntityId && driverScopeRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
 
     if (!status) {
       return res.status(400).json({ message: 'status is required' });
@@ -193,6 +265,19 @@ router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
 router.get('/requirement/:driverId/:requirementKey/changes', async (req, res) => {
   try {
     const { driverId, requirementKey } = req.params;
+
+    const driverScopeRes = await query(
+      `SELECT id, operating_entity_id
+         FROM drivers
+        WHERE id = $1`,
+      [driverId]
+    );
+    if (driverScopeRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    if (req.context?.operatingEntityId && driverScopeRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
 
     const result = await query(
       `SELECT

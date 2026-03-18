@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversion Successful</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #374151; background: #f9fafb; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
+        .header { background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); padding: 24px; text-align: center; }
+        .logo { font-size: 24px; font-weight: 700; color: #ffffff; margin: 0; }
+        .content { padding: 32px 24px; }
+        .section { margin-bottom: 24px; }
+        .text { font-size: 14px; color: #4b5563; margin-bottom: 12px; line-height: 1.6; }
+        .success-box { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; border-radius: 4px; margin: 16px 0; font-size: 14px; color: #166534; font-weight: 600; }
+        .plan-info { background: #f0f9ff; border-left: 4px solid #0284c7; padding: 12px 16px; border-radius: 4px; margin: 12px 0; font-size: 13px; color: #075985; line-height: 1.6; }
+        .button { display: inline-block; background: #6366f1; color: #ffffff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; margin-top: 12px; }
+        .button:hover { background: #4f46e5; }
+        .footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 16px 24px; text-align: center; font-size: 12px; color: #6b7280; }
+        .footer-link { color: #6366f1; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="logo">FleetNeuron</h1>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <p class="text">Hi {{tenantName}},</p>
+            </div>
+
+            <div class="success-box">
+                ✅ Welcome to {{planName}} Plan!<br>
+                Your account is now fully activated.
+            </div>
+
+            <div class="section">
+                <p class="text">Thank you for choosing FleetNeuron. Your trial has been converted to a {{planName}} subscription.</p>
+            </div>
+
+            <div class="plan-info">
+                <strong>Your subscription:</strong><br>
+                Plan: {{planName}}<br>
+                Price: {{monthlyPrice}}/month<br>
+                Billing Date: {{billingDate}} of each month<br>
+                Next Renewal: {{nextRenewalDate}}
+            </div>
+
+            <div class="section">
+                <p class="text"><strong>What's available now:</strong></p>
+                <ul style="font-size: 14px; color: #4b5563; margin: 12px 0;">
+                    <li>Full access to all {{planName}} features</li>
+                    <li>{{apiCallLimit}} API calls per month</li>
+                    <li>{{userCount}} team members</li>
+                    <li>{{storageAmount}} data storage</li>
+                    <li>Priority support</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <p class="text"><strong>Next steps:</strong></p>
+                <a href="{{dashboardUrl}}" class="button">Go to Dashboard →</a>
+            </div>
+
+            <div class="section">
+                <p class="text">You can manage your subscription, view invoices, and update billing info in your <a href="{{accountSettingsUrl}}" style="color: #6366f1;">Account Settings</a>.</p>
+            </div>
+
+            <div class="section">
+                <p class="text">Have questions? Our support team is available {{supportHours}} at {{supportEmail}}</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>FleetNeuron AI • AI fleet intelligence<br>
+            <a href="https://fleetneuron.com" class="footer-link">Website</a> | 
+            <a href="https://fleetneuron.com/contact" class="footer-link">Contact</a></p>
+        </div>
+    </div>
+</body>
+</html>

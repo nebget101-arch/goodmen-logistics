@@ -76,6 +76,9 @@
           <a routerLink="/profile" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
             <span class="material-symbols-outlined">person</span> Profile
           </a>
+          <a routerLink="/billing" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+            <span class="material-symbols-outlined">credit_card</span> Billing
+          </a>
           <ng-container *ngIf="canSeeAdminMenuLink('/admin/multi-mc', adminMenuPermissions)">
             <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">domain</span> Company Access Admin
@@ -133,6 +136,9 @@
           <a routerLink="/profile" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
             <span class="material-symbols-outlined">person</span> Profile
           </a>
+          <a routerLink="/billing" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+            <span class="material-symbols-outlined">credit_card</span> Billing
+          </a>
           <ng-container *ngIf="canSeeAdminMenuLink('/admin/multi-mc', adminMenuPermissions)">
             <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">domain</span> Company Access Admin
@@ -159,6 +165,7 @@
         <span>Open AI Console</span>
       </button>
     </div>
+    <app-trial-banner *ngIf="shouldRenderProtectedShell()"></app-trial-banner>
     <router-outlet></router-outlet>
 
     <button

@@ -34,7 +34,8 @@ const PLANS = {
       '/settlements',
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners',
-      '/users'
+      '/users',
+      '/billing'
     ],
     highlighted: false,
     features: [
@@ -75,7 +76,8 @@ const PLANS = {
       '/settlements/scheduled-deductions',
       '/settlements/equipment-owners',
       '/users',
-      '/admin/multi-mc'
+      '/admin/multi-mc',
+      '/billing'
     ],
     highlighted: true,
     badge: 'Most Popular',
@@ -131,7 +133,8 @@ const PLANS = {
       '/reports',
       '/roadside',
       '/finance/lease-to-own',
-      '/finance/fleet-financing-dashboard'
+      '/finance/fleet-financing-dashboard',
+      '/billing'
     ],
     highlighted: false,
     features: [
@@ -186,7 +189,8 @@ const PLANS = {
       '/reports',
       '/roadside',
       '/finance/lease-to-own',
-      '/finance/fleet-financing-dashboard'
+      '/finance/fleet-financing-dashboard',
+      '/billing'
     ],
     highlighted: false,
     features: [

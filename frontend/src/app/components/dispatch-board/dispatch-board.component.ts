@@ -1,9 +1,11 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { Subject, takeUntil } from 'rxjs';
 import { LoadsService } from '../../services/loads.service';
 import { ApiService } from '../../services/api.service';
 import { LoadListItem } from '../../models/load-dashboard.model';
 import { ReferenceDataService, StatusCode } from '../../services/reference-data.service';
+import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 
 interface DriverRow {
   id: string | null;
@@ -34,7 +36,7 @@ interface CustomFilter {
   templateUrl: './dispatch-board.component.html',
   styleUrls: ['./dispatch-board.component.css']
 })
-export class DispatchBoardComponent implements OnInit {
+export class DispatchBoardComponent implements OnInit, OnDestroy {
   weekStart: Date = this.getWeekStart(new Date());
   drivers: DriverRow[] = [];
   loads: LoadListItem[] = [];
@@ -80,13 +82,17 @@ export class DispatchBoardComponent implements OnInit {
   filterSelectedIds = new Set<string>();
 
   private readonly STORAGE_KEY = 'fleetneuron_dispatch_filters';
+  activeOperatingEntityName = '';
+  private destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   constructor(
     private loadsService: LoadsService,
     private apiService: ApiService,
     private router: Router,
     private cdr: ChangeDetectorRef,
-    private referenceDataService: ReferenceDataService
+    private referenceDataService: ReferenceDataService,
+    private operatingEntityContext: OperatingEntityContextService
   ) {}
 
   get days(): DayColumn[] {
@@ -281,7 +287,37 @@ export class DispatchBoardComponent implements OnInit {
   ngOnInit(): void {
     this.loadCustomFilters();
     this.loadReferenceData();
-    this.loadData();
+    this.bindOperatingEntityContext();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private bindOperatingEntityContext(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+
+        this.activeOperatingEntityName = state.selectedOperatingEntity?.name || '';
+        const nextId = state.selectedOperatingEntityId || null;
+
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          this.loadData();
+          return;
+        }
+
+        if (this.lastOperatingEntityId !== nextId) {
+          this.lastOperatingEntityId = nextId;
+          this.loads = [];
+          this.unassignedLoads = [];
+          this.drivers = [];
+          this.loadData();
+        }
+      });
   }
 
   private loadReferenceData(): void {

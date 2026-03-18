@@ -66,6 +66,16 @@ function tenantId(req) {
   return req.context?.tenantId || req.user?.tenantId || null;
 }
 
+function operatingEntityId(req) {
+  return req.context?.operatingEntityId || null;
+}
+
+function applyOperatingEntityFilter(query, req, column = 'operating_entity_id') {
+  const oeId = operatingEntityId(req);
+  if (oeId) query.where(column, oeId);
+  return query;
+}
+
 function userId(req) {
   return req.user?.id || null;
 }
@@ -89,8 +99,10 @@ router.get('/providers/templates', (_req, res) => {
 router.get('/cards', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const rows = await knex('fuel_card_accounts')
-      .where({ tenant_id: tid })
+    const rows = await applyOperatingEntityFilter(
+      knex('fuel_card_accounts').where({ tenant_id: tid }),
+      req
+    )
       .orderBy('created_at', 'desc');
     res.json(rows);
   } catch (err) {
@@ -102,12 +114,12 @@ router.get('/cards', async (req, res) => {
 router.post('/cards', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const { provider_name, display_name, account_number_masked, import_method, default_matching_rules, status, notes, operating_entity_id } = req.body;
+    const { provider_name, display_name, account_number_masked, import_method, default_matching_rules, status, notes } = req.body;
     if (!provider_name || !display_name) return sendError(res, 400, 'provider_name and display_name are required');
 
     const [row] = await knex('fuel_card_accounts').insert({
       tenant_id: tid,
-      operating_entity_id: operating_entity_id || null,
+      operating_entity_id: operatingEntityId(req),
       provider_name,
       display_name,
       account_number_masked: account_number_masked || null,
@@ -136,7 +148,10 @@ router.patch('/cards/:id', async (req, res) => {
     patch.updated_at = new Date();
 
     const [row] = await knex('fuel_card_accounts')
-      .where({ id: req.params.id, tenant_id: tid })
+      .modify((qb) => {
+        qb.where({ id: req.params.id, tenant_id: tid });
+        applyOperatingEntityFilter(qb, req);
+      })
       .update(patch)
       .returning('*');
     if (!row) return sendError(res, 404, 'Fuel card account not found');
@@ -228,7 +243,7 @@ router.post('/import/stage', upload.single('file'), async (req, res) => {
     const tid = requireTenant(req, res); if (!tid) return;
     if (!req.file) return sendError(res, 400, 'No file uploaded');
 
-    const { provider_name, card_account_id, operating_entity_id, column_map } = req.body;
+    const { provider_name, card_account_id, column_map } = req.body;
     if (!provider_name) return sendError(res, 400, 'provider_name is required');
 
     let parsedMap;
@@ -261,7 +276,7 @@ router.post('/import/stage', upload.single('file'), async (req, res) => {
 
     const result = await stageBatch({
       tenantId: tid,
-      operatingEntityId: operating_entity_id || null,
+      operatingEntityId: operatingEntityId(req),
       cardAccountId: card_account_id || null,
       providerName: provider_name,
       fileName: req.file.originalname,
@@ -286,6 +301,7 @@ router.post('/import/commit/:batchId', async (req, res) => {
     const result = await commitBatch({
       batchId: req.params.batchId,
       tenantId: tid,
+      operatingEntityId: operatingEntityId(req),
       importedByUserId: userId(req),
       importWarnings: !!import_warnings
     });
@@ -301,12 +317,17 @@ router.get('/import/batches', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const { limit = 50, offset = 0 } = req.query;
-    const rows = await knex('fuel_import_batches')
-      .where({ tenant_id: tid })
+    const rows = await applyOperatingEntityFilter(
+      knex('fuel_import_batches').where({ tenant_id: tid }),
+      req
+    )
       .orderBy('started_at', 'desc')
       .limit(Number(limit))
       .offset(Number(offset));
-    const [{ total }] = await knex('fuel_import_batches').where({ tenant_id: tid }).count('* as total');
+    const [{ total }] = await applyOperatingEntityFilter(
+      knex('fuel_import_batches').where({ tenant_id: tid }),
+      req
+    ).count('* as total');
     res.json({ rows, total: Number(total) });
   } catch (err) {
     dtLogger.error('fuel_batches_list_error', err);
@@ -317,7 +338,10 @@ router.get('/import/batches', async (req, res) => {
 router.get('/import/batches/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const batch = await knex('fuel_import_batches').where({ id: req.params.id, tenant_id: tid }).first();
+    const batch = await applyOperatingEntityFilter(
+      knex('fuel_import_batches').where({ id: req.params.id, tenant_id: tid }),
+      req
+    ).first();
     if (!batch) return sendError(res, 404, 'Batch not found');
 
     const batchRows = await knex('fuel_import_batch_rows')
@@ -354,6 +378,8 @@ router.get('/transactions', async (req, res) => {
       )
       .orderBy('ft.transaction_date', 'desc');
 
+    applyOperatingEntityFilter(q, req, 'ft.operating_entity_id');
+
     if (date_from) q = q.where('ft.transaction_date', '>=', date_from);
     if (date_to) q = q.where('ft.transaction_date', '<=', date_to);
     if (provider) q = q.whereRaw('LOWER(ft.provider_name) = LOWER(?)', [provider]);
@@ -363,7 +389,10 @@ router.get('/transactions', async (req, res) => {
     if (settlement_link_status) q = q.where('ft.settlement_link_status', settlement_link_status);
     if (batch_id) q = q.where('ft.source_batch_id', batch_id);
 
-    const total = await knex('fuel_transactions').where('tenant_id', tid)
+    const total = await applyOperatingEntityFilter(
+      knex('fuel_transactions').where('tenant_id', tid),
+      req
+    )
       .modify((qb) => {
         if (date_from) qb.where('transaction_date', '>=', date_from);
         if (date_to) qb.where('transaction_date', '<=', date_to);
@@ -386,7 +415,10 @@ router.get('/transactions', async (req, res) => {
 router.get('/transactions/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const txn = await knex('fuel_transactions').where({ id: req.params.id, tenant_id: tid }).first();
+    const txn = await applyOperatingEntityFilter(
+      knex('fuel_transactions').where({ id: req.params.id, tenant_id: tid }),
+      req
+    ).first();
     if (!txn) return sendError(res, 404, 'Transaction not found');
 
     const exceptions = await knex('fuel_transaction_exceptions').where({ fuel_transaction_id: txn.id });
@@ -409,7 +441,10 @@ router.patch('/transactions/:id', async (req, res) => {
     patch.updated_at = new Date();
 
     const [row] = await knex('fuel_transactions')
-      .where({ id: req.params.id, tenant_id: tid })
+      .modify((qb) => {
+        qb.where({ id: req.params.id, tenant_id: tid });
+        applyOperatingEntityFilter(qb, req);
+      })
       .update(patch)
       .returning('*');
     if (!row) return sendError(res, 404, 'Transaction not found');
@@ -431,7 +466,7 @@ router.post('/transactions', async (req, res) => {
 
     const [row] = await knex('fuel_transactions').insert({
       tenant_id: tid,
-      operating_entity_id: req.body.operating_entity_id || null,
+      operating_entity_id: operatingEntityId(req),
       provider_name: req.body.provider_name,
       external_transaction_id: req.body.external_transaction_id || null,
       transaction_date: req.body.transaction_date,
@@ -466,7 +501,10 @@ router.post('/transactions', async (req, res) => {
 router.delete('/transactions/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const deleted = await knex('fuel_transactions').where({ id: req.params.id, tenant_id: tid }).del();
+    const deleted = await applyOperatingEntityFilter(
+      knex('fuel_transactions').where({ id: req.params.id, tenant_id: tid }),
+      req
+    ).del();
     if (!deleted) return sendError(res, 404, 'Transaction not found');
     res.json({ deleted: true });
   } catch (err) {
@@ -491,11 +529,17 @@ router.get('/exceptions', async (req, res) => {
       )
       .orderBy('e.created_at', 'desc');
 
+    applyOperatingEntityFilter(q, req, 'ft.operating_entity_id');
+
     if (status) q = q.where('e.resolution_status', status);
 
     const rows = await q.limit(Number(limit)).offset(Number(offset));
-    const [{ total }] = await knex('fuel_transaction_exceptions')
-      .where({ tenant_id: tid })
+    const [{ total }] = await knex('fuel_transaction_exceptions as e')
+      .join('fuel_transactions as ft', 'ft.id', 'e.fuel_transaction_id')
+      .where('e.tenant_id', tid)
+      .modify((qb) => {
+        applyOperatingEntityFilter(qb, req, 'ft.operating_entity_id');
+      })
       .modify((qb) => { if (status) qb.where('resolution_status', status); })
       .count('* as total');
 
@@ -513,6 +557,7 @@ router.patch('/exceptions/:id/resolve', async (req, res) => {
     const result = await resolveException({
       exceptionId: req.params.id,
       tenantId: tid,
+      operatingEntityId: operatingEntityId(req),
       resolvedBy: userId(req),
       truckId: truck_id || null,
       driverId: driver_id || null,
@@ -534,6 +579,7 @@ router.post('/exceptions/bulk-resolve', async (req, res) => {
     const result = await bulkResolveExceptions({
       exceptionIds: exception_ids,
       tenantId: tid,
+      operatingEntityId: operatingEntityId(req),
       resolvedBy: userId(req),
       action,
       resolutionNotes: resolution_notes || null
@@ -549,7 +595,7 @@ router.post('/exceptions/bulk-resolve', async (req, res) => {
 router.post('/reprocess-unmatched', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const result = await reprocessUnmatched(tid);
+    const result = await reprocessUnmatched(tid, operatingEntityId(req));
     res.json(result);
   } catch (err) {
     dtLogger.error('fuel_reprocess_error', err);
@@ -568,6 +614,7 @@ router.get('/overview', async (req, res) => {
 
     const [weekStats] = await knex('fuel_transactions')
       .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .where('transaction_date', '>=', weekAgo.toISOString().slice(0, 10))
       .select(
         knex.raw('COALESCE(SUM(amount), 0) as total_amount'),
@@ -577,6 +624,7 @@ router.get('/overview', async (req, res) => {
 
     const [monthStats] = await knex('fuel_transactions')
       .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .where('transaction_date', '>=', monthAgo.toISOString().slice(0, 10))
       .select(
         knex.raw('COALESCE(SUM(amount), 0) as total_amount'),
@@ -590,6 +638,7 @@ router.get('/overview', async (req, res) => {
 
     const topVendors = await knex('fuel_transactions')
       .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .where('transaction_date', '>=', monthAgo.toISOString().slice(0, 10))
       .whereNotNull('vendor_name')
       .groupBy('vendor_name')
@@ -601,6 +650,7 @@ router.get('/overview', async (req, res) => {
 
     const byState = await knex('fuel_transactions')
       .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .where('transaction_date', '>=', monthAgo.toISOString().slice(0, 10))
       .whereNotNull('state')
       .groupBy('state')
@@ -612,14 +662,18 @@ router.get('/overview', async (req, res) => {
 
     const [unmatchedCount] = await knex('fuel_transactions')
       .where({ tenant_id: tid, matched_status: 'unmatched' })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .count('* as count');
 
-    const [exceptionsOpen] = await knex('fuel_transaction_exceptions')
-      .where({ tenant_id: tid, resolution_status: 'open' })
+    const [exceptionsOpen] = await knex('fuel_transaction_exceptions as e')
+      .join('fuel_transactions as ft', 'ft.id', 'e.fuel_transaction_id')
+      .where({ 'e.tenant_id': tid, 'e.resolution_status': 'open' })
+      .modify((qb) => applyOperatingEntityFilter(qb, req, 'ft.operating_entity_id'))
       .count('* as count');
 
     const lastBatch = await knex('fuel_import_batches')
       .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .orderBy('started_at', 'desc')
       .first(['id', 'import_status', 'source_file_name', 'started_at', 'total_rows', 'success_rows', 'failed_rows']);
 

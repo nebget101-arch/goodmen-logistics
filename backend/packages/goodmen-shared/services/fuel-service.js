@@ -276,8 +276,13 @@ async function stageBatch({
  * Commit all validated rows from a batch into fuel_transactions.
  * Performs entity matching and creates exceptions for unmatched rows.
  */
-async function commitBatch({ batchId, tenantId, importedByUserId, importWarnings = false }) {
-  const batch = await knex('fuel_import_batches').where({ id: batchId, tenant_id: tenantId }).first();
+async function commitBatch({ batchId, tenantId, operatingEntityId = null, importedByUserId, importWarnings = false }) {
+  const batch = await knex('fuel_import_batches')
+    .where({ id: batchId, tenant_id: tenantId })
+    .modify((qb) => {
+      if (operatingEntityId) qb.where('operating_entity_id', operatingEntityId);
+    })
+    .first();
   if (!batch) throw Object.assign(new Error('Batch not found'), { status: 404 });
   if (!['validated', 'failed'].includes(batch.import_status)) {
     throw Object.assign(new Error(`Batch is in status "${batch.import_status}" and cannot be committed`), { status: 409 });
@@ -402,9 +407,14 @@ function buildExceptionMessage(type, normalized) {
 /**
  * Resolve a single exception – assign truck/driver manually.
  */
-async function resolveException({ exceptionId, tenantId, resolvedBy, truckId, driverId, resolutionNotes, ignore }) {
-  const exc = await knex('fuel_transaction_exceptions')
-    .where({ id: exceptionId, tenant_id: tenantId })
+async function resolveException({ exceptionId, tenantId, operatingEntityId = null, resolvedBy, truckId, driverId, resolutionNotes, ignore }) {
+  const exc = await knex('fuel_transaction_exceptions as e')
+    .join('fuel_transactions as ft', 'ft.id', 'e.fuel_transaction_id')
+    .where({ 'e.id': exceptionId, 'e.tenant_id': tenantId })
+    .modify((qb) => {
+      if (operatingEntityId) qb.where('ft.operating_entity_id', operatingEntityId);
+    })
+    .select('e.*', 'ft.operating_entity_id as transaction_operating_entity_id')
     .first();
   if (!exc) throw Object.assign(new Error('Exception not found'), { status: 404 });
 
@@ -444,12 +454,22 @@ async function resolveException({ exceptionId, tenantId, resolvedBy, truckId, dr
 /**
  * Bulk resolve exceptions.
  */
-async function bulkResolveExceptions({ exceptionIds, tenantId, resolvedBy, action, resolutionNotes }) {
+async function bulkResolveExceptions({ exceptionIds, tenantId, operatingEntityId = null, resolvedBy, action, resolutionNotes }) {
   if (!Array.isArray(exceptionIds) || exceptionIds.length === 0) return { resolved: 0 };
   const status = action === 'ignore' ? 'ignored' : 'resolved';
+  let scopedIds = exceptionIds;
+  if (operatingEntityId) {
+    scopedIds = await knex('fuel_transaction_exceptions as e')
+      .join('fuel_transactions as ft', 'ft.id', 'e.fuel_transaction_id')
+      .where('e.tenant_id', tenantId)
+      .where('ft.operating_entity_id', operatingEntityId)
+      .whereIn('e.id', exceptionIds)
+      .pluck('e.id');
+  }
+  if (scopedIds.length === 0) return { resolved: 0 };
   const count = await knex('fuel_transaction_exceptions')
     .where({ tenant_id: tenantId })
-    .whereIn('id', exceptionIds)
+    .whereIn('id', scopedIds)
     .update({ resolution_status: status, resolved_by: resolvedBy, resolved_at: new Date(), resolution_notes: resolutionNotes || null });
   return { resolved: count };
 }
@@ -458,9 +478,12 @@ async function bulkResolveExceptions({ exceptionIds, tenantId, resolvedBy, actio
  * Re-process unmatched transactions by re-running entity matching.
  * Useful after master data (trucks/drivers) has been fixed.
  */
-async function reprocessUnmatched(tenantId) {
+async function reprocessUnmatched(tenantId, operatingEntityId = null) {
   const unmatched = await knex('fuel_transactions')
     .where({ tenant_id: tenantId })
+    .modify((qb) => {
+      if (operatingEntityId) qb.where('operating_entity_id', operatingEntityId);
+    })
     .whereIn('matched_status', ['unmatched', 'partial']);
 
   let updated = 0;

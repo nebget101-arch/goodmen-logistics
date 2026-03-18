@@ -1,0 +1,125 @@
+<div class="billing-page">
+  <div class="billing-header">
+    <h1 class="billing-title">Billing &amp; Subscription</h1>
+    <p class="billing-subtitle">Manage your plan, trial, and payment method.</p>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="billing-loading">
+    <span class="loading-spinner"></span>
+    <span>Loading billing details…</span>
+  </div>
+
+  <ng-container *ngIf="!loading">
+
+    <!-- ── No billing data (non-trial / admin / error) ── -->
+    <div *ngIf="!state" class="billing-card billing-empty">
+      <p>No billing information is available for your account.</p>
+    </div>
+
+    <ng-container *ngIf="state">
+
+      <!-- ── Plan Card ── -->
+      <section class="billing-card">
+        <h2 class="card-section-title">
+          <span class="material-symbols-outlined section-icon">workspace_premium</span>
+          Current Plan
+        </h2>
+        <div class="plan-row">
+          <div class="plan-name">
+            {{ state.planName || state.planId || 'FleetNeuron' }}
+          </div>
+          <div class="plan-price" *ngIf="state.planAmount !== null">
+            {{ state.planAmount | currency }}<span class="price-period">/mo</span>
+          </div>
+          <div class="plan-price plan-price-contact" *ngIf="state.planAmount === null">
+            Contact us
+          </div>
+        </div>
+
+        <!-- Trial status badge -->
+        <div *ngIf="isInTrial" class="status-badge badge-trial">
+          🕐 Free trial active
+        </div>
+        <div *ngIf="isExpired" class="status-badge badge-expired">
+          ⚠️ Trial expired
+        </div>
+        <div *ngIf="isConverted" class="status-badge badge-converted">
+          ✅ Active subscriber
+        </div>
+      </section>
+
+      <!-- ── Trial Info Card (shown only during / after trial) ── -->
+      <section class="billing-card" *ngIf="isInTrial || isExpired">
+        <h2 class="card-section-title">
+          <span class="material-symbols-outlined section-icon">timer</span>
+          Trial Details
+        </h2>
+
+        <div class="detail-grid">
+          <div class="detail-row" *ngIf="state.trialEnd">
+            <span class="detail-label">Trial end date</span>
+            <span class="detail-value">{{ state.trialEnd | date:'fullDate' }}</span>
+          </div>
+          <div class="detail-row" *ngIf="isInTrial && state.daysRemaining !== null">
+            <span class="detail-label">Days remaining</span>
+            <span class="detail-value days-remaining" [class.low]="(state.daysRemaining ?? 99) <= 3">
+              {{ state.daysRemaining }} day{{ state.daysRemaining === 1 ? '' : 's' }}
+            </span>
+          </div>
+          <div class="detail-row" *ngIf="isExpired">
+            <span class="detail-label">Status</span>
+            <span class="detail-value expired-label">Trial has ended</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Payment Method Card ── -->
+      <section class="billing-card">
+        <h2 class="card-section-title">
+          <span class="material-symbols-outlined section-icon">credit_card</span>
+          Payment Method
+        </h2>
+
+        <!-- Card on file -->
+        <div *ngIf="state.hasPaymentMethod" class="card-on-file">
+          <div class="card-chip">
+            <span class="card-brand">{{ state.cardBrand | titlecase }}</span>
+            <span class="card-last4">•••• {{ state.cardLast4 }}</span>
+            <span class="card-exp">Expires {{ state.cardExpMonth }}/{{ state.cardExpYear }}</span>
+          </div>
+
+          <div class="card-actions">
+            <button class="btn btn-secondary" type="button" (click)="openPaymentDialog()">
+              <span class="material-symbols-outlined btn-icon">edit</span>
+              Update card
+            </button>
+            <button
+              *ngIf="isInTrial || isExpired"
+              class="btn btn-danger-outline"
+              type="button"
+              [disabled]="removing"
+              (click)="removeCard()"
+            >
+              <span class="material-symbols-outlined btn-icon">delete</span>
+              {{ removing ? 'Removing…' : 'Remove card' }}
+            </button>
+          </div>
+
+          <p *ngIf="removeError" class="inline-error">{{ removeError }}</p>
+          <p *ngIf="removeSuccess" class="inline-success">{{ removeSuccess }}</p>
+        </div>
+
+        <!-- No card on file -->
+        <div *ngIf="!state.hasPaymentMethod" class="no-card">
+          <p class="no-card-text">No payment method on file.</p>
+          <button class="btn btn-primary" type="button" (click)="openPaymentDialog()">
+            <span class="material-symbols-outlined btn-icon">add_card</span>
+            Add payment method
+          </button>
+        </div>
+      </section>
+
+    </ng-container>
+  </ng-container>
+</div>

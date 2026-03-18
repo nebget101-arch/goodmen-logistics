@@ -1,0 +1,85 @@
+.payment-method-form {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  background: #ffffff;
+
+  .state {
+    margin-bottom: 12px;
+    color: #374151;
+  }
+
+  .state.error {
+    color: #b91c1c;
+  }
+
+  .state.success {
+    color: #065f46;
+  }
+
+  .trial-message {
+    margin-bottom: 16px;
+    color: #111827;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+    line-height: 1.5;
+  }
+
+  .saved-card {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    p {
+      margin: 0;
+      color: #1f2937;
+    }
+  }
+
+  .card-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    label {
+      font-weight: 600;
+      color: #111827;
+    }
+  }
+
+  .card-element {
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 44px;
+    background: #fff;
+  }
+
+  .btn {
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn.primary {
+    background: #111827;
+    color: #fff;
+  }
+
+  .btn.danger {
+    background: #fff;
+    color: #b91c1c;
+    border-color: #fca5a5;
+  }
+
+  .btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+}

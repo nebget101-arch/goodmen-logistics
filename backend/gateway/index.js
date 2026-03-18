@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const stripeWebhookRouter = require('../routes/stripe');
 
 const app = express();
 
@@ -55,6 +56,9 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Stripe webhook endpoint must use raw request body for signature verification.
+app.use('/api/stripe', stripeWebhookRouter);
+
 function buildProxy(target, label) {
   return createProxyMiddleware({
     target,
@@ -101,6 +105,7 @@ app.use(
   '/api/communication-preferences',
   buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users')
 );
+app.use('/api/billing', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 // Explicit trial-request mapping to avoid mount-path rewrite ambiguity for nested /api/public paths.
 app.use(
   '/api/public/trial-requests',

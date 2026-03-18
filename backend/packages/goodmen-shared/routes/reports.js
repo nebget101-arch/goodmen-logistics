@@ -1155,7 +1155,103 @@ function periodExpression(period, dateSql) {
 	return `to_char(date_trunc('week', ${dateSql}), 'YYYY-MM-DD')`;
 }
 
+async function buildOperatingEntityFinancialSummary(req, filters) {
+	if (!isAllOperatingEntitiesMode(req)) {
+		return [];
+	}
+
+	const revenueParams = [filters.startDate, filters.endDate];
+	const revenueClauses = ['l.completed_date IS NOT NULL', 'l.completed_date BETWEEN ? AND ?'];
+	revenueClauses.push(...applyContextSql('l', req, revenueParams));
+	if (filters.dispatcherId) {
+		revenueParams.push(filters.dispatcherId);
+		revenueClauses.push('l.dispatcher_user_id = ?');
+	}
+	if (filters.driverId) {
+		revenueParams.push(filters.driverId);
+		revenueClauses.push('l.driver_id = ?');
+	}
+	if (filters.status) {
+		revenueParams.push(filters.status);
+		revenueClauses.push('l.status = ?');
+	}
+
+	const revenueRows = (await db.raw(`
+		SELECT COALESCE(oe.name, 'Unassigned') AS operating_entity_name,
+			COALESCE(SUM(l.rate), 0)::numeric AS revenue
+		FROM loads l
+		LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id
+		WHERE ${revenueClauses.join(' AND ')}
+		GROUP BY 1
+	`, revenueParams)).rows;
+
+	const adjustmentParams = [filters.startDate, filters.endDate];
+	const adjustmentClauses = ['pp.period_end BETWEEN ? AND ?'];
+	adjustmentClauses.push(...applyContextSql('s', req, adjustmentParams));
+	const adjustmentRows = (await db.raw(`
+		SELECT COALESCE(oe.name, 'Unassigned') AS operating_entity_name,
+			COALESCE(SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END), 0)::numeric AS expenses
+		FROM settlement_adjustment_items sai
+		JOIN settlements s ON s.id = sai.settlement_id
+		JOIN payroll_periods pp ON pp.id = s.payroll_period_id
+		LEFT JOIN operating_entities oe ON oe.id = s.operating_entity_id
+		WHERE ${adjustmentClauses.join(' AND ')}
+		GROUP BY 1
+	`, adjustmentParams)).rows;
+
+	const fuelParams = [filters.startDate, filters.endDate];
+	const fuelClauses = ['ft.transaction_date BETWEEN ? AND ?'];
+	fuelClauses.push(...applyContextSql('ft', req, fuelParams));
+	const fuelRows = (await db.raw(`
+		SELECT COALESCE(oe.name, 'Unassigned') AS operating_entity_name,
+			COALESCE(SUM(ft.amount), 0)::numeric AS expenses
+		FROM fuel_transactions ft
+		LEFT JOIN operating_entities oe ON oe.id = ft.operating_entity_id
+		WHERE ${fuelClauses.join(' AND ')}
+		GROUP BY 1
+	`, fuelParams)).rows;
+
+	const tollParams = [filters.startDate, filters.endDate];
+	const tollClauses = ['tt.transaction_date BETWEEN ? AND ?'];
+	tollClauses.push(...applyContextSql('tt', req, tollParams));
+	const tollRows = (await db.raw(`
+		SELECT COALESCE(oe.name, 'Unassigned') AS operating_entity_name,
+			COALESCE(SUM(tt.amount), 0)::numeric AS expenses
+		FROM toll_transactions tt
+		LEFT JOIN operating_entities oe ON oe.id = tt.operating_entity_id
+		WHERE ${tollClauses.join(' AND ')}
+		GROUP BY 1
+	`, tollParams)).rows;
+
+	const summary = new Map();
+	const ensure = (name) => {
+		if (!summary.has(name)) {
+			summary.set(name, {
+				operating_entity_name: name,
+				revenue: 0,
+				expenses: 0,
+				gross_profit: 0,
+			});
+		}
+		return summary.get(name);
+	};
+
+	for (const row of revenueRows) {
+		const item = ensure(row.operating_entity_name || 'Unassigned');
+		item.revenue += Number(row.revenue || 0);
+		item.gross_profit = item.revenue - item.expenses;
+	}
+	for (const row of [...adjustmentRows, ...fuelRows, ...tollRows]) {
+		const item = ensure(row.operating_entity_name || 'Unassigned');
+		item.expenses += Number(row.expenses || 0);
+		item.gross_profit = item.revenue - item.expenses;
+	}
+
+	return Array.from(summary.values()).sort((a, b) => Number(b.gross_profit || 0) - Number(a.gross_profit || 0));
+}
+
 async function buildOverview(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
 	const revenueParams = [filters.startDate, filters.endDate];
 	const revenueClauses = ['l.completed_date IS NOT NULL', 'l.completed_date BETWEEN ? AND ?'];
 	revenueClauses.push(...applyContextSql('l', req, revenueParams));
@@ -1178,13 +1274,16 @@ async function buildOverview(req, filters) {
 		WHERE ${revenueClauses.join(' AND ')}
 	`, revenueParams)).rows[0] || { revenue: 0 };
 
+	const adjustmentParams = [filters.startDate, filters.endDate];
+	const adjustmentClauses = ['pp.period_end BETWEEN ? AND ?'];
+	adjustmentClauses.push(...applyContextSql('s', req, adjustmentParams));
 	const adjustmentExpenseRow = (await db.raw(`
 		SELECT COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE amount END), 0)::numeric AS amount
 		FROM settlement_adjustment_items sai
 		JOIN settlements s ON s.id = sai.settlement_id
 		JOIN payroll_periods pp ON pp.id = s.payroll_period_id
-		WHERE pp.period_end BETWEEN ? AND ?
-	`, [filters.startDate, filters.endDate])).rows[0] || { amount: 0 };
+		WHERE ${adjustmentClauses.join(' AND ')}
+	`, adjustmentParams)).rows[0] || { amount: 0 };
 
 	const fuelParams = [filters.startDate, filters.endDate];
 	const fuelClauses = ['ft.transaction_date BETWEEN ? AND ?'];
@@ -1195,23 +1294,35 @@ async function buildOverview(req, filters) {
 		WHERE ${fuelClauses.join(' AND ')}
 	`, fuelParams)).rows[0] || { amount: 0 };
 
+	const tollParams = [filters.startDate, filters.endDate];
+	const tollClauses = ['tt.transaction_date BETWEEN ? AND ?'];
+	tollClauses.push(...applyContextSql('tt', req, tollParams));
+	const tollExpenseRow = (await db.raw(`
+		SELECT COALESCE(SUM(tt.amount), 0)::numeric AS amount
+		FROM toll_transactions tt
+		WHERE ${tollClauses.join(' AND ')}
+	`, tollParams)).rows[0] || { amount: 0 };
+
 	const revenue = Number(revenueRow.revenue || 0);
-	const expenses = Number(adjustmentExpenseRow.amount || 0) + Number(fuelExpenseRow.amount || 0);
+	const expenses = Number(adjustmentExpenseRow.amount || 0) + Number(fuelExpenseRow.amount || 0) + Number(tollExpenseRow.amount || 0);
 	const grossProfit = revenue - expenses;
 
 	const trend = (await db.raw(`
 		SELECT
+			${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
 			${periodExpression(filters.period, 'l.completed_date')} AS period,
 			COALESCE(SUM(l.rate), 0)::numeric AS revenue,
 			0::numeric AS expenses,
 			COALESCE(SUM(l.rate), 0)::numeric AS gross_profit
 		FROM loads l
+		${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id' : ''}
 		WHERE ${revenueClauses.join(' AND ')}
-		GROUP BY 1
-		ORDER BY 1 ASC
+		GROUP BY ${allMode ? '1,2' : '1'}
+		ORDER BY ${allMode ? '1 ASC, 2 ASC' : '1 ASC'}
 	`, revenueParams)).rows;
+	const operatingEntitySubtotals = await buildOperatingEntityFinancialSummary(req, filters);
 
-	return {
+	const payload = {
 		success: true,
 		cards: [
 			{ key: 'revenue', label: 'Revenue', value: revenue },
@@ -1219,8 +1330,14 @@ async function buildOverview(req, filters) {
 			{ key: 'gross_profit', label: 'Gross Profit', value: grossProfit }
 		],
 		data: trend,
-		summary: { revenue, expenses, grossProfit }
+		summary: {
+			revenue,
+			expenses,
+			grossProfit,
+			...(operatingEntitySubtotals.length ? { operatingEntitySubtotals } : {})
+		}
 	};
+	return allMode ? withOperatingEntitySummary(payload, trend, 'revenue') : payload;
 }
 
 async function buildEmails(req, filters) {
@@ -1400,9 +1517,15 @@ async function buildPaymentSummary(req, filters) {
 
 async function buildExpenses(req, filters) {
 	const allMode = isAllOperatingEntitiesMode(req);
-	const params = [filters.startDate, filters.endDate];
-	if (req.context?.tenantId) params.push(req.context.tenantId);
-	if (req.context?.operatingEntityId) params.push(req.context.operatingEntityId);
+	const adjustmentParams = [filters.startDate, filters.endDate];
+	const adjustmentClauses = ['pp.period_end BETWEEN ? AND ?'];
+	adjustmentClauses.push(...applyContextSql('s', req, adjustmentParams));
+	const fuelParams = [filters.startDate, filters.endDate];
+	const fuelClauses = ['ft.transaction_date BETWEEN ? AND ?'];
+	fuelClauses.push(...applyContextSql('ft', req, fuelParams));
+	const tollParams = [filters.startDate, filters.endDate];
+	const tollClauses = ['tt.transaction_date BETWEEN ? AND ?'];
+	tollClauses.push(...applyContextSql('tt', req, tollParams));
 	const rows = (await db.raw(`
 		WITH adjustments AS (
 			SELECT
@@ -1417,7 +1540,7 @@ async function buildExpenses(req, filters) {
 			JOIN settlements s ON s.id = sai.settlement_id
 			${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = s.operating_entity_id' : ''}
 			JOIN payroll_periods pp ON pp.id = s.payroll_period_id
-			WHERE pp.period_end BETWEEN ? AND ?
+			WHERE ${adjustmentClauses.join(' AND ')}
 			GROUP BY ${allMode ? '1,2,3' : '1,2'}
 		),
 		fuel AS (
@@ -1429,16 +1552,28 @@ async function buildExpenses(req, filters) {
 				COALESCE(SUM(ft.amount), 0)::numeric AS total_amount
 			FROM fuel_transactions ft
 			${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = ft.operating_entity_id' : ''}
-			WHERE ft.transaction_date BETWEEN ? AND ?
-			${req.context?.tenantId ? 'AND ft.tenant_id = ?' : ''}
-			${req.context?.operatingEntityId ? 'AND ft.operating_entity_id = ?' : ''}
+			WHERE ${fuelClauses.join(' AND ')}
+			${allMode ? 'GROUP BY 1,2,3' : ''}
+		),
+		tolls AS (
+			SELECT
+				${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
+				'Toll'::text AS category,
+				'toll_transaction'::text AS source,
+				COUNT(*)::int AS expense_count,
+				COALESCE(SUM(tt.amount), 0)::numeric AS total_amount
+			FROM toll_transactions tt
+			${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = tt.operating_entity_id' : ''}
+			WHERE ${tollClauses.join(' AND ')}
 			${allMode ? 'GROUP BY 1,2,3' : ''}
 		)
 		SELECT * FROM adjustments
 		UNION ALL
 		SELECT * FROM fuel
+		UNION ALL
+		SELECT * FROM tolls
 		ORDER BY total_amount DESC
-	`, params)).rows;
+	`, [...adjustmentParams, ...fuelParams, ...tollParams])).rows;
 
 	const total = rows.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
 	const payload = { success: true, data: rows, cards: [{ key: 'expense_total', label: 'Total Expenses', value: total }] };
@@ -1446,21 +1581,32 @@ async function buildExpenses(req, filters) {
 }
 
 async function buildGrossProfit(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
 	const revenue = await buildTotalRevenue(req, filters);
 	const expenses = await buildExpenses(req, filters);
 	const expenseTotal = Number(expenses.cards?.[0]?.value || 0);
 	const revenueTotal = Number(revenue.cards?.[0]?.value || 0);
+	const byEntity = await buildOperatingEntityFinancialSummary(req, filters);
 
-	const rows = revenue.data.map((r) => ({
-		operating_entity_name: r.operating_entity_name,
-		period: r.period,
-		revenue: Number(r.total_revenue || 0),
-		expenses: 0,
-		gross_profit: Number(r.total_revenue || 0),
-		margin_pct: 100
-	}));
+	const rows = allMode && byEntity.length
+		? byEntity.map((r) => ({
+			operating_entity_name: r.operating_entity_name,
+			period: null,
+			revenue: Number(r.revenue || 0),
+			expenses: Number(r.expenses || 0),
+			gross_profit: Number(r.gross_profit || 0),
+			margin_pct: Number(r.revenue || 0) > 0 ? (Number(r.gross_profit || 0) / Number(r.revenue || 0)) * 100 : 0
+		}))
+		: revenue.data.map((r) => ({
+			operating_entity_name: r.operating_entity_name,
+			period: r.period,
+			revenue: Number(r.total_revenue || 0),
+			expenses: 0,
+			gross_profit: Number(r.total_revenue || 0),
+			margin_pct: 100
+		}));
 
-	return {
+	const payload = {
 		success: true,
 		data: rows,
 		cards: [
@@ -1469,6 +1615,7 @@ async function buildGrossProfit(req, filters) {
 			{ key: 'gross_profit', label: 'Gross Profit', value: revenueTotal - expenseTotal }
 		]
 	};
+	return allMode ? withOperatingEntitySummary(payload, rows, 'gross_profit') : payload;
 }
 
 async function buildGrossProfitPerLoad(req, filters) {
@@ -1494,6 +1641,8 @@ async function buildGrossProfitPerLoad(req, filters) {
 			(
 				COALESCE((SELECT SUM(ft.amount) FROM fuel_transactions ft WHERE ft.load_id = l.id), 0)
 				+
+				COALESCE((SELECT SUM(tt.amount) FROM toll_transactions tt WHERE tt.load_id = l.id), 0)
+				+
 				COALESCE((SELECT SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END)
 				FROM settlement_adjustment_items sai
 				WHERE sai.source_reference_type = 'load' AND sai.source_reference_id::text = l.id::text), 0)
@@ -1502,6 +1651,8 @@ async function buildGrossProfitPerLoad(req, filters) {
 				COALESCE(l.rate, 0)
 				-
 				COALESCE((SELECT SUM(ft.amount) FROM fuel_transactions ft WHERE ft.load_id = l.id), 0)
+				-
+				COALESCE((SELECT SUM(tt.amount) FROM toll_transactions tt WHERE tt.load_id = l.id), 0)
 			)::numeric AS gross_profit
 		FROM loads l
 		${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id' : ''}
@@ -1514,18 +1665,28 @@ async function buildGrossProfitPerLoad(req, filters) {
 }
 
 async function buildProfitLoss(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
 	const totalRevenue = await buildTotalRevenue(req, filters);
 	const expenses = await buildExpenses(req, filters);
-	const rows = totalRevenue.data.map((r) => ({
-		operating_entity_name: r.operating_entity_name,
-		period: r.period,
-		revenue: Number(r.total_revenue || 0),
-		cost_of_operations: 0,
-		gross_profit: Number(r.total_revenue || 0)
-	}));
+	const byEntity = await buildOperatingEntityFinancialSummary(req, filters);
+	const rows = allMode && byEntity.length
+		? byEntity.map((r) => ({
+			operating_entity_name: r.operating_entity_name,
+			period: null,
+			revenue: Number(r.revenue || 0),
+			cost_of_operations: Number(r.expenses || 0),
+			gross_profit: Number(r.gross_profit || 0)
+		}))
+		: totalRevenue.data.map((r) => ({
+			operating_entity_name: r.operating_entity_name,
+			period: r.period,
+			revenue: Number(r.total_revenue || 0),
+			cost_of_operations: 0,
+			gross_profit: Number(r.total_revenue || 0)
+		}));
 	const revenueTotal = Number(totalRevenue.cards?.[0]?.value || 0);
 	const costTotal = Number(expenses.cards?.[0]?.value || 0);
-	return {
+	const payload = {
 		success: true,
 		data: rows,
 		cards: [
@@ -1534,6 +1695,7 @@ async function buildProfitLoss(req, filters) {
 			{ key: 'gross_profit', label: 'Gross Profit', value: revenueTotal - costTotal }
 		]
 	};
+	return allMode ? withOperatingEntitySummary(payload, rows, 'gross_profit') : payload;
 }
 
 const v2Builders = {

@@ -20,6 +20,10 @@ export class LeaseFinancingService {
     return this.http.get<LeaseAgreement & { schedule: LeaseScheduleRow[]; payments: LeasePaymentTransaction[]; risk_snapshot?: any }>(`${this.baseUrl}/lease-agreements/${id}`);
   }
 
+  getMyAgreement(): Observable<LeaseAgreement> {
+    return this.http.get<LeaseAgreement>(`${this.baseUrl}/lease-financing/driver/me`);
+  }
+
   createAgreement(payload: Record<string, unknown>): Observable<LeaseAgreement> {
     return this.http.post<LeaseAgreement>(`${this.baseUrl}/lease-agreements`, payload);
   }
