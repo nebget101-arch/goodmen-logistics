@@ -9,8 +9,8 @@ async function getCustomerPricing(customerId) {
   const result = await query(
     `SELECT c.id, c.status, c.customer_type, c.is_deleted,
             pr.default_labor_rate, pr.parts_discount_percent, pr.labor_discount_percent
-     FROM customers c
-     LEFT JOIN customer_pricing_rules pr ON pr.customer_id = c.id
+     FROM shop_clients c
+     LEFT JOIN customer_pricing_rules pr ON pr.shop_client_id = c.id
      WHERE c.id = $1 AND c.is_deleted = false`,
     [customerId]
   );
@@ -101,7 +101,7 @@ router.post('/', async (req, res) => {
 
     const pricing = await getCustomerPricing(normalize(customerId));
     if (pricing && pricing.status === 'INACTIVE') {
-      return res.status(400).json({ message: 'Inactive customers cannot be used for new work orders' });
+      return res.status(400).json({ message: 'Inactive shop clients cannot be used for new work orders' });
     }
 
     if (pricing) {
@@ -130,7 +130,7 @@ router.post('/', async (req, res) => {
     const result = await query(
       `INSERT INTO maintenance_records (
         vehicle_id, type, description, date_performed, mileage,
-        mechanic_name, cost, status, parts_used, priority, customer_id
+        mechanic_name, cost, status, parts_used, priority, shop_client_id
       )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
@@ -178,7 +178,7 @@ router.get('/:id', async (req, res) => {
         mr.cost,
         mr.status,
         mr.priority,
-        mr.customer_id as "customerId",
+        mr.shop_client_id as "customerId",
         mr.created_at as "createdAt",
         mr.updated_at as "updatedAt",
         v.unit_number as "vehicleUnit",
@@ -246,7 +246,7 @@ router.put('/:id', async (req, res) => {
 
     const pricing = await getCustomerPricing(normalize(customerId));
     if (pricing && pricing.status === 'INACTIVE') {
-      return res.status(400).json({ message: 'Inactive customers cannot be used for work orders' });
+      return res.status(400).json({ message: 'Inactive shop clients cannot be used for work orders' });
     }
 
     if (pricing) {
@@ -284,7 +284,7 @@ router.put('/:id', async (req, res) => {
         status = $8,
         parts_used = $9,
         priority = $10,
-        customer_id = $11,
+        shop_client_id = $11,
         updated_at = CURRENT_TIMESTAMP
        WHERE id = $12
        RETURNING *`,

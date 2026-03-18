@@ -37,20 +37,20 @@ router.get('/fmcsainfo/:dot', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/customers
-// shop_clerk and shop_manager may create customers (shop operations).
+// POST /api/shop-clients
+// shop_clerk and shop_manager may create shop clients (shop operations).
 router.post('/', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
   try {
     const { customer, errors } = await customersService.createCustomer(req.body, req.user?.id);
     if (errors) return res.status(400).json({ error: 'Validation failed', details: errors });
     res.status(201).json({ success: true, data: customer });
   } catch (error) {
-    dtLogger.error('customer_create_failed', error);
+    dtLogger.error('shop_client_create_failed', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// GET /api/customers
+// GET /api/shop-clients
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { search, type, status, locationId, page, pageSize, dot, paymentTerms } = req.query;
@@ -62,19 +62,19 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/customers/:id
+// GET /api/shop-clients/:id
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const data = await customersService.getCustomerById(req.params.id);
-    if (!data) return res.status(404).json({ error: 'Customer not found' });
+    if (!data) return res.status(404).json({ error: 'Shop client not found' });
     res.json({ success: true, ...data });
   } catch (error) {
-    dtLogger.error('customer_get_failed', error);
+    dtLogger.error('shop_client_get_failed', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// PUT /api/customers/:id
+// PUT /api/shop-clients/:id
 router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
   try {
     const { customer, errors, error } = await customersService.updateCustomer(req.params.id, req.body, req.user?.id);
@@ -82,13 +82,13 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'acc
     if (error) return res.status(404).json({ error });
     res.json({ success: true, data: customer });
   } catch (err) {
-    dtLogger.error('customer_update_failed', err);
+    dtLogger.error('shop_client_update_failed', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PATCH /api/customers/:id/status
-// shop_manager can change customer status; shop_clerk cannot.
+// PATCH /api/shop-clients/:id/status
+// shop_manager can change shop client status; shop_clerk cannot.
 router.patch('/:id/status', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'service_writer']), async (req, res) => {
   try {
     const { status } = req.body;
@@ -96,19 +96,19 @@ router.patch('/:id/status', authMiddleware, requireRole(['admin', 'service_advis
     if (error) return res.status(400).json({ error });
     res.json({ success: true, data: customer });
   } catch (err) {
-    dtLogger.error('customer_status_failed', err);
+    dtLogger.error('shop_client_status_failed', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE /api/customers/:id (soft delete)
+// DELETE /api/shop-clients/:id (soft delete)
 router.delete('/:id', authMiddleware, requireRole(['admin']), async (req, res) => {
   try {
     const { customer, error } = await customersService.softDeleteCustomer(req.params.id, req.user?.id);
     if (error) return res.status(404).json({ error });
     res.json({ success: true, data: customer });
   } catch (err) {
-    dtLogger.error('customer_delete_failed', err);
+    dtLogger.error('shop_client_delete_failed', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -120,7 +120,7 @@ router.post('/:id/notes', authMiddleware, requireRole(['admin', 'service_advisor
     if (error) return res.status(400).json({ error });
     res.status(201).json({ success: true, data: note });
   } catch (err) {
-    dtLogger.error('customer_note_create_failed', err);
+    dtLogger.error('shop_client_note_create_failed', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -130,7 +130,7 @@ router.get('/:id/notes', authMiddleware, async (req, res) => {
     const notes = await customersService.getNotes(req.params.id);
     res.json({ success: true, data: notes });
   } catch (err) {
-    dtLogger.error('customer_notes_get_failed', err);
+    dtLogger.error('shop_client_notes_get_failed', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -139,10 +139,10 @@ router.get('/:id/notes', authMiddleware, async (req, res) => {
 router.get('/:id/pricing', authMiddleware, async (req, res) => {
   try {
     const data = await customersService.getCustomerById(req.params.id);
-    if (!data) return res.status(404).json({ error: 'Customer not found' });
+    if (!data) return res.status(404).json({ error: 'Shop client not found' });
     res.json({ success: true, data: { pricingRule: data.pricingRule, effectivePricing: data.effectivePricing } });
   } catch (err) {
-    dtLogger.error('customer_pricing_get_failed', err);
+    dtLogger.error('shop_client_pricing_get_failed', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -152,7 +152,7 @@ router.put('/:id/pricing', authMiddleware, requireRole(['admin', 'accounting']),
     const pricing = await customersService.upsertPricingRules(req.params.id, req.body, req.user?.id);
     res.json({ success: true, data: pricing });
   } catch (err) {
-    dtLogger.error('customer_pricing_update_failed', err);
+    dtLogger.error('shop_client_pricing_update_failed', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -164,7 +164,7 @@ router.get('/:id/work-orders', authMiddleware, async (req, res) => {
     const result = await customersService.getCustomerWorkOrders(req.params.id, { status, from, to, page, pageSize });
     res.json({ success: true, ...result });
   } catch (err) {
-    dtLogger.error('customer_work_orders_failed', err);
+    dtLogger.error('shop_client_work_orders_failed', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -175,7 +175,7 @@ router.get('/:id/service-history', authMiddleware, async (req, res) => {
     const result = await customersService.getCustomerServiceHistory(req.params.id, { from, to, page, pageSize });
     res.json({ success: true, ...result });
   } catch (err) {
-    dtLogger.error('customer_service_history_failed', err);
+    dtLogger.error('shop_client_service_history_failed', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -186,7 +186,7 @@ router.get('/:id/vehicles', authMiddleware, async (req, res) => {
     const result = await customersService.getCustomerVehicles(req.params.id, { page, pageSize });
     res.json({ success: true, ...result });
   } catch (err) {
-    dtLogger.error('customer_vehicles_failed', err);
+    dtLogger.error('shop_client_vehicles_failed', err);
     res.status(500).json({ error: err.message });
   }
 });

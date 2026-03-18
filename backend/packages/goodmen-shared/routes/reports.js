@@ -375,7 +375,7 @@ router.get('/cycle-variance', authMiddleware, async (req, res) => {
 });
 
 // Customer reports
-router.get('/customers/summary', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
+router.get('/shop-clients/summary', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, customerId } = req.query;
 		const limit = Math.min(parseInt(req.query.limit || '200', 10) || 200, 1000);
@@ -386,11 +386,11 @@ router.get('/customers/summary', authMiddleware, requireRole(['admin', 'accounti
 			.modify(qb => {
 				applyDateFilters(qb, 'issued_date', dateFrom, dateTo);
 				if (locationId) qb.andWhere('location_id', locationId);
-				if (customerId) qb.andWhere('customer_id', customerId);
+				if (customerId) qb.andWhere('shop_client_id', customerId);
 			})
-			.groupBy('customer_id')
+			.groupBy('shop_client_id')
 			.select(
-				'customer_id',
+				'shop_client_id',
 				db.raw('COUNT(*) as invoice_count'),
 				db.raw('SUM(total_amount) as total_invoiced'),
 				db.raw('SUM(amount_paid) as total_paid'),
@@ -402,24 +402,24 @@ router.get('/customers/summary', authMiddleware, requireRole(['admin', 'accounti
 			.modify(qb => {
 				applyDateFilters(qb, 'created_at', dateFrom, dateTo);
 				if (locationId) qb.andWhere('location_id', locationId);
-				if (customerId) qb.andWhere('customer_id', customerId);
+				if (customerId) qb.andWhere('shop_client_id', customerId);
 			})
-			.groupBy('customer_id')
+			.groupBy('shop_client_id')
 			.select(
-				'customer_id',
+				'shop_client_id',
 				db.raw('COUNT(*) as work_orders_count'),
 				db.raw('MAX(created_at) as last_work_order_date')
 			);
 
-		const rows = await db('customers as c')
-			.leftJoin(invoiceAgg.as('inv'), 'c.id', 'inv.customer_id')
-			.leftJoin(workOrderAgg.as('wo'), 'c.id', 'wo.customer_id')
+		const rows = await db('shop_clients as c')
+			.leftJoin(invoiceAgg.as('inv'), 'c.id', 'inv.shop_client_id')
+			.leftJoin(workOrderAgg.as('wo'), 'c.id', 'wo.shop_client_id')
 			.where('c.is_deleted', false)
 			.modify(qb => {
 				if (customerId) qb.andWhere('c.id', customerId);
 			})
 			.select(
-				'c.id as customer_id',
+				'c.id as shop_client_id',
 				'c.company_name',
 				db.raw('c.primary_contact_name as contact_name'),
 				'c.phone',
@@ -451,7 +451,7 @@ router.get('/customers/summary', authMiddleware, requireRole(['admin', 'accounti
 	}
 });
 
-router.get('/customers/activity', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
+router.get('/shop-clients/activity', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, customerId } = req.query;
 		const limit = Math.min(parseInt(req.query.limit || '200', 10) || 200, 1000);
@@ -462,11 +462,11 @@ router.get('/customers/activity', authMiddleware, requireRole(['admin', 'account
 			.modify(qb => {
 				applyDateFilters(qb, 'issued_date', dateFrom, dateTo);
 				if (locationId) qb.andWhere('location_id', locationId);
-				if (customerId) qb.andWhere('customer_id', customerId);
+				if (customerId) qb.andWhere('shop_client_id', customerId);
 			})
-			.groupBy('customer_id')
+			.groupBy('shop_client_id')
 			.select(
-				'customer_id',
+				'shop_client_id',
 				db.raw('COUNT(*) as invoice_count'),
 				db.raw('SUM(total_amount) as total_invoiced'),
 				db.raw('SUM(amount_paid) as total_paid'),
@@ -478,24 +478,24 @@ router.get('/customers/activity', authMiddleware, requireRole(['admin', 'account
 			.modify(qb => {
 				applyDateFilters(qb, 'created_at', dateFrom, dateTo);
 				if (locationId) qb.andWhere('location_id', locationId);
-				if (customerId) qb.andWhere('customer_id', customerId);
+				if (customerId) qb.andWhere('shop_client_id', customerId);
 			})
-			.groupBy('customer_id')
+			.groupBy('shop_client_id')
 			.select(
-				'customer_id',
+				'shop_client_id',
 				db.raw('COUNT(*) as work_orders_count'),
 				db.raw('MAX(created_at) as last_work_order_date')
 			);
 
-		const rows = await db('customers as c')
-			.leftJoin(invoiceAgg.as('inv'), 'c.id', 'inv.customer_id')
-			.leftJoin(workOrderAgg.as('wo'), 'c.id', 'wo.customer_id')
+		const rows = await db('shop_clients as c')
+			.leftJoin(invoiceAgg.as('inv'), 'c.id', 'inv.shop_client_id')
+			.leftJoin(workOrderAgg.as('wo'), 'c.id', 'wo.shop_client_id')
 			.where('c.is_deleted', false)
 			.modify(qb => {
 				if (customerId) qb.andWhere('c.id', customerId);
 			})
 			.select(
-				'c.id as customer_id',
+				'c.id as shop_client_id',
 				'c.company_name',
 				db.raw('c.primary_contact_name as contact_name'),
 				'c.phone',
@@ -527,7 +527,7 @@ router.get('/customers/activity', authMiddleware, requireRole(['admin', 'account
 	}
 });
 
-router.get('/customers/aging', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
+router.get('/shop-clients/aging', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
 	try {
 		const { asOfDate, locationId, customerId } = req.query;
 		const limit = Math.min(parseInt(req.query.limit || '200', 10) || 200, 1000);
@@ -535,16 +535,16 @@ router.get('/customers/aging', authMiddleware, requireRole(['admin', 'accounting
 		const asOf = asOfDate || new Date().toISOString().slice(0, 10);
 
 		const rows = await db('invoices as i')
-			.join('customers as c', 'i.customer_id', 'c.id')
+			.join('shop_clients as c', 'i.shop_client_id', 'c.id')
 			.where({ 'i.is_deleted': false })
 			.andWhere('i.balance_due', '>', 0)
 			.andWhere('i.status', '!=', 'VOID')
 			.modify(qb => {
 				if (locationId) qb.andWhere('i.location_id', locationId);
-				if (customerId) qb.andWhere('i.customer_id', customerId);
+				if (customerId) qb.andWhere('i.shop_client_id', customerId);
 			})
 			.select(
-				'c.id as customer_id',
+				'c.id as shop_client_id',
 				'c.company_name',
 				db.raw(`SUM(CASE WHEN DATE_PART('day', ?::date - i.due_date) <= 30 THEN i.balance_due ELSE 0 END) as bucket_0_30`, [asOf]),
 				db.raw(`SUM(CASE WHEN DATE_PART('day', ?::date - i.due_date) BETWEEN 31 AND 60 THEN i.balance_due ELSE 0 END) as bucket_31_60`, [asOf]),
@@ -887,14 +887,14 @@ router.get('/financial/aging', authMiddleware, requireRole(['admin', 'accounting
 		const asOf = asOfDate || new Date().toISOString().slice(0, 10);
 
 		let base = db('invoices')
-			.join('customers', 'invoices.customer_id', 'customers.id')
+			.join('shop_clients', 'invoices.shop_client_id', 'shop_clients.id')
 			.where({ 'invoices.is_deleted': false })
 			.andWhere('invoices.balance_due', '>', 0)
 			.andWhere('invoices.status', '!=', 'VOID');
 		if (locationId) base = base.andWhere('invoices.location_id', locationId);
 
 		const rows = await base.select(
-			'customers.company_name as customer_name',
+			'shop_clients.company_name as customer_name',
 			'invoices.invoice_number',
 			'invoices.issued_date',
 			'invoices.due_date',
@@ -920,13 +920,13 @@ router.get('/financial/payments', authMiddleware, requireRole(['admin', 'account
 		const { dateFrom, dateTo, locationId, customerId } = req.query;
 		let query = db('invoice_payments')
 			.join('invoices', 'invoice_payments.invoice_id', 'invoices.id')
-			.join('customers', 'invoices.customer_id', 'customers.id')
+			.join('shop_clients', 'invoices.shop_client_id', 'shop_clients.id')
 			.leftJoin('locations', 'invoices.location_id', 'locations.id')
 			.where('invoices.is_deleted', false)
 			.select(
 				'invoice_payments.payment_date',
 				'invoices.invoice_number',
-				'customers.company_name as customer_name',
+				'shop_clients.company_name as customer_name',
 				'invoice_payments.amount',
 				'invoice_payments.method',
 				'invoice_payments.reference_number',
@@ -935,7 +935,7 @@ router.get('/financial/payments', authMiddleware, requireRole(['admin', 'account
 
 		applyDateFilters(query, 'invoice_payments.payment_date', dateFrom, dateTo);
 		if (locationId) query = query.andWhere('invoices.location_id', locationId);
-		if (customerId) query = query.andWhere('invoices.customer_id', customerId);
+		if (customerId) query = query.andWhere('invoices.shop_client_id', customerId);
 
 		const rows = await query.orderBy('invoice_payments.payment_date', 'desc');
 		res.json({ success: true, data: rows, count: rows.length });
@@ -1005,7 +1005,7 @@ router.get('/dashboard/kpis', authMiddleware, requireRole(['admin', 'accounting'
 			.first();
 
 		// Get customer stats
-		const customerStats = await db('customers')
+		const customerStats = await db('shop_clients')
 			.select(db.raw('COUNT(*) as total'))
 			.first();
 

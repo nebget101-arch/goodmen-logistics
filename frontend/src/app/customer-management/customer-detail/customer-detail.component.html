@@ -10,7 +10,7 @@
       class="btn btn-primary"
       (click)="editCustomer()"
       [disabled]="!canEditCustomer()"
-      [title]="!canEditCustomer() ? 'You do not have permission to edit customers.' : ''"
+      [title]="!canEditCustomer() ? 'You do not have permission to edit shop clients.' : ''"
     >
       <span class="material-symbols-outlined">edit</span> Edit
     </button>
@@ -21,7 +21,7 @@
     Missing billing information.
   </div>
   <div *ngIf="alerts?.inactive_warning" class="alert alert-danger">
-    Customer is inactive.
+    Shop Client is inactive.
   </div>
 
   <div class="tabs">
@@ -34,7 +34,7 @@
       [class.active]="activeTab === 'credit'"
       (click)="activeTab = 'credit'"
       [disabled]="!canManageCreditLimit()"
-      [title]="!canManageCreditLimit() ? 'You do not have permission to manage customer credit settings.' : ''"
+      [title]="!canManageCreditLimit() ? 'You do not have permission to manage shop client credit settings.' : ''"
     >Credit</button>
     <button type="button" class="tab-btn" [class.active]="activeTab === 'service-history'" (click)="activeTab = 'service-history'">Service History</button>
     <button
@@ -82,7 +82,7 @@
       </table>
     </div>
     <div *ngIf="!workOrders || workOrders.length === 0" class="alert alert-info">
-      No work orders found for this customer.
+      No work orders found for this shop client.
     </div>
   </div>
 
@@ -116,7 +116,7 @@
       </table>
     </div>
     <div *ngIf="!invoices || invoices.length === 0" class="alert alert-info">
-      No invoices found for this customer.
+      No invoices found for this shop client.
     </div>
   </div>
 
@@ -200,7 +200,7 @@
     </div>
 
     <div *ngIf="!creditBalance" class="alert alert-warning">
-      No credit limit set for this customer.
+      No credit limit set for this shop client.
     </div>
   </div>
 
@@ -228,7 +228,7 @@
       </table>
     </div>
     <div *ngIf="!serviceHistory || serviceHistory.length === 0" class="alert alert-info">
-      No service history found for this customer.
+      No service history found for this shop client.
     </div>
   </div>
 
@@ -280,13 +280,13 @@
   <div class="tab-content" *ngIf="activeTab === 'vehicles'">
     <div class="vehicle-add">
       <div style="display:flex; align-items:center; justify-content: space-between;">
-        <h4>Add Customer Vehicle</h4>
+        <h4>Add Shop Client Vehicle</h4>
         <button
           class="btn btn-outline-primary"
           type="button"
           (click)="toggleAddVehicleForm()"
           [disabled]="!canCreateCustomerVehicle()"
-          [title]="!canCreateCustomerVehicle() ? 'You do not have permission to add customer vehicles.' : ''"
+          [title]="!canCreateCustomerVehicle() ? 'You do not have permission to add shop client vehicles.' : ''"
         >
           {{ showAddVehicleForm ? 'Cancel' : 'Add Vehicle' }}
         </button>
@@ -356,7 +356,7 @@
         style="margin-top: 10px;"
         (click)="addCustomerVehicle()"
         [disabled]="!canCreateCustomerVehicle()"
-        [title]="!canCreateCustomerVehicle() ? 'You do not have permission to add customer vehicles.' : ''"
+        [title]="!canCreateCustomerVehicle() ? 'You do not have permission to add shop client vehicles.' : ''"
       >Save Vehicle</button>
       <hr />
     </div>
@@ -387,7 +387,7 @@
       </table>
     </div>
     <div *ngIf="!vehicles || vehicles.length === 0" class="alert alert-info">
-      No vehicles found for this customer.
+      No vehicles found for this shop client.
     </div>
   </div>
 

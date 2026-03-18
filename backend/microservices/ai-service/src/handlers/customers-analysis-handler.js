@@ -2,7 +2,7 @@ const { buildSystemPrompt } = require('../prompt');
 const { logAiInteraction } = require('../analytics/logger');
 
 /**
- * POST /api/ai/customers/analysis
+ * POST /api/ai/shop-clients/analysis
  * Body: { customers: [{ company_name, customer_type, status, phone, email, default_location_id, last_service_date?, payment_terms?, credit_limit? }] }
  * Returns: { summary, insights: [{ type, title, message, customerIds? }], recommendations: [{ action, detail, customerIds? }] }
  */
@@ -74,7 +74,7 @@ async function handleCustomersAnalysis(req, res, deps) {
 
     logAiInteraction({
       userId: null,
-      route: '/api/ai/customers/analysis',
+      route: '/api/ai/shop-clients/analysis',
       message: `customers=${customers.length}`,
       conversationId: null,
       success: true,
@@ -89,7 +89,7 @@ async function handleCustomersAnalysis(req, res, deps) {
 
     logAiInteraction({
       userId: null,
-      route: '/api/ai/customers/analysis',
+      route: '/api/ai/shop-clients/analysis',
       message: null,
       conversationId: null,
       success: false,

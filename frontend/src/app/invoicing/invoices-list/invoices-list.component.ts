@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { InvoiceService } from '../../services/invoice.service';
-import { CustomerService } from '../../services/customer.service';
+import { ShopClientsService } from '../../services/shop-clients.service';
 import { ApiService } from '../../services/api.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { PermissionHelperService } from '../../services/permission-helper.service';
@@ -38,7 +38,7 @@ export class InvoicesListComponent implements OnInit, OnDestroy {
 
   constructor(
     private invoiceService: InvoiceService,
-    private customerService: CustomerService,
+    private customerService: ShopClientsService,
     private apiService: ApiService,
     private router: Router,
     private operatingEntityContext: OperatingEntityContextService,

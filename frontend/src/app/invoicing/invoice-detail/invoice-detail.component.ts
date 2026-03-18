@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { InvoiceService } from '../../services/invoice.service';
-import { CustomerService } from '../../services/customer.service';
+import { ShopClientsService } from '../../services/shop-clients.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { PermissionHelperService } from '../../services/permission-helper.service';
@@ -42,7 +42,7 @@ export class InvoiceDetailComponent implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private invoiceService: InvoiceService,
-    private customerService: CustomerService,
+    private customerService: ShopClientsService,
     private operatingEntityContext: OperatingEntityContextService,
     private permissions: PermissionHelperService
   ) {}
@@ -102,9 +102,9 @@ export class InvoiceDetailComponent implements OnInit, OnDestroy {
         this.payments = res.payments || res.data?.payments || [];
         this.documents = res.documents || res.data?.documents || [];
         this.loading = false;
-        // If invoice has customer_id but backend didn't return customer (e.g. different service DB), fetch from customers API
-        if (!this.customer && this.invoice?.customer_id) {
-          this.customerService.getCustomer(this.invoice.customer_id).subscribe({
+        // If invoice has shop_client_id but backend didn't return customer (e.g. different service DB), fetch from shop clients API
+        if (!this.customer && this.invoice?.shop_client_id) {
+          this.customerService.getCustomer(this.invoice.shop_client_id).subscribe({
             next: (c: any) => { this.customer = c?.data ?? c ?? null; },
             error: () => {}
           });

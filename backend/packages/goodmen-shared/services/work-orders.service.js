@@ -189,7 +189,7 @@ async function listWorkOrders(filters = {}, context = null) {
 
   const baseQuery = db('work_orders as wo')
     .leftJoin('all_vehicles as v', 'wo.vehicle_id', 'v.id')
-    .leftJoin('customers as c', 'wo.customer_id', 'c.id')
+    .leftJoin('shop_clients as c', 'wo.shop_client_id', 'c.id')
     .leftJoin('locations as l', 'wo.location_id', 'l.id')
     .leftJoin(latestInvoice, 'wo.id', 'i.work_order_id')
     .select(
@@ -223,7 +223,7 @@ async function listWorkOrders(filters = {}, context = null) {
       if (type) qb.andWhere('wo.type', type);
       if (priority) qb.andWhere('wo.priority', priority);
       if (locationId) qb.andWhere('wo.location_id', locationId);
-      if (customerId) qb.andWhere('wo.customer_id', customerId);
+      if (customerId) qb.andWhere('wo.shop_client_id', customerId);
       if (vehicleId) qb.andWhere('wo.vehicle_id', vehicleId);
       if (invoiceStatus) qb.andWhere('i.status', invoiceStatus);
       if (dateFrom) qb.andWhere('wo.created_at', '>=', dateFrom);
@@ -273,7 +273,7 @@ async function getWorkOrderById(workOrderId, context = null) {
   }
 
   const vehicle = await db('all_vehicles').where({ id: workOrder.vehicle_id }).first();
-  const customer = workOrder.customer_id ? await db('customers').where({ id: workOrder.customer_id }).first() : null;
+  const customer = workOrder.shop_client_id ? await db('shop_clients').where({ id: workOrder.shop_client_id }).first() : null;
   const location = workOrder.location_id ? await db('locations').where({ id: workOrder.location_id }).first() : null;
   const labor = await db('work_order_labor_items as woli')
     .leftJoin('users as u', 'woli.mechanic_user_id', 'u.id')
@@ -309,9 +309,9 @@ async function createWorkOrder(payload, userId, context = null) {
     }
 
     if (payload.customerId) {
-      const customer = await trx('customers').where({ id: payload.customerId }).first();
+      const customer = await trx('shop_clients').where({ id: payload.customerId }).first();
       if (!customer || customer.is_deleted) throw new Error('Customer not found');
-      if (customer.status === 'INACTIVE') throw new Error('Inactive customers cannot be used for work orders');
+      if (customer.status === 'INACTIVE') throw new Error('Inactive shop clients cannot be used for work orders');
     }
 
     const maxResult = await trx.raw(
@@ -330,7 +330,7 @@ async function createWorkOrder(payload, userId, context = null) {
       tenant_id: context?.tenantId || null,
       work_order_number: workOrderNumber,
       vehicle_id: normalizeUuid(payload.vehicleId),
-      customer_id: normalizeUuid(payload.customerId),
+      shop_client_id: normalizeUuid(payload.customerId),
       location_id: normalizeUuid(payload.locationId),
       type: payload.type || 'REPAIR',
       priority: payload.priority || 'NORMAL',
@@ -389,13 +389,13 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
     if (!workOrder) throw new Error('Work order not found');
 
     if (payload.customerId) {
-      const customer = await trx('customers').where({ id: payload.customerId }).first();
+      const customer = await trx('shop_clients').where({ id: payload.customerId }).first();
       if (!customer || customer.is_deleted) throw new Error('Customer not found');
-      if (customer.status === 'INACTIVE') throw new Error('Inactive customers cannot be used for work orders');
+      if (customer.status === 'INACTIVE') throw new Error('Inactive shop clients cannot be used for work orders');
     }
 
     const vehicleId = normalizeUuid(payload.vehicleId ?? workOrder.vehicle_id);
-    const customerId = normalizeUuid(payload.customerId ?? workOrder.customer_id);
+    const customerId = normalizeUuid(payload.customerId ?? workOrder.shop_client_id);
     const locationId = normalizeUuid(payload.locationId ?? workOrder.location_id);
     const assignedMechanicId = normalizeUuid(payload.assignedMechanicUserId ?? workOrder.assigned_mechanic_user_id);
     const odometerMiles = normalizeOdometer(payload.odometerMiles ?? workOrder.odometer_miles);
@@ -407,7 +407,7 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
 
     await trx('work_orders').where({ id: workOrderId }).update({
       vehicle_id: vehicleId,
-      customer_id: customerId,
+      shop_client_id: customerId,
       location_id: locationId,
       type: payload.type ?? workOrder.type,
       priority: payload.priority ?? workOrder.priority,
@@ -493,7 +493,7 @@ async function updateWorkOrderStatus(workOrderId, nextStatus, userRole) {
         await trx('maintenance_records').insert({
           id: require('uuid').v4(),
           vehicle_id: workOrder.vehicle_id,
-          customer_id: workOrder.customer_id,
+          shop_client_id: workOrder.shop_client_id,
           date_performed: trx.fn.now(),
           status: 'completed',
           description: workOrder.description || `Work Order ${workOrder.work_order_number}`,
@@ -891,8 +891,8 @@ async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}, co
     }
 
     let customer = null;
-    if (workOrder.customer_id) {
-      customer = await trx('customers').where({ id: workOrder.customer_id }).first();
+    if (workOrder.shop_client_id) {
+      customer = await trx('shop_clients').where({ id: workOrder.shop_client_id }).first();
       if (!customer || customer.is_deleted) throw new Error('Customer not found');
       if (customer.status === 'INACTIVE') throw new Error('Inactive customer cannot be invoiced');
     } else {
@@ -988,12 +988,12 @@ async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}, co
         const totals = await recomputeInvoiceTotals(trx, existingInvoice.id);
         const totalAmount = normalizeDecimal(totals?.invoice?.total_amount);
 
-        if (payload.useCredit && workOrder.customer_id && totalAmount > 0) {
-          const creditStatus = await creditService.canUseCredit(workOrder.customer_id, totalAmount);
+        if (payload.useCredit && workOrder.shop_client_id && totalAmount > 0) {
+          const creditStatus = await creditService.canUseCredit(workOrder.shop_client_id, totalAmount);
           if (!creditStatus.canUse) {
             throw new Error(`Insufficient credit. Available: $${creditStatus.availableCredit.toFixed(2)}, Required: $${creditStatus.requiredAmount.toFixed(2)}, Shortfall: $${creditStatus.shortfall.toFixed(2)}`);
           }
-          await creditService.applyInvoiceToCredit(workOrder.customer_id, existingInvoice.id, totalAmount, userId);
+          await creditService.applyInvoiceToCredit(workOrder.shop_client_id, existingInvoice.id, totalAmount, userId);
           const [updatedInvoice] = await trx('invoices')
             .where({ id: existingInvoice.id })
             .update({ status: 'INVOICED', updated_at: trx.fn.now() })
@@ -1004,15 +1004,15 @@ async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}, co
         return totals?.invoice || existingInvoice;
       }
 
-      if (payload.useCredit && workOrder.customer_id) {
+      if (payload.useCredit && workOrder.shop_client_id) {
         const totals = await recomputeInvoiceTotals(trx, existingInvoice.id);
         const totalAmount = normalizeDecimal(totals?.invoice?.total_amount);
         if (totalAmount > 0) {
-          const creditStatus = await creditService.canUseCredit(workOrder.customer_id, totalAmount);
+          const creditStatus = await creditService.canUseCredit(workOrder.shop_client_id, totalAmount);
           if (!creditStatus.canUse) {
             throw new Error(`Insufficient credit. Available: $${creditStatus.availableCredit.toFixed(2)}, Required: $${creditStatus.requiredAmount.toFixed(2)}, Shortfall: $${creditStatus.shortfall.toFixed(2)}`);
           }
-          await creditService.applyInvoiceToCredit(workOrder.customer_id, existingInvoice.id, totalAmount, userId);
+          await creditService.applyInvoiceToCredit(workOrder.shop_client_id, existingInvoice.id, totalAmount, userId);
           const [updatedInvoice] = await trx('invoices')
             .where({ id: existingInvoice.id })
             .update({ status: 'INVOICED', updated_at: trx.fn.now() })
@@ -1034,7 +1034,7 @@ async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}, co
       operating_entity_id: context?.operatingEntityId || null,
       invoice_number: invoiceNumber,
       work_order_id: workOrderId,
-      customer_id: workOrder.customer_id,
+      shop_client_id: workOrder.shop_client_id,
       location_id: workOrder.location_id,
       status: 'DRAFT',
       issued_date: issuedDate,
@@ -1113,14 +1113,14 @@ async function generateInvoiceForWorkOrder(workOrderId, userId, payload = {}, co
     await trx('invoices').where({ id: invoice.id }).update({ updated_at: trx.fn.now() });
 
     // Apply credit if requested
-    if (payload.useCredit && workOrder.customer_id) {
+    if (payload.useCredit && workOrder.shop_client_id) {
       const totalAmount = normalizeDecimal(totals?.invoice?.total_amount);
       if (totalAmount <= 0) return totals?.invoice || invoice;
-      const creditStatus = await creditService.canUseCredit(workOrder.customer_id, totalAmount);
+      const creditStatus = await creditService.canUseCredit(workOrder.shop_client_id, totalAmount);
       if (!creditStatus.canUse) {
         throw new Error(`Insufficient credit. Available: $${creditStatus.availableCredit.toFixed(2)}, Required: $${creditStatus.requiredAmount.toFixed(2)}, Shortfall: $${creditStatus.shortfall.toFixed(2)}`);
       }
-      await creditService.applyInvoiceToCredit(workOrder.customer_id, invoice.id, totalAmount, userId);
+      await creditService.applyInvoiceToCredit(workOrder.shop_client_id, invoice.id, totalAmount, userId);
       await trx('invoices')
         .where({ id: invoice.id })
         .update({ status: 'INVOICED', updated_at: trx.fn.now() });

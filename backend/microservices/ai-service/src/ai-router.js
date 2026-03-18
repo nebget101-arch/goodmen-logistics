@@ -19,7 +19,7 @@ function buildAiRouter(deps) {
   router.post('/parts/analysis', (req, res) =>
     handlePartsAnalysis(req, res, deps)
   );
-  router.post('/customers/analysis', (req, res) =>
+  router.post('/shop-clients/analysis', (req, res) =>
     handleCustomersAnalysis(req, res, deps)
   );
 

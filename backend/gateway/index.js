@@ -205,7 +205,7 @@ app.use('/api/adjustments', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/cycle-counts', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/receiving', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/barcodes', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
-app.use('/api/customers', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
+app.use('/api/shop-clients', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/ai', buildProxy(AI_SERVICE_URL, 'ai'));
 
 app.listen(PORT, () => {

@@ -14,31 +14,31 @@ const routes: Routes = [
     path: '',
     component: CustomersListComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: { planPath: '/customers', anyPermission: [PERMISSIONS.CUSTOMERS_VIEW, PERMISSIONS.CUSTOMERS_EDIT] }
+    data: { planPath: '/shop-clients', anyPermission: [PERMISSIONS.CUSTOMERS_VIEW, PERMISSIONS.CUSTOMERS_EDIT] }
   },
   {
     path: 'bulk-upload',
     component: CustomerBulkUploadComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: { planPath: '/customers', anyPermission: [PERMISSIONS.CUSTOMERS_CREATE, PERMISSIONS.CUSTOMERS_EDIT] }
+    data: { planPath: '/shop-clients', anyPermission: [PERMISSIONS.CUSTOMERS_CREATE, PERMISSIONS.CUSTOMERS_EDIT] }
   },
   {
     path: 'new',
     component: CustomerFormComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: { planPath: '/customers', anyPermission: [PERMISSIONS.CUSTOMERS_CREATE, PERMISSIONS.CUSTOMERS_EDIT] }
+    data: { planPath: '/shop-clients', anyPermission: [PERMISSIONS.CUSTOMERS_CREATE, PERMISSIONS.CUSTOMERS_EDIT] }
   },
   {
     path: ':id/edit',
     component: CustomerFormComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: { planPath: '/customers', anyPermission: [PERMISSIONS.CUSTOMERS_EDIT, PERMISSIONS.CUSTOMERS_CREATE] }
+    data: { planPath: '/shop-clients', anyPermission: [PERMISSIONS.CUSTOMERS_EDIT, PERMISSIONS.CUSTOMERS_CREATE] }
   },
   {
     path: ':id',
     component: CustomerDetailComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: { planPath: '/customers', anyPermission: [PERMISSIONS.CUSTOMERS_VIEW, PERMISSIONS.CUSTOMERS_EDIT] }
+    data: { planPath: '/shop-clients', anyPermission: [PERMISSIONS.CUSTOMERS_VIEW, PERMISSIONS.CUSTOMERS_EDIT] }
   }
 ];
 

@@ -116,13 +116,13 @@ async function resolveLocation(row, vehicle) {
 async function resolveCustomerId(row) {
   const customerId = normalizeText(row['Customer ID']);
   if (customerId) {
-    const customer = await db('customers').where({ id: customerId }).first();
+    const customer = await db('shop_clients').where({ id: customerId }).first();
     return customer ? customer.id : null;
   }
 
   const customerEmail = normalizeText(row['Customer Email'] || row['Email']);
   if (customerEmail) {
-    const customer = await db('customers')
+    const customer = await db('shop_clients')
       .whereRaw('LOWER(email) = ?', [customerEmail.toLowerCase()])
       .first();
     if (customer) return customer.id;
@@ -130,13 +130,13 @@ async function resolveCustomerId(row) {
 
   const dotNumber = normalizeText(row['Customer DOT'] || row['DOT Number']);
   if (dotNumber) {
-    const customer = await db('customers').where({ dot_number: dotNumber }).first();
+    const customer = await db('shop_clients').where({ dot_number: dotNumber }).first();
     if (customer) return customer.id;
   }
 
   const customerName = normalizeText(row['Customer Name'] || row['Company Name']);
   if (customerName) {
-    const customer = await db('customers')
+    const customer = await db('shop_clients')
       .whereRaw('LOWER(company_name) = ?', [customerName.toLowerCase()])
       .first();
     if (customer) return customer.id;

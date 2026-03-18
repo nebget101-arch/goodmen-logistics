@@ -1,7 +1,7 @@
 <div class="customer-form-dashboard">
   <div class="header">
-    <h1>{{ customerId ? 'Edit Customer' : 'New Customer' }}</h1>
-    <p class="subtitle">{{ customerId ? 'Update customer details' : 'Add a new customer account' }}</p>
+    <h1>{{ customerId ? 'Edit Shop Client' : 'New Shop Client' }}</h1>
+    <p class="subtitle">{{ customerId ? 'Update shop client details' : 'Add a new shop client account' }}</p>
   </div>
 
   <div class="card form-card">
@@ -17,7 +17,7 @@
           <input class="form-control" formControlName="company_name" />
         </div>
         <div>
-          <label>Customer Type *</label>
+          <label>Shop Client Type *</label>
           <select class="form-control" formControlName="customer_type">
             <option *ngFor="let t of customerTypes" [value]="t">{{ t }}</option>
           </select>

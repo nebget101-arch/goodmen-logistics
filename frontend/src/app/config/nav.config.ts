@@ -51,7 +51,7 @@ export const NAV_SECTIONS: NavSection[] = [
     tabs: ['maintenance', 'customers'],
     children: [
       { path: '/maintenance', label: 'Maintenance', tab: 'maintenance' },
-      { path: '/customers', label: 'Customers', tab: 'customers' },
+      { path: '/shop-clients', label: 'Shop Clients', tab: 'customers' },
     ],
   },
   {

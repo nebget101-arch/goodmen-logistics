@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { CustomerService } from '../../services/customer.service';
+import { ShopClientsService } from '../../services/shop-clients.service';
 
 interface UploadResult {
   successful: Array<{ row: number; company: string; id: string }>;
@@ -20,7 +20,7 @@ export class CustomerBulkUploadComponent implements OnInit {
   errorMessage = '';
   showResults = false;
 
-  constructor(private customerService: CustomerService) {}
+  constructor(private customerService: ShopClientsService) {}
 
   ngOnInit(): void {}
 
@@ -33,7 +33,7 @@ export class CustomerBulkUploadComponent implements OnInit {
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'customer-upload-template.xlsx';
+        link.download = 'shop-client-upload-template.xlsx';
         link.click();
         window.URL.revokeObjectURL(url);
       },
@@ -90,9 +90,9 @@ export class CustomerBulkUploadComponent implements OnInit {
         const failCount = response.results.failed.length;
         
         if (failCount === 0) {
-          this.successMessage = `✓ Successfully uploaded ${successCount} customers!`;
+          this.successMessage = `✓ Successfully uploaded ${successCount} shop clients!`;
         } else {
-          this.successMessage = `✓ Uploaded ${successCount} customers with ${failCount} failures (see details below)`;
+          this.successMessage = `✓ Uploaded ${successCount} shop clients with ${failCount} failures (see details below)`;
         }
         
         this.selectedFile = null;

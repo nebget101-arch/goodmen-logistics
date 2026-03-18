@@ -69,7 +69,7 @@ function getEffectivePricing(customer, pricingRule) {
 async function logAudit(customerId, field, oldValue, newValue, userId) {
   if (oldValue === newValue) return;
   await db('customer_audit_log').insert({
-    customer_id: customerId,
+    shop_client_id: customerId,
     field,
     old_value: oldValue === undefined || oldValue === null ? null : String(oldValue),
     new_value: newValue === undefined || newValue === null ? null : String(newValue),
@@ -113,7 +113,7 @@ async function createCustomer(payload, userId) {
     is_deleted: false
   };
 
-  const [customer] = await db('customers').insert(insertData).returning('*');
+  const [customer] = await db('shop_clients').insert(insertData).returning('*');
   dtLogger.info('customer_created', { id: customer.id, company_name: customer.company_name });
 
   if (payload.pricing_rules) {
@@ -124,7 +124,7 @@ async function createCustomer(payload, userId) {
 }
 
 async function updateCustomer(id, payload, userId) {
-  const customer = await db('customers').where({ id, is_deleted: false }).first();
+  const customer = await db('shop_clients').where({ id, is_deleted: false }).first();
   if (!customer) return { error: 'Customer not found' };
 
   const errors = validateCustomerPayload({ ...customer, ...payload });
@@ -162,7 +162,7 @@ async function updateCustomer(id, payload, userId) {
     updated_at: db.fn.now()
   };
 
-  const [updated] = await db('customers').where({ id }).update(updateData).returning('*');
+  const [updated] = await db('shop_clients').where({ id }).update(updateData).returning('*');
 
   const auditFields = ['company_name','customer_type','status','tax_id','primary_contact_name','phone','email','secondary_phone','website','billing_address_line1','billing_address_line2','billing_city','billing_state','billing_zip','billing_country','payment_terms','payment_terms_custom_days','credit_limit','tax_exempt','billing_notes','default_location_id'];
   for (const field of auditFields) {
@@ -181,7 +181,7 @@ async function listCustomers({ search, type, status, locationId, dot, paymentTer
   const limit = Math.max(parseInt(pageSize, 10) || 20, 1);
   const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
 
-  const baseQuery = db('customers')
+  const baseQuery = db('shop_clients')
     .where(function() {
       this.where('is_deleted', false).orWhereNull('is_deleted');
     })
@@ -205,7 +205,7 @@ async function listCustomers({ search, type, status, locationId, dot, paymentTer
 
   const rows = await baseQuery.clone()
     .select(
-      'customers.*'
+      'shop_clients.*'
     )
     .orderBy('company_name', 'asc')
     .limit(limit)
@@ -215,10 +215,10 @@ async function listCustomers({ search, type, status, locationId, dot, paymentTer
 }
 
 async function getCustomerById(id) {
-  const customer = await db('customers').where({ id, is_deleted: false }).first();
+  const customer = await db('shop_clients').where({ id, is_deleted: false }).first();
   if (!customer) return null;
 
-  const pricingRule = await db('customer_pricing_rules').where({ customer_id: id }).first();
+  const pricingRule = await db('customer_pricing_rules').where({ shop_client_id: id }).first();
   const alerts = buildAlerts(customer);
   const effectivePricing = getEffectivePricing(customer, pricingRule);
 
@@ -226,19 +226,19 @@ async function getCustomerById(id) {
 }
 
 async function setCustomerStatus(id, status, userId) {
-  const customer = await db('customers').where({ id, is_deleted: false }).first();
+  const customer = await db('shop_clients').where({ id, is_deleted: false }).first();
   if (!customer) return { error: 'Customer not found' };
   if (!STATUS_TYPES.includes(status)) return { error: 'Invalid status' };
 
-  const [updated] = await db('customers').where({ id }).update({ status, updated_at: db.fn.now() }).returning('*');
+  const [updated] = await db('shop_clients').where({ id }).update({ status, updated_at: db.fn.now() }).returning('*');
   await logAudit(id, 'status', customer.status, status, userId);
   return { customer: updated };
 }
 
 async function softDeleteCustomer(id, userId) {
-  const customer = await db('customers').where({ id, is_deleted: false }).first();
+  const customer = await db('shop_clients').where({ id, is_deleted: false }).first();
   if (!customer) return { error: 'Customer not found' };
-  const [updated] = await db('customers').where({ id }).update({ is_deleted: true, status: 'INACTIVE', updated_at: db.fn.now() }).returning('*');
+  const [updated] = await db('shop_clients').where({ id }).update({ is_deleted: true, status: 'INACTIVE', updated_at: db.fn.now() }).returning('*');
   await logAudit(id, 'is_deleted', customer.is_deleted, true, userId);
   return { customer: updated };
 }
@@ -251,7 +251,7 @@ async function addNote(customerId, payload, userId) {
     return { error: 'note is required' };
   }
   const [note] = await db('customer_notes').insert({
-    customer_id: customerId,
+    shop_client_id: customerId,
     note_type: payload.note_type,
     note: payload.note,
     created_by_user_id: userId || null
@@ -262,13 +262,13 @@ async function addNote(customerId, payload, userId) {
 
 async function getNotes(customerId) {
   const notes = await db('customer_notes')
-    .where({ customer_id: customerId })
+    .where({ shop_client_id: customerId })
     .orderBy('created_at', 'desc');
   return notes;
 }
 
 async function upsertPricingRules(customerId, payload, userId) {
-  const existing = await db('customer_pricing_rules').where({ customer_id: customerId }).first();
+  const existing = await db('customer_pricing_rules').where({ shop_client_id: customerId }).first();
   const updateData = {
     default_labor_rate: normalizeDecimal(payload.default_labor_rate),
     parts_discount_percent: normalizeDecimal(payload.parts_discount_percent),
@@ -280,13 +280,13 @@ async function upsertPricingRules(customerId, payload, userId) {
   };
 
   if (existing) {
-    const [updated] = await db('customer_pricing_rules').where({ customer_id: customerId }).update(updateData).returning('*');
+    const [updated] = await db('customer_pricing_rules').where({ shop_client_id: customerId }).update(updateData).returning('*');
     await logAudit(customerId, 'pricing_rules', JSON.stringify(existing), JSON.stringify(updated), userId);
     return updated;
   }
 
   const [created] = await db('customer_pricing_rules').insert({
-    customer_id: customerId,
+    shop_client_id: customerId,
     ...updateData,
     created_at: db.fn.now()
   }).returning('*');
@@ -299,7 +299,7 @@ async function getCustomerWorkOrders(customerId, { status, from, to, page = 1, p
   const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
 
   let query = db('work_orders')
-    .where({ customer_id: customerId })
+    .where({ shop_client_id: customerId })
     .modify(qb => {
       if (status) qb.andWhere('status', status);
       if (from) qb.andWhere('created_at', '>=', from);
@@ -326,11 +326,11 @@ async function getCustomerServiceHistory(customerId, { from, to, page = 1, pageS
       SELECT mr.id, mr.date_performed
       FROM maintenance_records mr
       JOIN work_orders wo ON wo.id = mr.work_order_id
-      WHERE wo.customer_id = ? AND mr.status = 'completed'
+      WHERE wo.shop_client_id = ? AND mr.status = 'completed'
       UNION ALL
       SELECT id, COALESCE(completed_at, updated_at) as date_performed
       FROM work_orders
-      WHERE customer_id = ? AND status IN ('completed', 'closed')
+      WHERE shop_client_id = ? AND status IN ('completed', 'closed')
     ) combined
   `, [customerId, customerId]);
 
@@ -349,7 +349,7 @@ async function getCustomerServiceHistory(customerId, { from, to, page = 1, pageS
         wo.work_order_number
       FROM maintenance_records mr
       JOIN work_orders wo ON wo.id = mr.work_order_id
-      WHERE wo.customer_id = ? AND mr.status = 'completed'
+      WHERE wo.shop_client_id = ? AND mr.status = 'completed'
       UNION ALL
       SELECT 
         id,
@@ -361,7 +361,7 @@ async function getCustomerServiceHistory(customerId, { from, to, page = 1, pageS
         total_amount as cost,
         work_order_number
       FROM work_orders 
-      WHERE customer_id = ? AND status IN ('completed', 'closed')
+      WHERE shop_client_id = ? AND status IN ('completed', 'closed')
     ) combined
     ORDER BY date_performed DESC NULLS LAST
     LIMIT ? OFFSET ?
@@ -378,7 +378,7 @@ async function getCustomerVehicles(customerId, { page = 1, pageSize = 20 } = {})
   const countResult = await db.raw(`
     SELECT COUNT(*) as count
     FROM all_vehicles
-    WHERE customer_id = ?
+    WHERE shop_client_id = ?
   `, [customerId]);
 
   const count = parseInt(countResult.rows[0]?.count || 0);
@@ -397,7 +397,7 @@ async function getCustomerVehicles(customerId, { page = 1, pageSize = 20 } = {})
       all_vehicles.created_at,
       all_vehicles.source
     FROM all_vehicles
-    WHERE customer_id = ?
+    WHERE shop_client_id = ?
     ORDER BY all_vehicles.created_at DESC
     LIMIT ? OFFSET ?
   `, [customerId, limit, offset]);

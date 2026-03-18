@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { CustomerService } from '../../services/customer.service';
+import { ShopClientsService } from '../../services/shop-clients.service';
 import { ApiService } from '../../services/api.service';
 import { PermissionHelperService } from '../../services/permission-helper.service';
 import { PERMISSIONS } from '../../models/access-control.model';
@@ -48,7 +48,7 @@ export class CustomersListComponent implements OnInit {
   paymentTerms = ['DUE_ON_RECEIPT', 'NET_15', 'NET_30', 'CUSTOM'];
 
   constructor(
-    private customerService: CustomerService,
+    private customerService: ShopClientsService,
     private router: Router,
     private apiService: ApiService,
     private permissions: PermissionHelperService
@@ -83,7 +83,7 @@ export class CustomersListComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to load customers';
+        this.error = err?.error?.error || 'Failed to load shop clients';
         this.loading = false;
       }
     });
@@ -96,35 +96,35 @@ export class CustomersListComponent implements OnInit {
 
   goToNew(): void {
     if (!this.canCreateCustomer()) {
-      this.error = 'You do not have permission to create customers.';
+      this.error = 'You do not have permission to create shop clients.';
       return;
     }
-    this.router.navigate(['/customers/new']);
+    this.router.navigate(['/shop-clients/new']);
   }
 
   goToBulkUpload(): void {
     if (!this.canCreateCustomer()) {
-      this.error = 'You do not have permission to bulk upload customers.';
+      this.error = 'You do not have permission to bulk upload shop clients.';
       return;
     }
-    this.router.navigate(['/customers/bulk-upload']);
+    this.router.navigate(['/shop-clients/bulk-upload']);
   }
 
   viewCustomer(id: string): void {
-    this.router.navigate(['/customers', id]);
+    this.router.navigate(['/shop-clients', id]);
   }
 
   editCustomer(id: string): void {
     if (!this.canEditCustomer()) {
-      this.error = 'You do not have permission to edit customers.';
+      this.error = 'You do not have permission to edit shop clients.';
       return;
     }
-    this.router.navigate(['/customers', id, 'edit']);
+    this.router.navigate(['/shop-clients', id, 'edit']);
   }
 
   toggleStatus(customer: any): void {
     if (!this.canEditCustomer()) {
-      this.error = 'You do not have permission to change customer status.';
+      this.error = 'You do not have permission to change shop client status.';
       return;
     }
     const nextStatus = customer.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
