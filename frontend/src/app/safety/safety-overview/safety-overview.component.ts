@@ -32,5 +32,13 @@ export class SafetyOverviewComponent implements OnInit {
   goToAccidents(): void { this.router.navigate(['/safety/accidents']); }
   goToClaims(): void { this.router.navigate(['/safety/claims']); }
   goToTasks(): void { this.router.navigate(['/safety/tasks']); }
+  goToEntityAccidents(operatingEntityId: string | null): void {
+    this.router.navigate(['/safety/accidents'], {
+      queryParams: {
+        operating_entity_id: operatingEntityId || undefined,
+        status: 'open'
+      }
+    });
+  }
   newIncident(): void { this.router.navigate(['/safety/accidents'], { queryParams: { new: '1' } }); }
 }

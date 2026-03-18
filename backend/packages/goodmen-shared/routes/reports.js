@@ -1120,6 +1120,35 @@ function applyContextSql(tableAlias, req, params) {
 	return clauses;
 }
 
+function isAllOperatingEntitiesMode(req) {
+	return req.context?.isAllOperatingEntities === true;
+}
+
+function withOperatingEntitySummary(payload, rows, valueKey = 'total_revenue') {
+	const byEntity = (rows || []).reduce((acc, row) => {
+		const key = row?.operating_entity_name || 'Unassigned';
+		const amount = Number(row?.[valueKey] || 0);
+		acc[key] = (acc[key] || 0) + amount;
+		return acc;
+	}, {});
+
+	if (Object.keys(byEntity).length === 0) {
+		return payload;
+	}
+
+	const operatingEntitySubtotals = Object.entries(byEntity)
+		.map(([operating_entity_name, subtotal]) => ({ operating_entity_name, subtotal }))
+		.sort((a, b) => Number(b.subtotal || 0) - Number(a.subtotal || 0));
+
+	return {
+		...payload,
+		summary: {
+			...(payload.summary || {}),
+			operatingEntitySubtotals
+		}
+	};
+}
+
 function periodExpression(period, dateSql) {
 	if (period === 'month') return `to_char(date_trunc('month', ${dateSql}), 'YYYY-MM-01')`;
 	if (period === 'day') return `to_char(date_trunc('day', ${dateSql}), 'YYYY-MM-DD')`;
@@ -1223,6 +1252,7 @@ async function buildEmails(req, filters) {
 }
 
 async function buildTotalRevenue(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
 	const params = [filters.startDate, filters.endDate];
 	const clauses = ['l.completed_date BETWEEN ? AND ?'];
 	clauses.push(...applyContextSql('l', req, params));
@@ -1237,19 +1267,23 @@ async function buildTotalRevenue(req, filters) {
 
 	const rows = (await db.raw(`
 		SELECT
+			${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
 			${periodExpression(filters.period, 'l.completed_date')} AS period,
 			COUNT(*)::int AS loads_count,
 			COALESCE(SUM(l.rate), 0)::numeric AS total_revenue
 		FROM loads l
+		${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id' : ''}
 		WHERE ${clauses.join(' AND ')}
-		GROUP BY 1
-		ORDER BY 1 ASC
+		GROUP BY ${allMode ? '1,2' : '1'}
+		ORDER BY ${allMode ? '1 ASC, 2 ASC' : '1 ASC'}
 	`, params)).rows;
 	const totalRevenue = rows.reduce((sum, r) => sum + Number(r.total_revenue || 0), 0);
-	return { success: true, data: rows, cards: [{ key: 'total_revenue', label: 'Total Revenue', value: totalRevenue }] };
+	const payload = { success: true, data: rows, cards: [{ key: 'total_revenue', label: 'Total Revenue', value: totalRevenue }] };
+	return allMode ? withOperatingEntitySummary(payload, rows, 'total_revenue') : payload;
 }
 
 async function buildRatePerMile(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
 	const params = [filters.startDate, filters.endDate];
 	const clauses = ['COALESCE(sli.delivery_date, s.date) BETWEEN ? AND ?'];
 	clauses.push(...applyContextSql('s', req, params));
@@ -1259,6 +1293,7 @@ async function buildRatePerMile(req, filters) {
 	}
 	const rows = (await db.raw(`
 		SELECT
+			${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
 			${periodExpression(filters.period, 'COALESCE(sli.delivery_date, s.date)')} AS period,
 			COALESCE(SUM(sli.loaded_miles), 0)::numeric AS loaded_miles,
 			COALESCE(SUM(sli.gross_amount), 0)::numeric AS revenue,
@@ -1268,14 +1303,17 @@ async function buildRatePerMile(req, filters) {
 			END AS rpm
 		FROM settlement_load_items sli
 		JOIN settlements s ON s.id = sli.settlement_id
+		${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = s.operating_entity_id' : ''}
 		WHERE ${clauses.join(' AND ')}
-		GROUP BY 1
-		ORDER BY 1 ASC
+		GROUP BY ${allMode ? '1,2' : '1'}
+		ORDER BY ${allMode ? '1 ASC, 2 ASC' : '1 ASC'}
 	`, params)).rows;
-	return { success: true, data: rows };
+	const payload = { success: true, data: rows };
+	return allMode ? withOperatingEntitySummary(payload, rows, 'revenue') : payload;
 }
 
 async function buildRevenueByDispatcher(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
 	const params = [filters.startDate, filters.endDate];
 	const clauses = ['l.completed_date BETWEEN ? AND ?'];
 	clauses.push(...applyContextSql('l', req, params));
@@ -1289,21 +1327,25 @@ async function buildRevenueByDispatcher(req, filters) {
 	}
 	const rows = (await db.raw(`
 		SELECT
+			${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
 			COALESCE(CONCAT_WS(' ', u.first_name, u.last_name), u.username, 'Unassigned') AS dispatcher_name,
 			COUNT(*)::int AS loads_count,
 			COALESCE(SUM(l.rate), 0)::numeric AS total_revenue,
 			COALESCE(AVG(l.rate), 0)::numeric AS avg_revenue_per_load
 		FROM loads l
 		LEFT JOIN users u ON u.id = l.dispatcher_user_id
+		${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id' : ''}
 		WHERE ${clauses.join(' AND ')}
-		GROUP BY 1
+		GROUP BY ${allMode ? '1,2' : '1'}
 		ORDER BY total_revenue DESC
 		LIMIT ${filters.limit} OFFSET ${filters.offset}
 	`, params)).rows;
-	return { success: true, data: rows };
+	const payload = { success: true, data: rows };
+	return allMode ? withOperatingEntitySummary(payload, rows, 'total_revenue') : payload;
 }
 
 async function buildPaymentSummary(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
 	const params = [filters.startDate, filters.endDate];
 	const clauses = ['ip.payment_date BETWEEN ? AND ?'];
 	if (req.context?.tenantId) {
@@ -1316,13 +1358,15 @@ async function buildPaymentSummary(req, filters) {
 	}
 	const rows = (await db.raw(`
 		SELECT
+			${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
 			ip.method,
 			COUNT(*)::int AS payment_count,
 			COALESCE(SUM(ip.amount), 0)::numeric AS total_paid
 		FROM invoice_payments ip
 		JOIN invoices i ON i.id = ip.invoice_id
+		${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = i.operating_entity_id' : ''}
 		WHERE ${clauses.join(' AND ')}
-		GROUP BY ip.method
+		GROUP BY ${allMode ? '1,2' : 'ip.method'}
 		ORDER BY total_paid DESC
 	`, params)).rows;
 
@@ -1343,7 +1387,7 @@ async function buildPaymentSummary(req, filters) {
 	`, outstandingParams);
 	const totalPaid = rows.reduce((sum, r) => sum + Number(r.total_paid || 0), 0);
 	const outstanding = Number(outstandingRows.rows[0]?.outstanding || 0);
-	return {
+	const payload = {
 		success: true,
 		data: rows,
 		cards: [
@@ -1351,15 +1395,18 @@ async function buildPaymentSummary(req, filters) {
 			{ key: 'outstanding', label: 'Outstanding', value: outstanding }
 		]
 	};
+	return allMode ? withOperatingEntitySummary(payload, rows, 'total_paid') : payload;
 }
 
 async function buildExpenses(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
 	const params = [filters.startDate, filters.endDate];
 	if (req.context?.tenantId) params.push(req.context.tenantId);
 	if (req.context?.operatingEntityId) params.push(req.context.operatingEntityId);
 	const rows = (await db.raw(`
 		WITH adjustments AS (
 			SELECT
+				${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
 				COALESCE(epc.name, gec.name, sai.description, 'Uncategorized') AS category,
 				'settlement_adjustment' AS source,
 				COUNT(*)::int AS expense_count,
@@ -1368,20 +1415,24 @@ async function buildExpenses(req, filters) {
 			LEFT JOIN expense_payment_categories epc ON epc.id = sai.category_id
 			LEFT JOIN global_expense_categories gec ON gec.id = sai.category_id
 			JOIN settlements s ON s.id = sai.settlement_id
+			${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = s.operating_entity_id' : ''}
 			JOIN payroll_periods pp ON pp.id = s.payroll_period_id
 			WHERE pp.period_end BETWEEN ? AND ?
-			GROUP BY 1,2
+			GROUP BY ${allMode ? '1,2,3' : '1,2'}
 		),
 		fuel AS (
 			SELECT
+				${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
 				'Fuel'::text AS category,
 				'fuel_transaction'::text AS source,
 				COUNT(*)::int AS expense_count,
 				COALESCE(SUM(ft.amount), 0)::numeric AS total_amount
 			FROM fuel_transactions ft
+			${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = ft.operating_entity_id' : ''}
 			WHERE ft.transaction_date BETWEEN ? AND ?
 			${req.context?.tenantId ? 'AND ft.tenant_id = ?' : ''}
 			${req.context?.operatingEntityId ? 'AND ft.operating_entity_id = ?' : ''}
+			${allMode ? 'GROUP BY 1,2,3' : ''}
 		)
 		SELECT * FROM adjustments
 		UNION ALL
@@ -1390,7 +1441,8 @@ async function buildExpenses(req, filters) {
 	`, params)).rows;
 
 	const total = rows.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
-	return { success: true, data: rows, cards: [{ key: 'expense_total', label: 'Total Expenses', value: total }] };
+	const payload = { success: true, data: rows, cards: [{ key: 'expense_total', label: 'Total Expenses', value: total }] };
+	return allMode ? withOperatingEntitySummary(payload, rows, 'total_amount') : payload;
 }
 
 async function buildGrossProfit(req, filters) {
@@ -1400,6 +1452,7 @@ async function buildGrossProfit(req, filters) {
 	const revenueTotal = Number(revenue.cards?.[0]?.value || 0);
 
 	const rows = revenue.data.map((r) => ({
+		operating_entity_name: r.operating_entity_name,
 		period: r.period,
 		revenue: Number(r.total_revenue || 0),
 		expenses: 0,
@@ -1419,6 +1472,7 @@ async function buildGrossProfit(req, filters) {
 }
 
 async function buildGrossProfitPerLoad(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
 	const params = [filters.startDate, filters.endDate];
 	const clauses = ['l.completed_date BETWEEN ? AND ?'];
 	clauses.push(...applyContextSql('l', req, params));
@@ -1432,6 +1486,7 @@ async function buildGrossProfitPerLoad(req, filters) {
 	}
 	const rows = (await db.raw(`
 		SELECT
+			${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
 			l.id,
 			l.load_number,
 			l.completed_date,
@@ -1449,17 +1504,20 @@ async function buildGrossProfitPerLoad(req, filters) {
 				COALESCE((SELECT SUM(ft.amount) FROM fuel_transactions ft WHERE ft.load_id = l.id), 0)
 			)::numeric AS gross_profit
 		FROM loads l
+		${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id' : ''}
 		WHERE ${clauses.join(' AND ')}
 		ORDER BY l.completed_date DESC
 		LIMIT ${filters.limit} OFFSET ${filters.offset}
 	`, params)).rows;
-	return { success: true, data: rows };
+	const payload = { success: true, data: rows };
+	return allMode ? withOperatingEntitySummary(payload, rows, 'gross_profit') : payload;
 }
 
 async function buildProfitLoss(req, filters) {
 	const totalRevenue = await buildTotalRevenue(req, filters);
 	const expenses = await buildExpenses(req, filters);
 	const rows = totalRevenue.data.map((r) => ({
+		operating_entity_name: r.operating_entity_name,
 		period: r.period,
 		revenue: Number(r.total_revenue || 0),
 		cost_of_operations: 0,

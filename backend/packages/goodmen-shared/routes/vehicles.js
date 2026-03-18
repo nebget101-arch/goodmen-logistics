@@ -192,16 +192,23 @@ router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
     const params = [];
-    let sql = 'SELECT * FROM all_vehicles WHERE 1=1';
+    let sql = `
+      SELECT
+        av.*,
+        oe.name AS operating_entity_name
+      FROM all_vehicles av
+      LEFT JOIN operating_entities oe ON oe.id = av.operating_entity_id
+      WHERE 1=1
+    `;
     if (req.context?.tenantId) {
       params.push(req.context.tenantId);
-      sql += ` AND tenant_id = $${params.length}`;
+      sql += ` AND av.tenant_id = $${params.length}`;
     }
     if (req.context?.operatingEntityId) {
       params.push(req.context.operatingEntityId);
-      sql += ` AND (operating_entity_id = $${params.length} OR LOWER(COALESCE(vehicle_type, '')) = 'trailer')`;
+      sql += ` AND (av.operating_entity_id = $${params.length} OR LOWER(COALESCE(av.vehicle_type, '')) = 'trailer')`;
     }
-    sql += ' ORDER BY unit_number';
+    sql += ' ORDER BY av.unit_number';
     const result = await query(sql, params);
     const duration = Date.now() - startTime;
     

@@ -56,6 +56,10 @@ export class AppComponent implements OnInit {
     return !!localStorage.getItem('token');
   }
 
+  showAllEntitiesOption(): boolean {
+    return this.access.hasRole('admin');
+  }
+
   isAuthTransitioning(): boolean {
     return sessionStorage.getItem(this.authTransitionStorageKey) === '1';
   }
@@ -174,6 +178,7 @@ export class AppComponent implements OnInit {
   onOperatingEntityChange(rawId: string): void {
     const selectedId = (rawId || '').toString().trim();
     if (!selectedId) return;
+    if (selectedId.toLowerCase() === 'all' && !this.showAllEntitiesOption()) return;
     this.operatingEntityContext.selectOperatingEntity(selectedId);
   }
 

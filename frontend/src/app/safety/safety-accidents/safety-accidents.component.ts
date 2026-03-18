@@ -22,7 +22,7 @@ export class SafetyAccidentsComponent implements OnInit {
   form: any = this.blankForm();
 
   // Filter state
-  filters: any = { status: '', severity: '', incident_type: '', search: '' };
+  filters: any = { status: '', severity: '', incident_type: '', operating_entity_id: '', search: '' };
 
   readonly STATUSES = ['open', 'under_review', 'pending_close', 'closed'];
   readonly SEVERITIES = ['critical', 'major', 'minor', 'near_miss'];
@@ -34,8 +34,14 @@ export class SafetyAccidentsComponent implements OnInit {
   ngOnInit(): void {
     this.route.queryParams.subscribe(params => {
       if (params['new'] === '1') { this.openForm(); }
+      this.filters = {
+        ...this.filters,
+        status: params['status'] || this.filters.status || '',
+        operating_entity_id: params['operating_entity_id'] || this.filters.operating_entity_id || ''
+      };
+      this.page = 1;
+      this.load();
     });
-    this.load();
   }
 
   load(): void {
@@ -50,7 +56,7 @@ export class SafetyAccidentsComponent implements OnInit {
   }
 
   applyFilters(): void { this.page = 1; this.load(); }
-  clearFilters(): void { this.filters = { status: '', severity: '', incident_type: '', search: '' }; this.page = 1; this.load(); }
+  clearFilters(): void { this.filters = { status: '', severity: '', incident_type: '', operating_entity_id: '', search: '' }; this.page = 1; this.load(); }
 
   prevPage(): void { if (this.page > 1) { this.page--; this.load(); } }
   nextPage(): void { if (this.page * this.pageSize < this.total) { this.page++; this.load(); } }

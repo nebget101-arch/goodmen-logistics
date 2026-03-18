@@ -136,19 +136,52 @@ async function logAudit(incidentId, claimId, actorId, actorName, action, field, 
 router.get('/overview', canViewIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
+    const operatingEntityId = req.context?.operatingEntityId || null;
 
-    const [openIncidents, openClaims, totalLoss, paidAmount, overdueTasks] = await Promise.all([
-      knex('safety_incidents').where({ tenant_id: tid }).whereNot({ status: 'closed' }).count('id as cnt').first(),
-      knex('safety_claims').where({ tenant_id: tid }).whereNot({ status: 'closed' }).count('id as cnt').first(),
-      knex('safety_incidents').where({ tenant_id: tid }).sum('estimated_loss_amount as total').first(),
-      knex('safety_claims').where({ tenant_id: tid }).sum('paid_amount as total').first(),
-      knex('safety_incident_tasks')
-        .join('safety_incidents', 'safety_incident_tasks.incident_id', 'safety_incidents.id')
-        .where('safety_incidents.tenant_id', tid)
-        .whereNot('safety_incident_tasks.status', 'completed')
-        .where('safety_incident_tasks.due_date', '<', new Date())
-        .count('safety_incident_tasks.id as cnt')
-        .first(),
+    const openIncidentsQuery = knex('safety_incidents').where({ tenant_id: tid }).whereNot({ status: 'closed' });
+    const openClaimsQuery = knex('safety_claims').where({ tenant_id: tid }).whereNot({ status: 'closed' });
+    const totalLossQuery = knex('safety_incidents').where({ tenant_id: tid });
+    const paidAmountQuery = knex('safety_claims').where({ tenant_id: tid });
+    const overdueTasksQuery = knex('safety_incident_tasks')
+      .join('safety_incidents', 'safety_incident_tasks.incident_id', 'safety_incidents.id')
+      .where('safety_incidents.tenant_id', tid)
+      .whereNot('safety_incident_tasks.status', 'completed')
+      .where('safety_incident_tasks.due_date', '<', new Date());
+
+    if (operatingEntityId) {
+      openIncidentsQuery.andWhere('operating_entity_id', operatingEntityId);
+      openClaimsQuery.andWhere('operating_entity_id', operatingEntityId);
+      totalLossQuery.andWhere('operating_entity_id', operatingEntityId);
+      paidAmountQuery.andWhere('operating_entity_id', operatingEntityId);
+      overdueTasksQuery.andWhere('safety_incidents.operating_entity_id', operatingEntityId);
+    }
+
+    const [openIncidents, openClaims, totalLoss, paidAmount, overdueTasks, openIncidentsByOperatingEntity, openClaimsByOperatingEntity] = await Promise.all([
+      openIncidentsQuery.clone().count('id as cnt').first(),
+      openClaimsQuery.clone().count('id as cnt').first(),
+      totalLossQuery.clone().sum('estimated_loss_amount as total').first(),
+      paidAmountQuery.clone().sum('paid_amount as total').first(),
+      overdueTasksQuery.clone().count('safety_incident_tasks.id as cnt').first(),
+      openIncidentsQuery
+        .clone()
+        .leftJoin('operating_entities as oe', 'oe.id', 'safety_incidents.operating_entity_id')
+        .select(
+          'safety_incidents.operating_entity_id',
+          knex.raw("COALESCE(oe.name, 'Unassigned') as operating_entity_name"),
+          knex.raw('COUNT(safety_incidents.id)::int as count')
+        )
+        .groupBy('safety_incidents.operating_entity_id', 'oe.name')
+        .orderBy('count', 'desc'),
+      openClaimsQuery
+        .clone()
+        .leftJoin('operating_entities as oe', 'oe.id', 'safety_claims.operating_entity_id')
+        .select(
+          'safety_claims.operating_entity_id',
+          knex.raw("COALESCE(oe.name, 'Unassigned') as operating_entity_name"),
+          knex.raw('COUNT(safety_claims.id)::int as count')
+        )
+        .groupBy('safety_claims.operating_entity_id', 'oe.name')
+        .orderBy('count', 'desc'),
     ]);
 
     res.json({
@@ -157,6 +190,8 @@ router.get('/overview', canViewIncidents, async (req, res) => {
       totalEstimatedLoss: parseFloat(totalLoss?.total || '0'),
       totalPaid: parseFloat(paidAmount?.total || '0'),
       overdueFollowUps: parseInt(overdueTasks?.cnt || '0', 10),
+      openIncidentsByOperatingEntity,
+      openClaimsByOperatingEntity,
     });
   } catch (err) {
     dtLogger.error('safety_overview_error', err);
