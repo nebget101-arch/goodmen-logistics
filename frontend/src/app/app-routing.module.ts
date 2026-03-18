@@ -132,7 +132,7 @@ const routes: Routes = [
   // Public driver onboarding packet link (no AuthGuard)
   { path: 'onboard/:packetId', component: OnboardingPacketComponent },
   { path: 'roadside/:callId', component: PublicRoadsideComponent },
-  { path: 'customers', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
+  { path: 'shop-clients', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
   { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
   { path: 'settlements', loadChildren: () => import('./settlements/settlements.module').then(m => m.SettlementsModule) },
   {

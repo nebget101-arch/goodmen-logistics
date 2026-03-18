@@ -12,16 +12,16 @@ function normalizeDecimal(value) {
 async function getCustomerCreditBalance(customerId) {
   try {
     const balance = await db('customer_credit_balance')
-      .where({ customer_id: customerId })
+      .where({ shop_client_id: customerId })
       .first();
     
     if (!balance) {
       // Initialize balance from customer credit_limit
-      const customer = await db('customers').where({ id: customerId }).first();
+      const customer = await db('shop_clients').where({ id: customerId }).first();
       if (!customer) throw new Error('Customer not found');
       
       const newBalance = await db('customer_credit_balance').insert({
-        customer_id: customerId,
+        shop_client_id: customerId,
         credit_limit: normalizeDecimal(customer.credit_limit),
         credit_used: 0,
         available_credit: normalizeDecimal(customer.credit_limit)
@@ -42,7 +42,7 @@ async function getCustomerCreditBalance(customerId) {
 async function applyInvoiceToCredit(customerId, invoiceId, invoiceAmount, userId) {
   return db.transaction(async trx => {
     const balance = await trx('customer_credit_balance')
-      .where({ customer_id: customerId })
+      .where({ shop_client_id: customerId })
       .first();
     
     if (!balance) throw new Error('Customer credit balance not found');
@@ -57,7 +57,7 @@ async function applyInvoiceToCredit(customerId, invoiceId, invoiceAmount, userId
     
     // Update balance
     const [updated] = await trx('customer_credit_balance')
-      .where({ customer_id: customerId })
+      .where({ shop_client_id: customerId })
       .update({
         credit_used: newUsed,
         available_credit: newAvailable,
@@ -67,7 +67,7 @@ async function applyInvoiceToCredit(customerId, invoiceId, invoiceAmount, userId
     
     // Log transaction
     await trx('customer_credit_transactions').insert({
-      customer_id: customerId,
+      shop_client_id: customerId,
       transaction_type: 'INVOICE_APPLIED',
       reference_id: invoiceId,
       reference_type: 'invoice',
@@ -88,7 +88,7 @@ async function applyInvoiceToCredit(customerId, invoiceId, invoiceAmount, userId
 async function applyPaymentToCredit(customerId, invoiceId, paymentAmount, paymentMethod, userId) {
   return db.transaction(async trx => {
     const balance = await trx('customer_credit_balance')
-      .where({ customer_id: customerId })
+      .where({ shop_client_id: customerId })
       .first();
     
     if (!balance) throw new Error('Customer credit balance not found');
@@ -99,7 +99,7 @@ async function applyPaymentToCredit(customerId, invoiceId, paymentAmount, paymen
     
     // Update balance
     const [updated] = await trx('customer_credit_balance')
-      .where({ customer_id: customerId })
+      .where({ shop_client_id: customerId })
       .update({
         credit_used: newUsed,
         available_credit: newAvailable,
@@ -109,7 +109,7 @@ async function applyPaymentToCredit(customerId, invoiceId, paymentAmount, paymen
     
     // Log transaction
     await trx('customer_credit_transactions').insert({
-      customer_id: customerId,
+      shop_client_id: customerId,
       transaction_type: 'PAYMENT',
       reference_id: invoiceId,
       reference_type: 'invoice',
@@ -130,7 +130,7 @@ async function applyPaymentToCredit(customerId, invoiceId, paymentAmount, paymen
 async function updateCreditLimit(customerId, newLimit, userId) {
   return db.transaction(async trx => {
     const balance = await trx('customer_credit_balance')
-      .where({ customer_id: customerId })
+      .where({ shop_client_id: customerId })
       .first();
     
     if (!balance) throw new Error('Customer credit balance not found');
@@ -140,7 +140,7 @@ async function updateCreditLimit(customerId, newLimit, userId) {
     
     // Update balance
     const [updated] = await trx('customer_credit_balance')
-      .where({ customer_id: customerId })
+      .where({ shop_client_id: customerId })
       .update({
         credit_limit: normalizeDecimal(newLimit),
         available_credit: newAvailable,
@@ -148,14 +148,14 @@ async function updateCreditLimit(customerId, newLimit, userId) {
       })
       .returning('*');
     
-    // Update customers table as well
-    await trx('customers').where({ id: customerId }).update({
+    // Update shop clients table as well
+    await trx('shop_clients').where({ id: customerId }).update({
       credit_limit: normalizeDecimal(newLimit)
     });
     
     // Log transaction
     await trx('customer_credit_transactions').insert({
-      customer_id: customerId,
+      shop_client_id: customerId,
       transaction_type: 'LIMIT_CHANGE',
       amount: normalizeDecimal(newLimit),
       description: `Credit limit updated to $${newLimit.toFixed(2)}`,
@@ -178,7 +178,7 @@ async function getCreditTransactionHistory(customerId, filters = {}) {
   const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
   
   let query = db('customer_credit_transactions')
-    .where({ customer_id: customerId });
+    .where({ shop_client_id: customerId });
   
   if (type) {
     query = query.andWhere({ transaction_type: type });

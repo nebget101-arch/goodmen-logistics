@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CustomerService } from '../../services/customer.service';
+import { ShopClientsService } from '../../services/shop-clients.service';
 import { PermissionHelperService } from '../../services/permission-helper.service';
 import { PERMISSIONS } from '../../models/access-control.model';
 
@@ -26,7 +26,7 @@ export class CustomerFormComponent implements OnInit {
     private fb: FormBuilder,
     private route: ActivatedRoute,
     private router: Router,
-    private customerService: CustomerService,
+    private customerService: ShopClientsService,
     private permissions: PermissionHelperService
   ) {
     this.form = this.fb.group({
@@ -72,7 +72,7 @@ export class CustomerFormComponent implements OnInit {
         this.loading = false;
       },
       error: () => {
-        this.error = 'Failed to load customer';
+        this.error = 'Failed to load shop client';
         this.loading = false;
       }
     });
@@ -81,8 +81,8 @@ export class CustomerFormComponent implements OnInit {
   save(): void {
     if (!this.canSave()) {
       this.error = this.customerId
-        ? 'You do not have permission to edit customers.'
-        : 'You do not have permission to create customers.';
+        ? 'You do not have permission to edit shop clients.'
+        : 'You do not have permission to create shop clients.';
       return;
     }
 
@@ -95,7 +95,7 @@ export class CustomerFormComponent implements OnInit {
     this.error = '';
     const payload = this.form.value;
 
-    console.log('Saving customer:', { id: this.customerId, payload });
+    console.log('Saving shop client:', { id: this.customerId, payload });
 
     const request = this.customerId
       ? this.customerService.updateCustomer(this.customerId, payload)
@@ -106,18 +106,18 @@ export class CustomerFormComponent implements OnInit {
         console.log('Save response:', res);
         const id = this.customerId || res?.data?.id || res?.customer?.id;
         this.loading = false;
-        this.success = this.customerId ? 'Customer updated successfully' : 'Customer created successfully';
+        this.success = this.customerId ? 'Shop client updated successfully' : 'Shop client created successfully';
         setTimeout(() => {
           if (id) {
-            this.router.navigate(['/customers', id]);
+            this.router.navigate(['/shop-clients', id]);
           } else {
-            this.error = 'Customer saved but could not navigate: missing ID';
+            this.error = 'Shop client saved but could not navigate: missing ID';
           }
         }, 1000);
       },
       error: (err) => {
         console.error('Save error:', err);
-        this.error = err?.error?.error || err?.message || 'Failed to save customer';
+        this.error = err?.error?.error || err?.message || 'Failed to save shop client';
         this.loading = false;
       }
     });
@@ -125,9 +125,9 @@ export class CustomerFormComponent implements OnInit {
 
   cancel(): void {
     if (this.customerId) {
-      this.router.navigate(['/customers', this.customerId]);
+      this.router.navigate(['/shop-clients', this.customerId]);
     } else {
-      this.router.navigate(['/customers']);
+      this.router.navigate(['/shop-clients']);
     }
   }
 

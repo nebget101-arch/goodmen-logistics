@@ -88,7 +88,7 @@ async function createInvoiceFromWorkOrder(workOrderId, payload, userId, context 
       .modify((qb) => applyTenantFilter(qb, context, 'work_orders.tenant_id'))
       .first();
     let locationId = workOrder?.location_id || null;
-    let customerId = workOrder?.customer_id || null;
+    let customerId = workOrder?.shop_client_id || null;
     let description = workOrder?.description || 'Work order charges';
 
     if (!workOrder) {
@@ -100,15 +100,15 @@ async function createInvoiceFromWorkOrder(workOrderId, payload, userId, context 
       if (!mr) throw new Error('Work order not found');
       workOrder = mr;
       locationId = mr.location_id;
-      customerId = mr.customer_id;
+      customerId = mr.shop_client_id;
       description = mr.description || 'Work order charges';
     }
 
     if (!customerId) throw new Error('Work order must have a customer');
 
-    const customer = await trx('customers')
+    const customer = await trx('shop_clients')
       .where({ id: customerId })
-      .modify((qb) => applyTenantFilter(qb, context, 'customers.tenant_id'))
+      .modify((qb) => applyTenantFilter(qb, context, 'shop_clients.tenant_id'))
       .first();
     if (!customer || customer.is_deleted) throw new Error('Customer not found');
     if (customer.status === 'INACTIVE') throw new Error('Inactive customer cannot be invoiced');
@@ -123,7 +123,7 @@ async function createInvoiceFromWorkOrder(workOrderId, payload, userId, context 
       operating_entity_id: context?.operatingEntityId || null,
       invoice_number: invoiceNumber,
       work_order_id: workOrder?.id || null,
-      customer_id: customerId,
+      shop_client_id: customerId,
       location_id: locationId,
       status: 'DRAFT',
       issued_date: issuedDate,
@@ -206,7 +206,7 @@ async function createManualInvoice(payload, userId, context = null) {
       operating_entity_id: context?.operatingEntityId || null,
       invoice_number: invoiceNumber,
       work_order_id: payload.workOrderId || null,
-      customer_id: payload.customerId,
+      shop_client_id: payload.customerId,
       location_id: payload.locationId,
       status: 'DRAFT',
       issued_date: issuedDate,
@@ -256,18 +256,18 @@ async function listInvoices(filters, context = null) {
   const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit;
 
   const baseQuery = db('invoices')
-    .join('customers', 'invoices.customer_id', 'customers.id')
+    .join('shop_clients', 'invoices.shop_client_id', 'shop_clients.id')
     .where({ 'invoices.is_deleted': false })
     .modify(qb => {
       applyTenantFilter(qb, context, 'invoices.tenant_id');
       if (search) {
         qb.andWhere(function() {
           this.where('invoices.invoice_number', 'ilike', `%${search}%`)
-            .orWhere('customers.company_name', 'ilike', `%${search}%`);
+            .orWhere('shop_clients.company_name', 'ilike', `%${search}%`);
         });
       }
       if (status) qb.andWhere('invoices.status', status);
-      if (customerId) qb.andWhere('invoices.customer_id', customerId);
+      if (customerId) qb.andWhere('invoices.shop_client_id', customerId);
       if (locationId) qb.andWhere('invoices.location_id', locationId);
       if (dateFrom) qb.andWhere('invoices.issued_date', '>=', dateFrom);
       if (dateTo) qb.andWhere('invoices.issued_date', '<=', dateTo);
@@ -276,7 +276,7 @@ async function listInvoices(filters, context = null) {
   const [{ count }] = await baseQuery.clone().count();
   const rows = await baseQuery
     .clone()
-    .select('invoices.*', 'customers.company_name')
+    .select('invoices.*', 'shop_clients.company_name')
     .orderBy('invoices.issued_date', 'desc')
     .limit(limit)
     .offset(offset);
@@ -388,8 +388,8 @@ async function getInvoiceById(id, context = null) {
   let location = null;
   let workOrder = null;
   let vehicle = null;
-  if (invoice.customer_id) {
-    customer = await db('customers').where({ id: invoice.customer_id }).first();
+  if (invoice.shop_client_id) {
+    customer = await db('shop_clients').where({ id: invoice.shop_client_id }).first();
   }
   if (invoice.location_id) {
     location = await db('locations').where({ id: invoice.location_id }).first();

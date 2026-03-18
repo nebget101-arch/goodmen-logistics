@@ -1,7 +1,7 @@
 <div class="customers-dashboard">
   <div class="header">
     <div>
-      <h1>Customers</h1>
+      <h1>Shop Clients</h1>
       <p class="subtitle">Manage customer accounts, billing, and service history</p>
     </div>
     <div class="header-actions">
@@ -12,7 +12,7 @@
         class="btn btn-secondary"
         (click)="goToBulkUpload()"
         [disabled]="!canCreateCustomer()"
-        [title]="!canCreateCustomer() ? 'You do not have permission to bulk upload customers.' : ''"
+        [title]="!canCreateCustomer() ? 'You do not have permission to bulk upload shop clients.' : ''"
       >
         <span class="material-symbols-outlined">upload_file</span> Bulk Upload
       </button>
@@ -20,7 +20,7 @@
         class="btn btn-primary"
         (click)="goToNew()"
         [disabled]="!canCreateCustomer()"
-        [title]="!canCreateCustomer() ? 'You do not have permission to create customers.' : ''"
+        [title]="!canCreateCustomer() ? 'You do not have permission to create shop clients.' : ''"
       >
         <span class="material-symbols-outlined">add</span> New Customer
       </button>
@@ -84,7 +84,7 @@
 
   <div *ngIf="loading" class="loading-state">
     <div class="loading-spinner"></div>
-    <span>Loading customers...</span>
+    <span>Loading shop clients...</span>
   </div>
 
   <div class="table-responsive" *ngIf="!loading">
@@ -138,7 +138,7 @@
     <!-- Pagination Controls -->
     <div class="pagination-section">
       <div class="pagination-info">
-        Showing {{ (page - 1) * pageSize + 1 }} to {{ Math.min(page * pageSize, total) }} of {{ total }} customers
+        Showing {{ (page - 1) * pageSize + 1 }} to {{ Math.min(page * pageSize, total) }} of {{ total }} shop clients
       </div>
       <nav class="pagination-nav" aria-label="Page navigation">
         <button type="button" class="pagination-btn" (click)="previousPage()" [disabled]="page === 1">‹ Prev</button>

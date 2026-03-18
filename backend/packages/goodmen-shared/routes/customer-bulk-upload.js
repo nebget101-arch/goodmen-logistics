@@ -31,7 +31,7 @@ function requireRole(allowedRoles) {
   };
 }
 
-// GET /api/customers/bulk-upload/template - Download template
+// GET /api/shop-clients/bulk-upload/template - Download template
 router.get('/bulk-upload/template', authMiddleware, (req, res) => {
   try {
     // Create workbook
@@ -187,7 +187,7 @@ router.get('/bulk-upload/template', authMiddleware, (req, res) => {
   }
 });
 
-// POST /api/customers/bulk-upload - Upload and process file
+// POST /api/shop-clients/bulk-upload - Upload and process file
 router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting']), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -282,7 +282,7 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advis
         // Check if customer already exists
         let existingCustomer;
         try {
-          existingCustomer = await db('customers')
+          existingCustomer = await db('shop_clients')
             .where({ email, company_name: companyName })
             .first();
         } catch (dbError) {
@@ -347,7 +347,7 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advis
 
     res.json({
       success: true,
-      message: `Uploaded ${results.successful.length} customers, ${results.failed.length} failed`,
+      message: `Uploaded ${results.successful.length} shop clients, ${results.failed.length} failed`,
       results
     });
   } catch (error) {

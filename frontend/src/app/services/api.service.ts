@@ -23,12 +23,12 @@ export class ApiService {
 
   // FMCSA company info lookup
   getFmcsainfo(dot: string): Observable<any> {
-    return this.http.get(`${this.baseUrl}/customers/fmcsainfo/${encodeURIComponent(dot)}`);
+    return this.http.get(`${this.baseUrl}/shop-clients/fmcsainfo/${encodeURIComponent(dot)}`);
   }
 
   // Customers
   getCustomers(params?: { query?: string; pageSize?: number }): Observable<any> {
-    let url = `${this.baseUrl}/customers`;
+    let url = `${this.baseUrl}/shop-clients`;
     const queryParams: string[] = [];
     if (params?.query) queryParams.push(`search=${encodeURIComponent(params.query)}`);
     if (params?.pageSize) queryParams.push(`pageSize=${params.pageSize}`);
@@ -37,7 +37,7 @@ export class ApiService {
   }
 
   getCustomerByDot(dot: string): Observable<any> {
-    return this.http.get(`${this.baseUrl}/customers?dot=${encodeURIComponent(dot)}`);
+    return this.http.get(`${this.baseUrl}/shop-clients?dot=${encodeURIComponent(dot)}`);
   }
 
   createCustomer(customer: any): Observable<any> {
@@ -45,7 +45,7 @@ export class ApiService {
     if (!payload.company_name && payload.name) {
       payload.company_name = payload.name;
     }
-    return this.http.post(`${this.baseUrl}/customers`, payload);
+    return this.http.post(`${this.baseUrl}/shop-clients`, payload);
   }
 
   // Users

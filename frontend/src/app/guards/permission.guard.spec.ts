@@ -32,7 +32,7 @@ describe('PermissionGuard', () => {
     });
 
     const route: any = { data: { anyPermission: [PERMISSIONS.CUSTOMERS_VIEW, PERMISSIONS.CUSTOMERS_EDIT] } };
-    const result = guard.canActivate(route, { url: '/customers' } as any);
+    const result = guard.canActivate(route, { url: '/shop-clients' } as any);
 
     expect(result).toBeTrue();
   });

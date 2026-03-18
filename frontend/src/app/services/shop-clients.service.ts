@@ -7,7 +7,7 @@ import { Customer, CustomerNote, CustomerPricingRule } from '../models/customer.
 @Injectable({
   providedIn: 'root'
 })
-export class CustomerService {
+export class ShopClientsService {
   private baseUrl = environment.apiUrl;
 
   constructor(private http: HttpClient) {}
@@ -21,43 +21,43 @@ export class CustomerService {
         }
       });
     }
-    return this.http.get(`${this.baseUrl}/customers`, { params: httpParams });
+    return this.http.get(`${this.baseUrl}/shop-clients`, { params: httpParams });
   }
 
   getCustomer(id: string): Observable<any> {
-    return this.http.get(`${this.baseUrl}/customers/${id}`);
+    return this.http.get(`${this.baseUrl}/shop-clients/${id}`);
   }
 
   createCustomer(payload: Partial<Customer>): Observable<any> {
-    return this.http.post(`${this.baseUrl}/customers`, payload);
+    return this.http.post(`${this.baseUrl}/shop-clients`, payload);
   }
 
   updateCustomer(id: string, payload: Partial<Customer>): Observable<any> {
-    return this.http.put(`${this.baseUrl}/customers/${id}`, payload);
+    return this.http.put(`${this.baseUrl}/shop-clients/${id}`, payload);
   }
 
   setStatus(id: string, status: 'ACTIVE' | 'INACTIVE'): Observable<any> {
-    return this.http.patch(`${this.baseUrl}/customers/${id}/status`, { status });
+    return this.http.patch(`${this.baseUrl}/shop-clients/${id}/status`, { status });
   }
 
   deleteCustomer(id: string): Observable<any> {
-    return this.http.delete(`${this.baseUrl}/customers/${id}`);
+    return this.http.delete(`${this.baseUrl}/shop-clients/${id}`);
   }
 
   getNotes(customerId: string): Observable<any> {
-    return this.http.get(`${this.baseUrl}/customers/${customerId}/notes`);
+    return this.http.get(`${this.baseUrl}/shop-clients/${customerId}/notes`);
   }
 
   addNote(customerId: string, note: Partial<CustomerNote>): Observable<any> {
-    return this.http.post(`${this.baseUrl}/customers/${customerId}/notes`, note);
+    return this.http.post(`${this.baseUrl}/shop-clients/${customerId}/notes`, note);
   }
 
   getPricing(customerId: string): Observable<any> {
-    return this.http.get(`${this.baseUrl}/customers/${customerId}/pricing`);
+    return this.http.get(`${this.baseUrl}/shop-clients/${customerId}/pricing`);
   }
 
   updatePricing(customerId: string, payload: CustomerPricingRule): Observable<any> {
-    return this.http.put(`${this.baseUrl}/customers/${customerId}/pricing`, payload);
+    return this.http.put(`${this.baseUrl}/shop-clients/${customerId}/pricing`, payload);
   }
 
   getWorkOrders(customerId: string, params?: any): Observable<any> {
@@ -69,7 +69,7 @@ export class CustomerService {
         }
       });
     }
-    return this.http.get(`${this.baseUrl}/customers/${customerId}/work-orders`, { params: httpParams });
+    return this.http.get(`${this.baseUrl}/shop-clients/${customerId}/work-orders`, { params: httpParams });
   }
 
   getServiceHistory(customerId: string, params?: any): Observable<any> {
@@ -81,7 +81,7 @@ export class CustomerService {
         }
       });
     }
-    return this.http.get(`${this.baseUrl}/customers/${customerId}/service-history`, { params: httpParams });
+    return this.http.get(`${this.baseUrl}/shop-clients/${customerId}/service-history`, { params: httpParams });
   }
 
   getVehicles(customerId: string, params?: any): Observable<any> {
@@ -93,17 +93,17 @@ export class CustomerService {
         }
       });
     }
-    return this.http.get(`${this.baseUrl}/customers/${customerId}/vehicles`, { params: httpParams });
+    return this.http.get(`${this.baseUrl}/shop-clients/${customerId}/vehicles`, { params: httpParams });
   }
 
   // Bulk Upload Methods
   downloadUploadTemplate(): Observable<Blob> {
-    return this.http.get(`${this.baseUrl}/customers/bulk-upload/template`, { responseType: 'blob' });
+    return this.http.get(`${this.baseUrl}/shop-clients/bulk-upload/template`, { responseType: 'blob' });
   }
 
   bulkUploadCustomers(file: File): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
-    return this.http.post(`${this.baseUrl}/customers/bulk-upload`, formData);
+    return this.http.post(`${this.baseUrl}/shop-clients/bulk-upload`, formData);
   }
 }

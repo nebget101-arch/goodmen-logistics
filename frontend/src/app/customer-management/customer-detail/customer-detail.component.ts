@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, FormGroup } from '@angular/forms';
-import { CustomerService } from '../../services/customer.service';
+import { ShopClientsService } from '../../services/shop-clients.service';
 import { InvoiceService } from '../../services/invoice.service';
 import { CreditService } from '../../services/credit.service';
 import { ApiService } from '../../services/api.service';
@@ -67,7 +67,7 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private customerService: CustomerService,
+    private customerService: ShopClientsService,
     private invoiceService: InvoiceService,
     private creditService: CreditService,
     private fb: FormBuilder,
@@ -113,7 +113,7 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
         }
       },
       error: () => {
-        this.error = 'Failed to load customer';
+        this.error = 'Failed to load shop client';
         this.loading = false;
       }
     });
@@ -191,7 +191,7 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
 
   addCustomerVehicle(): void {
     if (!this.canCreateCustomerVehicle()) {
-      this.newVehicleError = 'You do not have permission to add customer vehicles.';
+      this.newVehicleError = 'You do not have permission to add shop client vehicles.';
       return;
     }
     if (!this.customer?.id) return;
@@ -199,7 +199,7 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
     this.newVehicleSuccess = '';
     const payload = {
       ...this.newVehicle,
-      customer_id: this.customer.id
+      shop_client_id: this.customer.id
     };
     if (!payload.vin) {
       this.newVehicleError = 'VIN is required.';
@@ -333,11 +333,11 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
 
   editCustomer(): void {
     if (!this.canEditCustomer()) {
-      this.error = 'You do not have permission to edit customers.';
+      this.error = 'You do not have permission to edit shop clients.';
       return;
     }
     if (!this.customer?.id) return;
-    this.router.navigate(['/customers', this.customer.id, 'edit']);
+    this.router.navigate(['/shop-clients', this.customer.id, 'edit']);
   }
 
   savePricingRules(): void {

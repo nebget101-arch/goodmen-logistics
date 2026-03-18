@@ -59,7 +59,7 @@ const adjustmentsRouter = require('@goodmen/shared/routes/adjustments');
 const cycleCountsRouter = require('@goodmen/shared/routes/cycle-counts');
 const receivingRouter = require('@goodmen/shared/routes/receiving');
 const barcodesRouter = require('@goodmen/shared/routes/barcodes');
-const customersRouter = require('@goodmen/shared/routes/customers');
+const shopClientsRouter = require('@goodmen/shared/routes/shop-clients');
 const customerBulkUploadRouter = require('@goodmen/shared/routes/customer-bulk-upload');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
@@ -76,8 +76,8 @@ app.use('/api/adjustments', authMiddleware, tenantContextMiddleware, requirePart
 app.use('/api/cycle-counts', authMiddleware, tenantContextMiddleware, requirePartsPlan, cycleCountsRouter);
 app.use('/api/receiving', authMiddleware, tenantContextMiddleware, requireReceivingPlan, receivingRouter);
 app.use('/api/barcodes', authMiddleware, tenantContextMiddleware, requireBarcodesPlan, barcodesRouter);
-app.use('/api/customers', authMiddleware, tenantContextMiddleware, customerBulkUploadRouter);
-app.use('/api/customers', authMiddleware, tenantContextMiddleware, customersRouter);
+app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, customerBulkUploadRouter);
+app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, shopClientsRouter);
 
 /**
  * @openapi
