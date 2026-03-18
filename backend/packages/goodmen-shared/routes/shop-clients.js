@@ -2,21 +2,14 @@ const express = require('express');
 const axios = require('axios');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
+const { loadUserRbac, requirePermission } = require('../middleware/rbac-middleware');
 const dtLogger = require('../utils/logger');
 const customersService = require('../services/customers.service');
 
-function requireRole(allowedRoles) {
-  return (req, res, next) => {
-    const role = req.user?.role || 'technician';
-    if (!allowedRoles.includes(role)) {
-      return res.status(403).json({ error: 'Forbidden: insufficient role' });
-    }
-    next();
-  };
-}
+const rbac = [authMiddleware, loadUserRbac];
 
 // FMCSA lookup
-router.get('/fmcsainfo/:dot', authMiddleware, async (req, res) => {
+router.get('/fmcsainfo/:dot', ...rbac, requirePermission('shop_clients.read'), async (req, res) => {
   try {
     const url = `https://mobile.fmcsa.dot.gov/qc/services/carriers/${req.params.dot}?webKey=94c7ff4bde4f4531bec510f7d3c4100d99f02350`;
     const response = await axios.get(url);
@@ -38,8 +31,7 @@ router.get('/fmcsainfo/:dot', authMiddleware, async (req, res) => {
 });
 
 // POST /api/shop-clients
-// shop_clerk and shop_manager may create shop clients (shop operations).
-router.post('/', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
+router.post('/', ...rbac, requirePermission('shop_clients.write'), async (req, res) => {
   try {
     const { customer, errors } = await customersService.createCustomer(req.body, req.user?.id);
     if (errors) return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -51,7 +43,7 @@ router.post('/', authMiddleware, requireRole(['admin', 'service_advisor', 'accou
 });
 
 // GET /api/shop-clients
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', ...rbac, requirePermission('shop_clients.read'), async (req, res) => {
   try {
     const { search, type, status, locationId, page, pageSize, dot, paymentTerms } = req.query;
     const result = await customersService.listCustomers({ search, type, status, locationId, page, pageSize, dot, paymentTerms });
@@ -63,7 +55,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // GET /api/shop-clients/:id
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', ...rbac, requirePermission('shop_clients.read'), async (req, res) => {
   try {
     const data = await customersService.getCustomerById(req.params.id);
     if (!data) return res.status(404).json({ error: 'Shop client not found' });
@@ -75,7 +67,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/shop-clients/:id
-router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
+router.put('/:id', ...rbac, requirePermission('shop_clients.write'), async (req, res) => {
   try {
     const { customer, errors, error } = await customersService.updateCustomer(req.params.id, req.body, req.user?.id);
     if (errors) return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -88,8 +80,7 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'acc
 });
 
 // PATCH /api/shop-clients/:id/status
-// shop_manager can change shop client status; shop_clerk cannot.
-router.patch('/:id/status', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'service_writer']), async (req, res) => {
+router.patch('/:id/status', ...rbac, requirePermission('shop_clients.write'), async (req, res) => {
   try {
     const { status } = req.body;
     const { customer, error } = await customersService.setCustomerStatus(req.params.id, status, req.user?.id);
@@ -102,7 +93,7 @@ router.patch('/:id/status', authMiddleware, requireRole(['admin', 'service_advis
 });
 
 // DELETE /api/shop-clients/:id (soft delete)
-router.delete('/:id', authMiddleware, requireRole(['admin']), async (req, res) => {
+router.delete('/:id', ...rbac, requirePermission('shop_clients.write'), async (req, res) => {
   try {
     const { customer, error } = await customersService.softDeleteCustomer(req.params.id, req.user?.id);
     if (error) return res.status(404).json({ error });
@@ -114,7 +105,7 @@ router.delete('/:id', authMiddleware, requireRole(['admin']), async (req, res) =
 });
 
 // Notes
-router.post('/:id/notes', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
+router.post('/:id/notes', ...rbac, requirePermission('shop_clients.write'), async (req, res) => {
   try {
     const { note, error } = await customersService.addNote(req.params.id, req.body, req.user?.id);
     if (error) return res.status(400).json({ error });
@@ -125,7 +116,7 @@ router.post('/:id/notes', authMiddleware, requireRole(['admin', 'service_advisor
   }
 });
 
-router.get('/:id/notes', authMiddleware, async (req, res) => {
+router.get('/:id/notes', ...rbac, requirePermission('shop_clients.read'), async (req, res) => {
   try {
     const notes = await customersService.getNotes(req.params.id);
     res.json({ success: true, data: notes });
@@ -136,7 +127,7 @@ router.get('/:id/notes', authMiddleware, async (req, res) => {
 });
 
 // Pricing
-router.get('/:id/pricing', authMiddleware, async (req, res) => {
+router.get('/:id/pricing', ...rbac, requirePermission('shop_clients.read'), async (req, res) => {
   try {
     const data = await customersService.getCustomerById(req.params.id);
     if (!data) return res.status(404).json({ error: 'Shop client not found' });
@@ -147,7 +138,7 @@ router.get('/:id/pricing', authMiddleware, async (req, res) => {
   }
 });
 
-router.put('/:id/pricing', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
+router.put('/:id/pricing', ...rbac, requirePermission('shop_clients.write'), async (req, res) => {
   try {
     const pricing = await customersService.upsertPricingRules(req.params.id, req.body, req.user?.id);
     res.json({ success: true, data: pricing });
@@ -158,7 +149,7 @@ router.put('/:id/pricing', authMiddleware, requireRole(['admin', 'accounting']),
 });
 
 // History
-router.get('/:id/work-orders', authMiddleware, async (req, res) => {
+router.get('/:id/work-orders', ...rbac, requirePermission('shop_clients.read'), async (req, res) => {
   try {
     const { status, from, to, page, pageSize } = req.query;
     const result = await customersService.getCustomerWorkOrders(req.params.id, { status, from, to, page, pageSize });
@@ -169,7 +160,7 @@ router.get('/:id/work-orders', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/:id/service-history', authMiddleware, async (req, res) => {
+router.get('/:id/service-history', ...rbac, requirePermission('shop_clients.read'), async (req, res) => {
   try {
     const { from, to, page, pageSize } = req.query;
     const result = await customersService.getCustomerServiceHistory(req.params.id, { from, to, page, pageSize });
@@ -180,7 +171,7 @@ router.get('/:id/service-history', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/:id/vehicles', authMiddleware, async (req, res) => {
+router.get('/:id/vehicles', ...rbac, requirePermission('shop_clients.read'), async (req, res) => {
   try {
     const { page, pageSize } = req.query;
     const result = await customersService.getCustomerVehicles(req.params.id, { page, pageSize });
