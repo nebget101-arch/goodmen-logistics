@@ -111,6 +111,7 @@ app.use('/api/settlements', authMiddleware, tenantContextMiddleware, requireSett
 app.use('/api', authMiddleware, tenantContextMiddleware, requireLeaseFinancingPlan, leaseFinancingRouter);
 app.use('/api', authMiddleware, tenantContextMiddleware, requireIftaPlan, iftaRouter);
 app.use('/api/expense-payment-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
+app.use('/api/expense-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
 
 /**
  * @openapi

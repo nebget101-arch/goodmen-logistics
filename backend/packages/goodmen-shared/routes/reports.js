@@ -1360,12 +1360,13 @@ async function buildExpenses(req, filters) {
 	const rows = (await db.raw(`
 		WITH adjustments AS (
 			SELECT
-				COALESCE(epc.name, sai.description, 'Uncategorized') AS category,
+				COALESCE(epc.name, gec.name, sai.description, 'Uncategorized') AS category,
 				'settlement_adjustment' AS source,
 				COUNT(*)::int AS expense_count,
 				COALESCE(SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END), 0)::numeric AS total_amount
 			FROM settlement_adjustment_items sai
 			LEFT JOIN expense_payment_categories epc ON epc.id = sai.category_id
+			LEFT JOIN global_expense_categories gec ON gec.id = sai.category_id
 			JOIN settlements s ON s.id = sai.settlement_id
 			JOIN payroll_periods pp ON pp.id = s.payroll_period_id
 			WHERE pp.period_end BETWEEN ? AND ?

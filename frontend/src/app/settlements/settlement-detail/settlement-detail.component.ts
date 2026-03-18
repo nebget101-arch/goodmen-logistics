@@ -739,6 +739,14 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
     return isRevenue ? this.revenueCategories : this.expenseCategories;
   }
 
+  get filteredStandardCategories(): ExpensePaymentCategory[] {
+    return this.filteredCategories.filter(category => category.source === 'global');
+  }
+
+  get filteredCustomCategories(): ExpensePaymentCategory[] {
+    return this.filteredCategories.filter(category => category.source !== 'global');
+  }
+
   onCategorySearchFocus(): void {
     this.showCategoryDropdown = true;
     this.filterCategories();
@@ -816,6 +824,8 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
 
     this.categoriesService.createCategory(categoryData).subscribe({
       next: (newCategory) => {
+        newCategory.source = 'custom';
+
         // Add to appropriate list
         if (isRevenue) {
           this.revenueCategories.push(newCategory);
