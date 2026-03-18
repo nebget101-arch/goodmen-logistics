@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { LoadsService } from '../../services/loads.service';
 import { ApiService } from '../../services/api.service';
 import { LoadListItem } from '../../models/load-dashboard.model';
+import { ReferenceDataService, StatusCode } from '../../services/reference-data.service';
 
 interface DriverRow {
   id: string | null;
@@ -64,7 +65,10 @@ export class DispatchBoardComponent implements OnInit {
   ];
 
   loadStatusFilter: string = '';
-  loadStatusOptions = ['', 'DELIVERED', 'EN_ROUTE', 'IN_TRANSIT', 'DISPATCHED', 'PICKED_UP', 'NEW'];
+  loadStatusOptions: StatusCode[] = [];
+
+  private loadStatusMap = new Map<string, StatusCode>();
+  private billingStatusMap = new Map<string, StatusCode>();
 
   driverFilterId: string | null = null;
   driverFilterOpen = false;
@@ -81,7 +85,8 @@ export class DispatchBoardComponent implements OnInit {
     private loadsService: LoadsService,
     private apiService: ApiService,
     private router: Router,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private referenceDataService: ReferenceDataService
   ) {}
 
   get days(): DayColumn[] {
@@ -275,7 +280,96 @@ export class DispatchBoardComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadCustomFilters();
+    this.loadReferenceData();
     this.loadData();
+  }
+
+  private loadReferenceData(): void {
+    this.referenceDataService.getLoadStatusCodes().subscribe({
+      next: (rows) => {
+        this.loadStatusOptions = this.dedupeByNormalizedCode(rows);
+        this.loadStatusMap = this.buildStatusMap(rows);
+      }
+    });
+
+    this.referenceDataService.getBillingStatusCodes().subscribe({
+      next: (rows) => {
+        this.billingStatusMap = this.buildStatusMap(rows);
+      }
+    });
+  }
+
+  private dedupeByNormalizedCode(rows: StatusCode[]): StatusCode[] {
+    const seen = new Set<string>();
+    const out: StatusCode[] = [];
+    for (const row of rows || []) {
+      const key = this.normalizeStatusCode(row.code);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+    return out;
+  }
+
+  private buildStatusMap(rows: StatusCode[]): Map<string, StatusCode> {
+    const map = new Map<string, StatusCode>();
+    for (const row of rows || []) {
+      const key = this.normalizeStatusCode(row.code);
+      if (!map.has(key)) {
+        map.set(key, row);
+      }
+    }
+    return map;
+  }
+
+  private normalizeStatusCode(value: string | null | undefined): string {
+    return (value || '').toString().trim().toUpperCase().replace(/[\s-]+/g, '_');
+  }
+
+  private hexToRgb(hex: string | null | undefined): { r: number; g: number; b: number } | null {
+    const normalized = (hex || '').toString().trim().replace(/^#/, '');
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return null;
+    return {
+      r: parseInt(normalized.slice(0, 2), 16),
+      g: parseInt(normalized.slice(2, 4), 16),
+      b: parseInt(normalized.slice(4, 6), 16)
+    };
+  }
+
+  getLoadStatusLabel(status: string | null | undefined): string {
+    const normalized = this.normalizeStatusCode(status);
+    return this.loadStatusMap.get(normalized)?.display_label || normalized.replace(/_/g, ' ') || 'Unknown';
+  }
+
+  getLoadStatusBadgeStyle(status: string | null | undefined): Record<string, string> {
+    const normalized = this.normalizeStatusCode(status);
+    const color = this.loadStatusMap.get(normalized)?.color_hex || '64748B';
+    const rgb = this.hexToRgb(color);
+    if (!rgb) return {};
+    return {
+      background: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.18)`,
+      border: `1px solid rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`,
+      color: `#${color}`
+    };
+  }
+
+  getLoadCardStyle(load: LoadListItem): Record<string, string> {
+    const statusCode = this.normalizeStatusCode(load.status);
+    const billingCode = this.normalizeStatusCode(load.billing_status);
+    const statusColor = this.loadStatusMap.get(statusCode)?.color_hex || '64748B';
+    const billingColor = this.billingStatusMap.get(billingCode)?.color_hex || null;
+    const statusRgb = this.hexToRgb(statusColor);
+    const billingRgb = this.hexToRgb(billingColor || '');
+
+    const styles: Record<string, string> = {};
+    if (statusRgb) {
+      styles['background'] = `rgba(${statusRgb.r}, ${statusRgb.g}, ${statusRgb.b}, 0.20)`;
+      styles['border-color'] = `rgba(${statusRgb.r}, ${statusRgb.g}, ${statusRgb.b}, 0.45)`;
+    }
+    if (billingRgb) {
+      styles['box-shadow'] = `inset 3px 0 0 rgba(${billingRgb.r}, ${billingRgb.g}, ${billingRgb.b}, 0.95)`;
+    }
+    return styles;
   }
 
   private loadCustomFilters(): void {

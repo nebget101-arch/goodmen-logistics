@@ -72,6 +72,7 @@ const settlementsRouter = require(path.join(sharedRoot, 'routes', 'settlements')
 const leaseFinancingRouter = require(path.join(sharedRoot, 'routes', 'lease-financing'));
 const iftaRouter = require(path.join(sharedRoot, 'routes', 'ifta'));
 const expensePaymentCategoriesRouter = require(path.join(sharedRoot, 'routes', 'expense-payment-categories'));
+const referenceRouter = require(path.join(sharedRoot, 'routes', 'reference'));
 const authMiddleware = require(path.join(sharedRoot, 'middleware', 'auth-middleware'));
 const tenantContextMiddleware = require(path.join(sharedRoot, 'middleware', 'tenant-context-middleware'));
 const requirePlanAccess = require(path.join(sharedRoot, 'middleware', 'plan-access-middleware'));
@@ -112,6 +113,7 @@ app.use('/api', authMiddleware, tenantContextMiddleware, requireLeaseFinancingPl
 app.use('/api', authMiddleware, tenantContextMiddleware, requireIftaPlan, iftaRouter);
 app.use('/api/expense-payment-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
 app.use('/api/expense-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
+app.use('/api/reference', authMiddleware, tenantContextMiddleware, referenceRouter);
 
 /**
  * @openapi
