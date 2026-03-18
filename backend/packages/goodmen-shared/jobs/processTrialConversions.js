@@ -1,8 +1,8 @@
 'use strict';
 
 const { knex } = require('../internal/db');
-const stripeService = require('./stripeService');
-const trialService = require('./trialService');
+const stripeService = require('../services/stripeService');
+const trialService = require('../services/trialService');
 const dtLogger = require('../utils/logger');
 
 /**

@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const stripeWebhookRouter = require('../routes/stripe');
+const stripeWebhookRouter = require('./routes/stripe');
 
 const app = express();
 
