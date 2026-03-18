@@ -395,7 +395,7 @@ async function getCustomerVehicles(customerId, { page = 1, pageSize = 20 } = {})
       all_vehicles.status,
       all_vehicles.mileage,
       all_vehicles.created_at,
-      all_vehicles.source
+      all_vehicles.vehicle_source
     FROM all_vehicles
     WHERE shop_client_id = ?
     ORDER BY all_vehicles.created_at DESC
