@@ -5,6 +5,7 @@ import { ApiService } from './services/api.service';
 import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.service';
 import { AccessControlService } from './services/access-control.service';
 import { OperatingEntityContextService } from './services/operating-entity-context.service';
+import { ReferenceDataService } from './services/reference-data.service';
 import { NAV_TOP_LINKS, NAV_SECTIONS, NavSection, NavLink } from './config/nav.config';
 import { PERMISSIONS } from './models/access-control.model';
 
@@ -47,11 +48,16 @@ export class AppComponent implements OnInit {
     private apiService: ApiService,
     private aiChatService: AiChatService,
     public access: AccessControlService,
-    public operatingEntityContext: OperatingEntityContextService
+    public operatingEntityContext: OperatingEntityContextService,
+    private referenceDataService: ReferenceDataService
   ) {}
 
   isLoggedIn(): boolean {
     return !!localStorage.getItem('token');
+  }
+
+  showAllEntitiesOption(): boolean {
+    return this.access.hasRole('admin');
   }
 
   isAuthTransitioning(): boolean {
@@ -172,6 +178,7 @@ export class AppComponent implements OnInit {
   onOperatingEntityChange(rawId: string): void {
     const selectedId = (rawId || '').toString().trim();
     if (!selectedId) return;
+    if (selectedId.toLowerCase() === 'all' && !this.showAllEntitiesOption()) return;
     this.operatingEntityContext.selectOperatingEntity(selectedId);
   }
 
@@ -213,6 +220,11 @@ export class AppComponent implements OnInit {
     }
     if (this.isLoggedIn()) {
       this.access.loadAccess().subscribe();
+      this.referenceDataService.preload().subscribe({
+        error: () => {
+          // Non-blocking preload; dispatch board and other screens can retry on demand.
+        }
+      });
     }
     this.operatingEntityContext.bootstrapFromSessionIfNeeded(this.isLoggedIn());
   }

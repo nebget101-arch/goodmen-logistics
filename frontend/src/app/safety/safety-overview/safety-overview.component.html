@@ -4,24 +4,24 @@
 <ng-container *ngIf="!loading && overview">
   <!-- KPI cards -->
   <div class="kpi-row">
-    <div class="kpi-card kpi-danger" [class.kpi-warn]="overview!.openIncidents > 0" (click)="goToAccidents()" style="cursor:pointer">
+    <button type="button" class="kpi-card kpi-danger" [class.kpi-warn]="overview!.openIncidents > 0" (click)="goToAccidents()" style="cursor:pointer">
       <span class="material-symbols-outlined kpi-icon">car_crash</span>
       <span class="kpi-label">Open Incidents</span>
       <span class="kpi-value">{{ overview!.openIncidents }}</span>
       <span class="kpi-sub">Click to view all</span>
-    </div>
-    <div class="kpi-card" [class.kpi-warn]="overview!.openClaims > 0" (click)="goToClaims()" style="cursor:pointer">
+    </button>
+    <button type="button" class="kpi-card" [class.kpi-warn]="overview!.openClaims > 0" (click)="goToClaims()" style="cursor:pointer">
       <span class="material-symbols-outlined kpi-icon">description</span>
       <span class="kpi-label">Open Claims</span>
       <span class="kpi-value">{{ overview!.openClaims }}</span>
       <span class="kpi-sub">Click to view all</span>
-    </div>
-    <div class="kpi-card" [class.kpi-warn]="overview!.overdueFollowUps > 0" (click)="goToTasks()" style="cursor:pointer">
+    </button>
+    <button type="button" class="kpi-card" [class.kpi-warn]="overview!.overdueFollowUps > 0" (click)="goToTasks()" style="cursor:pointer">
       <span class="material-symbols-outlined kpi-icon">event_busy</span>
       <span class="kpi-label">Overdue Follow-ups</span>
       <span class="kpi-value">{{ overview!.overdueFollowUps }}</span>
       <span class="kpi-sub">Click to manage tasks</span>
-    </div>
+    </button>
     <div class="kpi-card">
       <span class="material-symbols-outlined kpi-icon">trending_down</span>
       <span class="kpi-label">Total Est. Loss</span>
@@ -44,6 +44,31 @@
     <button type="button" class="btn btn-secondary" (click)="load()">
       <span class="material-symbols-outlined">refresh</span> Refresh
     </button>
+  </div>
+
+  <div class="info-panels" *ngIf="(overview!.openIncidentsByOperatingEntity?.length || 0) > 0 || (overview!.openClaimsByOperatingEntity?.length || 0) > 0">
+    <div class="info-panel" *ngIf="(overview!.openIncidentsByOperatingEntity?.length || 0) > 0">
+      <h3>Open Incidents by Operating Entity</h3>
+      <div class="nav-quick-links">
+        <button
+          type="button"
+          class="nav-quick-link"
+          *ngFor="let row of overview!.openIncidentsByOperatingEntity"
+          (click)="goToEntityAccidents(row.operating_entity_id)">
+          <span class="material-symbols-outlined">apartment</span>
+          <span>{{ row.operating_entity_name }} ({{ row.count }})</span>
+        </button>
+      </div>
+    </div>
+    <div class="info-panel" *ngIf="(overview!.openClaimsByOperatingEntity?.length || 0) > 0">
+      <h3>Open Claims by Operating Entity</h3>
+      <ul class="ref-list">
+        <li *ngFor="let row of overview!.openClaimsByOperatingEntity">
+          <span class="material-symbols-outlined">apartment</span>
+          <span>{{ row.operating_entity_name }} — {{ row.count }}</span>
+        </li>
+      </ul>
+    </div>
   </div>
 
   <!-- Info panels -->

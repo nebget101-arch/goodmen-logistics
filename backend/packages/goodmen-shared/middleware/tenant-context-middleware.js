@@ -154,10 +154,25 @@ function createTenantContextMiddleware({ knexClient = knex, logger = dtLogger } 
         }
       }
 
-      const requestedEntityId = (req.headers['x-operating-entity-id'] || '').toString().trim() || null;
-      let operatingEntityId = requestedEntityId || defaultEntityId;
+      const requestedEntityIdHeader = (req.headers['x-operating-entity-id'] || '').toString().trim() || null;
+      const requestedEntityIdQuery = (req.query?.operating_entity_id || '').toString().trim() || null;
+      const requestedEntityId = requestedEntityIdHeader || requestedEntityIdQuery || null;
+      const requestedAllEntities = requestedEntityId?.toLowerCase() === 'all';
 
-      if (requestedEntityId && !allowedOperatingEntityIds.includes(requestedEntityId)) {
+      const isTenantAdmin = isGlobalAdmin
+        ? true
+        : await isTenantAdminUser(knexClient, userId, req.user?.role, tenantId).catch(() => false);
+
+      if (requestedAllEntities && !isTenantAdmin) {
+        res.setHeader('X-Debug-Tenant', tenantId);
+        res.setHeader('X-Debug-User', userId);
+        res.setHeader('X-Debug-Requested-Operating-Entity', requestedEntityId);
+        return res.status(403).json({ error: 'Forbidden: operating_entity_id=all is allowed only for admin users' });
+      }
+
+      let operatingEntityId = requestedAllEntities ? null : (requestedEntityId || defaultEntityId);
+
+      if (requestedEntityId && !requestedAllEntities && !allowedOperatingEntityIds.includes(requestedEntityId)) {
         res.setHeader('X-Debug-Tenant', tenantId);
         res.setHeader('X-Debug-User', userId);
         res.setHeader('X-Debug-Requested-Operating-Entity', requestedEntityId);
@@ -166,7 +181,7 @@ function createTenantContextMiddleware({ knexClient = knex, logger = dtLogger } 
         return res.status(403).json({ error: 'Forbidden: operating entity not allowed' });
       }
 
-      if (!operatingEntityId) {
+      if (!operatingEntityId && !requestedAllEntities) {
         const configuredEntityAssignments = await countConfiguredEntityAssignments(knexClient, userId, tenantId);
         if (configuredEntityAssignments > 0) {
           res.setHeader('X-Debug-Tenant', tenantId);
@@ -199,7 +214,8 @@ function createTenantContextMiddleware({ knexClient = knex, logger = dtLogger } 
         tenantId,
         operatingEntityId,
         allowedOperatingEntityIds,
-        isGlobalAdmin: !!isGlobalAdmin
+        isGlobalAdmin: !!isGlobalAdmin,
+        isAllOperatingEntities: !!requestedAllEntities
       };
 
       return next();

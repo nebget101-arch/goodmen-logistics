@@ -495,7 +495,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
 
   selectVehicle(vehicle: any): void {
     this.workOrder.vehicleId = vehicle.id;
-    const ownership = vehicle.source === 'customer' || vehicle.company_owned === false ? 'Customer' : 'Internal';
+    const ownership = vehicle.vehicle_source === 'shop_client' || vehicle.company_owned === false ? 'Customer' : 'Internal';
     this.vehicleSearch = `${vehicle.unit_number || vehicle.unitNumber} - ${vehicle.vin} (${ownership})`;
     this.showVehicleDropdown = false;
     this.onVehicleSelect();
@@ -801,7 +801,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
       this.workOrder.vehicleStatus = vehicle.status;
 
       // Auto-assign customer based on vehicle ownership
-      const isCompanyOwned = vehicle.source === 'internal' || vehicle.is_company_owned === true || vehicle.company_owned === true;
+      const isCompanyOwned = vehicle.vehicle_source === 'fleet' || vehicle.is_company_owned === true || vehicle.company_owned === true;
       
       if (isCompanyOwned) {
         // Find and assign Internal customer

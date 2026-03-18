@@ -21,6 +21,7 @@ export interface OperatingEntityContextState {
 }
 
 const STORAGE_SELECTED_ID = 'selectedOperatingEntityId';
+const ALL_ENTITIES_SENTINEL = 'all';
 const LEGACY_STORAGE_KEYS = ['operatingEntityId', 'activeOperatingEntityId', 'selectedCompanyId', 'selectedOperatingEntity'];
 const DEFAULT_OPERATING_ENTITY_NAME_CANDIDATES = [
   'fleetneuron default operating entity',
@@ -107,6 +108,17 @@ export class OperatingEntityContextService {
     const id = (operatingEntityId || '').trim() || null;
     const entities = this.snapshot.accessibleOperatingEntities || [];
     if (!id) return;
+
+    if (id.toLowerCase() === ALL_ENTITIES_SENTINEL) {
+      localStorage.setItem(STORAGE_SELECTED_ID, ALL_ENTITIES_SENTINEL);
+      this.state$.next({
+        ...this.snapshot,
+        selectedOperatingEntityId: ALL_ENTITIES_SENTINEL,
+        selectedOperatingEntity: { id: ALL_ENTITIES_SENTINEL, name: 'All Entities' }
+      });
+      return;
+    }
+
     const found = entities.find((entity) => entity.id === id);
     if (!found) return;
 
@@ -235,7 +247,10 @@ export class OperatingEntityContextService {
       return DEFAULT_OPERATING_ENTITY_NAME_CANDIDATES.includes(normalized);
     }) || null;
 
-    const selected = byCandidateId || byDefaultFlag || byDefaultName || entities[0] || null;
+    const selectedAll = (selectedCandidate || '').toLowerCase() === ALL_ENTITIES_SENTINEL;
+    const selected = selectedAll
+      ? ({ id: ALL_ENTITIES_SENTINEL, name: 'All Entities' } as OperatingEntityOption)
+      : (byCandidateId || byDefaultFlag || byDefaultName || entities[0] || null);
 
     if (selected?.id) {
       localStorage.setItem(STORAGE_SELECTED_ID, selected.id);

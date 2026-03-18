@@ -260,12 +260,32 @@
           
           <!-- Dropdown Results -->
           <div class="category-dropdown" *ngIf="showCategoryDropdown && !isCreatingCategory">
-            <div class="category-dropdown-item" 
-                 *ngFor="let cat of filteredCategories"
-                 (mousedown)="selectCategory(cat)"
-                 [class.indent]="cat.parent_code">
-              <span class="category-name">{{ cat.name }}</span>
-              <span class="category-code">#{{ cat.code }}</span>
+            <div class="category-dropdown-section" *ngIf="filteredStandardCategories.length > 0">
+              <div class="category-dropdown-section-label">Standard Categories</div>
+              <div class="category-dropdown-item" 
+                   *ngFor="let cat of filteredStandardCategories"
+                   (mousedown)="selectCategory(cat)"
+                   [class.indent]="cat.parent_code">
+                <span class="category-name">{{ cat.name }}</span>
+                <span class="category-meta">
+                  <span class="category-source-badge global">Standard</span>
+                  <span class="category-code">#{{ cat.code }}</span>
+                </span>
+              </div>
+            </div>
+
+            <div class="category-dropdown-section" *ngIf="filteredCustomCategories.length > 0">
+              <div class="category-dropdown-section-label">Custom Categories</div>
+              <div class="category-dropdown-item" 
+                   *ngFor="let cat of filteredCustomCategories"
+                   (mousedown)="selectCategory(cat)"
+                   [class.indent]="cat.parent_code">
+                <span class="category-name">{{ cat.name }}</span>
+                <span class="category-meta">
+                  <span class="category-source-badge custom">Custom</span>
+                  <span class="category-code">#{{ cat.code }}</span>
+                </span>
+              </div>
             </div>
             
             <div class="category-dropdown-item create-new" 

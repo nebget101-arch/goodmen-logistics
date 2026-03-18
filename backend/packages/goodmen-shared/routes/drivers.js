@@ -133,6 +133,8 @@ router.get('/', async (req, res) => {
       let sql = `
         SELECT
           d.id,
+          d.operating_entity_id,
+          oe.name AS operating_entity_name,
           d.first_name,
           d.last_name,
           d.email,
@@ -157,6 +159,7 @@ router.get('/', async (req, res) => {
         FROM drivers d
         LEFT JOIN driver_licenses dl ON dl.driver_id = d.id
         LEFT JOIN driver_compliance dc ON dc.driver_id = d.id
+        LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
       `;
       params.push(req.context?.tenantId || null);
       sql += ` WHERE d.tenant_id = $${params.length}`;
@@ -175,9 +178,11 @@ router.get('/', async (req, res) => {
       let sql = `
         SELECT
           d.*,
+          oe.name AS operating_entity_name,
           t.unit_number AS truck_unit_number,
           tr.unit_number AS trailer_unit_number
         FROM drivers d
+        LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
         LEFT JOIN all_vehicles t ON t.id = d.truck_id
         LEFT JOIN all_vehicles tr ON tr.id = d.trailer_id
       `;
@@ -196,20 +201,20 @@ router.get('/', async (req, res) => {
     } else {
       // Legacy/default view – keep existing behaviour for backward compatibility
       const params = [];
-      let sql = 'SELECT * FROM drivers';
+      let sql = 'SELECT d.*, oe.name AS operating_entity_name FROM drivers d LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id';
       if (hasStatus) {
         params.push(req.context?.tenantId || null);
         params.push(status);
-        sql += ` WHERE tenant_id = $${params.length - 1} AND LOWER(status) = $${params.length}`;
+        sql += ` WHERE d.tenant_id = $${params.length - 1} AND LOWER(d.status) = $${params.length}`;
       } else {
         params.push(req.context?.tenantId || null);
-        sql += ` WHERE tenant_id = $${params.length}`;
+        sql += ` WHERE d.tenant_id = $${params.length}`;
       }
       if (req.context?.operatingEntityId) {
         params.push(req.context.operatingEntityId);
-        sql += ` AND operating_entity_id = $${params.length}`;
+        sql += ` AND d.operating_entity_id = $${params.length}`;
       }
-      sql += ' ORDER BY created_at DESC';
+      sql += ' ORDER BY d.created_at DESC';
       result = await query(sql, params);
     }
 

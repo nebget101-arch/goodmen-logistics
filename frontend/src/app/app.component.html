@@ -52,6 +52,7 @@
           [value]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
           (change)="onOperatingEntityChange(($any($event.target)).value)"
         >
+          <option *ngIf="showAllEntitiesOption()" value="all">All Entities</option>
           <option
             *ngFor="let entity of operatingEntityContext.snapshot.accessibleOperatingEntities"
             [value]="entity.id"
@@ -114,6 +115,7 @@
           (change)="onOperatingEntityChange(($any($event.target)).value)"
           aria-label="Select company"
         >
+          <option *ngIf="showAllEntitiesOption()" value="all">All Entities</option>
           <option
             *ngFor="let entity of operatingEntityContext.snapshot.accessibleOperatingEntities"
             [value]="entity.id"

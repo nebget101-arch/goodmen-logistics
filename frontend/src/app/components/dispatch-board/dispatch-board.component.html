@@ -39,7 +39,7 @@
           <ng-container *ngFor="let f of customFilters">
             <button type="button" class="dropdown-option" (click)="setDriverFilter(f.id); driverFilterOpen = false">
               {{ f.name }}
-              <span class="material-symbols-outlined edit-icon" (click)="openFilterModal(f); $event.stopPropagation()">edit</span>
+              <span class="material-symbols-outlined edit-icon" aria-hidden="true">edit</span>
             </button>
           </ng-container>
           <button type="button" class="dropdown-option new-filter" (click)="openFilterModal(); driverFilterOpen = false">
@@ -51,22 +51,10 @@
         <span class="material-symbols-outlined">add</span>
         New Load
       </button>
-      <button
-        type="button"
-        class="chip"
-        [class.chip-active]="loadStatusFilter === 'DELIVERED'"
-        (click)="setLoadStatusFilter(loadStatusFilter === 'DELIVERED' ? '' : 'DELIVERED')"
-      >
-        Delivered
-      </button>
-      <button
-        type="button"
-        class="chip"
-        [class.chip-active]="loadStatusFilter === 'EN_ROUTE'"
-        (click)="setLoadStatusFilter(loadStatusFilter === 'EN_ROUTE' ? '' : 'EN_ROUTE')"
-      >
-        En Route
-      </button>
+      <select class="select-filter" [(ngModel)]="loadStatusFilter" (change)="setLoadStatusFilter(loadStatusFilter)">
+        <option value="">All Load Statuses</option>
+        <option *ngFor="let s of loadStatusOptions" [value]="s.code">{{ s.display_label }}</option>
+      </select>
       <input
         type="text"
         class="search-input"
@@ -117,13 +105,18 @@
             [style.grid-column]="getLoadSpan(load).startCol + ' / span ' + getLoadSpan(load).span"
             [style.grid-row]="1"
           >
-            <div
+            <button
+              type="button"
               [ngClass]="getLoadCardClass(load)"
+              [ngStyle]="getLoadCardStyle(load)"
               (click)="goToLoad(load)"
               class="load-card-inner load-card-span-inner"
               [attr.title]="getLoadTooltip(load)"
             >
-              <div class="load-card-id">#{{ load.load_number || load.id }}</div>
+              <div class="load-card-id">
+                #{{ load.load_number || load.id }}
+                <span class="status-badge" [ngStyle]="getLoadStatusBadgeStyle(load.status)">{{ getLoadStatusLabel(load.status) }}</span>
+              </div>
               <div class="load-card-row">
                 <span class="load-pickup">
                   {{ getLoadCardPickup(load) }}<span class="load-date" *ngIf="getLoadPickupDateMMDDYY(load)"> {{ getLoadPickupDateMMDDYY(load) }}</span>
@@ -133,7 +126,7 @@
                   {{ getLoadCardDelivery(load) }}<span class="load-date" *ngIf="getLoadDeliveryDateMMDDYY(load)"> {{ getLoadDeliveryDateMMDDYY(load) }}</span>
                 </span>
               </div>
-            </div>
+            </button>
             <div class="load-card-hover">
               <div class="hover-row" *ngIf="load.rate != null">Price: ${{ load.rate | number:'1.2-2' }}</div>
               <div class="hover-row">Pickup: {{ getLoadCardPickup(load) }}{{ load.pickup_zip ? ' ' + load.pickup_zip : '' }}</div>
@@ -154,8 +147,8 @@
   </div>
 
   <!-- Custom filter modal -->
-  <div class="modal-backdrop" *ngIf="showFilterModal" (click)="closeFilterModal()">
-    <div class="modal" (click)="$event.stopPropagation()">
+  <div class="modal-backdrop" *ngIf="showFilterModal" (mousedown)="closeFilterModal()">
+    <div class="modal" (mousedown)="$event.stopPropagation()">
       <div class="modal-header">
         <h2>Edit Dispatch board Filter</h2>
         <button type="button" class="btn-close" (click)="closeFilterModal()">×</button>

@@ -3,6 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { Subject, switchMap, takeUntil } from 'rxjs';
 import { ReportCard, ReportColumn, ReportFilters, ReportKey, ReportPageConfig } from '../../reports.models';
 import { ReportsService } from '../../services/reports.service';
+import { OperatingEntityContextService } from '../../../services/operating-entity-context.service';
 
 const REPORT_CONFIG: Record<ReportKey, ReportPageConfig> = {
   overview: {
@@ -134,16 +135,39 @@ const REPORT_CONFIG: Record<ReportKey, ReportPageConfig> = {
 })
 export class ReportViewComponent implements OnInit, OnDestroy {
   private readonly destroy$ = new Subject<void>();
+  private lastOperatingEntityId: string | null | undefined = undefined;
 
   config!: ReportPageConfig;
   isLoading = false;
+  isAllEntitiesMode = false;
   error = '';
   cards: ReportCard[] = [];
   rows: Record<string, unknown>[] = [];
+  reportSummary: Record<string, unknown> = {};
 
-  constructor(private route: ActivatedRoute, private reportsService: ReportsService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private reportsService: ReportsService,
+    private operatingEntityContext: OperatingEntityContextService
+  ) {}
 
   ngOnInit(): void {
+    this.operatingEntityContext.context$()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        if (!state.isLoaded) return;
+        const nextId = state.selectedOperatingEntityId || null;
+        this.isAllEntitiesMode = nextId === 'all';
+        if (this.lastOperatingEntityId === undefined) {
+          this.lastOperatingEntityId = nextId;
+          return;
+        }
+        if (this.lastOperatingEntityId !== nextId && this.config?.endpoint) {
+          this.lastOperatingEntityId = nextId;
+          this.fetchReport(this.getCurrentFilters());
+        }
+      });
+
     this.route.data
       .pipe(
         takeUntil(this.destroy$),
@@ -190,7 +214,16 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   }
 
   asColumns(): ReportColumn[] {
-    return this.config?.columns || [];
+    const baseColumns = this.config?.columns || [];
+    if (!this.isAllEntitiesMode) return baseColumns;
+    const hasEntityColumn = baseColumns.some((c) => c.key === 'operating_entity_name');
+    if (hasEntityColumn) return baseColumns;
+    return [{ key: 'operating_entity_name', label: 'Operating Entity' }, ...baseColumns];
+  }
+
+  operatingEntitySubtotals(): Array<{ operating_entity_name: string; subtotal: number }> {
+    const rows = (this.reportSummary?.['operatingEntitySubtotals'] as Array<{ operating_entity_name: string; subtotal: number }>) || [];
+    return Array.isArray(rows) ? rows : [];
   }
 
   format(value: unknown, type: ReportColumn['type']): string {
@@ -216,12 +249,14 @@ export class ReportViewComponent implements OnInit, OnDestroy {
       next: (resp) => {
         this.cards = resp.cards || [];
         this.rows = resp.data || [];
+        this.reportSummary = (resp.summary || {}) as Record<string, unknown>;
         this.isLoading = false;
       },
       error: (err) => {
         this.error = err?.error?.error || 'Unable to load report data.';
         this.rows = [];
         this.cards = [];
+        this.reportSummary = {};
         this.isLoading = false;
       }
     });

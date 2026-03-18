@@ -17,6 +17,7 @@ export interface ExpensePaymentCategory {
   value?: string;
   children?: ExpensePaymentCategory[];
   parent?: ExpensePaymentCategory;
+  source?: 'global' | 'custom';
   created_at?: string;
   updated_at?: string;
 }
@@ -44,7 +45,7 @@ export interface CategoryStats {
   providedIn: 'root'
 })
 export class ExpensePaymentCategoriesService {
-  private baseUrl = `${environment.apiUrl}/expense-payment-categories`;
+  private baseUrl = `${environment.apiUrl}/expense-categories`;
 
   constructor(private http: HttpClient) {}
 

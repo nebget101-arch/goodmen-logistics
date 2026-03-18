@@ -409,6 +409,7 @@ router.get('/', async (req, res) => {
       FROM loads l
       LEFT JOIN drivers d ON l.driver_id = d.id
       LEFT JOIN brokers b ON l.broker_id = b.id
+      LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id
       LEFT JOIN LATERAL (
         SELECT city, state, zip, stop_date
         FROM load_stops
@@ -471,6 +472,8 @@ router.get('/', async (req, res) => {
         COALESCE(b.legal_name, b.name, l.broker_name) as broker_name,
         l.po_number,
         l.notes,
+        l.operating_entity_id,
+        oe.name as operating_entity_name,
         COALESCE(att.attachment_count, 0) as attachment_count,
         COALESCE(att.attachment_types, ARRAY[]::text[]) as attachment_types
       ${baseSql}

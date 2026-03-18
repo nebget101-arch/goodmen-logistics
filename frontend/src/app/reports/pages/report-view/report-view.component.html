@@ -30,6 +30,16 @@
   <p class="error" *ngIf="error"><span class="material-symbols-outlined">error</span> {{ error }}</p>
   <p class="loading" *ngIf="isLoading">Loading {{ config.title }}...</p>
 
+  <div class="entity-subtotals" *ngIf="!isLoading && operatingEntitySubtotals().length">
+    <h3>Operating Entity Subtotals</h3>
+    <div class="entity-subtotals-grid">
+      <div class="entity-subtotal-card" *ngFor="let subtotal of operatingEntitySubtotals(); trackBy: trackByIndex">
+        <span class="entity-name">{{ subtotal.operating_entity_name }}</span>
+        <span class="entity-value">{{ format(subtotal.subtotal, 'currency') }}</span>
+      </div>
+    </div>
+  </div>
+
   <div class="table-wrap" *ngIf="!isLoading">
     <table>
       <thead>

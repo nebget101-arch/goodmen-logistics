@@ -9,6 +9,8 @@ export interface SafetyOverview {
   totalEstimatedLoss: number;
   totalPaid: number;
   overdueFollowUps: number;
+  openIncidentsByOperatingEntity?: Array<{ operating_entity_id: string | null; operating_entity_name: string; count: number }>;
+  openClaimsByOperatingEntity?: Array<{ operating_entity_id: string | null; operating_entity_name: string; count: number }>;
 }
 
 export interface SafetyIncidentFilters {
