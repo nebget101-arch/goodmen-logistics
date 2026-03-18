@@ -5,6 +5,45 @@ const path = require('path');
 const { query } = require('../internal/db');
 const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 
+// GET /api/dqf-documents - list all DQF docs scoped through drivers
+router.get('/', async (req, res) => {
+  try {
+    const params = [];
+    const where = [];
+
+    if (req.context?.tenantId) {
+      params.push(req.context.tenantId);
+      where.push(`dr.tenant_id = $${params.length}`);
+    }
+    if (req.context?.operatingEntityId) {
+      params.push(req.context.operatingEntityId);
+      where.push(`dr.operating_entity_id = $${params.length}`);
+    }
+
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const result = await query(
+      `SELECT dd.*, dr.first_name, dr.last_name, dr.operating_entity_id
+       FROM dqf_documents dd
+       JOIN drivers dr ON dr.id = dd.driver_id
+       ${whereClause}
+       ORDER BY dd.created_at DESC`,
+      params
+    );
+
+    const data = await Promise.all(
+      result.rows.map(async (row) => ({
+        ...row,
+        downloadUrl: row.file_path ? await getSignedDownloadUrl(row.file_path) : null
+      }))
+    );
+
+    return res.json(data);
+  } catch (error) {
+    console.error('Error listing DQF documents:', error);
+    return res.status(500).json({ message: 'Failed to list documents' });
+  }
+});
+
 // Configure multer for file uploads (memory storage for R2)
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -42,6 +81,14 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
     if (!driverId || !documentType) {
       return res.status(400).json({ message: 'Driver ID and document type are required' });
+    }
+
+    // Validate driver belongs to active OE
+    if (req.context?.operatingEntityId) {
+      const driverRes = await query('SELECT operating_entity_id FROM drivers WHERE id = $1', [driverId]);
+      if (driverRes.rows.length === 0 || driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+        return res.status(404).json({ message: 'Driver not found' });
+      }
     }
 
     const fileExt = path.extname(req.file.originalname || '').toLowerCase();
@@ -84,6 +131,14 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 // GET all documents for a driver
 router.get('/driver/:driverId', async (req, res) => {
   try {
+    // Validate OE access
+    if (req.context?.operatingEntityId) {
+      const driverRes = await query('SELECT operating_entity_id FROM drivers WHERE id = $1', [req.params.driverId]);
+      if (driverRes.rows.length === 0 || driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+        return res.status(404).json({ message: 'Driver not found' });
+      }
+    }
+
     const result = await query(
       `SELECT * FROM dqf_documents WHERE driver_id = $1 ORDER BY created_at DESC`,
       [req.params.driverId]
@@ -104,6 +159,14 @@ router.get('/driver/:driverId', async (req, res) => {
 // GET documents by type for a driver
 router.get('/driver/:driverId/type/:documentType', async (req, res) => {
   try {
+    // Validate OE access
+    if (req.context?.operatingEntityId) {
+      const driverRes = await query('SELECT operating_entity_id FROM drivers WHERE id = $1', [req.params.driverId]);
+      if (driverRes.rows.length === 0 || driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+        return res.status(404).json({ message: 'Driver not found' });
+      }
+    }
+
     const result = await query(
       `SELECT * FROM dqf_documents 
        WHERE driver_id = $1 AND document_type = $2 
@@ -137,6 +200,17 @@ router.delete('/:id', async (req, res) => {
 
     const document = result.rows[0];
 
+    // Validate OE access through driver
+    if (req.context?.operatingEntityId) {
+      const driverRes = await query('SELECT operating_entity_id FROM drivers WHERE id = $1', [document.driver_id]);
+      if (driverRes.rows.length === 0) {
+        return res.status(404).json({ message: 'Driver not found' });
+      }
+      if (driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+    }
+
     await deleteObject(document.file_path);
 
     // Delete from database
@@ -162,6 +236,14 @@ router.get('/download/:id', async (req, res) => {
     }
 
     const document = result.rows[0];
+
+    // Validate OE access through driver
+    if (req.context?.operatingEntityId) {
+      const driverRes = await query('SELECT operating_entity_id FROM drivers WHERE id = $1', [document.driver_id]);
+      if (driverRes.rows.length === 0 || driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+        return res.status(404).json({ message: 'Document not found' });
+      }
+    }
 
     const downloadUrl = await getSignedDownloadUrl(document.file_path);
     res.json({ downloadUrl });

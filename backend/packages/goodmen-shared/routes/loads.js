@@ -407,7 +407,7 @@ router.get('/', async (req, res) => {
 
     const baseSql = `
       FROM loads l
-      LEFT JOIN drivers d ON l.driver_id = d.id
+      LEFT JOIN drivers d ON l.driver_id = d.id AND d.tenant_id = l.tenant_id AND (l.operating_entity_id IS NULL OR d.operating_entity_id = l.operating_entity_id)
       LEFT JOIN brokers b ON l.broker_id = b.id
       LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id
       LEFT JOIN LATERAL (

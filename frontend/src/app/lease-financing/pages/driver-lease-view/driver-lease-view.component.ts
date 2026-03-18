@@ -204,14 +204,13 @@ export class DriverLeaseViewComponent implements OnInit {
 
   ngOnInit(): void {
     this.loading = true;
-    this.lease.listAgreements({ active_only: 1, limit: 1 }).subscribe({
-      next: (resp) => {
-        const first = (resp.rows || [])[0];
-        if (!first) {
+    this.lease.getMyAgreement().subscribe({
+      next: (agreement) => {
+        if (!agreement?.id) {
           this.loading = false;
           return;
         }
-        this.lease.getAgreement(first.id).subscribe({
+        this.lease.getAgreement(agreement.id).subscribe({
           next: (full) => { this.agreement = full; this.loading = false; },
           error: (err) => { this.error = err?.error?.error || 'Failed to load agreement'; this.loading = false; }
         });

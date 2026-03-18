@@ -66,10 +66,29 @@ function mapAgreementFilters(q, req, tid) {
   q.where('la.tenant_id', tid);
   if (operatingEntityId(req)) q.andWhere('la.operating_entity_id', operatingEntityId(req));
   if (req.query.status) q.andWhere('la.status', req.query.status);
+  if (String(req.query.active_only || '') === '1' || String(req.query.active_only || '').toLowerCase() === 'true') {
+    q.whereIn('la.status', ['active', 'overdue', 'pending_signature']);
+  }
   if (req.query.driver_id) q.andWhere('la.driver_id', req.query.driver_id);
   if (req.query.truck_id) q.andWhere('la.truck_id', req.query.truck_id);
   if (req.query.payment_frequency) q.andWhere('la.payment_frequency', req.query.payment_frequency);
   if (req.query.mc_id) q.andWhere('la.mc_id', req.query.mc_id);
+}
+
+function applyAgreementScope(query, req, tid, alias = 'lease_agreements') {
+  query.where(`${alias}.tenant_id`, tid);
+  if (operatingEntityId(req)) query.andWhere(`${alias}.operating_entity_id`, operatingEntityId(req));
+  return query;
+}
+
+async function findScopedAgreement(req, agreementId, trx = knex) {
+  const tid = tenantId(req);
+  if (!tid) return null;
+  return applyAgreementScope(
+    trx('lease_agreements').where({ id: agreementId }),
+    req,
+    tid
+  ).first();
 }
 
 async function nextAgreementNumber(tid) {
@@ -207,6 +226,35 @@ router.get('/lease-agreements', canView, async (req, res) => {
   }
 });
 
+router.get('/lease-financing/driver/me', canView, async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const driverId = req.user?.driver_id || null;
+    if (!driverId) return res.status(404).json({ error: 'Driver lease agreement not found' });
+
+    const row = await knex('lease_agreements as la')
+      .leftJoin('drivers as d', 'd.id', 'la.driver_id')
+      .leftJoin('vehicles as v', 'v.id', 'la.truck_id')
+      .modify((q) => applyAgreementScope(q, req, tid, 'la'))
+      .where('la.driver_id', driverId)
+      .whereIn('la.status', ['active', 'overdue', 'pending_signature'])
+      .select(
+        'la.*',
+        knex.raw("NULLIF(TRIM(CONCAT_WS(' ', d.first_name, d.last_name)), '') as driver_name"),
+        knex.raw("COALESCE(v.unit_number, v.license_plate) as truck_label")
+      )
+      .orderByRaw("CASE la.status WHEN 'active' THEN 1 WHEN 'overdue' THEN 2 WHEN 'pending_signature' THEN 3 ELSE 4 END")
+      .orderBy('la.created_at', 'desc')
+      .first();
+
+    if (!row) return res.status(404).json({ error: 'Driver lease agreement not found' });
+    res.json(row);
+  } catch (err) {
+    dtLogger.error('lease_driver_me_failed', err);
+    res.status(500).json({ error: 'Failed to fetch driver lease agreement' });
+  }
+});
+
 router.get('/lease-agreements/:id', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -214,7 +262,7 @@ router.get('/lease-agreements/:id', canView, async (req, res) => {
       .leftJoin('drivers as d', 'd.id', 'la.driver_id')
       .leftJoin('vehicles as v', 'v.id', 'la.truck_id')
       .where('la.id', req.params.id)
-      .andWhere('la.tenant_id', tid)
+      .modify((q) => applyAgreementScope(q, req, tid, 'la'))
       .select(
         'la.*',
         knex.raw("NULLIF(TRIM(CONCAT_WS(' ', d.first_name, d.last_name)), '') as driver_name"),
@@ -273,13 +321,19 @@ router.post('/lease-agreements', canCreate, async (req, res) => {
       return res.status(400).json({ error: 'driver_id, truck_id, agreement_start_date are required' });
     }
 
-    const driver = await trx('drivers').where({ id: driverId, tenant_id: tid }).first();
+    const driver = await trx('drivers')
+      .where({ id: driverId, tenant_id: tid })
+      .modify((qb) => { if (operatingEntityId(req)) qb.andWhere('operating_entity_id', operatingEntityId(req)); })
+      .first();
     if (!driver) {
       await trx.rollback();
       return res.status(400).json({ error: 'Driver not found in tenant scope' });
     }
 
-    const truck = await trx('vehicles').where({ id: truckId, tenant_id: tid }).first();
+    const truck = await trx('vehicles')
+      .where({ id: truckId, tenant_id: tid })
+      .modify((qb) => { if (operatingEntityId(req)) qb.andWhere('operating_entity_id', operatingEntityId(req)); })
+      .first();
     if (!truck) {
       await trx.rollback();
       return res.status(400).json({ error: 'Truck not found in tenant scope' });
@@ -304,7 +358,7 @@ router.post('/lease-agreements', canCreate, async (req, res) => {
 
     const [agreement] = await trx('lease_agreements').insert({
       tenant_id: tid,
-      operating_entity_id: req.body.operating_entity_id || operatingEntityId(req) || null,
+      operating_entity_id: operatingEntityId(req) || null,
       company_id: req.body.company_id || tid,
       mc_id: req.body.mc_id || null,
       driver_id: driverId,
@@ -385,7 +439,7 @@ router.put('/lease-agreements/:id', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
     const tid = requireTenant(req, res); if (!tid) { await trx.rollback(); return; }
-    const existing = await trx('lease_agreements').where({ id: req.params.id, tenant_id: tid }).first();
+    const existing = await findScopedAgreement(req, req.params.id, trx);
     if (!existing) { await trx.rollback(); return res.status(404).json({ error: 'Lease agreement not found' }); }
     if (['completed', 'defaulted', 'terminated'].includes(existing.status)) {
       await trx.rollback();
@@ -401,7 +455,11 @@ router.put('/lease-agreements/:id', canEdit, async (req, res) => {
       if (req.body[key] !== undefined) patch[key] = req.body[key];
     }
 
-    const [updated] = await trx('lease_agreements').where({ id: req.params.id, tenant_id: tid }).update(patch).returning('*');
+    const [updated] = await applyAgreementScope(
+      trx('lease_agreements').where({ id: req.params.id }),
+      req,
+      tid
+    ).update(patch).returning('*');
     await logAgreementEvent(trx, updated.id, tid, req.user?.id || null, 'agreement_updated', patch);
     await trx.commit();
     res.json(updated);
@@ -416,7 +474,7 @@ router.post('/lease-agreements/:id/activate', canActivate, async (req, res) => {
   const trx = await knex.transaction();
   try {
     const tid = requireTenant(req, res); if (!tid) { await trx.rollback(); return; }
-    const agreement = await trx('lease_agreements').where({ id: req.params.id, tenant_id: tid }).first();
+    const agreement = await findScopedAgreement(req, req.params.id, trx);
     if (!agreement) { await trx.rollback(); return res.status(404).json({ error: 'Lease agreement not found' }); }
     if (!agreement.signed_at) { await trx.rollback(); return res.status(400).json({ error: 'Agreement must be signed before activation' }); }
 
@@ -460,7 +518,7 @@ router.post('/lease-agreements/:id/terminate', canTerminate, async (req, res) =>
   const trx = await knex.transaction();
   try {
     const tid = requireTenant(req, res); if (!tid) { await trx.rollback(); return; }
-    const agreement = await trx('lease_agreements').where({ id: req.params.id, tenant_id: tid }).first();
+    const agreement = await findScopedAgreement(req, req.params.id, trx);
     if (!agreement) { await trx.rollback(); return res.status(404).json({ error: 'Lease agreement not found' }); }
 
     const [updated] = await trx('lease_agreements').where({ id: agreement.id }).update({
@@ -494,7 +552,7 @@ router.post('/lease-agreements/:id/upload-contract', canEdit, upload.single('fil
   const trx = await knex.transaction();
   try {
     const tid = requireTenant(req, res); if (!tid) { await trx.rollback(); return; }
-    const agreement = await trx('lease_agreements').where({ id: req.params.id, tenant_id: tid }).first();
+    const agreement = await findScopedAgreement(req, req.params.id, trx);
     if (!agreement) { await trx.rollback(); return res.status(404).json({ error: 'Lease agreement not found' }); }
 
     if (!req.file) { await trx.rollback(); return res.status(400).json({ error: 'Contract file is required' }); }
@@ -534,7 +592,7 @@ router.post('/lease-agreements/:id/upload-contract', canEdit, upload.single('fil
 router.get('/lease-agreements/:id/payment-schedule', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const agreement = await knex('lease_agreements').where({ id: req.params.id, tenant_id: tid }).first();
+    const agreement = await findScopedAgreement(req, req.params.id);
     if (!agreement) return res.status(404).json({ error: 'Lease agreement not found' });
 
     await knex.transaction(async (trx) => {
@@ -554,7 +612,7 @@ router.post('/lease-agreements/:id/manual-payment', canPay, async (req, res) => 
   const trx = await knex.transaction();
   try {
     const tid = requireTenant(req, res); if (!tid) { await trx.rollback(); return; }
-    const agreement = await trx('lease_agreements').where({ id: req.params.id, tenant_id: tid }).first();
+    const agreement = await findScopedAgreement(req, req.params.id, trx);
     if (!agreement) { await trx.rollback(); return res.status(404).json({ error: 'Lease agreement not found' }); }
     if (['completed', 'terminated', 'defaulted'].includes(agreement.status)) {
       await trx.rollback();
@@ -615,7 +673,7 @@ router.post('/lease-agreements/:id/sign', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
     const tid = requireTenant(req, res); if (!tid) { await trx.rollback(); return; }
-    const agreement = await trx('lease_agreements').where({ id: req.params.id, tenant_id: tid }).first();
+    const agreement = await findScopedAgreement(req, req.params.id, trx);
     if (!agreement) { await trx.rollback(); return res.status(404).json({ error: 'Lease agreement not found' }); }
 
     const [updated] = await trx('lease_agreements').where({ id: agreement.id }).update({

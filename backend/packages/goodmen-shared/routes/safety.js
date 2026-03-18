@@ -82,6 +82,16 @@ function tenantId(req) {
   return req.context?.tenantId || req.user?.tenantId || null;
 }
 
+function operatingEntityId(req) {
+  return req.context?.operatingEntityId || null;
+}
+
+function applyOperatingEntityFilter(query, req, column = 'operating_entity_id') {
+  const oeId = operatingEntityId(req);
+  if (oeId) query.where(column, oeId);
+  return query;
+}
+
 function userId(req) {
   return req.user?.id || null;
 }
@@ -129,6 +139,45 @@ async function logAudit(incidentId, claimId, actorId, actorName, action, field, 
     // Non-fatal
     dtLogger.error('safety_audit_log_error', e);
   }
+}
+
+async function findScopedIncident(req, incidentId, columns = ['*']) {
+  const tid = tenantId(req);
+  if (!tid) return null;
+  return applyOperatingEntityFilter(
+    knex('safety_incidents').where({ id: incidentId, tenant_id: tid }),
+    req
+  ).first(columns);
+}
+
+async function requireScopedIncident(req, res, incidentId, columns = ['*']) {
+  const incident = await findScopedIncident(req, incidentId, columns);
+  if (!incident) {
+    sendError(res, 404, 'Incident not found');
+    return null;
+  }
+  return incident;
+}
+
+async function findScopedClaim(req, claimId, columns = ['sc.*']) {
+  const tid = tenantId(req);
+  if (!tid) return null;
+  return knex('safety_claims as sc')
+    .join('safety_incidents as si', 'si.id', 'sc.incident_id')
+    .where('sc.id', claimId)
+    .where('sc.tenant_id', tid)
+    .modify((qb) => applyOperatingEntityFilter(qb, req, 'si.operating_entity_id'))
+    .select(columns)
+    .first();
+}
+
+async function requireScopedClaim(req, res, claimId, columns = ['sc.*']) {
+  const claim = await findScopedClaim(req, claimId, columns);
+  if (!claim) {
+    sendError(res, 404, 'Claim not found');
+    return null;
+  }
+  return claim;
 }
 
 // ─── OVERVIEW ─────────────────────────────────────────────────────────────────
@@ -222,13 +271,18 @@ router.get('/incidents', canViewIncidents, async (req, res) => {
       )
       .orderBy('si.incident_date', 'desc');
 
+    const activeOperatingEntityId = operatingEntityId(req);
+    if (activeOperatingEntityId) {
+      q = q.where('si.operating_entity_id', activeOperatingEntityId);
+    }
+
     if (status) q = q.where('si.status', status);
     if (severity) q = q.where('si.severity', severity);
     if (incident_type) q = q.where('si.incident_type', incident_type);
     if (preventability) q = q.where('si.preventability', preventability);
     if (driver_id) q = q.where('si.driver_id', driver_id);
     if (vehicle_id) q = q.where('si.vehicle_id', vehicle_id);
-    if (operating_entity_id) q = q.where('si.operating_entity_id', operating_entity_id);
+    if (!activeOperatingEntityId && operating_entity_id) q = q.where('si.operating_entity_id', operating_entity_id);
     if (dateFrom) q = q.where('si.incident_date', '>=', dateFrom);
     if (dateTo) q = q.where('si.incident_date', '<=', dateTo);
     if (search) {
@@ -262,6 +316,7 @@ router.post('/incidents', canCreateIncidents, async (req, res) => {
       ...req.body,
       id: knex.raw('gen_random_uuid()'),
       tenant_id: tid,
+      operating_entity_id: operatingEntityId(req),
       incident_number: incidentNumber,
       created_by: uid,
     };
@@ -284,7 +339,7 @@ router.post('/incidents', canCreateIncidents, async (req, res) => {
 router.get('/incidents/:id', canViewIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const row = await knex('safety_incidents').where({ id: req.params.id, tenant_id: tid }).first();
+    const row = await requireScopedIncident(req, res, req.params.id);
     if (!row) return sendError(res, 404, 'Incident not found');
     res.json(row);
   } catch (err) {
@@ -299,13 +354,16 @@ router.patch('/incidents/:id', canEditIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const uid = userId(req);
-    const existing = await knex('safety_incidents').where({ id: req.params.id, tenant_id: tid }).first();
-    if (!existing) return sendError(res, 404, 'Incident not found');
+    const existing = await requireScopedIncident(req, res, req.params.id);
+    if (!existing) return;
 
     const updates = { ...req.body, updated_at: new Date() };
     delete updates.id; delete updates.tenant_id; delete updates.incident_number; delete updates.created_by;
 
-    const [updated] = await knex('safety_incidents').where({ id: req.params.id, tenant_id: tid }).update(updates).returning('*');
+    const [updated] = await applyOperatingEntityFilter(
+      knex('safety_incidents').where({ id: req.params.id, tenant_id: tid }),
+      req
+    ).update(updates).returning('*');
 
     // Log changed fields
     const tracked = ['status', 'severity', 'preventability', 'dot_recordable', 'hazmat_involved', 'litigation_risk', 'root_cause', 'corrective_action', 'estimated_loss_amount'];
@@ -328,10 +386,13 @@ router.delete('/incidents/:id', canEditIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const uid = userId(req);
-    const existing = await knex('safety_incidents').where({ id: req.params.id, tenant_id: tid }).first();
-    if (!existing) return sendError(res, 404, 'Incident not found');
+    const existing = await requireScopedIncident(req, res, req.params.id);
+    if (!existing) return;
     // Soft-close instead of hard delete to preserve audit history
-    await knex('safety_incidents').where({ id: req.params.id, tenant_id: tid }).update({
+    await applyOperatingEntityFilter(
+      knex('safety_incidents').where({ id: req.params.id, tenant_id: tid }),
+      req
+    ).update({
       status: 'closed', close_date: new Date(), closed_by: uid, updated_at: new Date(),
     });
     await logAudit(req.params.id, null, uid, userName(req), 'status_changed', 'status', existing.status, 'closed');
@@ -346,6 +407,8 @@ router.delete('/incidents/:id', canEditIncidents, async (req, res) => {
 
 router.get('/incidents/:id/parties', canViewIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const rows = await knex('safety_incident_parties').where({ incident_id: req.params.id }).orderBy('created_at');
     res.json(rows);
   } catch (err) {
@@ -355,6 +418,8 @@ router.get('/incidents/:id/parties', canViewIncidents, async (req, res) => {
 
 router.post('/incidents/:id/parties', canEditIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const [row] = await knex('safety_incident_parties').insert({ ...req.body, incident_id: req.params.id }).returning('*');
     await logAudit(req.params.id, null, userId(req), userName(req), 'note_added', 'parties', null, row.name);
     res.status(201).json(row);
@@ -365,6 +430,8 @@ router.post('/incidents/:id/parties', canEditIncidents, async (req, res) => {
 
 router.delete('/incidents/:id/parties/:partyId', canEditIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     await knex('safety_incident_parties').where({ id: req.params.partyId, incident_id: req.params.id }).delete();
     res.json({ success: true });
   } catch (err) {
@@ -376,6 +443,8 @@ router.delete('/incidents/:id/parties/:partyId', canEditIncidents, async (req, r
 
 router.get('/incidents/:id/witnesses', canViewIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const rows = await knex('safety_incident_witnesses').where({ incident_id: req.params.id }).orderBy('created_at');
     res.json(rows);
   } catch (err) {
@@ -385,6 +454,8 @@ router.get('/incidents/:id/witnesses', canViewIncidents, async (req, res) => {
 
 router.post('/incidents/:id/witnesses', canEditIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const [row] = await knex('safety_incident_witnesses').insert({ ...req.body, incident_id: req.params.id }).returning('*');
     res.status(201).json(row);
   } catch (err) {
@@ -394,6 +465,8 @@ router.post('/incidents/:id/witnesses', canEditIncidents, async (req, res) => {
 
 router.delete('/incidents/:id/witnesses/:witnessId', canEditIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     await knex('safety_incident_witnesses').where({ id: req.params.witnessId, incident_id: req.params.id }).delete();
     res.json({ success: true });
   } catch (err) {
@@ -405,6 +478,8 @@ router.delete('/incidents/:id/witnesses/:witnessId', canEditIncidents, async (re
 
 router.get('/incidents/:id/notes', canViewIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const rows = await knex('safety_incident_notes').where({ incident_id: req.params.id }).orderBy('created_at', 'desc');
     res.json(rows);
   } catch (err) {
@@ -414,6 +489,8 @@ router.get('/incidents/:id/notes', canViewIncidents, async (req, res) => {
 
 router.post('/incidents/:id/notes', canEditIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const uid = userId(req);
     const [row] = await knex('safety_incident_notes').insert({
       ...req.body, incident_id: req.params.id, author_id: uid,
@@ -429,6 +506,8 @@ router.post('/incidents/:id/notes', canEditIncidents, async (req, res) => {
 
 router.get('/incidents/:id/documents', canViewIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const rows = await knex('safety_incident_documents').where({ incident_id: req.params.id }).orderBy('created_at', 'desc');
     res.json(rows);
   } catch (err) {
@@ -438,10 +517,19 @@ router.get('/incidents/:id/documents', canViewIncidents, async (req, res) => {
 
 router.post('/incidents/:id/documents', canUploadDocuments, upload.single('file'), async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const uid = userId(req);
     if (!req.file) return sendError(res, 400, 'No file provided');
 
     const claimId = req.body.claim_id || null;
+    if (claimId) {
+      const claim = await requireScopedClaim(req, res, claimId, ['sc.id', 'sc.incident_id']);
+      if (!claim) return;
+      if (String(claim.incident_id) !== String(req.params.id)) {
+        return sendError(res, 404, 'Claim not found');
+      }
+    }
     const storageKey = claimId
       ? `safety/claims/${claimId}/${Date.now()}_${req.file.originalname}`
       : `safety/incidents/${req.params.id}/${Date.now()}_${req.file.originalname}`;
@@ -468,6 +556,8 @@ router.post('/incidents/:id/documents', canUploadDocuments, upload.single('file'
 
 router.delete('/incidents/:id/documents/:docId', canUploadDocuments, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     await knex('safety_incident_documents').where({ id: req.params.docId, incident_id: req.params.id }).delete();
     res.json({ success: true });
   } catch (err) {
@@ -479,6 +569,8 @@ router.delete('/incidents/:id/documents/:docId', canUploadDocuments, async (req,
 
 router.get('/incidents/:id/tasks', canViewIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const rows = await knex('safety_incident_tasks').where({ incident_id: req.params.id }).orderBy('due_date');
     res.json(rows);
   } catch (err) {
@@ -488,6 +580,8 @@ router.get('/incidents/:id/tasks', canViewIncidents, async (req, res) => {
 
 router.post('/incidents/:id/tasks', canEditIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const uid = userId(req);
     const [row] = await knex('safety_incident_tasks').insert({
       ...req.body, incident_id: req.params.id, created_by: uid,
@@ -500,6 +594,8 @@ router.post('/incidents/:id/tasks', canEditIncidents, async (req, res) => {
 
 router.patch('/incidents/:id/tasks/:taskId', canEditIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const uid = userId(req);
     const updates = { ...req.body, updated_at: new Date() };
     if (updates.status === 'completed' && !updates.completed_at) {
@@ -516,6 +612,8 @@ router.patch('/incidents/:id/tasks/:taskId', canEditIncidents, async (req, res) 
 
 router.delete('/incidents/:id/tasks/:taskId', canEditIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     await knex('safety_incident_tasks').where({ id: req.params.taskId, incident_id: req.params.id }).delete();
     res.json({ success: true });
   } catch (err) {
@@ -527,6 +625,8 @@ router.delete('/incidents/:id/tasks/:taskId', canEditIncidents, async (req, res)
 
 router.get('/incidents/:id/audit-log', canViewIncidents, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const rows = await knex('safety_incident_audit_log').where({ incident_id: req.params.id }).orderBy('created_at', 'desc');
     res.json(rows);
   } catch (err) {
@@ -538,6 +638,8 @@ router.get('/incidents/:id/audit-log', canViewIncidents, async (req, res) => {
 
 router.get('/incidents/:id/claims', canViewClaims, async (req, res) => {
   try {
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
+    if (!incident) return;
     const rows = await knex('safety_claims').where({ incident_id: req.params.id }).orderBy('created_at');
     res.json(rows);
   } catch (err) {
@@ -549,6 +651,8 @@ router.post('/incidents/:id/claims', canCreateClaims, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const uid = userId(req);
+    const incident = await requireScopedIncident(req, res, req.params.id, ['id', 'operating_entity_id']);
+    if (!incident) return;
 
     // Auto-generate internal claim number: CLM-YYYY-NNNN
     const year = new Date().getFullYear();
@@ -562,6 +666,7 @@ router.post('/incidents/:id/claims', canCreateClaims, async (req, res) => {
       id: knex.raw('gen_random_uuid()'),
       incident_id: req.params.id,
       tenant_id: tid,
+      operating_entity_id: incident.operating_entity_id || null,
       internal_claim_number: internalClaimNumber,
       created_by: uid,
     }).returning('*');
@@ -587,6 +692,8 @@ router.get('/claims', canViewClaims, async (req, res) => {
       .select('sc.*', 'si.incident_number', 'si.incident_date', 'si.incident_type')
       .orderBy('sc.created_at', 'desc');
 
+    q = q.modify((qb) => applyOperatingEntityFilter(qb, req, 'si.operating_entity_id'));
+
     if (status) q = q.where('sc.status', status);
     if (claim_type) q = q.where('sc.claim_type', claim_type);
     if (overdue_only === 'true') q = q.where('sc.next_followup_date', '<', new Date()).whereNot('sc.status', 'closed');
@@ -605,8 +712,8 @@ router.get('/claims', canViewClaims, async (req, res) => {
 router.get('/claims/:id', canViewClaims, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const row = await knex('safety_claims').where({ id: req.params.id, tenant_id: tid }).first();
-    if (!row) return sendError(res, 404, 'Claim not found');
+    const row = await requireScopedClaim(req, res, req.params.id);
+    if (!row) return;
     res.json(row);
   } catch (err) {
     sendError(res, 500, 'Failed to fetch claim');
@@ -617,13 +724,19 @@ router.patch('/claims/:id', canEditClaims, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const uid = userId(req);
-    const existing = await knex('safety_claims').where({ id: req.params.id, tenant_id: tid }).first();
-    if (!existing) return sendError(res, 404, 'Claim not found');
+    const existing = await requireScopedClaim(req, res, req.params.id, ['sc.*', 'si.operating_entity_id as incident_operating_entity_id']);
+    if (!existing) return;
 
     const updates = { ...req.body, updated_at: new Date() };
     delete updates.id; delete updates.tenant_id; delete updates.incident_id; delete updates.created_by;
 
-    const [updated] = await knex('safety_claims').where({ id: req.params.id, tenant_id: tid }).update(updates).returning('*');
+    const [updated] = await knex('safety_claims as sc')
+      .join('safety_incidents as si', 'si.id', 'sc.incident_id')
+      .where('sc.id', req.params.id)
+      .where('sc.tenant_id', tid)
+      .modify((qb) => applyOperatingEntityFilter(qb, req, 'si.operating_entity_id'))
+      .update(updates)
+      .returning('sc.*');
 
     if (updates.status && updates.status !== existing.status) {
       await logAudit(existing.incident_id, req.params.id, uid, userName(req), 'status_changed', 'status', existing.status, updates.status);
@@ -648,6 +761,8 @@ router.get('/tasks', canViewIncidents, async (req, res) => {
       .select('t.*', 'si.incident_number', 'si.incident_type', 'si.status as incident_status')
       .orderBy('t.due_date');
 
+    q = q.modify((qb) => applyOperatingEntityFilter(qb, req, 'si.operating_entity_id'));
+
     if (status) q = q.where('t.status', status);
     if (assigned_to) q = q.where('t.assigned_to', assigned_to);
     if (overdue_only === 'true') {
@@ -671,6 +786,7 @@ router.get('/reports', canViewReports, async (req, res) => {
     const dateFilter = (q, alias = 'si') => {
       if (dateFrom) q = q.where(`${alias}.incident_date`, '>=', dateFrom);
       if (dateTo) q = q.where(`${alias}.incident_date`, '<=', dateTo);
+      q = applyOperatingEntityFilter(q, req, `${alias}.operating_entity_id`);
       return q;
     };
 
@@ -685,6 +801,7 @@ router.get('/reports', canViewReports, async (req, res) => {
     // Claims by status
     const claimsByStatus = await knex('safety_claims')
       .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .select('status')
       .count('id as count')
       .groupBy('status');
@@ -697,6 +814,7 @@ router.get('/reports', canViewReports, async (req, res) => {
     // Loss by claim type
     const lossByType = await knex('safety_claims')
       .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .select('claim_type')
       .sum('paid_amount as total_paid')
       .sum('net_loss_amount as total_loss')
@@ -716,6 +834,7 @@ router.get('/reports', canViewReports, async (req, res) => {
     // Claim aging (days since opened)
     const claimAging = await knex('safety_claims')
       .where({ tenant_id: tid }).whereNot({ status: 'closed' })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
       .select('id', 'internal_claim_number', 'status', 'claim_type', 'opened_date', 'insurance_carrier')
       .orderBy('opened_date');
 
