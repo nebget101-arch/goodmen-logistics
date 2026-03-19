@@ -1,7 +1,9 @@
+# DEV ENVIRONMENT — auto-deploys from develop branch
 services:
   - type: web
-    name: fleetneuron-logistics-ui
+    name: fleetneuron-logistics-ui-dev
     runtime: static
+    branch: develop
     rootDir: frontend
     buildCommand: npm install --include=dev && npm run build
     staticPublishPath: dist/goodmen-logistics
@@ -11,39 +13,41 @@ services:
         destination: /index.html
 
   - type: web
-    name: fleetneuron-logistics-gateway
+    name: fleetneuron-logistics-gateway-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/gateway
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: REPORTING_SERVICE_URL
-        value: https://fleetneuron-reporting-service.onrender.com
+        value: https://fleetneuron-reporting-service-dev.onrender.com
       - key: INTEGRATIONS_SERVICE_URL
-        value: https://fleetneuron-integrations-service.onrender.com
+        value: https://fleetneuron-integrations-service-dev.onrender.com
       - key: AUTH_USERS_SERVICE_URL
-        value: https://fleetneuron-auth-users-service.onrender.com
+        value: https://fleetneuron-auth-users-service-dev.onrender.com
       - key: DRIVERS_COMPLIANCE_SERVICE_URL
-        value: https://fleetneuron-drivers-compliance-service.onrender.com
+        value: https://fleetneuron-drivers-compliance-service-dev.onrender.com
       - key: VEHICLES_MAINTENANCE_SERVICE_URL
-        value: https://fleetneuron-vehicles-maintenance-service.onrender.com
+        value: https://fleetneuron-vehicles-maintenance-service-dev.onrender.com
       - key: LOGISTICS_SERVICE_URL
-        value: https://fleetneuron-logistics-service.onrender.com
+        value: https://fleetneuron-logistics-service-dev.onrender.com
       - key: INVENTORY_SERVICE_URL
-        value: https://fleetneuron-inventory-service.onrender.com
+        value: https://fleetneuron-inventory-service-dev.onrender.com
       - key: AI_SERVICE_URL
-        value: https://fleetneuron-ai-service.onrender.com
+        value: https://fleetneuron-ai-service-dev.onrender.com
       - key: CORS_ORIGIN
-        value: https://fleetneuron.ai
+        value: https://dev.fleetneuron.ai
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10002
 
   - type: web
-    name: fleetneuron-reporting-service
+    name: fleetneuron-reporting-service-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/microservices/reporting-service
     buildCommand: npm install
@@ -53,36 +57,37 @@ services:
         value: /opt/render/project/src/backend/microservices/reporting-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: connectionString
       - key: PG_DATABASE
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: database
       - key: PG_USER
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: user
       - key: PG_PASSWORD
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: password
       - key: PG_HOST
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: host
       - key: PG_PORT
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10003
 
   - type: web
-    name: fleetneuron-integrations-service
+    name: fleetneuron-integrations-service-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/microservices/integrations-service
     buildCommand: npm install
@@ -91,13 +96,14 @@ services:
       - key: NODE_PATH
         value: /opt/render/project/src/backend/microservices/integrations-service/node_modules
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10004
 
   - type: web
-    name: fleetneuron-auth-users-service
+    name: fleetneuron-auth-users-service-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/microservices/auth-users-service
     buildCommand: npm install
@@ -107,38 +113,39 @@ services:
         value: /opt/render/project/src/backend/microservices/auth-users-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: connectionString
       - key: PG_DATABASE
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: database
       - key: PG_USER
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: user
       - key: PG_PASSWORD
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: password
       - key: PG_HOST
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: host
       - key: PG_PORT
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10005
 
   # Dedicated migration service (no HTTP port). Deploy this service to run DB migrations.
   # It will run latest migrations, then stay alive.
   - type: worker
-    name: fleetneuron-db-migrations
+    name: fleetneuron-db-migrations-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/packages/goodmen-database
     buildCommand: npm install
@@ -146,34 +153,35 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: connectionString
       - key: PG_DATABASE
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: database
       - key: PG_USER
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: user
       - key: PG_PASSWORD
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: password
       - key: PG_HOST
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: host
       - key: PG_PORT
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: production
+        value: development
 
   - type: web
-    name: fleetneuron-drivers-compliance-service
+    name: fleetneuron-drivers-compliance-service-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/microservices/drivers-compliance-service
     buildCommand: npm install
@@ -183,27 +191,27 @@ services:
         value: /opt/render/project/src/backend/microservices/drivers-compliance-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: connectionString
       - key: PG_DATABASE
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: database
       - key: PG_USER
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: user
       - key: PG_PASSWORD
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: password
       - key: PG_HOST
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: host
       - key: PG_PORT
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: port
       - key: R2_ACCOUNT_ID
         sync: false
@@ -218,13 +226,14 @@ services:
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10006
 
   - type: web
-    name: fleetneuron-vehicles-maintenance-service
+    name: fleetneuron-vehicles-maintenance-service-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/microservices/vehicles-maintenance-service
     buildCommand: npm install
@@ -234,27 +243,27 @@ services:
         value: /opt/render/project/src/backend/microservices/vehicles-maintenance-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: connectionString
       - key: PG_DATABASE
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: database
       - key: PG_USER
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: user
       - key: PG_PASSWORD
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: password
       - key: PG_HOST
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: host
       - key: PG_PORT
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: port
       - key: R2_ACCOUNT_ID
         sync: false
@@ -269,13 +278,14 @@ services:
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10007
 
   - type: web
-    name: fleetneuron-logistics-service
+    name: fleetneuron-logistics-service-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/microservices/logistics-service
     buildCommand: npm install
@@ -286,27 +296,27 @@ services:
         value: /opt/render/project/src/backend/microservices/logistics-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: connectionString
       - key: PG_DATABASE
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: database
       - key: PG_USER
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: user
       - key: PG_PASSWORD
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: password
       - key: PG_HOST
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: host
       - key: PG_PORT
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: port
       - key: R2_ACCOUNT_ID
         sync: false
@@ -321,13 +331,14 @@ services:
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10008
 
   - type: web
-    name: fleetneuron-inventory-service
+    name: fleetneuron-inventory-service-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/microservices/inventory-service
     buildCommand: npm install
@@ -337,36 +348,37 @@ services:
         value: /opt/render/project/src/backend/microservices/inventory-service/node_modules
       - key: DATABASE_URL
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: connectionString
       - key: PG_DATABASE
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: database
       - key: PG_USER
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: user
       - key: PG_PASSWORD
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: password
       - key: PG_HOST
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: host
       - key: PG_PORT
         fromDatabase:
-          name: safetyapp-db
+          name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10009
 
   - type: web
-    name: fleetneuron-ai-service
+    name: fleetneuron-ai-service-dev
     runtime: node
+    branch: develop
     plan: starter
     rootDir: backend/microservices/ai-service
     buildCommand: npm install
@@ -379,16 +391,16 @@ services:
       - key: OPENAI_MODEL
         value: gpt-4.1-mini
       - key: CORS_ORIGIN
-        value: https://fleetneuron.ai
+        value: https://dev.fleetneuron.ai
       - key: NODE_ENV
-        value: production
+        value: development
       - key: PORT
         value: 10010
       - key: AI_SERVICE_PORT
         value: 10010
 
 databases:
-  - name: safetyapp-db
-    databaseName: goodmen_logistics
-    user: goodmen_user
+  - name: safetyapp-dev-db
+    databaseName: goodmen_logistics_dev
+    user: goodmen_user_dev
     plan: basic-256mb
