@@ -3,17 +3,25 @@ exports.up = async function(knex) {
     return;
   }
   await knex.raw('CREATE EXTENSION IF NOT EXISTS pgcrypto');
-  const hasCompanyOwned = await knex.schema.hasColumn('vehicles', 'company_owned');
-  if (!hasCompanyOwned) {
-    await knex.schema.alterTable('vehicles', table => {
-      table.boolean('company_owned').defaultTo(true);
-    });
+  
+  const hasVehiclesTable = await knex.schema.hasTable('vehicles');
+  if (hasVehiclesTable) {
+    const hasCompanyOwned = await knex.schema.hasColumn('vehicles', 'company_owned');
+    if (!hasCompanyOwned) {
+      await knex.schema.alterTable('vehicles', table => {
+        table.boolean('company_owned').defaultTo(true);
+      });
+    }
   }
-  const hasVehicleUuid = await knex.schema.hasColumn('customer_vehicles', 'vehicle_uuid');
-  if (!hasVehicleUuid) {
-    await knex.schema.alterTable('customer_vehicles', table => {
-      table.uuid('vehicle_uuid').defaultTo(knex.raw('gen_random_uuid()')).unique();
-    });
+  
+  const hasCustomerVehiclesTable = await knex.schema.hasTable('customer_vehicles');
+  if (hasCustomerVehiclesTable) {
+    const hasVehicleUuid = await knex.schema.hasColumn('customer_vehicles', 'vehicle_uuid');
+    if (!hasVehicleUuid) {
+      await knex.schema.alterTable('customer_vehicles', table => {
+        table.uuid('vehicle_uuid').defaultTo(knex.raw('gen_random_uuid()')).unique();
+      });
+    }
   }
   await knex.raw('UPDATE customer_vehicles SET vehicle_uuid = COALESCE(vehicle_uuid, gen_random_uuid())');
   await knex.raw('ALTER TABLE work_orders DROP CONSTRAINT IF EXISTS work_orders_vehicle_id_fkey');

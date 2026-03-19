@@ -2,6 +2,9 @@
  * Ensure customer billing-related columns exist.
  */
 exports.up = async function(knex) {
+  const hasCustomers = await knex.schema.hasTable('customers');
+  if (!hasCustomers) return;
+
   const addColumnIfMissing = async (column, callback) => {
     const exists = await knex.schema.hasColumn('customers', column);
     if (!exists) {
