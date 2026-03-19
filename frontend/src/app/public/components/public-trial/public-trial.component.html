@@ -135,6 +135,64 @@
               </div>
             </div>
 
+            <!-- Row: USDOT + MC -->
+            <div class="pub-form-row">
+              <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('dotNumber')">
+                <div class="pub-dot-label-row">
+                  <label for="dotNumber">USDOT Number <span class="pub-required">*</span></label>
+                  <span
+                    class="pub-dot-badge-slot"
+                    aria-live="polite"
+                    [attr.aria-label]="dotBadgeAriaLabel"
+                    [ngSwitch]="dotLookupStatus"
+                  >
+                    <span *ngSwitchCase="'loading'" class="pub-dot-badge pub-dot-badge-loading">
+                      <span class="pub-dot-badge-spinner"></span>
+                      Looking up…
+                    </span>
+                    <span *ngSwitchCase="'active'" class="pub-dot-badge pub-dot-badge-active">
+                      ✅ Active Carrier
+                    </span>
+                    <span *ngSwitchCase="'inactive'" class="pub-dot-badge pub-dot-badge-inactive">
+                      ⚠️ Inactive
+                    </span>
+                    <span *ngSwitchCase="'not-found'" class="pub-dot-badge pub-dot-badge-notfound">
+                      ❌ DOT Not Found
+                    </span>
+                  </span>
+                </div>
+                <input
+                  id="dotNumber"
+                  type="text"
+                  class="pub-form-input"
+                  formControlName="dotNumber"
+                  placeholder="e.g. 1234567"
+                  inputmode="numeric"
+                  maxlength="8"
+                  autocomplete="off"
+                  (blur)="onDotBlur()"
+                />
+                <span class="pub-helper-text">Your USDOT number issued by FMCSA</span>
+                <span class="pub-error-msg">{{ getFieldError('dotNumber') }}</span>
+              </div>
+
+              <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('mcNumber')">
+                <label for="mcNumber">MC Number <span class="pub-optional">(optional)</span></label>
+                <input
+                  id="mcNumber"
+                  type="text"
+                  class="pub-form-input"
+                  formControlName="mcNumber"
+                  placeholder="e.g. 123456"
+                  inputmode="numeric"
+                  maxlength="8"
+                  autocomplete="off"
+                />
+                <span class="pub-helper-text">Leave blank if you don't have an MC authority number</span>
+                <span class="pub-error-msg">{{ getFieldError('mcNumber') }}</span>
+              </div>
+            </div>
+
             <!-- Row: Email + Phone -->
             <div class="pub-form-row">
               <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('email')">
