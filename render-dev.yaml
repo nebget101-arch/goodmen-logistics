@@ -1,9 +1,9 @@
-# DEV ENVIRONMENT — auto-deploys from develop branch
+# DEV ENVIRONMENT — auto-deploys from dev branch
 services:
   - type: web
     name: fleetneuron-logistics-ui-dev
     runtime: static
-    branch: develop
+    branch: dev
     rootDir: frontend
     buildCommand: npm install --include=dev && npm run build
     staticPublishPath: dist/goodmen-logistics
@@ -15,7 +15,7 @@ services:
   - type: web
     name: fleetneuron-logistics-gateway-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/gateway
     buildCommand: npm install
@@ -40,14 +40,14 @@ services:
       - key: CORS_ORIGIN
         value: https://dev.fleetneuron.ai
       - key: NODE_ENV
-        value: development
+        value: devment
       - key: PORT
         value: 10002
 
   - type: web
     name: fleetneuron-reporting-service-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/microservices/reporting-service
     buildCommand: npm install
@@ -80,14 +80,14 @@ services:
           name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: development
+        value: devment
       - key: PORT
         value: 10003
 
   - type: web
     name: fleetneuron-integrations-service-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/microservices/integrations-service
     buildCommand: npm install
@@ -96,14 +96,14 @@ services:
       - key: NODE_PATH
         value: /opt/render/project/src/backend/microservices/integrations-service/node_modules
       - key: NODE_ENV
-        value: development
+        value: devment
       - key: PORT
         value: 10004
 
   - type: web
     name: fleetneuron-auth-users-service-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/microservices/auth-users-service
     buildCommand: npm install
@@ -136,7 +136,7 @@ services:
           name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: development
+        value: devment
       - key: PORT
         value: 10005
 
@@ -145,7 +145,7 @@ services:
   - type: worker
     name: fleetneuron-db-migrations-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/packages/goodmen-database
     buildCommand: npm install
@@ -176,12 +176,12 @@ services:
           name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: development
+        value: devment
 
   - type: web
     name: fleetneuron-drivers-compliance-service-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/microservices/drivers-compliance-service
     buildCommand: npm install
@@ -226,14 +226,14 @@ services:
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
       - key: NODE_ENV
-        value: development
+        value: devment
       - key: PORT
         value: 10006
 
   - type: web
     name: fleetneuron-vehicles-maintenance-service-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/microservices/vehicles-maintenance-service
     buildCommand: npm install
@@ -278,14 +278,14 @@ services:
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
       - key: NODE_ENV
-        value: development
+        value: devment
       - key: PORT
         value: 10007
 
   - type: web
     name: fleetneuron-logistics-service-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/microservices/logistics-service
     buildCommand: npm install
@@ -331,14 +331,14 @@ services:
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
       - key: NODE_ENV
-        value: development
+        value: devment
       - key: PORT
         value: 10008
 
   - type: web
     name: fleetneuron-inventory-service-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/microservices/inventory-service
     buildCommand: npm install
@@ -371,14 +371,14 @@ services:
           name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: development
+        value: devment
       - key: PORT
         value: 10009
 
   - type: web
     name: fleetneuron-ai-service-dev
     runtime: node
-    branch: develop
+    branch: dev
     plan: starter
     rootDir: backend/microservices/ai-service
     buildCommand: npm install
@@ -393,7 +393,7 @@ services:
       - key: CORS_ORIGIN
         value: https://dev.fleetneuron.ai
       - key: NODE_ENV
-        value: development
+        value: devment
       - key: PORT
         value: 10010
       - key: AI_SERVICE_PORT
