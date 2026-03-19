@@ -49,6 +49,7 @@
           <tr>
             <th scope="col">Created</th>
             <th scope="col">Company</th>
+            <th scope="col">DOT / Status</th>
             <th scope="col">Contact</th>
             <th scope="col">Plan</th>
             <th scope="col">Fleet Size</th>
@@ -61,6 +62,16 @@
           <tr *ngFor="let record of records" [class.row-selected]="selectedRecord?.id === record.id">
             <td>{{ formatDate(record.created_at) }}</td>
             <td class="company-cell">{{ record.company_name }}</td>
+            <td class="dot-cell">
+              <div class="dot-cell-inner">
+                <span class="fmcsa-dot-num" *ngIf="record.dot_number">{{ record.dot_number }}</span>
+                <span
+                  class="fmcsa-badge"
+                  [ngClass]="dotBadgeClass(record)"
+                  [title]="getFmcsa(record).data?.legalName || ''"
+                >{{ dotBadgeLabel(record) }}</span>
+              </div>
+            </td>
             <td>
               <div class="contact-stack">
                 <span>{{ record.contact_name }}</span>
@@ -202,6 +213,152 @@
         <span class="label">Updated</span>
         <span>{{ formatDate(selectedRecord.updated_at || selectedRecord.created_at) }}</span>
       </div>
+
+      <!-- ─── FN-102: FMCSA Verification Card ─────────────────────────────── -->
+      <div class="detail-item full fmcsa-card">
+        <div class="fmcsa-card-header">
+          <span class="label">FMCSA Verification</span>
+          <div class="fmcsa-header-actions">
+            <!-- Re-verify button (shown when a DOT exists) -->
+            <button
+              *ngIf="selectedRecord.dot_number"
+              type="button"
+              class="btn-sm btn-outline"
+              [disabled]="getFmcsa(selectedRecord).status === 'loading'"
+              (click)="reVerifyFmcsa(selectedRecord)"
+            >
+              <span class="material-symbols-outlined">sync</span>
+              Re-verify
+            </button>
+            <!-- SAFER link -->
+            <a
+              *ngIf="selectedRecord.dot_number"
+              [href]="saferUrl(selectedRecord.dot_number)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn-sm btn-outline safer-link"
+            >
+              <span class="material-symbols-outlined">open_in_new</span>
+              View on FMCSA SAFER ↗
+            </a>
+          </div>
+        </div>
+
+        <!-- No DOT case: manual entry -->
+        <div class="fmcsa-no-dot" *ngIf="!selectedRecord.dot_number">
+          <span class="fmcsa-badge fmcsa-badge-nodot">&#8505;&#65039; No DOT on record</span>
+          <label class="fmcsa-manual-label" for="manualDotInput">Enter USDOT to add</label>
+          <div class="fmcsa-manual-row">
+            <input
+              id="manualDotInput"
+              type="text"
+              class="fmcsa-manual-input"
+              inputmode="numeric"
+              maxlength="8"
+              placeholder="e.g. 1234567"
+              [value]="getDotEditValue(selectedRecord)"
+              (input)="onDotEditChange(selectedRecord, $any($event.target).value)"
+              (blur)="onDotEditBlur(selectedRecord)"
+              [disabled]="dotSavingId === selectedRecord.id"
+              aria-label="USDOT number"
+            />
+            <span *ngIf="dotSavingId === selectedRecord.id" class="fmcsa-saving">Saving…</span>
+          </div>
+        </div>
+
+        <!-- DOT exists: show lookup state -->
+        <ng-container *ngIf="selectedRecord.dot_number">
+          <!-- Loading -->
+          <div class="fmcsa-loading" *ngIf="getFmcsa(selectedRecord).status === 'loading'">
+            <span class="fmcsa-mini-spinner"></span>
+            Looking up DOT {{ selectedRecord.dot_number }}…
+          </div>
+
+          <!-- Not found / error -->
+          <div class="fmcsa-not-found"
+               *ngIf="getFmcsa(selectedRecord).status === 'not-found' || getFmcsa(selectedRecord).status === 'error'">
+            <span class="fmcsa-badge"
+                  [ngClass]="getFmcsa(selectedRecord).status === 'not-found' ? 'fmcsa-badge-notfound' : 'fmcsa-badge-error'">
+              {{ getFmcsa(selectedRecord).status === 'not-found' ? '&#10060; DOT Not Found in FMCSA database' : '&#8212; FMCSA lookup unavailable' }}
+            </span>
+          </div>
+
+          <!-- Found -->
+          <div class="fmcsa-detail-body"
+               *ngIf="getFmcsa(selectedRecord).status === 'active' || getFmcsa(selectedRecord).status === 'inactive'">
+
+            <!-- Status badge + risk chips -->
+            <div class="fmcsa-status-row">
+              <span
+                class="fmcsa-badge"
+                [ngClass]="dotBadgeClass(selectedRecord)"
+              >{{ dotBadgeLabel(selectedRecord) }}</span>
+              <span
+                *ngFor="let chip of riskSignals(selectedRecord)"
+                class="fmcsa-risk-chip"
+                [ngClass]="chip.severity === 'red' ? 'risk-chip-red' : 'risk-chip-amber'"
+              >{{ chip.label }}</span>
+            </div>
+
+            <!-- Carrier fields grid -->
+            <div class="fmcsa-fields">
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">DOT</span>
+                <span>{{ getFmcsa(selectedRecord).data?.dotNumber || selectedRecord.dot_number }}</span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">MC</span>
+                <span>{{ getFmcsa(selectedRecord).data?.mcNumber || selectedRecord.mc_number || '—' }}</span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">Legal Name</span>
+                <span>{{ getFmcsa(selectedRecord).data?.legalName || '—' }}</span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">DBA</span>
+                <span>{{ getFmcsa(selectedRecord).data?.dbaName || '—' }}</span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">Authority</span>
+                <span>{{ getFmcsa(selectedRecord).data?.authorityType || '—' }}</span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">Phone</span>
+                <span>{{ getFmcsa(selectedRecord).data?.phone || '—' }}</span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">City / State</span>
+                <span>{{ getFmcsa(selectedRecord).data?.city }}, {{ getFmcsa(selectedRecord).data?.state }}</span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">Safety Rating</span>
+                <span>{{ getFmcsa(selectedRecord).data?.safetyRating || 'Unrated' }}</span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">OOS %</span>
+                <span>
+                  {{ getFmcsa(selectedRecord).data?.oosPercent != null
+                    ? (getFmcsa(selectedRecord).data!.oosPercent | number:'1.1-1') + '%'
+                    : '—' }}
+                  <span
+                    class="oos-note"
+                    *ngIf="(getFmcsa(selectedRecord).data?.oosPercent ?? 0) > 20"
+                  > &#9888; above 20% national avg</span>
+                </span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">Trucks</span>
+                <span>{{ getFmcsa(selectedRecord).data?.totalTrucks ?? '—' }}</span>
+              </div>
+              <div class="fmcsa-field">
+                <span class="fmcsa-field-label">Drivers</span>
+                <span>{{ getFmcsa(selectedRecord).data?.totalDrivers ?? '—' }}</span>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+      <!-- end FMCSA card -->
 
       <div class="detail-item full" *ngIf="activationLink && activationRequestId === selectedRecord.id">
         <span class="label">Manual signup link (fallback)</span>

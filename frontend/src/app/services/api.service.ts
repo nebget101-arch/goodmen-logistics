@@ -21,9 +21,40 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/locations`);
   }
 
-  // FMCSA company info lookup
+  // FMCSA company info lookup (legacy — shop clients context)
   getFmcsainfo(dot: string): Observable<any> {
     return this.http.get(`${this.baseUrl}/shop-clients/fmcsainfo/${encodeURIComponent(dot)}`);
+  }
+
+  /**
+   * FN-101/102: FMCSA carrier lookup via server-side proxy.
+   * The API key never leaves the backend.
+   * HTTP 404 → { found: false }
+   * HTTP 503 → { found: false, error: 'lookup_unavailable' }
+   * @param force  Pass true (requires admin JWT) to bypass the 1-hour cache.
+   */
+  fmcsaLookup(dotNumber: string, force = false): Observable<{
+    found: boolean;
+    dotNumber?: string;
+    legalName?: string;
+    dbaName?: string;
+    mcNumber?: string | null;
+    status?: string;
+    authorityType?: string;
+    phone?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    safetyRating?: string;
+    oosPercent?: number | null;
+    totalDrivers?: number | null;
+    totalTrucks?: number | null;
+    error?: string;
+  }> {
+    const url = `${this.baseUrl}/fmcsa/lookup/${encodeURIComponent(dotNumber)}${
+      force ? '?force=true' : ''
+    }`;
+    return this.http.get<any>(url);
   }
 
   // Customers
@@ -843,6 +874,8 @@ export class ApiService {
       phone: string;
       fleetSize: string;
       currentSystem?: string;
+      dot_number: string;
+      mc_number?: string | null;
       requestedPlan: 'basic' | 'multi_mc' | 'end_to_end';
       wantsDemoAssistance: boolean;
       notes?: string;
@@ -884,6 +917,18 @@ export class ApiService {
       return this.http.post(
         `${this.baseUrl}/public/trial-requests/${encodeURIComponent(trialRequestId)}/reset-tenant-admin-password`,
         {}
+      );
+    }
+
+    /** FN-102: Update DOT / MC number on a trial request (admin-only). */
+    patchTrialRequestDotMc(
+      id: string,
+      dotNumber: string | null,
+      mcNumber?: string | null
+    ): Observable<any> {
+      return this.http.patch(
+        `${this.baseUrl}/public/trial-requests/${encodeURIComponent(id)}`,
+        { dot_number: dotNumber ?? null, mc_number: mcNumber ?? null }
       );
     }
 

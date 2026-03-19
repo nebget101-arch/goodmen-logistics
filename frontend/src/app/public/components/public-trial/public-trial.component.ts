@@ -1,6 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../../services/api.service';
 import { MARKETING_PLANS, FLEET_SIZE_OPTIONS } from '../../config/marketing.config';
 
@@ -9,7 +10,7 @@ import { MARKETING_PLANS, FLEET_SIZE_OPTIONS } from '../../config/marketing.conf
   templateUrl: './public-trial.component.html',
   styleUrls: ['./public-trial.component.css']
 })
-export class PublicTrialComponent implements OnInit {
+export class PublicTrialComponent implements OnInit, OnDestroy {
   plans = MARKETING_PLANS.filter(plan => plan.trialEligible !== false);
   fleetSizeOptions = FLEET_SIZE_OPTIONS;
   mobileNavOpen = false;
@@ -19,6 +20,11 @@ export class PublicTrialComponent implements OnInit {
   submitting = false;
   success = false;
   submitError = '';
+  private readonly dotMcPattern = /^\d{1,8}$/;
+
+  /** FN-101: FMCSA carrier lookup state */
+  dotLookupStatus: 'idle' | 'loading' | 'active' | 'inactive' | 'not-found' | 'error' = 'idle';
+  private dotLookupSub: Subscription | null = null;;
 
   constructor(
     private fb: FormBuilder,
@@ -28,6 +34,8 @@ export class PublicTrialComponent implements OnInit {
   ) {
     this.form = this.fb.group({
       companyName: ['', [Validators.required, Validators.maxLength(200)]],
+      dotNumber: ['', [Validators.required, Validators.pattern(this.dotMcPattern), Validators.maxLength(8)]],
+      mcNumber: ['', [Validators.pattern(this.dotMcPattern), Validators.maxLength(8)]],
       contactName: ['', [Validators.required, Validators.maxLength(200)]],
       email: ['', [Validators.required, Validators.email, Validators.maxLength(300)]],
       phone: ['', [Validators.required, Validators.maxLength(50)]],
@@ -57,7 +65,22 @@ export class PublicTrialComponent implements OnInit {
     this.submitting = true;
     this.submitError = '';
 
-    this.apiService.submitTrialRequest(this.form.value).subscribe({
+    const dotNumber = this.normalizeNumeric(this.form.value.dotNumber);
+    const mcNumber = this.normalizeNumeric(this.form.value.mcNumber);
+
+    this.apiService.submitTrialRequest({
+      companyName: this.form.value.companyName,
+      contactName: this.form.value.contactName,
+      email: this.form.value.email,
+      phone: this.form.value.phone,
+      fleetSize: this.form.value.fleetSize,
+      currentSystem: this.form.value.currentSystem,
+      requestedPlan: this.form.value.requestedPlan,
+      wantsDemoAssistance: this.form.value.wantsDemoAssistance,
+      notes: this.form.value.notes,
+      dot_number: dotNumber ?? '',
+      mc_number: mcNumber
+    }).subscribe({
       next: () => {
         this.success = true;
         this.submitting = false;
@@ -102,8 +125,96 @@ export class PublicTrialComponent implements OnInit {
     const field = this.form.get(fieldName);
     if (!field || !field.errors || !(field.dirty || field.touched)) return '';
     if (field.errors['required']) return 'This field is required';
+    if (field.errors['pattern']) {
+      if (fieldName === 'dotNumber') return 'USDOT must be 1–8 digits';
+      if (fieldName === 'mcNumber') return 'MC number must be 1–8 digits';
+      return 'Invalid format';
+    }
     if (field.errors['email']) return 'Please enter a valid email address';
-    if (field.errors['maxlength']) return 'Value is too long';
+    if (field.errors['maxlength']) {
+      if (fieldName === 'dotNumber' || fieldName === 'mcNumber') return 'Maximum 8 digits';
+      return 'Value is too long';
+    }
     return 'Invalid value';
+  }
+
+  private normalizeNumeric(value: unknown): string | null {
+    const digitsOnly = String(value || '')
+      .trim()
+      .replace(/\D+/g, '');
+    return digitsOnly ? digitsOnly.slice(0, 8) : null;
+  }
+
+  ngOnDestroy(): void {
+    this.dotLookupSub?.unsubscribe();
+  }
+
+  /**
+   * FN-101: Triggered on blur of the USDOT field.
+   * Looks up the carrier and pre-fills company name / MC number.
+   */
+  onDotBlur(): void {
+    const raw = this.form.get('dotNumber')?.value ?? '';
+    const digits = this.normalizeNumeric(raw);
+
+    // Clear badge when field is empty or too short to query.
+    if (!digits) {
+      this.dotLookupStatus = 'idle';
+      return;
+    }
+    if (digits.length < 7) {
+      return;
+    }
+
+    // Cancel any still-running request before starting a new one.
+    this.dotLookupSub?.unsubscribe();
+    this.dotLookupStatus = 'loading';
+
+    this.dotLookupSub = this.apiService.fmcsaLookup(digits).subscribe({
+      next: (result) => {
+        if (!result.found) {
+          // Should not normally arrive here (backend sends 404 for not-found),
+          // but handle defensively.
+          this.dotLookupStatus = 'not-found';
+          return;
+        }
+
+        // Pre-fill company name with FMCSA legal name.
+        if (result.legalName) {
+          this.form.patchValue({ companyName: result.legalName });
+          // Mark the field dirty so validators re-evaluate.
+          this.form.get('companyName')?.markAsDirty();
+        }
+
+        // Pre-fill MC number only when the user hasn't typed one yet.
+        if (result.mcNumber && !this.normalizeNumeric(this.form.get('mcNumber')?.value)) {
+          this.form.patchValue({ mcNumber: result.mcNumber });
+          this.form.get('mcNumber')?.markAsDirty();
+        }
+
+        this.dotLookupStatus = result.status === 'ACTIVE' ? 'active' : 'inactive';
+      },
+      error: (err: any) => {
+        if (err?.status === 404) {
+          // DOT not found in FMCSA database.
+          this.dotLookupStatus = 'not-found';
+          return;
+        }
+        // 503 / network failure — silent: hide spinner, leave form usable.
+        console.warn('[fmcsa] lookup unavailable:', err?.status ?? 'network error');
+        this.dotLookupStatus = 'error';
+      }
+    });
+  }
+
+  /** Accessible label for the badge slot, consumed by aria-live region. */
+  get dotBadgeAriaLabel(): string {
+    switch (this.dotLookupStatus) {
+      case 'loading':   return 'Looking up carrier information';
+      case 'active':    return 'Verified active FMCSA carrier';
+      case 'inactive':  return 'Carrier is not currently active';
+      case 'not-found': return 'DOT number not found in FMCSA database';
+      default:          return '';
+    }
   }
 }

@@ -16,6 +16,14 @@ const bcrypt = require('bcrypt');
 const { VALID_PLAN_IDS, TRIAL_REQUEST_STATUSES, PLANS } = require('../config/plans');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DOT_MC_RE = /^\d{1,8}$/;
+
+function normalizeNumericIdentifier(value) {
+  const digitsOnly = String(value || '')
+    .trim()
+    .replace(/\D+/g, '');
+  return digitsOnly || null;
+}
 
 /**
  * Validate and create a new trial request record.
@@ -30,11 +38,16 @@ async function createTrialRequest(payload) {
     phone,
     fleetSize,
     currentSystem,
+    dot_number,
+    mc_number,
     requestedPlan,
     wantsDemoAssistance,
     notes,
     source = 'marketing_website'
   } = payload || {};
+
+  const normalizedDotNumber = normalizeNumericIdentifier(dot_number);
+  const normalizedMcNumber = normalizeNumericIdentifier(mc_number);
 
   const errors = [];
   if (!companyName || !String(companyName).trim()) errors.push('companyName is required');
@@ -43,6 +56,12 @@ async function createTrialRequest(payload) {
   if (!phone || !String(phone).trim()) errors.push('phone is required');
   if (!requestedPlan || !VALID_PLAN_IDS.includes(requestedPlan)) {
     errors.push(`requestedPlan must be one of: ${VALID_PLAN_IDS.join(', ')}`);
+  }
+  if (normalizedDotNumber && !DOT_MC_RE.test(normalizedDotNumber)) {
+    errors.push('dot_number must be 1 to 8 digits');
+  }
+  if (normalizedMcNumber && !DOT_MC_RE.test(normalizedMcNumber)) {
+    errors.push('mc_number must be 1 to 8 digits when provided');
   }
 
   if (errors.length > 0) {
@@ -60,6 +79,8 @@ async function createTrialRequest(payload) {
       phone: String(phone).trim(),
       fleet_size: fleetSize ? String(fleetSize).trim() : null,
       current_system: currentSystem ? String(currentSystem).trim() : null,
+      dot_number: normalizedDotNumber,
+      mc_number: normalizedMcNumber,
       requested_plan: requestedPlan,
       wants_demo_assistance: Boolean(wantsDemoAssistance),
       notes: notes ? String(notes).trim() : null,
@@ -357,6 +378,8 @@ async function completeSignupFromToken(token, payload = {}) {
       .insert({
         name: String(record.company_name || 'Trial Tenant').trim(),
         legal_name: String(record.company_name || '').trim() || null,
+        dot_number: normalizeNumericIdentifier(record.dot_number),
+        mc_number: normalizeNumericIdentifier(record.mc_number),
         status: 'active',
         subscription_plan: record.requested_plan || 'basic'
       })
@@ -368,6 +391,8 @@ async function completeSignupFromToken(token, payload = {}) {
         entity_type: 'carrier',
         name: String(record.company_name || 'Main').trim(),
         legal_name: String(record.company_name || '').trim() || null,
+        dot_number: normalizeNumericIdentifier(record.dot_number),
+        mc_number: normalizeNumericIdentifier(record.mc_number),
         email: normalizedEmail,
         phone: String(record.phone || '').trim() || null,
         is_active: true,
@@ -516,5 +541,55 @@ module.exports = {
   getTrialRequestById,
   getSignupContextByToken,
   completeSignupFromToken,
-  resetTenantAdminPassword
+  resetTenantAdminPassword,
+  updateTrialRequestDotMc
 };
+
+/**
+ * FN-102: Update dot_number / mc_number on an existing trial request.
+ * Validates DOT format and strips non-digit characters before saving.
+ *
+ * @param {string} id  Trial request UUID
+ * @param {{ dot_number?: string|null, mc_number?: string|null }} fields
+ * @returns {Object}   Updated trial_requests row
+ */
+async function updateTrialRequestDotMc(id, { dot_number, mc_number } = {}) {
+  const safeId = String(id || '').trim();
+  if (!safeId) {
+    const err = new Error('id is required');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const normalizedDot = normalizeNumericIdentifier(dot_number);
+  const normalizedMc  = normalizeNumericIdentifier(mc_number);
+
+  if (normalizedDot && !/^\d{1,8}$/.test(normalizedDot)) {
+    const err = new Error('dot_number must be 1–8 digits');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (normalizedMc && !/^\d{1,8}$/.test(normalizedMc)) {
+    const err = new Error('mc_number must be 1–8 digits');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const existing = await knex('trial_requests').where({ id: safeId }).first();
+  if (!existing) {
+    const err = new Error('Trial request not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  await knex('trial_requests')
+    .where({ id: safeId })
+    .update({
+      dot_number: normalizedDot,
+      mc_number: normalizedMc,
+      updated_at: knex.fn.now()
+    });
+
+  return knex('trial_requests').where({ id: safeId }).first();
+}
+

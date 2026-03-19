@@ -46,8 +46,10 @@ const swaggerOptions = {
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const scanBridgeRouter = require('@goodmen/shared/routes/scan-bridge');
+const fmcsaRouter = require('@goodmen/shared/routes/fmcsa');
 
 app.use('/api/scan-bridge', scanBridgeRouter);
+app.use('/api/fmcsa', fmcsaRouter);
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 

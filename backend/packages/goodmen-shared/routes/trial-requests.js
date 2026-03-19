@@ -386,4 +386,54 @@ router.patch('/:id/status', authMiddleware, requireInternalTrialAdmin, async (re
   }
 });
 
+// ─── ADMIN: Update DOT / MC number on a trial request ─────────────────────
+
+/**
+ * @openapi
+ * /api/public/trial-requests/{id}:
+ *   patch:
+ *     summary: Update DOT / MC number on an existing trial request
+ *     tags:
+ *       - Admin
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               dot_number: { type: string, pattern: '^\\d{1,8}$' }
+ *               mc_number:  { type: string, pattern: '^\\d{1,8}$' }
+ *     responses:
+ *       200:
+ *         description: Updated trial request
+ *       400:
+ *         description: Validation error
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Not found
+ */
+router.patch('/:id', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
+  try {
+    const { dot_number, mc_number } = req.body || {};
+    const updated = await trialRequestService.updateTrialRequestDotMc(
+      req.params.id,
+      { dot_number, mc_number }
+    );
+    return res.json({ success: true, data: updated });
+  } catch (err) {
+    if ([400, 404].includes(err.statusCode)) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    console.error('[trial-requests] patch dot/mc error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to update trial request' });
+  }
+});
+
 module.exports = router;

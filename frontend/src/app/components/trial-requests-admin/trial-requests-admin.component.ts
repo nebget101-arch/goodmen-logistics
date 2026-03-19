@@ -1,4 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../services/api.service';
 
 type TrialRequestStatus =
@@ -17,6 +18,8 @@ interface TrialRequestRecord {
   phone: string;
   fleet_size?: string | null;
   current_system?: string | null;
+  dot_number?: string | null;
+  mc_number?: string | null;
   requested_plan: 'basic' | 'multi_mc' | 'end_to_end';
   wants_demo_assistance?: boolean;
   notes?: string | null;
@@ -25,12 +28,32 @@ interface TrialRequestRecord {
   updated_at?: string;
 }
 
+/** FN-102: FMCSA lookup state tracked per trial-request row */
+interface FmcsaState {
+  status: 'idle' | 'loading' | 'active' | 'inactive' | 'not-found' | 'error';
+  data?: {
+    dotNumber?: string;
+    legalName?: string;
+    dbaName?: string;
+    mcNumber?: string | null;
+    authorityType?: string;
+    phone?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    safetyRating?: string;
+    oosPercent?: number | null;
+    totalDrivers?: number | null;
+    totalTrucks?: number | null;
+  } | null;
+}
+
 @Component({
   selector: 'app-trial-requests-admin',
   templateUrl: './trial-requests-admin.component.html',
   styleUrls: ['./trial-requests-admin.component.css']
 })
-export class TrialRequestsAdminComponent implements OnInit {
+export class TrialRequestsAdminComponent implements OnInit, OnDestroy {
   loading = false;
   refreshing = false;
   error = '';
@@ -50,6 +73,15 @@ export class TrialRequestsAdminComponent implements OnInit {
   tempPasswordRequestId = '';
   tempPasswordUsername = '';
   tempPasswordEmail = '';
+
+  /** FN-102: FMCSA lookup state per record id */
+  dotFmcsa = new Map<string, FmcsaState>();
+
+  /** FN-102: Manual DOT edit state per record id */
+  dotEditValue = new Map<string, string>();
+  dotSavingId: string | null = null;
+
+  private dotLookupSubs = new Map<string, Subscription>();
 
   readonly statusOptions: Array<{ value: TrialRequestStatus | 'all'; label: string }> = [
     { value: 'all', label: 'All statuses' },
@@ -71,6 +103,11 @@ export class TrialRequestsAdminComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadTrialRequests();
+  }
+
+  ngOnDestroy(): void {
+    this.dotLookupSubs.forEach(sub => sub.unsubscribe());
+    this.dotLookupSubs.clear();
   }
 
   loadTrialRequests(isRefresh = false): void {
@@ -95,6 +132,9 @@ export class TrialRequestsAdminComponent implements OnInit {
             const latest = this.records.find((r) => r.id === this.selectedRecord?.id) || null;
             this.selectedRecord = latest;
           }
+
+          // FN-102: kick off lazy DOT lookups for rows that have a dot_number
+          this.scheduleFmcsaQueue(this.records);
         },
         error: (err: any) => {
           this.error = err?.error?.error || 'Failed to load trial requests';
@@ -102,6 +142,170 @@ export class TrialRequestsAdminComponent implements OnInit {
           this.refreshing = false;
         }
       });
+  }
+
+  // ─── FN-102: FMCSA lookup helpers ─────────────────────────────────────────
+
+  /**
+   * Queue staggered lookups for all rows that carry a DOT number and haven't
+   * been fetched yet. Staggering avoids hammering the FMCSA API if the list
+   * contains many DOT numbers.
+   */
+  private scheduleFmcsaQueue(records: TrialRequestRecord[]): void {
+    const pending = records.filter(
+      r => r.dot_number && !this.dotFmcsa.has(r.id)
+    );
+    pending.forEach((record, idx) => {
+      // Mark as loading immediately so the badge renders right away.
+      this.dotFmcsa.set(record.id, { status: 'loading', data: null });
+      setTimeout(() => this.fetchFmcsa(record, false), idx * 180);
+    });
+  }
+
+  /** Perform (or re-perform) an FMCSA lookup for one record. */
+  fetchFmcsa(record: TrialRequestRecord, force = false): void {
+    const dot = record.dot_number;
+    if (!dot) {
+      this.dotFmcsa.set(record.id, { status: 'idle', data: null });
+      return;
+    }
+
+    // Cancel any in-flight sub for this record.
+    this.dotLookupSubs.get(record.id)?.unsubscribe();
+    this.dotFmcsa.set(record.id, { status: 'loading', data: null });
+
+    const sub = this.api.fmcsaLookup(dot, force).subscribe({
+      next: (result) => {
+        if (!result.found) {
+          this.dotFmcsa.set(record.id, { status: 'not-found', data: null });
+          return;
+        }
+        this.dotFmcsa.set(record.id, {
+          status: result.status === 'ACTIVE' ? 'active' : 'inactive',
+          data: result
+        });
+      },
+      error: (err: any) => {
+        if (err?.status === 404) {
+          this.dotFmcsa.set(record.id, { status: 'not-found', data: null });
+        } else {
+          this.dotFmcsa.set(record.id, { status: 'error', data: null });
+        }
+      }
+    });
+    this.dotLookupSubs.set(record.id, sub);
+  }
+
+  /** Admin re-verifies a DOT, bypassing the 1-hour backend cache. */
+  reVerifyFmcsa(record: TrialRequestRecord): void {
+    this.fetchFmcsa(record, true);
+  }
+
+  /** Returns the FmcsaState for a record, or a sensible default. */
+  getFmcsa(record: TrialRequestRecord): FmcsaState {
+    return this.dotFmcsa.get(record.id) ?? { status: 'idle', data: null };
+  }
+
+  /** Human-readable badge label for the DOT status. */
+  dotBadgeLabel(record: TrialRequestRecord): string {
+    if (!record.dot_number) return 'ℹ️ No DOT';
+    const state = this.getFmcsa(record);
+    switch (state.status) {
+      case 'loading':   return '⏳ Checking…';
+      case 'active':    return '✅ Active';
+      case 'inactive':  return '⚠️ Inactive';
+      case 'not-found': return '❌ Not Found';
+      case 'error':     return '— Unavailable';
+      default:          return record.dot_number;
+    }
+  }
+
+  dotBadgeClass(record: TrialRequestRecord): string {
+    if (!record.dot_number) return 'fmcsa-badge-nodot';
+    const state = this.getFmcsa(record);
+    switch (state.status) {
+      case 'loading':   return 'fmcsa-badge-loading';
+      case 'active':    return 'fmcsa-badge-active';
+      case 'inactive':  return 'fmcsa-badge-inactive';
+      case 'not-found': return 'fmcsa-badge-notfound';
+      default:          return 'fmcsa-badge-error';
+    }
+  }
+
+  /** Risk signal chips shown in the detail panel. */
+  riskSignals(record: TrialRequestRecord): Array<{ label: string; severity: 'red' | 'amber' }> {
+    const state = this.getFmcsa(record);
+    if (!state.data) return [];
+    const chips: Array<{ label: string; severity: 'red' | 'amber' }> = [];
+
+    if (state.status === 'inactive') {
+      chips.push({ label: 'Not Authorized to Operate', severity: 'red' });
+    }
+    const rating = (state.data.safetyRating || '').toLowerCase();
+    if (rating === 'unsatisfactory' || rating === 'conditional') {
+      chips.push({ label: `Safety Rating: ${state.data.safetyRating}`, severity: 'red' });
+    }
+    const oos = state.data.oosPercent;
+    if (typeof oos === 'number') {
+      if (oos > 34) {
+        chips.push({ label: `OOS Rate ${oos.toFixed(1)}% — Very High`, severity: 'red' });
+      } else if (oos > 20) {
+        chips.push({ label: `OOS Rate ${oos.toFixed(1)}% — Above National Avg`, severity: 'amber' });
+      }
+    }
+    return chips;
+  }
+
+  /** FMCSA SAFER link for a given DOT number. */
+  saferUrl(dot: string): string {
+    return `https://safer.fmcsa.dot.gov/query.asp?query_type=queryCarrierSnapshot&query_param=USDOT&query_string=${encodeURIComponent(dot)}`;
+  }
+
+  // ─── FN-102: Manual DOT/MC save ───────────────────────────────────────────
+
+  getDotEditValue(record: TrialRequestRecord): string {
+    return this.dotEditValue.get(record.id) ?? (record.dot_number || '');
+  }
+
+  onDotEditChange(record: TrialRequestRecord, value: string): void {
+    this.dotEditValue.set(record.id, value.replace(/\D/g, '').slice(0, 8));
+  }
+
+  onDotEditBlur(record: TrialRequestRecord): void {
+    const newDot = (this.dotEditValue.get(record.id) ?? '').trim();
+    const currentDot = (record.dot_number ?? '').trim();
+    if (newDot === currentDot) return; // no change
+    this.saveDotMc(record, newDot || null, record.mc_number ?? null);
+  }
+
+  saveDotMc(
+    record: TrialRequestRecord,
+    dotNumber: string | null,
+    mcNumber: string | null
+  ): void {
+    this.dotSavingId = record.id;
+    this.error = '';
+    this.api.patchTrialRequestDotMc(record.id, dotNumber, mcNumber).subscribe({
+      next: (res: any) => {
+        const updated = res?.data || {};
+        this.records = this.records.map(r => r.id === record.id ? { ...r, ...updated } : r);
+        if (this.selectedRecord?.id === record.id) {
+          this.selectedRecord = { ...record, ...updated };
+        }
+        this.dotSavingId = null;
+        this.dotEditValue.delete(record.id);
+        // Trigger FMCSA lookup for the new DOT.
+        if (dotNumber) {
+          this.dotFmcsa.delete(record.id);
+          const fresh = this.records.find(r => r.id === record.id);
+          if (fresh) this.fetchFmcsa(fresh, false);
+        }
+      },
+      error: (err: any) => {
+        this.error = err?.error?.error || 'Failed to save DOT number';
+        this.dotSavingId = null;
+      }
+    });
   }
 
   onStatusFilterChange(value: TrialRequestStatus | 'all'): void {

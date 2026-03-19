@@ -38,6 +38,54 @@ async function activateTrial(tenantId, planId, trialDays = 14, actorUserId = nul
     subscription_plan: planId,
     updated_at: knex.fn.now()
   });
+
+  // FN-100: pass DOT/MC captured at trial request stage into tenant + operating entity
+  // so operating entities can be pre-populated and prepared for FMCSA auto-fill workflows.
+  try {
+    const latestTrialRequest = await knex('trial_requests')
+      .where({ created_tenant_id: tenantId })
+      .orderBy('updated_at', 'desc')
+      .first(['dot_number', 'mc_number', 'created_operating_entity_id']);
+
+    const dotNumber = String(latestTrialRequest?.dot_number || '').trim() || null;
+    const mcNumber = String(latestTrialRequest?.mc_number || '').trim() || null;
+
+    if (dotNumber || mcNumber) {
+      await knex('tenants')
+        .where({ id: tenantId })
+        .update({
+          dot_number: dotNumber,
+          mc_number: mcNumber,
+          updated_at: knex.fn.now()
+        });
+
+      let operatingEntityQuery = knex('operating_entities')
+        .where({ tenant_id: tenantId });
+
+      if (latestTrialRequest?.created_operating_entity_id) {
+        operatingEntityQuery = operatingEntityQuery.andWhere({
+          id: latestTrialRequest.created_operating_entity_id
+        });
+      }
+
+      const targetOperatingEntity = await operatingEntityQuery
+        .orderBy('created_at', 'asc')
+        .first(['id']);
+
+      if (targetOperatingEntity?.id) {
+        await knex('operating_entities')
+          .where({ id: targetOperatingEntity.id })
+          .update({
+            dot_number: dotNumber,
+            mc_number: mcNumber,
+            updated_at: knex.fn.now()
+          });
+      }
+    }
+  } catch {
+    // Best effort only: do not block trial activation if DOT/MC passthrough fails.
+  }
+
   await writeAuditLog(tenantId, actorUserId, 'trial_activated', 'tenants', tenantId, {
     planId,
     trialDays: safeTrialDays
