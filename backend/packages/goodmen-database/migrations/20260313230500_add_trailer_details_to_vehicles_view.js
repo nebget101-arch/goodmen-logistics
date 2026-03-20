@@ -1,6 +1,10 @@
 'use strict';
 
 exports.up = async function up(knex) {
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+  if (!hasVehicles || !hasCustomerVehicles) return;
+
   const hasColumn = await knex.schema.hasColumn('vehicles', 'trailer_details');
   if (!hasColumn) {
     await knex.schema.alterTable('vehicles', (table) => {
@@ -70,6 +74,10 @@ exports.up = async function up(knex) {
 };
 
 exports.down = async function down(knex) {
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+  if (!hasVehicles || !hasCustomerVehicles) return;
+
   await knex.raw('DROP VIEW IF EXISTS all_vehicles');
   await knex.raw(`
     CREATE VIEW all_vehicles AS

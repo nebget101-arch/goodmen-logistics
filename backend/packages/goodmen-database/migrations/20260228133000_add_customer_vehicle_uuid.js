@@ -4,6 +4,9 @@
 exports.up = async function(knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS pgcrypto');
 
+  const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+  if (!hasCustomerVehicles) return;
+
   const hasVehicleUuid = await knex.schema.hasColumn('customer_vehicles', 'vehicle_uuid');
   if (!hasVehicleUuid) {
     await knex.schema.alterTable('customer_vehicles', table => {
@@ -15,6 +18,9 @@ exports.up = async function(knex) {
 };
 
 exports.down = async function(knex) {
+	const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+	if (!hasCustomerVehicles) return;
+
   const hasVehicleUuid = await knex.schema.hasColumn('customer_vehicles', 'vehicle_uuid');
   if (hasVehicleUuid) {
     await knex.schema.alterTable('customer_vehicles', table => {

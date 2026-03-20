@@ -2,6 +2,9 @@
  * Ensure work_orders financial columns exist.
  */
 exports.up = async function(knex) {
+  const hasWorkOrders = await knex.schema.hasTable('work_orders');
+  if (!hasWorkOrders) return;
+
   const addColumnIfMissing = async (column, callback) => {
     const exists = await knex.schema.hasColumn('work_orders', column);
     if (!exists) {
@@ -20,6 +23,9 @@ exports.up = async function(knex) {
 };
 
 exports.down = async function(knex) {
+  const hasWorkOrders = await knex.schema.hasTable('work_orders');
+  if (!hasWorkOrders) return;
+
   await knex.schema.alterTable('work_orders', table => {
     table.dropColumn('discount_type');
     table.dropColumn('discount_value');

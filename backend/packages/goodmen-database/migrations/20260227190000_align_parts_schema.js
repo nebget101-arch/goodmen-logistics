@@ -6,6 +6,9 @@
  * @returns { Promise<void> }
  */
 exports.up = async function(knex) {
+	const hasParts = await knex.schema.hasTable('parts');
+	if (!hasParts) return;
+
 	// Check which columns exist
 	const hasUnitCost = await knex.schema.hasColumn('parts', 'unit_cost');
 	const hasUnitPrice = await knex.schema.hasColumn('parts', 'unit_price');
@@ -88,6 +91,9 @@ exports.up = async function(knex) {
  * @returns { Promise<void> }
  */
 exports.down = async function(knex) {
+	const hasParts = await knex.schema.hasTable('parts');
+	if (!hasParts) return;
+
 	await knex.schema.alterTable('parts', table => {
 		table.dropColumn('unit_cost');
 		table.dropColumn('unit_price');

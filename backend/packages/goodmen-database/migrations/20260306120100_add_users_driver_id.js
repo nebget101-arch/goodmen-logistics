@@ -5,6 +5,9 @@
  */
 
 exports.up = async function (knex) {
+	const hasUsers = await knex.schema.hasTable('users');
+	if (!hasUsers) return;
+
   const hasColumn = await knex.schema.hasColumn('users', 'driver_id');
   if (!hasColumn) {
     await knex.schema.alterTable('users', (table) => {
@@ -14,6 +17,9 @@ exports.up = async function (knex) {
 };
 
 exports.down = async function (knex) {
+	const hasUsers = await knex.schema.hasTable('users');
+	if (!hasUsers) return;
+
   if (await knex.schema.hasColumn('users', 'driver_id')) {
     await knex.schema.alterTable('users', (table) => {
       table.dropColumn('driver_id');
