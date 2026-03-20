@@ -2,6 +2,13 @@ exports.up = async function(knex) {
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DESTRUCTIVE_MIGRATIONS !== 'true') {
     return;
   }
+
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+  if (!hasVehicles || !hasCustomerVehicles) {
+    return;
+  }
+
   await knex.raw('DROP VIEW IF EXISTS all_vehicles');
   await knex.raw(`
     CREATE VIEW all_vehicles AS
@@ -60,5 +67,11 @@ exports.up = async function(knex) {
 };
 
 exports.down = async function(knex) {
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+  if (!hasVehicles || !hasCustomerVehicles) {
+    return;
+  }
+
   await knex.raw('DROP VIEW IF EXISTS all_vehicles');
 };
