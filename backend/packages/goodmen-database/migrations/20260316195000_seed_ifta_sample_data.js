@@ -1,7 +1,14 @@
 'use strict';
 
 exports.up = async function up(knex) {
-  const requiredTables = ['ifta_quarters', 'ifta_miles_entries', 'ifta_fuel_entries'];
+  const requiredTables = [
+    'ifta_quarters',
+    'ifta_miles_entries',
+    'ifta_fuel_entries',
+    'tenants',
+    'operating_entities',
+    'vehicles',
+  ];
   for (const table of requiredTables) {
     // eslint-disable-next-line no-await-in-loop
     if (!(await knex.schema.hasTable(table))) return;
@@ -116,6 +123,12 @@ exports.up = async function up(knex) {
 };
 
 exports.down = async function down(knex) {
+  const requiredTables = ['ifta_quarters', 'ifta_miles_entries', 'ifta_fuel_entries'];
+  for (const table of requiredTables) {
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await knex.schema.hasTable(table))) return;
+  }
+
   const quarter = await knex('ifta_quarters').where({ tax_year: 2026, quarter: 1 }).orderBy('created_at', 'asc').first();
   if (!quarter) return;
 
