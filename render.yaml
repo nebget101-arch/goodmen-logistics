@@ -35,7 +35,7 @@ services:
       - key: AI_SERVICE_URL
         value: https://fleetneuron-ai-service.onrender.com
       - key: CORS_ORIGIN
-        value: https://fleetneuron.ai
+        value: https://fleetneuron.ai,https://dev.fleetneuron.ai,https://fleetneuron-logistics-ui.onrender.com,http://localhost:4200
       - key: NODE_ENV
         value: production
       - key: PORT

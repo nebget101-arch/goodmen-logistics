@@ -27,9 +27,31 @@ const INVENTORY_SERVICE_URL = requireEnv('INVENTORY_SERVICE_URL');
 const AI_SERVICE_URL = requireEnv('AI_SERVICE_URL');
 const isProd = process.env.NODE_ENV === 'production';
 
+function parseAllowedOrigins(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+const allowedOrigins = parseAllowedOrigins(
+  process.env.CORS_ORIGIN ||
+    'http://localhost:4200,https://fleetneuron.ai,https://dev.fleetneuron.ai,https://fleetneuron-logistics-ui.onrender.com'
+);
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:4200',
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true
   })
 );
