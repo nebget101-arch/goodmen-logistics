@@ -34,9 +34,18 @@ function parseAllowedOrigins(raw) {
     .filter(Boolean);
 }
 
-const allowedOrigins = parseAllowedOrigins(
-  process.env.CORS_ORIGIN ||
-    'http://localhost:4200,https://fleetneuron.ai,https://dev.fleetneuron.ai,https://fleetneuron-logistics-ui.onrender.com'
+const baseAllowedOrigins = [
+  'http://localhost:4200',
+  'https://fleetneuron.ai',
+  'https://dev.fleetneuron.ai',
+  'https://fleetneuron-logistics-ui.onrender.com'
+];
+
+const allowedOrigins = Array.from(
+  new Set([
+    ...baseAllowedOrigins,
+    ...parseAllowedOrigins(process.env.CORS_ORIGIN)
+  ])
 );
 
 app.use(
