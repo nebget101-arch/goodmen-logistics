@@ -3,7 +3,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const stripeWebhookRouter = require('./routes/stripe');
 
 const app = express();
 
@@ -87,9 +86,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Stripe webhook endpoint must use raw request body for signature verification.
-app.use('/api/stripe', stripeWebhookRouter);
-
 function buildProxy(target, label) {
   return createProxyMiddleware({
     target,
@@ -148,6 +144,7 @@ app.use('/api/audit', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/scan-bridge', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/fmcsa', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/auth', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
+app.use('/api/stripe', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/users', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/roles', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/permissions', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
