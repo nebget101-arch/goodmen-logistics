@@ -7,6 +7,8 @@
 exports.up = async function up(knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
 
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+
   if (!(await knex.schema.hasTable('lease_agreements'))) {
     await knex.schema.createTable('lease_agreements', (t) => {
       t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
@@ -15,7 +17,10 @@ exports.up = async function up(knex) {
       t.uuid('company_id').nullable();
       t.uuid('mc_id').nullable();
       t.uuid('driver_id').notNullable().references('id').inTable('drivers').onDelete('RESTRICT');
-      t.uuid('truck_id').notNullable().references('id').inTable('vehicles').onDelete('RESTRICT');
+      const truckId = t.uuid('truck_id').notNullable();
+      if (hasVehicles) {
+        truckId.references('id').inTable('vehicles').onDelete('RESTRICT');
+      }
       t.text('agreement_number').notNullable();
 
       t.decimal('purchase_price', 14, 2).notNullable().defaultTo(0);

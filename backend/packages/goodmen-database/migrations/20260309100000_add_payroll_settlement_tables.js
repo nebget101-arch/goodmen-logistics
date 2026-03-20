@@ -10,6 +10,8 @@
 exports.up = async function (knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
 
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+
   // ---------------------------------------------------------------------------
   // 1. payees
   // ---------------------------------------------------------------------------
@@ -204,7 +206,10 @@ exports.up = async function (knex) {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
       table.uuid('driver_id').nullable().references('id').inTable('drivers').onDelete('CASCADE');
       table.uuid('payee_id').nullable().references('id').inTable('payees').onDelete('SET NULL');
-      table.uuid('equipment_id').nullable().references('id').inTable('vehicles').onDelete('SET NULL');
+      const equipmentId = table.uuid('equipment_id').nullable();
+      if (hasVehicles) {
+        equipmentId.references('id').inTable('vehicles').onDelete('SET NULL');
+      }
       table.text('rule_scope').notNullable(); // driver | payee | truck | trailer | driver_and_truck
       table.text('description').nullable();
       table.text('amount_type').notNullable().defaultTo('fixed');
@@ -257,7 +262,10 @@ exports.up = async function (knex) {
       table.text('category').nullable();
       table.uuid('matched_driver_id').nullable().references('id').inTable('drivers').onDelete('SET NULL');
       table.uuid('matched_payee_id').nullable().references('id').inTable('payees').onDelete('SET NULL');
-      table.uuid('matched_vehicle_id').nullable().references('id').inTable('vehicles').onDelete('SET NULL');
+      const matchedVehicleId = table.uuid('matched_vehicle_id').nullable();
+      if (hasVehicles) {
+        matchedVehicleId.references('id').inTable('vehicles').onDelete('SET NULL');
+      }
       table.decimal('match_confidence', 5, 4).nullable();
       table.uuid('settlement_adjustment_item_id').nullable().references('id').inTable('settlement_adjustment_items').onDelete('SET NULL');
       table.text('status').notNullable().defaultTo('unmatched'); // unmatched | matched | applied | ignored

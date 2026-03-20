@@ -1,4 +1,6 @@
 exports.up = async function(knex) {
+  await knex.raw('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
+
   const hasTable = await knex.schema.hasTable('customer_vehicles');
   if (hasTable) return;
 

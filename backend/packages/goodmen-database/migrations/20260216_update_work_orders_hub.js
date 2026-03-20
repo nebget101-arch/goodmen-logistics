@@ -3,20 +3,38 @@
  * @returns { Promise<void> }
  */
 exports.up = async function(knex) {
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasCustomers = await knex.schema.hasTable('customers');
+  const hasLocations = await knex.schema.hasTable('locations');
+  const hasUsers = await knex.schema.hasTable('users');
+  const hasParts = await knex.schema.hasTable('parts');
+
   const hasWorkOrders = await knex.schema.hasTable('work_orders');
   if (!hasWorkOrders) {
     await knex.schema.createTable('work_orders', table => {
       table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
       table.string('work_order_number').notNullable().unique();
-      table.uuid('vehicle_id').notNullable().references('id').inTable('vehicles');
-      table.uuid('customer_id').references('id').inTable('customers');
-      table.uuid('location_id').notNullable().references('id').inTable('locations');
+      const vehicleId = table.uuid('vehicle_id').notNullable();
+      if (hasVehicles) {
+        vehicleId.references('id').inTable('vehicles');
+      }
+      const customerId = table.uuid('customer_id');
+      if (hasCustomers) {
+        customerId.references('id').inTable('customers');
+      }
+      const locationId = table.uuid('location_id').notNullable();
+      if (hasLocations) {
+        locationId.references('id').inTable('locations');
+      }
       table.enu('type', ['REPAIR', 'PM', 'INSPECTION', 'TIRE', 'OTHER']).defaultTo('REPAIR');
       table.enu('priority', ['LOW', 'NORMAL', 'HIGH', 'URGENT']).defaultTo('NORMAL');
       table.enu('status', ['DRAFT', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'CLOSED', 'CANCELED']).defaultTo('DRAFT');
       table.text('description');
       table.integer('odometer_miles');
-      table.uuid('assigned_mechanic_user_id').references('id').inTable('users');
+      const assignedMechanicUserId = table.uuid('assigned_mechanic_user_id');
+      if (hasUsers) {
+        assignedMechanicUserId.references('id').inTable('users');
+      }
       table.enu('discount_type', ['NONE', 'PERCENT', 'AMOUNT']).defaultTo('NONE');
       table.decimal('discount_value', 12, 2).defaultTo(0);
       table.decimal('tax_rate_percent', 6, 3).defaultTo(0);
@@ -40,7 +58,10 @@ exports.up = async function(knex) {
     const hasCustomer = await knex.schema.hasColumn('work_orders', 'customer_id');
     if (!hasCustomer) {
       await knex.schema.table('work_orders', table => {
-        table.uuid('customer_id').references('id').inTable('customers');
+        const customerId = table.uuid('customer_id');
+        if (hasCustomers) {
+          customerId.references('id').inTable('customers');
+        }
       });
     }
 
@@ -68,7 +89,10 @@ exports.up = async function(knex) {
     const hasAssigned = await knex.schema.hasColumn('work_orders', 'assigned_mechanic_user_id');
     if (!hasAssigned) {
       await knex.schema.table('work_orders', table => {
-        table.uuid('assigned_mechanic_user_id').references('id').inTable('users');
+        const assignedMechanicUserId = table.uuid('assigned_mechanic_user_id');
+        if (hasUsers) {
+          assignedMechanicUserId.references('id').inTable('users');
+        }
       });
     }
 
@@ -133,7 +157,7 @@ exports.up = async function(knex) {
   }
 
   const hasLaborItems = await knex.schema.hasTable('work_order_labor_items');
-  if (!hasLaborItems) {
+  if (!hasLaborItems && hasWorkOrders) {
     await knex.schema.createTable('work_order_labor_items', table => {
       table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
       table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
@@ -148,12 +172,18 @@ exports.up = async function(knex) {
   }
 
   const hasPartItems = await knex.schema.hasTable('work_order_part_items');
-  if (!hasPartItems) {
+  if (!hasPartItems && hasWorkOrders) {
     await knex.schema.createTable('work_order_part_items', table => {
       table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
       table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
-      table.uuid('part_id').notNullable().references('id').inTable('parts');
-      table.uuid('location_id').notNullable().references('id').inTable('locations');
+      const partId = table.uuid('part_id').notNullable();
+      if (hasParts) {
+        partId.references('id').inTable('parts');
+      }
+      const locationId = table.uuid('location_id').notNullable();
+      if (hasLocations) {
+        locationId.references('id').inTable('locations');
+      }
       table.decimal('qty_requested', 12, 3).defaultTo(0);
       table.decimal('qty_reserved', 12, 3).defaultTo(0);
       table.decimal('qty_issued', 12, 3).defaultTo(0);
@@ -168,7 +198,7 @@ exports.up = async function(knex) {
   }
 
   const hasFees = await knex.schema.hasTable('work_order_fees');
-  if (!hasFees) {
+  if (!hasFees && hasWorkOrders) {
     await knex.schema.createTable('work_order_fees', table => {
       table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
       table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
@@ -181,7 +211,7 @@ exports.up = async function(knex) {
   }
 
   const hasDocuments = await knex.schema.hasTable('work_order_documents');
-  if (!hasDocuments) {
+  if (!hasDocuments && hasWorkOrders) {
     await knex.schema.createTable('work_order_documents', table => {
       table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
       table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
@@ -189,7 +219,10 @@ exports.up = async function(knex) {
       table.string('mime_type').notNullable();
       table.bigint('file_size_bytes').notNullable();
       table.string('storage_key').notNullable();
-      table.uuid('uploaded_by_user_id').references('id').inTable('users');
+      const uploadedByUserId = table.uuid('uploaded_by_user_id');
+      if (hasUsers) {
+        uploadedByUserId.references('id').inTable('users');
+      }
       table.timestamp('created_at').defaultTo(knex.fn.now());
       table.index('work_order_id');
     });
