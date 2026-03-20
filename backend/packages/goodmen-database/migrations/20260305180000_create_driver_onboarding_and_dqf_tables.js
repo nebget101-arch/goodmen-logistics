@@ -16,16 +16,22 @@
 /* eslint-disable no-await-in-loop */
 
 exports.up = async function up(knex) {
+  const hasDrivers = await knex.schema.hasTable('drivers');
+  const hasUsers = await knex.schema.hasTable('users');
+
   // 1) driver_onboarding_packets
   const hasPackets = await knex.schema.hasTable('driver_onboarding_packets');
   if (!hasPackets) {
     await knex.schema.createTable('driver_onboarding_packets', (table) => {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-      table
+      const driverId = table
         .uuid('driver_id')
-        .notNullable()
-        .references('id')
-        .inTable('drivers');
+        .notNullable();
+      if (hasDrivers) {
+        driverId
+          .references('id')
+          .inTable('drivers');
+      }
       table
         .text('status')
         .notNullable()
@@ -35,10 +41,13 @@ exports.up = async function up(knex) {
       table.text('sent_via');
       table.text('sent_to_phone');
       table.text('sent_to_email');
-      table
-        .uuid('created_by')
-        .references('id')
-        .inTable('users');
+      const createdBy = table
+        .uuid('created_by');
+      if (hasUsers) {
+        createdBy
+          .references('id')
+          .inTable('users');
+      }
       table.timestamp('created_at', { useTz: true }).defaultTo(knex.fn.now());
       table.timestamp('updated_at', { useTz: true }).defaultTo(knex.fn.now());
     });
@@ -110,11 +119,14 @@ exports.up = async function up(knex) {
   if (!hasDocs) {
     await knex.schema.createTable('driver_documents', (table) => {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-      table
+      const driverId = table
         .uuid('driver_id')
-        .notNullable()
-        .references('id')
-        .inTable('drivers');
+        .notNullable();
+      if (hasDrivers) {
+        driverId
+          .references('id')
+          .inTable('drivers');
+      }
       table
         .uuid('packet_id')
         .references('id')
@@ -166,12 +178,15 @@ exports.up = async function up(knex) {
   const hasStatus = await knex.schema.hasTable('dqf_driver_status');
   if (!hasStatus) {
     await knex.schema.createTable('dqf_driver_status', (table) => {
-      table
+      const driverId = table
         .uuid('driver_id')
-        .notNullable()
-        .references('id')
-        .inTable('drivers')
-        .onDelete('CASCADE');
+        .notNullable();
+      if (hasDrivers) {
+        driverId
+          .references('id')
+          .inTable('drivers')
+          .onDelete('CASCADE');
+      }
       table
         .text('requirement_key')
         .notNullable()
@@ -232,11 +247,13 @@ exports.up = async function up(knex) {
   }
 
   // 9) Ensure drivers.dqf_completeness exists
-  const hasDqfCol = await knex.schema.hasColumn('drivers', 'dqf_completeness');
-  if (!hasDqfCol) {
-    await knex.schema.alterTable('drivers', (table) => {
-      table.integer('dqf_completeness').defaultTo(0);
-    });
+  if (hasDrivers) {
+    const hasDqfCol = await knex.schema.hasColumn('drivers', 'dqf_completeness');
+    if (!hasDqfCol) {
+      await knex.schema.alterTable('drivers', (table) => {
+        table.integer('dqf_completeness').defaultTo(0);
+      });
+    }
   }
 };
 

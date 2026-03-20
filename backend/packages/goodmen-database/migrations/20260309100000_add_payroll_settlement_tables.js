@@ -11,6 +11,7 @@ exports.up = async function (knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
 
   const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasDrivers = await knex.schema.hasTable('drivers');
 
   // ---------------------------------------------------------------------------
   // 1. payees
@@ -36,7 +37,10 @@ exports.up = async function (knex) {
   if (!(await knex.schema.hasTable('driver_compensation_profiles'))) {
     await knex.schema.createTable('driver_compensation_profiles', (table) => {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-      table.uuid('driver_id').notNullable().references('id').inTable('drivers').onDelete('CASCADE');
+      const driverId = table.uuid('driver_id').notNullable();
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('CASCADE');
+      }
       table.text('profile_type').notNullable(); // company_driver | owner_operator | hired_driver_for_owner
       table.text('pay_model').notNullable(); // per_mile | percentage | flat_weekly | flat_per_load
       table.decimal('percentage_rate', 5, 2).nullable();
@@ -60,7 +64,10 @@ exports.up = async function (knex) {
   if (!(await knex.schema.hasTable('expense_responsibility_profiles'))) {
     await knex.schema.createTable('expense_responsibility_profiles', (table) => {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-      table.uuid('driver_id').nullable().references('id').inTable('drivers').onDelete('CASCADE');
+      const driverId = table.uuid('driver_id').nullable();
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('CASCADE');
+      }
       table.uuid('compensation_profile_id').nullable().references('id').inTable('driver_compensation_profiles').onDelete('SET NULL');
       table.text('fuel_responsibility').nullable(); // company | driver | owner | shared
       table.text('insurance_responsibility').nullable();
@@ -83,7 +90,10 @@ exports.up = async function (knex) {
   if (!(await knex.schema.hasTable('driver_payee_assignments'))) {
     await knex.schema.createTable('driver_payee_assignments', (table) => {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-      table.uuid('driver_id').notNullable().references('id').inTable('drivers').onDelete('CASCADE');
+      const driverId = table.uuid('driver_id').notNullable();
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('CASCADE');
+      }
       table.uuid('primary_payee_id').notNullable().references('id').inTable('payees').onDelete('RESTRICT');
       table.uuid('additional_payee_id').nullable().references('id').inTable('payees').onDelete('SET NULL');
       table.text('rule_type').notNullable(); // company_truck | owner_truck | owner_operator | custom
@@ -120,7 +130,10 @@ exports.up = async function (knex) {
     await knex.schema.createTable('settlements', (table) => {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
       table.uuid('payroll_period_id').notNullable().references('id').inTable('payroll_periods').onDelete('RESTRICT');
-      table.uuid('driver_id').notNullable().references('id').inTable('drivers').onDelete('RESTRICT');
+      const driverId = table.uuid('driver_id').notNullable();
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('RESTRICT');
+      }
       table.uuid('compensation_profile_id').nullable().references('id').inTable('driver_compensation_profiles').onDelete('SET NULL');
       table.uuid('primary_payee_id').notNullable().references('id').inTable('payees').onDelete('RESTRICT');
       table.uuid('additional_payee_id').nullable().references('id').inTable('payees').onDelete('SET NULL');
@@ -204,7 +217,10 @@ exports.up = async function (knex) {
   if (!(await knex.schema.hasTable('recurring_deduction_rules'))) {
     await knex.schema.createTable('recurring_deduction_rules', (table) => {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-      table.uuid('driver_id').nullable().references('id').inTable('drivers').onDelete('CASCADE');
+      const driverId = table.uuid('driver_id').nullable();
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('CASCADE');
+      }
       table.uuid('payee_id').nullable().references('id').inTable('payees').onDelete('SET NULL');
       const equipmentId = table.uuid('equipment_id').nullable();
       if (hasVehicles) {
@@ -260,7 +276,10 @@ exports.up = async function (knex) {
       table.text('description').nullable();
       table.decimal('amount', 14, 2).notNullable();
       table.text('category').nullable();
-      table.uuid('matched_driver_id').nullable().references('id').inTable('drivers').onDelete('SET NULL');
+      const matchedDriverId = table.uuid('matched_driver_id').nullable();
+      if (hasDrivers) {
+        matchedDriverId.references('id').inTable('drivers').onDelete('SET NULL');
+      }
       table.uuid('matched_payee_id').nullable().references('id').inTable('payees').onDelete('SET NULL');
       const matchedVehicleId = table.uuid('matched_vehicle_id').nullable();
       if (hasVehicles) {

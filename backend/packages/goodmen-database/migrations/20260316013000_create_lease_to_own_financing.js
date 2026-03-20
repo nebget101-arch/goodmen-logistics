@@ -8,6 +8,7 @@ exports.up = async function up(knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
 
   const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasDrivers = await knex.schema.hasTable('drivers');
 
   if (!(await knex.schema.hasTable('lease_agreements'))) {
     await knex.schema.createTable('lease_agreements', (t) => {
@@ -16,7 +17,10 @@ exports.up = async function up(knex) {
       t.uuid('operating_entity_id').nullable(); // MC / entity scope
       t.uuid('company_id').nullable();
       t.uuid('mc_id').nullable();
-      t.uuid('driver_id').notNullable().references('id').inTable('drivers').onDelete('RESTRICT');
+      const driverId = t.uuid('driver_id').notNullable();
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('RESTRICT');
+      }
       const truckId = t.uuid('truck_id').notNullable();
       if (hasVehicles) {
         truckId.references('id').inTable('vehicles').onDelete('RESTRICT');
@@ -125,7 +129,10 @@ exports.up = async function up(knex) {
     await knex.schema.createTable('lease_risk_snapshots', (t) => {
       t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
       t.uuid('agreement_id').notNullable().references('id').inTable('lease_agreements').onDelete('CASCADE');
-      t.uuid('driver_id').notNullable().references('id').inTable('drivers').onDelete('CASCADE');
+      const driverId = t.uuid('driver_id').notNullable();
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('CASCADE');
+      }
       t.timestamp('calculated_at').notNullable().defaultTo(knex.fn.now());
       t.integer('risk_score').notNullable().defaultTo(0); // 0-100
       t.text('risk_level').notNullable().defaultTo('low'); // low | medium | high
@@ -166,7 +173,12 @@ exports.up = async function up(knex) {
     if (!hasOwnerType || !hasLeasedDriverId || !hasTitleStatus) {
       await knex.schema.alterTable('vehicles', (t) => {
         if (!hasOwnerType) t.text('owner_type').nullable().defaultTo('company_owned');
-        if (!hasLeasedDriverId) t.uuid('leased_driver_id').nullable().references('id').inTable('drivers').onDelete('SET NULL');
+        if (!hasLeasedDriverId) {
+          const leasedDriverId = t.uuid('leased_driver_id').nullable();
+          if (hasDrivers) {
+            leasedDriverId.references('id').inTable('drivers').onDelete('SET NULL');
+          }
+        }
         if (!hasTitleStatus) t.text('title_status').nullable();
       });
     }

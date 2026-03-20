@@ -18,16 +18,25 @@
 /* eslint-disable no-await-in-loop */
 
 exports.up = async function up(knex) {
+  const hasDrivers = await knex.schema.hasTable('drivers');
+  const hasUsers = await knex.schema.hasTable('users');
+
   // 1) dqf_status_changes audit table
   const hasAudit = await knex.schema.hasTable('dqf_status_changes');
   if (!hasAudit) {
     await knex.schema.createTable('dqf_status_changes', (table) => {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-      table.uuid('driver_id').notNullable().references('id').inTable('drivers').onDelete('CASCADE');
+      const driverId = table.uuid('driver_id').notNullable();
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('CASCADE');
+      }
       table.text('requirement_key').notNullable();
       table.text('old_status').defaultTo('missing');
       table.text('new_status').notNullable();
-      table.uuid('changed_by_user_id').references('id').inTable('users');
+      const changedByUserId = table.uuid('changed_by_user_id');
+      if (hasUsers) {
+        changedByUserId.references('id').inTable('users');
+      }
       table.timestamp('changed_at', { useTz: true }).defaultTo(knex.fn.now());
       table.text('note');
       table.index(['driver_id']);
@@ -41,7 +50,10 @@ exports.up = async function up(knex) {
   if (!hasEmps) {
     await knex.schema.createTable('driver_past_employers', (table) => {
       table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-      table.uuid('driver_id').notNullable().references('id').inTable('drivers').onDelete('CASCADE');
+      const driverId = table.uuid('driver_id').notNullable();
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('CASCADE');
+      }
       table.text('employer_name').notNullable();
       table.text('contact_name');
       table.text('contact_phone');
@@ -114,6 +126,11 @@ exports.up = async function up(knex) {
       weight: 8
     }
   ];
+
+  const hasRequirements = await knex.schema.hasTable('dqf_requirements');
+  if (!hasRequirements) {
+    return;
+  }
 
   for (const r of newRequirements) {
     await knex('dqf_requirements')
