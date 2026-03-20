@@ -112,6 +112,24 @@ function buildProxy(target, label) {
             `[gateway->${label}] ${req.method} ${req.originalUrl} -> ${proxyReq.path}`
           );
         },
+    onProxyRes: (proxyRes, req) => {
+      const requestOrigin = req.headers.origin;
+      if (!requestOrigin) {
+        return;
+      }
+
+      if (!allowedOrigins.includes(requestOrigin)) {
+        return;
+      }
+
+      // Some downstream services return `Access-Control-Allow-Origin: *`.
+      // That breaks credentialed browser requests. Enforce gateway policy.
+      proxyRes.headers['access-control-allow-origin'] = requestOrigin;
+      proxyRes.headers['access-control-allow-credentials'] = 'true';
+      proxyRes.headers.vary = proxyRes.headers.vary
+        ? `${proxyRes.headers.vary}, Origin`
+        : 'Origin';
+    },
     onError: (err, req, res) => {
       // eslint-disable-next-line no-console
       console.error('[gateway] proxy error', err.message);
