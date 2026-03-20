@@ -40,7 +40,7 @@ services:
       - key: CORS_ORIGIN
         value: https://dev.fleetneuron.ai
       - key: NODE_ENV
-        value: development
+        value: production
       - key: PORT
         value: 10002
 
@@ -80,7 +80,7 @@ services:
           name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: development
+        value: production
       - key: PORT
         value: 10003
 
@@ -96,7 +96,7 @@ services:
       - key: NODE_PATH
         value: /opt/render/project/src/backend/microservices/integrations-service/node_modules
       - key: NODE_ENV
-        value: development
+        value: production
       - key: PORT
         value: 10004
 
@@ -136,7 +136,7 @@ services:
           name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: development
+        value: production
       - key: PORT
         value: 10005
 
@@ -176,7 +176,7 @@ services:
           name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: development
+        value: production
 
   - type: web
     name: fleetneuron-drivers-compliance-service-dev
@@ -226,7 +226,7 @@ services:
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
       - key: NODE_ENV
-        value: development
+        value: production
       - key: PORT
         value: 10006
 
@@ -278,7 +278,7 @@ services:
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
       - key: NODE_ENV
-        value: development
+        value: production
       - key: PORT
         value: 10007
 
@@ -331,7 +331,7 @@ services:
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
       - key: NODE_ENV
-        value: development
+        value: production
       - key: PORT
         value: 10008
 
@@ -371,7 +371,7 @@ services:
           name: safetyapp-dev-db
           property: port
       - key: NODE_ENV
-        value: development
+        value: production
       - key: PORT
         value: 10009
 
@@ -393,7 +393,7 @@ services:
       - key: CORS_ORIGIN
         value: https://dev.fleetneuron.ai
       - key: NODE_ENV
-        value: development
+        value: production
       - key: PORT
         value: 10010
       - key: AI_SERVICE_PORT
