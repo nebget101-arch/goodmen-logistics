@@ -5,6 +5,10 @@
  * Handles both PostgreSQL native enum and CHECK constraint.
  */
 
+// ALTER TYPE ... ADD VALUE can fail inside transaction blocks in PostgreSQL,
+// and any resulting error marks the whole transaction aborted.
+exports.config = { transaction: false };
+
 exports.up = async function (knex) {
   const r = await knex.raw(`
     SELECT udt_name
