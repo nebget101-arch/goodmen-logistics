@@ -137,15 +137,21 @@ exports.up = async function(knex) {
   await knex.raw(`CREATE INDEX IF NOT EXISTS idx_customer_audit_customer_changed ON customer_audit_log (customer_id, changed_at DESC)`);
 
   // Link customer_id to work_orders
-  const hasWorkOrderCustomer = await knex.schema.hasColumn('work_orders', 'customer_id');
-  if (!hasWorkOrderCustomer) {
-    await knex.schema.alterTable('work_orders', function(table) {
-      table.uuid('customer_id').references('id').inTable('customers').onDelete('SET NULL');
-    });
+  const hasWorkOrders = await knex.schema.hasTable('work_orders');
+  if (hasWorkOrders) {
+    const hasWorkOrderCustomer = await knex.schema.hasColumn('work_orders', 'customer_id');
+    if (!hasWorkOrderCustomer) {
+      await knex.schema.alterTable('work_orders', function(table) {
+        table.uuid('customer_id').references('id').inTable('customers').onDelete('SET NULL');
+      });
+    }
   }
 
   // maintenance_records already has customer_id in earlier migration, ensure index
-  await knex.raw(`CREATE INDEX IF NOT EXISTS idx_maintenance_records_customer ON maintenance_records (customer_id)`);
+  const hasMaintenanceRecords = await knex.schema.hasTable('maintenance_records');
+  if (hasMaintenanceRecords) {
+    await knex.raw(`CREATE INDEX IF NOT EXISTS idx_maintenance_records_customer ON maintenance_records (customer_id)`);
+  }
 };
 
 exports.down = async function(knex) {
@@ -153,10 +159,13 @@ exports.down = async function(knex) {
   await knex.schema.dropTableIfExists('customer_pricing_rules');
   await knex.schema.dropTableIfExists('customer_notes');
 
-  const hasWorkOrderCustomer = await knex.schema.hasColumn('work_orders', 'customer_id');
-  if (hasWorkOrderCustomer) {
-    await knex.schema.alterTable('work_orders', function(table) {
-      table.dropColumn('customer_id');
-    });
+  const hasWorkOrders = await knex.schema.hasTable('work_orders');
+  if (hasWorkOrders) {
+    const hasWorkOrderCustomer = await knex.schema.hasColumn('work_orders', 'customer_id');
+    if (hasWorkOrderCustomer) {
+      await knex.schema.alterTable('work_orders', function(table) {
+        table.dropColumn('customer_id');
+      });
+    }
   }
 };
