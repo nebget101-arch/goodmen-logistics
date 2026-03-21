@@ -6,5 +6,5 @@ import { Component } from '@angular/core';
   styleUrls: ['./privacy-policy.component.css']
 })
 export class PrivacyPolicyComponent {
-  updatedDate = '2026-02-08';
+  updatedDate = '2026-03-21';
 }

@@ -6,5 +6,5 @@ import { Component } from '@angular/core';
   styleUrls: ['./terms.component.css']
 })
 export class TermsComponent {
-  updatedDate = '2026-02-08';
+  updatedDate = '2026-03-21';
 }
