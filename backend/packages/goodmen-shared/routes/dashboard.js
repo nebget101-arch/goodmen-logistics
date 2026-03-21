@@ -79,6 +79,17 @@ async function resolveVehicleSource() {
   }
 }
 
+async function tableExists(tableName) {
+  try {
+    const safeName = String(tableName || '').replace(/[^a-zA-Z0-9_]/g, '');
+    if (!safeName) return false;
+    const result = await query(`SELECT to_regclass('public.${safeName}') AS rel`);
+    return !!result?.rows?.[0]?.rel;
+  } catch {
+    return false;
+  }
+}
+
 // Protect all dashboard routes: admin, safety
 router.use(auth(['admin', 'safety']));
 
@@ -90,34 +101,105 @@ router.get('/stats', async (req, res) => {
     const operatingEntityId = req.context?.operatingEntityId || null;
     const vehicleSource = await resolveVehicleSource();
     const vehicleSqlPg = buildVehicleUnionSqlPg(vehicleSource);
+    const hasDrivers = await tableExists('drivers');
+    const hasLoads = await tableExists('loads');
+    const hasHosRecords = await tableExists('hos_records');
+
+    const activeDriversExpr = hasDrivers
+      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND status = 'active')`
+      : '0';
+    const totalDriversExpr = hasDrivers
+      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2))`
+      : '0';
+
+    const activeLoadsExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('IN_TRANSIT', 'IN-TRANSIT', 'in-transit'))`
+      : '0';
+    const pendingLoadsExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('NEW', 'PENDING', 'pending'))`
+      : '0';
+    const completedLoadsTodayExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('DELIVERED', 'COMPLETED', 'completed') AND DATE(COALESCE(completed_date, delivery_date, created_at)) = CURRENT_DATE)`
+      : '0';
+    const loadsDispatchedExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(status::text, ' ', '_')) IN ('DISPATCHED'))`
+      : '0';
+    const loadsInTransitExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(status::text, ' ', '_')) IN ('IN_TRANSIT', 'EN_ROUTE', 'PICKED_UP'))`
+      : '0';
+    const loadsDeliveredExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('DELIVERED', 'COMPLETED', 'completed'))`
+      : '0';
+    const loadsCanceledExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('CANCELLED', 'CANCELED', 'cancelled', 'canceled'))`
+      : '0';
+
+    const billingPendingExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PENDING')`
+      : '0';
+    const billingCanceledExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('CANCELLED', 'CANCELED'))`
+      : '0';
+    const billingInvoicedExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING'))`
+      : '0';
+    const billingFundedExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'FUNDED')`
+      : '0';
+    const billingPaidExpr = hasLoads
+      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PAID')`
+      : '0';
+
+    const hosViolationsExpr = hasHosRecords && hasDrivers
+      ? `(SELECT COUNT(*) FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2) AND array_length(hr.violations, 1) > 0)`
+      : '0';
+    const hosWarningsExpr = hasHosRecords && hasDrivers
+      ? `(SELECT COUNT(*) FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2) AND hr.status = 'warning')`
+      : '0';
+
+    const dqfComplianceRateExpr = hasDrivers
+      ? `(SELECT COALESCE(ROUND(AVG(dqf_completeness)), 0) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2))`
+      : '0';
+    const expiredMedCertsExpr = hasDrivers
+      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND medical_cert_expiry <= CURRENT_DATE)`
+      : '0';
+    const upcomingMedCertsExpr = hasDrivers
+      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND medical_cert_expiry > CURRENT_DATE AND medical_cert_expiry <= CURRENT_DATE + INTERVAL '30 days')`
+      : '0';
+    const expiredCDLsExpr = hasDrivers
+      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND cdl_expiry <= CURRENT_DATE)`
+      : '0';
+    const clearinghouseIssuesExpr = hasDrivers
+      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND clearinghouse_status != 'eligible')`
+      : '0';
 
     const stats = await query(`
       SELECT 
-        (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND status = 'active') as "activeDrivers",
-        (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)) as "totalDrivers",
+        ${activeDriversExpr} as "activeDrivers",
+        ${totalDriversExpr} as "totalDrivers",
         (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'in-service') as "activeVehicles",
         (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles) as "totalVehicles",
         (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'out-of-service') as "oosVehicles",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('IN_TRANSIT', 'IN-TRANSIT', 'in-transit')) as "activeLoads",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('NEW', 'PENDING', 'pending')) as "pendingLoads",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('DELIVERED', 'COMPLETED', 'completed') AND DATE(COALESCE(completed_date, delivery_date, created_at)) = CURRENT_DATE) as "completedLoadsToday",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(status::text, ' ', '_')) IN ('DISPATCHED')) as "loadsDispatched",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(status::text, ' ', '_')) IN ('IN_TRANSIT', 'EN_ROUTE', 'PICKED_UP')) as "loadsInTransit",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('DELIVERED', 'COMPLETED', 'completed')) as "loadsDelivered",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('CANCELLED', 'CANCELED', 'cancelled', 'canceled')) as "loadsCanceled",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PENDING') as "billingPending",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('CANCELLED', 'CANCELED')) as "billingCanceled",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING')) as "billingInvoiced",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'FUNDED') as "billingFunded",
-        (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PAID') as "billingPaid",
-        (SELECT COUNT(*) FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2) AND array_length(hr.violations, 1) > 0) as "hosViolations",
-        (SELECT COUNT(*) FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2) AND hr.status = 'warning') as "hosWarnings",
-        (SELECT COALESCE(ROUND(AVG(dqf_completeness)), 0) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)) as "dqfComplianceRate",
+        ${activeLoadsExpr} as "activeLoads",
+        ${pendingLoadsExpr} as "pendingLoads",
+        ${completedLoadsTodayExpr} as "completedLoadsToday",
+        ${loadsDispatchedExpr} as "loadsDispatched",
+        ${loadsInTransitExpr} as "loadsInTransit",
+        ${loadsDeliveredExpr} as "loadsDelivered",
+        ${loadsCanceledExpr} as "loadsCanceled",
+        ${billingPendingExpr} as "billingPending",
+        ${billingCanceledExpr} as "billingCanceled",
+        ${billingInvoicedExpr} as "billingInvoiced",
+        ${billingFundedExpr} as "billingFunded",
+        ${billingPaidExpr} as "billingPaid",
+        ${hosViolationsExpr} as "hosViolations",
+        ${hosWarningsExpr} as "hosWarnings",
+        ${dqfComplianceRateExpr} as "dqfComplianceRate",
         (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') as "vehiclesNeedingMaintenance",
-        (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND medical_cert_expiry <= CURRENT_DATE) as "expiredMedCerts",
-        (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND medical_cert_expiry > CURRENT_DATE AND medical_cert_expiry <= CURRENT_DATE + INTERVAL '30 days') as "upcomingMedCerts",
-        (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND cdl_expiry <= CURRENT_DATE) as "expiredCDLs",
-        (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND clearinghouse_status != 'eligible') as "clearinghouseIssues"
+        ${expiredMedCertsExpr} as "expiredMedCerts",
+        ${upcomingMedCertsExpr} as "upcomingMedCerts",
+        ${expiredCDLsExpr} as "expiredCDLs",
+        ${clearinghouseIssuesExpr} as "clearinghouseIssues"
       `, [tenantId, operatingEntityId]);
     const duration = Date.now() - startTime;
     
