@@ -794,6 +794,10 @@ router.put('/:id', rbac, requirePermission('users.manage'), async (req, res) => 
   if (planValidationError) {
     return res.status(400).json({ success: false, error: planValidationError });
   }
+
+    const hasIsActiveCompat = await ensureUsersIsActiveColumn(knex);
+    const [hasFirstName, hasLastName, hasEmail, hasUpdatedAt, hasRolesTable, hasUserRolesTable] = await Promise.all([
+      knex.schema.hasColumn('users', 'first_name'),
       knex.schema.hasColumn('users', 'last_name'),
       knex.schema.hasColumn('users', 'email'),
       knex.schema.hasColumn('users', 'updated_at'),
@@ -954,14 +958,6 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
     });
   }
 
-  // Validate roles against subscription plan
-  const tenantPlanId = await getTenantPlanForTenant(tenantId);
-  const allowedRolesForPlan = getAllowedRoleCodesForPlan(tenantPlanId);
-  const planValidationError = validateRolesAgainstPlan(normalizedRoleCodes, allowedRolesForPlan);
-  if (planValidationError) {
-    return res.status(400).json({ error: planValidationError });
-  }
-
   const primaryRoleCode = normalizedRoleCodes[0];
   const legacyRoleForUsersColumn = mapCanonicalRoleToLegacyRole(primaryRoleCode);
 
@@ -980,6 +976,13 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
     await assertActiveSeatAvailable(knex, tenantId);
 
     const tenantPlanId = await getTenantPlanForTenant(tenantId);
+
+    // Validate roles against subscription plan
+    const allowedRolesForPlan = getAllowedRoleCodesForPlan(tenantPlanId);
+    const planValidationError = validateRolesAgainstPlan(normalizedRoleCodes, allowedRolesForPlan);
+    if (planValidationError) {
+      return res.status(400).json({ error: planValidationError });
+    }
 
     let resolvedUsername = normalizeUsername(username);
     if (!resolvedUsername) {
