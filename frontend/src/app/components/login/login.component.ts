@@ -4,6 +4,8 @@ import { Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { AccessControlService } from '../../services/access-control.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { SeoService } from '../../services/seo.service';
+import { SEO_PUBLIC } from '../../services/seo-public-presets';
 
 @Component({
   selector: 'app-login',
@@ -24,10 +26,12 @@ export class LoginComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private accessControl: AccessControlService,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private seo: SeoService
   ) {}
 
   ngOnInit(): void {
+    this.seo.apply(SEO_PUBLIC.login);
     this.route.queryParamMap.subscribe((params) => {
       this.success = params.get('reset') === 'success'
         ? 'Password updated successfully. Please sign in.'

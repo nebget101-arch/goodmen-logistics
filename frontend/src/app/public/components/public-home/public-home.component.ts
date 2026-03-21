@@ -1,5 +1,6 @@
 import { Component, OnInit, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
+import { SeoService } from '../../../services/seo.service';
 import {
   MarketingFeature,
   MarketingPlan,
@@ -25,9 +26,14 @@ export class PublicHomeComponent implements OnInit {
   navScrolled = false;
   currentYear = new Date().getFullYear();
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private seo: SeoService
+  ) {}
 
-  ngOnInit(): void {}
+  ngOnInit(): void {
+    this.seo.applyMarketingHome();
+  }
 
   @HostListener('window:scroll')
   onWindowScroll(): void {

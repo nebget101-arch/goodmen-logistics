@@ -5,6 +5,8 @@ import { finalize } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { AccessControlService } from '../../services/access-control.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 
 @Component({
   selector: 'app-drivers',
@@ -107,8 +109,17 @@ export class DriversComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private onboardingModal: OnboardingModalService,
     private route: ActivatedRoute,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private accessControl: AccessControlService
   ) { }
+
+  get canManageDrivers(): boolean {
+    return this.accessControl.hasPermission(PERMISSIONS.DRIVERS_EDIT);
+  }
+
+  get canAccessDqf(): boolean {
+    return this.accessControl.hasAnyPermission([PERMISSIONS.DQF_VIEW, PERMISSIONS.DQF_EDIT]);
+  }
 
   ngOnInit(): void {
     this.bindOperatingEntityContext();

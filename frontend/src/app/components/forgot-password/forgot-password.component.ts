@@ -1,14 +1,16 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
+import { SeoService } from '../../services/seo.service';
+import { SEO_PUBLIC } from '../../services/seo-public-presets';
 
 @Component({
   selector: 'app-forgot-password',
   templateUrl: './forgot-password.component.html',
   styleUrls: ['./forgot-password.component.css']
 })
-export class ForgotPasswordComponent {
+export class ForgotPasswordComponent implements OnInit {
   form: FormGroup;
   submitting = false;
   submitted = false;
@@ -17,11 +19,16 @@ export class ForgotPasswordComponent {
   constructor(
     private fb: FormBuilder,
     private api: ApiService,
-    private router: Router
+    private router: Router,
+    private seo: SeoService
   ) {
     this.form = this.fb.group({
       email: ['', [Validators.required, Validators.email]]
     });
+  }
+
+  ngOnInit(): void {
+    this.seo.apply(SEO_PUBLIC.forgotPassword);
   }
 
   get emailInvalid(): boolean {
