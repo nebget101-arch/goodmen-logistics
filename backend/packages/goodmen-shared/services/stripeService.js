@@ -175,6 +175,43 @@ async function cancelSubscription(stripeSubscriptionId) {
   }
 }
 
+/**
+ * Add recurring extra-seat quantity on an existing subscription (prorated invoice).
+ * @param {string} subscriptionId
+ * @param {string} extraSeatPriceId Stripe Price id (e.g. price_xxx)
+ * @param {number} quantityToAdd
+ */
+async function applyExtraSeatPurchase(subscriptionId, extraSeatPriceId, quantityToAdd) {
+  try {
+    assertStripeConfigured();
+    const qtyAdd = Math.min(100, Math.max(1, Math.floor(Number(quantityToAdd) || 1)));
+
+    const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ['items.data.price'] });
+    const line = (sub.items?.data || []).find((item) => item.price && item.price.id === extraSeatPriceId);
+
+    if (line) {
+      return await stripe.subscriptionItems.update(line.id, {
+        quantity: (line.quantity || 0) + qtyAdd,
+        proration_behavior: 'create_prorations'
+      });
+    }
+
+    return await stripe.subscriptionItems.create({
+      subscription: subscriptionId,
+      price: extraSeatPriceId,
+      quantity: qtyAdd,
+      proration_behavior: 'create_prorations'
+    });
+  } catch (error) {
+    throw stripeError(
+      'STRIPE_EXTRA_SEAT_PURCHASE_FAILED',
+      'Failed to add extra seats to subscription',
+      error,
+      { subscriptionId, extraSeatPriceId }
+    );
+  }
+}
+
 module.exports = {
   createCustomer,
   attachPaymentMethod,
@@ -182,5 +219,6 @@ module.exports = {
   getPaymentMethod,
   createSetupIntent,
   createSubscription,
-  cancelSubscription
+  cancelSubscription,
+  applyExtraSeatPurchase
 };

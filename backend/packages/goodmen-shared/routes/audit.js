@@ -2,7 +2,30 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
-const auth = require('./auth-middleware');
+
+/**
+ * Export / compliance-summary require more than generic login.
+ * Legacy JWT uses users.role; canonical codes include safety_manager (FN-129).
+ * When req.user.rbac is loaded (reporting service), allow granular safety.* or audit.*.
+ */
+function requireAuditExportAccess(req, res, next) {
+  const role = (req.user?.role || '').toString().trim().toLowerCase();
+  const legacyOk = new Set(['admin', 'company_admin', 'super_admin', 'safety', 'safety_manager']);
+  if (legacyOk.has(role)) return next();
+
+  const codes = req.user?.rbac?.permissionCodes || [];
+  const hasSafetyOrAudit = codes.some(
+    (c) =>
+      c.startsWith('safety.incidents.') ||
+      c.startsWith('safety.claims.') ||
+      c === 'safety.reports.view' ||
+      c === 'safety.manage' ||
+      c.startsWith('audit.')
+  );
+  if (hasSafetyOrAudit) return next();
+
+  return res.status(403).json({ error: 'Forbidden: insufficient permission for this audit operation' });
+}
 
 async function listScopedAuditTrail(req, res) {
   const params = [];
@@ -75,8 +98,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Protect all audit routes: admin, safety
-router.use(auth(['admin', 'safety']));
+// Sensitive audit routes: legacy roles + RBAC safety/audit permissions (FN-129)
+router.use(requireAuditExportAccess);
 
 // GET export data for compliance review
 router.get('/export/:category', async (req, res) => {

@@ -607,7 +607,7 @@ export const MARKETING_PLANS: MarketingPlan[] = [
       'Custom implementation, onboarding, and integrations for complex operations.',
     priceLabel: "Let's talk",
     includedUsers: 25,
-    additionalUserPriceUsd: 25,
+    additionalUserPriceUsd: 0,
     highlighted: false,
     ctaLabel: "Let's Talk",
     ctaAction: 'contact',

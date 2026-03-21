@@ -4,6 +4,7 @@ const express = require('express');
 const stripe = require('../../packages/goodmen-shared/config/stripe');
 const { knex } = require('../../packages/goodmen-shared/internal/db');
 const trialService = require('../../packages/goodmen-shared/services/trialService');
+const extraSeatSyncService = require('../../packages/goodmen-shared/services/extraSeatSyncService');
 const dtLogger = require('../../packages/goodmen-shared/utils/logger');
 
 const router = express.Router();
@@ -139,6 +140,22 @@ async function handlePaymentFailed(event) {
 
 async function handleSubscriptionUpdated(event) {
   dtLogger.info('[stripe-webhook] handler customer.subscription.updated', { eventId: event.id });
+
+  try {
+    const obj = event.data?.object;
+    if (!obj?.id || !obj?.customer) {
+      dtLogger.warn('[stripe-webhook] subscription.updated missing id or customer', { eventId: event.id });
+      return;
+    }
+    if (stripe?._disabled) return;
+
+    await extraSeatSyncService.syncTenantExtraSeats(knex, stripe, obj.customer, obj.id);
+  } catch (err) {
+    dtLogger.error('[stripe-webhook] subscription.updated extra seat sync failed', err, {
+      eventId: event.id,
+      error: err?.message
+    });
+  }
 }
 
 async function routeEvent(event) {

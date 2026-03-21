@@ -81,9 +81,16 @@ export class AccessControlService {
     const providedPermissions: string[] = Array.isArray(raw.permissions)
       ? raw.permissions.map((permission: any) => String(permission || '').trim()).filter(Boolean)
       : [];
-    const permissions: string[] = providedPermissions.length > 0
-      ? providedPermissions
-      : this.derivePermissionsFromRoles(roles, raw);
+    const derivedFromRoles = this.derivePermissionsFromRoles(roles, raw);
+    // Backend often returns a partial permission list. For safety roles, that list can omit
+    // hos.view / audit.view / safety.* and hide nav + /safety guard while role is correct (FN-131).
+    const safetyRole = roles.some((r) => r === 'safety_manager' || r === 'safety');
+    const permissions: string[] =
+      providedPermissions.length === 0
+        ? derivedFromRoles
+        : safetyRole
+          ? [...new Set([...providedPermissions, ...derivedFromRoles])]
+          : providedPermissions;
     const locations: AccessLocation[] = Array.isArray(raw.locations)
       ? raw.locations.map((l: any) => ({ id: l.id ?? l.locationId, name: l.name ?? l.locationName ?? '' }))
       : [];
@@ -124,7 +131,21 @@ export class AccessControlService {
     }
     if (r('safety_manager') || r('safety')) {
       set.add(PERMISSIONS.DASHBOARD_VIEW).add(PERMISSIONS.DRIVERS_VIEW).add(PERMISSIONS.DRIVERS_EDIT).add(PERMISSIONS.DQF_VIEW).add(PERMISSIONS.DQF_EDIT);
-      set.add(PERMISSIONS.HOS_VIEW).add(PERMISSIONS.AUDIT_VIEW).add(PERMISSIONS.VEHICLES_VIEW);
+      set.add(PERMISSIONS.HOS_VIEW).add(PERMISSIONS.AUDIT_VIEW);
+      set.add(PERMISSIONS.VEHICLES_VIEW).add(PERMISSIONS.VEHICLES_CREATE).add(PERMISSIONS.VEHICLES_EDIT);
+      set.add(PERMISSIONS.DOCUMENTS_VIEW).add(PERMISSIONS.DOCUMENTS_UPLOAD);
+      // Full Safety module (/safety) — align with DB migration 20260316000500 when API omits permissions (FN-131)
+      set.add(PERMISSIONS.SAFETY_INCIDENTS_VIEW);
+      set.add(PERMISSIONS.SAFETY_INCIDENTS_CREATE);
+      set.add(PERMISSIONS.SAFETY_INCIDENTS_EDIT);
+      set.add(PERMISSIONS.SAFETY_INCIDENTS_CLOSE);
+      set.add(PERMISSIONS.SAFETY_CLAIMS_VIEW);
+      set.add(PERMISSIONS.SAFETY_CLAIMS_CREATE);
+      set.add(PERMISSIONS.SAFETY_CLAIMS_EDIT);
+      set.add(PERMISSIONS.SAFETY_CLAIMS_FINANCIALS_VIEW);
+      set.add(PERMISSIONS.SAFETY_CLAIMS_FINANCIALS_EDIT);
+      set.add(PERMISSIONS.SAFETY_DOCUMENTS_UPLOAD);
+      set.add(PERMISSIONS.SAFETY_REPORTS_VIEW);
     }
     if (r('carrier_accountant') || r('accounting') || r('company_accountant')) {
       set.add(PERMISSIONS.DASHBOARD_VIEW).add(PERMISSIONS.CUSTOMERS_VIEW).add(PERMISSIONS.INVOICES_VIEW).add(PERMISSIONS.INVOICES_CREATE).add(PERMISSIONS.INVOICES_EDIT).add(PERMISSIONS.INVOICES_EXPORT);
