@@ -5,7 +5,7 @@ services:
     runtime: static
     branch: dev
     rootDir: frontend
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev && npm run build -- --configuration=devBuild
     staticPublishPath: dist/goodmen-logistics
     routes:
       - type: rewrite

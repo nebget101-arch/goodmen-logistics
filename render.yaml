@@ -3,7 +3,7 @@ services:
     name: fleetneuron-logistics-ui
     runtime: static
     rootDir: frontend
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev && npm run build -- --configuration=production
     staticPublishPath: dist/goodmen-logistics
     routes:
       - type: rewrite
