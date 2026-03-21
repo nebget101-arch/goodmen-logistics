@@ -244,7 +244,16 @@ router.get('/overview', canViewIncidents, async (req, res) => {
     });
   } catch (err) {
     dtLogger.error('safety_overview_error', err);
-    sendError(res, 500, 'Failed to load safety overview');
+    res.json({
+      openIncidents: 0,
+      openClaims: 0,
+      totalEstimatedLoss: 0,
+      totalPaid: 0,
+      overdueFollowUps: 0,
+      openIncidentsByOperatingEntity: [],
+      openClaimsByOperatingEntity: [],
+      degraded: true
+    });
   }
 });
 
@@ -849,7 +858,16 @@ router.get('/reports', canViewReports, async (req, res) => {
     });
   } catch (err) {
     dtLogger.error('safety_reports_error', err);
-    sendError(res, 500, 'Failed to load reports');
+    res.json({
+      incidentsByMonth: [],
+      claimsByStatus: [],
+      preventability: [],
+      lossByClaimType: [],
+      bySeverity: [],
+      topCostIncidents: [],
+      claimAging: [],
+      degraded: true
+    });
   }
 });
 
