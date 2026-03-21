@@ -423,6 +423,59 @@
         </div>
       </div>
 
+      <div class="pub-compare-wrap">
+        <div class="pub-compare-scroll-hint" aria-hidden="true">
+          <span>Scroll to compare plans</span>
+          <span class="material-symbols-outlined">arrow_right_alt</span>
+        </div>
+
+        <div class="pub-compare-table-scroller">
+          <table class="pub-compare-table">
+            <thead>
+              <tr>
+                <th class="pub-compare-feature-head">Features</th>
+                @for (plan of comparisonPlans; track plan.id) {
+                  <th [class.pub-compare-plan-popular]="plan.popular">
+                    <div class="pub-compare-plan-head">
+                      @if (plan.popular) {
+                        <span class="pub-compare-popular-badge">Most Popular</span>
+                      }
+                      <span class="pub-compare-plan-name">{{ plan.name }}</span>
+                    </div>
+                  </th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of comparisonRows; track row.feature; let i = $index) {
+                <tr [class.pub-compare-row-alt]="i % 2 === 1">
+                  <td class="pub-compare-feature">{{ row.feature }}</td>
+                  @for (plan of comparisonPlans; track plan.id) {
+                    <td class="pub-compare-value">{{ row.values[plan.id] }}</td>
+                  }
+                </tr>
+              }
+              <tr class="pub-compare-cta-row">
+                <td class="pub-compare-feature pub-compare-cta-title">Get started</td>
+                @for (plan of comparisonPlans; track plan.id) {
+                  <td class="pub-compare-value pub-compare-cta-cell">
+                    <button
+                      type="button"
+                      class="pub-compare-cta-btn"
+                      [class.pub-compare-cta-btn-popular]="plan.popular"
+                      (click)="handleComparisonCta(plan)"
+                    >
+                      <span class="material-symbols-outlined">{{ plan.ctaAction === 'contact' ? 'contact_support' : 'rocket_launch' }}</span>
+                      {{ plan.ctaLabel }}
+                    </button>
+                  </td>
+                }
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <p class="pub-pricing-note">
         Need tailored onboarding, integrations, or multi-location deployment?
         <button type="button" class="pub-inline-link-btn" (click)="navigateToContact()">Contact our team</button> and we'll help design your rollout.

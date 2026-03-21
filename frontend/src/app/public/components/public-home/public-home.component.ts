@@ -8,6 +8,22 @@ import {
   AI_BENEFITS
 } from '../../config/marketing.config';
 
+type ComparisonPlanId = 'starter' | 'professional' | 'advanced' | 'enterprise';
+
+interface PlanComparisonColumn {
+  id: ComparisonPlanId;
+  name: string;
+  ctaLabel: string;
+  ctaAction: 'trial' | 'contact';
+  ctaPlanId?: 'basic' | 'multi_mc' | 'end_to_end' | 'enterprise';
+  popular?: boolean;
+}
+
+interface PlanComparisonRow {
+  feature: string;
+  values: Record<ComparisonPlanId, string>;
+}
+
 @Component({
   selector: 'app-public-home',
   templateUrl: './public-home.component.html',
@@ -23,6 +39,103 @@ export class PublicHomeComponent implements OnInit {
   mobileNavOpen = false;
   navScrolled = false;
   currentYear = new Date().getFullYear();
+
+  comparisonPlans: PlanComparisonColumn[] = [
+    {
+      id: 'starter',
+      name: 'Starter',
+      ctaLabel: 'Start Free Trial',
+      ctaAction: 'trial',
+      ctaPlanId: 'basic',
+    },
+    {
+      id: 'professional',
+      name: 'Professional',
+      ctaLabel: 'Start Free Trial',
+      ctaAction: 'trial',
+      ctaPlanId: 'multi_mc',
+      popular: true,
+    },
+    {
+      id: 'advanced',
+      name: 'Advanced',
+      ctaLabel: 'Start Free Trial',
+      ctaAction: 'trial',
+      ctaPlanId: 'end_to_end',
+    },
+    {
+      id: 'enterprise',
+      name: 'Enterprise',
+      ctaLabel: 'Contact Sales',
+      ctaAction: 'contact',
+      ctaPlanId: 'enterprise',
+    }
+  ];
+
+  comparisonRows: PlanComparisonRow[] = [
+    {
+      feature: 'Number of vehicles included',
+      values: {
+        starter: 'Up to 25',
+        professional: 'Up to 100',
+        advanced: 'Up to 300',
+        enterprise: 'Unlimited',
+      }
+    },
+    {
+      feature: 'Number of drivers included',
+      values: {
+        starter: 'Up to 20',
+        professional: 'Up to 80',
+        advanced: 'Up to 250',
+        enterprise: 'Unlimited',
+      }
+    },
+    {
+      feature: 'Real-time GPS tracking',
+      values: { starter: '✅', professional: '✅', advanced: '✅', enterprise: '✅' }
+    },
+    {
+      feature: 'Route optimization',
+      values: { starter: '✗', professional: '✅', advanced: '✅', enterprise: '✅' }
+    },
+    {
+      feature: 'Driver onboarding / employment applications',
+      values: { starter: '✅', professional: '✅', advanced: '✅', enterprise: '✅' }
+    },
+    {
+      feature: 'Maintenance scheduling',
+      values: { starter: '✅', professional: '✅', advanced: '✅', enterprise: '✅' }
+    },
+    {
+      feature: 'Reporting & analytics',
+      values: { starter: 'Standard', professional: 'Advanced', advanced: 'Advanced + AI', enterprise: 'Custom BI' }
+    },
+    {
+      feature: 'API access',
+      values: { starter: '✗', professional: 'Read-only', advanced: 'Full API', enterprise: 'Full API + SLA' }
+    },
+    {
+      feature: 'Custom integrations',
+      values: { starter: '✗', professional: 'Limited', advanced: '✅', enterprise: '✅' }
+    },
+    {
+      feature: 'Priority support / dedicated CSM',
+      values: { starter: '✗', professional: 'Priority support', advanced: 'Priority support', enterprise: 'Dedicated CSM' }
+    },
+    {
+      feature: 'SLA guarantee',
+      values: { starter: '✗', professional: '✗', advanced: '99.5%', enterprise: '99.9%' }
+    },
+    {
+      feature: 'Custom branding',
+      values: { starter: '✗', professional: '✗', advanced: '✅', enterprise: '✅' }
+    },
+    {
+      feature: 'Multi-depot support',
+      values: { starter: '✗', professional: '✅', advanced: '✅', enterprise: '✅' }
+    }
+  ];
 
   constructor(private router: Router) {}
 
@@ -64,6 +177,14 @@ export class PublicHomeComponent implements OnInit {
       return;
     }
     this.navigateToTrial(plan?.id);
+  }
+
+  handleComparisonCta(plan: PlanComparisonColumn): void {
+    if (plan.ctaAction === 'contact' || plan.id === 'enterprise') {
+      this.navigateToContact();
+      return;
+    }
+    this.navigateToTrial(plan.ctaPlanId || 'basic');
   }
 
   goToLogin(): void {

@@ -980,6 +980,155 @@
 }
 .pub-pricing-note a:hover { color: #5eead4; }
 
+.pub-compare-wrap {
+  margin: 8px 0 26px;
+}
+
+.pub-compare-scroll-hint {
+  display: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: #64748b;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.pub-compare-scroll-hint .material-symbols-outlined {
+  font-size: 16px;
+  color: #2dd4bf;
+}
+
+.pub-compare-table-scroller {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(31, 41, 55, 0.9);
+  background: rgba(15, 23, 42, 0.75);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.pub-compare-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.pub-compare-table thead th {
+  text-align: center;
+  padding: 16px 12px;
+  color: #ecfeff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(45, 212, 191, 0.45);
+  background: linear-gradient(135deg, rgba(14, 116, 144, 0.92) 0%, rgba(15, 118, 110, 0.92) 100%);
+}
+
+.pub-compare-feature-head {
+  text-align: left !important;
+  min-width: 240px;
+}
+
+.pub-compare-plan-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.pub-compare-plan-name {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.pub-compare-popular-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.pub-compare-plan-popular {
+  box-shadow: inset 0 -2px 0 rgba(45, 212, 191, 0.65);
+}
+
+.pub-compare-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.8);
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+.pub-compare-feature {
+  color: #e2e8f0 !important;
+  font-weight: 600;
+  text-align: left;
+}
+
+.pub-compare-value {
+  text-align: center;
+  font-weight: 500;
+}
+
+.pub-compare-row-alt td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pub-compare-cta-row td {
+  background: rgba(2, 6, 23, 0.55);
+  border-bottom: none;
+}
+
+.pub-compare-cta-title {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8 !important;
+  font-size: 11px;
+}
+
+.pub-compare-cta-cell {
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+}
+
+.pub-compare-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e5e7eb;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.2s, border-color 0.2s;
+}
+
+.pub-compare-cta-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(45, 212, 191, 0.5);
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.pub-compare-cta-btn .material-symbols-outlined {
+  font-size: 15px;
+}
+
+.pub-compare-cta-btn-popular {
+  border-color: rgba(45, 212, 191, 0.55);
+  background: radial-gradient(circle at 0 0, rgba(45, 212, 191, 0.28), transparent 60%), rgba(2, 6, 23, 0.7);
+}
+
 /* ─── CTA Section ────────────────────────────────────────────────────────── */
 .pub-cta-section {
   padding: 100px 24px;
@@ -1128,6 +1277,15 @@
 
   .pub-pricing-grid { grid-template-columns: 1fr; }
   .pub-how-grid { grid-template-columns: 1fr; }
+
+  .pub-compare-scroll-hint {
+    display: inline-flex;
+    width: 100%;
+  }
+
+  .pub-compare-table-scroller {
+    -webkit-overflow-scrolling: touch;
+  }
 
   .pub-footer-inner { flex-direction: column; gap: 32px; }
   .pub-footer-links { gap: 32px; }
