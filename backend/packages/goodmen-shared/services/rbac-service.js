@@ -172,7 +172,7 @@ async function getPermissionsForUser(userId) {
   }
 
   mergeSafetyBaselineIfApplicable(roleCodes, permissionSet);
-  stripFleetVehicleWritesForSafetyRoles(roleCodes, permissionSet);
+  mergeSafetyFleetUnitBaselineIfApplicable(roleCodes, permissionSet);
 
   return permissionSet;
 }
