@@ -78,4 +78,19 @@ describe('AccessControlService RBAC compatibility', () => {
     expect(service.canSee('drivers')).toBeTrue();
     expect(service.canSee('settlements')).toBeFalse();
   });
+
+  it('merges role-derived permissions for safety when backend sends partial permissions', () => {
+    service.setAccessFromLoginResponse({
+      roles: ['safety'],
+      user: { id: 'u7' },
+      permissions: [PERMISSIONS.DRIVERS_VIEW]
+    });
+
+    expect(service.hasPermission(PERMISSIONS.HOS_VIEW)).toBeTrue();
+    expect(service.hasPermission(PERMISSIONS.AUDIT_VIEW)).toBeTrue();
+    expect(service.hasPermission(PERMISSIONS.SAFETY_INCIDENTS_VIEW)).toBeTrue();
+    expect(service.canSee('hos')).toBeTrue();
+    expect(service.canSee('audit')).toBeTrue();
+    expect(service.canSee('safety_claims')).toBeTrue();
+  });
 });

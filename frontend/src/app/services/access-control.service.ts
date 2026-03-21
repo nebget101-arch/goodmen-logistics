@@ -81,9 +81,16 @@ export class AccessControlService {
     const providedPermissions: string[] = Array.isArray(raw.permissions)
       ? raw.permissions.map((permission: any) => String(permission || '').trim()).filter(Boolean)
       : [];
-    const permissions: string[] = providedPermissions.length > 0
-      ? providedPermissions
-      : this.derivePermissionsFromRoles(roles, raw);
+    const derivedFromRoles = this.derivePermissionsFromRoles(roles, raw);
+    // Backend often returns a partial permission list. For safety roles, that list can omit
+    // hos.view / audit.view / safety.* and hide nav + /safety guard while role is correct (FN-131).
+    const safetyRole = roles.some((r) => r === 'safety_manager' || r === 'safety');
+    const permissions: string[] =
+      providedPermissions.length === 0
+        ? derivedFromRoles
+        : safetyRole
+          ? [...new Set([...providedPermissions, ...derivedFromRoles])]
+          : providedPermissions;
     const locations: AccessLocation[] = Array.isArray(raw.locations)
       ? raw.locations.map((l: any) => ({ id: l.id ?? l.locationId, name: l.name ?? l.locationName ?? '' }))
       : [];
