@@ -29,6 +29,17 @@ interface RoleAccessSummary {
   pages: Array<{ path: string; label: string }>;
 }
 
+interface SeatUsagePayload {
+  planId?: string;
+  includedUsers: number | null;
+  extraPaidSeats: number;
+  effectiveSeatLimit: number | null;
+  activeUsers: number;
+  additionalUserPriceUsd: number | null;
+  canPurchaseExtraSeat: boolean;
+  purchaseBlockedReason?: string | null;
+}
+
 @Component({
   selector: 'app-users-admin',
   templateUrl: './users-admin.component.html',
@@ -52,6 +63,10 @@ export class UsersAdminComponent implements OnInit {
     roles: [] as string[]
   };
   savingEdit = false;
+
+  seatUsage: SeatUsagePayload | null = null;
+  loadingSeatUsage = false;
+  purchasingSeats = false;
 
   private readonly userPageCatalog: Array<{ path: string; label: string; tab: string }> = [
     ...NAV_TOP_LINKS.map((link) => ({ path: link.path, label: link.label, tab: link.tab })),
@@ -83,10 +98,42 @@ export class UsersAdminComponent implements OnInit {
       next: (res: any) => {
         this.users = Array.isArray(res?.data) ? res.data : [];
         this.loadingUsers = false;
+        this.loadSeatUsage();
       },
       error: (err: any) => {
         this.error = err?.error?.error || 'Failed to load users';
         this.loadingUsers = false;
+      }
+    });
+  }
+
+  loadSeatUsage(): void {
+    this.loadingSeatUsage = true;
+    this.api.getBillingSeatUsage().subscribe({
+      next: (res: any) => {
+        this.seatUsage = (res?.data || null) as SeatUsagePayload | null;
+        this.loadingSeatUsage = false;
+      },
+      error: () => {
+        this.seatUsage = null;
+        this.loadingSeatUsage = false;
+      }
+    });
+  }
+
+  purchaseExtraSeat(): void {
+    if (!this.seatUsage?.canPurchaseExtraSeat) return;
+    this.purchasingSeats = true;
+    this.error = '';
+    this.api.purchaseBillingExtraSeats(1).subscribe({
+      next: () => {
+        this.purchasingSeats = false;
+        this.loadSeatUsage();
+        this.loadUsers();
+      },
+      error: (err: any) => {
+        this.purchasingSeats = false;
+        this.error = err?.error?.error || 'Failed to purchase extra seat';
       }
     });
   }
@@ -216,6 +263,7 @@ export class UsersAdminComponent implements OnInit {
         const updated = (res?.data || {}) as UserListRecord;
         this.users = this.users.map((row) => row.id === user.id ? { ...row, ...updated } : row);
         this.actionLoadingUserId = null;
+        this.loadSeatUsage();
       },
       error: (err: any) => {
         this.error = err?.error?.error || 'Failed to update user status';
@@ -262,9 +310,15 @@ export class UsersAdminComponent implements OnInit {
   }
 
   get includedUsersLabel(): string {
-    const limit = this.includedUsersLimit;
+    const limit = this.effectiveSeatLimit;
     if (limit == null) return 'Plan-based user access';
-    return `${this.activeUserCount}/${limit} active users`;
+    const active = this.activeUserCount;
+    const extra = this.seatUsage?.extraPaidSeats;
+    if (this.seatUsage != null && Number(extra) > 0) {
+      const inc = this.seatUsage.includedUsers;
+      return `${active}/${limit} active (${inc ?? '—'} incl. + ${extra} paid)`;
+    }
+    return `${active}/${limit} active users`;
   }
 
   get currentUserCount(): number {
@@ -272,7 +326,23 @@ export class UsersAdminComponent implements OnInit {
   }
 
   get activeUserCount(): number {
+    if (this.seatUsage != null && Number.isFinite(Number(this.seatUsage.activeUsers))) {
+      return Number(this.seatUsage.activeUsers);
+    }
     return this.users.filter((user) => user.is_active !== false).length;
+  }
+
+  get effectiveSeatLimit(): number | null {
+    if (this.seatUsage != null && this.seatUsage.effectiveSeatLimit != null) {
+      return this.seatUsage.effectiveSeatLimit;
+    }
+    return this.includedUsersLimit;
+  }
+
+  get extraSeatPriceLabel(): string {
+    const n = this.seatUsage?.additionalUserPriceUsd;
+    if (Number.isFinite(Number(n))) return `$${Number(n)}/mo`;
+    return '$25/mo';
   }
 
   get includedUsersLimit(): number | null {
@@ -282,16 +352,24 @@ export class UsersAdminComponent implements OnInit {
   }
 
   get isAtOrAboveIncludedUserLimit(): boolean {
-    const limit = this.includedUsersLimit;
+    const limit = this.effectiveSeatLimit;
     if (limit == null) return false;
     return this.activeUserCount >= limit;
   }
 
   get userLimitMessage(): string {
-    const limit = this.includedUsersLimit;
+    const limit = this.effectiveSeatLimit;
     if (limit == null) return '';
     if (this.activeUserCount < limit) return '';
-    return 'User limit reached for your current plan. Contact support to add more users. Stripe-based self-serve add-ons are coming soon.';
+    if (this.seatUsage?.canPurchaseExtraSeat) {
+      const price = this.seatUsage.additionalUserPriceUsd;
+      const label = Number.isFinite(Number(price)) ? `$${Number(price)}` : '$25';
+      return `You've reached your seat limit. Add a paid seat (${label}/user/mo) with the button below, or contact support.`;
+    }
+    if (this.seatUsage?.purchaseBlockedReason) {
+      return `${this.seatUsage.purchaseBlockedReason} Contact support if you need help.`;
+    }
+    return 'User limit reached for your current plan. Contact support to add more users.';
   }
 
   formatUserName(user: UserListRecord): string {

@@ -7,6 +7,10 @@
 FleetNeuron uses a layered RBAC system that supports both a legacy single-role JWT claim
 and a full normalized DB permission model. Both coexist and are backward-compatible.
 
+### User seats (plans + paid add-ons)
+
+Effective active-user limit = **included seats** from `plans.js` for the tenant’s `subscription_plan` **plus** `tenants.extra_paid_seats` (Stripe recurring add-on, **FN-134**). Creating or activating a user beyond that limit returns **409** `PLAN_USER_LIMIT_REACHED`. Tenant admins can purchase extra seats via **Users** → “Add paid seat” when eligible (active Stripe subscription, payment method on file, `STRIPE_PRICE_EXTRA_USER_SEAT` configured). Webhook `customer.subscription.updated` keeps `extra_paid_seats` in sync with the subscription line item quantity.
+
 ---
 
 ## Current Roles

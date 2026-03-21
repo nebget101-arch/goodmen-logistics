@@ -24,6 +24,13 @@ async function getTenantPlanForTenant(tenantId) {
   return normalizePlanId(tenantRow?.subscription_plan, 'basic');
 }
 
+async function getExtraPaidSeatsForTenant(tenantId) {
+  if (!tenantId) return 0;
+  const row = await knex('tenants').where({ id: tenantId }).first('extra_paid_seats');
+  const n = Number(row?.extra_paid_seats);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
 /**
  * Get allowed role codes for a plan.
  * Returns legacy role codes (admin, safety, dispatch, accounting) that match plan.includedRoles.
@@ -89,8 +96,11 @@ async function assertActiveSeatAvailable(knexClient, tenantId) {
   const seatLimit = getIncludedUsersForPlan(tenantPlanId);
   if (!seatLimit) return;
 
+  const extraPaid = await getExtraPaidSeatsForTenant(tenantId);
+  const effectiveLimit = seatLimit + extraPaid;
+
   const activeUsers = await countActiveUsersForTenant(knexClient, tenantId);
-  if (activeUsers >= seatLimit) {
+  if (activeUsers >= effectiveLimit) {
     const err = new Error('User limit reached for your current plan. Contact support to add more users.');
     err.statusCode = 409;
     err.code = 'PLAN_USER_LIMIT_REACHED';
