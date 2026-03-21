@@ -218,10 +218,62 @@ router.get('/stats', async (req, res) => {
   } catch (error) {
     const duration = Date.now() - startTime;
     dtLogger.error('Failed to fetch dashboard stats', error, { path: '/api/dashboard/stats' });
-    dtLogger.trackRequest('GET', '/api/dashboard/stats', 500, duration);
-    
     console.error('Error fetching dashboard stats:', error);
-    res.status(500).json({ message: 'Failed to fetch dashboard statistics' });
+
+    // Graceful degradation for partial dev schemas.
+    // Return a stable payload so dashboard UI can render instead of hard-failing.
+    try {
+      const tenantId = req.context?.tenantId || null;
+      const operatingEntityId = req.context?.operatingEntityId || null;
+      const vehicleSource = await resolveVehicleSource();
+      const vehicleSqlPg = buildVehicleUnionSqlPg(vehicleSource);
+
+      const counts = await query(
+        `SELECT
+           (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'in-service') AS "activeVehicles",
+           (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles) AS "totalVehicles",
+           (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'out-of-service') AS "oosVehicles",
+           (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') AS "vehiclesNeedingMaintenance"`,
+        [tenantId, operatingEntityId]
+      );
+
+      const row = counts?.rows?.[0] || {};
+      const fallback = {
+        activeDrivers: 0,
+        totalDrivers: 0,
+        activeVehicles: Number(row.activeVehicles || 0),
+        totalVehicles: Number(row.totalVehicles || 0),
+        oosVehicles: Number(row.oosVehicles || 0),
+        activeLoads: 0,
+        pendingLoads: 0,
+        completedLoadsToday: 0,
+        loadsDispatched: 0,
+        loadsInTransit: 0,
+        loadsDelivered: 0,
+        loadsCanceled: 0,
+        billingPending: 0,
+        billingCanceled: 0,
+        billingInvoiced: 0,
+        billingFunded: 0,
+        billingPaid: 0,
+        hosViolations: 0,
+        hosWarnings: 0,
+        dqfComplianceRate: 0,
+        vehiclesNeedingMaintenance: Number(row.vehiclesNeedingMaintenance || 0),
+        expiredMedCerts: 0,
+        upcomingMedCerts: 0,
+        expiredCDLs: 0,
+        clearinghouseIssues: 0,
+        degraded: true
+      };
+
+      dtLogger.trackRequest('GET', '/api/dashboard/stats', 200, duration, { degraded: true });
+      return res.json(fallback);
+    } catch (fallbackError) {
+      dtLogger.error('Failed dashboard stats fallback', fallbackError, { path: '/api/dashboard/stats' });
+      dtLogger.trackRequest('GET', '/api/dashboard/stats', 500, duration);
+      return res.status(500).json({ message: 'Failed to fetch dashboard statistics' });
+    }
   }
 });
 

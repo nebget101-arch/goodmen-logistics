@@ -19,6 +19,34 @@ async function resolveVehicleSource() {
   }
 }
 
+async function relationExists(name) {
+  try {
+    const safe = String(name || '').replace(/[^a-zA-Z0-9_]/g, '');
+    if (!safe) return false;
+    const result = await query(`SELECT to_regclass('public.${safe}') AS rel`);
+    return !!result?.rows?.[0]?.rel;
+  } catch {
+    return false;
+  }
+}
+
+async function getRelationColumns(name) {
+  try {
+    const safe = String(name || '').replace(/[^a-zA-Z0-9_]/g, '');
+    if (!safe) return new Set();
+    const result = await query(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = $1`,
+      [safe]
+    );
+    return new Set((result.rows || []).map((row) => row.column_name));
+  } catch {
+    return new Set();
+  }
+}
+
 let vehiclesColumnSetCache = null;
 
 async function getVehiclesColumnSet() {
@@ -211,24 +239,46 @@ router.get('/', async (req, res) => {
   try {
     const vehicleSource = await resolveVehicleSource();
     if (vehicleSource === 'none') return res.json([]);
+    const vehicleColumns = await getRelationColumns(vehicleSource);
+    const hasOperatingEntityId = vehicleColumns.has('operating_entity_id');
+    const hasVehicleType = vehicleColumns.has('vehicle_type');
+    const hasOperatingEntitiesTable = await relationExists('operating_entities');
+
     const params = [];
-    let sql = `
+    let sql = hasOperatingEntitiesTable && hasOperatingEntityId
+      ? `
       SELECT
         av.*,
         oe.name AS operating_entity_name
       FROM ${vehicleSource} av
       LEFT JOIN operating_entities oe ON oe.id = av.operating_entity_id
       WHERE 1=1
+    `
+      : `
+      SELECT
+        av.*,
+        NULL::text AS operating_entity_name
+      FROM ${vehicleSource} av
+      WHERE 1=1
     `;
+
     if (req.context?.tenantId) {
       params.push(req.context.tenantId);
-      sql += ` AND av.tenant_id = $${params.length}`;
+      if (vehicleColumns.has('tenant_id')) {
+        sql += ` AND av.tenant_id = $${params.length}`;
+      }
     }
-    if (req.context?.operatingEntityId) {
+
+    if (req.context?.operatingEntityId && hasOperatingEntityId) {
       params.push(req.context.operatingEntityId);
-      sql += ` AND (av.operating_entity_id = $${params.length} OR LOWER(COALESCE(av.vehicle_type, '')) = 'trailer')`;
+      if (hasVehicleType) {
+        sql += ` AND (av.operating_entity_id = $${params.length} OR LOWER(COALESCE(av.vehicle_type, '')) = 'trailer')`;
+      } else {
+        sql += ` AND av.operating_entity_id = $${params.length}`;
+      }
     }
-    sql += ' ORDER BY av.unit_number';
+
+    sql += vehicleColumns.has('unit_number') ? ' ORDER BY av.unit_number' : ' ORDER BY 1';
     const result = await query(sql, params);
     const duration = Date.now() - startTime;
     
