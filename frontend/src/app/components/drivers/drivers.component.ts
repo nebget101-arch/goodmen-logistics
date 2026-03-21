@@ -5,6 +5,7 @@ import { finalize } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { AccessControlService } from '../../services/access-control.service';
 
 @Component({
   selector: 'app-drivers',
@@ -51,6 +52,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   uploadingDocuments: { [key: string]: boolean } = {};
   
   saving = false;
+  canManageDrivers = false;
+  canAccessDqf = false;
 
   driverFilters: {
     name: string;
@@ -107,10 +110,15 @@ export class DriversComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private onboardingModal: OnboardingModalService,
     private route: ActivatedRoute,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private access: AccessControlService
   ) { }
 
   ngOnInit(): void {
+    const adminSafetyRoles = ['super_admin', 'admin', 'company_admin', 'safety_manager', 'safety'];
+    this.canManageDrivers = this.access.hasAnyRole(adminSafetyRoles) || this.access.hasAnyPermission(['drivers.edit', 'drivers.manage']);
+    this.canAccessDqf = this.access.hasAnyRole(adminSafetyRoles) || this.access.hasAnyPermission(['dqf.view', 'dqf.edit', 'dqf.manage']);
+
     this.bindOperatingEntityContext();
     this.route.queryParams.subscribe(params => {
       const filter = params['filter'];
@@ -302,6 +310,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   addDriver(): void {
+    if (!this.canManageDrivers) return;
+
     if (!this.validateDriver()) {
       alert('Please fill in all required fields');
       return;
@@ -325,8 +335,11 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   loadDrivers(): void {
-    // Use the DQF view so we pull from the unified driver_licenses / driver_compliance tables
-    this.apiService.getDqfDrivers().subscribe({
+    const load$ = this.canAccessDqf
+      ? this.apiService.getDqfDrivers()
+      : this.apiService.getDispatchDrivers();
+
+    load$.subscribe({
       next: (data) => {
         this.drivers = data;
         this.loading = false;
@@ -355,6 +368,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   editDriver(driver: any): void {
+    if (!this.canManageDrivers) return;
+
     this.editingDriver = {
       ...driver,
       cdlExpiry: this.normalizeDate(driver.cdlExpiry),
@@ -371,6 +386,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   saveEdit(): void {
+    if (!this.canManageDrivers) return;
+
     if (!this.validateDriver(this.editingDriver)) {
       alert('Please fill in all required fields');
       return;
@@ -426,6 +443,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   openDQFForm(driver: any): void {
+    if (!this.canAccessDqf) return;
+
     this.selectedDriver = driver;
     this.showDQFForm = true;
     this.showAddForm = false;
@@ -515,6 +534,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   onDQFFileSelected(event: any, documentType: string): void {
+    if (!this.canManageDrivers) return;
+
     const file = event.target.files[0];
     if (!file || !this.selectedDriver) return;
 
@@ -537,6 +558,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   deleteDocument(documentId: string, documentType: string): void {
+    if (!this.canManageDrivers) return;
+
     if (!confirm('Are you sure you want to delete this document?')) return;
 
     this.apiService.deleteDQFDocument(documentId).subscribe({
@@ -642,6 +665,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   updateRequirementStatus(requirement: any, newStatus: string): void {
+    if (!this.canManageDrivers) return;
+
     if (!this.selectedDriver) return;
 
     this.updateingRequirementKey = requirement.key;
@@ -685,6 +710,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   onDQFFileSelectedForKey(event: any, requirementKey: string): void {
+    if (!this.canManageDrivers) return;
+
     const file = event.target.files[0];
     if (!file || !this.selectedDriver) return;
 
@@ -748,6 +775,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   saveDQFForm(): void {
+    if (!this.canManageDrivers) return;
+
     // Count how many checkboxes are checked (excluding notes which is a string)
     const checkboxes = [
       this.dqfForm.applicationComplete,
@@ -811,6 +840,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   onFileSelected(event: any, driver: any): void {
+    if (!this.canManageDrivers) return;
+
     const file = event.target.files[0];
     if (!file) return;
 

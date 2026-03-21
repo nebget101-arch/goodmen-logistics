@@ -5,9 +5,49 @@ const { transformRows, transformRow, toSnakeCase } = require('../utils/case-conv
 const dtLogger = require('../utils/logger');
 const authMiddleware = require('../middleware/auth-middleware');
 const tenantContextMiddleware = require('../middleware/tenant-context-middleware');
+const { loadUserRbac } = require('../middleware/rbac-middleware');
 
 router.use(authMiddleware);
 router.use(tenantContextMiddleware);
+router.use(loadUserRbac);
+
+function getRoleCodes(req) {
+  return (req.user?.rbac?.roles || [])
+    .map((role) => {
+      if (typeof role === 'string') return role;
+      if (role && typeof role.code === 'string') return role.code;
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function getPermissionCodes(req) {
+  return (req.user?.rbac?.permissionCodes || [])
+    .map((code) => (typeof code === 'string' ? code : null))
+    .filter(Boolean);
+}
+
+function hasAnyRole(req, roles) {
+  if (!Array.isArray(roles) || roles.length === 0) return false;
+  const roleSet = new Set(getRoleCodes(req));
+  return roles.some((role) => roleSet.has(role));
+}
+
+function hasAnyPermission(req, perms) {
+  if (!Array.isArray(perms) || perms.length === 0) return false;
+  const permissionSet = new Set(getPermissionCodes(req));
+  return perms.some((perm) => permissionSet.has(perm));
+}
+
+function canWriteDrivers(req) {
+  const adminSafetyRoles = ['super_admin', 'admin', 'company_admin', 'safety_manager', 'safety'];
+  return hasAnyRole(req, adminSafetyRoles) || hasAnyPermission(req, ['drivers.edit', 'drivers.manage']);
+}
+
+function canViewDqfDrivers(req) {
+  const adminSafetyRoles = ['super_admin', 'admin', 'company_admin', 'safety_manager', 'safety'];
+  return hasAnyRole(req, adminSafetyRoles) || hasAnyPermission(req, ['dqf.view', 'dqf.edit', 'dqf.manage']);
+}
 
 async function resolveVehicleSource() {
   try {
@@ -135,6 +175,9 @@ router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
     const view = (req.query.view || '').toString().trim().toLowerCase();
+    if (view === 'dqf' && !canViewDqfDrivers(req)) {
+      return res.status(403).json({ message: 'Forbidden: insufficient permission' });
+    }
     const status = (req.query.status || '').toString().trim().toLowerCase();
     const hasStatus = !!status;
 
@@ -344,6 +387,9 @@ router.get('/:id', async (req, res) => {
 
 // POST create new driver
 router.post('/', async (req, res) => {
+  if (!canWriteDrivers(req)) {
+    return res.status(403).json({ message: 'Forbidden: insufficient permission' });
+  }
   const startTime = Date.now();
   const client = await getClient();
   try {
@@ -627,6 +673,9 @@ router.post('/', async (req, res) => {
 
 // PUT update driver
 router.put('/:id', async (req, res) => {
+  if (!canWriteDrivers(req)) {
+    return res.status(403).json({ message: 'Forbidden: insufficient permission' });
+  }
   const client = await getClient();
   try {
     const body = req.body || {};
@@ -866,6 +915,9 @@ router.put('/:id', async (req, res) => {
 
 // DELETE driver
 router.delete('/:id', async (req, res) => {
+  if (!canWriteDrivers(req)) {
+    return res.status(403).json({ message: 'Forbidden: insufficient permission' });
+  }
   try {
     const result = await query('DELETE FROM drivers WHERE id = $1 AND tenant_id = $2 RETURNING *', [req.params.id, req.context?.tenantId || null]);
     if (result.rows.length > 0) {

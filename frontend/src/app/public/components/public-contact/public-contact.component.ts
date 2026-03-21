@@ -2,6 +2,8 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '../../../services/api.service';
+import { SeoService } from '../../../services/seo.service';
+import { SEO_PUBLIC } from '../../../services/seo-public-presets';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
@@ -25,10 +27,12 @@ export class PublicContactComponent implements OnInit, OnDestroy {
   constructor(
     private readonly router: Router,
     private readonly fb: FormBuilder,
-    private readonly api: ApiService
+    private readonly api: ApiService,
+    private readonly seo: SeoService
   ) {}
 
   ngOnInit(): void {
+    this.seo.apply(SEO_PUBLIC.contact);
     this.initForm();
   }
 

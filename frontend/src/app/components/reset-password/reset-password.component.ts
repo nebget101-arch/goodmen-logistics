@@ -2,6 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
+import { SeoService } from '../../services/seo.service';
+import { SEO_PUBLIC } from '../../services/seo-public-presets';
 
 @Component({
   selector: 'app-reset-password',
@@ -19,7 +21,8 @@ export class ResetPasswordComponent implements OnInit {
     private fb: FormBuilder,
     private route: ActivatedRoute,
     private router: Router,
-    private api: ApiService
+    private api: ApiService,
+    private seo: SeoService
   ) {
     this.form = this.fb.group({
       password: ['', [Validators.required, Validators.minLength(8)]],
@@ -28,6 +31,7 @@ export class ResetPasswordComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.seo.apply(SEO_PUBLIC.resetPassword);
     this.route.queryParamMap.subscribe((params) => {
       this.token = String(params.get('token') || '').trim();
       if (!this.token) {

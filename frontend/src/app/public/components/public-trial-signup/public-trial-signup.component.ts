@@ -4,6 +4,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { combineLatest } from 'rxjs';
 import { ApiService } from '../../../services/api.service';
 import { AccessControlService } from '../../../services/access-control.service';
+import { SeoService } from '../../../services/seo.service';
+import { SEO_PUBLIC } from '../../../services/seo-public-presets';
 import { MARKETING_PLANS } from '../../config/marketing.config';
 
 @Component({
@@ -36,7 +38,8 @@ export class PublicTrialSignupComponent implements OnInit {
     private readonly route: ActivatedRoute,
     private readonly router: Router,
     private readonly apiService: ApiService,
-    private readonly accessControl: AccessControlService
+    private readonly accessControl: AccessControlService,
+    private readonly seo: SeoService
   ) {
     this.form = this.fb.group(
       {
@@ -52,6 +55,9 @@ export class PublicTrialSignupComponent implements OnInit {
 
   ngOnInit(): void {
     combineLatest([this.route.queryParamMap, this.route.paramMap]).subscribe(([query, params]) => {
+      const pathOnly = this.router.url.split('?')[0] || SEO_PUBLIC.trialSignup.path;
+      this.seo.apply({ ...SEO_PUBLIC.trialSignup, path: pathOnly });
+
       const queryToken = (query.get('token') || query.get('signupToken') || query.get('signup_token') || '').trim();
       const pathToken = (params.get('token') || '').trim();
       this.token = queryToken || pathToken;
