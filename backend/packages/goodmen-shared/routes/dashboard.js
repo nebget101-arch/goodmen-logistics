@@ -5,7 +5,29 @@ const dtLogger = require('../utils/logger');
 const auth = require('./auth-middleware');
 const db = require('../internal/db').knex;
 
-function buildVehicleUnionSqlPg() {
+function buildVehicleUnionSqlPg(source = 'all_vehicles') {
+  if (source === 'vehicles') {
+    return `
+      SELECT id, unit_number, status, oos_reason, next_pm_due, tenant_id, operating_entity_id
+      FROM vehicles
+      WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)
+    `;
+  }
+
+  if (source === 'none') {
+    return `
+      SELECT
+        NULL::uuid AS id,
+        NULL::text AS unit_number,
+        NULL::text AS status,
+        NULL::text AS oos_reason,
+        NULL::date AS next_pm_due,
+        NULL::uuid AS tenant_id,
+        NULL::uuid AS operating_entity_id
+      WHERE FALSE
+    `;
+  }
+
   return `
     SELECT id, unit_number, status, oos_reason, next_pm_due, tenant_id, operating_entity_id
     FROM all_vehicles
@@ -13,12 +35,48 @@ function buildVehicleUnionSqlPg() {
   `;
 }
 
-function buildVehicleUnionSqlKnex() {
+function buildVehicleUnionSqlKnex(source = 'all_vehicles') {
+  if (source === 'vehicles') {
+    return `
+      SELECT id, unit_number, status, oos_reason, next_pm_due, tenant_id, operating_entity_id
+      FROM vehicles
+      WHERE tenant_id = ? AND (?::uuid IS NULL OR operating_entity_id = ?)
+    `;
+  }
+
+  if (source === 'none') {
+    return `
+      SELECT
+        NULL::uuid AS id,
+        NULL::text AS unit_number,
+        NULL::text AS status,
+        NULL::text AS oos_reason,
+        NULL::date AS next_pm_due,
+        NULL::uuid AS tenant_id,
+        NULL::uuid AS operating_entity_id
+      WHERE FALSE
+    `;
+  }
+
   return `
     SELECT id, unit_number, status, oos_reason, next_pm_due, tenant_id, operating_entity_id
     FROM all_vehicles
     WHERE tenant_id = ? AND (?::uuid IS NULL OR operating_entity_id = ?)
   `;
+}
+
+async function resolveVehicleSource() {
+  try {
+    const viewResult = await query(`SELECT to_regclass('public.all_vehicles') AS rel`);
+    if (viewResult?.rows?.[0]?.rel) return 'all_vehicles';
+
+    const tableResult = await query(`SELECT to_regclass('public.vehicles') AS rel`);
+    if (tableResult?.rows?.[0]?.rel) return 'vehicles';
+
+    return 'none';
+  } catch {
+    return 'none';
+  }
 }
 
 // Protect all dashboard routes: admin, safety
@@ -30,15 +88,16 @@ router.get('/stats', async (req, res) => {
   try {
     const tenantId = req.context?.tenantId || null;
     const operatingEntityId = req.context?.operatingEntityId || null;
-    const isGlobalAdmin = !!req.context?.isGlobalAdmin;
+    const vehicleSource = await resolveVehicleSource();
+    const vehicleSqlPg = buildVehicleUnionSqlPg(vehicleSource);
 
     const stats = await query(`
       SELECT 
         (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND status = 'active') as "activeDrivers",
         (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)) as "totalDrivers",
-        (SELECT COUNT(*) FROM (${buildVehicleUnionSqlPg()}) scoped_vehicles WHERE status = 'in-service') as "activeVehicles",
-        (SELECT COUNT(*) FROM (${buildVehicleUnionSqlPg()}) scoped_vehicles) as "totalVehicles",
-        (SELECT COUNT(*) FROM (${buildVehicleUnionSqlPg()}) scoped_vehicles WHERE status = 'out-of-service') as "oosVehicles",
+        (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'in-service') as "activeVehicles",
+        (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles) as "totalVehicles",
+        (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'out-of-service') as "oosVehicles",
         (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('IN_TRANSIT', 'IN-TRANSIT', 'in-transit')) as "activeLoads",
         (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('NEW', 'PENDING', 'pending')) as "pendingLoads",
         (SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('DELIVERED', 'COMPLETED', 'completed') AND DATE(COALESCE(completed_date, delivery_date, created_at)) = CURRENT_DATE) as "completedLoadsToday",
@@ -54,7 +113,7 @@ router.get('/stats', async (req, res) => {
         (SELECT COUNT(*) FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2) AND array_length(hr.violations, 1) > 0) as "hosViolations",
         (SELECT COUNT(*) FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2) AND hr.status = 'warning') as "hosWarnings",
         (SELECT COALESCE(ROUND(AVG(dqf_completeness)), 0) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)) as "dqfComplianceRate",
-        (SELECT COUNT(*) FROM (${buildVehicleUnionSqlPg()}) scoped_vehicles WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') as "vehiclesNeedingMaintenance",
+        (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') as "vehiclesNeedingMaintenance",
         (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND medical_cert_expiry <= CURRENT_DATE) as "expiredMedCerts",
         (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND medical_cert_expiry > CURRENT_DATE AND medical_cert_expiry <= CURRENT_DATE + INTERVAL '30 days') as "upcomingMedCerts",
         (SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND cdl_expiry <= CURRENT_DATE) as "expiredCDLs",
@@ -93,6 +152,8 @@ router.get('/alerts', auth(['admin', 'safety']), async (req, res) => {
     const tenantId = req.context?.tenantId || null;
     const operatingEntityId = req.context?.operatingEntityId || null;
     const isGlobalAdmin = !!req.context?.isGlobalAdmin;
+    const vehicleSource = await resolveVehicleSource();
+    const vehicleSqlKnex = buildVehicleUnionSqlKnex(vehicleSource);
     
     // Get driver compliance data
     const drivers = await db('drivers')
@@ -156,7 +217,10 @@ router.get('/alerts', auth(['admin', 'safety']), async (req, res) => {
     });
     
     // Get vehicle maintenance alerts
-    const vehiclesResult = await db.raw(buildVehicleUnionSqlKnex(), [tenantId, operatingEntityId, operatingEntityId]);
+    const vehicleBindings = vehicleSource === 'none'
+      ? []
+      : [tenantId, operatingEntityId, operatingEntityId];
+    const vehiclesResult = await db.raw(vehicleSqlKnex, vehicleBindings);
     const vehicles = vehiclesResult?.rows || [];
     
     vehicles.forEach(vehicle => {
