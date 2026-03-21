@@ -11,6 +11,41 @@ const SUPER_ADMIN_ROLE_CODE = 'super_admin';
 const TENANT_ADMIN_ROLE_CODES = new Set(['admin', 'company_admin']);
 const TENANT_ADMIN_FALLBACK_PERMISSIONS = ['users.view', 'users.manage', 'roles.view'];
 
+/** Roles that own the Safety module (claims, incidents, reports). Must match safety router / product policy. */
+const SAFETY_ROLE_CODES = new Set(['safety_manager', 'safety']);
+
+/**
+ * Default permission codes for safety roles when DB role_permissions is empty or user only has
+ * legacy users.role (no user_roles row → no role_id → no role_permissions join). Without this,
+ * loadUserRbac yields an empty set and GET /api/safety/overview returns 403 (FN-132).
+ * Keep in sync with `routes/safety.js` SAFETY_ANY_PERMISSION.
+ */
+const SAFETY_DEFAULT_PERMISSION_CODES = [
+  'safety.incidents.view',
+  'safety.incidents.create',
+  'safety.incidents.edit',
+  'safety.incidents.close',
+  'safety.claims.view',
+  'safety.claims.create',
+  'safety.claims.edit',
+  'safety.claims.financials.view',
+  'safety.claims.financials.edit',
+  'safety.documents.upload',
+  'safety.reports.view',
+];
+
+/**
+ * Merge baseline Safety permissions when the user has a safety role.
+ * Exported for unit tests.
+ * @param {string[]} roleCodes
+ * @param {Set<string>} permissionSet
+ */
+function mergeSafetyBaselineIfApplicable(roleCodes, permissionSet) {
+  if (!roleCodes?.length || !permissionSet) return;
+  if (!roleCodes.some((code) => SAFETY_ROLE_CODES.has(code))) return;
+  SAFETY_DEFAULT_PERMISSION_CODES.forEach((code) => permissionSet.add(code));
+}
+
 /**
  * Maps legacy users.role string values to canonical RBAC role codes.
  *
@@ -30,6 +65,8 @@ const LEGACY_TO_ROLE_CODE = {
   // Trial users created with role='admin' should NOT be elevated to super_admin
   admin: 'admin',
   safety: 'safety_manager',
+  /** JWT / users.role may already store the canonical RBAC code */
+  safety_manager: 'safety_manager',
   fleet: 'dispatcher',
   dispatch: 'dispatcher',
   driver: 'driver',
@@ -114,6 +151,8 @@ async function getPermissionsForUser(userId) {
     rows.forEach((row) => permissionSet.add(row.code));
   }
 
+  mergeSafetyBaselineIfApplicable(roleCodes, permissionSet);
+
   return permissionSet;
 }
 
@@ -163,5 +202,8 @@ module.exports = {
   hasAnyPermission,
   hasLocationAccess,
   loadUserAccess,
-  SUPER_ADMIN_ROLE_CODE
+  SUPER_ADMIN_ROLE_CODE,
+  mergeSafetyBaselineIfApplicable,
+  SAFETY_ROLE_CODES,
+  SAFETY_DEFAULT_PERMISSION_CODES,
 };
