@@ -93,4 +93,16 @@ describe('AccessControlService RBAC compatibility', () => {
     expect(service.canSee('audit')).toBeTrue();
     expect(service.canSee('safety_claims')).toBeTrue();
   });
+
+  it('strips fleet vehicle write permissions for safety even when API sends them (FN-133)', () => {
+    service.setAccessFromLoginResponse({
+      roles: ['safety_manager'],
+      user: { id: 'u8' },
+      permissions: [PERMISSIONS.VEHICLES_VIEW, PERMISSIONS.VEHICLES_EDIT, PERMISSIONS.VEHICLES_CREATE]
+    });
+
+    expect(service.hasPermission(PERMISSIONS.VEHICLES_VIEW)).toBeTrue();
+    expect(service.hasPermission(PERMISSIONS.VEHICLES_EDIT)).toBeFalse();
+    expect(service.hasPermission(PERMISSIONS.VEHICLES_CREATE)).toBeFalse();
+  });
 });
