@@ -81,31 +81,31 @@
 
         <div class="pub-trial-plans-preview">
           <p class="pub-plans-preview-label">Available plans</p>
-          <div class="pub-plan-compare-grid">
+          <div class="pub-pricing-grid pub-pricing-grid-compact">
             <button
               *ngFor="let plan of plans"
               type="button"
-              class="pub-plan-compare-card"
-              [class.pub-plan-compare-card-active]="form.get('requestedPlan')?.value === plan.id"
-              [class.pub-plan-compare-card-popular]="plan.highlighted"
+              class="pub-pricing-card"
+              [class.pub-pricing-featured]="plan.highlighted"
+              [class.pub-pricing-card-active]="form.get('requestedPlan')?.value === plan.id"
               (click)="selectPlan(plan.id)"
             >
-              <div class="pub-plan-compare-head">
+              <div class="pub-pricing-header">
                 <div>
-                  <p class="pub-plan-compare-name">{{ plan.name }}</p>
-                  <p class="pub-plan-compare-tagline">{{ plan.tagline }}</p>
+                  <p class="pub-pricing-name">{{ plan.name }}</p>
+                  <p class="pub-pricing-tagline">{{ plan.tagline }}</p>
                 </div>
                 <span class="pub-plan-pill-tag" *ngIf="plan.badge">{{ plan.badge }}</span>
               </div>
 
-              <p class="pub-plan-compare-price">{{ plan.priceLabel }}</p>
-              <p class="pub-plan-compare-users">{{ getPlanUserAllowance(plan) }} · {{ getPlanSeatPricing(plan) }}</p>
-              <p class="pub-plan-desc">{{ plan.description }}</p>
+              <p class="pub-pricing-price">{{ plan.priceLabel }}</p>
+              <p class="pub-pricing-users">{{ getPlanUserAllowance(plan) }} · {{ getPlanSeatPricing(plan) }}</p>
+              <p class="pub-pricing-desc">{{ plan.description }}</p>
 
-              <ul class="pub-plan-feature-list">
+              <ul class="pub-pricing-features">
                 <li *ngFor="let feature of plan.features | slice:0:4">
                   <span class="material-symbols-outlined">check_circle</span>
-                  <span>{{ feature }}</span>
+                  <span>{{ feature.text }}</span>
                 </li>
               </ul>
             </button>

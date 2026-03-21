@@ -126,19 +126,11 @@ export class PublicTrialComponent implements OnInit, OnDestroy {
   }
 
   getPlanUserAllowance(plan: MarketingPlan): string {
-    const users = plan.includedUsers ?? 1;
-    if (plan.id === 'enterprise') {
-      return `${users}+ users included`;
-    }
-    return `${users} users included`;
+    return `${plan.includedUsers ?? 1} users included`;
   }
 
   getPlanSeatPricing(plan: MarketingPlan): string {
-    const extraSeatPrice = plan.additionalUserPriceUsd ?? 0;
-    if (extraSeatPrice <= 0 || plan.id === 'enterprise') {
-      return 'Custom seat pricing';
-    }
-    return `+$${extraSeatPrice}/extra user`;
+    return `+$${plan.additionalUserPriceUsd ?? 25}/user`;
   }
 
   getFieldError(fieldName: string): string {
