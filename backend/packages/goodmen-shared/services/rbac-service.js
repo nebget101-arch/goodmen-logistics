@@ -8,6 +8,8 @@
 const db = require('../internal/db').knex;
 
 const SUPER_ADMIN_ROLE_CODE = 'super_admin';
+const TENANT_ADMIN_ROLE_CODES = new Set(['admin', 'company_admin']);
+const TENANT_ADMIN_FALLBACK_PERMISSIONS = ['users.view', 'users.manage', 'roles.view'];
 
 /**
  * Maps legacy users.role string values to canonical RBAC role codes.
@@ -93,13 +95,26 @@ async function getPermissionsForUser(userId) {
     const all = await db('permissions').select('code');
     return new Set(all.map((p) => p.code));
   }
-  const roleIds = roles.map((r) => r.id);
-  const rows = await db('role_permissions as rp')
-    .join('permissions as p', 'rp.permission_id', 'p.id')
-    .whereIn('rp.role_id', roleIds)
-    .distinct('p.code')
-    .select('p.code');
-  return new Set(rows.map((r) => r.code));
+
+  const permissionSet = new Set();
+
+  // Legacy-safe baseline: tenant admins must be able to manage users even when
+  // their access is resolved from users.role fallback (no user_roles rows yet).
+  if (roleCodes.some((code) => TENANT_ADMIN_ROLE_CODES.has(code))) {
+    TENANT_ADMIN_FALLBACK_PERMISSIONS.forEach((code) => permissionSet.add(code));
+  }
+
+  const roleIds = roles.map((r) => r.id).filter(Boolean);
+  if (roleIds.length > 0) {
+    const rows = await db('role_permissions as rp')
+      .join('permissions as p', 'rp.permission_id', 'p.id')
+      .whereIn('rp.role_id', roleIds)
+      .distinct('p.code')
+      .select('p.code');
+    rows.forEach((row) => permissionSet.add(row.code));
+  }
+
+  return permissionSet;
 }
 
 async function getLocationIdsForUser(userId) {
