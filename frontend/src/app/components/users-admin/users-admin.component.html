@@ -10,6 +10,16 @@
         <span class="material-symbols-outlined">group</span>
         <span>{{ currentUserCount }} users · {{ includedUsersLabel }}</span>
       </div>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        *ngIf="isAtOrAboveIncludedUserLimit && seatUsage?.canPurchaseExtraSeat"
+        [disabled]="purchasingSeats || loadingSeatUsage"
+        (click)="purchaseExtraSeat()"
+      >
+        <span class="material-symbols-outlined">payments</span>
+        {{ purchasingSeats ? 'Processing…' : 'Add paid seat (' + extraSeatPriceLabel + ' each)' }}
+      </button>
       <button type="button" class="btn btn-primary" [disabled]="isAtOrAboveIncludedUserLimit" (click)="addUser()">
         <span class="material-symbols-outlined">person_add</span>
         Add User

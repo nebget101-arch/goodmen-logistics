@@ -15,7 +15,7 @@ const PLANS = {
       'Includes core dispatch, driver, compliance, and settlement workflows for a single operating entity.',
     priceLabel: '$149/mo',
     includedUsers: 2,
-    additionalUserPriceUsd: 50,
+    additionalUserPriceUsd: 25,
     includedRoles: ['admin', 'dispatch'],
     includedPages: [
       '/dashboard',
@@ -45,7 +45,7 @@ const PLANS = {
       'Safety incidents & claims',
       'Settlements: Scheduled Payments + Equipment Owners',
       '2 included users: Admin + Dispatch',
-      '$50 per additional user'
+      '$25 per additional user'
     ]
   },
   multi_mc: {
@@ -56,7 +56,7 @@ const PLANS = {
       'Everything in Basic plus multi-entity administration and broader role coverage for growing operations.',
     priceLabel: '$349/mo',
     includedUsers: 4,
-    additionalUserPriceUsd: 50,
+    additionalUserPriceUsd: 25,
     includedRoles: ['admin', 'safety', 'dispatch', 'accounting'],
     includedPages: [
       '/dashboard',
@@ -88,7 +88,7 @@ const PLANS = {
       'Multi-entity admin page access',
       '4 included users: Admin, Safety, Dispatch, Accounting',
       'Cross-entity operational management',
-      '$50 per additional user'
+      '$25 per additional user'
     ]
   },
   end_to_end: {
@@ -99,7 +99,7 @@ const PLANS = {
       'Everything in Multi-MC plus full inventory, accounting, reporting, and roadside AI with larger included seat count.',
     priceLabel: '$799/mo',
     includedUsers: 10,
-    additionalUserPriceUsd: 50,
+    additionalUserPriceUsd: 25,
     includedRoles: ['admin', 'safety', 'dispatch', 'accounting'],
     includedPages: [
       '/dashboard',
@@ -144,7 +144,7 @@ const PLANS = {
       'Reports + Roadside AI',
       'Lease-to-own & fleet financing',
       '10 included users',
-      '$50 per additional user'
+      '$25 per additional user'
     ]
   },
   enterprise: {

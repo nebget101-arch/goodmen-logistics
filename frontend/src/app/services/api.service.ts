@@ -984,6 +984,14 @@ export class ApiService {
       return this.http.delete(`${this.baseUrl}/billing/payment-method`);
     }
 
+    getBillingSeatUsage(): Observable<any> {
+      return this.http.get(`${this.baseUrl}/billing/seat-usage`);
+    }
+
+    purchaseBillingExtraSeats(quantity = 1): Observable<any> {
+      return this.http.post(`${this.baseUrl}/billing/extra-seats/purchase`, { quantity });
+    }
+
   // ========== INVENTORY MANAGEMENT (PHASE 2) ==========
 
   // Parts Catalog
