@@ -118,13 +118,35 @@
   color: #6b7280;
   margin: 0 0 12px;
 }
-.pub-pricing-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
+.pub-plan-switch-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
-.pub-pricing-grid-compact {
-  margin-top: 8px;
+.pub-plan-switch {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(2, 6, 23, 0.45);
+  color: #94a3b8;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.pub-plan-switch:hover {
+  border-color: rgba(45, 212, 191, 0.45);
+  color: #e2e8f0;
+}
+.pub-plan-switch-active {
+  border-color: rgba(45, 212, 191, 0.8);
+  background: rgba(45, 212, 191, 0.14);
+  color: #a5f3fc;
 }
 .pub-plan-pill-tag {
   font-size: 9px;
@@ -135,71 +157,64 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.pub-pricing-card {
-  width: 100%;
-  text-align: left;
-  padding: 14px;
-  border-radius: 12px;
+.pub-selected-plan {
   border: 1px solid rgba(51, 65, 85, 0.85);
+  border-radius: 12px;
+  padding: 14px;
   background: linear-gradient(160deg, rgba(15, 23, 42, 0.9), rgba(2, 6, 23, 0.8));
-  color: inherit;
-  cursor: pointer;
-  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
-.pub-pricing-card:hover {
-  border-color: rgba(45, 212, 191, 0.45);
-  transform: translateY(-1px);
+.pub-selected-plan-main,
+.pub-selected-plan-side {
+  min-width: 0;
 }
-.pub-pricing-card-active {
-  border-color: rgba(45, 212, 191, 0.75);
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.35), 0 12px 26px rgba(6, 182, 212, 0.12);
-}
-.pub-pricing-featured {
-  background: linear-gradient(160deg, rgba(15, 23, 42, 0.95), rgba(6, 78, 59, 0.2));
-}
-.pub-pricing-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.pub-pricing-name {
+.pub-selected-plan-name {
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
   color: #f8fafc;
 }
-.pub-pricing-tagline {
+.pub-selected-plan-tagline {
   margin: 2px 0 0;
   font-size: 11px;
   color: #94a3b8;
 }
-.pub-pricing-price {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 800;
+.pub-selected-plan-price {
+  margin: 10px 0 0;
+  font-size: 20px;
+  font-weight: 900;
   color: #e2e8f0;
 }
-.pub-pricing-users {
-  margin: 3px 0 10px;
-  font-size: 11px;
+.pub-selected-plan-users {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  font-weight: 600;
   color: #67e8f9;
 }
-.pub-pricing-desc {
+.pub-selected-plan-desc {
   font-size: 13px;
   color: #6b7280;
   line-height: 1.6;
-  margin: 0 0 10px;
+  margin: 0;
 }
-.pub-pricing-features {
+.pub-selected-plan-side-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+.pub-selected-plan-features {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   gap: 6px;
 }
-.pub-pricing-features li {
+.pub-selected-plan-features li {
   display: flex;
   align-items: flex-start;
   gap: 6px;
@@ -207,7 +222,7 @@
   font-size: 12px;
   line-height: 1.35;
 }
-.pub-pricing-features .material-symbols-outlined {
+.pub-selected-plan-features .material-symbols-outlined {
   font-size: 14px;
   color: #22c55e;
   margin-top: 1px;
@@ -447,8 +462,8 @@ select.pub-form-input option { background: #0f172a; color: #e5e7eb; }
 @media (max-width: 900px) {
   .pub-trial-layout { grid-template-columns: 1fr; gap: 32px; }
   .pub-trial-left { position: static; }
-  .pub-pricing-grid-compact {
-    grid-template-columns: 1fr 1fr;
+  .pub-selected-plan {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -456,7 +471,8 @@ select.pub-form-input option { background: #0f172a; color: #e5e7eb; }
   .pub-trial-section { padding: 90px 16px 48px; }
   .pub-form-row { grid-template-columns: 1fr; }
   .pub-trial-form-card { padding: 24px 18px; }
-  .pub-pricing-grid-compact {
-    grid-template-columns: 1fr;
+  .pub-plan-switch {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
   }
 }

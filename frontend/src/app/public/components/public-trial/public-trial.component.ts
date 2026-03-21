@@ -125,6 +125,11 @@ export class PublicTrialComponent implements OnInit, OnDestroy {
     this.form.patchValue({ requestedPlan: planId });
   }
 
+  get selectedPlan(): MarketingPlan {
+    const selectedId = this.form.get('requestedPlan')?.value as MarketingPlan['id'] | null;
+    return this.plans.find(plan => plan.id === selectedId) || this.plans[0];
+  }
+
   getPlanUserAllowance(plan: MarketingPlan): string {
     return `${plan.includedUsers ?? 1} users included`;
   }

@@ -81,34 +81,37 @@
 
         <div class="pub-trial-plans-preview">
           <p class="pub-plans-preview-label">Available plans</p>
-          <div class="pub-pricing-grid pub-pricing-grid-compact">
+          <div class="pub-plan-switch-row">
             <button
               *ngFor="let plan of plans"
               type="button"
-              class="pub-pricing-card"
-              [class.pub-pricing-featured]="plan.highlighted"
-              [class.pub-pricing-card-active]="form.get('requestedPlan')?.value === plan.id"
+              class="pub-plan-switch"
+              [class.pub-plan-switch-active]="form.get('requestedPlan')?.value === plan.id"
               (click)="selectPlan(plan.id)"
             >
-              <div class="pub-pricing-header">
-                <div>
-                  <p class="pub-pricing-name">{{ plan.name }}</p>
-                  <p class="pub-pricing-tagline">{{ plan.tagline }}</p>
-                </div>
-                <span class="pub-plan-pill-tag" *ngIf="plan.badge">{{ plan.badge }}</span>
-              </div>
+              {{ plan.name }}
+              <span class="pub-plan-pill-tag" *ngIf="plan.badge">{{ plan.badge }}</span>
+            </button>
+          </div>
 
-              <p class="pub-pricing-price">{{ plan.priceLabel }}</p>
-              <p class="pub-pricing-users">{{ getPlanUserAllowance(plan) }} · {{ getPlanSeatPricing(plan) }}</p>
-              <p class="pub-pricing-desc">{{ plan.description }}</p>
+          <div class="pub-selected-plan" *ngIf="selectedPlan as plan">
+            <div class="pub-selected-plan-main">
+              <p class="pub-selected-plan-name">{{ plan.name }}</p>
+              <p class="pub-selected-plan-tagline">{{ plan.tagline }}</p>
+              <p class="pub-selected-plan-price">{{ plan.priceLabel }}</p>
+              <p class="pub-selected-plan-users">{{ getPlanUserAllowance(plan) }} · {{ getPlanSeatPricing(plan) }}</p>
+              <p class="pub-selected-plan-desc">{{ plan.description }}</p>
+            </div>
 
-              <ul class="pub-pricing-features">
+            <div class="pub-selected-plan-side">
+              <p class="pub-selected-plan-side-title">Included highlights</p>
+              <ul class="pub-selected-plan-features">
                 <li *ngFor="let feature of plan.features | slice:0:4">
                   <span class="material-symbols-outlined">check_circle</span>
                   <span>{{ feature.text }}</span>
                 </li>
               </ul>
-            </button>
+            </div>
           </div>
         </div>
       </div>
