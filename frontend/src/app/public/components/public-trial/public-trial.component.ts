@@ -3,7 +3,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { ApiService } from '../../../services/api.service';
-import { MARKETING_PLANS, FLEET_SIZE_OPTIONS } from '../../config/marketing.config';
+import { MARKETING_PLANS, FLEET_SIZE_OPTIONS, MarketingPlan } from '../../config/marketing.config';
 
 @Component({
   selector: 'app-public-trial',
@@ -11,7 +11,7 @@ import { MARKETING_PLANS, FLEET_SIZE_OPTIONS } from '../../config/marketing.conf
   styleUrls: ['./public-trial.component.css']
 })
 export class PublicTrialComponent implements OnInit, OnDestroy {
-  plans = MARKETING_PLANS.filter(plan => plan.trialEligible !== false);
+  plans: MarketingPlan[] = MARKETING_PLANS.filter(plan => plan.trialEligible !== false);
   fleetSizeOptions = FLEET_SIZE_OPTIONS;
   mobileNavOpen = false;
   currentYear = new Date().getFullYear();
@@ -50,7 +50,7 @@ export class PublicTrialComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.route.queryParams.subscribe(params => {
       const plan = params['plan'];
-      if (plan && ['basic', 'multi_mc', 'end_to_end'].includes(plan)) {
+      if (plan && ['basic', 'multi_mc', 'end_to_end', 'enterprise'].includes(plan)) {
         this.form.patchValue({ requestedPlan: plan });
       }
     });
@@ -119,6 +119,26 @@ export class PublicTrialComponent implements OnInit, OnDestroy {
   isFieldInvalid(fieldName: string): boolean {
     const field = this.form.get(fieldName);
     return !!(field && field.invalid && (field.dirty || field.touched));
+  }
+
+  selectPlan(planId: MarketingPlan['id']): void {
+    this.form.patchValue({ requestedPlan: planId });
+  }
+
+  getPlanUserAllowance(plan: MarketingPlan): string {
+    const users = plan.includedUsers ?? 1;
+    if (plan.id === 'enterprise') {
+      return `${users}+ users included`;
+    }
+    return `${users} users included`;
+  }
+
+  getPlanSeatPricing(plan: MarketingPlan): string {
+    const extraSeatPrice = plan.additionalUserPriceUsd ?? 0;
+    if (extraSeatPrice <= 0 || plan.id === 'enterprise') {
+      return 'Custom seat pricing';
+    }
+    return `+$${extraSeatPrice}/extra user`;
   }
 
   getFieldError(fieldName: string): string {

@@ -49,6 +49,8 @@ export interface MarketingPlan {
   tagline: string;
   description: string;
   priceLabel: string;
+  includedUsers?: number;
+  additionalUserPriceUsd?: number;
   highlighted: boolean;
   badge?: string;
   ctaLabel?: string;
@@ -538,6 +540,8 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     description:
       'Core day-to-day operations for a single company entity with dispatch, safety, and accounting basics.',
     priceLabel: '$149/mo',
+    includedUsers: 2,
+    additionalUserPriceUsd: 50,
     highlighted: false,
     ctaLabel: 'Start Free Trial',
     ctaAction: 'trial',
@@ -558,6 +562,8 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     description:
       'Everything in Starter plus multi-company operations and cross-entity administration controls.',
     priceLabel: '$349/mo',
+    includedUsers: 4,
+    additionalUserPriceUsd: 50,
     highlighted: true,
     badge: 'Most Popular',
     ctaLabel: 'Start Free Trial',
@@ -579,6 +585,8 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     description:
       'Everything in Professional plus maintenance/work-orders, lease-to-own financing, and expanded analytics/AI workflows.',
     priceLabel: '$799/mo',
+    includedUsers: 10,
+    additionalUserPriceUsd: 50,
     highlighted: false,
     ctaLabel: 'Start Free Trial',
     ctaAction: 'trial',
@@ -598,6 +606,8 @@ export const MARKETING_PLANS: MarketingPlan[] = [
     description:
       'Custom implementation, onboarding, and integrations for complex operations.',
     priceLabel: "Let's talk",
+    includedUsers: 25,
+    additionalUserPriceUsd: 0,
     highlighted: false,
     ctaLabel: "Let's Talk",
     ctaAction: 'contact',
