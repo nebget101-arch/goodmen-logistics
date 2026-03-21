@@ -191,7 +191,7 @@ export class AppComponent implements OnInit {
   canSeeLink(link: NavLink): boolean {
     if (link.featureFlag && !this.access.hasFeatureAccess(link.featureFlag)) return false;
     if (!this.access.canSee(link.tab)) return false;
-    if (link.roles?.length) return this.access.hasAnyRole(link.roles);
+    if (link.roles?.length) return this.access.hasAnyRole(link.roles) && this.access.canAccessUrl(link.path);
     return this.access.canAccessUrl(link.path);
   }
 
