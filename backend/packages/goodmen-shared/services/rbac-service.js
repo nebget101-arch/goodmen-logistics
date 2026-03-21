@@ -46,25 +46,24 @@ function mergeSafetyBaselineIfApplicable(roleCodes, permissionSet) {
   SAFETY_DEFAULT_PERMISSION_CODES.forEach((code) => permissionSet.add(code));
 }
 
-/** Fleet truck/trailer mutation codes safety roles must never retain (FN-133 / stale DB rows). */
-const SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES = [
+/**
+ * Safety assigns trucks/trailers to drivers and maintains unit records + documents (product 2026).
+ * Merged when DB role_permissions is incomplete (legacy users.role fallback).
+ */
+const SAFETY_FLEET_UNIT_BASELINE_CODES = [
   'vehicles.create',
   'vehicles.edit',
-  'vehicles.delete',
+  'trailers.view',
   'trailers.create',
   'trailers.edit',
-  'trailers.delete',
+  'documents.view',
+  'documents.upload',
 ];
 
-/**
- * Remove fleet vehicle write permissions for safety roles (read-only fleet per product).
- * @param {string[]} roleCodes
- * @param {Set<string>} permissionSet
- */
-function stripFleetVehicleWritesForSafetyRoles(roleCodes, permissionSet) {
+function mergeSafetyFleetUnitBaselineIfApplicable(roleCodes, permissionSet) {
   if (!roleCodes?.length || !permissionSet) return;
   if (!roleCodes.some((code) => SAFETY_ROLE_CODES.has(code))) return;
-  SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES.forEach((code) => permissionSet.delete(code));
+  SAFETY_FLEET_UNIT_BASELINE_CODES.forEach((code) => permissionSet.add(code));
 }
 
 /**
@@ -226,8 +225,8 @@ module.exports = {
   loadUserAccess,
   SUPER_ADMIN_ROLE_CODE,
   mergeSafetyBaselineIfApplicable,
-  stripFleetVehicleWritesForSafetyRoles,
+  mergeSafetyFleetUnitBaselineIfApplicable,
   SAFETY_ROLE_CODES,
   SAFETY_DEFAULT_PERMISSION_CODES,
-  SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES,
+  SAFETY_FLEET_UNIT_BASELINE_CODES,
 };

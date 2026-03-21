@@ -18,7 +18,7 @@ and a full normalized DB permission model. Both coexist and are backward-compati
 | `executive_read_only`| View dashboards, loads, reports — no mutations |
 | `dispatch_manager`   | Manage loads, dispatch, brokers, drivers |
 | `dispatcher`         | View/create/edit loads, assign drivers |
-| `safety_manager`     | Drivers, DQF, safety compliance, HOS |
+| `safety_manager`     | Drivers, DQF, safety compliance, HOS; **fleet trucks & trailers** (create/edit, unit documents) for assignments |
 | `carrier_accountant` | Invoices, settlements, accounting, exports |
 | `company_accountant` | Accounting across divisions |
 | `shop_manager`       | Full shop operations + finalization (post invoices, close WOs, approve discounts) |
@@ -72,9 +72,11 @@ The foundational permission model was created by:
    - `reports.shop`
 3. **Safety claims module**
    - `safety.incidents.*`, `safety.claims.*`, `safety.documents.upload`, `safety.reports.view`
-4. **Lease financing module**
+4. **Safety fleet units (trucks & trailers)**
+   - `safety_manager` / legacy `safety`: `vehicles.create`, `vehicles.edit`, `trailers.view`, `trailers.create`, `trailers.edit`, plus `documents.view` / `documents.upload` for unit paperwork (see seed `01_rbac_seed.js`, migration `20260321140000_grant_safety_fleet_unit_permissions.js`, and `rbac-service` `mergeSafetyFleetUnitBaselineIfApplicable`).
+5. **Lease financing module**
    - `lease.financing.*`, including payments/dashboard/driver visibility
-5. **IFTA module**
+6. **IFTA module**
    - `ifta.view`, `ifta.edit`, `ifta.import`, `ifta.run_ai_review`, `ifta.finalize`, `ifta.export`
 
 ### How to verify the effective permission list (authoritative runtime check)
