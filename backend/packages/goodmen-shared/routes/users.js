@@ -8,6 +8,7 @@ const authWithRole = require('./auth-middleware');
 const requirePlanAccess = require('../middleware/plan-access-middleware');
 const { loadUserRbac, requirePermission, requireAnyPermission } = require('../middleware/rbac-middleware');
 const { normalizePlanId, PLANS } = require('../config/plans');
+const rbacService = require('../services/rbac-service');
 
 const router = express.Router();
 const rbac = [baseAuth, loadUserRbac];
@@ -21,6 +22,40 @@ async function getTenantPlanForTenant(tenantId) {
   if (!tenantId) return 'basic';
   const tenantRow = await knex('tenants').where({ id: tenantId }).first('subscription_plan');
   return normalizePlanId(tenantRow?.subscription_plan, 'basic');
+}
+
+/**
+ * Get allowed role codes for a plan.
+ * Returns legacy role codes (admin, safety, dispatch, accounting) that match plan.includedRoles.
+ */
+function getAllowedRoleCodesForPlan(planId) {
+  const plan = PLANS[normalizePlanId(planId, 'basic')];
+  if (!plan?.includedRoles) return new Set();
+  return new Set(plan.includedRoles);
+}
+
+/**
+ * Validate that requested role codes are allowed by the tenant's plan.
+ * Accepts legacy role codes (admin, safety, etc.) and canonical codes (dispatcher, safety_manager, etc.).
+ * Returns error message if validation fails, null if valid.
+ */
+function validateRolesAgainstPlan(requestedRoleCodes, allowedLegacyRoles) {
+  if (!requestedRoleCodes || requestedRoleCodes.length === 0) return null;
+  
+  for (const roleCode of requestedRoleCodes) {
+    const normalized = String(roleCode || '').trim().toLowerCase();
+    if (!normalized) continue;
+    
+    // Check if requested role is in allowed set (by legacy name or canonical name)
+    const isAllowed = allowedLegacyRoles.has(normalized) ||
+                      // Also check if canonical form of requested role maps to an allowed legacy role
+                      allowedLegacyRoles.has(mapCanonicalRoleToLegacyRole(normalized));
+    
+    if (!isAllowed) {
+      return `Role '${normalized}' is not included in your subscription plan. Allowed roles: ${Array.from(allowedLegacyRoles).join(', ')}`;
+    }
+  }
+  return null;
 }
 
 function getIncludedUsersForPlan(planId) {
@@ -550,8 +585,24 @@ router.get('/:id/access', rbac, requireAnyPermission(['users.manage', 'roles.man
 router.put('/:id/roles', rbac, requirePermission('users.manage'), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
-    const user = await knex('users').where('id', req.params.id).first('id');
+    const tenantId = req.context?.tenantId || null;
+    if (!tenantId) return res.status(403).json({ success: false, error: 'Forbidden: tenant context missing' });
+    
+    const user = await knex('users').where('id', req.params.id).first('id', 'tenant_id');
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.tenant_id !== tenantId) return res.status(403).json({ success: false, error: 'Forbidden: user belongs to different tenant' });
+    
+    // Validate roles against plan
+    const planId = await getTenantPlanForTenant(tenantId);
+    const allowedRoles = getAllowedRoleCodesForPlan(planId);
+    
+    if (req.body?.roleCodes && Array.isArray(req.body.roleCodes)) {
+      const validationError = validateRolesAgainstPlan(req.body.roleCodes, allowedRoles);
+      if (validationError) {
+        return res.status(400).json({ success: false, error: validationError });
+      }
+    }
+    
     const roleIds = Array.isArray(req.body.roleIds) ? req.body.roleIds : [];
     await knex('user_roles').where('user_id', req.params.id).del();
     if (roleIds.length) {
@@ -736,17 +787,13 @@ router.put('/:id', rbac, requirePermission('users.manage'), async (req, res) => 
       });
     }
 
-    const hasIsActiveCompat = await ensureUsersIsActiveColumn(knex);
-
-    const [
-      hasFirstName,
-      hasLastName,
-      hasEmail,
-      hasUpdatedAt,
-      hasRolesTable,
-      hasUserRolesTable
-    ] = await Promise.all([
-      knex.schema.hasColumn('users', 'first_name'),
+  // Validate roles against subscription plan
+  const planId = await getTenantPlanForTenant(tenantId);
+  const allowedRolesForPlan = getAllowedRoleCodesForPlan(planId);
+  const planValidationError = validateRolesAgainstPlan(normalizedRoleCodes, allowedRolesForPlan);
+  if (planValidationError) {
+    return res.status(400).json({ success: false, error: planValidationError });
+  }
       knex.schema.hasColumn('users', 'last_name'),
       knex.schema.hasColumn('users', 'email'),
       knex.schema.hasColumn('users', 'updated_at'),
@@ -905,6 +952,14 @@ router.post('/', authWithRole(['admin']), async (req, res) => {
         allowedRoles: Array.from(ALLOWED_CANONICAL_ROLE_CODES)
       }
     });
+  }
+
+  // Validate roles against subscription plan
+  const tenantPlanId = await getTenantPlanForTenant(tenantId);
+  const allowedRolesForPlan = getAllowedRoleCodesForPlan(tenantPlanId);
+  const planValidationError = validateRolesAgainstPlan(normalizedRoleCodes, allowedRolesForPlan);
+  if (planValidationError) {
+    return res.status(400).json({ error: planValidationError });
   }
 
   const primaryRoleCode = normalizedRoleCodes[0];
