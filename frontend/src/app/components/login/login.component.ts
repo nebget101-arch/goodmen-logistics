@@ -1,4 +1,5 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { AccessControlService } from '../../services/access-control.service';
@@ -9,19 +10,33 @@ import { OperatingEntityContextService } from '../../services/operating-entity-c
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.css']
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   username = '';
   password = '';
   error = '';
+  success = '';
   isSigningIn = false;
   private readonly authTransitionStorageKey = 'fleetneuron_auth_transitioning';
 
   constructor(
     private api: ApiService,
+    private route: ActivatedRoute,
     private router: Router,
     private accessControl: AccessControlService,
     private operatingEntityContext: OperatingEntityContextService
   ) {}
+
+  ngOnInit(): void {
+    this.route.queryParamMap.subscribe((params) => {
+      this.success = params.get('reset') === 'success'
+        ? 'Password updated successfully. Please sign in.'
+        : '';
+    });
+  }
+
+  goToForgotPassword(): void {
+    this.router.navigate(['/forgot-password']);
+  }
 
   login(): void {
     if (this.isSigningIn) return;

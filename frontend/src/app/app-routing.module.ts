@@ -12,6 +12,8 @@ import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dash
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
+import { ForgotPasswordComponent } from './components/forgot-password/forgot-password.component';
+import { ResetPasswordComponent } from './components/reset-password/reset-password.component';
 import { AuthGuard } from './auth.guard';
 import { PermissionGuard } from './guards/permission.guard';
 import { PlanGuard } from './guards/plan.guard';
@@ -232,6 +234,8 @@ const routes: Routes = [
     canActivate: [AuthGuard, InternalTrialAdminGuard]
   },
   { path: 'login', component: LoginComponent },
+  { path: 'forgot-password', component: ForgotPasswordComponent },
+  { path: 'reset-password', component: ResetPasswordComponent },
   { path: 'privacy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
   { path: 'communication-preferences', component: CommunicationPreferencesComponent }
