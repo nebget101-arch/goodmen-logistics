@@ -10,6 +10,18 @@ const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 
 const router = express.Router();
 
+async function resolveVehicleSource() {
+  try {
+    const viewResult = await db.raw("SELECT to_regclass('public.all_vehicles') AS rel");
+    if (viewResult?.rows?.[0]?.rel) return 'all_vehicles';
+    const tableResult = await db.raw("SELECT to_regclass('public.vehicles') AS rel");
+    if (tableResult?.rows?.[0]?.rel) return 'vehicles';
+    return 'none';
+  } catch {
+    return 'none';
+  }
+}
+
 function requireRole(allowedRoles) {
   return (req, res, next) => {
     const role = (req.user?.role || 'technician').toString().trim().toLowerCase();
@@ -74,9 +86,12 @@ function normalizeEnum(value, allowedValues, fallback) {
 }
 
 async function resolveVehicle(row) {
+  const vehicleSource = await resolveVehicleSource();
+  if (vehicleSource === 'none') return null;
+
   const vehicleId = normalizeText(row['Vehicle ID']);
   if (vehicleId) {
-    const vehicle = await db('all_vehicles').where({ id: vehicleId }).first();
+    const vehicle = await db(vehicleSource).where({ id: vehicleId }).first();
     return vehicle ? { vehicleId: vehicle.id, vehicle } : null;
   }
 
@@ -84,7 +99,7 @@ async function resolveVehicle(row) {
   const unitNumber = normalizeText(row['Vehicle Unit Number'] || row['Unit Number']);
   if (!vin && !unitNumber) return null;
 
-  const vehicle = await db('all_vehicles')
+  const vehicle = await db(vehicleSource)
     .where(qb => {
       if (vin) qb.orWhereRaw('LOWER(vin) = ?', [vin.toLowerCase()]);
       if (unitNumber) qb.orWhereRaw('LOWER(unit_number) = ?', [unitNumber.toLowerCase()]);

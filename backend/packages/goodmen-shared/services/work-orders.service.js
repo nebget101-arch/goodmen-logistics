@@ -5,6 +5,18 @@ const { recomputeInvoiceTotals } = require('./invoices.service');
 const creditService = require('./credit.service');
 const barcodesService = require('./barcodes.service');
 
+async function resolveVehicleSource() {
+  try {
+    const viewResult = await db.raw("SELECT to_regclass('public.all_vehicles') AS rel");
+    if (viewResult?.rows?.[0]?.rel) return 'all_vehicles';
+    const tableResult = await db.raw("SELECT to_regclass('public.vehicles') AS rel");
+    if (tableResult?.rows?.[0]?.rel) return 'vehicles';
+    return 'none';
+  } catch {
+    return 'none';
+  }
+}
+
 function applyTenantFilter(qb, context, column = 'tenant_id') {
   if (context?.tenantId) {
     qb.andWhere(column, context.tenantId);
@@ -187,8 +199,14 @@ async function listWorkOrders(filters = {}, context = null) {
     .orderBy('i.created_at', 'desc')
     .as('i');
 
+  const vehicleSource = await resolveVehicleSource();
+
   const baseQuery = db('work_orders as wo')
-    .leftJoin('all_vehicles as v', 'wo.vehicle_id', 'v.id')
+    .modify((qb) => {
+      if (vehicleSource !== 'none') {
+        qb.leftJoin(`${vehicleSource} as v`, 'wo.vehicle_id', 'v.id');
+      }
+    })
     .leftJoin('shop_clients as c', 'wo.shop_client_id', 'c.id')
     .leftJoin('locations as l', 'wo.location_id', 'l.id')
     .leftJoin(latestInvoice, 'wo.id', 'i.work_order_id')
@@ -202,8 +220,9 @@ async function listWorkOrders(filters = {}, context = null) {
       'wo.status',
       'wo.created_at',
       'wo.updated_at',
-      'v.unit_number as vehicle_unit',
-      'v.vin as vehicle_vin',
+      ...(vehicleSource !== 'none'
+        ? ['v.unit_number as vehicle_unit', 'v.vin as vehicle_vin']
+        : [db.raw('NULL::text as vehicle_unit'), db.raw('NULL::text as vehicle_vin')]),
       db.raw('c.company_name as customer_name'),
       'l.name as location_name',
       'i.status as invoice_status',
@@ -214,9 +233,11 @@ async function listWorkOrders(filters = {}, context = null) {
       if (search) {
         qb.andWhere(function() {
           this.where('wo.work_order_number', 'ilike', `%${search}%`)
-            .orWhere('v.unit_number', 'ilike', `%${search}%`)
-            .orWhere('v.vin', 'ilike', `%${search}%`)
             .orWhere('c.company_name', 'ilike', `%${search}%`);
+          if (vehicleSource !== 'none') {
+            this.orWhere('v.unit_number', 'ilike', `%${search}%`)
+              .orWhere('v.vin', 'ilike', `%${search}%`);
+          }
         });
       }
       if (status) qb.andWhere('wo.status', status);
@@ -272,7 +293,10 @@ async function getWorkOrderById(workOrderId, context = null) {
     }
   }
 
-  const vehicle = await db('all_vehicles').where({ id: workOrder.vehicle_id }).first();
+  const vehicleSource = await resolveVehicleSource();
+  const vehicle = vehicleSource === 'none'
+    ? null
+    : await db(vehicleSource).where({ id: workOrder.vehicle_id }).first();
   const customer = workOrder.shop_client_id ? await db('shop_clients').where({ id: workOrder.shop_client_id }).first() : null;
   const location = workOrder.location_id ? await db('locations').where({ id: workOrder.location_id }).first() : null;
   const labor = await db('work_order_labor_items as woli')
