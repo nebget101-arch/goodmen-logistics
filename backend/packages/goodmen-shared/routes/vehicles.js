@@ -61,24 +61,26 @@ async function getVehiclesColumnSet() {
   return vehiclesColumnSetCache;
 }
 
-// Protect vehicles routes: Safety / safety_manager may READ (compliance context) but must not
-// mutate fleet trucks/trailers (FN-133). Writes require admin, dispatch, or shop roles.
+// Protect vehicles routes. Safety / safety_manager may create/edit trucks & trailers and unit
+// documents (assign units, new equipment) — same JWT write list as fleet + admin + shop.
 const VEHICLE_SHOP_ROLES = [
   'shop_manager', 'service_writer', 'service_advisor',
   'shop_clerk', 'mechanic', 'technician',
 ];
 const VEHICLE_ADMIN_ROLES = ['admin', 'company_admin', 'super_admin'];
 const VEHICLE_FLEET_ROLES = ['dispatch', 'dispatcher', 'fleet'];
+const VEHICLE_SAFETY_ROLES = ['safety', 'safety_manager'];
 
 const VEHICLE_READ_ROLES = [
   ...VEHICLE_ADMIN_ROLES,
-  'safety', 'safety_manager',
+  ...VEHICLE_SAFETY_ROLES,
   ...VEHICLE_FLEET_ROLES,
   ...VEHICLE_SHOP_ROLES,
 ];
 
 const VEHICLE_WRITE_ROLES = [
   ...VEHICLE_ADMIN_ROLES,
+  ...VEHICLE_SAFETY_ROLES,
   ...VEHICLE_FLEET_ROLES,
   ...VEHICLE_SHOP_ROLES,
 ];

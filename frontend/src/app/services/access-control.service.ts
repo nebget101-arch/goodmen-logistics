@@ -13,16 +13,6 @@ import {
 } from '../models/access-control.model';
 
 const STORAGE_KEY_ACCESS = 'fleetneuron_access';
-
-/** Safety / safety_manager: fleet trucks & trailers are view-only (FN-133); strip if API still sends writes. */
-const SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES = [
-  'vehicles.create',
-  'vehicles.edit',
-  'vehicles.delete',
-  'trailers.create',
-  'trailers.edit',
-  'trailers.delete',
-];
 const ALWAYS_ALLOWED_PATH_PREFIXES = ['/profile', '/users', '/users/create'];
 const INTERNAL_TRIAL_ADMIN_TENANT_NAME = 'fleetneuron default tenant';
 const FEATURE_PLAN_ACCESS: Record<string, string[]> = {
@@ -95,15 +85,12 @@ export class AccessControlService {
     // Backend often returns a partial permission list. For safety roles, that list can omit
     // hos.view / audit.view / safety.* and hide nav + /safety guard while role is correct (FN-131).
     const safetyRole = roles.some((r) => r === 'safety_manager' || r === 'safety');
-    let permissions: string[] =
+    const permissions: string[] =
       providedPermissions.length === 0
         ? derivedFromRoles
         : safetyRole
           ? [...new Set([...providedPermissions, ...derivedFromRoles])]
           : providedPermissions;
-    if (safetyRole) {
-      permissions = permissions.filter((p) => !SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES.includes(p));
-    }
     const locations: AccessLocation[] = Array.isArray(raw.locations)
       ? raw.locations.map((l: any) => ({ id: l.id ?? l.locationId, name: l.name ?? l.locationName ?? '' }))
       : [];
@@ -144,7 +131,9 @@ export class AccessControlService {
     }
     if (r('safety_manager') || r('safety')) {
       set.add(PERMISSIONS.DASHBOARD_VIEW).add(PERMISSIONS.DRIVERS_VIEW).add(PERMISSIONS.DRIVERS_EDIT).add(PERMISSIONS.DQF_VIEW).add(PERMISSIONS.DQF_EDIT);
-      set.add(PERMISSIONS.HOS_VIEW).add(PERMISSIONS.AUDIT_VIEW).add(PERMISSIONS.VEHICLES_VIEW);
+      set.add(PERMISSIONS.HOS_VIEW).add(PERMISSIONS.AUDIT_VIEW);
+      set.add(PERMISSIONS.VEHICLES_VIEW).add(PERMISSIONS.VEHICLES_CREATE).add(PERMISSIONS.VEHICLES_EDIT);
+      set.add(PERMISSIONS.DOCUMENTS_VIEW).add(PERMISSIONS.DOCUMENTS_UPLOAD);
       // Full Safety module (/safety) — align with DB migration 20260316000500 when API omits permissions (FN-131)
       set.add(PERMISSIONS.SAFETY_INCIDENTS_VIEW);
       set.add(PERMISSIONS.SAFETY_INCIDENTS_CREATE);

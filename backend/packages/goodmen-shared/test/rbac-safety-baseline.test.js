@@ -9,10 +9,10 @@
 
 const {
   mergeSafetyBaselineIfApplicable,
-  stripFleetVehicleWritesForSafetyRoles,
+  mergeSafetyFleetUnitBaselineIfApplicable,
   SAFETY_ROLE_CODES,
   SAFETY_DEFAULT_PERMISSION_CODES,
-  SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES,
+  SAFETY_FLEET_UNIT_BASELINE_CODES,
 } = require('../services/rbac-service');
 
 describe('mergeSafetyBaselineIfApplicable', () => {
@@ -59,24 +59,24 @@ describe('SAFETY_ROLE_CODES', () => {
   });
 });
 
-describe('stripFleetVehicleWritesForSafetyRoles (FN-133)', () => {
-  test('removes vehicles.edit and trailers.edit for safety_manager', () => {
-    const set = new Set(['vehicles.view', 'vehicles.edit', 'trailers.view', 'trailers.edit']);
-    stripFleetVehicleWritesForSafetyRoles(['safety_manager'], set);
-    expect(set.has('vehicles.view')).toBe(true);
-    expect(set.has('trailers.view')).toBe(true);
-    expect(set.has('vehicles.edit')).toBe(false);
-    expect(set.has('trailers.edit')).toBe(false);
+describe('mergeSafetyFleetUnitBaselineIfApplicable', () => {
+  test('adds vehicles.create/edit and documents for safety_manager', () => {
+    const set = new Set(['vehicles.view']);
+    mergeSafetyFleetUnitBaselineIfApplicable(['safety_manager'], set);
+    expect(set.has('vehicles.create')).toBe(true);
+    expect(set.has('vehicles.edit')).toBe(true);
+    expect(set.has('trailers.create')).toBe(true);
+    expect(set.has('documents.upload')).toBe(true);
   });
 
   test('no-op for dispatcher', () => {
-    const set = new Set(['vehicles.edit']);
-    stripFleetVehicleWritesForSafetyRoles(['dispatcher'], set);
-    expect(set.has('vehicles.edit')).toBe(true);
+    const set = new Set(['vehicles.view']);
+    mergeSafetyFleetUnitBaselineIfApplicable(['dispatcher'], set);
+    expect(set.has('vehicles.create')).toBe(false);
   });
 
-  test('strip list includes create and delete', () => {
-    expect(SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES).toContain('vehicles.create');
-    expect(SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES).toContain('vehicles.delete');
+  test('baseline list is non-empty', () => {
+    expect(SAFETY_FLEET_UNIT_BASELINE_CODES.length).toBeGreaterThan(0);
+    expect(SAFETY_FLEET_UNIT_BASELINE_CODES).toContain('vehicles.edit');
   });
 });

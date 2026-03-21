@@ -1,18 +1,18 @@
 'use strict';
 
 /**
- * FN-133: Safety roles read-only on /api/vehicles (no POST/PUT/PATCH/DELETE).
+ * Safety roles may mutate fleet units (trucks/trailers) for assignments and documentation.
  * Run: cd backend/packages/goodmen-shared && npx jest test/vehicles-role-gate.test.js
  */
 
 const vehicleRouter = require('../routes/vehicles');
 
-describe('vehicles router role gate (FN-133)', () => {
-  test('safety roles may read but not write', () => {
+describe('vehicles router role gate', () => {
+  test('safety roles may read and write', () => {
     expect(vehicleRouter.VEHICLE_READ_ROLES).toContain('safety');
     expect(vehicleRouter.VEHICLE_READ_ROLES).toContain('safety_manager');
-    expect(vehicleRouter.VEHICLE_WRITE_ROLES).not.toContain('safety');
-    expect(vehicleRouter.VEHICLE_WRITE_ROLES).not.toContain('safety_manager');
+    expect(vehicleRouter.VEHICLE_WRITE_ROLES).toContain('safety');
+    expect(vehicleRouter.VEHICLE_WRITE_ROLES).toContain('safety_manager');
   });
 
   test('dispatch and shop roles may write', () => {

@@ -94,15 +94,16 @@ describe('AccessControlService RBAC compatibility', () => {
     expect(service.canSee('safety_claims')).toBeTrue();
   });
 
-  it('strips fleet vehicle write permissions for safety even when API sends them (FN-133)', () => {
+  it('keeps fleet vehicle create/edit for safety when API sends partial list', () => {
     service.setAccessFromLoginResponse({
       roles: ['safety_manager'],
       user: { id: 'u8' },
-      permissions: [PERMISSIONS.VEHICLES_VIEW, PERMISSIONS.VEHICLES_EDIT, PERMISSIONS.VEHICLES_CREATE]
+      permissions: [PERMISSIONS.DRIVERS_VIEW]
     });
 
     expect(service.hasPermission(PERMISSIONS.VEHICLES_VIEW)).toBeTrue();
-    expect(service.hasPermission(PERMISSIONS.VEHICLES_EDIT)).toBeFalse();
-    expect(service.hasPermission(PERMISSIONS.VEHICLES_CREATE)).toBeFalse();
+    expect(service.hasPermission(PERMISSIONS.VEHICLES_EDIT)).toBeTrue();
+    expect(service.hasPermission(PERMISSIONS.VEHICLES_CREATE)).toBeTrue();
+    expect(service.hasPermission(PERMISSIONS.DOCUMENTS_UPLOAD)).toBeTrue();
   });
 });
