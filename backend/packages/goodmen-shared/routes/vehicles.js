@@ -262,11 +262,9 @@ router.get('/', async (req, res) => {
       WHERE 1=1
     `;
 
-    if (req.context?.tenantId) {
+    if (req.context?.tenantId && vehicleColumns.has('tenant_id')) {
       params.push(req.context.tenantId);
-      if (vehicleColumns.has('tenant_id')) {
-        sql += ` AND av.tenant_id = $${params.length}`;
-      }
+      sql += ` AND av.tenant_id = $${params.length}`;
     }
 
     if (req.context?.operatingEntityId && hasOperatingEntityId) {
