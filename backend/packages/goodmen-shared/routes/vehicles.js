@@ -61,14 +61,39 @@ async function getVehiclesColumnSet() {
   return vehiclesColumnSetCache;
 }
 
-// Protect all vehicles routes.
-// Extended with shop roles so shop workers can view/create customer vehicles.
-// Original admin, safety, and dispatch access is unchanged.
-router.use(auth([
-  'admin', 'safety', 'dispatch',
+// Protect vehicles routes: Safety / safety_manager may READ (compliance context) but must not
+// mutate fleet trucks/trailers (FN-133). Writes require admin, dispatch, or shop roles.
+const VEHICLE_SHOP_ROLES = [
   'shop_manager', 'service_writer', 'service_advisor',
   'shop_clerk', 'mechanic', 'technician',
-]));
+];
+const VEHICLE_ADMIN_ROLES = ['admin', 'company_admin', 'super_admin'];
+const VEHICLE_FLEET_ROLES = ['dispatch', 'dispatcher', 'fleet'];
+
+const VEHICLE_READ_ROLES = [
+  ...VEHICLE_ADMIN_ROLES,
+  'safety', 'safety_manager',
+  ...VEHICLE_FLEET_ROLES,
+  ...VEHICLE_SHOP_ROLES,
+];
+
+const VEHICLE_WRITE_ROLES = [
+  ...VEHICLE_ADMIN_ROLES,
+  ...VEHICLE_FLEET_ROLES,
+  ...VEHICLE_SHOP_ROLES,
+];
+
+function isVehicleReadHttpMethod(method) {
+  const m = (method || 'GET').toString().toUpperCase();
+  return m === 'GET' || m === 'HEAD' || m === 'OPTIONS';
+}
+
+function vehiclesRoleGate(req, res, next) {
+  const allowed = isVehicleReadHttpMethod(req.method) ? VEHICLE_READ_ROLES : VEHICLE_WRITE_ROLES;
+  return auth(allowed)(req, res, next);
+}
+
+router.use(vehiclesRoleGate);
 
 // GET decode VIN using NHTSA vPIC
 router.get('/decode-vin/:vin', async (req, res) => {
@@ -601,5 +626,10 @@ router.delete('/:id/documents/:documentId', async (req, res) => {
     res.status(500).json({ message: 'Failed to delete vehicle document' });
   }
 });
+
+// Expose for unit tests (FN-133 regression)
+router.VEHICLE_READ_ROLES = VEHICLE_READ_ROLES;
+router.VEHICLE_WRITE_ROLES = VEHICLE_WRITE_ROLES;
+router.isVehicleReadHttpMethod = isVehicleReadHttpMethod;
 
 module.exports = router;
