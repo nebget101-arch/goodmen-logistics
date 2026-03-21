@@ -481,6 +481,11 @@ export class AccessControlService {
     return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COMPANY_ADMIN]);
   }
 
+  /** Billing page (subscription, payment, extra seats) — admin roles only. */
+  canAccessBilling(): boolean {
+    return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COMPANY_ADMIN]);
+  }
+
   private normalizeUrl(url: string): string {
     const value = String(url || '').trim();
     if (!value) return '';

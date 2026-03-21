@@ -36,6 +36,7 @@ import { RoadsideBoardComponent } from './components/roadside-board/roadside-boa
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 import { PERMISSIONS } from './models/access-control.model';
 import { InternalTrialAdminGuard } from './guards/internal-trial-admin.guard';
+import { BillingAdminGuard } from './guards/billing-admin.guard';
 import { BillingComponent } from './billing/billing.component';
 
 const routes: Routes = [
@@ -214,7 +215,7 @@ const routes: Routes = [
   },
   { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
-  { path: 'billing', component: BillingComponent, canActivate: [AuthGuard] },
+  { path: 'billing', component: BillingComponent, canActivate: [AuthGuard, BillingAdminGuard] },
   {
     path: 'users',
     component: UsersAdminComponent,
