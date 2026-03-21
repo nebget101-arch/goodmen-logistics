@@ -24,7 +24,9 @@ const SUPER_ADMIN_ROLE_CODE = 'super_admin';
  */
 const LEGACY_TO_ROLE_CODE = {
   // Pre-existing legacy mappings — do NOT change these
-  admin: 'super_admin',
+  // NOTE: 'admin' now maps to 'admin' (tenant admin) not 'super_admin' (platform admin)
+  // Trial users created with role='admin' should NOT be elevated to super_admin
+  admin: 'admin',
   safety: 'safety_manager',
   fleet: 'dispatcher',
   dispatch: 'dispatcher',
