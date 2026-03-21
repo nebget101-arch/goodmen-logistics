@@ -9,6 +9,18 @@ const tenantContextMiddleware = require('../middleware/tenant-context-middleware
 router.use(authMiddleware);
 router.use(tenantContextMiddleware);
 
+async function resolveVehicleSource() {
+  try {
+    const viewResult = await query(`SELECT to_regclass('public.all_vehicles') AS rel`);
+    if (viewResult?.rows?.[0]?.rel) return 'all_vehicles';
+    const tableResult = await query(`SELECT to_regclass('public.vehicles') AS rel`);
+    if (tableResult?.rows?.[0]?.rel) return 'vehicles';
+    return 'none';
+  } catch {
+    return 'none';
+  }
+}
+
 // Basic mapping of common CDL state inputs to 2‑letter codes.
 // This keeps the API forgiving (e.g. 'Texas', 'texas', 'tx' → 'TX')
 // while enforcing the underlying VARCHAR(2) constraint.
@@ -175,7 +187,10 @@ router.get('/', async (req, res) => {
       result = await query(sql, params);
     } else if (view === 'dispatch') {
       const params = [];
-      let sql = `
+      const vehicleSource = await resolveVehicleSource();
+      const hasVehicles = vehicleSource !== 'none';
+      let sql = hasVehicles
+        ? `
         SELECT
           d.*,
           oe.name AS operating_entity_name,
@@ -183,8 +198,17 @@ router.get('/', async (req, res) => {
           tr.unit_number AS trailer_unit_number
         FROM drivers d
         LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
-        LEFT JOIN all_vehicles t ON t.id = d.truck_id
-        LEFT JOIN all_vehicles tr ON tr.id = d.trailer_id
+        LEFT JOIN ${vehicleSource} t ON t.id = d.truck_id
+        LEFT JOIN ${vehicleSource} tr ON tr.id = d.trailer_id
+      `
+        : `
+        SELECT
+          d.*,
+          oe.name AS operating_entity_name,
+          NULL AS truck_unit_number,
+          NULL AS trailer_unit_number
+        FROM drivers d
+        LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
       `;
       params.push(req.context?.tenantId || null);
       sql += ` WHERE d.tenant_id = $${params.length}`;

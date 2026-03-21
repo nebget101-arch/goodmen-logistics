@@ -1,6 +1,12 @@
 'use strict';
 
 exports.up = async function(knex) {
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+  if (!hasVehicles || !hasCustomerVehicles) {
+    return;
+  }
+
   // Recreate all_vehicles view to include operating_entity_id
   await knex.raw('DROP VIEW IF EXISTS all_vehicles');
   await knex.raw(`
@@ -62,5 +68,11 @@ exports.up = async function(knex) {
 };
 
 exports.down = async function(knex) {
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+  if (!hasVehicles || !hasCustomerVehicles) {
+    return;
+  }
+
   await knex.raw('DROP VIEW IF EXISTS all_vehicles');
 };

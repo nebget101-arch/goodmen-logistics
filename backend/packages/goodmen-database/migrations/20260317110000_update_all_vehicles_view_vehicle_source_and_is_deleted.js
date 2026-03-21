@@ -15,6 +15,10 @@
  */
 
 exports.up = async function up(knex) {
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+  if (!hasVehicles || !hasCustomerVehicles) return;
+
   // 1. Add is_deleted to vehicles if it doesn't exist yet
   const hasCol = await knex.schema.hasColumn('vehicles', 'is_deleted');
   if (!hasCol) {
@@ -94,6 +98,10 @@ exports.up = async function up(knex) {
 };
 
 exports.down = async function down(knex) {
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+  const hasCustomerVehicles = await knex.schema.hasTable('customer_vehicles');
+  if (!hasVehicles || !hasCustomerVehicles) return;
+
   // Restore view to pre-migration shape
   await knex.raw('DROP VIEW IF EXISTS all_vehicles');
   await knex.raw(`

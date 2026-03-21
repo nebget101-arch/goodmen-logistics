@@ -3,6 +3,8 @@
 exports.up = async function up(knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
 
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+
   if (!(await knex.schema.hasTable('ifta_quarters'))) {
     await knex.schema.createTable('ifta_quarters', (t) => {
       t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
@@ -61,7 +63,10 @@ exports.up = async function up(knex) {
       t.uuid('quarter_id').notNullable().references('id').inTable('ifta_quarters').onDelete('CASCADE');
       t.uuid('tenant_id').notNullable();
       t.uuid('operating_entity_id').nullable();
-      t.uuid('truck_id').nullable().references('id').inTable('vehicles').onDelete('SET NULL');
+      const truckId = t.uuid('truck_id').nullable();
+      if (hasVehicles) {
+        truckId.references('id').inTable('vehicles').onDelete('SET NULL');
+      }
       t.text('unit').notNullable();
       t.text('jurisdiction').notNullable();
       t.decimal('taxable_miles', 14, 2).notNullable().defaultTo(0);
@@ -85,7 +90,10 @@ exports.up = async function up(knex) {
       t.uuid('quarter_id').notNullable().references('id').inTable('ifta_quarters').onDelete('CASCADE');
       t.uuid('tenant_id').notNullable();
       t.uuid('operating_entity_id').nullable();
-      t.uuid('truck_id').nullable().references('id').inTable('vehicles').onDelete('SET NULL');
+      const truckId = t.uuid('truck_id').nullable();
+      if (hasVehicles) {
+        truckId.references('id').inTable('vehicles').onDelete('SET NULL');
+      }
       t.date('purchase_date').notNullable();
       t.text('unit').notNullable();
       t.text('jurisdiction').notNullable();

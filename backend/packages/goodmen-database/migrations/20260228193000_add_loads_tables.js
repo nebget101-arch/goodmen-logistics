@@ -4,6 +4,10 @@
 exports.up = async function(knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
 
+  const hasUsers = await knex.schema.hasTable('users');
+  const hasDrivers = await knex.schema.hasTable('drivers');
+  const hasVehicles = await knex.schema.hasTable('vehicles');
+
   const hasBrokers = await knex.schema.hasTable('brokers');
   if (!hasBrokers) {
     await knex.schema.createTable('brokers', table => {
@@ -45,10 +49,22 @@ exports.up = async function(knex) {
       table.text('load_number').notNullable().unique();
       table.enu('status', ['NEW','DISPATCHED','IN_TRANSIT','DELIVERED','CANCELLED']).defaultTo('NEW');
       table.enu('billing_status', ['PENDING','FUNDED','INVOICED','PAID']).defaultTo('PENDING');
-      table.uuid('dispatcher_user_id').references('id').inTable('users').onDelete('SET NULL');
-      table.uuid('driver_id').references('id').inTable('drivers').onDelete('SET NULL');
-      table.uuid('truck_id').references('id').inTable('vehicles').onDelete('SET NULL');
-      table.uuid('trailer_id').references('id').inTable('vehicles').onDelete('SET NULL');
+      const dispatcherUserId = table.uuid('dispatcher_user_id');
+      if (hasUsers) {
+        dispatcherUserId.references('id').inTable('users').onDelete('SET NULL');
+      }
+      const driverId = table.uuid('driver_id');
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('SET NULL');
+      }
+      const truckId = table.uuid('truck_id');
+      if (hasVehicles) {
+        truckId.references('id').inTable('vehicles').onDelete('SET NULL');
+      }
+      const trailerId = table.uuid('trailer_id');
+      if (hasVehicles) {
+        trailerId.references('id').inTable('vehicles').onDelete('SET NULL');
+      }
       table.uuid('broker_id').references('id').inTable('brokers').onDelete('SET NULL');
       table.text('broker_name');
       table.text('po_number');
@@ -75,16 +91,28 @@ exports.up = async function(knex) {
       table.enu('billing_status', ['PENDING','FUNDED','INVOICED','PAID']).defaultTo('PENDING');
     });
     await addColumnIfMissing('dispatcher_user_id', table => {
-      table.uuid('dispatcher_user_id').references('id').inTable('users').onDelete('SET NULL');
+      const dispatcherUserId = table.uuid('dispatcher_user_id');
+      if (hasUsers) {
+        dispatcherUserId.references('id').inTable('users').onDelete('SET NULL');
+      }
     });
     await addColumnIfMissing('driver_id', table => {
-      table.uuid('driver_id').references('id').inTable('drivers').onDelete('SET NULL');
+      const driverId = table.uuid('driver_id');
+      if (hasDrivers) {
+        driverId.references('id').inTable('drivers').onDelete('SET NULL');
+      }
     });
     await addColumnIfMissing('truck_id', table => {
-      table.uuid('truck_id').references('id').inTable('vehicles').onDelete('SET NULL');
+      const truckId = table.uuid('truck_id');
+      if (hasVehicles) {
+        truckId.references('id').inTable('vehicles').onDelete('SET NULL');
+      }
     });
     await addColumnIfMissing('trailer_id', table => {
-      table.uuid('trailer_id').references('id').inTable('vehicles').onDelete('SET NULL');
+      const trailerId = table.uuid('trailer_id');
+      if (hasVehicles) {
+        trailerId.references('id').inTable('vehicles').onDelete('SET NULL');
+      }
     });
     await addColumnIfMissing('broker_id', table => {
       table.uuid('broker_id').references('id').inTable('brokers').onDelete('SET NULL');
@@ -134,7 +162,10 @@ exports.up = async function(knex) {
       table.text('mime_type');
       table.bigint('size_bytes');
       table.text('notes');
-      table.uuid('uploaded_by_user_id').references('id').inTable('users').onDelete('SET NULL');
+      const uploadedByUserId = table.uuid('uploaded_by_user_id');
+      if (hasUsers) {
+        uploadedByUserId.references('id').inTable('users').onDelete('SET NULL');
+      }
       table.timestamp('created_at').defaultTo(knex.fn.now());
     });
   }

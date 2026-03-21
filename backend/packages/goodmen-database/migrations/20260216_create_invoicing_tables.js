@@ -4,14 +4,28 @@
 exports.up = async function(knex) {
   await knex.raw('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
 
+  const hasWorkOrders = await knex.schema.hasTable('work_orders');
+  const hasCustomers = await knex.schema.hasTable('customers');
+  const hasLocations = await knex.schema.hasTable('locations');
+  const hasUsers = await knex.schema.hasTable('users');
+
   const hasInvoices = await knex.schema.hasTable('invoices');
   if (!hasInvoices) {
     await knex.schema.createTable('invoices', table => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
     table.text('invoice_number').notNullable().unique();
-    table.uuid('work_order_id').references('id').inTable('work_orders').onDelete('SET NULL');
-    table.uuid('customer_id').notNullable().references('id').inTable('customers').onDelete('RESTRICT');
-    table.uuid('location_id').notNullable().references('id').inTable('locations').onDelete('RESTRICT');
+    const workOrderId = table.uuid('work_order_id');
+    if (hasWorkOrders) {
+      workOrderId.references('id').inTable('work_orders').onDelete('SET NULL');
+    }
+    const customerId = table.uuid('customer_id').notNullable();
+    if (hasCustomers) {
+      customerId.references('id').inTable('customers').onDelete('RESTRICT');
+    }
+    const locationId = table.uuid('location_id').notNullable();
+    if (hasLocations) {
+      locationId.references('id').inTable('locations').onDelete('RESTRICT');
+    }
     table.enu('status', ['DRAFT','SENT','PARTIAL','PAID','VOID']).defaultTo('DRAFT');
     table.date('issued_date');
     table.date('due_date');
@@ -29,7 +43,10 @@ exports.up = async function(knex) {
     table.decimal('balance_due', 12, 2).defaultTo(0);
     table.text('voided_reason');
     table.timestamp('voided_at');
-    table.uuid('created_by_user_id').references('id').inTable('users').onDelete('SET NULL');
+    const createdByUserId = table.uuid('created_by_user_id');
+    if (hasUsers) {
+      createdByUserId.references('id').inTable('users').onDelete('SET NULL');
+    }
     table.boolean('is_deleted').defaultTo(false);
     table.timestamps(true, true);
     });
@@ -62,7 +79,10 @@ exports.up = async function(knex) {
     table.enu('method', ['CASH','CHECK','CARD','ACH','WIRE','ZELLE','OTHER']).notNullable();
     table.text('reference_number');
     table.text('memo');
-    table.uuid('received_by_user_id').references('id').inTable('users').onDelete('SET NULL');
+    const receivedByUserId = table.uuid('received_by_user_id');
+    if (hasUsers) {
+      receivedByUserId.references('id').inTable('users').onDelete('SET NULL');
+    }
     table.timestamp('created_at').defaultTo(knex.fn.now());
     });
   }
@@ -77,7 +97,10 @@ exports.up = async function(knex) {
     table.text('mime_type').notNullable();
     table.bigint('file_size_bytes').notNullable();
     table.text('storage_key').notNullable();
-    table.uuid('uploaded_by_user_id').references('id').inTable('users').onDelete('SET NULL');
+    const uploadedByUserId = table.uuid('uploaded_by_user_id');
+    if (hasUsers) {
+      uploadedByUserId.references('id').inTable('users').onDelete('SET NULL');
+    }
     table.timestamp('created_at').defaultTo(knex.fn.now());
     });
   }
@@ -91,7 +114,10 @@ exports.up = async function(knex) {
     table.text('from_status');
     table.text('to_status');
     table.jsonb('data_json');
-    table.uuid('created_by_user_id').references('id').inTable('users').onDelete('SET NULL');
+    const eventCreatedByUserId = table.uuid('created_by_user_id');
+    if (hasUsers) {
+      eventCreatedByUserId.references('id').inTable('users').onDelete('SET NULL');
+    }
     table.timestamp('created_at').defaultTo(knex.fn.now());
     });
   }
@@ -104,20 +130,25 @@ exports.up = async function(knex) {
   await knex.raw('CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice_date ON invoice_payments (invoice_id, payment_date)');
   await knex.raw('CREATE INDEX IF NOT EXISTS idx_invoice_documents_invoice_type ON invoice_documents (invoice_id, doc_type)');
 
-  const hasInvoicedInvoiceId = await knex.schema.hasColumn('work_orders', 'invoiced_invoice_id');
-  if (!hasInvoicedInvoiceId) {
-    await knex.schema.alterTable('work_orders', table => {
-      table.uuid('invoiced_invoice_id').references('id').inTable('invoices').onDelete('SET NULL');
-    });
+  if (hasWorkOrders) {
+    const hasInvoicedInvoiceId = await knex.schema.hasColumn('work_orders', 'invoiced_invoice_id');
+    if (!hasInvoicedInvoiceId) {
+      await knex.schema.alterTable('work_orders', table => {
+        table.uuid('invoiced_invoice_id').references('id').inTable('invoices').onDelete('SET NULL');
+      });
+    }
   }
 };
 
 exports.down = async function(knex) {
-  const hasInvoicedInvoiceId = await knex.schema.hasColumn('work_orders', 'invoiced_invoice_id');
-  if (hasInvoicedInvoiceId) {
-    await knex.schema.alterTable('work_orders', table => {
-      table.dropColumn('invoiced_invoice_id');
-    });
+  const hasWorkOrders = await knex.schema.hasTable('work_orders');
+  if (hasWorkOrders) {
+    const hasInvoicedInvoiceId = await knex.schema.hasColumn('work_orders', 'invoiced_invoice_id');
+    if (hasInvoicedInvoiceId) {
+      await knex.schema.alterTable('work_orders', table => {
+        table.dropColumn('invoiced_invoice_id');
+      });
+    }
   }
   await knex.schema.dropTableIfExists('invoice_events');
   await knex.schema.dropTableIfExists('invoice_documents');

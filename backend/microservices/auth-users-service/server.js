@@ -20,10 +20,23 @@ require('@goodmen/shared').setDatabase({
   knex
 });
 
+const authRouter = require('@goodmen/shared/routes/auth');
+const usersRouter = require('@goodmen/shared/routes/users');
+const communicationPreferencesRouter = require('@goodmen/shared/routes/communication-preferences');
+const rolesRouter = require('@goodmen/shared/routes/roles');
+const trialRequestsRouter = require('@goodmen/shared/routes/trial-requests');
+const billingRouter = require('./routes/billing');
+const stripeWebhookRouter = require('./routes/stripe');
+const permissionsRouter = require('@goodmen/shared/routes/permissions');
+const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
+const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
+const { startTrialConversionJob } = require('@goodmen/shared/jobs/processTrialConversions');
+
 const app = express();
 const PORT = process.env.PORT || 5003;
 
 app.use(cors());
+app.use('/api/stripe', stripeWebhookRouter);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -57,17 +70,6 @@ const swaggerOptions = {
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
-
-const authRouter = require('@goodmen/shared/routes/auth');
-const usersRouter = require('@goodmen/shared/routes/users');
-const communicationPreferencesRouter = require('@goodmen/shared/routes/communication-preferences');
-const rolesRouter = require('@goodmen/shared/routes/roles');
-const trialRequestsRouter = require('@goodmen/shared/routes/trial-requests');
-const billingRouter = require('../../routes/billing');
-const permissionsRouter = require('@goodmen/shared/routes/permissions');
-const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
-const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
-const { startTrialConversionJob } = require('@goodmen/shared/jobs/processTrialConversions');
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 

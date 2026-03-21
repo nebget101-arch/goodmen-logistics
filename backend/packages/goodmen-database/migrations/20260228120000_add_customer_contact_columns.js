@@ -2,6 +2,9 @@
  * Add missing customer contact columns.
  */
 exports.up = async function(knex) {
+  const hasCustomers = await knex.schema.hasTable('customers');
+  if (!hasCustomers) return;
+
   const addColumnIfMissing = async (column, callback) => {
     const exists = await knex.schema.hasColumn('customers', column);
     if (!exists) {
@@ -16,6 +19,9 @@ exports.up = async function(knex) {
 };
 
 exports.down = async function(knex) {
+  const hasCustomers = await knex.schema.hasTable('customers');
+  if (!hasCustomers) return;
+
   await knex.schema.alterTable('customers', table => {
     table.dropColumn('primary_contact_name');
     table.dropColumn('secondary_phone');

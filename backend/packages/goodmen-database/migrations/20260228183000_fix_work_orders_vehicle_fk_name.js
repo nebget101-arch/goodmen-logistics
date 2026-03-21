@@ -3,6 +3,9 @@
  * and re-add FK to customer_vehicles.vehicle_uuid.
  */
 exports.up = async function(knex) {
+  const hasTable = await knex.schema.hasTable('work_orders');
+  if (!hasTable) return;
+
   await knex.schema.alterTable('work_orders', table => {
     table.uuid('vehicle_id').nullable().alter();
   });

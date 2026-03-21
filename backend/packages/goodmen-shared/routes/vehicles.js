@@ -7,6 +7,46 @@ const dtLogger = require('../utils/logger');
 const { query } = require('../internal/db');
 const { getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 
+async function resolveVehicleSource() {
+  try {
+    const viewResult = await query(`SELECT to_regclass('public.all_vehicles') AS rel`);
+    if (viewResult?.rows?.[0]?.rel) return 'all_vehicles';
+    const tableResult = await query(`SELECT to_regclass('public.vehicles') AS rel`);
+    if (tableResult?.rows?.[0]?.rel) return 'vehicles';
+    return 'none';
+  } catch {
+    return 'none';
+  }
+}
+
+async function relationExists(name) {
+  try {
+    const safe = String(name || '').replace(/[^a-zA-Z0-9_]/g, '');
+    if (!safe) return false;
+    const result = await query(`SELECT to_regclass('public.${safe}') AS rel`);
+    return !!result?.rows?.[0]?.rel;
+  } catch {
+    return false;
+  }
+}
+
+async function getRelationColumns(name) {
+  try {
+    const safe = String(name || '').replace(/[^a-zA-Z0-9_]/g, '');
+    if (!safe) return new Set();
+    const result = await query(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = $1`,
+      [safe]
+    );
+    return new Set((result.rows || []).map((row) => row.column_name));
+  } catch {
+    return new Set();
+  }
+}
+
 let vehiclesColumnSetCache = null;
 
 async function getVehiclesColumnSet() {
@@ -109,7 +149,11 @@ router.post('/customer', async (req, res) => {
         finalInspectionExpiry, finalNextPmDue, finalNextPmMileage, finalCustomerId, tenantId
       ]
     );
-    const created = await query('SELECT * FROM all_vehicles WHERE id = $1', [result.rows[0].vehicle_uuid]);
+    const vehicleSource = await resolveVehicleSource();
+    const readBackSql = vehicleSource === 'all_vehicles'
+      ? 'SELECT * FROM all_vehicles WHERE id = $1'
+      : 'SELECT * FROM customer_vehicles WHERE vehicle_uuid = $1';
+    const created = await query(readBackSql, [result.rows[0].vehicle_uuid]);
     const duration = Date.now() - startTime;
     dtLogger.trackDatabase('INSERT', 'customer_vehicles', duration, true, { vehicleId: result.rows[0].vehicle_uuid });
     dtLogger.trackEvent('customer_vehicle.created', { vehicleId: result.rows[0].vehicle_uuid, unit_number, vin });
@@ -143,8 +187,10 @@ router.get('/search', async (req, res) => {
     return res.status(400).json({ message: 'VIN query parameter is required' });
   }
   try {
+    const vehicleSource = await resolveVehicleSource();
+    if (vehicleSource === 'none') return res.json([]);
     const result = await query(
-      `SELECT * FROM all_vehicles WHERE LOWER(vin) LIKE LOWER($1) ORDER BY unit_number`,
+      `SELECT * FROM ${vehicleSource} WHERE LOWER(vin) LIKE LOWER($1) ORDER BY unit_number`,
       [`%${vin}%`]
     );
     const data = await Promise.all(
@@ -191,24 +237,46 @@ router.get('/search', async (req, res) => {
 router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
+    const vehicleSource = await resolveVehicleSource();
+    if (vehicleSource === 'none') return res.json([]);
+    const vehicleColumns = await getRelationColumns(vehicleSource);
+    const hasOperatingEntityId = vehicleColumns.has('operating_entity_id');
+    const hasVehicleType = vehicleColumns.has('vehicle_type');
+    const hasOperatingEntitiesTable = await relationExists('operating_entities');
+
     const params = [];
-    let sql = `
+    let sql = hasOperatingEntitiesTable && hasOperatingEntityId
+      ? `
       SELECT
         av.*,
         oe.name AS operating_entity_name
-      FROM all_vehicles av
+      FROM ${vehicleSource} av
       LEFT JOIN operating_entities oe ON oe.id = av.operating_entity_id
       WHERE 1=1
+    `
+      : `
+      SELECT
+        av.*,
+        NULL::text AS operating_entity_name
+      FROM ${vehicleSource} av
+      WHERE 1=1
     `;
-    if (req.context?.tenantId) {
+
+    if (req.context?.tenantId && vehicleColumns.has('tenant_id')) {
       params.push(req.context.tenantId);
       sql += ` AND av.tenant_id = $${params.length}`;
     }
-    if (req.context?.operatingEntityId) {
+
+    if (req.context?.operatingEntityId && hasOperatingEntityId) {
       params.push(req.context.operatingEntityId);
-      sql += ` AND (av.operating_entity_id = $${params.length} OR LOWER(COALESCE(av.vehicle_type, '')) = 'trailer')`;
+      if (hasVehicleType) {
+        sql += ` AND (av.operating_entity_id = $${params.length} OR LOWER(COALESCE(av.vehicle_type, '')) = 'trailer')`;
+      } else {
+        sql += ` AND av.operating_entity_id = $${params.length}`;
+      }
     }
-    sql += ' ORDER BY av.unit_number';
+
+    sql += vehicleColumns.has('unit_number') ? ' ORDER BY av.unit_number' : ' ORDER BY 1';
     const result = await query(sql, params);
     const duration = Date.now() - startTime;
     
@@ -229,7 +297,9 @@ router.get('/', async (req, res) => {
 // GET vehicle by ID
 router.get('/:id', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM all_vehicles WHERE id = $1', [req.params.id]);
+    const vehicleSource = await resolveVehicleSource();
+    if (vehicleSource === 'none') return res.status(404).json({ message: 'Vehicle not found' });
+    const result = await query(`SELECT * FROM ${vehicleSource} WHERE id = $1`, [req.params.id]);
     if (result.rows.length > 0) {
       res.json(result.rows[0]);
     } else {
@@ -436,8 +506,10 @@ router.delete('/:id', async (req, res) => {
 // GET vehicles needing maintenance
 router.get('/maintenance/needed', async (req, res) => {
   try {
+    const vehicleSource = await resolveVehicleSource();
+    if (vehicleSource === 'none') return res.json([]);
     const result = await query(`
-      SELECT * FROM all_vehicles 
+      SELECT * FROM ${vehicleSource} 
       WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days' 
          OR status = 'out-of-service'
       ORDER BY next_pm_due

@@ -16,22 +16,25 @@ exports.up = async function(knex) {
 	}
 
 	// Add location_id and status to vehicles if not exist
-	const hasLocationId = await knex.schema.hasColumn('vehicles', 'location_id');
-	if (!hasLocationId) {
-		await knex.schema.table('vehicles', table => {
-			table.uuid('location_id').references('id').inTable('locations');
-		});
-	}
-	const hasStatus = await knex.schema.hasColumn('vehicles', 'status');
-	if (!hasStatus) {
-		await knex.schema.table('vehicles', table => {
-			table.enu('status', ['active', 'in_maintenance', 'out_of_service']).defaultTo('active');
-		});
+	const hasVehicles = await knex.schema.hasTable('vehicles');
+	if (hasVehicles) {
+		const hasLocationId = await knex.schema.hasColumn('vehicles', 'location_id');
+		if (!hasLocationId) {
+			await knex.schema.table('vehicles', table => {
+				table.uuid('location_id').references('id').inTable('locations');
+			});
+		}
+		const hasStatus = await knex.schema.hasColumn('vehicles', 'status');
+		if (!hasStatus) {
+			await knex.schema.table('vehicles', table => {
+				table.enu('status', ['active', 'in_maintenance', 'out_of_service']).defaultTo('active');
+			});
+		}
 	}
 
 	// Work orders table (idempotent)
 	const hasWorkOrders = await knex.schema.hasTable('work_orders');
-	if (!hasWorkOrders) {
+	if (!hasWorkOrders && hasVehicles) {
 		await knex.schema.createTable('work_orders', table => {
 			table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
 			table.uuid('vehicle_id').notNullable().references('id').inTable('vehicles');
@@ -44,34 +47,46 @@ exports.up = async function(knex) {
 	}
 
 	// Work order notes table
-	await knex.schema.createTable('work_order_notes', table => {
-		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
-		table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
-		table.text('note');
-		table.string('author');
-		table.timestamp('created_at').defaultTo(knex.fn.now());
-	});
+	const hasWorkOrdersTable = await knex.schema.hasTable('work_orders');
+	if (hasWorkOrdersTable) {
+		const hasWorkOrderNotes = await knex.schema.hasTable('work_order_notes');
+		if (!hasWorkOrderNotes) {
+			await knex.schema.createTable('work_order_notes', table => {
+				table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
+				table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
+				table.text('note');
+				table.string('author');
+				table.timestamp('created_at').defaultTo(knex.fn.now());
+			});
+		}
 
 	// Work order attachments table
-	await knex.schema.createTable('work_order_attachments', table => {
-		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
-		table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
-		table.string('filename');
-		table.string('filepath');
-		table.string('uploaded_by');
-		table.timestamp('uploaded_at').defaultTo(knex.fn.now());
-	});
+		const hasWorkOrderAttachments = await knex.schema.hasTable('work_order_attachments');
+		if (!hasWorkOrderAttachments) {
+			await knex.schema.createTable('work_order_attachments', table => {
+				table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
+				table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
+				table.string('filename');
+				table.string('filepath');
+				table.string('uploaded_by');
+				table.timestamp('uploaded_at').defaultTo(knex.fn.now());
+			});
+		}
 
 	// Work order labor entries table
-	await knex.schema.createTable('work_order_labor', table => {
-		table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
-		table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
-		table.string('technician');
-		table.float('hours');
-		table.float('rate');
-		table.text('description');
-		table.timestamp('created_at').defaultTo(knex.fn.now());
-	});
+		const hasWorkOrderLabor = await knex.schema.hasTable('work_order_labor');
+		if (!hasWorkOrderLabor) {
+			await knex.schema.createTable('work_order_labor', table => {
+				table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
+				table.uuid('work_order_id').notNullable().references('id').inTable('work_orders').onDelete('CASCADE');
+				table.string('technician');
+				table.float('hours');
+				table.float('rate');
+				table.text('description');
+				table.timestamp('created_at').defaultTo(knex.fn.now());
+			});
+		}
+	}
 };
 
 /**
@@ -85,11 +100,15 @@ exports.down = async function(knex) {
 	await knex.schema.dropTableIfExists('work_orders');
 	await knex.schema.dropTableIfExists('locations');
 	// Optionally remove columns from vehicles
-	const hasLocationId = await knex.schema.hasColumn('vehicles', 'location_id');
-	if (hasLocationId) {
-		await knex.schema.table('vehicles', table => {
-			table.dropColumn('location_id');
-			table.dropColumn('status');
-		});
+	const hasVehicles = await knex.schema.hasTable('vehicles');
+	if (hasVehicles) {
+		const hasLocationId = await knex.schema.hasColumn('vehicles', 'location_id');
+		const hasStatus = await knex.schema.hasColumn('vehicles', 'status');
+		if (hasLocationId || hasStatus) {
+			await knex.schema.table('vehicles', table => {
+				if (hasLocationId) table.dropColumn('location_id');
+				if (hasStatus) table.dropColumn('status');
+			});
+		}
 	}
 };

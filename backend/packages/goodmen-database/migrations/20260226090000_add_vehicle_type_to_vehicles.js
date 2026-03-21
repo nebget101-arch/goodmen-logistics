@@ -1,4 +1,7 @@
 exports.up = async function(knex) {
+	const hasVehicles = await knex.schema.hasTable('vehicles');
+	if (!hasVehicles) return;
+
   const hasVehicleType = await knex.schema.hasColumn('vehicles', 'vehicle_type');
   if (!hasVehicleType) {
     await knex.schema.alterTable('vehicles', table => {
@@ -9,6 +12,9 @@ exports.up = async function(knex) {
 };
 
 exports.down = async function(knex) {
+	const hasVehicles = await knex.schema.hasTable('vehicles');
+	if (!hasVehicles) return;
+
   const hasVehicleType = await knex.schema.hasColumn('vehicles', 'vehicle_type');
   if (hasVehicleType) {
     await knex.schema.alterTable('vehicles', table => {

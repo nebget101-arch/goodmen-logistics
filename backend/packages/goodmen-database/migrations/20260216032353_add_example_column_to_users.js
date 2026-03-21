@@ -4,6 +4,9 @@
  * @returns { Promise<void> }
  */
 exports.up = async function (knex) {
+  const hasTable = await knex.schema.hasTable('users');
+  if (!hasTable) return;
+
   const hasColumn = await knex.schema.hasColumn('users', 'example_column');
   if (hasColumn) return;
 

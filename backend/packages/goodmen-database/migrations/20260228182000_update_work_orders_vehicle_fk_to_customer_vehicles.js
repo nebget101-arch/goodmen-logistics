@@ -3,6 +3,9 @@
  * Use NOT VALID to avoid failing on legacy rows that still reference vehicles(id).
  */
 exports.up = async function(knex) {
+  const hasTable = await knex.schema.hasTable('work_orders');
+  if (!hasTable) return;
+
   await knex.schema.alterTable('work_orders', table => {
     table.uuid('vehicle_id').nullable().alter();
   });

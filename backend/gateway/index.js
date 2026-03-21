@@ -3,7 +3,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const stripeWebhookRouter = require('./routes/stripe');
 
 const app = express();
 
@@ -27,9 +26,40 @@ const INVENTORY_SERVICE_URL = requireEnv('INVENTORY_SERVICE_URL');
 const AI_SERVICE_URL = requireEnv('AI_SERVICE_URL');
 const isProd = process.env.NODE_ENV === 'production';
 
+function parseAllowedOrigins(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+const baseAllowedOrigins = [
+  'http://localhost:4200',
+  'https://fleetneuron.ai',
+  'https://dev.fleetneuron.ai',
+  'https://fleetneuron-logistics-ui.onrender.com'
+];
+
+const allowedOrigins = Array.from(
+  new Set([
+    ...baseAllowedOrigins,
+    ...parseAllowedOrigins(process.env.CORS_ORIGIN)
+  ])
+);
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:4200',
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true
   })
 );
@@ -56,9 +86,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Stripe webhook endpoint must use raw request body for signature verification.
-app.use('/api/stripe', stripeWebhookRouter);
-
 function buildProxy(target, label) {
   return createProxyMiddleware({
     target,
@@ -81,6 +108,24 @@ function buildProxy(target, label) {
             `[gateway->${label}] ${req.method} ${req.originalUrl} -> ${proxyReq.path}`
           );
         },
+    onProxyRes: (proxyRes, req) => {
+      const requestOrigin = req.headers.origin;
+      if (!requestOrigin) {
+        return;
+      }
+
+      if (!allowedOrigins.includes(requestOrigin)) {
+        return;
+      }
+
+      // Some downstream services return `Access-Control-Allow-Origin: *`.
+      // That breaks credentialed browser requests. Enforce gateway policy.
+      proxyRes.headers['access-control-allow-origin'] = requestOrigin;
+      proxyRes.headers['access-control-allow-credentials'] = 'true';
+      proxyRes.headers.vary = proxyRes.headers.vary
+        ? `${proxyRes.headers.vary}, Origin`
+        : 'Origin';
+    },
     onError: (err, req, res) => {
       // eslint-disable-next-line no-console
       console.error('[gateway] proxy error', err.message);
@@ -99,6 +144,7 @@ app.use('/api/audit', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/scan-bridge', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/fmcsa', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/auth', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
+app.use('/api/stripe', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/users', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/roles', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/permissions', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
