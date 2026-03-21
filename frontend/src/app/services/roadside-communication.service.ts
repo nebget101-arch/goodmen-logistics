@@ -11,7 +11,7 @@ import { environment } from '../../environments/environment';
   providedIn: 'root'
 })
 export class RoadsideCommunicationService {
-  private apiUrl = `${environment.apiUrl}/api/roadside`;
+  private apiUrl = `${environment.apiUrl}/roadside`;
 
   constructor(private http: HttpClient) {}
 
