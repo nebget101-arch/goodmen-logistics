@@ -274,6 +274,137 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/contact:
+ *   post:
+ *     summary: Submit contact form from public marketing website
+ *     tags:
+ *       - Contact
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fullName, businessEmail, companyName, message]
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *               businessEmail:
+ *                 type: string
+ *                 format: email
+ *               companyName:
+ *                 type: string
+ *               message:
+ *                 type: string
+ *               phoneNumber:
+ *                 type: string
+ *               fleetSize:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Contact form submitted successfully
+ *       400:
+ *         description: Validation error
+ */
+router.post('/contact', async (req, res) => {
+  const { fullName, businessEmail, companyName, message, phoneNumber, fleetSize } = req.body;
+
+  // Validation
+  if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 2) {
+    return res.status(400).json({ error: 'Full name is required and must be at least 2 characters' });
+  }
+
+  if (!businessEmail || typeof businessEmail !== 'string' || !businessEmail.includes('@')) {
+    return res.status(400).json({ error: 'Valid business email is required' });
+  }
+
+  if (!companyName || typeof companyName !== 'string' || companyName.trim().length < 2) {
+    return res.status(400).json({ error: 'Company name is required and must be at least 2 characters' });
+  }
+
+  if (!message || typeof message !== 'string' || message.trim().length < 10) {
+    return res.status(400).json({ error: 'Message is required and must be at least 10 characters' });
+  }
+
+  try {
+    // Normalize email
+    const normalizedEmail = businessEmail.trim().toLowerCase();
+    
+    // Send email to support inbox
+    const supportPayload = {
+      to: 'support@fleetneuron.ai',
+      subject: `New Contact Form Submission from ${fullName}`,
+      text:
+        `Contact Form Submission\n\n` +
+        `Name: ${fullName}\n` +
+        `Email: ${normalizedEmail}\n` +
+        `Company: ${companyName}\n` +
+        `Phone: ${phoneNumber || 'Not provided'}\n` +
+        `Fleet Size: ${fleetSize || 'Not provided'}\n\n` +
+        `Message:\n${message}\n\n` +
+        `---\n` +
+        `This contact was submitted via the public contact form at ${new Date().toISOString()}`,
+      html:
+        `<h2>Contact Form Submission</h2>` +
+        `<table style="border-collapse: collapse; width: 100%;">` +
+        `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Name:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">${fullName}</td></tr>` +
+        `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Email:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;"><a href="mailto:${normalizedEmail}">${normalizedEmail}</a></td></tr>` +
+        `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Company:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">${companyName}</td></tr>` +
+        `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Phone:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">${phoneNumber || 'Not provided'}</td></tr>` +
+        `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Fleet Size:</strong></td><td style="padding: 8px; border-bottom: 1px solid #eee;">${fleetSize || 'Not provided'}</td></tr>` +
+        `</table>` +
+        `<h3 style="margin-top: 20px;">Message:</h3>` +
+        `<p style="white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px;">${message}</p>` +
+        `<hr style="margin-top: 20px;">` +
+        `<p style="font-size: 12px; color: #999;">Submitted on ${new Date().toLocaleString()}</p>`
+    };
+
+    const supportResult = await sendEmail(supportPayload);
+    if (!supportResult?.sent) {
+      console.error('[contact] support email send failed:', supportResult?.error || 'unknown');
+      return res.status(500).json({ error: 'Failed to send contact form. Please try again later.' });
+    }
+
+    // Send confirmation email to user
+    const confirmationPayload = {
+      to: normalizedEmail,
+      subject: 'We received your message - FleetNeuron',
+      text:
+        `Hi ${fullName},\n\n` +
+        `Thank you for reaching out to FleetNeuron. We have received your inquiry and appreciate your interest.\n\n` +
+        `Our team will review your message and get back to you within 1 business day.\n\n` +
+        `Best regards,\n` +
+        `FleetNeuron Support\n` +
+        `support@fleetneuron.ai\n` +
+        `+1 (469) 532-9250`,
+      html:
+        `<p>Hi ${fullName},</p>` +
+        `<p>Thank you for reaching out to FleetNeuron. We have received your inquiry and appreciate your interest.</p>` +
+        `<p>Our team will review your message and get back to you within 1 business day.</p>` +
+        `<p style="margin-top: 20px;">Best regards,<br>` +
+        `<strong>FleetNeuron Support</strong><br>` +
+        `<a href="mailto:support@fleetneuron.ai">support@fleetneuron.ai</a><br>` +
+        `<a href="tel:+14695329250">+1 (469) 532-9250</a></p>`
+    };
+
+    const confirmationResult = await sendEmail(confirmationPayload);
+    if (!confirmationResult?.sent) {
+      console.warn('[contact] confirmation email send failed:', confirmationResult?.error || 'unknown');
+      // Don't fail the response if confirmation email fails; support email already sent
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Thank you for your inquiry. We will respond within 1 business day.'
+    });
+  } catch (err) {
+    console.error('[contact]', err?.message || err);
+    return res.status(500).json({ error: 'Server error processing contact form' });
+  }
+});
+
 // GET /auth/me
 // Unified session/access/context payload for frontend bootstrap.
 router.get('/me', authMiddleware, async (req, res) => {

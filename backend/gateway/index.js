@@ -153,6 +153,7 @@ app.use(
   buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users')
 );
 app.use('/api/billing', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
+app.use('/api/contact', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 // Explicit trial-request mapping to avoid mount-path rewrite ambiguity for nested /api/public paths.
 app.use(
   '/api/public/trial-requests',

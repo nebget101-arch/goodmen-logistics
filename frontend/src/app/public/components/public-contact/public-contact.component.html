@@ -49,22 +49,162 @@
 
       <div class="pub-contact-card">
         <h2>Contact us</h2>
-        <p class="pub-contact-sub">We usually respond within one business day.</p>
+        <p class="pub-contact-sub">We respond to all inquiries within 1 business day.</p>
 
-        <div class="pub-contact-action-list">
-          <a class="pub-contact-action" href="mailto:sales@fleetneuron.com">
+        <!-- Success Message -->
+        <output *ngIf="successMessage" class="pub-contact-success" aria-live="polite">
+          <span class="material-symbols-outlined">check_circle</span>
+          {{ successMessage }}
+        </output>
+
+        <!-- Error Message -->
+        <output *ngIf="errorMessage" class="pub-contact-error" aria-live="assertive">
+          <span class="material-symbols-outlined">error</span>
+          {{ errorMessage }}
+        </output>
+
+        <!-- Contact Form -->
+        <form *ngIf="showForm" [formGroup]="contactForm" (ngSubmit)="submit()" class="pub-contact-form">
+          <div class="pub-form-group">
+            <label for="fullName" class="pub-form-label">Full Name *</label>
+            <input
+              id="fullName"
+              type="text"
+              class="pub-form-input"
+              formControlName="fullName"
+              placeholder="Your full name"
+              [class.pub-form-invalid]="fullName?.invalid && fullName?.touched"
+            />
+            <span *ngIf="fullName?.hasError('required') && fullName?.touched" class="pub-form-error">
+              Full name is required
+            </span>
+            <span *ngIf="fullName?.hasError('minlength') && fullName?.touched" class="pub-form-error">
+              Full name must be at least 2 characters
+            </span>
+          </div>
+
+          <div class="pub-form-group">
+            <label for="businessEmail" class="pub-form-label">Business Email *</label>
+            <input
+              id="businessEmail"
+              type="email"
+              class="pub-form-input"
+              formControlName="businessEmail"
+              placeholder="your.email@company.com"
+              [class.pub-form-invalid]="businessEmail?.invalid && businessEmail?.touched"
+            />
+            <span *ngIf="businessEmail?.hasError('required') && businessEmail?.touched" class="pub-form-error">
+              Email is required
+            </span>
+            <span *ngIf="businessEmail?.hasError('email') && businessEmail?.touched" class="pub-form-error">
+              Please enter a valid email address
+            </span>
+          </div>
+
+          <div class="pub-form-group">
+            <label for="companyName" class="pub-form-label">Company Name *</label>
+            <input
+              id="companyName"
+              type="text"
+              class="pub-form-input"
+              formControlName="companyName"
+              placeholder="Your company name"
+              [class.pub-form-invalid]="companyName?.invalid && companyName?.touched"
+            />
+            <span *ngIf="companyName?.hasError('required') && companyName?.touched" class="pub-form-error">
+              Company name is required
+            </span>
+            <span *ngIf="companyName?.hasError('minlength') && companyName?.touched" class="pub-form-error">
+              Company name must be at least 2 characters
+            </span>
+          </div>
+
+          <div class="pub-form-group">
+            <label for="phoneNumber" class="pub-form-label">Phone Number (Optional)</label>
+            <input
+              id="phoneNumber"
+              type="tel"
+              class="pub-form-input"
+              formControlName="phoneNumber"
+              placeholder="(123) 456-7890"
+            />
+          </div>
+
+          <div class="pub-form-group">
+            <label for="fleetSize" class="pub-form-label">Fleet Size (Optional)</label>
+            <select id="fleetSize" class="pub-form-input" formControlName="fleetSize">
+              <option value="">Select fleet size...</option>
+              <option value="1-10">1-10 vehicles</option>
+              <option value="11-50">11-50 vehicles</option>
+              <option value="51-100">51-100 vehicles</option>
+              <option value="101-250">101-250 vehicles</option>
+              <option value="251-500">251-500 vehicles</option>
+              <option value="501+">500+ vehicles</option>
+            </select>
+          </div>
+
+          <div class="pub-form-group">
+            <label for="message" class="pub-form-label">Message / Inquiry *</label>
+            <textarea
+              id="message"
+              class="pub-form-textarea"
+              formControlName="message"
+              placeholder="Tell us about your fleet, integrations, and timeline..."
+              rows="6"
+              [class.pub-form-invalid]="message?.invalid && message?.touched"
+            ></textarea>
+            <span *ngIf="message?.hasError('required') && message?.touched" class="pub-form-error">
+              Message is required
+            </span>
+            <span *ngIf="message?.hasError('minlength') && message?.touched" class="pub-form-error">
+              Message must be at least 10 characters
+            </span>
+          </div>
+
+          <button
+            type="submit"
+            class="pub-btn-primary pub-contact-submit"
+            [disabled]="contactForm.invalid || isSubmitting"
+          >
+            <span class="material-symbols-outlined">send</span>
+            {{ isSubmitting ? 'Sending...' : 'Send Message' }}
+          </button>
+        </form>
+
+        <!-- Quick Contact Links -->
+        <div *ngIf="!showForm" class="pub-contact-action-list">
+          <a class="pub-contact-action" href="mailto:support@fleetneuron.ai">
             <span class="material-symbols-outlined">mail</span>
             <div>
-              <span class="label">Email sales</span>
-              <span class="value">sales&#64;fleetneuron.com</span>
+              <span class="label">Email us</span>
+              <span class="value">support&#64;fleetneuron.ai</span>
             </div>
           </a>
 
-          <a class="pub-contact-action" href="tel:+18005551234">
+          <a class="pub-contact-action" href="tel:+14695329250">
             <span class="material-symbols-outlined">call</span>
             <div>
               <span class="label">Call us</span>
-              <span class="value">+1 (800) 555-1234</span>
+              <span class="value">+1 (469) 532-9250</span>
+            </div>
+          </a>
+        </div>
+
+        <!-- Original Quick Links (always visible) -->
+        <div class="pub-contact-action-list pub-contact-quick-links">
+          <a class="pub-contact-action" href="mailto:support@fleetneuron.ai">
+            <span class="material-symbols-outlined">mail</span>
+            <div>
+              <span class="label">Email</span>
+              <span class="value">support&#64;fleetneuron.ai</span>
+            </div>
+          </a>
+
+          <a class="pub-contact-action" href="tel:+14695329250">
+            <span class="material-symbols-outlined">call</span>
+            <div>
+              <span class="label">Phone</span>
+              <span class="value">+1 (469) 532-9250</span>
             </div>
           </a>
         </div>
