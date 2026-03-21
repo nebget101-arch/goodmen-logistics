@@ -13,6 +13,16 @@ import {
 } from '../models/access-control.model';
 
 const STORAGE_KEY_ACCESS = 'fleetneuron_access';
+
+/** Safety / safety_manager: fleet trucks & trailers are view-only (FN-133); strip if API still sends writes. */
+const SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES = [
+  'vehicles.create',
+  'vehicles.edit',
+  'vehicles.delete',
+  'trailers.create',
+  'trailers.edit',
+  'trailers.delete',
+];
 const ALWAYS_ALLOWED_PATH_PREFIXES = ['/profile', '/users', '/users/create'];
 const INTERNAL_TRIAL_ADMIN_TENANT_NAME = 'fleetneuron default tenant';
 const FEATURE_PLAN_ACCESS: Record<string, string[]> = {
@@ -85,12 +95,15 @@ export class AccessControlService {
     // Backend often returns a partial permission list. For safety roles, that list can omit
     // hos.view / audit.view / safety.* and hide nav + /safety guard while role is correct (FN-131).
     const safetyRole = roles.some((r) => r === 'safety_manager' || r === 'safety');
-    const permissions: string[] =
+    let permissions: string[] =
       providedPermissions.length === 0
         ? derivedFromRoles
         : safetyRole
           ? [...new Set([...providedPermissions, ...derivedFromRoles])]
           : providedPermissions;
+    if (safetyRole) {
+      permissions = permissions.filter((p) => !SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES.includes(p));
+    }
     const locations: AccessLocation[] = Array.isArray(raw.locations)
       ? raw.locations.map((l: any) => ({ id: l.id ?? l.locationId, name: l.name ?? l.locationName ?? '' }))
       : [];

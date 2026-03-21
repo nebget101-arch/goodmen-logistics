@@ -9,8 +9,10 @@
 
 const {
   mergeSafetyBaselineIfApplicable,
+  stripFleetVehicleWritesForSafetyRoles,
   SAFETY_ROLE_CODES,
   SAFETY_DEFAULT_PERMISSION_CODES,
+  SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES,
 } = require('../services/rbac-service');
 
 describe('mergeSafetyBaselineIfApplicable', () => {
@@ -54,5 +56,27 @@ describe('SAFETY_ROLE_CODES', () => {
   test('includes safety_manager and safety', () => {
     expect(SAFETY_ROLE_CODES.has('safety_manager')).toBe(true);
     expect(SAFETY_ROLE_CODES.has('safety')).toBe(true);
+  });
+});
+
+describe('stripFleetVehicleWritesForSafetyRoles (FN-133)', () => {
+  test('removes vehicles.edit and trailers.edit for safety_manager', () => {
+    const set = new Set(['vehicles.view', 'vehicles.edit', 'trailers.view', 'trailers.edit']);
+    stripFleetVehicleWritesForSafetyRoles(['safety_manager'], set);
+    expect(set.has('vehicles.view')).toBe(true);
+    expect(set.has('trailers.view')).toBe(true);
+    expect(set.has('vehicles.edit')).toBe(false);
+    expect(set.has('trailers.edit')).toBe(false);
+  });
+
+  test('no-op for dispatcher', () => {
+    const set = new Set(['vehicles.edit']);
+    stripFleetVehicleWritesForSafetyRoles(['dispatcher'], set);
+    expect(set.has('vehicles.edit')).toBe(true);
+  });
+
+  test('strip list includes create and delete', () => {
+    expect(SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES).toContain('vehicles.create');
+    expect(SAFETY_STRIP_FLEET_VEHICLE_WRITE_CODES).toContain('vehicles.delete');
   });
 });
