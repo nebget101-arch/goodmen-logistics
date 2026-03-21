@@ -404,6 +404,7 @@
           <div class="pub-pricing-price">
             <span class="pub-price-label">{{ plan.priceLabel }}</span>
           </div>
+          <p class="pub-pricing-users">{{ getPlanUserAllowance(plan) }} · {{ getPlanSeatPricing(plan) }}</p>
           <p class="pub-pricing-desc">{{ plan.description }}</p>
           <ul class="pub-pricing-features">
             <li *ngFor="let f of plan.features" [class.pub-pricing-feature-hl]="f.highlight">

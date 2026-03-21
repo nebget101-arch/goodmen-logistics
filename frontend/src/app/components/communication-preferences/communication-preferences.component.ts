@@ -1,12 +1,14 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../services/api.service';
+import { SeoService } from '../../services/seo.service';
+import { SEO_PUBLIC } from '../../services/seo-public-presets';
 
 @Component({
   selector: 'app-communication-preferences',
   templateUrl: './communication-preferences.component.html',
   styleUrls: ['./communication-preferences.component.css']
 })
-export class CommunicationPreferencesComponent {
+export class CommunicationPreferencesComponent implements OnInit {
   email = '';
   phone = '';
   optInEmail = true;
@@ -15,7 +17,14 @@ export class CommunicationPreferencesComponent {
   message: string | null = null;
   isError = false;
 
-  constructor(private api: ApiService) {}
+  constructor(
+    private api: ApiService,
+    private seo: SeoService
+  ) {}
+
+  ngOnInit(): void {
+    this.seo.apply(SEO_PUBLIC.communicationPreferences);
+  }
 
   save(): void {
     const trimmedEmail = this.email.trim();

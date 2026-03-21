@@ -129,6 +129,24 @@ services:
         fromDatabase:
           name: safetyapp-db
           property: port
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
+        sync: false
+      - key: ONBOARDING_FROM_EMAIL
+        sync: false
+      - key: TRIAL_REQUEST_NOTIFY_TO
+        sync: false
+      - key: SALES_NOTIFY_EMAILS
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: PUBLIC_APP_BASE_URL
+        sync: false
+      - key: TRIAL_PUBLIC_BASE_URL
+        sync: false
+      - key: TRIAL_SIGNUP_URL_TEMPLATE
+        sync: false
       - key: NODE_ENV
         value: production
       - key: PORT

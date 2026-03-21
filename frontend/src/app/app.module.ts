@@ -25,6 +25,8 @@ import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dash
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
+import { ForgotPasswordComponent } from './components/forgot-password/forgot-password.component';
+import { ResetPasswordComponent } from './components/reset-password/reset-password.component';
 import { UserCreateComponent } from './components/user-create/user-create.component';
 import { UsersAdminComponent } from './components/users-admin/users-admin.component';
 import { ProfileComponent } from './components/profile/profile.component';
@@ -73,6 +75,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     DispatchBoardComponent,
     AuditComponent,
     LoginComponent,
+    ForgotPasswordComponent,
+    ResetPasswordComponent,
     UsersAdminComponent,
     UserCreateComponent,
     ProfileComponent,

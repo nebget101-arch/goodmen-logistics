@@ -919,6 +919,12 @@
 .pub-pricing-tagline { font-size: 13px; color: #6b7280; margin: 0; }
 .pub-pricing-price { margin: 0 0 -8px; }
 .pub-price-label { font-size: 1.1rem; font-weight: 700; color: #a5f3fc; }
+.pub-pricing-users {
+  margin: 0;
+  font-size: 12px;
+  color: #67e8f9;
+  font-weight: 600;
+}
 .pub-pricing-desc { font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0; }
 
 .pub-pricing-features {

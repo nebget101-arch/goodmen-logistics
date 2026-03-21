@@ -40,7 +40,7 @@ export const NAV_SECTIONS: NavSection[] = [
     tabs: ['hos', 'audit', 'drivers', 'safety_claims'],
     children: [
       { path: '/hos', label: 'HOS', tab: 'hos' },
-      { path: '/drivers/dqf', label: 'DQF', tab: 'drivers' },
+      { path: '/drivers/dqf', label: 'DQF', tab: 'drivers', roles: ['super_admin', 'admin', 'company_admin', 'safety_manager', 'safety'] },
       { path: '/audit', label: 'Audit', tab: 'audit' },
       { path: '/safety', label: 'Claims & Accidents', tab: 'safety_claims' },
     ],

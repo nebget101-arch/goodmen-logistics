@@ -1,7 +1,9 @@
 import { Component, OnInit, HostListener } from '@angular/core';
 import { Router } from '@angular/router';
+import { SeoService } from '../../../services/seo.service';
 import {
   MarketingFeature,
+  MarketingPlan,
   MARKETING_FEATURES,
   MARKETING_PLANS,
   HOW_IT_WORKS_STEPS,
@@ -24,9 +26,14 @@ export class PublicHomeComponent implements OnInit {
   navScrolled = false;
   currentYear = new Date().getFullYear();
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private seo: SeoService
+  ) {}
 
-  ngOnInit(): void {}
+  ngOnInit(): void {
+    this.seo.applyMarketingHome();
+  }
 
   @HostListener('window:scroll')
   onWindowScroll(): void {
@@ -64,6 +71,14 @@ export class PublicHomeComponent implements OnInit {
       return;
     }
     this.navigateToTrial(plan?.id);
+  }
+
+  getPlanUserAllowance(plan: MarketingPlan): string {
+    return `${plan.includedUsers ?? 1} users included`;
+  }
+
+  getPlanSeatPricing(plan: MarketingPlan): string {
+    return `+$${plan.additionalUserPriceUsd ?? 25}/user`;
   }
 
   goToLogin(): void {

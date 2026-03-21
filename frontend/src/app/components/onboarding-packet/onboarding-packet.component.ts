@@ -1,6 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
+import { SeoService } from '../../services/seo.service';
+import { SEO_PUBLIC } from '../../services/seo-public-presets';
 
 export interface EmploymentForm {
   firstName?: string;
@@ -79,13 +81,16 @@ export class OnboardingPacketComponent implements OnInit {
 
   constructor(
     private route: ActivatedRoute,
-    private apiService: ApiService
+    private apiService: ApiService,
+    private seo: SeoService
   ) {
     this.packetId = this.route.snapshot.paramMap.get('packetId');
     this.token = this.route.snapshot.queryParamMap.get('token');
   }
 
   ngOnInit(): void {
+    const path = this.packetId ? `/onboard/${this.packetId}` : SEO_PUBLIC.driverOnboarding.path;
+    this.seo.apply({ ...SEO_PUBLIC.driverOnboarding, path });
     this.loadPacket();
   }
 

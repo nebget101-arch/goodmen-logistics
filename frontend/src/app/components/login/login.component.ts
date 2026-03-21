@@ -1,27 +1,47 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { AccessControlService } from '../../services/access-control.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { SeoService } from '../../services/seo.service';
+import { SEO_PUBLIC } from '../../services/seo-public-presets';
 
 @Component({
   selector: 'app-login',
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.css']
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   username = '';
   password = '';
   error = '';
+  success = '';
   isSigningIn = false;
   private readonly authTransitionStorageKey = 'fleetneuron_auth_transitioning';
+  private readonly signupResponseStorageKey = 'fleetneuron_signup_response';
 
   constructor(
     private api: ApiService,
+    private route: ActivatedRoute,
     private router: Router,
     private accessControl: AccessControlService,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private seo: SeoService
   ) {}
+
+  ngOnInit(): void {
+    this.seo.apply(SEO_PUBLIC.login);
+    this.route.queryParamMap.subscribe((params) => {
+      this.success = params.get('reset') === 'success'
+        ? 'Password updated successfully. Please sign in.'
+        : '';
+    });
+  }
+
+  goToForgotPassword(): void {
+    this.router.navigate(['/forgot-password']);
+  }
 
   login(): void {
     if (this.isSigningIn) return;
@@ -44,7 +64,25 @@ export class LoginComponent {
             localStorage.setItem('displayName', displayName);
           }
         }
-        this.accessControl.setAccessFromLoginResponse(res);
+        
+        // Check if there's a stored signup response with plan data
+        const storedSignupResponse = sessionStorage.getItem(this.signupResponseStorageKey);
+        const responseToUse = res;
+        
+        // Merge plan data from signup response if not in login response
+        if (storedSignupResponse && !res.plan) {
+          try {
+            const signupData = JSON.parse(storedSignupResponse);
+            if (signupData.plan) {
+              responseToUse.plan = signupData.plan;
+              responseToUse.requestedPlan = signupData.requestedPlan;
+            }
+          } catch (e) {
+            // Silently fail to parse; just use login response
+          }
+        }
+        
+        this.accessControl.setAccessFromLoginResponse(responseToUse);
 
         // Important: hydrate canonical RBAC + subscription plan context from /auth/me
         // immediately after login so plan-gated pages are hidden/shown correctly

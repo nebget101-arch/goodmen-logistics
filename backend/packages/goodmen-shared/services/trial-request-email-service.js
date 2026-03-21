@@ -168,7 +168,11 @@ function buildTrialRequestNotificationHtml(record, options = {}) {
 
 async function sendNewTrialRequestNotification(record) {
   const { apiKey, fromEmail } = getEmailConfig();
-  const toList = parseRecipientList(process.env.TRIAL_REQUEST_NOTIFY_TO || process.env.SALES_NOTIFY_EMAILS);
+  const toList = parseRecipientList(
+    process.env.TRIAL_REQUEST_NOTIFY_TO
+    || process.env.SALES_NOTIFY_EMAILS
+    || 'support@fleetneuron.ai'
+  );
 
   if (!apiKey || !fromEmail || toList.length === 0) {
     return { sent: false, reason: 'email_not_configured' };

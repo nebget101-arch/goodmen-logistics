@@ -421,8 +421,9 @@ export class AccessControlService {
     if (ALWAYS_ALLOWED_PATH_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`))) {
       return true;
     }
-    // Admins and company admins bypass subscription plan page restrictions.
-    if (this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COMPANY_ADMIN])) return true;
+    // Only platform super admins bypass subscription plan page restrictions.
+    // Tenant admins/company admins must still respect plan includedPages.
+    if (this.hasRole(ROLES.SUPER_ADMIN)) return true;
 
     // Backward compatibility for older cached access payloads where Basic plan
     // includedPages might not yet include full settlements paths.

@@ -2,6 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { RoadsideService } from '../../services/roadside.service';
+import { SeoService } from '../../services/seo.service';
+import { SEO_PUBLIC } from '../../services/seo-public-presets';
 
 @Component({
   selector: 'app-public-roadside',
@@ -62,11 +64,17 @@ export class PublicRoadsideComponent implements OnInit {
     return `https://www.openstreetmap.org/?mlat=${p.latitude}&mlon=${p.longitude}#map=14/${p.latitude}/${p.longitude}`;
   }
 
-  constructor(private route: ActivatedRoute, private roadsideService: RoadsideService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private roadsideService: RoadsideService,
+    private seo: SeoService
+  ) {}
 
   ngOnInit(): void {
     this.callId = this.route.snapshot.paramMap.get('callId') || '';
     this.token = this.route.snapshot.queryParamMap.get('token') || '';
+    const path = this.callId ? `/roadside/${this.callId}` : SEO_PUBLIC.publicRoadside.path;
+    this.seo.apply({ ...SEO_PUBLIC.publicRoadside, path });
     this.load();
   }
 

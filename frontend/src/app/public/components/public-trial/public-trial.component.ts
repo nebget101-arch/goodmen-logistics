@@ -3,7 +3,9 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { ApiService } from '../../../services/api.service';
-import { MARKETING_PLANS, FLEET_SIZE_OPTIONS } from '../../config/marketing.config';
+import { SeoService } from '../../../services/seo.service';
+import { SEO_PUBLIC } from '../../../services/seo-public-presets';
+import { MARKETING_PLANS, FLEET_SIZE_OPTIONS, MarketingPlan } from '../../config/marketing.config';
 
 @Component({
   selector: 'app-public-trial',
@@ -11,7 +13,7 @@ import { MARKETING_PLANS, FLEET_SIZE_OPTIONS } from '../../config/marketing.conf
   styleUrls: ['./public-trial.component.css']
 })
 export class PublicTrialComponent implements OnInit, OnDestroy {
-  plans = MARKETING_PLANS.filter(plan => plan.trialEligible !== false);
+  plans: MarketingPlan[] = MARKETING_PLANS.filter(plan => plan.trialEligible !== false);
   fleetSizeOptions = FLEET_SIZE_OPTIONS;
   mobileNavOpen = false;
   currentYear = new Date().getFullYear();
@@ -30,7 +32,8 @@ export class PublicTrialComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private route: ActivatedRoute,
     private router: Router,
-    private apiService: ApiService
+    private apiService: ApiService,
+    private seo: SeoService
   ) {
     this.form = this.fb.group({
       companyName: ['', [Validators.required, Validators.maxLength(200)]],
@@ -48,9 +51,10 @@ export class PublicTrialComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.seo.apply(SEO_PUBLIC.trial);
     this.route.queryParams.subscribe(params => {
       const plan = params['plan'];
-      if (plan && ['basic', 'multi_mc', 'end_to_end'].includes(plan)) {
+      if (plan && ['basic', 'multi_mc', 'end_to_end', 'enterprise'].includes(plan)) {
         this.form.patchValue({ requestedPlan: plan });
       }
     });
@@ -119,6 +123,23 @@ export class PublicTrialComponent implements OnInit, OnDestroy {
   isFieldInvalid(fieldName: string): boolean {
     const field = this.form.get(fieldName);
     return !!(field && field.invalid && (field.dirty || field.touched));
+  }
+
+  selectPlan(planId: MarketingPlan['id']): void {
+    this.form.patchValue({ requestedPlan: planId });
+  }
+
+  get selectedPlan(): MarketingPlan {
+    const selectedId = this.form.get('requestedPlan')?.value as MarketingPlan['id'] | null;
+    return this.plans.find(plan => plan.id === selectedId) || this.plans[0];
+  }
+
+  getPlanUserAllowance(plan: MarketingPlan): string {
+    return `${plan.includedUsers ?? 1} users included`;
+  }
+
+  getPlanSeatPricing(plan: MarketingPlan): string {
+    return `+$${plan.additionalUserPriceUsd ?? 25}/user`;
   }
 
   getFieldError(fieldName: string): string {

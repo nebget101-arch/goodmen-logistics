@@ -6,7 +6,7 @@
       <p class="subtitle" *ngIf="activeOperatingEntityName">Current company context: {{ activeOperatingEntityName }} (driver roster remains tenant-wide).</p>
     </div>
     <div class="header-actions">
-      <button class="btn btn-primary" (click)="toggleAddForm()">
+      <button *ngIf="canManageDrivers" class="btn btn-primary" (click)="toggleAddForm()">
         <span class="material-symbols-outlined">verified_user</span>
         Add Driver
       </button>
@@ -102,16 +102,16 @@
           </td>
           <td>
             <div class="drivers-actions">
-              <button type="button" class="btn-action btn-edit" (click)="editDriver(driver)">
+              <button *ngIf="canManageDrivers" type="button" class="btn-action btn-edit" (click)="editDriver(driver)">
                 <span class="material-symbols-outlined">edit</span> Edit
               </button>
-              <button type="button" class="btn-action btn-dqf" (click)="openDQFForm(driver)">
+              <button *ngIf="canAccessDqf" type="button" class="btn-action btn-dqf" (click)="openDQFForm(driver)">
                 <span class="material-symbols-outlined">rule_folder</span> DQF
               </button>
               <button type="button" class="btn-action btn-onboard" (click)="openOnboardingModal(driver)">
                 <span class="material-symbols-outlined">forward_to_inbox</span> Send Packet
               </button>
-              <label class="btn-action btn-upload">
+              <label *ngIf="canManageDrivers" class="btn-action btn-upload">
                 <span class="material-symbols-outlined">upload_file</span> Upload
                 <input type="file" (change)="onFileSelected($event, driver)" accept=".pdf,.jpg,.jpeg,.png" hidden>
               </label>

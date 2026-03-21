@@ -23,6 +23,10 @@
     </div>
 
     <form (ngSubmit)="login()" class="login-form" novalidate>
+      <output *ngIf="success" class="success" aria-live="polite">
+        {{ success }}
+      </output>
+
       <div *ngIf="error" class="error" role="alert">
         {{ error }}
       </div>
@@ -32,6 +36,7 @@
         <div class="field-input-wrapper">
           <span class="field-icon material-symbols-outlined" aria-hidden="true">person</span>
           <input
+            type="text"
             [(ngModel)]="username"
             name="username"
             required
@@ -61,6 +66,10 @@
       <button type="submit" class="login-button" [disabled]="isSigningIn">
         <span>{{ isSigningIn ? 'Signing in…' : 'Continue' }}</span>
         <span class="login-button-glow"></span>
+      </button>
+
+      <button type="button" class="forgot-password-link" [disabled]="isSigningIn" (click)="goToForgotPassword()">
+        Forgot password?
       </button>
 
       <p class="login-meta">

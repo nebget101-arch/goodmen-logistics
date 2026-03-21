@@ -862,6 +862,18 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/auth/login`, { username, password });
   }
 
+  forgotPassword(email: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/auth/forgot-password`, { email });
+  }
+
+  resetPassword(token: string, password: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/auth/reset-password`, { token, password });
+  }
+
+  submitContactForm(payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/contact`, payload);
+  }
+
     // Public marketing website
     getMarketingPlans(): Observable<any> {
       return this.http.get(`${this.baseUrl}/public/trial-requests/plans`);
