@@ -3,6 +3,7 @@ import { AbstractControl, FormBuilder, FormGroup, ValidationErrors, Validators }
 import { ActivatedRoute, Router } from '@angular/router';
 import { combineLatest } from 'rxjs';
 import { ApiService } from '../../../services/api.service';
+import { AccessControlService } from '../../../services/access-control.service';
 import { MARKETING_PLANS } from '../../config/marketing.config';
 
 @Component({
@@ -27,11 +28,15 @@ export class PublicTrialSignupComponent implements OnInit {
 
   form: FormGroup;
 
+  // Temporary storage for signup response to pass plan data to next login
+  private readonly SIGNUP_RESPONSE_STORAGE_KEY = 'fleetneuron_signup_response';
+
   constructor(
     private readonly fb: FormBuilder,
     private readonly route: ActivatedRoute,
     private readonly router: Router,
-    private readonly apiService: ApiService
+    private readonly apiService: ApiService,
+    private readonly accessControl: AccessControlService
   ) {
     this.form = this.fb.group(
       {
@@ -85,6 +90,15 @@ export class PublicTrialSignupComponent implements OnInit {
     this.apiService.completeTrialSignup(this.token, payload).subscribe({
       next: (res: any) => {
         this.submitting = false;
+        
+        // Store the signup response (which includes plan/includedPages) in sessionStorage
+        // so the access control service can retrieve it after login
+        if (res?.data) {
+          sessionStorage.setItem(this.SIGNUP_RESPONSE_STORAGE_KEY, JSON.stringify(res.data));
+          // Immediately set access context from the signup response
+          this.accessControl.setAccessFromLoginResponse(res.data);
+        }
+        
         this.signupCompleted = true;
         this.createdUsername =
           String(res?.data?.username || '').trim()
@@ -104,6 +118,16 @@ export class PublicTrialSignupComponent implements OnInit {
   }
 
   goToLogin(): void {
+    // If signup response was stored, use it to set access context before navigating to login
+    const storedResponse = sessionStorage.getItem(this.SIGNUP_RESPONSE_STORAGE_KEY);
+    if (storedResponse) {
+      try {
+        const data = JSON.parse(storedResponse);
+        this.accessControl.setAccessFromLoginResponse(data);
+      } catch (e) {
+        // If parsing fails, just proceed to login (fallback to normal login flow)
+      }
+    }
     this.router.navigate(['/login']);
   }
 

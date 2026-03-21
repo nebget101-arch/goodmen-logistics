@@ -17,6 +17,7 @@ export class LoginComponent implements OnInit {
   success = '';
   isSigningIn = false;
   private readonly authTransitionStorageKey = 'fleetneuron_auth_transitioning';
+  private readonly signupResponseStorageKey = 'fleetneuron_signup_response';
 
   constructor(
     private api: ApiService,
@@ -59,7 +60,25 @@ export class LoginComponent implements OnInit {
             localStorage.setItem('displayName', displayName);
           }
         }
-        this.accessControl.setAccessFromLoginResponse(res);
+        
+        // Check if there's a stored signup response with plan data
+        const storedSignupResponse = sessionStorage.getItem(this.signupResponseStorageKey);
+        const responseToUse = res;
+        
+        // Merge plan data from signup response if not in login response
+        if (storedSignupResponse && !res.plan) {
+          try {
+            const signupData = JSON.parse(storedSignupResponse);
+            if (signupData.plan) {
+              responseToUse.plan = signupData.plan;
+              responseToUse.requestedPlan = signupData.requestedPlan;
+            }
+          } catch (e) {
+            // Silently fail to parse; just use login response
+          }
+        }
+        
+        this.accessControl.setAccessFromLoginResponse(responseToUse);
 
         // Important: hydrate canonical RBAC + subscription plan context from /auth/me
         // immediately after login so plan-gated pages are hidden/shown correctly
