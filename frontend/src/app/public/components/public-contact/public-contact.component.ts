@@ -1,9 +1,9 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { ApiService } from '../../../../services/api.service';
+import { ApiService } from '../../../services/api.service';
 import { Subject } from 'rxjs';
-import { debounceTime, takeUntil } from 'rxjs/operators';
+import { takeUntil } from 'rxjs/operators';
 
 @Component({
   selector: 'app-public-contact',
@@ -72,7 +72,7 @@ export class PublicContactComponent implements OnInit, OnDestroy {
             this.successMessage = '';
           }, 10000);
         },
-        error: (err) => {
+        error: (err: any) => {
           this.isSubmitting = false;
           this.errorMessage = err?.error?.message || 'Unable to send your message. Please try again later.';
         }
