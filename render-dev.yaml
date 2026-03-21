@@ -28,9 +28,9 @@ services:
       - key: AUTH_USERS_SERVICE_URL
         value: https://fleetneuron-auth-users-service-dev.onrender.com
       - key: DRIVERS_COMPLIANCE_SERVICE_URL
-        value: https://fleetneuron-drivers-compliance-service-dev.onrender.com
+        value: https://fleetneuron-drivers-compliance-service-kmpd.onrender.com
       - key: VEHICLES_MAINTENANCE_SERVICE_URL
-        value: https://fleetneuron-vehicles-maintenance-service-dev.onrender.com
+        value: https://fleetneuron-vehicles-maintenance-service-giz4.onrender.com
       - key: LOGISTICS_SERVICE_URL
         value: https://fleetneuron-logistics-service-dev.onrender.com
       - key: INVENTORY_SERVICE_URL
