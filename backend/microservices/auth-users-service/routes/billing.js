@@ -3,6 +3,7 @@
 const express = require('express');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
+const rbacService = require('@goodmen/shared/services/rbac-service');
 const knex = require('@goodmen/shared/config/knex');
 const stripe = require('@goodmen/shared/config/stripe');
 const stripeService = require('@goodmen/shared/services/stripeService');
@@ -10,9 +11,36 @@ const trialService = require('@goodmen/shared/services/trialService');
 const extraSeatSyncService = require('@goodmen/shared/services/extraSeatSyncService');
 const { PLANS, normalizePlanId } = require('@goodmen/shared/config/plans');
 
+const BILLING_ADMIN_ROLES = new Set(['super_admin', 'admin', 'company_admin']);
+
+async function requireBillingAdmin(req, res, next) {
+  try {
+    const userId = req.user?.id || req.user?.sub;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const roles = await rbacService.getRolesForUser(userId).catch(() => []);
+    const roleCodes = new Set((roles || []).map((r) => String(r.code || '').trim().toLowerCase()));
+    const legacyRole = String(req.user?.role || '').trim().toLowerCase();
+    const isAdmin = BILLING_ADMIN_ROLES.has(legacyRole) || [...BILLING_ADMIN_ROLES].some((code) => roleCodes.has(code));
+
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: billing access is restricted to admin roles (super_admin, admin, company_admin).'
+      });
+    }
+    return next();
+  } catch (err) {
+    console.error('[billing] requireBillingAdmin error:', err?.message || err);
+    return res.status(500).json({ success: false, error: 'Failed to validate billing access' });
+  }
+}
+
 const router = express.Router();
 
-router.use(authMiddleware, tenantContextMiddleware);
+router.use(authMiddleware, tenantContextMiddleware, requireBillingAdmin);
 
 function parsePlanAmount(planId) {
   const raw = String(PLANS?.[planId]?.priceLabel || '').trim();
