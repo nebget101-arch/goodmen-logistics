@@ -731,6 +731,113 @@
   color: #60a5fa;
 }
 
+/* Feature modal — mobile (FN-6): stack copy + mock; keep preview readable */
+@media (max-width: 767px) {
+  .pub-feature-modal-backdrop {
+    padding: 12px 10px;
+  }
+
+  .pub-feature-modal {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 20px 14px 18px;
+    border-radius: 20px;
+  }
+
+  .pub-feature-modal-close {
+    top: 12px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .pub-feature-modal-title {
+    font-size: 1.45rem;
+  }
+
+  .pub-feature-capabilities {
+    padding: 16px;
+  }
+
+  .pub-feature-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pub-feature-modal-actions .pub-btn-primary,
+  .pub-feature-modal-actions .pub-btn-outline {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pub-feature-modal-visual .pub-mockup {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pub-feature-modal .pub-mockup-body {
+    min-width: 0;
+  }
+
+  .pub-feature-mock-head {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .pub-feature-mock-status {
+    white-space: normal;
+    text-align: center;
+  }
+
+  .pub-feature-modal .pub-mockup-bar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .pub-feature-modal .pub-mockup-url {
+    flex: 1 1 100%;
+    margin-left: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pub-feature-modal .pub-mock-stat-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .pub-feature-modal .pub-mock-stat {
+    padding: 8px 6px;
+    min-width: 0;
+  }
+
+  .pub-feature-modal .pub-mock-stat-num {
+    font-size: 1.1rem;
+  }
+
+  .pub-feature-modal .pub-mock-stat-label {
+    font-size: 9px;
+    line-height: 1.2;
+  }
+
+  .pub-feature-modal .pub-mock-table-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .pub-feature-modal .pub-mock-row-meta {
+    flex-basis: auto;
+    margin-left: auto;
+  }
+
+  .pub-feature-modal .pub-mock-ai-msg {
+    word-break: break-word;
+  }
+}
+
 /* ─── How It Works ───────────────────────────────────────────────────────── */
 .pub-how-grid {
   display: grid;
