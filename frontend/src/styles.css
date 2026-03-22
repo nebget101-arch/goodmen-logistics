@@ -795,26 +795,64 @@ body {
   z-index: 1600;
 }
 
-/* Angular Material datepicker theming for dark AI console */
+/* Angular Material datepicker — AI console (FN-160: grid-forward cells, not heavy circles) */
 .mat-datepicker-content,
 .mat-calendar {
   background: rgba(15, 23, 42, 0.98);
   color: var(--text-dark);
 }
 
+.mat-datepicker-content .mat-calendar-header {
+  padding: 10px 12px 4px;
+}
+
+.mat-calendar-table-header th {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(148, 163, 184, 0.95);
+  padding: 6px 0 8px;
+}
+
+.mat-calendar-body-label {
+  color: rgba(148, 163, 184, 0.88);
+  font-size: 0.8rem;
+}
+
+.mat-calendar-body-cell {
+  vertical-align: middle;
+}
+
 .mat-calendar-body-cell-content {
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid transparent;
+  width: 100%;
+  max-width: 40px;
+  line-height: 40px;
+  margin: 0 auto;
 }
 
-.mat-calendar-body-selected,
-.mat-calendar-body-active {
-  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.4), rgba(14, 165, 233, 0.9)) !important;
-  color: #e5f9ff !important;
+.mat-calendar-body-cell:not(.mat-calendar-body-disabled):hover .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+  background: rgba(56, 189, 248, 0.1);
 }
 
-.mat-calendar-body-today:not(.mat-calendar-body-selected) {
-  border-color: rgba(14, 165, 233, 0.8);
+.mat-calendar-body-cell-content.mat-calendar-body-selected {
+  background: rgba(56, 189, 248, 0.26) !important;
+  border-color: rgba(56, 189, 248, 0.85) !important;
+  color: #f0f9ff !important;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.35);
+}
+
+.mat-calendar-body-cell-content.mat-calendar-body-active:not(.mat-calendar-body-selected) {
+  outline: 2px solid rgba(56, 189, 248, 0.45);
+  outline-offset: 1px;
+}
+
+.mat-calendar-body-today:not(.mat-calendar-body-selected) .mat-calendar-body-cell-content {
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #e0f2fe;
 }
 
 .mat-calendar-previous-button,
@@ -823,14 +861,15 @@ body {
   color: var(--text-dark);
 }
 
-/* Panel class from app-ai-date-picker — glassy dark calendar */
+/* Panel class from app-ai-date-picker — solid readable panel over forms (FN-160) */
 .ai-datepicker-overlay.mat-datepicker-content {
   border-radius: 12px;
-  border: 1px solid rgba(51, 65, 85, 0.85);
+  background: rgba(15, 23, 42, 0.99);
+  border: 1px solid rgba(71, 85, 105, 0.95);
   box-shadow:
-    0 16px 35px rgba(2, 6, 23, 0.65),
-    0 0 0 1px rgba(15, 23, 42, 0.9);
-  backdrop-filter: blur(14px);
+    0 20px 48px rgba(2, 6, 23, 0.72),
+    0 0 0 1px rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(16px);
 }
 
 /* app-ai-select panel — dark AI theme, cyan hover/selected */
