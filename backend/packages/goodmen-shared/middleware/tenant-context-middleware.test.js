@@ -16,6 +16,9 @@ function getRowValue(row, column) {
   return row[normalizeColumn(column)];
 }
 
+const TEST_USER_ID = '550e8400-e29b-41d4-a716-446655440001';
+const LEGACY_USER_ID = '660e8400-e29b-41d4-a716-446655440002';
+
 class FakeQuery {
   constructor(tableSpec, state) {
     this.table = String(tableSpec).split(/\s+as\s+/i)[0].trim();
@@ -37,6 +40,11 @@ class FakeQuery {
     }
 
     this.filters.push({ column: arg1, value: arg2 });
+    return this;
+  }
+
+  whereIn(column, values) {
+    this.filters.push({ column, op: 'in', values: values || [] });
     return this;
   }
 
@@ -91,7 +99,11 @@ class FakeQuery {
     }
 
     for (const filter of this.filters) {
-      rows = rows.filter((row) => getRowValue(row, filter.column) === filter.value);
+      if (filter.op === 'in') {
+        rows = rows.filter((row) => (filter.values || []).includes(getRowValue(row, filter.column)));
+      } else {
+        rows = rows.filter((row) => getRowValue(row, filter.column) === filter.value);
+      }
     }
 
     return this.firstOnly ? (rows[0] || undefined) : rows;
@@ -99,9 +111,13 @@ class FakeQuery {
 }
 
 function createFakeKnex(state) {
-  return function fakeKnex(tableSpec) {
+  const fakeKnex = function fakeKnex(tableSpec) {
     return new FakeQuery(tableSpec, state);
   };
+  fakeKnex.schema = {
+    hasTable: async () => true
+  };
+  return fakeKnex;
 }
 
 function createResponse() {
@@ -115,7 +131,8 @@ function createResponse() {
     json(payload) {
       this.body = payload;
       return this;
-    }
+    },
+    setHeader() {}
   };
 }
 
@@ -133,11 +150,11 @@ describe('tenant-context-middleware', () => {
     const middleware = tenantContextMiddlewareModule.createTenantContextMiddleware({
       knexClient: createFakeKnex({
         userTenantMemberships: [
-          { user_id: 'u1', tenant_id: 't1', is_active: true, is_default: true, created_at: '2026-03-01' }
+          { user_id: TEST_USER_ID, tenant_id: 't1', is_active: true, is_default: true, created_at: '2026-03-01' }
         ],
         userOperatingEntities: [
-          { user_id: 'u1', operating_entity_id: 'oe-default', is_active: true, is_default: true, created_at: '2026-03-01' },
-          { user_id: 'u1', operating_entity_id: 'oe-secondary', is_active: true, is_default: false, created_at: '2026-03-02' }
+          { user_id: TEST_USER_ID, operating_entity_id: 'oe-default', is_active: true, is_default: true, created_at: '2026-03-01' },
+          { user_id: TEST_USER_ID, operating_entity_id: 'oe-secondary', is_active: true, is_default: false, created_at: '2026-03-02' }
         ],
         operatingEntities: [
           { id: 'oe-default', tenant_id: 't1', is_active: true, created_at: '2026-03-01' },
@@ -147,7 +164,7 @@ describe('tenant-context-middleware', () => {
       logger: createLogger()
     });
 
-    const req = { user: { id: 'u1' }, headers: {} };
+    const req = { user: { id: TEST_USER_ID }, headers: {} };
     const res = createResponse();
     let nextCalled = false;
 
@@ -159,7 +176,9 @@ describe('tenant-context-middleware', () => {
     assert.deepStrictEqual(req.context, {
       tenantId: 't1',
       operatingEntityId: 'oe-default',
-      allowedOperatingEntityIds: ['oe-default', 'oe-secondary']
+      allowedOperatingEntityIds: ['oe-default', 'oe-secondary'],
+      isGlobalAdmin: false,
+      isAllOperatingEntities: false
     });
   });
 
@@ -167,11 +186,11 @@ describe('tenant-context-middleware', () => {
     const middleware = tenantContextMiddlewareModule.createTenantContextMiddleware({
       knexClient: createFakeKnex({
         userTenantMemberships: [
-          { user_id: 'u1', tenant_id: 't1', is_active: true, is_default: true, created_at: '2026-03-01' }
+          { user_id: TEST_USER_ID, tenant_id: 't1', is_active: true, is_default: true, created_at: '2026-03-01' }
         ],
         userOperatingEntities: [
-          { user_id: 'u1', operating_entity_id: 'oe-default', is_active: true, is_default: true, created_at: '2026-03-01' },
-          { user_id: 'u1', operating_entity_id: 'oe-secondary', is_active: true, is_default: false, created_at: '2026-03-02' }
+          { user_id: TEST_USER_ID, operating_entity_id: 'oe-default', is_active: true, is_default: true, created_at: '2026-03-01' },
+          { user_id: TEST_USER_ID, operating_entity_id: 'oe-secondary', is_active: true, is_default: false, created_at: '2026-03-02' }
         ],
         operatingEntities: [
           { id: 'oe-default', tenant_id: 't1', is_active: true, created_at: '2026-03-01' },
@@ -181,7 +200,7 @@ describe('tenant-context-middleware', () => {
       logger: createLogger()
     });
 
-    const req = { user: { id: 'u1' }, headers: { 'x-operating-entity-id': 'oe-secondary' } };
+    const req = { user: { id: TEST_USER_ID }, headers: { 'x-operating-entity-id': 'oe-secondary' } };
     const res = createResponse();
 
     await middleware(req, res, () => {});
@@ -193,10 +212,10 @@ describe('tenant-context-middleware', () => {
     const middleware = tenantContextMiddlewareModule.createTenantContextMiddleware({
       knexClient: createFakeKnex({
         userTenantMemberships: [
-          { user_id: 'u1', tenant_id: 't1', is_active: true, is_default: true, created_at: '2026-03-01' }
+          { user_id: TEST_USER_ID, tenant_id: 't1', is_active: true, is_default: true, created_at: '2026-03-01' }
         ],
         userOperatingEntities: [
-          { user_id: 'u1', operating_entity_id: 'oe-default', is_active: true, is_default: true, created_at: '2026-03-01' }
+          { user_id: TEST_USER_ID, operating_entity_id: 'oe-default', is_active: true, is_default: true, created_at: '2026-03-01' }
         ],
         operatingEntities: [
           { id: 'oe-default', tenant_id: 't1', is_active: true, created_at: '2026-03-01' },
@@ -206,7 +225,7 @@ describe('tenant-context-middleware', () => {
       logger: createLogger()
     });
 
-    const req = { user: { id: 'u1' }, headers: { 'x-operating-entity-id': 'oe-other' } };
+    const req = { user: { id: TEST_USER_ID }, headers: { 'x-operating-entity-id': 'oe-other' } };
     const res = createResponse();
     let nextCalled = false;
 
@@ -223,10 +242,10 @@ describe('tenant-context-middleware', () => {
     const middleware = tenantContextMiddlewareModule.createTenantContextMiddleware({
       knexClient: createFakeKnex({
         userTenantMemberships: [
-          { user_id: 'u1', tenant_id: 't1', is_active: true, is_default: true, created_at: '2026-03-01' }
+          { user_id: TEST_USER_ID, tenant_id: 't1', is_active: true, is_default: true, created_at: '2026-03-01' }
         ],
         userOperatingEntities: [
-          { id: 'assignment-1', user_id: 'u1', operating_entity_id: 'oe-default', is_active: false, is_default: false, created_at: '2026-03-01' }
+          { id: 'assignment-1', user_id: TEST_USER_ID, operating_entity_id: 'oe-default', is_active: false, is_default: false, created_at: '2026-03-01' }
         ],
         operatingEntities: [
           { id: 'oe-default', tenant_id: 't1', is_active: true, created_at: '2026-03-01' }
@@ -235,7 +254,7 @@ describe('tenant-context-middleware', () => {
       logger: createLogger()
     });
 
-    const req = { user: { id: 'u1' }, headers: {} };
+    const req = { user: { id: TEST_USER_ID }, headers: {} };
     const res = createResponse();
 
     await middleware(req, res, () => {});
@@ -248,7 +267,7 @@ describe('tenant-context-middleware', () => {
     const middleware = tenantContextMiddlewareModule.createTenantContextMiddleware({
       knexClient: createFakeKnex({
         users: [
-          { id: 'legacy-user', tenant_id: 't-legacy' }
+          { id: LEGACY_USER_ID, tenant_id: 't-legacy' }
         ],
         operatingEntities: [
           { id: 'oe-legacy', tenant_id: 't-legacy', is_active: true, created_at: '2026-03-01' }
@@ -257,7 +276,7 @@ describe('tenant-context-middleware', () => {
       logger: createLogger()
     });
 
-    const req = { user: { id: 'legacy-user' }, headers: {} };
+    const req = { user: { id: LEGACY_USER_ID }, headers: {} };
     const res = createResponse();
     let nextCalled = false;
 
@@ -269,7 +288,9 @@ describe('tenant-context-middleware', () => {
     assert.deepStrictEqual(req.context, {
       tenantId: 't-legacy',
       operatingEntityId: 'oe-legacy',
-      allowedOperatingEntityIds: ['oe-legacy']
+      allowedOperatingEntityIds: ['oe-legacy'],
+      isGlobalAdmin: false,
+      isAllOperatingEntities: false
     });
   });
 });
