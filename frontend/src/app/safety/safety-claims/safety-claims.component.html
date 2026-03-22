@@ -137,14 +137,24 @@
     <div class="form-row"><label>Attorney Assigned</label><input type="text" class="form-input" [(ngModel)]="selectedClaim.attorney_assigned"></div>
 
     <div class="form-row-2">
-      <div class="form-row"><label>Opened Date</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.opened_date"></div>
-      <div class="form-row"><label>Submitted Date</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.submitted_date"></div>
+      <div class="form-row">
+        <app-ai-date-picker label="Opened Date" [(ngModel)]="selectedClaim.opened_date" name="claimOpenedDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      </div>
+      <div class="form-row">
+        <app-ai-date-picker label="Submitted Date" [(ngModel)]="selectedClaim.submitted_date" name="claimSubmittedDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      </div>
     </div>
     <div class="form-row-2">
-      <div class="form-row"><label>Closed Date</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.closed_date"></div>
-      <div class="form-row"><label>Next Follow-up</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.next_followup_date"></div>
+      <div class="form-row">
+        <app-ai-date-picker label="Closed Date" [(ngModel)]="selectedClaim.closed_date" name="claimClosedDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      </div>
+      <div class="form-row">
+        <app-ai-date-picker label="Next Follow-up" [(ngModel)]="selectedClaim.next_followup_date" name="claimNextFollowup" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      </div>
     </div>
-    <div class="form-row"><label>Last Contacted</label><input type="date" class="form-input" [(ngModel)]="selectedClaim.last_contacted_date"></div>
+    <div class="form-row">
+      <app-ai-date-picker label="Last Contacted" [(ngModel)]="selectedClaim.last_contacted_date" name="claimLastContacted" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+    </div>
 
     <div class="form-row"><label>Notes</label><textarea class="form-input form-textarea" rows="4" [(ngModel)]="selectedClaim.notes"></textarea></div>
   </div>

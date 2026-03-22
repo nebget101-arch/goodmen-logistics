@@ -50,7 +50,15 @@
               <option value="applicant">applicant</option>
             </select>
           </th>
-          <th><input type="date" [(ngModel)]="driverFilters.hireDate" /></th>
+          <th>
+            <app-ai-date-picker
+              [inline]="true"
+              [(ngModel)]="driverFilters.hireDate"
+              name="dispatchFilterHireDate"
+              ariaLabel="Filter by hire date"
+              placeholder="Hire"
+            ></app-ai-date-picker>
+          </th>
           <th><input type="text" placeholder="Phone" [(ngModel)]="driverFilters.phone" /></th>
           <th><input type="text" placeholder="Email" [(ngModel)]="driverFilters.email" /></th>
           <th><input type="text" placeholder="Truck" [(ngModel)]="driverFilters.truck" /></th>
@@ -156,31 +164,31 @@
                 />
               </div>
               <div class="field">
-                <label for="dob">Date of Birth</label>
-                <input
-                  id="dob"
-                  type="date"
-                  class="form-input"
+                <app-ai-date-picker
+                  inputId="dob"
+                  label="Date of Birth"
                   [(ngModel)]="newDriver.dateOfBirth"
-                />
+                  name="dispatchNewDriverDob"
+                  placeholder="MM/DD/YYYY"
+                ></app-ai-date-picker>
               </div>
               <div class="field">
-                <label for="applicationDate">Application date</label>
-                <input
-                  id="applicationDate"
-                  type="date"
-                  class="form-input"
+                <app-ai-date-picker
+                  inputId="applicationDate"
+                  label="Application date"
                   [(ngModel)]="newDriver.applicationDate"
-                />
+                  name="dispatchNewDriverAppDate"
+                  placeholder="MM/DD/YYYY"
+                ></app-ai-date-picker>
               </div>
               <div class="field">
-                <label for="hireDate">Hire date</label>
-                <input
-                  id="hireDate"
-                  type="date"
-                  class="form-input"
+                <app-ai-date-picker
+                  inputId="hireDate"
+                  label="Hire date"
                   [(ngModel)]="newDriver.hireDate"
-                />
+                  name="dispatchNewDriverHireDate"
+                  placeholder="MM/DD/YYYY"
+                ></app-ai-date-picker>
               </div>
               <div class="field">
                 <label for="phone">Phone</label>
@@ -324,13 +332,13 @@
                 </select>
               </div>
               <div class="field">
-                <label for="cdlExpiry">CDL Expiry</label>
-                <input
-                  id="cdlExpiry"
-                  type="date"
-                  class="form-input"
+                <app-ai-date-picker
+                  inputId="cdlExpiry"
+                  label="CDL Expiry"
                   [(ngModel)]="newDriver.cdlExpiry"
-                />
+                  name="dispatchNewDriverCdlExpiry"
+                  placeholder="MM/DD/YYYY"
+                ></app-ai-date-picker>
               </div>
             </div>
           </div>
@@ -494,12 +502,22 @@
               <h4 class="comp-section-title"><span class="material-symbols-outlined">event</span> Effective dates</h4>
               <div class="comp-fields-grid comp-dates">
                 <div class="field">
-                  <label for="effectiveStart">Start</label>
-                  <input id="effectiveStart" type="date" class="form-input" [(ngModel)]="newDriver.effectiveStart" />
+                  <app-ai-date-picker
+                    inputId="effectiveStart"
+                    label="Start"
+                    [(ngModel)]="newDriver.effectiveStart"
+                    name="dispatchNewDriverEffectiveStart"
+                    placeholder="MM/DD/YYYY"
+                  ></app-ai-date-picker>
                 </div>
                 <div class="field">
-                  <label for="effectiveEnd">End</label>
-                  <input id="effectiveEnd" type="date" class="form-input" [(ngModel)]="newDriver.effectiveEnd" />
+                  <app-ai-date-picker
+                    inputId="effectiveEnd"
+                    label="End"
+                    [(ngModel)]="newDriver.effectiveEnd"
+                    name="dispatchNewDriverEffectiveEnd"
+                    placeholder="MM/DD/YYYY"
+                  ></app-ai-date-picker>
                 </div>
               </div>
             </div>
@@ -549,8 +567,22 @@
                   <div class="deduction-inline-editor" *ngIf="editingRecurringDeductionId === d.id">
                     <input type="text" class="form-input" placeholder="Description" [(ngModel)]="editingRecurringDeductionDraft.description" />
                     <input type="number" min="0" step="0.01" class="form-input" placeholder="Amount" [(ngModel)]="editingRecurringDeductionDraft.amount" />
-                    <input type="date" class="form-input" [(ngModel)]="editingRecurringDeductionDraft.start_date" />
-                    <input type="date" class="form-input" [(ngModel)]="editingRecurringDeductionDraft.end_date" />
+                    <app-ai-date-picker
+                      [inline]="true"
+                      [(ngModel)]="editingRecurringDeductionDraft.start_date"
+                      [name]="'edRdStart' + d.id"
+                      [inputId]="'edRdStart' + d.id"
+                      ariaLabel="Deduction start date"
+                      placeholder="Start"
+                    ></app-ai-date-picker>
+                    <app-ai-date-picker
+                      [inline]="true"
+                      [(ngModel)]="editingRecurringDeductionDraft.end_date"
+                      [name]="'edRdEnd' + d.id"
+                      [inputId]="'edRdEnd' + d.id"
+                      ariaLabel="Deduction end date"
+                      placeholder="End"
+                    ></app-ai-date-picker>
                     <button type="button" class="btn btn-primary btn-sm" (click)="saveRecurringDeductionInlineEdit(d)" [disabled]="savingRecurringDeductionEdit || driverBackfilling">
                       {{ savingRecurringDeductionEdit ? 'Saving...' : 'Save' }}
                     </button>
@@ -577,12 +609,24 @@
                 <p class="comp-hint">Recalculate this driver’s past settlements so scheduled deductions are applied retroactively.</p>
                 <div class="deduction-backfill-grid">
                   <div class="field">
-                    <label for="driverBackfillStart">Start date</label>
-                    <input id="driverBackfillStart" type="date" class="form-input" [(ngModel)]="driverBackfill.start_date" (ngModelChange)="onDriverBackfillDateChange()" />
+                    <app-ai-date-picker
+                      inputId="driverBackfillStart"
+                      label="Start date"
+                      [(ngModel)]="driverBackfill.start_date"
+                      (ngModelChange)="onDriverBackfillDateChange()"
+                      name="driverBackfillStart"
+                      placeholder="MM/DD/YYYY"
+                    ></app-ai-date-picker>
                   </div>
                   <div class="field">
-                    <label for="driverBackfillEnd">End date</label>
-                    <input id="driverBackfillEnd" type="date" class="form-input" [(ngModel)]="driverBackfill.end_date" (ngModelChange)="onDriverBackfillDateChange()" />
+                    <app-ai-date-picker
+                      inputId="driverBackfillEnd"
+                      label="End date"
+                      [(ngModel)]="driverBackfill.end_date"
+                      (ngModelChange)="onDriverBackfillDateChange()"
+                      name="driverBackfillEnd"
+                      placeholder="MM/DD/YYYY"
+                    ></app-ai-date-picker>
                   </div>
                   <div class="field">
                     <label for="driverBackfillLimit">Max settlements</label>
@@ -680,8 +724,13 @@
                     </div>
 
                     <div class="field">
-                      <label for="rdStartDate">Start date</label>
-                      <input id="rdStartDate" type="date" class="form-input" [(ngModel)]="newRecurringDeduction.start_date" />
+                      <app-ai-date-picker
+                        inputId="rdStartDate"
+                        label="Start date"
+                        [(ngModel)]="newRecurringDeduction.start_date"
+                        name="newRecurringDeductionStart"
+                        placeholder="MM/DD/YYYY"
+                      ></app-ai-date-picker>
                     </div>
 
                     <div class="field">

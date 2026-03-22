@@ -54,8 +54,6 @@ import { RoadsideAiCallerComponent } from './components/roadside-ai-caller/roads
 import { PaymentMethodFormComponent } from './billing/payment-method-form/payment-method-form.component';
 import { TrialBannerComponent } from './shared/trial-banner/trial-banner.component';
 import { BillingComponent } from './billing/billing.component';
-import { AiDatePickerComponent } from './shared/ai-date-picker/ai-date-picker.component';
-
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
 import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/has-permission.directive';
@@ -105,8 +103,7 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     RoadsideAiCallerComponent,
     PaymentMethodFormComponent,
     TrialBannerComponent,
-    BillingComponent,
-    AiDatePickerComponent
+    BillingComponent
   ],
   imports: [
     BrowserModule,

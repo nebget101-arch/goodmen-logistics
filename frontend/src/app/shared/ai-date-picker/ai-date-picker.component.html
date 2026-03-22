@@ -1,4 +1,9 @@
-<mat-form-field appearance="outline" class="ai-date-picker-field" subscriptSizing="dynamic">
+<mat-form-field
+  appearance="outline"
+  class="ai-date-picker-field"
+  subscriptSizing="dynamic"
+  [floatLabel]="$any(label ? 'auto' : 'never')"
+>
   <mat-label *ngIf="label">{{ label }}</mat-label>
   <input
     matInput

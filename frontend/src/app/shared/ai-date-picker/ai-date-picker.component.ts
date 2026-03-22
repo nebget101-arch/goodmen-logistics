@@ -1,9 +1,11 @@
-import { Component, forwardRef, Input } from '@angular/core';
+import { Component, forwardRef, HostBinding, Input } from '@angular/core';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 
 /**
  * AI-themed date field backed by Angular Material Datepicker.
  * Implements ControlValueAccessor — use with reactive forms or template-driven ngModel.
+ *
+ * Form model value: `YYYY-MM-DD` string or `null` (drop-in for native `<input type="date">`).
  */
 @Component({
   selector: 'app-ai-date-picker',
@@ -29,6 +31,13 @@ export class AiDatePickerComponent implements ControlValueAccessor {
   @Input() max: Date | null = null;
   /** Accessible name when no visible label. */
   @Input() ariaLabel = '';
+  /** Compact layout for tables / filter toolbars. */
+  @Input() inline = false;
+
+  @HostBinding('class.ai-date-picker--inline')
+  get inlineHostClass(): boolean {
+    return this.inline;
+  }
 
   private _disabled = false;
 
@@ -42,14 +51,14 @@ export class AiDatePickerComponent implements ControlValueAccessor {
 
   value: Date | null = null;
 
-  private onChange: (v: Date | null) => void = () => {};
+  private onChange: (v: string | null) => void = () => {};
   private onTouched: () => void = () => {};
 
-  writeValue(obj: Date | null): void {
-    this.value = obj ?? null;
+  writeValue(obj: unknown): void {
+    this.value = this.parseToDate(obj);
   }
 
-  registerOnChange(fn: (v: Date | null) => void): void {
+  registerOnChange(fn: (v: string | null) => void): void {
     this.onChange = fn;
   }
 
@@ -63,10 +72,38 @@ export class AiDatePickerComponent implements ControlValueAccessor {
 
   onDateChange(d: Date | null): void {
     this.value = d;
-    this.onChange(d);
+    this.onChange(d ? this.toIsoLocal(d) : null);
   }
 
   onBlur(): void {
     this.onTouched();
+  }
+
+  private parseToDate(v: unknown): Date | null {
+    if (v == null || v === '') {
+      return null;
+    }
+    if (v instanceof Date) {
+      return Number.isNaN(v.getTime()) ? null : v;
+    }
+    if (typeof v === 'string') {
+      const s = v.trim().slice(0, 10);
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+      if (!m) {
+        return null;
+      }
+      const y = Number(m[1]);
+      const mo = Number(m[2]) - 1;
+      const d = Number(m[3]);
+      return new Date(y, mo, d);
+    }
+    return null;
+  }
+
+  private toIsoLocal(d: Date): string {
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${mo}-${day}`;
   }
 }

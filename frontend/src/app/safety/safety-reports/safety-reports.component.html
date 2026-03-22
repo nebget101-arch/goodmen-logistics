@@ -18,14 +18,30 @@
           <span class="material-symbols-outlined">calendar_month</span>
           From
         </label>
-        <input id="safetyReportsDateFrom" type="date" class="filter-input" [(ngModel)]="filters.dateFrom">
+        <app-ai-date-picker
+          inputId="safetyReportsDateFrom"
+          [inline]="true"
+          class="filter-input"
+          [(ngModel)]="filters.dateFrom"
+          name="safetyReportsDateFrom"
+          ariaLabel="Safety reports from date"
+          placeholder="From"
+        ></app-ai-date-picker>
       </div>
       <div class="form-row-inline">
         <label for="safetyReportsDateTo">
           <span class="material-symbols-outlined">event</span>
           To
         </label>
-        <input id="safetyReportsDateTo" type="date" class="filter-input" [(ngModel)]="filters.dateTo">
+        <app-ai-date-picker
+          inputId="safetyReportsDateTo"
+          [inline]="true"
+          class="filter-input"
+          [(ngModel)]="filters.dateTo"
+          name="safetyReportsDateTo"
+          ariaLabel="Safety reports to date"
+          placeholder="To"
+        ></app-ai-date-picker>
       </div>
       <button type="button" class="btn btn-sm btn-danger" (click)="load()">
         <span class="material-symbols-outlined">tune</span>
