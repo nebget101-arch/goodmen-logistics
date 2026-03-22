@@ -152,6 +152,15 @@ struct LoginView: View {
             }
             .disabled(auth.isLoading || username.isEmpty || password.isEmpty)
             .opacity(auth.isLoading || username.isEmpty || password.isEmpty ? 0.7 : 1)
+
+            Button(action: openForgotPasswordInSafari) {
+                Text("Forgot password?")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppTheme.accentBlue)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the FleetNeuron website to reset your password")
         }
         .padding(24)
         .background(AppTheme.cardBackground)
