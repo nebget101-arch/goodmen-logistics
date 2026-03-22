@@ -46,6 +46,15 @@ Driver app for **iPhone and iPad**: sign in, view **My Loads**, and upload docum
    - For **simulator** pointing at your Mac: use `http://localhost:4000` or `http://127.0.0.1:4000`.
    - For **device** on same Wi‑Fi: use your Mac’s LAN IP, e.g. `http://192.168.1.10:4000`.
 
+5. **Web base URL (forgot password, FN-165)**  
+   - **Info.plist** key **`WEB_BASE_URL`**: public FleetNeuron web origin with **no trailing slash** (default `https://fleetneuron.ai`).  
+   - The login screen opens **`{WEB_BASE_URL}/forgot-password`** in an in-app Safari view. Override for staging (e.g. `https://your-preview.example.com`) or local Angular (`http://localhost:4200`).  
+   - You can also set the **`WEB_BASE_URL`** environment variable in the Run scheme instead of Info.plist.
+
+6. **Multi-entity / MC context (FN-166)**  
+   - The driver app shows the **operating entity / carrier** returned for the signed-in driver (see profile screen).  
+   - **Switching** between multiple carriers for one user is **not** implemented in the native app: tenant and operating-entity scope are determined server-side from the account. Users who need a different default carrier should use the **web** FleetNeuron app or an administrator. Future APIs could add an explicit switcher; until then the app stays **single carrier context per session**.
+
 ## Run on iPhone / iPad
 
 - Choose **My Mac (Designed for iPad)** or a connected **iPhone/iPad**.

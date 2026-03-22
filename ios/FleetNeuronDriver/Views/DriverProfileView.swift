@@ -34,6 +34,7 @@ struct DriverProfileView: View {
 
                 sectionTitle("Carrier")
                 profileRow(label: "MC number", value: mcDisplay)
+                multiEntityFootnote
 
                 sectionTitle("Contact")
                 profileRow(label: "Email", value: emailDisplay)
@@ -126,6 +127,17 @@ struct DriverProfileView: View {
     private var phoneDisplay: String {
         if let p = driver?.phone, !p.isEmpty { return p }
         return "—"
+    }
+
+    /// FN-166: no in-app MC / operating-entity switch API for drivers yet — clarify single-context behavior.
+    private var multiEntityFootnote: some View {
+        Text(
+            "This app uses the carrier (MC) linked to your driver profile. Switching between multiple carriers in one account is not available in the driver app; use the FleetNeuron web app or contact your administrator if you need a different default."
+        )
+        .font(.caption2)
+        .foregroundStyle(AppTheme.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 4)
     }
 
     private func sectionTitle(_ title: String) -> some View {

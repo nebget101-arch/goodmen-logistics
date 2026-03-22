@@ -10,6 +10,7 @@ struct LoginView: View {
     @EnvironmentObject var auth: AuthManager
     @State private var username = ""
     @State private var password = ""
+    @State private var forgotSafariItem: ForgotSafariSheetItem?
 
     var body: some View {
         ZStack {
@@ -47,6 +48,9 @@ struct LoginView: View {
             }
         }
         .onTapGesture { hideKeyboard() }
+        .sheet(item: $forgotSafariItem) { item in
+            SafariWebView(url: item.url)
+        }
     }
 
     private var brandBlock: some View {
@@ -162,6 +166,16 @@ struct LoginView: View {
         auth.clearError()
         Task { await auth.login(username: username, password: password) }
     }
+
+    private func openForgotPasswordInSafari() {
+        guard let url = WebAppURLs.forgotPasswordURL() else { return }
+        forgotSafariItem = ForgotSafariSheetItem(url: url)
+    }
+}
+
+private struct ForgotSafariSheetItem: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
 }
 
 private struct ThemedTextFieldModifier: ViewModifier {
