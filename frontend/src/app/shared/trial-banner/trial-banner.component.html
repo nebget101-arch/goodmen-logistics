@@ -10,7 +10,7 @@
       (ends <strong>{{ state?.trialEnd | date:'mediumDate' }}</strong>).
       You won't be charged until {{ state?.trialEnd | date:'mediumDate' }}.
     </span>
-    <button class="banner-cta" type="button" (click)="openPaymentDialog()">
+    <button *ngIf="canAccessBilling()" class="banner-cta" type="button" (click)="openPaymentDialog()">
       Add payment method →
     </button>
   </div>
@@ -29,7 +29,7 @@
       </ng-container>
       No action needed.
     </span>
-    <button class="banner-cta banner-cta-outline" type="button" (click)="openPaymentDialog()">
+    <button *ngIf="canAccessBilling()" class="banner-cta banner-cta-outline" type="button" (click)="openPaymentDialog()">
       Manage card
     </button>
   </div>
@@ -40,7 +40,7 @@
     <span class="banner-text">
       Your trial has ended.
     </span>
-    <button class="banner-cta" type="button" (click)="openPaymentDialog()">
+    <button *ngIf="canAccessBilling()" class="banner-cta" type="button" (click)="openPaymentDialog()">
       Add payment method → to reactivate your account
     </button>
   </div>

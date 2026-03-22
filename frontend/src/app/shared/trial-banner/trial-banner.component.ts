@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { TrialStateService, TrialState } from '../services/trial-state.service';
+import { AccessControlService } from '../../services/access-control.service';
 import { PaymentMethodFormComponent } from '../../billing/payment-method-form/payment-method-form.component';
 
 @Component({
@@ -15,7 +16,8 @@ export class TrialBannerComponent implements OnInit, OnDestroy {
 
   constructor(
     private readonly trialState: TrialStateService,
-    private readonly dialog: MatDialog
+    private readonly dialog: MatDialog,
+    private readonly access: AccessControlService
   ) {}
 
   ngOnInit(): void {
@@ -37,6 +39,10 @@ export class TrialBannerComponent implements OnInit, OnDestroy {
       return s.hasPaymentMethod ? 'state-b' : 'state-a';
     }
     return 'hidden';
+  }
+
+  canAccessBilling(): boolean {
+    return this.access.canAccessBilling();
   }
 
   openPaymentDialog(): void {
