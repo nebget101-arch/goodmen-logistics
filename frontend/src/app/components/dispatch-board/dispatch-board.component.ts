@@ -57,6 +57,19 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
   ];
   selectedSortOption = this.sortOptions[0];
 
+  get sortSelectOptions(): { value: string; label: string }[] {
+    return this.sortOptions.map(o => ({ value: `${o.value}_${o.dir}`, label: o.label }));
+  }
+  get selectedSortKey(): string {
+    return `${this.sortField}_${this.sortDir}`;
+  }
+  onSortSelect(key: string | null): void {
+    if (!key) return;
+    const [v, d] = key.split('_');
+    const opt = this.sortOptions.find(o => o.value === v && o.dir === d);
+    if (opt) this.setSort(opt);
+  }
+
   filterBy: 'all' | 'today' | 'tomorrow' | 'ready' | 'unassigned' = 'all';
   filterOptions = [
     { value: 'all', label: 'All' },
@@ -68,6 +81,9 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
 
   loadStatusFilter: string = '';
   loadStatusOptions: StatusCode[] = [];
+  get loadStatusSelectOptions(): { value: string; label: string }[] {
+    return this.loadStatusOptions.map(s => ({ value: s.code, label: s.display_label }));
+  }
 
   private loadStatusMap = new Map<string, StatusCode>();
   private billingStatusMap = new Map<string, StatusCode>();

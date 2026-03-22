@@ -393,11 +393,12 @@
 
   <div class="tab-content" *ngIf="activeTab === 'notes'">
     <div class="note-form">
-      <select class="form-control" [(ngModel)]="notePayload.note_type">
-        <option value="GENERAL">General</option>
-        <option value="BILLING">Billing</option>
-        <option value="SERVICE_ISSUE">Service Issue</option>
-      </select>
+      <app-ai-select
+        label="Note Type"
+        [options]="noteTypeOptions"
+        [(ngModel)]="notePayload.note_type"
+        placeholder="Select type"
+      ></app-ai-select>
       <textarea class="form-control" [(ngModel)]="notePayload.note" placeholder="Add a note"></textarea>
       <button class="btn btn-primary" (click)="addNote()">Add Note</button>
     </div>

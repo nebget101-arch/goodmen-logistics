@@ -48,13 +48,18 @@ export class SettlementListComponent implements OnInit, OnDestroy {
 
   /** Backend uses: preparing | ready_for_review | approved | paid | void */
   statusOptions = [
-    { value: '', label: 'All statuses' },
     { value: 'preparing', label: 'Draft / Preparing' },
     { value: 'ready_for_review', label: 'Pending approval' },
     { value: 'approved', label: 'Approved' },
     { value: 'paid', label: 'Paid' },
     { value: 'void', label: 'Void' }
   ];
+  get statusSelectOptions(): { value: string; label: string }[] {
+    return this.statusOptions;
+  }
+  get driverSelectOptions(): { value: string; label: string }[] {
+    return this.drivers.map(d => ({ value: d.id, label: this.getDriverDisplayName(d) }));
+  }
 
   constructor(
     private apiService: ApiService,

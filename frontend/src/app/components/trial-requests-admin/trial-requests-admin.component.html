@@ -10,18 +10,14 @@
     </div>
 
     <div class="header-actions">
-      <label class="field-inline" for="trialStatusFilter">
-        <span class="material-symbols-outlined">filter_alt</span>
-        <span>Status</span>
-      </label>
-      <select
-        id="trialStatusFilter"
-        class="form-select status-filter"
-        [ngModel]="selectedStatus"
+      <app-ai-select
+        inputId="trialStatusFilter"
+        label="Status"
+        [options]="statusOptions"
+        [(ngModel)]="selectedStatus"
         (ngModelChange)="onStatusFilterChange($event)"
-      >
-        <option *ngFor="let s of statusOptions" [value]="s.value">{{ s.label }}</option>
-      </select>
+        placeholder="Filter by status"
+      ></app-ai-select>
 
       <button type="button" class="btn btn-secondary" [disabled]="refreshing" (click)="loadTrialRequests(true)">
         <span class="material-symbols-outlined">refresh</span>

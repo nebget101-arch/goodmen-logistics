@@ -22,6 +22,10 @@ export class CustomerFormComponent implements OnInit {
   statuses = ['ACTIVE', 'INACTIVE'];
   paymentTerms = ['DUE_ON_RECEIPT', 'NET_15', 'NET_30', 'CUSTOM'];
 
+  get customerTypeOptions() { return this.customerTypes.map((t) => ({ value: t, label: t })); }
+  get statusOptions() { return this.statuses.map((s) => ({ value: s, label: s })); }
+  get paymentTermsOptions() { return this.paymentTerms.map((p) => ({ value: p, label: p })); }
+
   constructor(
     private fb: FormBuilder,
     private route: ActivatedRoute,

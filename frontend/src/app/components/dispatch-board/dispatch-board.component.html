@@ -23,12 +23,20 @@
           (valueChange)="onDatePickerChange($event)"
         ></app-date-picker>
       </div>
-      <select class="select-sort" [(ngModel)]="selectedSortOption" (ngModelChange)="setSort($event)">
-        <option *ngFor="let o of sortOptions" [ngValue]="o">{{ o.label }}</option>
-      </select>
-      <select class="select-filter" [(ngModel)]="filterBy" (change)="setFilterBy(filterBy)">
-        <option *ngFor="let o of filterOptions" [value]="o.value">{{ o.label }}</option>
-      </select>
+      <app-ai-select
+        class="select-sort"
+        [options]="sortSelectOptions"
+        [ngModel]="selectedSortKey"
+        (ngModelChange)="onSortSelect($event)"
+        placeholder="Sort"
+      ></app-ai-select>
+      <app-ai-select
+        class="select-filter"
+        [options]="filterOptions"
+        [ngModel]="filterBy"
+        (ngModelChange)="setFilterBy($event)"
+        placeholder="Filter"
+      ></app-ai-select>
       <div class="driver-filter-dropdown">
         <button type="button" class="btn-dropdown" (click)="driverFilterOpen = !driverFilterOpen">
           Drivers: {{ driverFilterLabel }}
@@ -51,10 +59,15 @@
         <span class="material-symbols-outlined">add</span>
         New Load
       </button>
-      <select class="select-filter" [(ngModel)]="loadStatusFilter" (change)="setLoadStatusFilter(loadStatusFilter)">
-        <option value="">All Load Statuses</option>
-        <option *ngFor="let s of loadStatusOptions" [value]="s.code">{{ s.display_label }}</option>
-      </select>
+      <app-ai-select
+        class="select-filter"
+        [options]="loadStatusSelectOptions"
+        [ngModel]="loadStatusFilter"
+        (ngModelChange)="setLoadStatusFilter($event)"
+        placeholder="Load status"
+        [allowEmpty]="true"
+        emptyLabel="All Load Statuses"
+      ></app-ai-select>
       <input
         type="text"
         class="search-input"

@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { SharedModule } from '../shared/shared.module';
 import { SafetyRoutingModule } from './safety-routing.module';
 
 import { SafetyShellComponent } from './safety-shell/safety-shell.component';
@@ -25,6 +26,7 @@ import { SafetyReportsComponent } from './safety-reports/safety-reports.componen
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
+    SharedModule,
     SafetyRoutingModule,
   ]
 })

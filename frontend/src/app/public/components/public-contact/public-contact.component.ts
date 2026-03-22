@@ -114,4 +114,13 @@ export class PublicContactComponent implements OnInit, OnDestroy {
   get message() {
     return this.contactForm.get('message');
   }
+
+  fleetSizeOptions: { value: string; label: string }[] = [
+    { value: '1-10', label: '1-10 vehicles' },
+    { value: '11-50', label: '11-50 vehicles' },
+    { value: '51-100', label: '51-100 vehicles' },
+    { value: '101-250', label: '101-250 vehicles' },
+    { value: '251-500', label: '251-500 vehicles' },
+    { value: '501+', label: '500+ vehicles' }
+  ];
 }

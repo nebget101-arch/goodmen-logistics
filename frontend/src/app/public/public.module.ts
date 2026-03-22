@@ -7,6 +7,7 @@ import { PublicHomeComponent } from './components/public-home/public-home.compon
 import { PublicTrialComponent } from './components/public-trial/public-trial.component';
 import { PublicTrialSignupComponent } from './components/public-trial-signup/public-trial-signup.component';
 import { PublicContactComponent } from './components/public-contact/public-contact.component';
+import { SharedModule } from '../shared/shared.module';
 
 @NgModule({
   declarations: [
@@ -20,7 +21,8 @@ import { PublicContactComponent } from './components/public-contact/public-conta
     RouterModule,
     FormsModule,
     ReactiveFormsModule,
-    PublicRoutingModule
+    PublicRoutingModule,
+    SharedModule
   ]
 })
 export class PublicModule {}
