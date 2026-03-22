@@ -31,10 +31,11 @@
     box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
   }
 
+  /* Match app-ai-date-picker / .form-input row height (~38px infix) */
   .mat-mdc-form-field-infix {
-    min-height: 44px;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    min-height: 38px;
+    padding-top: 8px;
+    padding-bottom: 8px;
   }
 
   .mat-mdc-select-value,

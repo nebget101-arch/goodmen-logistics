@@ -31,6 +31,7 @@ import { LeaseFinancingService } from '../../lease-financing.service';
               [(ngModel)]="model.agreement_start_date"
               name="agreement_start_date"
               inputId="leaseAgreementStartDate"
+              [label]="''"
               ariaLabel="Agreement start date"
               placeholder="MM/DD/YYYY"
             ></app-ai-date-picker>

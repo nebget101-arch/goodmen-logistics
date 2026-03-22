@@ -11,6 +11,8 @@
   --background: #020617;
   --card-background: #020617;
   --border-color: rgba(31, 41, 55, 0.9);
+  /* Native <select> chevron when appearance:none (matches slate-400 icons) */
+  --fn-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none'%3E%3Cpath stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 
 * {
@@ -1196,10 +1198,37 @@ body {
   border-color: #0ea5e9;
 }
 
+/* Legacy single-select: same vertical size as text fields */
+select.form-control:not([multiple]) {
+  min-height: 42px;
+  padding: 10px 36px 10px 10px;
+  line-height: 1.25;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  color-scheme: dark;
+  background:
+    var(--fn-select-chevron) no-repeat right 12px center / 12px,
+    rgba(15, 23, 42, 0.98);
+}
+
+select.form-control:not([multiple]):focus {
+  background:
+    var(--fn-select-chevron) no-repeat right 12px center / 12px,
+    rgba(15, 23, 42, 0.98);
+}
+
+select.form-control option {
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
 /* AI theme form inputs (FN-149) — dark, 10px radius, cyan focus per AI_THEME_VISUAL_REFERENCE */
 .form-input,
 input.form-input,
-textarea.form-input {
+textarea.form-input,
+select.form-input {
   width: 100%;
   border: 1px solid rgba(71, 85, 105, 0.95);
   border-radius: 10px;
@@ -1216,7 +1245,8 @@ textarea.form-input {
 
 .form-input:focus,
 input.form-input:focus,
-textarea.form-input:focus {
+textarea.form-input:focus,
+select.form-input:focus {
   border-color: rgba(56, 189, 248, 0.95);
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
 }
@@ -1232,6 +1262,42 @@ textarea.form-input:focus {
 textarea.form-input {
   resize: vertical;
   min-height: 80px;
+}
+
+/* Native <select> matches text input height (OS widgets ignore vertical padding and render shorter) */
+select.form-input:not([multiple]) {
+  min-height: 42px;
+  padding: 10px 36px 10px 12px;
+  line-height: 1.25;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  color-scheme: dark;
+  background:
+    var(--fn-select-chevron) no-repeat right 12px center / 12px,
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.08), transparent 52%),
+    rgba(2, 6, 23, 0.8);
+}
+
+select.form-input:not([multiple]):focus {
+  background:
+    var(--fn-select-chevron) no-repeat right 12px center / 12px,
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.08), transparent 52%),
+    rgba(2, 6, 23, 0.8);
+}
+
+select.form-input.error:not([multiple]),
+select.form-input.form-input-error:not([multiple]) {
+  background:
+    var(--fn-select-chevron) no-repeat right 12px center / 12px,
+    radial-gradient(circle at 0 0, rgba(239, 68, 68, 0.1), transparent 52%),
+    rgba(2, 6, 23, 0.8);
+}
+
+select.form-input option {
+  background: #0f172a;
+  color: #e5e7eb;
 }
 
 /* Date & datetime pickers */
