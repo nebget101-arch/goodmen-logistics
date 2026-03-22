@@ -380,6 +380,42 @@
     </div>
   </section>
 
+  <!-- ═══════════════════ SOCIAL PROOF (FN-7) ═══════════════════ -->
+  <section class="pub-section pub-social-section" id="social-proof" aria-labelledby="pub-social-heading">
+    <div class="pub-section-inner">
+      <div class="pub-section-label">Trusted by teams on the road</div>
+      <h2 class="pub-section-title" id="pub-social-heading">Proof from the operations floor</h2>
+      <p class="pub-section-sub">
+        Carriers and fleet leaders use FleetNeuron to centralize dispatch, safety, and maintenance —
+        with AI that removes busywork instead of adding another silo.
+      </p>
+
+      <div class="pub-social-stats" role="list">
+        <div class="pub-social-stat" *ngFor="let s of socialProof.stats" role="listitem">
+          <span class="pub-social-stat-value">{{ s.value }}</span>
+          <span class="pub-social-stat-label">{{ s.label }}</span>
+        </div>
+      </div>
+
+      <div class="pub-social-quotes">
+        <figure class="pub-social-quote" *ngFor="let q of socialProof.quotes">
+          <blockquote class="pub-social-quote-body">
+            <p>“{{ q.quote }}”</p>
+          </blockquote>
+          <figcaption class="pub-social-quote-by">{{ q.attribution }}</figcaption>
+        </figure>
+      </div>
+
+      <div class="pub-social-logos-label">Teams &amp; segments we build for</div>
+      <div class="pub-social-logos">
+        <div class="pub-social-logo" *ngFor="let logo of socialProof.logos">
+          <span class="pub-social-logo-initials" aria-hidden="true">{{ logo.initials }}</span>
+          <span class="pub-social-logo-name">{{ logo.label }}</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══════════════════ PRICING ═══════════════════ -->
   <section class="pub-section" id="pricing">
     <div class="pub-section-inner">

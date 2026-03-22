@@ -7,7 +7,8 @@ import {
   MARKETING_FEATURES,
   MARKETING_PLANS,
   HOW_IT_WORKS_STEPS,
-  AI_BENEFITS
+  AI_BENEFITS,
+  SOCIAL_PROOF
 } from '../../config/marketing.config';
 
 @Component({
@@ -20,6 +21,7 @@ export class PublicHomeComponent implements OnInit {
   plans = MARKETING_PLANS;
   steps = HOW_IT_WORKS_STEPS;
   aiBenefits = AI_BENEFITS;
+  socialProof = SOCIAL_PROOF;
   selectedFeature: MarketingFeature | null = null;
 
   mobileNavOpen = false;
