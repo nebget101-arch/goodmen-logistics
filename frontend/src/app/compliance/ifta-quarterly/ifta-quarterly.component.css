@@ -434,6 +434,21 @@ select:focus {
   margin: 14px 0;
 }
 
+.ifta-new-fuel-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ifta-new-fuel-date-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(147, 197, 253, 0.92);
+}
+
 /* Tables */
 .table-wrap {
   overflow-x: auto;

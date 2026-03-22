@@ -82,7 +82,27 @@
   padding: 7px 10px;
   font-size: 13px;
   min-width: 130px;
+  min-height: 36px;
+  line-height: 1.25;
+  box-sizing: border-box;
   outline: none;
+}
+
+.filter-input:is(select):not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 7px 30px 7px 10px;
+  cursor: pointer;
+  color-scheme: dark;
+  background:
+    var(--fn-select-chevron) no-repeat right 8px center / 12px,
+    rgba(255,255,255,0.05);
+}
+
+.filter-input:is(select):not([multiple]):focus {
+  background:
+    var(--fn-select-chevron) no-repeat right 8px center / 12px,
+    rgba(251, 191, 36, 0.04);
 }
 
 .filter-input:focus {

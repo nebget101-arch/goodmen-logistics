@@ -30,6 +30,8 @@ Shared AI-themed date field using Angular Material `MatDatepicker`. Styling alig
 
 Form / `ngModel` value: `YYYY-MM-DD` string or `null` (same as native `type="date"`).
 
+**Visible labels (a11y + sighted users):** Use either the `label` input (Material floating label) **or** a real HTML `<label for="inputId">` with `[label]="''"` on the picker so the control is not identified only by placeholder/`ariaLabel`.
+
 ## Dependencies
 
 Declared in `AppModule` with `MatDatepickerModule`, `MatNativeDateModule`, `MatFormFieldModule`, `MatInputModule`, `FormsModule`.
