@@ -10,7 +10,8 @@ import SwiftUI
 final class AuthManager: ObservableObject {
     static let shared = AuthManager()
 
-    private let tokenKey = "FleetNeuronDriver.token"
+    /// Legacy UserDefaults key; JWT must not remain here after migration (FN-161).
+    private let legacyTokenUserDefaultsKey = "FleetNeuronDriver.token"
     private let roleKey = "FleetNeuronDriver.role"
     private let driverIdKey = "FleetNeuronDriver.driverId"
     private let usernameKey = "FleetNeuronDriver.username"
@@ -25,10 +26,24 @@ final class AuthManager: ObservableObject {
     var isLoggedIn: Bool { token != nil && !(token?.isEmpty ?? true) }
 
     private init() {
-        token = UserDefaults.standard.string(forKey: tokenKey)
+        migrateJWTFromUserDefaultsIfNeeded()
+        token = KeychainHelper.readJWT()
         role = UserDefaults.standard.string(forKey: roleKey)
         driverId = UserDefaults.standard.string(forKey: driverIdKey)
         username = UserDefaults.standard.string(forKey: usernameKey)
+    }
+
+    /// One-time migration: copy JWT from UserDefaults into Keychain and remove from defaults.
+    private func migrateJWTFromUserDefaultsIfNeeded() {
+        if KeychainHelper.readJWT() != nil {
+            UserDefaults.standard.removeObject(forKey: legacyTokenUserDefaultsKey)
+            return
+        }
+        guard let legacy = UserDefaults.standard.string(forKey: legacyTokenUserDefaultsKey),
+              !legacy.isEmpty
+        else { return }
+        _ = KeychainHelper.saveJWT(legacy)
+        UserDefaults.standard.removeObject(forKey: legacyTokenUserDefaultsKey)
     }
 
     func login(username: String, password: String) async {
@@ -46,7 +61,8 @@ final class AuthManager: ObservableObject {
                 self.role = res.role
                 self.username = res.username
                 self.driverId = did
-                UserDefaults.standard.set(res.token, forKey: self.tokenKey)
+                _ = KeychainHelper.saveJWT(res.token)
+                UserDefaults.standard.removeObject(forKey: self.legacyTokenUserDefaultsKey)
                 UserDefaults.standard.set(res.role, forKey: self.roleKey)
                 UserDefaults.standard.set(res.username, forKey: self.usernameKey)
                 if let d = did { UserDefaults.standard.set(d, forKey: driverIdKey) }
@@ -62,7 +78,8 @@ final class AuthManager: ObservableObject {
         role = nil
         driverId = nil
         username = nil
-        UserDefaults.standard.removeObject(forKey: tokenKey)
+        KeychainHelper.deleteJWT()
+        UserDefaults.standard.removeObject(forKey: legacyTokenUserDefaultsKey)
         UserDefaults.standard.removeObject(forKey: roleKey)
         UserDefaults.standard.removeObject(forKey: driverIdKey)
         UserDefaults.standard.removeObject(forKey: usernameKey)
