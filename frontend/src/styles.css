@@ -1116,6 +1116,7 @@ body {
   color: var(--text-dark);
 }
 
+/* Legacy form-control — prefer form-input for AI theme */
 .form-control {
   width: 100%;
   padding: 10px;
@@ -1129,6 +1130,44 @@ body {
 .form-control:focus {
   outline: none;
   border-color: #0ea5e9;
+}
+
+/* AI theme form inputs (FN-149) — dark, 10px radius, cyan focus per AI_THEME_VISUAL_REFERENCE */
+.form-input,
+input.form-input,
+textarea.form-input {
+  width: 100%;
+  border: 1px solid rgba(71, 85, 105, 0.95);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #e5e7eb;
+  background:
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.08), transparent 52%),
+    rgba(2, 6, 23, 0.8);
+  outline: none;
+  font-size: 14px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  box-sizing: border-box;
+}
+
+.form-input:focus,
+input.form-input:focus,
+textarea.form-input:focus {
+  border-color: rgba(56, 189, 248, 0.95);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+.form-input.error,
+.form-input.form-input-error {
+  border-color: rgba(239, 68, 68, 0.8);
+  background:
+    radial-gradient(circle at 0 0, rgba(239, 68, 68, 0.1), transparent 52%),
+    rgba(2, 6, 23, 0.8);
+}
+
+textarea.form-input {
+  resize: vertical;
+  min-height: 80px;
 }
 
 /* Date & datetime pickers */

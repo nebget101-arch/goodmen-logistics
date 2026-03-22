@@ -121,37 +121,29 @@
   color: rgba(203, 213, 225, 0.9);
 }
 
-.vehicle-form-modal .form-control {
+/* AI theme form-input (extends global) — cyan focus per AI_THEME_VISUAL_REFERENCE */
+.vehicle-form-modal .form-input {
   padding: 10px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.8);
   border-radius: 10px;
   font-size: 14px;
-  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.25), transparent 55%),
-    rgba(15, 23, 42, 0.98);
-  color: var(--text-dark);
-  transition: all 0.2s ease;
-  box-sizing: border-box;
 }
 
-.vehicle-form-modal .form-control:focus {
-  outline: none;
-  border-color: rgba(34, 197, 94, 0.9);
-  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.5);
+.vehicle-form-modal .form-input:focus {
+  border-color: rgba(56, 189, 248, 0.95);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
 }
 
-.vehicle-form-modal .form-control.error {
+.vehicle-form-modal .form-input.error {
   border-color: rgba(239, 68, 68, 0.8);
-  background: radial-gradient(circle at 0 0, rgba(239, 68, 68, 0.15), transparent 55%),
-    rgba(15, 23, 42, 0.98);
 }
 
-.vehicle-form-modal .form-control[readonly] {
+.vehicle-form-modal .form-input[readonly] {
   background: rgba(30, 41, 59, 0.6);
   color: var(--text-light);
   cursor: not-allowed;
 }
 
-.vehicle-form-modal textarea.form-control {
+.vehicle-form-modal textarea.form-input {
   resize: vertical;
   min-height: 80px;
 }

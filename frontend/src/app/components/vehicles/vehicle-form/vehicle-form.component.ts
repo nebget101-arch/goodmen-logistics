@@ -112,6 +112,23 @@ export class VehicleFormComponent implements OnInit, OnChanges {
     'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
   ];
 
+  get stateSelectOptions(): { value: string; label: string }[] {
+    return this.states.map(s => ({ value: s, label: s }));
+  }
+
+  get driverSelectOptions(): { value: string; label: string }[] {
+    return this.drivers.map(d => ({ value: d.id, label: `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Unknown' }));
+  }
+
+  get makeSelectOptions(): { value: string; label: string }[] {
+    return this.makes.map(m => ({ value: m, label: m }));
+  }
+
+  statusSelectOptions = [
+    { value: 'in-service', label: 'In Service' },
+    { value: 'out-of-service', label: 'Out of Service' }
+  ];
+
   makes = ['Freightliner', 'Kenworth', 'Peterbilt', 'Volvo', 'Mack', 'International', 'Western Star'];
 
   readonly trailerTypeOptions = [

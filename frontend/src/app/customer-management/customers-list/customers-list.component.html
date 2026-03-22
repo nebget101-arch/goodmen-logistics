@@ -57,7 +57,7 @@
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
 
   <div class="filters customers-filters">
-    <input class="form-control" placeholder="Search company, phone, email" [(ngModel)]="filters.search" (input)="loadCustomers()" />
+    <input class="form-input" placeholder="Search company, phone, email" [(ngModel)]="filters.search" (input)="loadCustomers()" />
 
     <app-ai-select
       label="Type"
