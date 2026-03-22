@@ -35,6 +35,15 @@ export class InvoicesListComponent implements OnInit, OnDestroy {
   };
 
   statuses = ['DRAFT', 'SENT', 'PARTIAL', 'PAID', 'VOID'];
+  get statusSelectOptions(): { value: string; label: string }[] {
+    return this.statuses.map(s => ({ value: s, label: s }));
+  }
+  get customerSelectOptions(): { value: string; label: string }[] {
+    return this.customers.map(c => ({ value: c.id, label: c.company_name }));
+  }
+  get locationSelectOptions(): { value: string; label: string }[] {
+    return this.locations.map(l => ({ value: l.id, label: l.name }));
+  }
 
   constructor(
     private invoiceService: InvoiceService,

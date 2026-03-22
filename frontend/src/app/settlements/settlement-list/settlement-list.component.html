@@ -20,16 +20,27 @@
     </div>
     <div class="filter-group">
       <label for="filter-driver">Driver</label>
-      <select id="filter-driver" class="form-select" [(ngModel)]="filters.driverId" (change)="loadSettlements()">
-        <option value="">All drivers</option>
-        <option *ngFor="let d of drivers" [value]="d.id">{{ getDriverDisplayName(d) }}</option>
-      </select>
+      <app-ai-select
+        inputId="filter-driver"
+        class="form-select"
+        [options]="driverSelectOptions"
+        [ngModel]="filters.driverId"
+        (ngModelChange)="filters.driverId = $event; loadSettlements()"
+        [allowEmpty]="true"
+        emptyLabel="All drivers"
+      ></app-ai-select>
     </div>
     <div class="filter-group">
       <label for="filter-status">Status</label>
-      <select id="filter-status" class="form-select" [(ngModel)]="filters.status" (change)="loadSettlements()">
-        <option *ngFor="let o of statusOptions" [value]="o.value">{{ o.label }}</option>
-      </select>
+      <app-ai-select
+        inputId="filter-status"
+        class="form-select"
+        [options]="statusSelectOptions"
+        [ngModel]="filters.status"
+        (ngModelChange)="filters.status = $event; loadSettlements()"
+        [allowEmpty]="true"
+        emptyLabel="All statuses"
+      ></app-ai-select>
     </div>
     <div class="filter-group filter-actions">
       <button type="button" class="btn-secondary" (click)="clearFilters()">Clear filters</button>

@@ -42,40 +42,28 @@
 
         <!-- Status Filter -->
         <div class="control-group filter-group">
-          <label for="status-filter" class="control-label">
-            <span class="material-symbols-outlined" aria-hidden="true">insights</span>
-            Status
-          </label>
-          <select
-            id="status-filter"
-            class="form-control filter-select"
+          <app-ai-select
+            inputId="status-filter"
+            label="Status"
+            [options]="statusOptions"
             [(ngModel)]="selectedStatus"
-            (change)="onStatusChange(selectedStatus)"
-            aria-label="Filter vehicles by status"
-          >
-            <option *ngFor="let option of statusOptions" [value]="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+            (ngModelChange)="onStatusChange($event)"
+            placeholder="Filter by status"
+            ariaLabel="Filter vehicles by status"
+          ></app-ai-select>
         </div>
 
         <!-- Items Per Page -->
         <div class="control-group pagesize-group">
-          <label for="page-size" class="control-label">
-            <span class="material-symbols-outlined" aria-hidden="true">view_list</span>
-            Show
-          </label>
-          <select
-            id="page-size"
-            class="form-control pagesize-select"
-            [value]="itemsPerPage"
-            (change)="onPageSizeChange(+$any($event.target).value)"
-            aria-label="Items per page"
-          >
-            <option *ngFor="let size of pageSizeOptions" [value]="size">
-              {{ size }} items
-            </option>
-          </select>
+          <app-ai-select
+            inputId="page-size"
+            label="Show"
+            [options]="pageSizeSelectOptions"
+            [(ngModel)]="itemsPerPage"
+            (ngModelChange)="onPageSizeChange($event)"
+            placeholder="Items per page"
+            ariaLabel="Items per page"
+          ></app-ai-select>
         </div>
 
         <!-- Clear Filters Button -->

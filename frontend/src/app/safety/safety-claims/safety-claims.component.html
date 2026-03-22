@@ -8,14 +8,22 @@
 
   <!-- Filters -->
   <div class="filters-row">
-    <select class="filter-select" [(ngModel)]="filters.status" (change)="applyFilters()">
-      <option value="">All Statuses</option>
-      <option *ngFor="let s of STATUSES" [value]="s">{{ s | titlecase }}</option>
-    </select>
-    <select class="filter-select" [(ngModel)]="filters.claim_type" (change)="applyFilters()">
-      <option value="">All Claim Types</option>
-      <option *ngFor="let t of CLAIM_TYPES" [value]="t">{{ t | titlecase }}</option>
-    </select>
+    <app-ai-select
+      class="filter-select"
+      [options]="statusSelectOptions"
+      [ngModel]="filters.status"
+      (ngModelChange)="filters.status = $event; applyFilters()"
+      [allowEmpty]="true"
+      emptyLabel="All Statuses"
+    ></app-ai-select>
+    <app-ai-select
+      class="filter-select"
+      [options]="claimTypeSelectOptions"
+      [ngModel]="filters.claim_type"
+      (ngModelChange)="filters.claim_type = $event; applyFilters()"
+      [allowEmpty]="true"
+      emptyLabel="All Claim Types"
+    ></app-ai-select>
     <label class="checkbox-chip">
       <input type="checkbox" [(ngModel)]="filters.overdue_only" (change)="applyFilters()"> Overdue follow-up only
     </label>
@@ -85,15 +93,11 @@
     <div class="form-row-2">
       <div class="form-row">
         <label>Status</label>
-        <select class="form-input" [(ngModel)]="selectedClaim.status">
-          <option *ngFor="let s of STATUSES" [value]="s">{{ s | titlecase }}</option>
-        </select>
+        <app-ai-select class="form-input" [options]="statusSelectOptions" [(ngModel)]="selectedClaim.status" placeholder="Status"></app-ai-select>
       </div>
       <div class="form-row">
         <label>Claim Type</label>
-        <select class="form-input" [(ngModel)]="selectedClaim.claim_type">
-          <option *ngFor="let t of CLAIM_TYPES" [value]="t">{{ t | titlecase }}</option>
-        </select>
+        <app-ai-select class="form-input" [options]="claimTypeSelectOptions" [(ngModel)]="selectedClaim.claim_type" placeholder="Claim type"></app-ai-select>
       </div>
     </div>
 

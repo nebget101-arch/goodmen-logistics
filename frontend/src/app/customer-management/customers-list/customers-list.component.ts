@@ -47,6 +47,11 @@ export class CustomersListComponent implements OnInit {
   statuses = ['ACTIVE', 'INACTIVE'];
   paymentTerms = ['DUE_ON_RECEIPT', 'NET_15', 'NET_30', 'CUSTOM'];
 
+  get typeOptions() { return this.customerTypes.map((t) => ({ value: t, label: t })); }
+  get statusOptions() { return this.statuses.map((s) => ({ value: s, label: s })); }
+  get paymentTermsOptions() { return this.paymentTerms.map((p) => ({ value: p, label: p })); }
+  get locationOptions() { return this.locations.map((l) => ({ value: l.id, label: l.name })); }
+
   constructor(
     private customerService: ShopClientsService,
     private router: Router,

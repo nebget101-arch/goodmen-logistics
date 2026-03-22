@@ -28,6 +28,13 @@ export class SafetyAccidentsComponent implements OnInit {
   readonly SEVERITIES = ['critical', 'major', 'minor', 'near_miss'];
   readonly TYPES = ['collision', 'cargo_damage', 'injury', 'property_damage', 'spill', 'near_miss', 'other'];
   readonly PREVENTABILITIES = ['preventable', 'non_preventable', 'undetermined'];
+  private titleCase(s: string): string {
+    return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+  get statusSelectOptions(): { value: string; label: string }[] { return this.STATUSES.map(s => ({ value: s, label: this.titleCase(s) })); }
+  get severitySelectOptions(): { value: string; label: string }[] { return this.SEVERITIES.map(s => ({ value: s, label: this.titleCase(s) })); }
+  get typeSelectOptions(): { value: string; label: string }[] { return this.TYPES.map(t => ({ value: t, label: this.titleCase(t) })); }
+  get preventabilitySelectOptions(): { value: string; label: string }[] { return this.PREVENTABILITIES.map(p => ({ value: p, label: this.titleCase(p) })); }
 
   constructor(private safety: SafetyService, private router: Router, private route: ActivatedRoute) {}
 

@@ -21,6 +21,12 @@ export class SafetyClaimsComponent implements OnInit {
 
   readonly STATUSES = ['open', 'submitted', 'under_investigation', 'settled', 'closed', 'denied', 'litigated'];
   readonly CLAIM_TYPES = ['auto_liability', 'cargo', 'general_liability', 'workers_comp', 'property'];
+  get statusSelectOptions(): { value: string; label: string }[] {
+    return this.STATUSES.map(s => ({ value: s, label: s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
+  }
+  get claimTypeSelectOptions(): { value: string; label: string }[] {
+    return this.CLAIM_TYPES.map(t => ({ value: t, label: t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
+  }
 
   constructor(private safety: SafetyService, private route: ActivatedRoute) {}
 

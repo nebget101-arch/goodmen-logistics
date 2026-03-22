@@ -16,6 +16,12 @@ export class SafetyTasksComponent implements OnInit {
     status: '',
     assigned_to: ''
   };
+  statusSelectOptions = [
+    { value: 'open', label: 'Open' },
+    { value: 'in_progress', label: 'In progress' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'overdue', label: 'Overdue' }
+  ];
 
   constructor(private safety: SafetyService) {}
 

@@ -13,18 +13,30 @@
   <!-- Filters -->
   <div class="filters-row">
     <input class="filter-input" type="text" placeholder="Search by #, city, narrative…" [(ngModel)]="filters.search" (keyup.enter)="applyFilters()">
-    <select class="filter-select" [(ngModel)]="filters.status" (change)="applyFilters()">
-      <option value="">All Statuses</option>
-      <option *ngFor="let s of STATUSES" [value]="s">{{ s | titlecase }}</option>
-    </select>
-    <select class="filter-select" [(ngModel)]="filters.severity" (change)="applyFilters()">
-      <option value="">All Severities</option>
-      <option *ngFor="let s of SEVERITIES" [value]="s">{{ s | titlecase }}</option>
-    </select>
-    <select class="filter-select" [(ngModel)]="filters.incident_type" (change)="applyFilters()">
-      <option value="">All Types</option>
-      <option *ngFor="let t of TYPES" [value]="t">{{ t | titlecase }}</option>
-    </select>
+    <app-ai-select
+      class="filter-select"
+      [options]="statusSelectOptions"
+      [ngModel]="filters.status"
+      (ngModelChange)="filters.status = $event; applyFilters()"
+      [allowEmpty]="true"
+      emptyLabel="All Statuses"
+    ></app-ai-select>
+    <app-ai-select
+      class="filter-select"
+      [options]="severitySelectOptions"
+      [ngModel]="filters.severity"
+      (ngModelChange)="filters.severity = $event; applyFilters()"
+      [allowEmpty]="true"
+      emptyLabel="All Severities"
+    ></app-ai-select>
+    <app-ai-select
+      class="filter-select"
+      [options]="typeSelectOptions"
+      [ngModel]="filters.incident_type"
+      (ngModelChange)="filters.incident_type = $event; applyFilters()"
+      [allowEmpty]="true"
+      emptyLabel="All Types"
+    ></app-ai-select>
     <button type="button" class="btn btn-sm btn-secondary" (click)="applyFilters()">
       <span class="material-symbols-outlined">search</span>
     </button>
@@ -107,22 +119,16 @@
     </div>
     <div class="form-row">
       <label>Incident Type *</label>
-      <select class="form-input" [(ngModel)]="form.incident_type">
-        <option *ngFor="let t of TYPES" [value]="t">{{ t | titlecase }}</option>
-      </select>
+      <app-ai-select class="form-input" [options]="typeSelectOptions" [(ngModel)]="form.incident_type" placeholder="Type"></app-ai-select>
     </div>
     <div class="form-row-2">
       <div class="form-row">
         <label>Severity</label>
-        <select class="form-input" [(ngModel)]="form.severity">
-          <option *ngFor="let s of SEVERITIES" [value]="s">{{ s | titlecase }}</option>
-        </select>
+        <app-ai-select class="form-input" [options]="severitySelectOptions" [(ngModel)]="form.severity" placeholder="Severity"></app-ai-select>
       </div>
       <div class="form-row">
         <label>Preventability</label>
-        <select class="form-input" [(ngModel)]="form.preventability">
-          <option *ngFor="let p of PREVENTABILITIES" [value]="p">{{ p | titlecase }}</option>
-        </select>
+        <app-ai-select class="form-input" [options]="preventabilitySelectOptions" [(ngModel)]="form.preventability" placeholder="Preventability"></app-ai-select>
       </div>
     </div>
     <div class="form-row-3 flags-row">

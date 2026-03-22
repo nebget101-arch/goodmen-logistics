@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SharedModule } from '../shared/shared.module';
 import { SettlementsRoutingModule } from './settlements-routing.module';
 import { SettlementListComponent } from './settlement-list/settlement-list.component';
 import { SettlementWizardComponent } from './settlement-wizard/settlement-wizard.component';
@@ -19,6 +20,7 @@ import { EquipmentOwnersComponent } from './equipment-owners/equipment-owners.co
   imports: [
     CommonModule,
     FormsModule,
+    SharedModule,
     SettlementsRoutingModule
   ]
 })
