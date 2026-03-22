@@ -16,7 +16,7 @@ export class SafetyTasksComponent implements OnInit {
     status: '',
     assigned_to: ''
   };
-  statusSelectOptions = [
+  readonly statusSelectOptions = [
     { value: 'open', label: 'Open' },
     { value: 'in_progress', label: 'In progress' },
     { value: 'completed', label: 'Completed' },

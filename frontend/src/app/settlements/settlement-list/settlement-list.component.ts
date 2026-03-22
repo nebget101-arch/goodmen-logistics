@@ -47,19 +47,14 @@ export class SettlementListComponent implements OnInit, OnDestroy {
   };
 
   /** Backend uses: preparing | ready_for_review | approved | paid | void */
-  statusOptions = [
+  statusSelectOptions = [
     { value: 'preparing', label: 'Draft / Preparing' },
     { value: 'ready_for_review', label: 'Pending approval' },
     { value: 'approved', label: 'Approved' },
     { value: 'paid', label: 'Paid' },
     { value: 'void', label: 'Void' }
   ];
-  get statusSelectOptions(): { value: string; label: string }[] {
-    return this.statusOptions;
-  }
-  get driverSelectOptions(): { value: string; label: string }[] {
-    return this.drivers.map(d => ({ value: d.id, label: this.getDriverDisplayName(d) }));
-  }
+  driverSelectOptions: { value: string; label: string }[] = [];
 
   constructor(
     private apiService: ApiService,
@@ -103,6 +98,7 @@ export class SettlementListComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         const list = res?.data ?? res?.rows ?? res ?? [];
         this.drivers = Array.isArray(list) ? list : [];
+        this.driverSelectOptions = this.drivers.map(d => ({ value: d.id, label: this.getDriverDisplayName(d) }));
         this.loadSettlements();
       },
       error: () => this.loadSettlements()

@@ -1,4 +1,4 @@
-import { Component, forwardRef, Input } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, forwardRef, Input } from '@angular/core';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 
 /** Single option for flat list or inside a group. */
@@ -16,11 +16,13 @@ export interface AiSelectOptionGroup<T = string | number> {
 /**
  * AI-themed dropdown backed by Angular Material Select.
  * Implements ControlValueAccessor — use with reactive forms or template-driven ngModel.
+ * Uses OnPush for performance; parents must pass stable option references.
  */
 @Component({
   selector: 'app-ai-select',
   templateUrl: './ai-select.component.html',
   styleUrls: ['./ai-select.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
@@ -30,6 +32,8 @@ export interface AiSelectOptionGroup<T = string | number> {
   ]
 })
 export class AiSelectComponent<T = string | number> implements ControlValueAccessor {
+  constructor(private cdr: ChangeDetectorRef) {}
+
   @Input() label = '';
   @Input() placeholder = 'Select...';
   @Input() name = '';
@@ -65,6 +69,7 @@ export class AiSelectComponent<T = string | number> implements ControlValueAcces
 
   writeValue(obj: T | null): void {
     this.value = obj ?? null;
+    this.cdr.markForCheck();
   }
 
   registerOnChange(fn: (v: T | null) => void): void {
@@ -82,6 +87,7 @@ export class AiSelectComponent<T = string | number> implements ControlValueAcces
   onSelectionChange(v: T | null): void {
     this.value = v;
     this.onChange(v);
+    this.cdr.markForCheck();
   }
 
   onBlur(): void {
