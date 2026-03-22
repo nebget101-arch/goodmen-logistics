@@ -621,6 +621,50 @@ export const MARKETING_PLANS: MarketingPlan[] = [
   }
 ];
 
+// ─── Social proof (landing — FN-7) ────────────────────────────────────────────
+
+export interface SocialProofStat {
+  value: string;
+  label: string;
+}
+
+export interface SocialProofQuote {
+  quote: string;
+  attribution: string;
+}
+
+/** Text-only “logo” tiles (monogram + label) — illustrative segments, not trademarked marks */
+export interface SocialProofLogo {
+  initials: string;
+  label: string;
+}
+
+export const SOCIAL_PROOF = {
+  stats: [
+    { value: '10+', label: 'Operational modules in one workspace' },
+    { value: 'Multi-MC', label: 'Entities & permissions without extra logins' },
+    { value: 'Real-time', label: 'Dispatch, safety & maintenance signals' }
+  ] as SocialProofStat[],
+  quotes: [
+    {
+      quote:
+        'We were juggling three systems for dispatch, safety, and maintenance. Having one place that actually talks to itself is night and day.',
+      attribution: 'Director of Operations, regional dry van fleet'
+    },
+    {
+      quote:
+        'The AI intake alone cut hours off our document workflow each week. Our planners spend time on exceptions, not re-keying PDFs.',
+      attribution: 'Fleet manager, refrigerated carrier'
+    }
+  ] as SocialProofQuote[],
+  logos: [
+    { initials: 'NR', label: 'North Route Lines' },
+    { initials: 'CB', label: 'Cedar Brook Transport' },
+    { initials: 'GL', label: 'Great Lakes Haulage' },
+    { initials: 'SM', label: 'Summit Midwest Logistics' }
+  ] as SocialProofLogo[]
+};
+
 // ─── Fleet Size Options ───────────────────────────────────────────────────────
 
 export const FLEET_SIZE_OPTIONS = [
