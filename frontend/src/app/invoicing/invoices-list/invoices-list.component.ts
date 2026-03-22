@@ -151,6 +151,12 @@ export class InvoicesListComponent implements OnInit, OnDestroy {
     });
   }
 
+  getLocationName(locationId: string): string {
+    if (!locationId) return '—';
+    const loc = this.locations.find((l: any) => l.id === locationId);
+    return loc?.name || 'Unknown';
+  }
+
   getStatusClass(status: string): string {
     const normalized = (status || '').toLowerCase();
     if (normalized.includes('draft')) return 'draft';
