@@ -1,6 +1,7 @@
 <mat-form-field
   appearance="outline"
   class="ai-date-picker-field"
+  [class.ai-date-picker-field--external-label]="!label"
   subscriptSizing="dynamic"
   [floatLabel]="$any(label ? 'auto' : 'never')"
 >
