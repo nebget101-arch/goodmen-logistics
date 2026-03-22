@@ -425,19 +425,36 @@ body {
   color: rgba(148, 163, 184, 0.95);
 }
 
+/* FN-150 / AI theme — match form-input (AI_THEME_VISUAL_REFERENCE.md); native select kept for operating-entity behavior */
 .company-switcher-select {
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border-color);
+  padding: 10px 12px;
+  border: 1px solid rgba(71, 85, 105, 0.95);
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.92);
+  background:
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.08), transparent 52%),
+    rgba(2, 6, 23, 0.88);
   color: #e5e7eb;
   font-size: 0.86rem;
   outline: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  color-scheme: dark;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.company-switcher-select:hover {
+  border-color: rgba(100, 116, 139, 0.95);
 }
 
 .company-switcher-select:focus {
-  border-color: rgba(45, 212, 191, 0.55);
+  border-color: rgba(56, 189, 248, 0.95);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+.company-switcher-select option {
+  background: #0f172a;
+  color: #e5e7eb;
 }
 
 .company-switcher-loading .company-switcher-value {
