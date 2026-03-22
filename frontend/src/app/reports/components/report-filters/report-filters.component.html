@@ -7,12 +7,26 @@
     </select>
   </div>
   <div class="filter-row">
-    <label>From</label>
-    <input type="date" [(ngModel)]="localFilters.date_from" />
+    <label for="reportFilterDateFrom">From</label>
+    <app-ai-date-picker
+      inputId="reportFilterDateFrom"
+      [inline]="true"
+      [(ngModel)]="localFilters.date_from"
+      name="reportFilterDateFrom"
+      ariaLabel="Report filter from date"
+      placeholder="From"
+    ></app-ai-date-picker>
   </div>
   <div class="filter-row">
-    <label>To</label>
-    <input type="date" [(ngModel)]="localFilters.date_to" />
+    <label for="reportFilterDateTo">To</label>
+    <app-ai-date-picker
+      inputId="reportFilterDateTo"
+      [inline]="true"
+      [(ngModel)]="localFilters.date_to"
+      name="reportFilterDateTo"
+      ariaLabel="Report filter to date"
+      placeholder="To"
+    ></app-ai-date-picker>
   </div>
   <button type="button" class="btn btn-primary" (click)="onApply()">Apply</button>
   <button type="button" class="btn btn-secondary" (click)="onClear()">Clear</button>

@@ -28,7 +28,7 @@ Shared AI-themed date field using Angular Material `MatDatepicker`. Styling alig
 | `inputId` | DOM id for the input |
 | `ariaLabel` | When no `label`, for screen readers |
 
-Value type: `Date \| null`.
+Form / `ngModel` value: `YYYY-MM-DD` string or `null` (same as native `type="date"`).
 
 ## Dependencies
 

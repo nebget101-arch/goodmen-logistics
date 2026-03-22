@@ -17,11 +17,25 @@
     <div class="filters-grid">
       <label for="rptStartDate">
         <span class="material-symbols-outlined filter-icon">calendar_month</span> Start Date
-        <input id="rptStartDate" type="date" [(ngModel)]="filters.startDate" />
+        <app-ai-date-picker
+          inputId="rptStartDate"
+          [inline]="true"
+          [(ngModel)]="filters.startDate"
+          name="rptStartDate"
+          ariaLabel="Report start date"
+          placeholder="Start"
+        ></app-ai-date-picker>
       </label>
       <label for="rptEndDate">
         <span class="material-symbols-outlined filter-icon">calendar_month</span> End Date
-        <input id="rptEndDate" type="date" [(ngModel)]="filters.endDate" />
+        <app-ai-date-picker
+          inputId="rptEndDate"
+          [inline]="true"
+          [(ngModel)]="filters.endDate"
+          name="rptEndDate"
+          ariaLabel="Report end date"
+          placeholder="End"
+        ></app-ai-date-picker>
       </label>
       <label for="rptDispatcher">
         <span class="material-symbols-outlined filter-icon">person_pin</span> Dispatcher ID

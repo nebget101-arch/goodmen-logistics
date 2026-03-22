@@ -87,8 +87,24 @@
               <tr *ngFor="let d of drivingExperience.controls; let i = index" [formGroupName]="i">
                 <td data-label="Equipment"><input formControlName="classOfEquipment" class="ea-input-inline" /></td>
                 <td data-label="Type"><input formControlName="typeOfEquipment" class="ea-input-inline" /></td>
-                <td data-label="From"><input formControlName="dateFrom" type="date" class="ea-input-inline" /></td>
-                <td data-label="To"><input formControlName="dateTo" type="date" class="ea-input-inline" /></td>
+                <td data-label="From">
+                  <app-ai-date-picker
+                    formControlName="dateFrom"
+                    [inline]="true"
+                    [inputId]="'eaDriveFrom' + i"
+                    placeholder="From"
+                    ariaLabel="Driving experience from date"
+                  ></app-ai-date-picker>
+                </td>
+                <td data-label="To">
+                  <app-ai-date-picker
+                    formControlName="dateTo"
+                    [inline]="true"
+                    [inputId]="'eaDriveTo' + i"
+                    placeholder="To"
+                    ariaLabel="Driving experience to date"
+                  ></app-ai-date-picker>
+                </td>
                 <td data-label="Miles"><input formControlName="approximateMilesTotal" class="ea-input-inline" placeholder="Miles" /></td>
               </tr>
             </tbody>

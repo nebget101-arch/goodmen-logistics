@@ -281,7 +281,9 @@
     <div *ngIf="showTaskForm" class="sub-form">
       <div class="form-row"><label>Title *</label><input type="text" class="form-input" [(ngModel)]="taskForm.title"></div>
       <div class="form-row-2">
-        <div class="form-row"><label>Due Date</label><input type="date" class="form-input" [(ngModel)]="taskForm.due_date"></div>
+        <div class="form-row">
+          <app-ai-date-picker label="Due Date" [(ngModel)]="taskForm.due_date" name="accidentTaskDueDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+        </div>
       </div>
       <div class="form-row"><label>Description</label><textarea class="form-input form-textarea" [(ngModel)]="taskForm.description" rows="2"></textarea></div>
       <div class="sub-form-actions">
