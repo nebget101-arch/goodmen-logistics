@@ -96,7 +96,7 @@
                   </div>
                   <div style="flex: 1 1 300px; min-width: 300px;">
                     <h4>Pickup</h4>
-                    <div><label>Date: <input type="date" [(ngModel)]="newLoad.pickupDate" name="pickupDate"></label></div>
+                    <div><label>Date: <app-ai-date-picker [inline]="true" [(ngModel)]="newLoad.pickupDate" name="pickupDate" ariaLabel="Pickup date"></app-ai-date-picker></label></div>
                     <div><label>City: <input [(ngModel)]="newLoad.pickupCity" name="pickupCity"></label></div>
                     <div><label>State: <input [(ngModel)]="newLoad.pickupState" name="pickupState"></label></div>
                     <div><label>ZIP: <input [(ngModel)]="newLoad.pickupZip" name="pickupZip"></label></div>
@@ -104,7 +104,7 @@
                   </div>
                   <div style="flex: 1 1 300px; min-width: 300px;">
                     <h4>Delivery</h4>
-                    <div><label>Date: <input type="date" [(ngModel)]="newLoad.deliveryDate" name="deliveryDate"></label></div>
+                    <div><label>Date: <app-ai-date-picker [inline]="true" [(ngModel)]="newLoad.deliveryDate" name="deliveryDate" ariaLabel="Delivery date"></app-ai-date-picker></label></div>
                     <div><label>City: <input [(ngModel)]="newLoad.deliveryCity" name="deliveryCity"></label></div>
                     <div><label>State: <input [(ngModel)]="newLoad.deliveryState" name="deliveryState"></label></div>
                     <div><label>ZIP: <input [(ngModel)]="newLoad.deliveryZip" name="deliveryZip"></label></div>

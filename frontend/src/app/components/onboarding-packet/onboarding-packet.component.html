@@ -146,10 +146,10 @@
                   <div class="onboard-field"><label for="eaLastName">Last Name *</label><input id="eaLastName" class="form-input" [(ngModel)]="employment.lastName" name="eaLastName" placeholder="Enter last name" /></div>
                   <div class="onboard-field"><label for="eaPhone">Phone</label><input id="eaPhone" class="form-input" [(ngModel)]="employment.phone" name="eaPhone" placeholder="(555) 555-5555" /></div>
                   <div class="onboard-field"><label for="eaEmail">Email</label><input id="eaEmail" type="email" class="form-input" [(ngModel)]="employment.email" name="eaEmail" placeholder="name@example.com" /></div>
-                  <div class="onboard-field"><label for="eaDob">Date of Birth</label><input id="eaDob" type="date" class="form-input" [(ngModel)]="employment.dateOfBirth" name="eaDob" /></div>
+                  <div class="onboard-field"><app-ai-date-picker inputId="eaDob" label="Date of Birth" [(ngModel)]="employment.dateOfBirth" name="eaDob" placeholder="MM/DD/YYYY"></app-ai-date-picker></div>
                   <div class="onboard-field"><label for="eaSsnLast4">SSN (last 4)</label><input id="eaSsnLast4" maxlength="4" class="form-input" [(ngModel)]="employment.ssnLast4" name="eaSsnLast4" placeholder="1234" /></div>
                   <div class="onboard-field"><label for="eaPosition">Position applied for</label><input id="eaPosition" class="form-input" [(ngModel)]="employment.positionAppliedFor" name="eaPosition" placeholder="Company Driver / Owner Operator" /></div>
-                  <div class="onboard-field"><label for="eaAvailable">Date available for work</label><input id="eaAvailable" type="date" class="form-input" [(ngModel)]="employment.dateAvailable" name="eaAvailable" /></div>
+                  <div class="onboard-field"><app-ai-date-picker inputId="eaAvailable" label="Date available for work" [(ngModel)]="employment.dateAvailable" name="eaAvailable" placeholder="MM/DD/YYYY"></app-ai-date-picker></div>
                   <div class="onboard-field onboard-field-full"><div class="onboard-field-label">Legal right to work in the U.S.?</div><div class="onboard-radio-group"><label class="onboard-choice"><input type="radio" name="eaCanWork" [value]="true" [(ngModel)]="employment.canWorkInUs" /><span>Yes</span></label><label class="onboard-choice"><input type="radio" name="eaCanWork" [value]="false" [(ngModel)]="employment.canWorkInUs" /><span>No</span></label></div></div>
                 </div>
               </section>
@@ -184,7 +184,7 @@
                   <div class="onboard-field"><label for="eaLicNumber">CDL Number</label><input id="eaLicNumber" class="form-input" [(ngModel)]="employment.licenseNumber" name="eaLicNumber" placeholder="License number" /></div>
                   <div class="onboard-field"><label for="eaLicClass">CDL Class</label><input id="eaLicClass" class="form-input" [(ngModel)]="employment.licenseClass" name="eaLicClass" placeholder="Class A / B / C" /></div>
                   <div class="onboard-field"><label for="eaLicEndorse">Endorsements</label><input id="eaLicEndorse" class="form-input" [(ngModel)]="employment.licenseEndorsements" name="eaLicEndorse" placeholder="Hazmat, Tanker, etc." /></div>
-                  <div class="onboard-field"><label for="eaLicExp">CDL Expiration</label><input id="eaLicExp" type="date" class="form-input" [(ngModel)]="employment.licenseExpiry" name="eaLicExp" /></div>
+                  <div class="onboard-field"><app-ai-date-picker inputId="eaLicExp" label="CDL Expiration" [(ngModel)]="employment.licenseExpiry" name="eaLicExp" placeholder="MM/DD/YYYY"></app-ai-date-picker></div>
                 </div>
               </section>
 
@@ -260,7 +260,7 @@
                 <p class="onboard-small">By signing below, you certify that the information provided is true and complete to the best of your knowledge and authorize FleetNeuron AI to verify your employment and safety performance history as required by 49 CFR 391.21 and 391.23.</p>
                 <div class="onboard-grid-2">
                   <div class="onboard-field"><label for="eaSigName">Applicant signature (type full name) *</label><input id="eaSigName" class="form-input" [(ngModel)]="employment.applicationSignatureName" name="eaSigName" placeholder="Type your full legal name" /></div>
-                  <div class="onboard-field"><label for="eaSigDate">Date</label><input id="eaSigDate" type="date" class="form-input" [(ngModel)]="employment.applicationSignatureDate" name="eaSigDate" /></div>
+                  <div class="onboard-field"><app-ai-date-picker inputId="eaSigDate" label="Date" [(ngModel)]="employment.applicationSignatureDate" name="eaSigDate" placeholder="MM/DD/YYYY"></app-ai-date-picker></div>
                 </div>
               </section>
             </div>

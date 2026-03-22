@@ -49,12 +49,10 @@
         <p class="step-hint">Or create a new period:</p>
         <div class="form-row">
           <div class="field">
-            <label for="newPeriodStart">Start</label>
-            <input id="newPeriodStart" type="date" class="form-input" [(ngModel)]="newPeriodStart" />
+            <app-ai-date-picker inputId="newPeriodStart" [(ngModel)]="newPeriodStart" name="newPeriodStart" label="Start" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <div class="field">
-            <label for="newPeriodEnd">End</label>
-            <input id="newPeriodEnd" type="date" class="form-input" [(ngModel)]="newPeriodEnd" />
+            <app-ai-date-picker inputId="newPeriodEnd" [(ngModel)]="newPeriodEnd" name="newPeriodEnd" label="End" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <button type="button" class="btn-secondary" (click)="createNewPeriod()" [disabled]="creatingPeriod">
             {{ creatingPeriod ? 'Creating…' : 'Create period' }}

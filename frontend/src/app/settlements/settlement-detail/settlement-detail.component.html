@@ -119,10 +119,16 @@
         <h2>Load earnings</h2>
       </div>
       <div class="section-actions" *ngIf="!isLocked()">
-        <select class="form-select" [(ngModel)]="addLoadId">
-          <option value="">Select load to add</option>
-          <option *ngFor="let l of availableLoads" [value]="l.id">{{ l.load_number || l.id }} • ${{ (l.rate || 0) | number:'1.2-2' }}</option>
-        </select>
+        <app-ai-select
+          class="form-select"
+          [options]="availableLoadSelectOptions"
+          [(ngModel)]="addLoadId"
+          [allowEmpty]="true"
+          emptyLabel="Select load to add"
+          name="settlementAddLoadId"
+          inputId="settlementAddLoadId"
+          ariaLabel="Load to add to settlement"
+        ></app-ai-select>
         <button type="button" class="btn-primary" (click)="addLoad()" [disabled]="!addLoadId || saving">
           <span class="material-symbols-outlined">add_circle</span>
           Add load
@@ -224,13 +230,14 @@
       </div>
 
       <div class="adjustment-form" *ngIf="!isLocked()">
-        <select class="form-select" [(ngModel)]="addAdjustment.item_type">
-          <option value="deduction">Deduction</option>
-          <option value="earning">Earning</option>
-          <option value="reimbursement">Reimbursement</option>
-          <option value="advance">Advance</option>
-          <option value="correction">Correction</option>
-        </select>
+        <app-ai-select
+          class="form-select"
+          [options]="adjustmentItemTypeOptions"
+          [(ngModel)]="addAdjustment.item_type"
+          name="settlementAdjItemType"
+          inputId="settlementAdjItemType"
+          ariaLabel="Adjustment type"
+        ></app-ai-select>
         <input class="form-input" type="text" placeholder="Description" [(ngModel)]="addAdjustment.description" />
         <input class="form-input" type="number" step="0.01" placeholder="Amount" [(ngModel)]="addAdjustment.amount" />
         
@@ -326,11 +333,14 @@
           </div>
         </div>
 
-        <select class="form-select" [(ngModel)]="addAdjustment.apply_to">
-          <option value="primary_payee">Primary payee</option>
-          <option value="additional_payee">Additional payee</option>
-          <option value="settlement">Settlement</option>
-        </select>
+        <app-ai-select
+          class="form-select"
+          [options]="adjustmentApplyToOptions"
+          [(ngModel)]="addAdjustment.apply_to"
+          name="settlementAdjApplyTo"
+          inputId="settlementAdjApplyTo"
+          ariaLabel="Apply adjustment to"
+        ></app-ai-select>
         <button type="button" class="btn-primary" (click)="addManualAdjustment()" [disabled]="saving">
           <span class="material-symbols-outlined">add_circle</span>
           Add adjustment

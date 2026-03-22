@@ -5,6 +5,7 @@ import { ExpensePaymentCategoriesService, ExpensePaymentCategory } from '../../s
 import { Subject, forkJoin, of, takeUntil } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
 @Component({
   selector: 'app-settlement-detail',
@@ -67,6 +68,27 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   };
 
   lastGeneratedSettlementPdfUrl = '';
+
+  readonly adjustmentItemTypeOptions: AiSelectOption<string>[] = [
+    { value: 'deduction', label: 'Deduction' },
+    { value: 'earning', label: 'Earning' },
+    { value: 'reimbursement', label: 'Reimbursement' },
+    { value: 'advance', label: 'Advance' },
+    { value: 'correction', label: 'Correction' }
+  ];
+
+  readonly adjustmentApplyToOptions: AiSelectOption<string>[] = [
+    { value: 'primary_payee', label: 'Primary payee' },
+    { value: 'additional_payee', label: 'Additional payee' },
+    { value: 'settlement', label: 'Settlement' }
+  ];
+
+  get availableLoadSelectOptions(): AiSelectOption<string>[] {
+    return (this.availableLoads || []).map((l: any) => ({
+      value: String(l.id),
+      label: `${l.load_number || l.id} • $${Number(l.rate || 0).toFixed(2)}`
+    }));
+  }
 
   constructor(
     private route: ActivatedRoute,
