@@ -7,6 +7,7 @@ import { PublicHomeComponent } from './components/public-home/public-home.compon
 import { PublicTrialComponent } from './components/public-trial/public-trial.component';
 import { PublicTrialSignupComponent } from './components/public-trial-signup/public-trial-signup.component';
 import { PublicContactComponent } from './components/public-contact/public-contact.component';
+import { PublicFaqComponent } from './components/public-faq/public-faq.component';
 import { SharedModule } from '../shared/shared.module';
 
 @NgModule({
@@ -14,7 +15,8 @@ import { SharedModule } from '../shared/shared.module';
     PublicHomeComponent,
     PublicTrialComponent,
     PublicTrialSignupComponent,
-    PublicContactComponent
+    PublicContactComponent,
+    PublicFaqComponent
   ],
   imports: [
     CommonModule,

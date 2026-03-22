@@ -1,0 +1,26 @@
+<section
+  class="pub-faq-section"
+  [class.pub-faq-section--contact]="layout === 'contact'"
+  id="faq"
+  aria-labelledby="pub-faq-heading"
+>
+  <div class="pub-faq-inner">
+    <div class="pub-section-label">FAQ</div>
+    <h2 class="pub-section-title" id="pub-faq-heading">Questions we hear most</h2>
+    <p class="pub-section-sub">
+      Pricing, trials, what each plan includes, onboarding, and how cancellation works.
+    </p>
+
+    <div class="pub-faq-list">
+      <details *ngFor="let item of items" class="pub-faq-item">
+        <summary class="pub-faq-summary">
+          <span class="pub-faq-q">{{ item.question }}</span>
+          <span class="material-symbols-outlined pub-faq-icon" aria-hidden="true">expand_more</span>
+        </summary>
+        <div class="pub-faq-body">
+          <p class="pub-faq-a">{{ item.answer }}</p>
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
