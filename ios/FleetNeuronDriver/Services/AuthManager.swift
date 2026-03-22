@@ -15,6 +15,9 @@ final class AuthManager: ObservableObject {
     private let roleKey = "FleetNeuronDriver.role"
     private let driverIdKey = "FleetNeuronDriver.driverId"
     private let usernameKey = "FleetNeuronDriver.username"
+    private let firstNameKey = "FleetNeuronDriver.firstName"
+    private let lastNameKey = "FleetNeuronDriver.lastName"
+    private let emailKey = "FleetNeuronDriver.email"
     private let biometricUnlockEnabledKey = "FleetNeuronDriver.biometricUnlockEnabled"
     private let biometricUnlockDeclinedKey = "FleetNeuronDriver.biometricUnlockDeclined"
 
@@ -22,6 +25,10 @@ final class AuthManager: ObservableObject {
     @Published var role: String?
     @Published var driverId: String?
     @Published var username: String?
+    /// From login response; used when `/users/me` has no name fields.
+    @Published var profileFirstName: String?
+    @Published var profileLastName: String?
+    @Published var profileEmail: String?
     @Published var isLoading = false
     @Published var errorMessage: String?
 
@@ -33,11 +40,21 @@ final class AuthManager: ObservableObject {
 
     var isLoggedIn: Bool { token != nil && !(token?.isEmpty ?? true) }
 
+    /// Prefer stored `driverId`; otherwise read `driver_id` from JWT (e.g. before first `/me` refresh).
+    var effectiveDriverId: String? {
+        if let id = driverId, !id.isEmpty { return id }
+        guard let t = token, !t.isEmpty else { return nil }
+        return JWTClaims.driverId(from: t)
+    }
+
     private init() {
         migrateJWTFromUserDefaultsIfNeeded()
         role = UserDefaults.standard.string(forKey: roleKey)
         driverId = UserDefaults.standard.string(forKey: driverIdKey)
         username = UserDefaults.standard.string(forKey: usernameKey)
+        profileFirstName = UserDefaults.standard.string(forKey: firstNameKey)
+        profileLastName = UserDefaults.standard.string(forKey: lastNameKey)
+        profileEmail = UserDefaults.standard.string(forKey: emailKey)
 
         let jwt = KeychainHelper.readJWT()
         let wantsBiometricGate = UserDefaults.standard.bool(forKey: biometricUnlockEnabledKey)
@@ -79,10 +96,16 @@ final class AuthManager: ObservableObject {
                 self.role = res.role
                 self.username = res.username
                 self.driverId = did
+                self.profileFirstName = res.firstName
+                self.profileLastName = res.lastName
+                self.profileEmail = res.email
                 _ = KeychainHelper.saveJWT(res.token)
                 UserDefaults.standard.removeObject(forKey: self.legacyTokenUserDefaultsKey)
                 UserDefaults.standard.set(res.role, forKey: self.roleKey)
                 UserDefaults.standard.set(res.username, forKey: self.usernameKey)
+                Self.persistOptionalString(res.firstName, key: self.firstNameKey)
+                Self.persistOptionalString(res.lastName, key: self.lastNameKey)
+                Self.persistOptionalString(res.email, key: self.emailKey)
                 if let d = did { UserDefaults.standard.set(d, forKey: driverIdKey) }
                 else { UserDefaults.standard.removeObject(forKey: driverIdKey) }
                 self.sessionAwaitingBiometricUnlock = false
@@ -146,6 +169,9 @@ final class AuthManager: ObservableObject {
         role = nil
         driverId = nil
         username = nil
+        profileFirstName = nil
+        profileLastName = nil
+        profileEmail = nil
         sessionAwaitingBiometricUnlock = false
         pendingBiometricOptInPrompt = false
         biometricUnlockError = nil
@@ -154,9 +180,27 @@ final class AuthManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: roleKey)
         UserDefaults.standard.removeObject(forKey: driverIdKey)
         UserDefaults.standard.removeObject(forKey: usernameKey)
+        UserDefaults.standard.removeObject(forKey: firstNameKey)
+        UserDefaults.standard.removeObject(forKey: lastNameKey)
+        UserDefaults.standard.removeObject(forKey: emailKey)
         UserDefaults.standard.removeObject(forKey: biometricUnlockEnabledKey)
         UserDefaults.standard.removeObject(forKey: biometricUnlockDeclinedKey)
     }
 
     func clearError() { errorMessage = nil }
+
+    /// Apply `/api/users/me` result (driver_id from JWT-backed session).
+    func applyMeProfile(_ p: UserProfile) {
+        driverId = p.driver_id
+        if let d = p.driver_id, !d.isEmpty { UserDefaults.standard.set(d, forKey: driverIdKey) }
+        else { UserDefaults.standard.removeObject(forKey: driverIdKey) }
+        if let f = p.first_name, !f.isEmpty { profileFirstName = f; UserDefaults.standard.set(f, forKey: firstNameKey) }
+        if let l = p.last_name, !l.isEmpty { profileLastName = l; UserDefaults.standard.set(l, forKey: lastNameKey) }
+        if let e = p.email, !e.isEmpty { profileEmail = e; UserDefaults.standard.set(e, forKey: emailKey) }
+    }
+
+    private static func persistOptionalString(_ value: String?, key: String) {
+        if let v = value, !v.isEmpty { UserDefaults.standard.set(v, forKey: key) }
+        else { UserDefaults.standard.removeObject(forKey: key) }
+    }
 }

@@ -171,6 +171,12 @@ final class APIClient {
         return try await request("/api/users/me", token: token)
     }
 
+    /// Single driver record (includes carrier MC when assigned to an operating entity).
+    func driverDetail(id: String, token: String) async throws -> DriverDetailPayload {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await request("/api/drivers/\(encoded)", token: token)
+    }
+
     // MARK: - Loads
     func loadList(token: String, driverId: String?) async throws -> LoadsListResponse {
         var path = "/api/loads?pageSize=100"
