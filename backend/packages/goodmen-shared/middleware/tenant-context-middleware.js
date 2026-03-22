@@ -3,11 +3,21 @@
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
 
+/** Avoid Postgres uuid cast errors when auth passes a non-UUID (e.g. dev mock user id). */
+function looksLikeUuid(value) {
+  if (value == null || typeof value !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
 async function resolveTenantForUser(knexClient, userId) {
-  const memberships = await knexClient('user_tenant_memberships')
-    .where({ user_id: userId, is_active: true })
-    .orderBy('is_default', 'desc')
-    .orderBy('created_at', 'asc');
+  let memberships = [];
+  const hasMembershipsTable = await knexClient.schema.hasTable('user_tenant_memberships').catch(() => false);
+  if (hasMembershipsTable) {
+    memberships = await knexClient('user_tenant_memberships')
+      .where({ user_id: userId, is_active: true })
+      .orderBy('is_default', 'desc')
+      .orderBy('created_at', 'asc');
+  }
 
   if (memberships.length === 1) {
     return memberships[0].tenant_id;
@@ -30,6 +40,12 @@ async function resolveTenantForUser(knexClient, userId) {
 }
 
 async function resolveEntityAccessForUser(knexClient, userId, tenantId) {
+  const hasUoe = await knexClient.schema.hasTable('user_operating_entities').catch(() => false);
+  const hasOe = await knexClient.schema.hasTable('operating_entities').catch(() => false);
+  if (!hasUoe || !hasOe) {
+    return { allowedOperatingEntityIds: [], defaultEntityId: null };
+  }
+
   const rows = await knexClient('user_operating_entities as uoe')
     .join('operating_entities as oe', 'oe.id', 'uoe.operating_entity_id')
     .where('uoe.user_id', userId)
@@ -93,6 +109,10 @@ async function isTenantAdminUser(knexClient, userId, tokenRole, tenantId) {
 }
 
 async function countConfiguredEntityAssignments(knexClient, userId, tenantId) {
+  const hasUoe = await knexClient.schema.hasTable('user_operating_entities').catch(() => false);
+  const hasOe = await knexClient.schema.hasTable('operating_entities').catch(() => false);
+  if (!hasUoe || !hasOe) return 0;
+
   const rows = await knexClient('user_operating_entities as uoe')
     .join('operating_entities as oe', 'oe.id', 'uoe.operating_entity_id')
     .where('uoe.user_id', userId)
@@ -105,6 +125,9 @@ async function countConfiguredEntityAssignments(knexClient, userId, tenantId) {
 }
 
 async function listActiveTenantEntities(knexClient, tenantId) {
+  const hasOe = await knexClient.schema.hasTable('operating_entities').catch(() => false);
+  if (!hasOe) return [];
+
   return knexClient('operating_entities')
     .where({ tenant_id: tenantId, is_active: true })
     .orderBy('created_at', 'asc')
@@ -117,6 +140,11 @@ function createTenantContextMiddleware({ knexClient = knex, logger = dtLogger } 
       const userId = req.user?.id;
       if (!userId) {
         return next();
+      }
+
+      if (!looksLikeUuid(String(userId))) {
+        logger.warn('tenant_context_invalid_user_id', { userId: String(userId) });
+        return res.status(403).json({ error: 'Invalid session user id; sign in again or use a valid account token.' });
       }
 
       const tenantId = await resolveTenantForUser(knexClient, userId);
@@ -220,8 +248,12 @@ function createTenantContextMiddleware({ knexClient = knex, logger = dtLogger } 
 
       return next();
     } catch (error) {
-      logger.error('tenant_context_middleware_error', { error: error.message });
-      return res.status(500).json({ error: 'Failed to resolve tenant context' });
+      logger.error('tenant_context_middleware_error', { error: error.message, stack: error.stack });
+      const payload = { error: 'Failed to resolve tenant context' };
+      if (process.env.NODE_ENV !== 'production' && error?.message) {
+        payload.detail = error.message;
+      }
+      return res.status(500).json(payload);
     }
   };
 }
