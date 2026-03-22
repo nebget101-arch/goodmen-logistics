@@ -24,6 +24,8 @@
               "src/assets"
             ],
             "styles": [
+              "node_modules/@angular/cdk/overlay-prebuilt.css",
+              "node_modules/@angular/cdk/a11y-prebuilt.css",
               "src/styles.css",
               "node_modules/leaflet/dist/leaflet.css"
             ],

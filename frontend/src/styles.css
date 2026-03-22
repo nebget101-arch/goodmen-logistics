@@ -787,6 +787,14 @@ body {
   filter: saturate(1.06);
 }
 
+/*
+ * CDK overlay + a11y prebuilt styles are loaded in angular.json (required for mat-datepicker).
+ * Raise stacking above shell chrome (e.g. Ask Neuron panel z-index 1450).
+ */
+.cdk-overlay-container {
+  z-index: 1600;
+}
+
 /* Angular Material datepicker theming for dark AI console */
 .mat-datepicker-content,
 .mat-calendar {
