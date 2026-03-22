@@ -948,6 +948,14 @@ export class ApiService {
       return this.http.get(`${this.baseUrl}/public/trial-requests/signup/${encodeURIComponent(token)}`);
     }
 
+    /** FN-10: Public username availability for trial signup (debounced on client). */
+    checkTrialSignupUsername(username: string): Observable<any> {
+      const q = encodeURIComponent(String(username ?? '').trim());
+      return this.http.get(
+        `${this.baseUrl}/public/trial-requests/signup/check-username?username=${q}`
+      );
+    }
+
     completeTrialSignup(
       token: string,
       payload: {
