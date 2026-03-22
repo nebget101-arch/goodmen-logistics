@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AbstractControl, FormBuilder, FormGroup, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { combineLatest } from 'rxjs';
+import { combineLatest, of, Subject } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, switchMap, takeUntil } from 'rxjs/operators';
 import { ApiService } from '../../../services/api.service';
 import { AccessControlService } from '../../../services/access-control.service';
 import { SeoService } from '../../../services/seo.service';
@@ -14,14 +15,27 @@ import {
   scorePasswordStrength
 } from '../../utils/password-strength.util';
 
+export type TrialUsernameCheckStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'unavailable'
+  | 'invalid'
+  | 'error';
+
 @Component({
   selector: 'app-public-trial-signup',
   templateUrl: './public-trial-signup.component.html',
   styleUrls: ['./public-trial-signup.component.css']
 })
-export class PublicTrialSignupComponent implements OnInit {
+export class PublicTrialSignupComponent implements OnInit, OnDestroy {
   mobileNavOpen = false;
   currentYear = new Date().getFullYear();
+
+  private readonly destroy$ = new Subject<void>();
+
+  usernameCheckStatus: TrialUsernameCheckStatus = 'idle';
+  usernameNormalized: string | null = null;
 
   token = '';
   loading = true;
@@ -76,6 +90,59 @@ export class PublicTrialSignupComponent implements OnInit {
 
       this.loadSignupContext();
     });
+
+    this.form
+      .get('username')
+      ?.valueChanges.pipe(
+        debounceTime(350),
+        distinctUntilChanged(),
+        switchMap((raw: string | null) => {
+          const v = String(raw ?? '').trim();
+          if (!v) {
+            this.usernameCheckStatus = 'idle';
+            this.usernameNormalized = null;
+            return of(null);
+          }
+          this.usernameCheckStatus = 'checking';
+          return this.apiService.checkTrialSignupUsername(v).pipe(
+            catchError(() => {
+              this.usernameCheckStatus = 'error';
+              this.usernameNormalized = null;
+              return of(null);
+            })
+          );
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe((res: any) => {
+        if (res === null) {
+          return;
+        }
+        const data = res?.data ?? res;
+        if (data?.skipped) {
+          this.usernameCheckStatus = 'idle';
+          this.usernameNormalized = null;
+          return;
+        }
+        this.usernameNormalized = data?.normalized != null ? String(data.normalized) : null;
+        if (data?.available === true) {
+          this.usernameCheckStatus = 'available';
+          return;
+        }
+        const reason = String(data?.reason || '');
+        if (reason === 'taken') {
+          this.usernameCheckStatus = 'unavailable';
+        } else if (reason === 'too_long' || reason === 'invalid') {
+          this.usernameCheckStatus = 'invalid';
+        } else {
+          this.usernameCheckStatus = 'invalid';
+        }
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   get selectedPlan(): any {
@@ -87,6 +154,25 @@ export class PublicTrialSignupComponent implements OnInit {
     if (this.form.invalid || !this.token) {
       this.form.markAllAsTouched();
       return;
+    }
+
+    const usernameTrimmed = String(this.form.value.username || '').trim();
+    if (usernameTrimmed) {
+      if (this.usernameCheckStatus === 'checking' || this.usernameCheckStatus === 'idle') {
+        this.submitError = 'Please wait while we verify your username.';
+        return;
+      }
+      if (
+        this.usernameCheckStatus === 'unavailable'
+        || this.usernameCheckStatus === 'invalid'
+        || this.usernameCheckStatus === 'error'
+      ) {
+        this.submitError =
+          this.usernameCheckStatus === 'error'
+            ? 'Could not verify username. Check your connection and try again.'
+            : 'Choose a different username before continuing.';
+        return;
+      }
     }
 
     this.submitting = true;

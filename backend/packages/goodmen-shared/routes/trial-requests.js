@@ -197,6 +197,21 @@ router.get('/plans', (_req, res) => {
   return res.json({ success: true, data: PLANS });
 });
 
+// ─── PUBLIC: Trial signup username availability (no auth; must be before /signup/:token) ─
+
+router.get('/signup/check-username', async (req, res) => {
+  try {
+    const username = req.query.username;
+    const data = await trialRequestService.checkPublicUsernameAvailability(
+      username === undefined || username === null ? '' : username
+    );
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[trial-requests] check username error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to check username' });
+  }
+});
+
 // ─── PUBLIC: Read signup context by approved token ─────────────────────────
 
 router.get('/signup/:token', async (req, res) => {

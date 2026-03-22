@@ -168,6 +168,38 @@ async function generateUniqueUsername(trx, preferredBase) {
   }
 }
 
+const USERNAME_CHECK_RAW_RE = /^[a-zA-Z0-9._\-\s]+$/;
+
+/**
+ * Public, unauthenticated check: is this username (after trial signup normalization) free?
+ * @param {string} rawUsername
+ * @returns {Promise<{ available: boolean, skipped?: boolean, normalized?: string|null, reason?: string }>}
+ */
+async function checkPublicUsernameAvailability(rawUsername) {
+  const raw = String(rawUsername ?? '').trim();
+  if (!raw) {
+    return { available: true, skipped: true };
+  }
+  if (raw.length > 100) {
+    return { available: false, reason: 'too_long' };
+  }
+  if (!USERNAME_CHECK_RAW_RE.test(raw)) {
+    return { available: false, reason: 'invalid' };
+  }
+
+  const normalized = normalizeUsername(raw);
+  if (!normalized || normalized.length > 100) {
+    return { available: false, reason: normalized ? 'too_long' : 'invalid' };
+  }
+
+  const existing = await knex('users').where({ username: normalized }).first('id');
+  if (existing) {
+    return { available: false, normalized, reason: 'taken' };
+  }
+
+  return { available: true, normalized };
+}
+
 function getSignupTokenTtlHours() {
   const raw = parseInt(process.env.TRIAL_SIGNUP_TOKEN_TTL_HOURS, 10);
   if (Number.isFinite(raw) && raw > 0) return raw;
@@ -542,7 +574,8 @@ module.exports = {
   getSignupContextByToken,
   completeSignupFromToken,
   resetTenantAdminPassword,
-  updateTrialRequestDotMc
+  updateTrialRequestDotMc,
+  checkPublicUsernameAvailability
 };
 
 /**
