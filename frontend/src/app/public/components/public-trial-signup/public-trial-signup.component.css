@@ -314,6 +314,83 @@
   color: #f87171;
 }
 
+/* Password strength meter (FN-9) */
+.signup-pw-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.signup-pw-meter-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(31, 41, 55, 0.95);
+  overflow: hidden;
+  border: 1px solid rgba(51, 65, 85, 0.7);
+}
+
+.signup-pw-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  min-width: 0;
+}
+
+.signup-pw-meter[data-tier='0'] .signup-pw-meter-fill {
+  width: 0 !important;
+  background: transparent;
+}
+
+.signup-pw-meter[data-tier='1'] .signup-pw-meter-fill {
+  background: linear-gradient(90deg, #f87171, #fb923c);
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.35);
+}
+
+.signup-pw-meter[data-tier='2'] .signup-pw-meter-fill {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.25);
+}
+
+.signup-pw-meter[data-tier='3'] .signup-pw-meter-fill {
+  background: linear-gradient(90deg, #2dd4bf, #22d3ee);
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.3);
+}
+
+.signup-pw-meter[data-tier='4'] .signup-pw-meter-fill {
+  background: linear-gradient(90deg, #34d399, #22d3ee);
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.4);
+}
+
+.signup-pw-meter-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.signup-pw-meter:not(.signup-pw-meter--empty) .signup-pw-meter-label {
+  color: #94a3b8;
+}
+
+.signup-pw-meter[data-tier='1'] .signup-pw-meter-label {
+  color: #fca5a5;
+}
+
+.signup-pw-meter[data-tier='2'] .signup-pw-meter-label {
+  color: #fcd34d;
+}
+
+.signup-pw-meter[data-tier='3'] .signup-pw-meter-label {
+  color: #5eead4;
+}
+
+.signup-pw-meter[data-tier='4'] .signup-pw-meter-label {
+  color: #6ee7b7;
+}
+
 .signup-password-hint {
   display: flex;
   align-items: center;

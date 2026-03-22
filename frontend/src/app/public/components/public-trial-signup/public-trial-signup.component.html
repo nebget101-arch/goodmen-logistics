@@ -135,6 +135,24 @@
               <span class="material-symbols-outlined">lock</span>
               <input id="password" type="password" class="pub-form-input" formControlName="password" placeholder="At least 8 characters" autocomplete="new-password" />
             </div>
+            <div
+              class="signup-pw-meter"
+              [class.signup-pw-meter--empty]="passwordStrengthRaw.length === 0"
+              [attr.data-tier]="passwordStrengthTier"
+              aria-live="polite"
+            >
+              <div
+                class="signup-pw-meter-track"
+                role="progressbar"
+                [attr.aria-valuenow]="passwordStrengthPercent"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                [attr.aria-label]="passwordStrengthAriaLabel"
+              >
+                <div class="signup-pw-meter-fill" [style.width.%]="passwordStrengthPercent"></div>
+              </div>
+              <span class="signup-pw-meter-label">{{ passwordStrengthRaw.length === 0 ? 'Password strength' : passwordStrengthLabel }}</span>
+            </div>
             <span class="pub-error-msg">{{ getFieldError('password') }}</span>
           </div>
 
