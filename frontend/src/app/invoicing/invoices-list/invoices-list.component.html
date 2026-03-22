@@ -170,9 +170,9 @@
               {{ inv.invoice_number }}
             </td>
             <td>{{ inv.company_name }}</td>
-            <td>{{ inv.location_id }}</td>
-            <td>{{ inv.issued_date }}</td>
-            <td>{{ inv.due_date }}</td>
+            <td>{{ getLocationName(inv.location_id) }}</td>
+            <td>{{ inv.issued_date | date:'MMM d, yyyy' }}</td>
+            <td>{{ inv.due_date | date:'MMM d, yyyy' }}</td>
             <td>
               <span class="status-badge" [ngClass]="getStatusClass(inv.status)">
                 <span class="dot"></span>
