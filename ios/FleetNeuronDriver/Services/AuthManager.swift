@@ -15,6 +15,8 @@ final class AuthManager: ObservableObject {
     private let roleKey = "FleetNeuronDriver.role"
     private let driverIdKey = "FleetNeuronDriver.driverId"
     private let usernameKey = "FleetNeuronDriver.username"
+    private let biometricUnlockEnabledKey = "FleetNeuronDriver.biometricUnlockEnabled"
+    private let biometricUnlockDeclinedKey = "FleetNeuronDriver.biometricUnlockDeclined"
 
     @Published var token: String?
     @Published var role: String?
@@ -23,14 +25,30 @@ final class AuthManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    /// JWT exists in Keychain and user opted in; waiting for Face ID / Touch ID before exposing the token.
+    @Published var sessionAwaitingBiometricUnlock = false
+    @Published var pendingBiometricOptInPrompt = false
+    @Published var biometricUnlockError: String?
+    @Published var isBiometricUnlockBusy = false
+
     var isLoggedIn: Bool { token != nil && !(token?.isEmpty ?? true) }
 
     private init() {
         migrateJWTFromUserDefaultsIfNeeded()
-        token = KeychainHelper.readJWT()
         role = UserDefaults.standard.string(forKey: roleKey)
         driverId = UserDefaults.standard.string(forKey: driverIdKey)
         username = UserDefaults.standard.string(forKey: usernameKey)
+
+        let jwt = KeychainHelper.readJWT()
+        let wantsBiometricGate = UserDefaults.standard.bool(forKey: biometricUnlockEnabledKey)
+
+        if wantsBiometricGate, jwt != nil, BiometricAuth.isBiometricLoginAvailable() {
+            sessionAwaitingBiometricUnlock = true
+            token = nil
+        } else {
+            token = jwt
+            sessionAwaitingBiometricUnlock = false
+        }
     }
 
     /// One-time migration: copy JWT from UserDefaults into Keychain and remove from defaults.
@@ -67,9 +85,47 @@ final class AuthManager: ObservableObject {
                 UserDefaults.standard.set(res.username, forKey: self.usernameKey)
                 if let d = did { UserDefaults.standard.set(d, forKey: driverIdKey) }
                 else { UserDefaults.standard.removeObject(forKey: driverIdKey) }
+                self.sessionAwaitingBiometricUnlock = false
+                self.evaluatePostLoginBiometricPrompt()
             }
         } catch {
             await MainActor.run { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func evaluatePostLoginBiometricPrompt() {
+        guard BiometricAuth.isBiometricLoginAvailable() else { return }
+        guard !UserDefaults.standard.bool(forKey: biometricUnlockEnabledKey) else { return }
+        guard !UserDefaults.standard.bool(forKey: biometricUnlockDeclinedKey) else { return }
+        pendingBiometricOptInPrompt = true
+    }
+
+    func completeBiometricOptIn(accept: Bool) {
+        guard pendingBiometricOptInPrompt else { return }
+        pendingBiometricOptInPrompt = false
+        if accept {
+            UserDefaults.standard.set(true, forKey: biometricUnlockEnabledKey)
+            UserDefaults.standard.removeObject(forKey: biometricUnlockDeclinedKey)
+        } else {
+            UserDefaults.standard.set(true, forKey: biometricUnlockDeclinedKey)
+        }
+    }
+
+    func unlockSessionWithBiometrics() async {
+        await MainActor.run {
+            isBiometricUnlockBusy = true
+            biometricUnlockError = nil
+        }
+        defer { Task { @MainActor in isBiometricUnlockBusy = false } }
+        let ok = await BiometricAuth.authenticateForUnlock()
+        await MainActor.run {
+            if ok {
+                self.token = KeychainHelper.readJWT()
+                self.sessionAwaitingBiometricUnlock = false
+                self.biometricUnlockError = nil
+            } else {
+                self.biometricUnlockError = "Biometric authentication did not succeed. Try again or use your password."
+            }
         }
     }
 
@@ -78,11 +134,16 @@ final class AuthManager: ObservableObject {
         role = nil
         driverId = nil
         username = nil
+        sessionAwaitingBiometricUnlock = false
+        pendingBiometricOptInPrompt = false
+        biometricUnlockError = nil
         KeychainHelper.deleteJWT()
         UserDefaults.standard.removeObject(forKey: legacyTokenUserDefaultsKey)
         UserDefaults.standard.removeObject(forKey: roleKey)
         UserDefaults.standard.removeObject(forKey: driverIdKey)
         UserDefaults.standard.removeObject(forKey: usernameKey)
+        UserDefaults.standard.removeObject(forKey: biometricUnlockEnabledKey)
+        UserDefaults.standard.removeObject(forKey: biometricUnlockDeclinedKey)
     }
 
     func clearError() { errorMessage = nil }

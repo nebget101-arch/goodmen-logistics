@@ -14,6 +14,8 @@
 	<string>FleetNeuron Driver can use the camera to capture documents for your loads.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>FleetNeuron Driver shows your current location on the map to help you navigate your assigned loads.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>FleetNeuron Driver uses Face ID or Touch ID to unlock the app when you choose to enable it.</string>
 	<key>API_BASE_URL</key>
 	<string>http://localhost:4000</string>
 </dict>

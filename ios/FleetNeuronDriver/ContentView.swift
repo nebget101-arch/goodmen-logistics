@@ -95,7 +95,9 @@ struct ContentView: View {
             .ignoresSafeArea()
 
             Group {
-                if auth.isLoggedIn {
+                if auth.sessionAwaitingBiometricUnlock {
+                    BiometricUnlockView()
+                } else if auth.isLoggedIn {
                     MainDriverView()
                 } else {
                     LoginView()
@@ -103,5 +105,24 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: auth.isLoggedIn)
+        .animation(.easeInOut(duration: 0.25), value: auth.sessionAwaitingBiometricUnlock)
+        .alert(
+            "Sign in faster next time?",
+            isPresented: Binding(
+                get: { auth.pendingBiometricOptInPrompt },
+                set: { _ in }
+            ),
+            actions: {
+                Button("Enable \(BiometricAuth.biometricTypeDescription())") {
+                    auth.completeBiometricOptIn(accept: true)
+                }
+                Button("Not Now", role: .cancel) {
+                    auth.completeBiometricOptIn(accept: false)
+                }
+            },
+            message: {
+                Text("Use \(BiometricAuth.biometricTypeDescription()) to unlock FleetNeuron Driver when you come back. You can change this anytime by signing out.")
+            }
+        )
     }
 }
