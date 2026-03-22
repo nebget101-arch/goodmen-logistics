@@ -21,12 +21,22 @@ export class SafetyClaimsComponent implements OnInit {
 
   readonly STATUSES = ['open', 'submitted', 'under_investigation', 'settled', 'closed', 'denied', 'litigated'];
   readonly CLAIM_TYPES = ['auto_liability', 'cargo', 'general_liability', 'workers_comp', 'property'];
-  get statusSelectOptions(): { value: string; label: string }[] {
-    return this.STATUSES.map(s => ({ value: s, label: s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
-  }
-  get claimTypeSelectOptions(): { value: string; label: string }[] {
-    return this.CLAIM_TYPES.map(t => ({ value: t, label: t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
-  }
+  readonly statusSelectOptions: { value: string; label: string }[] = [
+    { value: 'open', label: 'Open' },
+    { value: 'submitted', label: 'Submitted' },
+    { value: 'under_investigation', label: 'Under Investigation' },
+    { value: 'settled', label: 'Settled' },
+    { value: 'closed', label: 'Closed' },
+    { value: 'denied', label: 'Denied' },
+    { value: 'litigated', label: 'Litigated' }
+  ];
+  readonly claimTypeSelectOptions: { value: string; label: string }[] = [
+    { value: 'auto_liability', label: 'Auto Liability' },
+    { value: 'cargo', label: 'Cargo' },
+    { value: 'general_liability', label: 'General Liability' },
+    { value: 'workers_comp', label: 'Workers Comp' },
+    { value: 'property', label: 'Property' }
+  ];
 
   constructor(private safety: SafetyService, private route: ActivatedRoute) {}
 
