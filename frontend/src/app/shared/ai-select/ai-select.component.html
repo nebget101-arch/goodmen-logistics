@@ -1,0 +1,29 @@
+<mat-form-field appearance="outline" class="ai-select-field" subscriptSizing="dynamic">
+  <mat-label *ngIf="label">{{ label }}</mat-label>
+  <mat-select
+    [attr.id]="inputId || null"
+    [ngModel]="value"
+    (ngModelChange)="onSelectionChange($event)"
+    (blur)="onBlur()"
+    [disabled]="disabled"
+    [placeholder]="placeholder"
+    [attr.aria-label]="ariaLabel || label || placeholder"
+    panelClass="ai-select-panel"
+  >
+    <mat-option *ngIf="allowEmpty" [value]="null">
+      {{ emptyLabel || placeholder }}
+    </mat-option>
+    <ng-container *ngIf="hasGroups; else flatList">
+      <mat-optgroup *ngFor="let group of optionGroups" [label]="group.groupLabel">
+        <mat-option *ngFor="let opt of group.options" [value]="opt.value">
+          {{ opt.label }}
+        </mat-option>
+      </mat-optgroup>
+    </ng-container>
+    <ng-template #flatList>
+      <mat-option *ngFor="let opt of options" [value]="opt.value">
+        {{ opt.label }}
+      </mat-option>
+    </ng-template>
+  </mat-select>
+</mat-form-field>

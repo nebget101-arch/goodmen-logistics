@@ -8,6 +8,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDialogModule } from '@angular/material/dialog';
+import { MatSelectModule } from '@angular/material/select';
 import { CommonModule } from '@angular/common';
 import { AppRoutingModule } from './app-routing.module';
 
@@ -54,6 +55,7 @@ import { PaymentMethodFormComponent } from './billing/payment-method-form/paymen
 import { TrialBannerComponent } from './shared/trial-banner/trial-banner.component';
 import { BillingComponent } from './billing/billing.component';
 import { AiDatePickerComponent } from './shared/ai-date-picker/ai-date-picker.component';
+import { AiSelectComponent } from './shared/ai-select/ai-select.component';
 
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
@@ -105,7 +107,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     PaymentMethodFormComponent,
     TrialBannerComponent,
     BillingComponent,
-    AiDatePickerComponent
+    AiDatePickerComponent,
+    AiSelectComponent
   ],
   imports: [
     BrowserModule,
@@ -119,7 +122,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
-    MatDialogModule
+    MatDialogModule,
+    MatSelectModule
   ],
   providers: [
     {
