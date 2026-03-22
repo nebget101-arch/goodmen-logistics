@@ -798,6 +798,16 @@ body {
   color: var(--text-dark);
 }
 
+/* Panel class from app-ai-date-picker — glassy dark calendar */
+.ai-datepicker-overlay.mat-datepicker-content {
+  border-radius: 12px;
+  border: 1px solid rgba(51, 65, 85, 0.85);
+  box-shadow:
+    0 16px 35px rgba(2, 6, 23, 0.65),
+    0 0 0 1px rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(14px);
+}
+
 /* app-ai-select panel — dark AI theme, cyan hover/selected */
 .ai-select-panel.mat-mdc-select-panel {
   background: rgba(15, 23, 42, 0.98);
@@ -825,7 +835,6 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-
 /* Table Styles */
 .table {
   width: 100%;
