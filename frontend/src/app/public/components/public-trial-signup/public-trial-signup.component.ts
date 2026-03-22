@@ -7,6 +7,12 @@ import { AccessControlService } from '../../../services/access-control.service';
 import { SeoService } from '../../../services/seo.service';
 import { SEO_PUBLIC } from '../../../services/seo-public-presets';
 import { MARKETING_PLANS } from '../../config/marketing.config';
+import {
+  getPasswordStrengthTier,
+  PASSWORD_STRENGTH_LABELS,
+  PasswordStrengthTier,
+  scorePasswordStrength
+} from '../../utils/password-strength.util';
 
 @Component({
   selector: 'app-public-trial-signup',
@@ -164,6 +170,34 @@ export class PublicTrialSignupComponent implements OnInit {
     const formTouched = this.form.touched || this.form.dirty;
     if (!formTouched || !this.form.errors?.['passwordMismatch']) return '';
     return 'Passwords do not match';
+  }
+
+  get passwordStrengthRaw(): string {
+    return String(this.form.get('password')?.value ?? '');
+  }
+
+  get passwordStrengthScore(): number {
+    return scorePasswordStrength(this.passwordStrengthRaw);
+  }
+
+  get passwordStrengthTier(): PasswordStrengthTier {
+    return getPasswordStrengthTier(this.passwordStrengthScore, this.passwordStrengthRaw.length > 0);
+  }
+
+  get passwordStrengthLabel(): string {
+    const t = this.passwordStrengthTier;
+    return PASSWORD_STRENGTH_LABELS[t] || 'Password strength';
+  }
+
+  get passwordStrengthPercent(): number {
+    return this.passwordStrengthRaw.length === 0 ? 0 : this.passwordStrengthScore;
+  }
+
+  get passwordStrengthAriaLabel(): string {
+    if (this.passwordStrengthRaw.length === 0) {
+      return 'Password strength';
+    }
+    return `Password strength: ${PASSWORD_STRENGTH_LABELS[this.passwordStrengthTier]}`;
   }
 
   private loadSignupContext(): void {
