@@ -129,6 +129,18 @@ final class AuthManager: ObservableObject {
         }
     }
 
+    /// Called after a successful token refresh (FN-163); keeps session metadata, updates JWT + Keychain.
+    func applyRefreshedAccessToken(_ newToken: String) {
+        token = newToken
+        _ = KeychainHelper.saveJWT(newToken)
+    }
+
+    /// 401 on an authenticated API call: clear session and surface a login message (no infinite retries).
+    func handleSessionExpiredFromAPI() {
+        logout()
+        errorMessage = "Your session expired. Please sign in again."
+    }
+
     func logout() {
         token = nil
         role = nil

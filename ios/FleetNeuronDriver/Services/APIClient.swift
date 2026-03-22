@@ -10,7 +10,8 @@ enum APIError: LocalizedError {
     case noData
     case decoding(Error)
     case server(String)
-    case unauthorized
+    /// Authenticated request returned 401; session was cleared. Single path — no retry loops.
+    case sessionExpired
 
     var errorDescription: String? {
         switch self {
@@ -19,7 +20,7 @@ enum APIError: LocalizedError {
         case .decoding(let e):
             return "Server response format is invalid. \(e.localizedDescription) Check that API_BASE_URL points to your backend (e.g. http://localhost:4000) and that the backend is running."
         case .server(let msg): return msg
-        case .unauthorized: return "Session expired. Please log in again."
+        case .sessionExpired: return "Your session expired. Please sign in again."
         }
     }
 }
@@ -47,7 +48,8 @@ final class APIClient {
         _ path: String,
         method: String = "GET",
         body: Data? = nil,
-        token: String?
+        token: String?,
+        retryingAfterRefresh: Bool = false
     ) async throws -> T {
         guard let url = URL(string: apiBaseURL + path) else { throw APIError.invalidURL }
         var req = URLRequest(url: url)
@@ -63,7 +65,20 @@ final class APIClient {
 
         let (data, res) = try await session.data(for: req)
         guard let http = res as? HTTPURLResponse else { throw APIError.noData }
-        if http.statusCode == 401 { throw APIError.unauthorized }
+
+        if http.statusCode == 401 {
+            if let token = token {
+                if !retryingAfterRefresh, let newToken = await Self.refreshAccessTokenIfAvailable(currentAccessToken: token) {
+                    await MainActor.run { AuthManager.shared.applyRefreshedAccessToken(newToken) }
+                    return try await self.request(path, method: method, body: body, token: newToken, retryingAfterRefresh: true)
+                }
+                await MainActor.run { AuthManager.shared.handleSessionExpiredFromAPI() }
+                throw APIError.sessionExpired
+            }
+            let msg = (try? JSONDecoder().decode(ServerError.self, from: data))?.error
+            throw APIError.server(msg ?? "Invalid username or password.")
+        }
+
         if http.statusCode >= 400 {
             let msg = (try? JSONDecoder().decode(ServerError.self, from: data))?.error ?? "Request failed (\(http.statusCode))"
             throw APIError.server(msg)
@@ -83,7 +98,8 @@ final class APIClient {
         mimeType: String,
         type: String,
         notes: String?,
-        token: String?
+        token: String?,
+        retryingAfterRefresh: Bool = false
     ) async throws -> LoadAttachmentResponse {
         guard let url = URL(string: apiBaseURL + path) else { throw APIError.invalidURL }
         let boundary = UUID().uuidString
@@ -109,12 +125,39 @@ final class APIClient {
 
         let (data, res) = try await session.data(for: req)
         guard let http = res as? HTTPURLResponse else { throw APIError.noData }
-        if http.statusCode == 401 { throw APIError.unauthorized }
+
+        if http.statusCode == 401 {
+            if let token = token {
+                if !retryingAfterRefresh, let newToken = await Self.refreshAccessTokenIfAvailable(currentAccessToken: token) {
+                    await MainActor.run { AuthManager.shared.applyRefreshedAccessToken(newToken) }
+                    return try await self.upload(
+                        path: path,
+                        fileData: fileData,
+                        fileName: fileName,
+                        mimeType: mimeType,
+                        type: type,
+                        notes: notes,
+                        token: newToken,
+                        retryingAfterRefresh: true
+                    )
+                }
+                await MainActor.run { AuthManager.shared.handleSessionExpiredFromAPI() }
+                throw APIError.sessionExpired
+            }
+            let msg = (try? JSONDecoder().decode(ServerError.self, from: data))?.error
+            throw APIError.server(msg ?? "Invalid username or password.")
+        }
+
         if http.statusCode >= 400 {
             let msg = (try? JSONDecoder().decode(ServerError.self, from: data))?.error ?? "Upload failed (\(http.statusCode))"
             throw APIError.server(msg)
         }
         return try JSONDecoder().decode(LoadAttachmentResponse.self, from: data)
+    }
+
+    /// When backend documents `POST /api/auth/refresh` (or similar), implement and return a new JWT. Returns `nil` until then (no extra 404 traffic).
+    private static func refreshAccessTokenIfAvailable(currentAccessToken _: String) async -> String? {
+        nil
     }
 
     // MARK: - Auth
