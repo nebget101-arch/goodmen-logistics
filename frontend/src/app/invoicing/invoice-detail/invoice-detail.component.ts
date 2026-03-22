@@ -7,6 +7,7 @@ import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { PermissionHelperService } from '../../services/permission-helper.service';
 import { PERMISSIONS } from '../../models/access-control.model';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
 @Component({
   selector: 'app-invoice-detail',
@@ -38,6 +39,16 @@ export class InvoiceDetailComponent implements OnInit, OnDestroy {
     referenceNumber: '',
     memo: ''
   };
+
+  readonly paymentMethodOptions: AiSelectOption<string>[] = [
+    { value: 'CASH', label: 'Cash' },
+    { value: 'CHECK', label: 'Check' },
+    { value: 'CARD', label: 'Card' },
+    { value: 'ACH', label: 'ACH' },
+    { value: 'WIRE', label: 'Wire' },
+    { value: 'ZELLE', label: 'Zelle' },
+    { value: 'OTHER', label: 'Other' }
+  ];
 
   constructor(
     private route: ActivatedRoute,

@@ -10,6 +10,7 @@ import { FuelImportWizardComponent } from './fuel-import-wizard/fuel-import-wiza
 import { FuelImportHistoryComponent } from './fuel-import-history/fuel-import-history.component';
 import { FuelCardsComponent } from './fuel-cards/fuel-cards.component';
 import { FuelExceptionsComponent } from './fuel-exceptions/fuel-exceptions.component';
+import { SharedModule } from '../shared/shared.module';
 
 @NgModule({
   declarations: [
@@ -26,6 +27,7 @@ import { FuelExceptionsComponent } from './fuel-exceptions/fuel-exceptions.compo
     FormsModule,
     ReactiveFormsModule,
     FuelRoutingModule,
+    SharedModule,
   ]
 })
 export class FuelModule {}

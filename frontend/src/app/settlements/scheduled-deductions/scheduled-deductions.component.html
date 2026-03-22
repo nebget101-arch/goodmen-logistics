@@ -48,11 +48,11 @@
       </div>
       <div class="filter-group">
         <label for="bf-start">Start date</label>
-        <input id="bf-start" type="date" class="form-input" [(ngModel)]="backfillForm.start_date" (ngModelChange)="onBackfillCriteriaChange()" />
+        <app-ai-date-picker inputId="bf-start" class="form-input" [(ngModel)]="backfillForm.start_date" (ngModelChange)="onBackfillCriteriaChange()" name="bfStart" ariaLabel="Backfill start date" placeholder="MM/DD/YYYY"></app-ai-date-picker>
       </div>
       <div class="filter-group">
         <label for="bf-end">End date</label>
-        <input id="bf-end" type="date" class="form-input" [(ngModel)]="backfillForm.end_date" (ngModelChange)="onBackfillCriteriaChange()" />
+        <app-ai-date-picker inputId="bf-end" class="form-input" [(ngModel)]="backfillForm.end_date" (ngModelChange)="onBackfillCriteriaChange()" name="bfEnd" ariaLabel="Backfill end date" placeholder="MM/DD/YYYY"></app-ai-date-picker>
       </div>
       <div class="filter-group">
         <label for="bf-limit">Max settlements</label>
@@ -233,13 +233,11 @@
         </div>
 
         <div class="form-group">
-          <label for="start_date">Start date *</label>
-          <input id="start_date" type="date" class="form-input" [(ngModel)]="formData.start_date" required />
+          <app-ai-date-picker inputId="start_date" label="Start date *" [(ngModel)]="formData.start_date" name="schedDedStart" placeholder="MM/DD/YYYY"></app-ai-date-picker>
         </div>
 
         <div class="form-group">
-          <label for="end_date">End date (optional)</label>
-          <input id="end_date" type="date" class="form-input" [(ngModel)]="formData.end_date" />
+          <app-ai-date-picker inputId="end_date" label="End date (optional)" [(ngModel)]="formData.end_date" name="schedDedEnd" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           <small class="form-hint">Leave empty for ongoing deduction</small>
         </div>
 
