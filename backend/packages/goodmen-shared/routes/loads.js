@@ -656,6 +656,144 @@ async function findBrokerByName(clientOrQuery, brokerName) {
   return result.rows.length ? result.rows[0] : null;
 }
 
+function buildLoc(obj) {
+  const parts = [(obj.city || '').trim(), (obj.state || '').trim()].filter(Boolean);
+  const loc = parts.join(', ');
+  const zip = (obj.zip || '').toString().trim();
+  return zip ? (loc ? `${loc} ${zip}` : zip) : (loc || 'UNKNOWN');
+}
+
+/**
+ * Process a single rate confirmation PDF: extract via AI, persist to DB, upload to R2.
+ * Each call acquires and releases its own DB client so files can run in parallel.
+ */
+async function processSingleRateConfirmation(file, req, dispatcherUserId) {
+  // Step 1: AI extraction — no DB client needed yet
+  const data = await extractLoadFromPdf(file.buffer, file.originalname || 'upload.pdf');
+  const pickup = data.pickup || {};
+  const delivery = data.delivery || {};
+  const brokerName = (data.brokerName || '').toString().trim() || null;
+  const extractedStops = Array.isArray(data.stops) && data.stops.length > 0 ? data.stops : null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  let pickupLocation, deliveryLocation, pickupDate, deliveryDate, stopsToInsert;
+
+  if (extractedStops && extractedStops.length > 0) {
+    const pickups = extractedStops.filter((s) => (s.type || '').toString().toUpperCase() === 'PICKUP');
+    const deliveries = extractedStops.filter((s) => (s.type || '').toString().toUpperCase() === 'DELIVERY');
+    const firstPickup = pickups[0];
+    const lastDelivery = deliveries[deliveries.length - 1];
+    pickupLocation = firstPickup ? buildLoc(firstPickup) : buildLoc(pickup);
+    deliveryLocation = lastDelivery ? buildLoc(lastDelivery) : buildLoc(delivery);
+    pickupDate = firstPickup?.date && String(firstPickup.date).trim() ? String(firstPickup.date).trim().slice(0, 10) : (pickup.date && String(pickup.date).trim() ? String(pickup.date).trim().slice(0, 10) : today);
+    deliveryDate = lastDelivery?.date && String(lastDelivery.date).trim() ? String(lastDelivery.date).trim().slice(0, 10) : (delivery.date && String(delivery.date).trim() ? String(delivery.date).trim().slice(0, 10) : tomorrow);
+    stopsToInsert = extractedStops.map((s, idx) => {
+      const isDelivery = (s.type || '').toString().toUpperCase() === 'DELIVERY';
+      return {
+        stopType: isDelivery ? 'DELIVERY' : 'PICKUP',
+        date: s.date && String(s.date).trim() ? String(s.date).trim().slice(0, 10) : (isDelivery ? deliveryDate : pickupDate),
+        city: s.city,
+        state: s.state,
+        zip: s.zip,
+        address1: s.address1,
+        sequence: typeof s.sequence === 'number' ? s.sequence : idx + 1
+      };
+    });
+  } else {
+    pickupLocation = buildLoc(pickup);
+    deliveryLocation = buildLoc(delivery);
+    pickupDate = pickup.date && String(pickup.date).trim() ? String(pickup.date).trim().slice(0, 10) : today;
+    deliveryDate = delivery.date && String(delivery.date).trim() ? String(delivery.date).trim().slice(0, 10) : tomorrow;
+    stopsToInsert = [
+      { stopType: 'PICKUP', date: pickupDate, city: pickup.city, state: pickup.state, zip: pickup.zip, address1: null, sequence: 1 },
+      { stopType: 'DELIVERY', date: deliveryDate, city: delivery.city, state: delivery.state, zip: delivery.zip, address1: null, sequence: 2 }
+    ];
+  }
+
+  const refValue = (data.loadId || data.orderId || data.proNumber || data.poNumber || '').toString().trim();
+  // Use loadId/orderId/proNumber as PO when poNumber not found in document
+  const poValue = (data.poNumber && data.poNumber.toString().trim()) || (data.loadId || data.orderId || data.proNumber || '').toString().trim() || null;
+
+  // Step 2: Short-lived DB transaction — acquire client, insert, commit, release immediately
+  // (does not include the R2 upload so the connection isn't held during the network call)
+  const client = await getClient();
+  let loadId;
+  try {
+    let brokerId = null;
+    let finalBrokerName = brokerName;
+    if (brokerName) {
+      const broker = await findBrokerByName(client, brokerName);
+      if (broker) {
+        brokerId = broker.id;
+        finalBrokerName = broker.name || brokerName;
+      }
+      if (!broker) finalBrokerName = null;
+    }
+
+    const loadNumber = refValue ? refValue.slice(0, 50) : await generateLoadNumber(client);
+
+    await client.query('BEGIN');
+
+    const insertResult = await client.query(
+      `INSERT INTO loads (
+        tenant_id, operating_entity_id,
+        load_number, status, billing_status, dispatcher_user_id,
+        driver_id, truck_id, trailer_id, broker_id, broker_name,
+        po_number, rate, notes, completed_date,
+        pickup_location, delivery_location, pickup_date, delivery_date
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+      RETURNING *`,
+      [
+        req.context?.tenantId || null,
+        req.context?.operatingEntityId || null,
+        loadNumber, 'DRAFT', 'PENDING', dispatcherUserId,
+        null, null, null, brokerId, finalBrokerName,
+        poValue, data.rate || 0, null, null,
+        pickupLocation, deliveryLocation, normalizeNullable(pickupDate), normalizeNullable(deliveryDate)
+      ]
+    );
+    loadId = insertResult.rows[0].id;
+
+    for (const stop of stopsToInsert) {
+      await client.query(
+        `INSERT INTO load_stops (load_id, stop_type, stop_date, city, state, zip, address1, sequence)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [loadId, stop.stopType, normalizeNullable(stop.date), normalizeNullable(stop.city), normalizeNullable(stop.state), normalizeNullable(stop.zip), normalizeNullable(stop.address1 || null), stop.sequence]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    // Always release the client back to the pool before the R2 upload
+    try { client.release(); } catch (_) {}
+  }
+
+  // Step 3: Upload PDF to R2 — DB connection already returned to pool
+  const fileExt = path.extname(file.originalname || '').toLowerCase() || '.pdf';
+  const safeName = `load-${loadId}-${Date.now()}${fileExt}`;
+  const { key: storageKey } = await uploadBuffer({
+    buffer: file.buffer,
+    contentType: file.mimetype,
+    prefix: `loads/${loadId}`,
+    fileName: safeName
+  });
+
+  // Step 4: Record the attachment — single query, no transaction needed
+  await query(
+    `INSERT INTO load_attachments (load_id, type, file_name, storage_key, mime_type, size_bytes, uploaded_by_user_id)
+     VALUES ($1,'RATE_CONFIRMATION',$2,$3,$4,$5,$6)`,
+    [loadId, file.originalname || safeName, storageKey, file.mimetype, file.size, dispatcherUserId]
+  );
+
+  const created = await getLoadDetail(query, loadId, req.context);
+  return { success: true, data: created, filename: file.originalname };
+}
+
 // POST /api/loads/bulk-rate-confirmations (admin, dispatch only; max 10 PDFs)
 router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), upload.array('files', BULK_MAX_FILES), async (req, res) => {
   const startTime = Date.now();
@@ -673,141 +811,21 @@ router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), uplo
       return res.status(400).json({ success: false, error: 'Only PDF files are supported for bulk rate confirmation upload.' });
     }
 
-    let client;
-    try {
-      client = await getClient();
-    } catch (e) {
-      return res.status(500).json({ success: false, error: 'Database unavailable' });
-    }
-    const results = [];
     const dispatcherUserId = req.user?.id || null;
 
-    for (const file of pdfFiles) {
-      try {
-        const data = await extractLoadFromPdf(file.buffer, file.originalname || 'upload.pdf');
-        const pickup = data.pickup || {};
-        const delivery = data.delivery || {};
-        const brokerName = (data.brokerName || '').toString().trim() || null;
-        const extractedStops = Array.isArray(data.stops) && data.stops.length > 0 ? data.stops : null;
+    // Process all files concurrently — each gets its own DB client so they don't block each other.
+    // With a sequential for-loop, 10 files × ~10 s/file = ~100 s (past any proxy timeout).
+    // In parallel, total time ≈ slowest single file (~10–15 s).
+    const settled = await Promise.allSettled(
+      pdfFiles.map(file => processSingleRateConfirmation(file, req, dispatcherUserId))
+    );
 
-        let brokerId = null;
-        let finalBrokerName = brokerName;
-        if (brokerName) {
-          const broker = await findBrokerByName(client, brokerName);
-          if (broker) {
-            brokerId = broker.id;
-            finalBrokerName = broker.name || brokerName;
-          }
-          if (!broker) finalBrokerName = null;
-        }
+    const results = settled.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value;
+      dtLogger.error('loads_bulk_single_failed', r.reason, { filename: pdfFiles[i].originalname });
+      return { success: false, error: r.reason?.message || 'Extraction or insert failed', filename: pdfFiles[i].originalname };
+    });
 
-        function buildLoc(obj) {
-          const parts = [(obj.city || '').trim(), (obj.state || '').trim()].filter(Boolean);
-          const loc = parts.join(', ');
-          const zip = (obj.zip || '').toString().trim();
-          return zip ? (loc ? `${loc} ${zip}` : zip) : (loc || 'UNKNOWN');
-        }
-        const today = new Date().toISOString().slice(0, 10);
-        const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-
-        let pickupLocation;
-        let deliveryLocation;
-        let pickupDate;
-        let deliveryDate;
-        let stopsToInsert;
-
-        if (extractedStops && extractedStops.length > 0) {
-          const pickups = extractedStops.filter((s) => (s.type || '').toString().toUpperCase() === 'PICKUP');
-          const deliveries = extractedStops.filter((s) => (s.type || '').toString().toUpperCase() === 'DELIVERY');
-          const firstPickup = pickups[0];
-          const lastDelivery = deliveries[deliveries.length - 1];
-          pickupLocation = firstPickup ? buildLoc(firstPickup) : buildLoc(pickup);
-          deliveryLocation = lastDelivery ? buildLoc(lastDelivery) : buildLoc(delivery);
-          pickupDate = firstPickup?.date && String(firstPickup.date).trim() ? String(firstPickup.date).trim().slice(0, 10) : (pickup.date && String(pickup.date).trim() ? String(pickup.date).trim().slice(0, 10) : today);
-          deliveryDate = lastDelivery?.date && String(lastDelivery.date).trim() ? String(lastDelivery.date).trim().slice(0, 10) : (delivery.date && String(delivery.date).trim() ? String(delivery.date).trim().slice(0, 10) : tomorrow);
-          stopsToInsert = extractedStops.map((s, idx) => {
-            const isDelivery = (s.type || '').toString().toUpperCase() === 'DELIVERY';
-            return {
-              stopType: isDelivery ? 'DELIVERY' : 'PICKUP',
-              date: s.date && String(s.date).trim() ? String(s.date).trim().slice(0, 10) : (isDelivery ? deliveryDate : pickupDate),
-              city: s.city,
-              state: s.state,
-              zip: s.zip,
-              address1: s.address1,
-              sequence: typeof s.sequence === 'number' ? s.sequence : idx + 1
-            };
-          });
-        } else {
-          pickupLocation = buildLoc(pickup);
-          deliveryLocation = buildLoc(delivery);
-          pickupDate = pickup.date && String(pickup.date).trim() ? String(pickup.date).trim().slice(0, 10) : today;
-          deliveryDate = delivery.date && String(delivery.date).trim() ? String(delivery.date).trim().slice(0, 10) : tomorrow;
-          stopsToInsert = [
-            { stopType: 'PICKUP', date: pickupDate, city: pickup.city, state: pickup.state, zip: pickup.zip, address1: null, sequence: 1 },
-            { stopType: 'DELIVERY', date: deliveryDate, city: delivery.city, state: delivery.state, zip: delivery.zip, address1: null, sequence: 2 }
-          ];
-        }
-
-        const refValue = (data.loadId || data.orderId || data.proNumber || data.poNumber || '').toString().trim();
-        const loadNumber = refValue ? refValue.slice(0, 50) : await generateLoadNumber(client);
-        // Use loadId/orderId/proNumber as PO when poNumber not found in document
-        const poValue = (data.poNumber && data.poNumber.toString().trim()) || (data.loadId || data.orderId || data.proNumber || '').toString().trim() || null;
-
-        await client.query('BEGIN');
-
-        const insertResult = await client.query(
-          `INSERT INTO loads (
-            tenant_id, operating_entity_id,
-            load_number, status, billing_status, dispatcher_user_id,
-            driver_id, truck_id, trailer_id, broker_id, broker_name,
-            po_number, rate, notes, completed_date,
-            pickup_location, delivery_location, pickup_date, delivery_date
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-          RETURNING *`,
-          [
-            req.context?.tenantId || null,
-            req.context?.operatingEntityId || null,
-            loadNumber, 'DRAFT', 'PENDING', dispatcherUserId,
-            null, null, null, brokerId, finalBrokerName,
-            poValue, data.rate || 0, null, null,
-            pickupLocation, deliveryLocation, normalizeNullable(pickupDate), normalizeNullable(deliveryDate)
-          ]
-        );
-        const loadId = insertResult.rows[0].id;
-
-        for (const stop of stopsToInsert) {
-          await client.query(
-            `INSERT INTO load_stops (load_id, stop_type, stop_date, city, state, zip, address1, sequence)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-            [loadId, stop.stopType, normalizeNullable(stop.date), normalizeNullable(stop.city), normalizeNullable(stop.state), normalizeNullable(stop.zip), normalizeNullable(stop.address1 || null), stop.sequence]
-          );
-        }
-
-        const fileExt = path.extname(file.originalname || '').toLowerCase() || '.pdf';
-        const safeName = `load-${loadId}-${Date.now()}${fileExt}`;
-        const { key: storageKey } = await uploadBuffer({
-          buffer: file.buffer,
-          contentType: file.mimetype,
-          prefix: `loads/${loadId}`,
-          fileName: safeName
-        });
-        await client.query(
-          `INSERT INTO load_attachments (load_id, type, file_name, storage_key, mime_type, size_bytes, uploaded_by_user_id)
-           VALUES ($1,'RATE_CONFIRMATION',$2,$3,$4,$5,$6)`,
-          [loadId, file.originalname || safeName, storageKey, file.mimetype, file.size, dispatcherUserId]
-        );
-
-        await client.query('COMMIT');
-        const created = await getLoadDetail(client, loadId);
-        results.push({ success: true, data: created, filename: file.originalname });
-      } catch (err) {
-        await client.query('ROLLBACK');
-        dtLogger.error('loads_bulk_single_failed', err, { filename: file.originalname });
-        results.push({ success: false, error: err.message || 'Extraction or insert failed', filename: file.originalname });
-      }
-    }
-
-    try { client.release(); } catch (_) {}
     const duration = Date.now() - startTime;
     dtLogger.trackRequest('POST', '/api/loads/bulk-rate-confirmations', 200, duration, { count: results.length });
     res.json({ success: true, results });
