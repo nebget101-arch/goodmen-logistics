@@ -207,10 +207,9 @@
               />
             </div>
             <div class="dqf-field">
-              <label for="dob">Date of Birth</label>
               <app-ai-date-picker
                 inputId="dob"
-                [label]="''"
+                [label]="'Date of Birth'"
                 ariaLabel="Date of Birth"
                 [(ngModel)]="newDriver.dateOfBirth"
                 name="newDriverDob"
@@ -218,10 +217,9 @@
               ></app-ai-date-picker>
             </div>
             <div class="dqf-field">
-              <label for="hireDate">Hire Date</label>
               <app-ai-date-picker
                 inputId="hireDate"
-                [label]="''"
+                [label]="'Hire Date'"
                 ariaLabel="Hire Date"
                 [(ngModel)]="newDriver.hireDate"
                 name="newDriverHireDate"
@@ -269,10 +267,9 @@
               </select>
             </div>
             <div class="dqf-field">
-              <label for="cdlExpiry">CDL Expiry</label>
               <app-ai-date-picker
                 inputId="cdlExpiry"
-                [label]="''"
+                [label]="'CDL Expiry'"
                 ariaLabel="CDL Expiry"
                 [(ngModel)]="newDriver.cdlExpiry"
                 name="newDriverCdlExpiry"
@@ -280,10 +277,9 @@
               ></app-ai-date-picker>
             </div>
             <div class="dqf-field">
-              <label for="medExpiry">Medical Cert Expiry</label>
               <app-ai-date-picker
                 inputId="medExpiry"
-                [label]="''"
+                [label]="'Med Cert Expiry'"
                 ariaLabel="Medical Cert Expiry"
                 [(ngModel)]="newDriver.medicalCertExpiry"
                 name="newDriverMedExpiry"
@@ -329,10 +325,9 @@
               <input id="editCdlNumber" type="text" [(ngModel)]="editingDriver.cdlNumber" class="form-input" />
             </div>
             <div class="dqf-field">
-              <label for="editCdlExpiry">CDL Expiry</label>
               <app-ai-date-picker
                 inputId="editCdlExpiry"
-                [label]="''"
+                [label]="'CDL Expiry'"
                 ariaLabel="CDL Expiry"
                 [(ngModel)]="editingDriver.cdlExpiry"
                 name="editDriverCdlExpiry"
@@ -354,10 +349,9 @@
               <input id="editCdlState" type="text" [(ngModel)]="editingDriver.cdlState" maxlength="2" class="form-input" />
             </div>
             <div class="dqf-field">
-              <label for="editMedExpiry">Medical Cert Expiry</label>
               <app-ai-date-picker
                 inputId="editMedExpiry"
-                [label]="''"
+                [label]="'Med Cert Expiry'"
                 ariaLabel="Medical Cert Expiry"
                 [(ngModel)]="editingDriver.medicalCertExpiry"
                 name="editDriverMedExpiry"
