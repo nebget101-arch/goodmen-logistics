@@ -339,12 +339,26 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
       });
   }
 
+  private readonly FALLBACK_LOAD_STATUS_OPTIONS: { value: string; label: string }[] = [
+    { value: 'NEW', label: 'New' },
+    { value: 'DISPATCHED', label: 'Dispatched' },
+    { value: 'EN_ROUTE', label: 'En Route' },
+    { value: 'IN_TRANSIT', label: 'In Transit' },
+    { value: 'DELIVERED', label: 'Delivered' },
+    { value: 'CANCELLED', label: 'Cancelled' }
+  ];
+
   private loadReferenceData(): void {
     this.referenceDataService.getLoadStatusCodes().subscribe({
       next: (rows) => {
         this.loadStatusOptions = this.dedupeByNormalizedCode(rows);
-        this.loadStatusSelectOptions = this.loadStatusOptions.map(s => ({ value: s.code, label: s.display_label }));
+        this.loadStatusSelectOptions = this.loadStatusOptions.length > 0
+          ? this.loadStatusOptions.map(s => ({ value: s.code, label: s.display_label }))
+          : [...this.FALLBACK_LOAD_STATUS_OPTIONS];
         this.loadStatusMap = this.buildStatusMap(rows);
+      },
+      error: () => {
+        this.loadStatusSelectOptions = [...this.FALLBACK_LOAD_STATUS_OPTIONS];
       }
     });
 
