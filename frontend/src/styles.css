@@ -817,21 +817,27 @@ body {
   padding: 6px 0 8px;
 }
 
+/* Hide redundant month-name label row — month is already shown in the header nav */
 .mat-calendar-body-label {
-  color: rgba(148, 163, 184, 0.88);
-  font-size: 0.8rem;
+  visibility: hidden !important;
+  padding: 0 !important;
+  height: 0 !important;
+  font-size: 0 !important;
 }
 
 .mat-calendar-body-cell {
   vertical-align: middle;
 }
 
+/* Flat day cells — no heavy circle background on unselected days */
 .mat-calendar-body-cell-content {
-  border-radius: 8px;
+  border-radius: 6px !important;
+  background: transparent !important;
   border: 1px solid transparent;
-  width: 100%;
-  max-width: 40px;
-  line-height: 40px;
+  width: 32px !important;
+  height: 32px !important;
+  max-width: 32px;
+  line-height: 32px !important;
   margin: 0 auto;
 }
 
@@ -861,6 +867,40 @@ body {
 .mat-calendar-next-button,
 .mat-calendar-period-button {
   color: var(--text-dark);
+}
+
+/* Today / Clear footer buttons (FN-179) */
+.mat-datepicker-actions {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 12px 10px;
+  border-top: 1px solid rgba(71, 85, 105, 0.4);
+  gap: 8px;
+}
+
+.dp-footer-btn {
+  font-size: 0.78rem !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+  min-width: 0 !important;
+  padding: 4px 12px !important;
+  border-radius: 6px !important;
+  line-height: 28px !important;
+  height: 28px !important;
+}
+
+.dp-footer-today {
+  color: rgba(56, 189, 248, 0.9) !important;
+}
+.dp-footer-today:hover {
+  background: rgba(56, 189, 248, 0.12) !important;
+}
+
+.dp-footer-clear {
+  color: rgba(148, 163, 184, 0.75) !important;
+}
+.dp-footer-clear:hover {
+  background: rgba(148, 163, 184, 0.1) !important;
 }
 
 /* Panel class from app-ai-date-picker — solid readable panel over forms (FN-160) */

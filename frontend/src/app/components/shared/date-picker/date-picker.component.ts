@@ -1,4 +1,5 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { MatDatepicker } from '@angular/material/datepicker';
 
 @Component({
   selector: 'app-date-picker',
@@ -25,5 +26,15 @@ export class DatePickerComponent {
   }
 
   @Output() valueChange = new EventEmitter<Date | null>();
+
+  setToday(picker: MatDatepicker<Date>): void {
+    this.value = new Date();
+    picker.close();
+  }
+
+  clearDate(picker: MatDatepicker<Date>): void {
+    this.value = null;
+    picker.close();
+  }
 }
 
