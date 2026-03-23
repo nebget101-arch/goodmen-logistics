@@ -14,23 +14,19 @@
       <div class="grid">
         <div>
           <label>Company Name *</label>
-          <input class="form-control" formControlName="company_name" />
+          <input class="form-input" formControlName="company_name" />
         </div>
         <div>
           <label>Shop Client Type *</label>
-          <select class="form-control" formControlName="customer_type">
-            <option *ngFor="let t of customerTypes" [value]="t">{{ t }}</option>
-          </select>
+          <app-ai-select formControlName="customer_type" label="Type" [options]="customerTypeOptions" placeholder="Select type"></app-ai-select>
         </div>
         <div>
           <label>Status *</label>
-          <select class="form-control" formControlName="status">
-            <option *ngFor="let s of statuses" [value]="s">{{ s }}</option>
-          </select>
+          <app-ai-select formControlName="status" label="Status" [options]="statusOptions" placeholder="Select status"></app-ai-select>
         </div>
         <div>
           <label>Tax ID / EIN</label>
-          <input class="form-control" formControlName="tax_id" />
+          <input class="form-input" formControlName="tax_id" />
         </div>
       </div>
     </div>
@@ -40,23 +36,23 @@
       <div class="grid">
         <div>
           <label>Primary Contact</label>
-          <input class="form-control" formControlName="primary_contact_name" />
+          <input class="form-input" formControlName="primary_contact_name" />
         </div>
         <div>
           <label>Phone</label>
-          <input class="form-control" formControlName="phone" />
+          <input class="form-input" formControlName="phone" />
         </div>
         <div>
           <label>Email</label>
-          <input class="form-control" formControlName="email" />
+          <input class="form-input" formControlName="email" />
         </div>
         <div>
           <label>Secondary Phone</label>
-          <input class="form-control" formControlName="secondary_phone" />
+          <input class="form-input" formControlName="secondary_phone" />
         </div>
         <div>
           <label>Website</label>
-          <input class="form-control" formControlName="website" />
+          <input class="form-input" formControlName="website" />
         </div>
       </div>
     </div>
@@ -66,27 +62,27 @@
       <div class="grid">
         <div>
           <label>Address Line 1</label>
-          <input class="form-control" formControlName="billing_address_line1" />
+          <input class="form-input" formControlName="billing_address_line1" />
         </div>
         <div>
           <label>Address Line 2</label>
-          <input class="form-control" formControlName="billing_address_line2" />
+          <input class="form-input" formControlName="billing_address_line2" />
         </div>
         <div>
           <label>City</label>
-          <input class="form-control" formControlName="billing_city" />
+          <input class="form-input" formControlName="billing_city" />
         </div>
         <div>
           <label>State</label>
-          <input class="form-control" formControlName="billing_state" />
+          <input class="form-input" formControlName="billing_state" />
         </div>
         <div>
           <label>Zip</label>
-          <input class="form-control" formControlName="billing_zip" />
+          <input class="form-input" formControlName="billing_zip" />
         </div>
         <div>
           <label>Country</label>
-          <input class="form-control" formControlName="billing_country" />
+          <input class="form-input" formControlName="billing_country" />
         </div>
       </div>
     </div>
@@ -96,17 +92,15 @@
       <div class="grid">
         <div>
           <label>Payment Terms *</label>
-          <select class="form-control" formControlName="payment_terms">
-            <option *ngFor="let p of paymentTerms" [value]="p">{{ p }}</option>
-          </select>
+          <app-ai-select formControlName="payment_terms" label="Payment Terms" [options]="paymentTermsOptions" placeholder="Select terms"></app-ai-select>
         </div>
         <div *ngIf="form.value.payment_terms === 'CUSTOM'">
           <label>Custom Days</label>
-          <input class="form-control" type="number" formControlName="payment_terms_custom_days" />
+          <input class="form-input" type="number" formControlName="payment_terms_custom_days" />
         </div>
         <div>
           <label>Credit Limit</label>
-          <input class="form-control" type="number" formControlName="credit_limit" />
+          <input class="form-input" type="number" formControlName="credit_limit" />
         </div>
         <div class="checkbox">
           <label>
@@ -115,7 +109,7 @@
         </div>
         <div>
           <label>Billing Notes</label>
-          <textarea class="form-control" formControlName="billing_notes"></textarea>
+          <textarea class="form-input" formControlName="billing_notes"></textarea>
         </div>
       </div>
     </div>

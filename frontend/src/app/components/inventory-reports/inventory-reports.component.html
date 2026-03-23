@@ -31,11 +31,27 @@
         </div>
         <div class="filter-item">
           <label for="inv-date-from">From</label>
-          <input id="inv-date-from" type="date" class="form-control" [(ngModel)]="filters.dateFrom" (change)="loadTransactions()" />
+          <app-ai-date-picker
+            inputId="inv-date-from"
+            class="form-control"
+            [(ngModel)]="filters.dateFrom"
+            (ngModelChange)="loadTransactions()"
+            name="invDateFrom"
+            ariaLabel="Transaction from date"
+            placeholder="From"
+          ></app-ai-date-picker>
         </div>
         <div class="filter-item">
           <label for="inv-date-to">To</label>
-          <input id="inv-date-to" type="date" class="form-control" [(ngModel)]="filters.dateTo" (change)="loadTransactions()" />
+          <app-ai-date-picker
+            inputId="inv-date-to"
+            class="form-control"
+            [(ngModel)]="filters.dateTo"
+            (ngModelChange)="loadTransactions()"
+            name="invDateTo"
+            ariaLabel="Transaction to date"
+            placeholder="To"
+          ></app-ai-date-picker>
         </div>
         <div class="filter-item" style="margin-left: auto;">
           <button type="button" class="btn btn-primary" (click)="loadAiRecommendations()" [disabled]="aiLoading || !locationId">

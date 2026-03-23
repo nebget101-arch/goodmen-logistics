@@ -7,6 +7,7 @@ import { CustomersListComponent } from './customers-list/customers-list.componen
 import { CustomerFormComponent } from './customer-form/customer-form.component';
 import { CustomerDetailComponent } from './customer-detail/customer-detail.component';
 import { CustomerBulkUploadModule } from '../components/customer-bulk-upload/customer-bulk-upload.module';
+import { SharedModule } from '../shared/shared.module';
 
 @NgModule({
   declarations: [
@@ -20,7 +21,8 @@ import { CustomerBulkUploadModule } from '../components/customer-bulk-upload/cus
     FormsModule,
     ReactiveFormsModule,
     CustomerManagementRoutingModule,
-    CustomerBulkUploadModule
+    CustomerBulkUploadModule,
+    SharedModule
   ]
 })
 export class CustomerManagementModule {}

@@ -111,19 +111,42 @@
     <div class="section" *ngIf="invoice.status !== 'VOID' && invoice.status !== 'PAID'">
       <h3 class="section-title">Add Payment</h3>
       <div class="payment-form">
-        <input type="date" class="form-control" [(ngModel)]="paymentForm.paymentDate" />
-        <input type="number" class="form-control" placeholder="Amount" [(ngModel)]="paymentForm.amount" />
-        <select class="form-control" [(ngModel)]="paymentForm.method">
-          <option value="CASH">Cash</option>
-          <option value="CHECK">Check</option>
-          <option value="CARD">Card</option>
-          <option value="ACH">ACH</option>
-          <option value="WIRE">Wire</option>
-          <option value="ZELLE">Zelle</option>
-          <option value="OTHER">Other</option>
-        </select>
-        <input type="text" class="form-control" placeholder="Reference" [(ngModel)]="paymentForm.referenceNumber" />
-        <input type="text" class="form-control" placeholder="Memo" [(ngModel)]="paymentForm.memo" />
+        <div class="payment-field">
+          <label class="payment-field-label" for="invPaymentDate">Payment date</label>
+          <app-ai-date-picker
+            class="form-control"
+            [inline]="true"
+            [(ngModel)]="paymentForm.paymentDate"
+            name="invPaymentDate"
+            inputId="invPaymentDate"
+            [label]="''"
+            ariaLabel="Payment date"
+            placeholder="MM/DD/YYYY"
+          ></app-ai-date-picker>
+        </div>
+        <div class="payment-field">
+          <label class="payment-field-label" for="invPaymentAmount">Amount</label>
+          <input id="invPaymentAmount" type="number" class="form-control" placeholder="0.00" [(ngModel)]="paymentForm.amount" />
+        </div>
+        <div class="payment-field">
+          <label class="payment-field-label" for="invPaymentMethod">Method</label>
+          <app-ai-select
+            class="form-control"
+            [options]="paymentMethodOptions"
+            [(ngModel)]="paymentForm.method"
+            name="invPaymentMethod"
+            inputId="invPaymentMethod"
+            ariaLabel="Payment method"
+          ></app-ai-select>
+        </div>
+        <div class="payment-field">
+          <label class="payment-field-label" for="invPaymentRef">Reference</label>
+          <input id="invPaymentRef" type="text" class="form-control" placeholder="Check #, txn id…" [(ngModel)]="paymentForm.referenceNumber" />
+        </div>
+        <div class="payment-field">
+          <label class="payment-field-label" for="invPaymentMemo">Memo</label>
+          <input id="invPaymentMemo" type="text" class="form-control" placeholder="Optional note" [(ngModel)]="paymentForm.memo" />
+        </div>
         <button
           type="button"
           class="btn-primary"

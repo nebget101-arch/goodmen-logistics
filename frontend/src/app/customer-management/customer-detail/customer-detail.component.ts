@@ -42,6 +42,12 @@ export class CustomerDetailComponent implements OnInit, OnDestroy {
     note: ''
   };
 
+  readonly noteTypeOptions = [
+    { value: 'GENERAL', label: 'General' },
+    { value: 'BILLING', label: 'Billing' },
+    { value: 'SERVICE_ISSUE', label: 'Service Issue' }
+  ];
+
   newVehicle: any = {
     unit_number: '',
     vin: '',

@@ -466,6 +466,29 @@
   color: #e5e7eb;
   font-size: 0.78rem;
   letter-spacing: 0.04em;
+  min-height: 34px;
+  line-height: 1.25;
+  box-sizing: border-box;
+}
+
+select.filter-select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  color-scheme: dark;
+  padding: 6px 28px 6px 10px;
+  background:
+    var(--fn-select-chevron) no-repeat right 8px center / 12px,
+    rgba(15, 23, 42, 0.96);
+}
+
+select.filter-select:not([multiple]):focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.7);
+  background:
+    var(--fn-select-chevron) no-repeat right 8px center / 12px,
+    rgba(15, 23, 42, 0.96);
 }
 
 .alert-clickable {

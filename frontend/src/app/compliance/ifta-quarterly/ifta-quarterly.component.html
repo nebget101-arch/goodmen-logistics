@@ -154,7 +154,19 @@
     </div>
 
     <div class="inline-form">
-      <input type="date" class="form-input" [(ngModel)]="newFuel.purchase_date" />
+      <div class="ifta-new-fuel-date-field">
+        <span class="ifta-new-fuel-date-label">Purchase date</span>
+        <app-ai-date-picker
+          class="ifta-new-fuel-date"
+          [inline]="true"
+          [(ngModel)]="newFuel.purchase_date"
+          name="newFuelPurchaseDate"
+          inputId="iftaNewFuelDate"
+          [label]="''"
+          ariaLabel="New fuel purchase date"
+          placeholder="MM/DD/YYYY"
+        ></app-ai-date-picker>
+      </div>
       <input class="form-input" placeholder="Unit" [(ngModel)]="newFuel.unit" />
       <input class="form-input" placeholder="ST" maxlength="2" [(ngModel)]="newFuel.jurisdiction" title="State abbreviation" />
       <input class="form-input" placeholder="Vendor" [(ngModel)]="newFuel.vendor" />
@@ -191,7 +203,17 @@
         </thead>
         <tbody>
           <tr *ngFor="let row of fuelRows" [class.warn-row]="row.duplicate_suspected">
-            <td><input type="date" class="cell-input" [(ngModel)]="row.purchase_date" (ngModelChange)="queueFuelUpdate(row)" /></td>
+            <td>
+              <app-ai-date-picker
+                [inline]="true"
+                [(ngModel)]="row.purchase_date"
+                (ngModelChange)="queueFuelUpdate(row)"
+                [name]="'fuelPurchaseDate' + row.id"
+                [inputId]="'fuelPurchaseDate' + row.id"
+                ariaLabel="Fuel purchase date"
+                placeholder="Date"
+              ></app-ai-date-picker>
+            </td>
             <td><input class="cell-input" [(ngModel)]="row.unit" (ngModelChange)="queueFuelUpdate(row)" /></td>
             <td><input class="cell-input" [(ngModel)]="row.jurisdiction" maxlength="2" (ngModelChange)="queueFuelUpdate(row)" /></td>
             <td><input class="cell-input" [(ngModel)]="row.vendor" (ngModelChange)="queueFuelUpdate(row)" /></td>

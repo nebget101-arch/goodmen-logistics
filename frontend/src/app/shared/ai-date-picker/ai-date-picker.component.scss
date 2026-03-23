@@ -1,0 +1,92 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+:host(.ai-date-picker--inline) {
+  display: inline-block;
+  width: auto;
+  min-width: 9.25rem;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+:host(.ai-date-picker--inline) .ai-date-picker-field ::ng-deep .mat-mdc-form-field-infix {
+  min-height: 36px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+:host(.ai-date-picker--inline) .ai-date-picker-field {
+  font-size: 0.82rem;
+}
+
+.ai-date-picker-field {
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+/* Parent template provides visible <label>; match compact filter height. */
+.ai-date-picker-field--external-label ::ng-deep .mat-mdc-form-field-infix {
+  min-height: 36px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+/* Match AI_THEME_VISUAL_REFERENCE form inputs: dark surface, 10px radius, cyan focus */
+.ai-date-picker-field ::ng-deep {
+  .mat-mdc-form-field-outline,
+  .mat-mdc-form-field-focus-overlay,
+  .mdc-notched-outline {
+    display: none !important;
+  }
+
+  .mat-mdc-text-field-wrapper {
+    padding: 0;
+    border-radius: 10px;
+    border: 1px solid rgba(71, 85, 105, 0.95);
+    background:
+      radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.08), transparent 52%),
+      rgba(2, 6, 23, 0.8);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper {
+    border-color: rgba(56, 189, 248, 0.95);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+  }
+
+  /* Align closer to .form-input / filter rows (~38px content) — FN-167 */
+  .mat-mdc-form-field-infix {
+    min-height: 38px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .mat-datepicker-toggle {
+    color: #94a3b8;
+  }
+
+  .mat-datepicker-toggle .mat-mdc-icon-button {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    --mdc-icon-button-icon-color: #94a3b8;
+    --mdc-icon-button-hover-icon-color: #67e8f9;
+  }
+
+  .mat-mdc-input-element {
+    color: #e5e7eb;
+    caret-color: #67e8f9;
+  }
+
+  .mat-mdc-form-field-label,
+  .mdc-floating-label {
+    color: #94a3b8 !important;
+  }
+
+  .mat-mdc-form-field.mat-focused .mat-mdc-form-field-label,
+  .mat-mdc-form-field.mat-focused .mdc-floating-label--float-above {
+    color: #67e8f9 !important;
+  }
+}

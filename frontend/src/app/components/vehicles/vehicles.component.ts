@@ -82,6 +82,11 @@ export class VehiclesComponent implements OnInit {
   itemsPerPage = 100;
   totalPages = 1;
   pageSizeOptions = [25, 50, 100];
+  pageSizeSelectOptions = [
+    { value: 25, label: '25 items' },
+    { value: 50, label: '50 items' },
+    { value: 100, label: '100 items' }
+  ];
 
   // Modal state
   showVehicleForm = false;

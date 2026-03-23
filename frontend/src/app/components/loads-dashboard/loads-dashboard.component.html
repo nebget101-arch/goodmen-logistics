@@ -167,7 +167,7 @@
       <section class="inline-new-load__col">
         <h4>Pickup</h4>
         <label>Date
-          <input type="date" formControlName="pickupDate">
+          <app-ai-date-picker formControlName="pickupDate" [inline]="true" ariaLabel="Pickup date"></app-ai-date-picker>
         </label>
         <label>City
           <input formControlName="pickupCity" (input)="markPickupCityEdited()">
@@ -183,7 +183,7 @@
       <section class="inline-new-load__col">
         <h4>Delivery</h4>
         <label>Date
-          <input type="date" formControlName="deliveryDate">
+          <app-ai-date-picker formControlName="deliveryDate" [inline]="true" ariaLabel="Delivery date"></app-ai-date-picker>
         </label>
         <label>City
           <input formControlName="deliveryCity" (input)="markDeliveryCityEdited()">
@@ -749,14 +749,14 @@
           </section>
           <section>
             <h4>Pickup</h4>
-            <label>Date <input type="date" formControlName="pickupDate"></label>
+            <label>Date <app-ai-date-picker formControlName="pickupDate" [inline]="true" ariaLabel="Pickup date"></app-ai-date-picker></label>
             <label>City <input formControlName="pickupCity" (input)="markPickupCityEdited()"></label>
             <label>State <input formControlName="pickupState" (input)="markPickupStateEdited()"></label>
             <label>Zip <input formControlName="pickupZip" (blur)="lookupPickupZip()"></label>
           </section>
           <section>
             <h4>Delivery</h4>
-            <label>Date <input type="date" formControlName="deliveryDate"></label>
+            <label>Date <app-ai-date-picker formControlName="deliveryDate" [inline]="true" ariaLabel="Delivery date"></app-ai-date-picker></label>
             <label>City <input formControlName="deliveryCity" (input)="markDeliveryCityEdited()"></label>
             <label>State <input formControlName="deliveryState" (input)="markDeliveryStateEdited()"></label>
             <label>Zip <input formControlName="deliveryZip" (blur)="lookupDeliveryZip()"></label>
@@ -1246,7 +1246,7 @@
           </div>
           <div class="new-stop-field">
             <label>Date *</label>
-            <input type="date" formControlName="stopDate">
+            <app-ai-date-picker formControlName="stopDate" [inline]="true" ariaLabel="Stop date"></app-ai-date-picker>
           </div>
           <div class="new-stop-field">
             <label>Company</label>
@@ -1326,7 +1326,7 @@
           <div class="new-stop-row">
             <div class="new-stop-field">
               <label>Date *</label>
-              <input type="date" formControlName="stopDate">
+              <app-ai-date-picker formControlName="stopDate" [inline]="true" ariaLabel="Stop date"></app-ai-date-picker>
             </div>
             <div class="new-stop-field" *ngIf="editStopForm.get('appointmentType')?.value === 'Appt'">
               <label>Appt time</label>

@@ -152,7 +152,7 @@
         <h4>Update Credit Limit</h4>
         <div class="form-group">
           <label>New Credit Limit</label>
-          <input type="number" class="form-control" [(ngModel)]="newCreditLimit" 
+          <input type="number" class="form-input" [(ngModel)]="newCreditLimit" 
                  [disabled]="updatingCreditLimit" min="0" step="100">
         </div>
         <button class="btn btn-primary" (click)="updateCreditLimit()" 
@@ -247,23 +247,21 @@
       <form [formGroup]="pricingForm">
         <div class="form-group">
           <label>Labor Rate Multiplier (%)</label>
-          <input type="number" class="form-control" formControlName="labor_rate_multiplier" step="0.01">
+          <input type="number" class="form-input" formControlName="labor_rate_multiplier" step="0.01">
         </div>
         <div class="form-group">
           <label>Markup Percentage (%)</label>
-          <input type="number" class="form-control" formControlName="markup_percentage" step="0.01">
+          <input type="number" class="form-input" formControlName="markup_percentage" step="0.01">
         </div>
         <div class="form-group">
           <label>Discount Percentage (%)</label>
-          <input type="number" class="form-control" formControlName="discount_percentage" step="0.01">
+          <input type="number" class="form-input" formControlName="discount_percentage" step="0.01">
         </div>
         <div class="form-group">
-          <label>Effective Date</label>
-          <input type="date" class="form-control" formControlName="effective_date">
+          <app-ai-date-picker formControlName="effective_date" label="Effective Date" inputId="rateEffectiveDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
         </div>
         <div class="form-group">
-          <label>End Date (Optional)</label>
-          <input type="date" class="form-control" formControlName="end_date">
+          <app-ai-date-picker formControlName="end_date" label="End Date (Optional)" inputId="rateEndDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
         </div>
         <button
           type="button"
@@ -304,7 +302,7 @@
       <div class="row">
         <div class="col-md-4">
           <label for="newVehicleVin">VIN</label>
-          <input id="newVehicleVin" type="text" class="form-control" [(ngModel)]="newVehicle.vin" placeholder="Scan or enter VIN">
+          <input id="newVehicleVin" type="text" class="form-input" [(ngModel)]="newVehicle.vin" placeholder="Scan or enter VIN">
         </div>
         <div class="col-md-2" style="display:flex; gap:8px; align-items:flex-end;">
           <button type="button" class="btn btn-outline-secondary" (click)="vinBridgeConnected ? stopVinBridge() : startVinBridge()">
@@ -316,34 +314,34 @@
         </div>
         <div class="col-md-3">
           <label for="newVehicleUnit">Unit #</label>
-          <input id="newVehicleUnit" type="text" class="form-control" [(ngModel)]="newVehicle.unit_number">
+          <input id="newVehicleUnit" type="text" class="form-input" [(ngModel)]="newVehicle.unit_number">
         </div>
         <div class="col-md-3">
           <label for="newVehiclePlate">License Plate</label>
-          <input id="newVehiclePlate" type="text" class="form-control" [(ngModel)]="newVehicle.license_plate">
+          <input id="newVehiclePlate" type="text" class="form-input" [(ngModel)]="newVehicle.license_plate">
         </div>
       </div>
 
       <div class="row" style="margin-top: 10px;">
         <div class="col-md-3">
           <label for="newVehicleMake">Make</label>
-          <input id="newVehicleMake" type="text" class="form-control" [(ngModel)]="newVehicle.make">
+          <input id="newVehicleMake" type="text" class="form-input" [(ngModel)]="newVehicle.make">
         </div>
         <div class="col-md-3">
           <label for="newVehicleModel">Model</label>
-          <input id="newVehicleModel" type="text" class="form-control" [(ngModel)]="newVehicle.model">
+          <input id="newVehicleModel" type="text" class="form-input" [(ngModel)]="newVehicle.model">
         </div>
         <div class="col-md-2">
           <label for="newVehicleYear">Year</label>
-          <input id="newVehicleYear" type="number" class="form-control" [(ngModel)]="newVehicle.year">
+          <input id="newVehicleYear" type="number" class="form-input" [(ngModel)]="newVehicle.year">
         </div>
         <div class="col-md-2">
           <label for="newVehicleState">State</label>
-          <input id="newVehicleState" type="text" class="form-control" [(ngModel)]="newVehicle.state">
+          <input id="newVehicleState" type="text" class="form-input" [(ngModel)]="newVehicle.state">
         </div>
         <div class="col-md-2">
           <label for="newVehicleMileage">Mileage</label>
-          <input id="newVehicleMileage" type="number" class="form-control" [(ngModel)]="newVehicle.mileage">
+          <input id="newVehicleMileage" type="number" class="form-input" [(ngModel)]="newVehicle.mileage">
         </div>
       </div>
 
@@ -393,12 +391,13 @@
 
   <div class="tab-content" *ngIf="activeTab === 'notes'">
     <div class="note-form">
-      <select class="form-control" [(ngModel)]="notePayload.note_type">
-        <option value="GENERAL">General</option>
-        <option value="BILLING">Billing</option>
-        <option value="SERVICE_ISSUE">Service Issue</option>
-      </select>
-      <textarea class="form-control" [(ngModel)]="notePayload.note" placeholder="Add a note"></textarea>
+      <app-ai-select
+        label="Note Type"
+        [options]="noteTypeOptions"
+        [(ngModel)]="notePayload.note_type"
+        placeholder="Select type"
+      ></app-ai-select>
+      <textarea class="form-input" [(ngModel)]="notePayload.note" placeholder="Add a note"></textarea>
       <button class="btn btn-primary" (click)="addNote()">Add Note</button>
     </div>
 

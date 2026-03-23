@@ -297,6 +297,33 @@
       }
     }
 
+    &__col input,
+    &__col select {
+      min-height: 32px;
+      line-height: 1.25;
+      box-sizing: border-box;
+    }
+
+    &__col select:not([multiple]) {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      cursor: pointer;
+      color-scheme: dark;
+      padding: 6px 26px 6px 8px;
+      background:
+        var(--fn-select-chevron) no-repeat right 6px center / 12px,
+        radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.35), transparent 55%),
+        rgba(15, 23, 42, 0.98);
+    }
+
+    &__col select:not([multiple]):focus {
+      background:
+        var(--fn-select-chevron) no-repeat right 6px center / 12px,
+        radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.35), transparent 55%),
+        rgba(15, 23, 42, 0.98);
+    }
+
     // AI-themed native date inputs
     &__col input[type="date"] {
       padding-right: 30px;
@@ -370,6 +397,25 @@
         radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.28), transparent 55%),
         rgba(15, 23, 42, 0.98);
       color: var(--text-dark);
+      min-height: 28px;
+      line-height: 1.25;
+    }
+
+    select:not([multiple]) {
+      appearance: none;
+      -webkit-appearance: none;
+      padding: 4px 22px 4px 6px;
+      background:
+        var(--fn-select-chevron) no-repeat right 4px center / 10px,
+        radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.28), transparent 55%),
+        rgba(15, 23, 42, 0.98);
+    }
+
+    select:not([multiple]):focus {
+      background:
+        var(--fn-select-chevron) no-repeat right 4px center / 10px,
+        radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.28), transparent 55%),
+        rgba(15, 23, 42, 0.98);
     }
 
     app-date-picker .ai-date-field {

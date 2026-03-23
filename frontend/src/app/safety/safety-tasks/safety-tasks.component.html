@@ -8,13 +8,14 @@
     <label class="checkbox-chip">
       <input type="checkbox" [(ngModel)]="filters.overdue_only" (change)="load()"> Overdue only
     </label>
-    <select class="filter-select" [(ngModel)]="filters.status" (change)="load()">
-      <option value="">All statuses</option>
-      <option value="open">Open</option>
-      <option value="in_progress">In progress</option>
-      <option value="completed">Completed</option>
-      <option value="overdue">Overdue</option>
-    </select>
+    <app-ai-select
+      class="filter-select"
+      [options]="statusSelectOptions"
+      [ngModel]="filters.status"
+      (ngModelChange)="filters.status = $event; load()"
+      [allowEmpty]="true"
+      emptyLabel="All statuses"
+    ></app-ai-select>
     <input class="filter-input" type="text" placeholder="Assigned to (user id)" [(ngModel)]="filters.assigned_to" (keyup.enter)="load()">
     <button type="button" class="btn btn-sm btn-secondary" (click)="load()">Apply</button>
     <button type="button" class="btn btn-sm btn-ghost" (click)="clearFilters()">Clear</button>

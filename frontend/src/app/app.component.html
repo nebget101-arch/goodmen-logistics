@@ -76,9 +76,11 @@
           <a routerLink="/profile" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
             <span class="material-symbols-outlined">person</span> Profile
           </a>
-          <a routerLink="/billing" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
-            <span class="material-symbols-outlined">credit_card</span> Billing
-          </a>
+          <ng-container *ngIf="canAccessBilling()">
+            <a routerLink="/billing" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">credit_card</span> Billing
+            </a>
+          </ng-container>
           <ng-container *ngIf="canSeeAdminMenuLink('/admin/multi-mc', adminMenuPermissions)">
             <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">domain</span> Company Access Admin
@@ -136,9 +138,11 @@
           <a routerLink="/profile" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
             <span class="material-symbols-outlined">person</span> Profile
           </a>
-          <a routerLink="/billing" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
-            <span class="material-symbols-outlined">credit_card</span> Billing
-          </a>
+          <ng-container *ngIf="canAccessBilling()">
+            <a routerLink="/billing" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">credit_card</span> Billing
+            </a>
+          </ng-container>
           <ng-container *ngIf="canSeeAdminMenuLink('/admin/multi-mc', adminMenuPermissions)">
             <a routerLink="/admin/multi-mc" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">domain</span> Company Access Admin

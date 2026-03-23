@@ -281,7 +281,8 @@ router.get('/me', baseAuth, (req, res) => {
     first_name: payload.first_name || null,
     last_name: payload.last_name || null,
     email: payload.email || null,
-    role: payload.role || null
+    role: payload.role || null,
+    driver_id: payload.driver_id || null
   };
   res.json({ success: true, data });
 });

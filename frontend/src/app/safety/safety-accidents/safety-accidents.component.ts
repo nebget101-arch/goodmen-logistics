@@ -28,6 +28,13 @@ export class SafetyAccidentsComponent implements OnInit {
   readonly SEVERITIES = ['critical', 'major', 'minor', 'near_miss'];
   readonly TYPES = ['collision', 'cargo_damage', 'injury', 'property_damage', 'spill', 'near_miss', 'other'];
   readonly PREVENTABILITIES = ['preventable', 'non_preventable', 'undetermined'];
+  private static titleCase(s: string): string {
+    return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+  readonly statusSelectOptions: { value: string; label: string }[] = ['open', 'under_review', 'pending_close', 'closed'].map(s => ({ value: s, label: SafetyAccidentsComponent.titleCase(s) }));
+  readonly severitySelectOptions: { value: string; label: string }[] = ['critical', 'major', 'minor', 'near_miss'].map(s => ({ value: s, label: SafetyAccidentsComponent.titleCase(s) }));
+  readonly typeSelectOptions: { value: string; label: string }[] = ['collision', 'cargo_damage', 'injury', 'property_damage', 'spill', 'near_miss', 'other'].map(t => ({ value: t, label: SafetyAccidentsComponent.titleCase(t) }));
+  readonly preventabilitySelectOptions: { value: string; label: string }[] = ['preventable', 'non_preventable', 'undetermined'].map(p => ({ value: p, label: SafetyAccidentsComponent.titleCase(p) }));
 
   constructor(private safety: SafetyService, private router: Router, private route: ActivatedRoute) {}
 

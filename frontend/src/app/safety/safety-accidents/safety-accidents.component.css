@@ -7,9 +7,29 @@
 .filter-input, .filter-select {
   background: rgba(255,255,255,.06); border: 1px solid rgba(148,163,184,.2);
   color: #e2e8f0; border-radius: 8px; padding: 8px 12px; font-size: .85rem;
+  min-height: 38px;
+  line-height: 1.25;
+  box-sizing: border-box;
 }
 .filter-input { flex: 1; min-width: 180px; }
 .filter-select { min-width: 130px; }
+
+.filters-row select.filter-select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 8px 32px 8px 12px;
+  cursor: pointer;
+  color-scheme: dark;
+  background:
+    var(--fn-select-chevron) no-repeat right 10px center / 12px,
+    rgba(255,255,255,.06);
+}
+
+.filters-row select.filter-select:not([multiple]):focus {
+  background:
+    var(--fn-select-chevron) no-repeat right 10px center / 12px,
+    rgba(255,255,255,.06);
+}
 
 .loading-state { color: #94a3b8; padding: 20px 0; }
 .alert-error { background: rgba(239,68,68,.15); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }

@@ -50,10 +50,15 @@
           <span class="material-symbols-outlined">pending_actions</span>
           Status
         </label>
-        <select id="filterStatus" class="form-select" [(ngModel)]="filters.status" (change)="loadInvoices()">
-          <option value="">All Statuses</option>
-          <option *ngFor="let s of statuses" [value]="s">{{ s }}</option>
-        </select>
+        <app-ai-select
+          inputId="filterStatus"
+          class="form-select"
+          [options]="statusSelectOptions"
+          [ngModel]="filters.status"
+          (ngModelChange)="filters.status = $event; loadInvoices()"
+          [allowEmpty]="true"
+          emptyLabel="All Statuses"
+        ></app-ai-select>
       </div>
 
       <div class="filter-field">
@@ -61,10 +66,15 @@
           <span class="material-symbols-outlined">person</span>
           Customer
         </label>
-        <select id="filterCustomer" class="form-select" [(ngModel)]="filters.customerId" (change)="loadInvoices()">
-          <option value="">All Customers</option>
-          <option *ngFor="let c of customers" [value]="c.id">{{ c.company_name }}</option>
-        </select>
+        <app-ai-select
+          inputId="filterCustomer"
+          class="form-select"
+          [options]="customerSelectOptions"
+          [ngModel]="filters.customerId"
+          (ngModelChange)="filters.customerId = $event; loadInvoices()"
+          [allowEmpty]="true"
+          emptyLabel="All Customers"
+        ></app-ai-select>
       </div>
 
       <div class="filter-field">
@@ -72,10 +82,15 @@
           <span class="material-symbols-outlined">place</span>
           Location
         </label>
-        <select id="filterLocation" class="form-select" [(ngModel)]="filters.locationId" (change)="loadInvoices()">
-          <option value="">All Locations</option>
-          <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
-        </select>
+        <app-ai-select
+          inputId="filterLocation"
+          class="form-select"
+          [options]="locationSelectOptions"
+          [ngModel]="filters.locationId"
+          (ngModelChange)="filters.locationId = $event; loadInvoices()"
+          [allowEmpty]="true"
+          emptyLabel="All Locations"
+        ></app-ai-select>
       </div>
 
       <div class="filter-field">
@@ -83,7 +98,15 @@
           <span class="material-symbols-outlined">calendar_today</span>
           From
         </label>
-        <input id="filterDateFrom" class="form-input" type="date" [(ngModel)]="filters.dateFrom" (change)="loadInvoices()" />
+        <app-ai-date-picker
+          inputId="filterDateFrom"
+          class="form-input"
+          [(ngModel)]="filters.dateFrom"
+          (ngModelChange)="loadInvoices()"
+          name="invoiceFilterDateFrom"
+          ariaLabel="Invoice filter from date"
+          placeholder="From"
+        ></app-ai-date-picker>
       </div>
 
       <div class="filter-field">
@@ -91,7 +114,15 @@
           <span class="material-symbols-outlined">calendar_today</span>
           To
         </label>
-        <input id="filterDateTo" class="form-input" type="date" [(ngModel)]="filters.dateTo" (change)="loadInvoices()" />
+        <app-ai-date-picker
+          inputId="filterDateTo"
+          class="form-input"
+          [(ngModel)]="filters.dateTo"
+          (ngModelChange)="loadInvoices()"
+          name="invoiceFilterDateTo"
+          ariaLabel="Invoice filter to date"
+          placeholder="To"
+        ></app-ai-date-picker>
       </div>
 
       <div class="filter-actions">

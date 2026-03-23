@@ -216,20 +216,16 @@
         </div>
         <div class="row">
           <div class="col">
-            <label for="workOrderRequestDate">Request Date</label>
-            <input id="workOrderRequestDate" type="date" class="form-control" [(ngModel)]="workOrder.requestDate" name="requestDate">
+            <app-ai-date-picker inputId="workOrderRequestDate" label="Request Date" [(ngModel)]="workOrder.requestDate" name="requestDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <div class="col">
-            <label for="workOrderScheduledDate">Scheduled Date</label>
-            <input id="workOrderScheduledDate" type="date" class="form-control" [(ngModel)]="workOrder.scheduledDate" name="scheduledDate">
+            <app-ai-date-picker inputId="workOrderScheduledDate" label="Scheduled Date" [(ngModel)]="workOrder.scheduledDate" name="scheduledDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <div class="col">
-            <label for="workOrderStartDate">Start Date</label>
-            <input id="workOrderStartDate" type="date" class="form-control" [(ngModel)]="workOrder.startDate" name="startDate">
+            <app-ai-date-picker inputId="workOrderStartDate" label="Start Date" [(ngModel)]="workOrder.startDate" name="startDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <div class="col">
-            <label for="workOrderCompletionDate">Completion Date</label>
-            <input id="workOrderCompletionDate" type="date" class="form-control" [(ngModel)]="workOrder.completionDate" name="completionDate">
+            <app-ai-date-picker inputId="workOrderCompletionDate" label="Completion Date" [(ngModel)]="workOrder.completionDate" name="completionDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
         </div>
       </div>
@@ -320,12 +316,10 @@
                       <input id="newCustomerVehicleMileage" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.mileage" name="newCustomerVehicleMileage">
                     </div>
                     <div class="mb-2">
-                      <label for="newCustomerVehicleInspectionExpiry">Inspection Expiry</label>
-                      <input id="newCustomerVehicleInspectionExpiry" type="date" class="form-control" [(ngModel)]="newCustomerVehicle.inspection_expiry" name="newCustomerVehicleInspectionExpiry">
+                      <app-ai-date-picker inputId="newCustomerVehicleInspectionExpiry" label="Inspection Expiry" [(ngModel)]="newCustomerVehicle.inspection_expiry" name="newCustomerVehicleInspectionExpiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
                     </div>
                     <div class="mb-2">
-                      <label for="newCustomerVehicleNextPmDue">Next PM Due</label>
-                      <input id="newCustomerVehicleNextPmDue" type="date" class="form-control" [(ngModel)]="newCustomerVehicle.next_pm_due" name="newCustomerVehicleNextPmDue">
+                      <app-ai-date-picker inputId="newCustomerVehicleNextPmDue" label="Next PM Due" [(ngModel)]="newCustomerVehicle.next_pm_due" name="newCustomerVehicleNextPmDue" placeholder="MM/DD/YYYY"></app-ai-date-picker>
                     </div>
                     <div class="mb-2">
                       <label for="newCustomerVehicleNextPmMileage">Next PM Mileage</label>
@@ -821,8 +815,7 @@
             <input id="workOrderApprovedBy" type="text" class="form-control" [(ngModel)]="workOrder.approvedBy" name="approvedBy">
           </div>
           <div class="col">
-            <label for="workOrderApprovalDate">Approval Date</label>
-            <input id="workOrderApprovalDate" type="date" class="form-control" [(ngModel)]="workOrder.approvalDate" name="approvalDate">
+            <app-ai-date-picker inputId="workOrderApprovalDate" label="Approval Date" [(ngModel)]="workOrder.approvalDate" name="approvalDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <div class="col">
             <label for="workOrderQaInspectionPassed">QA Inspection Passed</label>
@@ -913,8 +906,7 @@
         </div>
         <div class="row">
           <div class="col">
-            <label for="workOrderNextServiceDueDate">Next Service Due Date</label>
-            <input id="workOrderNextServiceDueDate" type="date" class="form-control" [(ngModel)]="workOrder.nextServiceDueDate" name="nextServiceDueDate">
+            <app-ai-date-picker inputId="workOrderNextServiceDueDate" label="Next Service Due Date" [(ngModel)]="workOrder.nextServiceDueDate" name="nextServiceDueDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <div class="col">
             <label for="workOrderNextServiceOdometer">Next Service Odometer</label>
@@ -931,16 +923,14 @@
             <input id="workOrderCreatedBy" type="text" class="form-control" [(ngModel)]="workOrder.createdBy" name="createdBy" readonly>
           </div>
           <div class="col">
-            <label for="workOrderCreatedDate">Created Date</label>
-            <input id="workOrderCreatedDate" type="date" class="form-control" [(ngModel)]="workOrder.createdDate" name="createdDate" readonly>
+            <app-ai-date-picker inputId="workOrderCreatedDate" label="Created Date" [(ngModel)]="workOrder.createdDate" name="createdDate" [disabled]="true" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <div class="col">
             <label for="workOrderLastUpdatedBy">Last Updated By</label>
             <input id="workOrderLastUpdatedBy" type="text" class="form-control" [(ngModel)]="workOrder.lastUpdatedBy" name="lastUpdatedBy" readonly>
           </div>
           <div class="col">
-            <label for="workOrderLastUpdatedDate">Last Updated Date</label>
-            <input id="workOrderLastUpdatedDate" type="date" class="form-control" [(ngModel)]="workOrder.lastUpdatedDate" name="lastUpdatedDate" readonly>
+            <app-ai-date-picker inputId="workOrderLastUpdatedDate" label="Last Updated Date" [(ngModel)]="workOrder.lastUpdatedDate" name="lastUpdatedDate" [disabled]="true" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <div class="col">
             <label for="workOrderDeletedFlag">Deleted Flag</label>

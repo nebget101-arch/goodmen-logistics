@@ -120,12 +120,34 @@
             </div>
           </div>
 
-          <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('username')">
+          <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('username') || usernameCheckStatus === 'invalid' || usernameCheckStatus === 'unavailable'">
             <label for="username">Preferred Username <span class="signup-optional">(optional)</span></label>
-            <div class="ai-input-wrap">
-              <span class="material-symbols-outlined">alternate_email</span>
-              <input id="username" type="text" class="pub-form-input" formControlName="username" placeholder="johnsmith" autocomplete="username" />
+            <div class="signup-username-row">
+              <div class="ai-input-wrap signup-username-input">
+                <span class="material-symbols-outlined">alternate_email</span>
+                <input id="username" type="text" class="pub-form-input" formControlName="username" placeholder="johnsmith" autocomplete="username" />
+              </div>
+              <span class="signup-username-badge" *ngIf="usernameCheckStatus !== 'idle'" [attr.data-status]="usernameCheckStatus" aria-live="polite">
+                <span class="material-symbols-outlined signup-username-spin" *ngIf="usernameCheckStatus === 'checking'">progress_activity</span>
+                <span class="material-symbols-outlined" *ngIf="usernameCheckStatus === 'available'">check_circle</span>
+                <span class="material-symbols-outlined" *ngIf="usernameCheckStatus === 'unavailable' || usernameCheckStatus === 'invalid'">cancel</span>
+                <span class="material-symbols-outlined" *ngIf="usernameCheckStatus === 'error'">wifi_off</span>
+              </span>
             </div>
+            <p
+              class="signup-username-meta"
+              *ngIf="
+                usernameCheckStatus === 'invalid'
+                || usernameCheckStatus === 'unavailable'
+                || (usernameCheckStatus === 'available' && usernameNormalized)
+              "
+            >
+              <ng-container *ngIf="usernameCheckStatus === 'available' && usernameNormalized">
+                Will register as <strong>&#64;{{ usernameNormalized }}</strong>
+              </ng-container>
+              <ng-container *ngIf="usernameCheckStatus === 'invalid'">Cannot use this username — use letters, numbers, <code>.</code> <code>-</code> <code>_</code> only.</ng-container>
+              <ng-container *ngIf="usernameCheckStatus === 'unavailable'"><strong>&#64;{{ usernameNormalized }}</strong> is already taken.</ng-container>
+            </p>
             <span class="pub-error-msg">{{ getFieldError('username') }}</span>
           </div>
 
@@ -134,6 +156,24 @@
             <div class="ai-input-wrap">
               <span class="material-symbols-outlined">lock</span>
               <input id="password" type="password" class="pub-form-input" formControlName="password" placeholder="At least 8 characters" autocomplete="new-password" />
+            </div>
+            <div
+              class="signup-pw-meter"
+              [class.signup-pw-meter--empty]="passwordStrengthRaw.length === 0"
+              [attr.data-tier]="passwordStrengthTier"
+              aria-live="polite"
+            >
+              <div
+                class="signup-pw-meter-track"
+                role="progressbar"
+                [attr.aria-valuenow]="passwordStrengthPercent"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                [attr.aria-label]="passwordStrengthAriaLabel"
+              >
+                <div class="signup-pw-meter-fill" [style.width.%]="passwordStrengthPercent"></div>
+              </div>
+              <span class="signup-pw-meter-label">{{ passwordStrengthRaw.length === 0 ? 'Password strength' : passwordStrengthLabel }}</span>
             </div>
             <span class="pub-error-msg">{{ getFieldError('password') }}</span>
           </div>

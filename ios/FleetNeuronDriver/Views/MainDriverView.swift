@@ -11,6 +11,7 @@ struct MainDriverView: View {
     @EnvironmentObject var auth: AuthManager
     @State private var selectedTab = 0
     @State private var showDrawer = false
+    @State private var showProfile = false
     @State private var loads: [LoadListItem] = []
     @State private var loading = false
 
@@ -43,6 +44,12 @@ struct MainDriverView: View {
             sideDrawer
         }
         .task { await fetchLoads() }
+        .sheet(isPresented: $showProfile) {
+            NavigationStack {
+                DriverProfileView()
+                    .environmentObject(auth)
+            }
+        }
     }
 
     private var topBar: some View {
@@ -129,6 +136,7 @@ struct MainDriverView: View {
                         showDrawer = false
                     }
                     drawerLink(icon: "person.fill", title: "My Profile") {
+                        showProfile = true
                         showDrawer = false
                     }
                     Spacer()

@@ -203,6 +203,10 @@ export class AppComponent implements OnInit {
     return this.access.canAccessTrialRequestsAdmin();
   }
 
+  canAccessBilling(): boolean {
+    return this.access.canAccessBilling();
+  }
+
   getSectionExpanded(index: number): boolean {
     return this.sectionExpanded[index] ?? true;
   }

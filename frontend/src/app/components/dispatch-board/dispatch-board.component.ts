@@ -57,6 +57,24 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
   ];
   selectedSortOption = this.sortOptions[0];
 
+  sortSelectOptions: { value: string; label: string }[] = [
+    { value: 'driver_asc', label: "Driver's Name ↑" },
+    { value: 'driver_desc', label: "Driver's Name ↓" },
+    { value: 'unit_asc', label: 'Unit Number ↑' },
+    { value: 'unit_desc', label: 'Unit Number ↓' },
+    { value: 'delivery_asc', label: 'Delivery Date ↑' },
+    { value: 'delivery_desc', label: 'Delivery Date ↓' }
+  ];
+  get selectedSortKey(): string {
+    return `${this.sortField}_${this.sortDir}`;
+  }
+  onSortSelect(key: string | null): void {
+    if (!key) return;
+    const [v, d] = key.split('_');
+    const opt = this.sortOptions.find(o => o.value === v && o.dir === d);
+    if (opt) this.setSort(opt);
+  }
+
   filterBy: 'all' | 'today' | 'tomorrow' | 'ready' | 'unassigned' = 'all';
   filterOptions = [
     { value: 'all', label: 'All' },
@@ -68,6 +86,7 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
 
   loadStatusFilter: string = '';
   loadStatusOptions: StatusCode[] = [];
+  loadStatusSelectOptions: { value: string; label: string }[] = [];
 
   private loadStatusMap = new Map<string, StatusCode>();
   private billingStatusMap = new Map<string, StatusCode>();
@@ -324,6 +343,7 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
     this.referenceDataService.getLoadStatusCodes().subscribe({
       next: (rows) => {
         this.loadStatusOptions = this.dedupeByNormalizedCode(rows);
+        this.loadStatusSelectOptions = this.loadStatusOptions.map(s => ({ value: s.code, label: s.display_label }));
         this.loadStatusMap = this.buildStatusMap(rows);
       }
     });

@@ -243,10 +243,14 @@
             <div class="pub-form-row">
               <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('fleetSize')">
                 <label for="fleetSize">Fleet Size <span class="pub-required">*</span></label>
-                <select id="fleetSize" class="pub-form-input" formControlName="fleetSize">
-                  <option value="">Select fleet size</option>
-                  <option *ngFor="let opt of fleetSizeOptions" [value]="opt">{{ opt }}</option>
-                </select>
+                <app-ai-select
+                  inputId="fleetSize"
+                  [options]="fleetSizeSelectOptions"
+                  formControlName="fleetSize"
+                  placeholder="Select fleet size"
+                  [allowEmpty]="true"
+                  emptyLabel="Select fleet size"
+                ></app-ai-select>
                 <span class="pub-error-msg">{{ getFieldError('fleetSize') }}</span>
               </div>
 
@@ -265,9 +269,12 @@
             <!-- Plan selection -->
             <div class="pub-form-group" [class.pub-field-error]="isFieldInvalid('requestedPlan')">
               <label for="requestedPlan">Plan Interest <span class="pub-required">*</span></label>
-              <select id="requestedPlan" class="pub-form-input" formControlName="requestedPlan">
-                <option *ngFor="let plan of plans" [value]="plan.id">{{ plan.name }} — {{ plan.tagline }}</option>
-              </select>
+              <app-ai-select
+                inputId="requestedPlan"
+                [options]="requestedPlanOptions"
+                formControlName="requestedPlan"
+                placeholder="Select plan"
+              ></app-ai-select>
               <span class="pub-error-msg">{{ getFieldError('requestedPlan') }}</span>
             </div>
 

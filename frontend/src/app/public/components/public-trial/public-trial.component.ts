@@ -15,6 +15,8 @@ import { MARKETING_PLANS, FLEET_SIZE_OPTIONS, MarketingPlan } from '../../config
 export class PublicTrialComponent implements OnInit, OnDestroy {
   plans: MarketingPlan[] = MARKETING_PLANS.filter(plan => plan.trialEligible !== false);
   fleetSizeOptions = FLEET_SIZE_OPTIONS;
+  fleetSizeSelectOptions: { value: string; label: string }[] = FLEET_SIZE_OPTIONS.map(s => ({ value: s, label: s }));
+  requestedPlanOptions: { value: string; label: string }[] = MARKETING_PLANS.filter(p => p.trialEligible !== false).map(p => ({ value: p.id, label: `${p.name} — ${p.tagline}` }));
   mobileNavOpen = false;
   currentYear = new Date().getFullYear();
 

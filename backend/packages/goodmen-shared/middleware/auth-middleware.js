@@ -33,7 +33,8 @@ function authMiddleware(req, res, next) {
 			req.user = {
 				id: decoded.sub || decoded.id,
 				username: decoded.username || decoded.sub,
-				role: decoded.role || 'technician'
+				role: decoded.role || 'technician',
+				driver_id: decoded.driver_id != null ? decoded.driver_id : null
 			};
 			next();
 		} catch (verifyError) {

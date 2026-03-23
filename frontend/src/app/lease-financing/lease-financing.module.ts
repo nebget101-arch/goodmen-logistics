@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SharedModule } from '../shared/shared.module';
 import { LeaseFinancingRoutingModule } from './lease-financing-routing.module';
 import { LeaseAgreementsListComponent } from './pages/lease-agreements-list/lease-agreements-list.component';
 import { LeaseAgreementDetailComponent } from './pages/lease-agreement-detail/lease-agreement-detail.component';
@@ -18,6 +19,6 @@ import { DriverLeaseViewComponent } from './pages/driver-lease-view/driver-lease
     LeaseUpgradeRequiredComponent,
     DriverLeaseViewComponent,
   ],
-  imports: [CommonModule, FormsModule, LeaseFinancingRoutingModule]
+  imports: [CommonModule, FormsModule, SharedModule, LeaseFinancingRoutingModule]
 })
 export class LeaseFinancingModule {}

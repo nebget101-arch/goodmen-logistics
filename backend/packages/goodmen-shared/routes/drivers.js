@@ -308,10 +308,16 @@ router.get('/:id', async (req, res) => {
   try {
     // Enforce operating_entity scoping for single-driver fetch
     const singleParams = [driverId, req.context?.tenantId || null];
-    let singleSql = 'SELECT * FROM drivers WHERE id = $1 AND tenant_id = $2';
+    let singleSql = `
+      SELECT d.*,
+        oe.mc_number AS mc_number,
+        oe.name AS operating_entity_name
+      FROM drivers d
+      LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
+      WHERE d.id = $1 AND d.tenant_id = $2`;
     if (req.context?.operatingEntityId) {
       singleParams.push(req.context.operatingEntityId);
-      singleSql += ` AND operating_entity_id = $3`;
+      singleSql += ` AND d.operating_entity_id = $3`;
     }
     const result = await query(singleSql, singleParams);
     const duration = Date.now() - startTime;
@@ -381,7 +387,7 @@ router.get('/:id', async (req, res) => {
     dtLogger.error('Failed to fetch driver', error, { driverId });
     dtLogger.trackRequest('GET', `/api/drivers/${driverId}`, 500, duration);
     console.error('Error fetching driver:', error);
-    res.json(transformRow(enriched));
+    res.status(500).json({ message: 'Failed to fetch driver' });
   }
 });
 

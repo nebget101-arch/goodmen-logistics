@@ -1,39 +1,127 @@
-<div class="employment-application">
-  <form [formGroup]="form">
-    <h2>Applicant Information</h2>
-    <div formGroupName="applicant">
-      <label>First Name <input formControlName="firstName" /></label>
-      <label>Middle Name <input formControlName="middleName" /></label>
-      <label>Last Name <input formControlName="lastName" /></label>
-      <label>Phone <input formControlName="phone" /></label>
-      <label>Email <input formControlName="email" /></label>
-    </div>
+<div class="ea-page">
+  <div class="ea-glow ea-glow-left"></div>
+  <div class="ea-glow ea-glow-right"></div>
 
-    <h3>Residency</h3>
-    <div formArrayName="residencies">
-      <div *ngFor="let r of residencies.controls; let i = index" [formGroupName]="i">
-        <label>Type <input formControlName="residencyType" /></label>
-        <label>Street <input formControlName="street" /></label>
-        <label>City <input formControlName="city" /></label>
-        <label>State <input formControlName="state" /></label>
+  <div class="ea-card">
+    <form [formGroup]="form">
+      <header class="ea-header">
+        <h2 class="ea-title">Applicant Information</h2>
+        <p class="ea-subtitle">Personal details for your employment application record.</p>
+      </header>
+
+      <section class="ea-panel" formGroupName="applicant">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">person</span>
+          <h3>Applicant</h3>
+        </div>
+        <div class="ea-grid-2">
+          <div class="ea-field">
+            <label for="eaFirstName">First Name *</label>
+            <input id="eaFirstName" formControlName="firstName" class="ea-input" placeholder="First name" />
+          </div>
+          <div class="ea-field">
+            <label for="eaMiddleName">Middle Name</label>
+            <input id="eaMiddleName" formControlName="middleName" class="ea-input" placeholder="Optional" />
+          </div>
+          <div class="ea-field">
+            <label for="eaLastName">Last Name *</label>
+            <input id="eaLastName" formControlName="lastName" class="ea-input" placeholder="Last name" />
+          </div>
+          <div class="ea-field">
+            <label for="eaPhone">Phone</label>
+            <input id="eaPhone" formControlName="phone" class="ea-input" placeholder="(555) 555-5555" />
+          </div>
+          <div class="ea-field ea-field-full">
+            <label for="eaEmail">Email</label>
+            <input id="eaEmail" type="email" formControlName="email" class="ea-input" placeholder="name@example.com" />
+          </div>
+        </div>
+      </section>
+
+      <section class="ea-panel">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">home_pin</span>
+          <h3>Residency</h3>
+        </div>
+        <div formArrayName="residencies">
+          <div *ngFor="let r of residencies.controls; let i = index" [formGroupName]="i" class="ea-residency-block">
+            <div class="ea-grid-2">
+              <div class="ea-field">
+                <label>Type</label>
+                <input formControlName="residencyType" class="ea-input" placeholder="Current / Mailing / Previous" />
+              </div>
+              <div class="ea-field ea-field-full">
+                <label>Street</label>
+                <input formControlName="street" class="ea-input" placeholder="Street address" />
+              </div>
+              <div class="ea-field">
+                <label>City</label>
+                <input formControlName="city" class="ea-input" placeholder="City" />
+              </div>
+              <div class="ea-field">
+                <label>State</label>
+                <input formControlName="state" class="ea-input" placeholder="State" maxlength="2" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="ea-panel">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">local_shipping</span>
+          <h3>Driving Experience</h3>
+        </div>
+        <div class="ea-table-wrap">
+          <table class="ea-table">
+            <thead>
+              <tr>
+                <th>Equipment</th>
+                <th>Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Miles</th>
+              </tr>
+            </thead>
+            <tbody formArrayName="drivingExperience">
+              <tr *ngFor="let d of drivingExperience.controls; let i = index" [formGroupName]="i">
+                <td data-label="Equipment"><input formControlName="classOfEquipment" class="ea-input-inline" /></td>
+                <td data-label="Type"><input formControlName="typeOfEquipment" class="ea-input-inline" /></td>
+                <td data-label="From">
+                  <app-ai-date-picker
+                    formControlName="dateFrom"
+                    [inline]="true"
+                    [inputId]="'eaDriveFrom' + i"
+                    placeholder="From"
+                    ariaLabel="Driving experience from date"
+                  ></app-ai-date-picker>
+                </td>
+                <td data-label="To">
+                  <app-ai-date-picker
+                    formControlName="dateTo"
+                    [inline]="true"
+                    [inputId]="'eaDriveTo' + i"
+                    placeholder="To"
+                    ariaLabel="Driving experience to date"
+                  ></app-ai-date-picker>
+                </td>
+                <td data-label="Miles"><input formControlName="approximateMilesTotal" class="ea-input-inline" placeholder="Miles" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="ea-actions">
+        <button type="button" class="ea-btn ea-btn-secondary" (click)="autosave()" [disabled]="saving">
+          <span class="material-symbols-outlined">save</span>
+          {{ saving ? 'Saving…' : 'Save Draft' }}
+        </button>
+        <button type="button" class="ea-btn ea-btn-primary" (click)="submit()">
+          <span class="material-symbols-outlined">preview</span>
+          Review & Submit
+        </button>
       </div>
-    </div>
-
-    <h3>Driving Experience</h3>
-    <table class="driving-table">
-      <thead><tr><th>Equipment</th><th>Type</th><th>From</th><th>To</th><th>Miles</th></tr></thead>
-      <tbody>
-        <tr *ngFor="let d of drivingExperience.controls; let i = index" [formGroupName]="i">
-          <td><input formControlName="classOfEquipment" /></td>
-          <td><input formControlName="typeOfEquipment" /></td>
-          <td><input formControlName="dateFrom" /></td>
-          <td><input formControlName="dateTo" /></td>
-          <td><input formControlName="approximateMilesTotal" /></td>
-        </tr>
-      </tbody>
-    </table>
-
-    <button type="button" (click)="autosave()">Save Draft</button>
-    <button type="button" (click)="submit()">Review & Submit</button>
-  </form>
+    </form>
+  </div>
 </div>

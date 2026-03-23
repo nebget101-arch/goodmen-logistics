@@ -132,15 +132,14 @@
 
           <div class="pub-form-group">
             <label for="fleetSize" class="pub-form-label">Fleet Size (Optional)</label>
-            <select id="fleetSize" class="pub-form-input" formControlName="fleetSize">
-              <option value="">Select fleet size...</option>
-              <option value="1-10">1-10 vehicles</option>
-              <option value="11-50">11-50 vehicles</option>
-              <option value="51-100">51-100 vehicles</option>
-              <option value="101-250">101-250 vehicles</option>
-              <option value="251-500">251-500 vehicles</option>
-              <option value="501+">500+ vehicles</option>
-            </select>
+            <app-ai-select
+              inputId="fleetSize"
+              [options]="fleetSizeOptions"
+              formControlName="fleetSize"
+              placeholder="Select fleet size..."
+              [allowEmpty]="true"
+              emptyLabel="Select fleet size..."
+            ></app-ai-select>
           </div>
 
           <div class="pub-form-group">
@@ -218,6 +217,8 @@
         </div>
       </div>
     </div>
+
+    <app-public-faq layout="contact"></app-public-faq>
   </section>
 
   <footer class="pub-footer pub-footer-minimal">

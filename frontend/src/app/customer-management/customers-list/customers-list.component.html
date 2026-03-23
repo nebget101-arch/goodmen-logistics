@@ -57,27 +57,43 @@
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
 
   <div class="filters customers-filters">
-    <input class="form-control" placeholder="Search company, phone, email" [(ngModel)]="filters.search" (input)="loadCustomers()" />
+    <input class="form-input" placeholder="Search company, phone, email" [(ngModel)]="filters.search" (input)="loadCustomers()" />
 
-    <select class="form-control" [(ngModel)]="filters.type" (change)="loadCustomers()">
-      <option value="">All Types</option>
-      <option *ngFor="let t of customerTypes" [value]="t">{{ t }}</option>
-    </select>
+    <app-ai-select
+      label="Type"
+      [options]="typeOptions"
+      [(ngModel)]="filters.type"
+      (ngModelChange)="loadCustomers()"
+      [allowEmpty]="true"
+      emptyLabel="All Types"
+    ></app-ai-select>
 
-    <select class="form-control" [(ngModel)]="filters.status" (change)="loadCustomers()">
-      <option value="">All Statuses</option>
-      <option *ngFor="let s of statuses" [value]="s">{{ s }}</option>
-    </select>
+    <app-ai-select
+      label="Status"
+      [options]="statusOptions"
+      [(ngModel)]="filters.status"
+      (ngModelChange)="loadCustomers()"
+      [allowEmpty]="true"
+      emptyLabel="All Statuses"
+    ></app-ai-select>
 
-    <select class="form-control" [(ngModel)]="filters.paymentTerms" (change)="loadCustomers()">
-      <option value="">All Payment Terms</option>
-      <option *ngFor="let p of paymentTerms" [value]="p">{{ p }}</option>
-    </select>
+    <app-ai-select
+      label="Payment Terms"
+      [options]="paymentTermsOptions"
+      [(ngModel)]="filters.paymentTerms"
+      (ngModelChange)="loadCustomers()"
+      [allowEmpty]="true"
+      emptyLabel="All Payment Terms"
+    ></app-ai-select>
 
-    <select class="form-control" [(ngModel)]="filters.locationId" (change)="loadCustomers()">
-      <option value="">All Locations</option>
-      <option *ngFor="let loc of locations" [value]="loc.id">{{ loc.name }}</option>
-    </select>
+    <app-ai-select
+      label="Location"
+      [options]="locationOptions"
+      [(ngModel)]="filters.locationId"
+      (ngModelChange)="loadCustomers()"
+      [allowEmpty]="true"
+      emptyLabel="All Locations"
+    ></app-ai-select>
 
     <button class="btn btn-secondary" (click)="clearFilters()">Clear</button>
   </div>

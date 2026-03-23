@@ -47,14 +47,14 @@ export class SettlementListComponent implements OnInit, OnDestroy {
   };
 
   /** Backend uses: preparing | ready_for_review | approved | paid | void */
-  statusOptions = [
-    { value: '', label: 'All statuses' },
+  statusSelectOptions = [
     { value: 'preparing', label: 'Draft / Preparing' },
     { value: 'ready_for_review', label: 'Pending approval' },
     { value: 'approved', label: 'Approved' },
     { value: 'paid', label: 'Paid' },
     { value: 'void', label: 'Void' }
   ];
+  driverSelectOptions: { value: string; label: string }[] = [];
 
   constructor(
     private apiService: ApiService,
@@ -98,6 +98,7 @@ export class SettlementListComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         const list = res?.data ?? res?.rows ?? res ?? [];
         this.drivers = Array.isArray(list) ? list : [];
+        this.driverSelectOptions = this.drivers.map(d => ({ value: d.id, label: this.getDriverDisplayName(d) }));
         this.loadSettlements();
       },
       error: () => this.loadSettlements()

@@ -35,6 +35,15 @@ export class InvoicesListComponent implements OnInit, OnDestroy {
   };
 
   statuses = ['DRAFT', 'SENT', 'PARTIAL', 'PAID', 'VOID'];
+  statusSelectOptions: { value: string; label: string }[] = [
+    { value: 'DRAFT', label: 'DRAFT' },
+    { value: 'SENT', label: 'SENT' },
+    { value: 'PARTIAL', label: 'PARTIAL' },
+    { value: 'PAID', label: 'PAID' },
+    { value: 'VOID', label: 'VOID' }
+  ];
+  customerSelectOptions: { value: string; label: string }[] = [];
+  locationSelectOptions: { value: string; label: string }[] = [];
 
   constructor(
     private invoiceService: InvoiceService,
@@ -96,13 +105,17 @@ export class InvoicesListComponent implements OnInit, OnDestroy {
     this.customerService.listCustomers({ pageSize: 200 }).subscribe({
       next: (res: any) => {
         this.customers = res.rows || res.data || [];
+        this.customerSelectOptions = this.customers.map((c: any) => ({ value: c.id, label: c.company_name }));
       }
     });
   }
 
   loadLocations(): void {
     this.apiService.getLocations().subscribe({
-      next: (data) => { this.locations = data || []; }
+      next: (data) => {
+        this.locations = data || [];
+        this.locationSelectOptions = this.locations.map((l: any) => ({ value: l.id, label: l.name }));
+      }
     });
   }
 

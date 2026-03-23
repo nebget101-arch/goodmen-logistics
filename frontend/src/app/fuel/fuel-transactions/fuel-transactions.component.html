@@ -19,12 +19,30 @@
   <!-- Filter Bar -->
   <div class="filter-bar">
     <div class="filter-group">
-      <label>From</label>
-      <input type="date" [(ngModel)]="dateFrom" (change)="applyFilters()" class="filter-input" />
+      <label for="fuelTxnDateFrom">From</label>
+      <app-ai-date-picker
+        inputId="fuelTxnDateFrom"
+        [inline]="true"
+        class="filter-input"
+        [(ngModel)]="dateFrom"
+        (ngModelChange)="applyFilters()"
+        name="fuelTxnDateFrom"
+        ariaLabel="Filter from date"
+        placeholder="From"
+      ></app-ai-date-picker>
     </div>
     <div class="filter-group">
-      <label>To</label>
-      <input type="date" [(ngModel)]="dateTo" (change)="applyFilters()" class="filter-input" />
+      <label for="fuelTxnDateTo">To</label>
+      <app-ai-date-picker
+        inputId="fuelTxnDateTo"
+        [inline]="true"
+        class="filter-input"
+        [(ngModel)]="dateTo"
+        (ngModelChange)="applyFilters()"
+        name="fuelTxnDateTo"
+        ariaLabel="Filter to date"
+        placeholder="To"
+      ></app-ai-date-picker>
     </div>
     <div class="filter-group">
       <label>Provider</label>

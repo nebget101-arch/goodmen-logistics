@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SharedModule } from '../shared/shared.module';
 import { ReportsRoutingModule } from './reports-routing.module';
 import { ReportsShellComponent } from './pages/reports-shell/reports-shell.component';
 import { ReportViewComponent } from './pages/report-view/report-view.component';
@@ -20,6 +21,6 @@ import { ReportsPageComponent } from './pages/reports-page/reports-page.componen
     KpiCardsComponent,
     ReportsPageComponent
   ],
-  imports: [CommonModule, FormsModule, ReportsRoutingModule]
+  imports: [CommonModule, FormsModule, SharedModule, ReportsRoutingModule]
 })
 export class ReportsModule {}

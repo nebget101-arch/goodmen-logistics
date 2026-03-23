@@ -621,6 +621,90 @@ export const MARKETING_PLANS: MarketingPlan[] = [
   }
 ];
 
+// ─── Social proof (landing — FN-7) ────────────────────────────────────────────
+
+export interface SocialProofStat {
+  value: string;
+  label: string;
+}
+
+export interface SocialProofQuote {
+  quote: string;
+  attribution: string;
+}
+
+/** Text-only “logo” tiles (monogram + label) — illustrative segments, not trademarked marks */
+export interface SocialProofLogo {
+  initials: string;
+  label: string;
+}
+
+export const SOCIAL_PROOF = {
+  stats: [
+    { value: '10+', label: 'Operational modules in one workspace' },
+    { value: 'Multi-MC', label: 'Entities & permissions without extra logins' },
+    { value: 'Real-time', label: 'Dispatch, safety & maintenance signals' }
+  ] as SocialProofStat[],
+  quotes: [
+    {
+      quote:
+        'We were juggling three systems for dispatch, safety, and maintenance. Having one place that actually talks to itself is night and day.',
+      attribution: 'Director of Operations, regional dry van fleet'
+    },
+    {
+      quote:
+        'The AI intake alone cut hours off our document workflow each week. Our planners spend time on exceptions, not re-keying PDFs.',
+      attribution: 'Fleet manager, refrigerated carrier'
+    }
+  ] as SocialProofQuote[],
+  logos: [
+    { initials: 'NR', label: 'North Route Lines' },
+    { initials: 'CB', label: 'Cedar Brook Transport' },
+    { initials: 'GL', label: 'Great Lakes Haulage' },
+    { initials: 'SM', label: 'Summit Midwest Logistics' }
+  ] as SocialProofLogo[]
+};
+
+// ─── FAQ (landing + contact — FN-8) ────────────────────────────────────────────
+
+export interface MarketingFaqItem {
+  question: string;
+  answer: string;
+}
+
+export const MARKETING_FAQ: MarketingFaqItem[] = [
+  {
+    question: 'How does FleetNeuron pricing work?',
+    answer:
+      'Plans are billed monthly with a set number of included users; additional seats are priced per user. Enterprise is tailored to your architecture and sold with custom onboarding—use the contact form for a scoped quote. Compare tiers on the Pricing section for included modules and user counts.'
+  },
+  {
+    question: 'How long is the free trial?',
+    answer:
+      'Trials give your team time to explore core workflows with guidance from in-app flows. Exact trial length may vary by promotion; the signup and trial screens always show the current period before you confirm. No credit card is required to start.'
+  },
+  {
+    question: 'Which features are included in each plan?',
+    answer:
+      'Higher tiers unlock more operational depth—such as multi-company (multi-MC) management, broader module coverage, and advanced AI-assisted workflows. Each plan card lists what is included; Enterprise adds custom integrations, migration support, and dedicated success coverage.'
+  },
+  {
+    question: 'What does onboarding look like?',
+    answer:
+      'You can get started quickly with self-serve setup: invite users, connect entities, and configure permissions. For larger rollouts, our team can help with data migration planning, integration touchpoints, and a phased go-live—especially on Enterprise.'
+  },
+  {
+    question: 'How do I cancel or change my subscription?',
+    answer:
+      'You can adjust seats and plans from billing settings where your role allows. Cancellation terms follow your agreement and the billing portal; for Enterprise contracts, your order form or success contact governs notice periods—reach out via support or your account contact.'
+  },
+  {
+    question: 'Where do I get help during a trial or after go-live?',
+    answer:
+      'Use in-app help and email support for product questions. Enterprise customers have defined channels with implementation and success contacts. The contact page is the right place for sales, security review, or custom rollout questions.'
+  }
+];
+
 // ─── Fleet Size Options ───────────────────────────────────────────────────────
 
 export const FLEET_SIZE_OPTIONS = [

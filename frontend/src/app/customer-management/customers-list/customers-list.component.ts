@@ -47,6 +47,24 @@ export class CustomersListComponent implements OnInit {
   statuses = ['ACTIVE', 'INACTIVE'];
   paymentTerms = ['DUE_ON_RECEIPT', 'NET_15', 'NET_30', 'CUSTOM'];
 
+  typeOptions = [
+    { value: 'FLEET', label: 'FLEET' },
+    { value: 'WALK_IN', label: 'WALK_IN' },
+    { value: 'INTERNAL', label: 'INTERNAL' },
+    { value: 'WARRANTY', label: 'WARRANTY' }
+  ];
+  statusOptions = [
+    { value: 'ACTIVE', label: 'ACTIVE' },
+    { value: 'INACTIVE', label: 'INACTIVE' }
+  ];
+  paymentTermsOptions = [
+    { value: 'DUE_ON_RECEIPT', label: 'DUE_ON_RECEIPT' },
+    { value: 'NET_15', label: 'NET_15' },
+    { value: 'NET_30', label: 'NET_30' },
+    { value: 'CUSTOM', label: 'CUSTOM' }
+  ];
+  locationOptions: { value: string; label: string }[] = [];
+
   constructor(
     private customerService: ShopClientsService,
     private router: Router,
@@ -61,8 +79,11 @@ export class CustomersListComponent implements OnInit {
 
   loadLocations(): void {
     this.apiService.getLocations().subscribe({
-      next: (data) => { this.locations = data || []; },
-      error: () => { this.locations = []; }
+      next: (data) => {
+        this.locations = data || [];
+        this.locationOptions = this.locations.map((l: any) => ({ value: l.id, label: l.name }));
+      },
+      error: () => { this.locations = []; this.locationOptions = []; }
     });
   }
 
