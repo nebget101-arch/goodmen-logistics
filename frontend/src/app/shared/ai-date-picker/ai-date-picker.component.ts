@@ -1,5 +1,6 @@
-import { Component, forwardRef, HostBinding, Input } from '@angular/core';
+import { Component, forwardRef, HostBinding, Input, ViewChild } from '@angular/core';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
+import { MatDatepicker } from '@angular/material/datepicker';
 
 /**
  * AI-themed date field backed by Angular Material Datepicker.
@@ -33,6 +34,8 @@ export class AiDatePickerComponent implements ControlValueAccessor {
   @Input() ariaLabel = '';
   /** Compact layout for tables / filter toolbars. */
   @Input() inline = false;
+
+  @ViewChild('picker') private picker!: MatDatepicker<Date>;
 
   @HostBinding('class.ai-date-picker--inline')
   get inlineHostClass(): boolean {
@@ -77,6 +80,12 @@ export class AiDatePickerComponent implements ControlValueAccessor {
 
   onBlur(): void {
     this.onTouched();
+  }
+
+  selectToday(): void {
+    const today = new Date();
+    this.onDateChange(today);
+    this.picker.close();
   }
 
   private parseToDate(v: unknown): Date | null {

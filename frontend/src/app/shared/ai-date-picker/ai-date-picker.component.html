@@ -27,5 +27,9 @@
     [startView]="startView"
     [touchUi]="touchUi"
     panelClass="ai-datepicker-overlay"
-  ></mat-datepicker>
+  >
+    <mat-datepicker-actions>
+      <button mat-flat-button type="button" class="ai-dp-action-today" (click)="selectToday()">Today</button>
+    </mat-datepicker-actions>
+  </mat-datepicker>
 </mat-form-field>

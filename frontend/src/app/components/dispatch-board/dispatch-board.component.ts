@@ -508,19 +508,12 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
     this.loadData();
   }
 
-  /** For AI date picker: current dateSearch as Date | null (local). */
-  get dateSearchAsDate(): Date | null {
-    if (!this.dateSearch || !this.dateSearch.trim()) return null;
+  onDateSearch(): void {
+    if (!this.dateSearch) return;
     const parts = this.dateSearch.trim().split('-').map(Number);
-    if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
+    if (parts.length !== 3 || parts.some(Number.isNaN)) return;
     const d = new Date(parts[0], parts[1] - 1, parts[2]);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-
-  onDatePickerChange(date: Date | null): void {
-    if (!date) return;
-    this.dateSearch = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    this.goToDate(date);
+    if (!Number.isNaN(d.getTime())) this.goToDate(d);
   }
 
   searchByDate(): void {

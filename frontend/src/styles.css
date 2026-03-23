@@ -817,44 +817,56 @@ body {
   padding: 6px 0 8px;
 }
 
+/* Hide the "MAR" row label that appears above day numbers */
 .mat-calendar-body-label {
-  color: rgba(148, 163, 184, 0.88);
-  font-size: 0.8rem;
+  visibility: hidden;
+  height: 0;
+  padding: 0 !important;
+  font-size: 0;
 }
 
 .mat-calendar-body-cell {
   vertical-align: middle;
 }
 
+/* Default cell: transparent background, circular shape, no border */
 .mat-calendar-body-cell-content {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  width: 100%;
-  max-width: 40px;
-  line-height: 40px;
+  border-radius: 50% !important;
+  border: none !important;
+  background: transparent !important;
+  width: 36px !important;
+  height: 36px !important;
+  line-height: 36px !important;
   margin: 0 auto;
+  font-size: 0.875rem;
+  color: #e2e8f0;
 }
 
-.mat-calendar-body-cell:not(.mat-calendar-body-disabled):hover .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
-  background: rgba(56, 189, 248, 0.1);
+/* Hover: subtle cyan tint */
+.mat-calendar-body-cell:not(.mat-calendar-body-disabled):hover .mat-calendar-body-cell-content:not(.mat-calendar-body-selected):not(.mat-calendar-body-today) {
+  background: rgba(56, 189, 248, 0.14) !important;
 }
 
+/* Today: solid filled blue circle (matches screenshot).
+   Both classes are on the same <span>, so use compound selector. */
+.mat-calendar-body-cell-content.mat-calendar-body-today:not(.mat-calendar-body-selected) {
+  background: rgba(56, 189, 248, 0.85) !important;
+  color: #020617 !important;
+  font-weight: 700;
+}
+
+/* Selected date */
 .mat-calendar-body-cell-content.mat-calendar-body-selected {
-  background: rgba(56, 189, 248, 0.26) !important;
-  border-color: rgba(56, 189, 248, 0.85) !important;
-  color: #f0f9ff !important;
-  font-weight: 600;
-  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.35);
+  background: rgba(56, 189, 248, 0.95) !important;
+  color: #020617 !important;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35);
 }
 
+/* Keyboard-focused, not selected */
 .mat-calendar-body-cell-content.mat-calendar-body-active:not(.mat-calendar-body-selected) {
-  outline: 2px solid rgba(56, 189, 248, 0.45);
+  outline: 2px solid rgba(56, 189, 248, 0.5);
   outline-offset: 1px;
-}
-
-.mat-calendar-body-today:not(.mat-calendar-body-selected) .mat-calendar-body-cell-content {
-  border-color: rgba(56, 189, 248, 0.55);
-  color: #e0f2fe;
 }
 
 .mat-calendar-previous-button,
@@ -872,6 +884,33 @@ body {
     0 20px 48px rgba(2, 6, 23, 0.72),
     0 0 0 1px rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(16px);
+}
+
+/* Footer actions — single "Today" button, full-width, matches screenshot style */
+.mat-datepicker-actions {
+  padding: 8px 12px 12px;
+  border-top: 1px solid rgba(71, 85, 105, 0.3);
+  display: flex !important;
+  justify-content: stretch !important;
+}
+
+.ai-dp-action-today {
+  flex: 1 !important;
+  background: rgba(56, 189, 248, 0.15) !important;
+  color: #67e8f9 !important;
+  border: 1px solid rgba(56, 189, 248, 0.4) !important;
+  border-radius: 8px !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  padding: 0 !important;
+  min-width: unset !important;
+  letter-spacing: 0.02em;
+}
+
+.ai-dp-action-today:hover {
+  background: rgba(56, 189, 248, 0.25) !important;
 }
 
 /* app-ai-select panel — dark AI theme, cyan hover/selected */

@@ -17,11 +17,12 @@
   <div class="toolbar">
     <div class="toolbar-left">
       <div class="ai-date-wrapper" title="Jump to date">
-        <app-date-picker
+        <app-ai-date-picker
           placeholder="Pick date"
-          [value]="dateSearchAsDate"
-          (valueChange)="onDatePickerChange($event)"
-        ></app-date-picker>
+          [(ngModel)]="dateSearch"
+          (ngModelChange)="onDateSearch()"
+          [inline]="true"
+        ></app-ai-date-picker>
       </div>
       <app-ai-select
         class="select-sort"

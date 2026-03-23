@@ -208,19 +208,15 @@
   font-size: 0.875rem;
 }
 
-.select-sort,
+/* Constrain app-ai-select host width in toolbar row */
+.select-sort {
+  width: 170px;
+  min-width: 170px;
+}
+
 .select-filter {
-  padding: 8px 32px 8px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 8px;
-  background: rgba(30, 41, 59, 0.8);
-  color: #e5e7eb;
-  font-size: 0.875rem;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
+  width: 140px;
+  min-width: 140px;
 }
 
 .driver-filter-dropdown {
