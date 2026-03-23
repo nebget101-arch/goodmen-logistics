@@ -164,27 +164,30 @@
                 />
               </div>
               <div class="field">
+                <label for="dob">Date of Birth</label>
                 <app-ai-date-picker
                   inputId="dob"
-                  label="Date of Birth"
+                  label=""
                   [(ngModel)]="newDriver.dateOfBirth"
                   name="dispatchNewDriverDob"
                   placeholder="MM/DD/YYYY"
                 ></app-ai-date-picker>
               </div>
               <div class="field">
+                <label for="applicationDate">Application Date</label>
                 <app-ai-date-picker
                   inputId="applicationDate"
-                  label="Application date"
+                  label=""
                   [(ngModel)]="newDriver.applicationDate"
                   name="dispatchNewDriverAppDate"
                   placeholder="MM/DD/YYYY"
                 ></app-ai-date-picker>
               </div>
               <div class="field">
+                <label for="hireDate">Hire Date</label>
                 <app-ai-date-picker
                   inputId="hireDate"
-                  label="Hire date"
+                  label=""
                   [(ngModel)]="newDriver.hireDate"
                   name="dispatchNewDriverHireDate"
                   placeholder="MM/DD/YYYY"
@@ -332,9 +335,10 @@
                 </select>
               </div>
               <div class="field">
+                <label for="cdlExpiry">CDL Expiry</label>
                 <app-ai-date-picker
                   inputId="cdlExpiry"
-                  label="CDL Expiry"
+                  label=""
                   [(ngModel)]="newDriver.cdlExpiry"
                   name="dispatchNewDriverCdlExpiry"
                   placeholder="MM/DD/YYYY"
@@ -502,18 +506,20 @@
               <h4 class="comp-section-title"><span class="material-symbols-outlined">event</span> Effective dates</h4>
               <div class="comp-fields-grid comp-dates">
                 <div class="field">
+                  <label for="effectiveStart">Start</label>
                   <app-ai-date-picker
                     inputId="effectiveStart"
-                    label="Start"
+                    label=""
                     [(ngModel)]="newDriver.effectiveStart"
                     name="dispatchNewDriverEffectiveStart"
                     placeholder="MM/DD/YYYY"
                   ></app-ai-date-picker>
                 </div>
                 <div class="field">
+                  <label for="effectiveEnd">End</label>
                   <app-ai-date-picker
                     inputId="effectiveEnd"
-                    label="End"
+                    label=""
                     [(ngModel)]="newDriver.effectiveEnd"
                     name="dispatchNewDriverEffectiveEnd"
                     placeholder="MM/DD/YYYY"
