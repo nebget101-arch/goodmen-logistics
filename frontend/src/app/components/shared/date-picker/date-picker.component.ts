@@ -11,7 +11,7 @@ export class DatePickerComponent {
   @Input() disabled = false;
   @Input() name = '';
   @Input() touchUi = false;
-  @Input() startView: 'month' | 'year' | 'multi-year' = 'multi-year';
+  @Input() startView: 'month' | 'year' | 'multi-year' = 'month';
 
   private _value: Date | null = null;
 
