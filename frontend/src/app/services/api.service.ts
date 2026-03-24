@@ -788,6 +788,44 @@ export class ApiService {
     );
   }
 
+  getDriverClearanceStatus(driverId: string): Observable<{
+    cleared: boolean;
+    requirements?: { key: string; label: string; met: boolean; link?: string }[];
+    missingItems: string[];
+  }> {
+    return this.http.get<{ cleared: boolean; requirements?: { key: string; label: string; met: boolean; link?: string }[]; missingItems: string[] }>(
+      `${this.baseUrl}/drug-alcohol/driver/${driverId}/clearance-status`
+    );
+  }
+
+  // ── Drug & Alcohol Test Management (FN-214) ──
+  getDrugAlcoholTests(driverId: string): Observable<any[]> {
+    return this.http.get<any[]>(
+      `${this.baseUrl}/drug-alcohol/driver/${driverId}/tests`
+    );
+  }
+
+  createDrugAlcoholTest(driverId: string, payload: any): Observable<any> {
+    return this.http.post(
+      `${this.baseUrl}/drug-alcohol/driver/${driverId}/tests`,
+      payload
+    );
+  }
+
+  updateDrugAlcoholTest(testId: string, payload: any): Observable<any> {
+    return this.http.put(
+      `${this.baseUrl}/drug-alcohol/tests/${testId}`,
+      payload
+    );
+  }
+
+  markTestClearinghouseReported(testId: string): Observable<any> {
+    return this.http.patch(
+      `${this.baseUrl}/drug-alcohol/tests/${testId}/clearinghouse-reported`,
+      {}
+    );
+  }
+
   createOnboardingPacket(driverId: string, driverPayload?: any): Observable<any> {
     const body: any = {};
     if (driverId) {
