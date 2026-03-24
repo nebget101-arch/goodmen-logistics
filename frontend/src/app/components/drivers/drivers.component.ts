@@ -739,7 +739,11 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.clearanceLoading = true;
     this.apiService.getDriverClearanceStatus(driverId).subscribe({
       next: (status) => {
-        this.clearanceStatus = status;
+        this.clearanceStatus = {
+          cleared: status?.cleared ?? false,
+          requirements: status?.requirements,
+          missingItems: status?.missingItems ?? (status as any)?.missing ?? []
+        };
         this.clearanceLoading = false;
       },
       error: () => {
