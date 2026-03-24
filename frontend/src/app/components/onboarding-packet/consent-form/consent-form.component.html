@@ -1,0 +1,89 @@
+<div class="consent-form-wrapper">
+  <!-- Loading state -->
+  <div *ngIf="loading" class="consent-loading">
+    <span class="material-symbols-outlined consent-spin">progress_activity</span>
+    <span>Loading consent form...</span>
+  </div>
+
+  <!-- Error state -->
+  <div *ngIf="!loading && errorMessage" class="consent-error">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ errorMessage }}</span>
+  </div>
+
+  <!-- Signed success state -->
+  <div *ngIf="signedSuccess" class="consent-signed">
+    <span class="material-symbols-outlined">verified</span>
+    <div>
+      <strong>Signed successfully</strong>
+      <p>You have signed the {{ consent?.title || consentKey }} consent form.</p>
+    </div>
+  </div>
+
+  <!-- Consent content -->
+  <ng-container *ngIf="!loading && !errorMessage && consent">
+    <div class="consent-header">
+      <h3 class="consent-title">{{ consent.title }}</h3>
+      <div class="consent-meta">
+        <span class="consent-meta-item">
+          <span class="material-symbols-outlined">info</span>
+          Version {{ consent.version }}
+        </span>
+        <span class="consent-meta-item">
+          <span class="material-symbols-outlined">calendar_today</span>
+          Effective {{ consent.effectiveDate }}
+        </span>
+      </div>
+    </div>
+
+    <div class="consent-body" [innerHTML]="consent.htmlContent"></div>
+
+    <!-- Signature section -->
+    <div class="consent-signature" *ngIf="!signedSuccess">
+      <div class="consent-signature-header">
+        <span class="material-symbols-outlined">draw</span>
+        <div>
+          <h4>E-Signature</h4>
+          <p>Type your full legal name and confirm your agreement below.</p>
+        </div>
+      </div>
+
+      <div class="consent-signature-fields">
+        <div class="consent-field">
+          <label for="signerName-{{ consentKey }}">Full Legal Name *</label>
+          <input
+            id="signerName-{{ consentKey }}"
+            class="form-input"
+            [(ngModel)]="signerName"
+            placeholder="Type your full legal name"
+            [disabled]="signing"
+            aria-label="Full legal name for e-signature"
+          />
+        </div>
+
+        <label class="consent-agree-card">
+          <input
+            type="checkbox"
+            [(ngModel)]="agreed"
+            [disabled]="signing"
+            aria-label="I agree to the terms"
+          />
+          <div>
+            <strong>I agree</strong>
+            <small>I have read and understand the above disclosure/authorization and voluntarily consent to its terms.</small>
+          </div>
+        </label>
+
+        <button
+          class="btn btn-primary consent-sign-btn"
+          type="button"
+          (click)="submitSignature()"
+          [disabled]="!canSign"
+        >
+          <span class="material-symbols-outlined">verified</span>
+          {{ signing ? 'Signing...' : 'Sign Consent' }}
+        </button>
+      </div>
+    </div>
+  </ng-container>
+</div>

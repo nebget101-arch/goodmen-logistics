@@ -3,6 +3,8 @@ import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { SeoService } from '../../services/seo.service';
 import { SEO_PUBLIC } from '../../services/seo-public-presets';
+import { EmployerHistoryData } from './employer-history-tiered/employer-history-tiered.component';
+import { DisqualificationData } from './disqualification-history/disqualification-history.component';
 
 export interface EmploymentForm {
   firstName?: string;
@@ -41,6 +43,8 @@ export interface EmploymentForm {
   otherQualifications?: string;
   applicationSignatureName?: string;
   applicationSignatureDate?: string;
+  employerHistory?: EmployerHistoryData;
+  disqualificationHistory?: DisqualificationData;
 }
 
 export interface MvrForm {
@@ -57,6 +61,19 @@ export interface MvrForm {
   mvrSignatureDate?: string;
 }
 
+export type PacketStep =
+  | 'employment_application'
+  | 'consent_forms'
+  | 'mvr_authorization'
+  | 'document_uploads'
+  | 'review_submit';
+
+export interface ConsentKeyConfig {
+  key: string;
+  label: string;
+  icon: string;
+}
+
 @Component({
   selector: 'app-onboarding-packet',
   templateUrl: './onboarding-packet.component.html',
@@ -70,7 +87,7 @@ export class OnboardingPacketComponent implements OnInit {
   errorMessage: string | null = null;
   driver: any = null;
   sections: { section_key: string; status: string; completed_at?: string }[] = [];
-  currentStep: 'employment_application' | 'mvr_authorization' = 'employment_application';
+  currentStep: PacketStep = 'employment_application';
   saving = false;
   reviewMode = false;
   submittedEmployment = false;
@@ -78,6 +95,24 @@ export class OnboardingPacketComponent implements OnInit {
 
   employment: EmploymentForm = {};
   mvr: MvrForm = {};
+
+  consentKeys: ConsentKeyConfig[] = [
+    { key: 'fcra_disclosure', label: 'FCRA Disclosure', icon: 'policy' },
+    { key: 'fcra_authorization', label: 'FCRA Authorization', icon: 'verified_user' },
+    { key: 'previous_employer_inquiry', label: 'Previous Employer Inquiry', icon: 'contact_phone' },
+    { key: 'clearinghouse_full', label: 'Clearinghouse Full Query', icon: 'search' },
+    { key: 'release_of_information', label: 'Release of Information', icon: 'share' }
+  ];
+
+  signedConsents: Set<string> = new Set();
+
+  steps: { key: PacketStep; label: string; icon: string; sectionKey?: string }[] = [
+    { key: 'employment_application', label: 'Employment Application', icon: 'description', sectionKey: 'employment_application' },
+    { key: 'consent_forms', label: 'Consent Forms', icon: 'verified_user', sectionKey: 'consent_forms' },
+    { key: 'mvr_authorization', label: 'MVR Authorization', icon: 'policy', sectionKey: 'mvr_authorization' },
+    { key: 'document_uploads', label: 'Document Uploads', icon: 'upload_file', sectionKey: 'document_uploads' },
+    { key: 'review_submit', label: 'Review & Submit', icon: 'fact_check' }
+  ];
 
   constructor(
     private route: ActivatedRoute,
@@ -125,16 +160,65 @@ export class OnboardingPacketComponent implements OnInit {
     if (mvrData) {
       this.mvr = { ...mvrData };
     }
+    const consentSection = this.sections.find((s) => s.section_key === 'consent_forms');
+    const consentData = (consentSection as unknown as { data?: { signedConsents?: string[] } })?.data;
+    if (consentData?.signedConsents) {
+      consentData.signedConsents.forEach((key) => this.signedConsents.add(key));
+    }
   }
 
-  setStep(step: 'employment_application' | 'mvr_authorization'): void {
+  setStep(step: PacketStep): void {
     this.currentStep = step;
     this.reviewMode = false;
     this.saveSuccess = null;
   }
 
   isSectionCompleted(sectionKey: string): boolean {
+    if (sectionKey === 'consent_forms') {
+      return this.consentKeys.every((c) => this.signedConsents.has(c.key));
+    }
     return this.sections.some((s) => s.section_key === sectionKey && s.status === 'completed');
+  }
+
+  getSectionStatus(sectionKey: string): string {
+    if (sectionKey === 'consent_forms') {
+      const signed = this.consentKeys.filter((c) => this.signedConsents.has(c.key)).length;
+      if (signed === this.consentKeys.length) return 'Completed';
+      if (signed > 0) return `${signed}/${this.consentKeys.length} signed`;
+      return 'Not started';
+    }
+    const section = this.sections.find((s) => s.section_key === sectionKey);
+    if (!section) return 'Not started';
+    if (section.status === 'completed') return 'Completed';
+    if (section.status === 'in_progress') return 'In progress';
+    return 'Not started';
+  }
+
+  onConsentSigned(consentKey: string): void {
+    this.signedConsents = new Set(this.signedConsents).add(consentKey);
+  }
+
+  isConsentSigned(consentKey: string): boolean {
+    return this.signedConsents.has(consentKey);
+  }
+
+  get allConsentsSigned(): boolean {
+    return this.consentKeys.every((c) => this.signedConsents.has(c.key));
+  }
+
+  get packetReady(): boolean {
+    return (
+      this.isSectionCompleted('employment_application') &&
+      this.allConsentsSigned
+    );
+  }
+
+  onEmployerHistoryChange(data: EmployerHistoryData): void {
+    this.employment = { ...this.employment, employerHistory: data };
+  }
+
+  onDisqualificationChange(data: DisqualificationData): void {
+    this.employment = { ...this.employment, disqualificationHistory: data };
   }
 
   saveEmploymentDraft(): void {
@@ -143,13 +227,7 @@ export class OnboardingPacketComponent implements OnInit {
     this.saveSuccess = null;
     this.errorMessage = null;
     this.apiService
-      .saveOnboardingSection(
-        this.packetId,
-        'employment_application',
-        this.employment,
-        'in_progress',
-        this.token
-      )
+      .saveOnboardingSection(this.packetId, 'employment_application', this.employment, 'in_progress', this.token)
       .subscribe({
         next: () => {
           this.saving = false;
@@ -177,13 +255,7 @@ export class OnboardingPacketComponent implements OnInit {
     this.saveSuccess = null;
     this.errorMessage = null;
     this.apiService
-      .saveOnboardingSection(
-        this.packetId,
-        'employment_application',
-        this.employment,
-        'completed',
-        this.token
-      )
+      .saveOnboardingSection(this.packetId, 'employment_application', this.employment, 'completed', this.token)
       .subscribe({
         next: () => {
           this.saving = false;
@@ -208,5 +280,9 @@ export class OnboardingPacketComponent implements OnInit {
 
   submitMvrAuthorization(): void {
     this.saveSuccess = 'MVR Authorization is not part of this phase yet. Placeholder only.';
+  }
+
+  submitFinalPacket(): void {
+    this.saveSuccess = 'Final packet review submission is not yet implemented. All sections are tracked individually.';
   }
 }
