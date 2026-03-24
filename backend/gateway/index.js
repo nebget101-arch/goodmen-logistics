@@ -193,6 +193,7 @@ app.use(
 app.use('/api/employment', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
 app.use('/api/roadside', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
 app.use('/api/safety', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
+app.use('/api/employer-investigations', buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers'));
 app.use(
   '/public/onboarding',
   buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
