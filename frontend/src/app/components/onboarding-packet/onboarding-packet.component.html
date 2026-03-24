@@ -288,7 +288,7 @@
             </div>
 
             <div class="consent-list">
-              <app-consent-form *ngFor="let c of consentKeys" [consentKey]="c.key" [packetId]="packetId || ''" [token]="token || ''" (signed)="onConsentSigned($event)"></app-consent-form>
+              <app-consent-form *ngFor="let c of consentKeys" [consentKey]="c.key" [packetId]="packetId || ''" [token]="token || ''" (signed)="onConsentSigned($any($event))"></app-consent-form>
             </div>
 
             <div class="onboard-actions">

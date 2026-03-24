@@ -63,6 +63,9 @@ import { InvestigationPanelComponent } from './components/drivers/investigation-
 import { RecordResponseModalComponent } from './components/drivers/investigation-panel/record-response-modal/record-response-modal.component';
 import { InvestigationHistoryComponent } from './components/drivers/investigation-history/investigation-history.component';
 import { DriverComplianceSectionComponent } from './components/drivers/driver-compliance-section/driver-compliance-section.component';
+import { ConsentFormComponent } from './components/onboarding-packet/consent-form/consent-form.component';
+import { EmployerHistoryTieredComponent } from './components/onboarding-packet/employer-history-tiered/employer-history-tiered.component';
+import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
 
 @NgModule({
   declarations: [
@@ -115,7 +118,10 @@ import { DriverComplianceSectionComponent } from './components/drivers/driver-co
     InvestigationPanelComponent,
     RecordResponseModalComponent,
     InvestigationHistoryComponent,
-    DriverComplianceSectionComponent
+    DriverComplianceSectionComponent,
+    ConsentFormComponent,
+    EmployerHistoryTieredComponent,
+    DisqualificationHistoryComponent
   ],
   imports: [
     BrowserModule,
