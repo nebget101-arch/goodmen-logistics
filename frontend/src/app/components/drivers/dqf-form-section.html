@@ -7,16 +7,24 @@
   <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
     <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
       📤 Upload File
-      <input type="file" (change)="onDQFFileSelected($event, 'application')" 
+      <input type="file" (change)="onDQFFileSelected($event, 'application')"
              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
              [disabled]="uploadingDocuments['application']">
     </label>
     <span *ngIf="uploadingDocuments['application']" style="font-size: 12px; color: #666;">Uploading...</span>
-    <div *ngFor="let doc of getDocumentsByType('application')" 
+    <!-- Auto-generated Employment Application PDFs -->
+    <div *ngFor="let doc of getDocumentsByType('application')"
          style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+      <span style="color: #0066cc;">📄</span>
       <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-      <button (click)="deleteDocument(doc.id, 'application')" 
+      <button (click)="deleteDocument(doc.id, 'application')"
               style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
+    </div>
+    <!-- Show employment application PDF from submitted application -->
+    <div *ngFor="let doc of getDocumentsByType('employment_application_pdf')"
+         style="font-size: 12px; background: #d4edda; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
+      <span style="color: #28a745;">✅</span>
+      <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #155724; text-decoration: none;">{{doc.file_name || 'Employment Application (Auto-generated)'}}</a>
     </div>
   </div>
 </div>
@@ -30,15 +38,15 @@
   <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
     <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
       📤 Upload File
-      <input type="file" (change)="onDQFFileSelected($event, 'mvr')" 
+      <input type="file" (change)="onDQFFileSelected($event, 'mvr')"
              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
              [disabled]="uploadingDocuments['mvr']">
     </label>
     <span *ngIf="uploadingDocuments['mvr']" style="font-size: 12px; color: #666;">Uploading...</span>
-    <div *ngFor="let doc of getDocumentsByType('mvr')" 
+    <div *ngFor="let doc of getDocumentsByType('mvr')"
          style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
       <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-      <button (click)="deleteDocument(doc.id, 'mvr')" 
+      <button (click)="deleteDocument(doc.id, 'mvr')"
               style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
     </div>
   </div>
@@ -53,15 +61,15 @@
   <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
     <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
       📤 Upload File
-      <input type="file" (change)="onDQFFileSelected($event, 'road_test')" 
+      <input type="file" (change)="onDQFFileSelected($event, 'road_test')"
              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
              [disabled]="uploadingDocuments['road_test']">
     </label>
     <span *ngIf="uploadingDocuments['road_test']" style="font-size: 12px; color: #666;">Uploading...</span>
-    <div *ngFor="let doc of getDocumentsByType('road_test')" 
+    <div *ngFor="let doc of getDocumentsByType('road_test')"
          style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
       <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-      <button (click)="deleteDocument(doc.id, 'road_test')" 
+      <button (click)="deleteDocument(doc.id, 'road_test')"
               style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
     </div>
   </div>
@@ -76,15 +84,15 @@
   <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
     <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
       📤 Upload File
-      <input type="file" (change)="onDQFFileSelected($event, 'medical_cert')" 
+      <input type="file" (change)="onDQFFileSelected($event, 'medical_cert')"
              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
              [disabled]="uploadingDocuments['medical_cert']">
     </label>
     <span *ngIf="uploadingDocuments['medical_cert']" style="font-size: 12px; color: #666;">Uploading...</span>
-    <div *ngFor="let doc of getDocumentsByType('medical_cert')" 
+    <div *ngFor="let doc of getDocumentsByType('medical_cert')"
          style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
       <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-      <button (click)="deleteDocument(doc.id, 'medical_cert')" 
+      <button (click)="deleteDocument(doc.id, 'medical_cert')"
               style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
     </div>
   </div>
@@ -99,15 +107,15 @@
   <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
     <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
       📤 Upload File
-      <input type="file" (change)="onDQFFileSelected($event, 'annual_review')" 
+      <input type="file" (change)="onDQFFileSelected($event, 'annual_review')"
              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
              [disabled]="uploadingDocuments['annual_review']">
     </label>
     <span *ngIf="uploadingDocuments['annual_review']" style="font-size: 12px; color: #666;">Uploading...</span>
-    <div *ngFor="let doc of getDocumentsByType('annual_review')" 
+    <div *ngFor="let doc of getDocumentsByType('annual_review')"
          style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
       <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-      <button (click)="deleteDocument(doc.id, 'annual_review')" 
+      <button (click)="deleteDocument(doc.id, 'annual_review')"
               style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
     </div>
   </div>
@@ -122,15 +130,15 @@
   <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
     <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
       📤 Upload File
-      <input type="file" (change)="onDQFFileSelected($event, 'clearinghouse_consent')" 
+      <input type="file" (change)="onDQFFileSelected($event, 'clearinghouse_consent')"
              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
              [disabled]="uploadingDocuments['clearinghouse_consent']">
     </label>
     <span *ngIf="uploadingDocuments['clearinghouse_consent']" style="font-size: 12px; color: #666;">Uploading...</span>
-    <div *ngFor="let doc of getDocumentsByType('clearinghouse_consent')" 
+    <div *ngFor="let doc of getDocumentsByType('clearinghouse_consent')"
          style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
       <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-      <button (click)="deleteDocument(doc.id, 'clearinghouse_consent')" 
+      <button (click)="deleteDocument(doc.id, 'clearinghouse_consent')"
               style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
     </div>
   </div>
