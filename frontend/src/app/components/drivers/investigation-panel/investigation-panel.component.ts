@@ -62,12 +62,20 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
 
     this.investigationService.getInvestigationStatus(this.driverId).subscribe({
       next: (status) => {
-        this.investigationStatus = status;
+        this.investigationStatus = status
+          ? {
+              ...status,
+              pastEmployers: status.pastEmployers ?? [],
+              completedCount: status.completedCount ?? 0,
+              totalCount: status.totalCount ?? 0
+            }
+          : null;
         this.loading = false;
       },
       error: (err) => {
         console.error('Error loading investigation status:', err);
         this.error = 'Unable to load employer investigation status.';
+        this.investigationStatus = null;
         this.loading = false;
       }
     });
