@@ -67,6 +67,7 @@ const publicRoadsideRouter = require('@goodmen/shared/routes/public-roadside');
 const consentsRouter = require('@goodmen/shared/routes/consents');
 const publicConsentsRouter = require('@goodmen/shared/routes/public-consents');
 const safetyRouter = require('@goodmen/shared/routes/safety');
+const employerInvestigationsRouter = require('@goodmen/shared/routes/employer-investigations');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
@@ -85,6 +86,7 @@ app.use('/api/employment', authMiddleware, tenantContextMiddleware, employmentAp
 app.use('/api/roadside', authMiddleware, tenantContextMiddleware, requireRoadsidePlan, roadsideRouter);
 app.use('/api/safety', authMiddleware, tenantContextMiddleware, safetyRouter);
 app.use('/api/consents', authMiddleware, tenantContextMiddleware, consentsRouter);
+app.use('/api/employer-investigations', authMiddleware, tenantContextMiddleware, employerInvestigationsRouter);
 app.use('/public/onboarding', publicOnboardingRouter);
 app.use('/public/roadside', publicRoadsideRouter);
 app.use('/public/consents', publicConsentsRouter);

@@ -1,0 +1,75 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Frontend (Angular)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start"],
+      "port": 4200,
+      "cwd": "frontend"
+    },
+    {
+      "name": "Gateway",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 4000,
+      "cwd": "backend/gateway"
+    },
+    {
+      "name": "Auth/Users Service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5003,
+      "cwd": "backend/microservices/auth-users-service"
+    },
+    {
+      "name": "Logistics Service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5006,
+      "cwd": "backend/microservices/logistics-service"
+    },
+    {
+      "name": "Drivers Compliance Service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5004,
+      "cwd": "backend/microservices/drivers-compliance-service"
+    },
+    {
+      "name": "Vehicles Maintenance Service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5005,
+      "cwd": "backend/microservices/vehicles-maintenance-service"
+    },
+    {
+      "name": "Reporting Service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5001,
+      "cwd": "backend/microservices/reporting-service"
+    },
+    {
+      "name": "Integrations Service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5002,
+      "cwd": "backend/microservices/integrations-service"
+    },
+    {
+      "name": "Inventory Service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5007,
+      "cwd": "backend/microservices/inventory-service"
+    },
+    {
+      "name": "AI Service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start"],
+      "port": 4100,
+      "cwd": "backend/microservices/ai-service"
+    }
+  ]
+}
