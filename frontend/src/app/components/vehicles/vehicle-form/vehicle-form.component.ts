@@ -57,7 +57,7 @@ interface Document {
   templateUrl: './vehicle-form.component.html',
   styleUrls: ['./vehicle-form.component.css']
 })
-export class VehicleFormComponent implements OnInit, OnChanges {
+export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
   @Input() vehicle: any = null;
   @Input() isOpen = false;
   @Input() vehicleType: 'truck' | 'trailer' = 'truck';
