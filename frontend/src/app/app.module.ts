@@ -57,6 +57,7 @@ import { BillingComponent } from './billing/billing.component';
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
 import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/has-permission.directive';
+import { DriverComplianceSectionComponent } from './components/drivers/driver-compliance-section/driver-compliance-section.component';
 
 @NgModule({
   declarations: [
@@ -103,7 +104,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     RoadsideAiCallerComponent,
     PaymentMethodFormComponent,
     TrialBannerComponent,
-    BillingComponent
+    BillingComponent,
+    DriverComplianceSectionComponent
   ],
   imports: [
     BrowserModule,
