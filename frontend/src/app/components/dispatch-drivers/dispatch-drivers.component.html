@@ -156,12 +156,13 @@
               </div>
               <div class="field">
                 <label for="status">Status</label>
-                <input
-                  id="status"
-                  class="form-input"
+                <app-ai-select
+                  inputId="status"
                   [(ngModel)]="newDriver.status"
-                  placeholder="Applicant"
-                />
+                  name="dispatchNewDriverStatus"
+                  [options]="statusOptions"
+                  placeholder="Select status"
+                ></app-ai-select>
               </div>
               <div class="field">
                 <app-ai-date-picker
@@ -194,8 +195,9 @@
                 <label for="phone">Phone</label>
                 <input
                   id="phone"
-                  class="form-input"
+                  class="form-input phone-input"
                   [(ngModel)]="newDriver.phone"
+                  placeholder="(555) 123-4567"
                 />
               </div>
               <div class="field">
@@ -245,12 +247,14 @@
               </div>
               <div class="field">
                 <label for="state">State</label>
-                <input
-                  id="state"
-                  class="form-input"
-                  maxlength="2"
+                <app-ai-select
+                  inputId="state"
                   [(ngModel)]="newDriver.state"
-                />
+                  name="dispatchNewDriverState"
+                  [options]="US_STATES"
+                  placeholder="Select state"
+                  [allowEmpty]="true"
+                ></app-ai-select>
               </div>
               <div class="field">
                 <label for="zip">Zip</label>
@@ -258,7 +262,11 @@
                   id="zip"
                   class="form-input"
                   [(ngModel)]="newDriver.zip"
+                  maxlength="5"
+                  (input)="onZipCodeChange(newDriver.zip)"
                 />
+                <small *ngIf="zipLookupLoading" style="color:#94a3b8;font-size:0.75rem">Looking up zip...</small>
+                <small *ngIf="zipLookupError" style="color:#f87171;font-size:0.75rem">{{ zipLookupError }}</small>
               </div>
               <div class="field">
                 <label for="coDriver">Co-Driver</label>
@@ -312,12 +320,14 @@
               </div>
               <div class="field">
                 <label for="cdlState">CDL State *</label>
-                <input
-                  id="cdlState"
-                  class="form-input"
-                  maxlength="2"
+                <app-ai-select
+                  inputId="cdlState"
                   [(ngModel)]="newDriver.cdlState"
-                />
+                  name="dispatchNewDriverCdlState"
+                  [options]="US_STATES"
+                  placeholder="Select CDL state"
+                  ariaLabel="CDL State"
+                ></app-ai-select>
               </div>
               <div class="field">
                 <label for="cdlClass">CDL Class</label>
@@ -357,7 +367,7 @@
             </button>
             <button type="button" class="pay-tab chip-tab" [class.active]="payTab === 'payee'" (click)="setPayTab('payee')">
               <span class="material-symbols-outlined">person_add</span>
-              Additional payee
+              Equipment Owner
             </button>
             <button type="button" class="pay-tab chip-tab" [class.active]="payTab === 'notes'" (click)="setPayTab('notes')">
               <span class="material-symbols-outlined">note</span>
@@ -451,7 +461,7 @@
                   />
                 </div>
                 <div class="field">
-                  <label for="additionalPayeeRates">Additional payee (optional)</label>
+                  <label for="additionalPayeeRates">Equipment Owner (optional)</label>
                   <div class="payee-search-wrapper">
                     <div class="payee-search-input-wrapper">
                       <input
@@ -694,7 +704,7 @@
                       <label for="rdTarget">Apply to</label>
                       <select id="rdTarget" class="form-input" [(ngModel)]="newRecurringDeduction.target">
                         <option value="primary">Primary payee</option>
-                        <option value="additional" [disabled]="!selectedAdditionalPayeeId">Additional payee</option>
+                        <option value="additional" [disabled]="!selectedAdditionalPayeeId">Equipment Owner</option>
                       </select>
                     </div>
 
@@ -760,7 +770,7 @@
             </div>
           </div>
 
-          <!-- Tab: Additional payee -->
+          <!-- Tab: Equipment Owner -->
           <div class="pay-content" *ngIf="payTab === 'payee'">
             <div class="comp-block">
               <h4 class="comp-section-title"><span class="material-symbols-outlined">person_add</span> Pay routing</h4>
@@ -779,7 +789,7 @@
                     />
                 </div>
                 <div class="field">
-                  <label for="additionalPayee">Additional payee</label>
+                  <label for="additionalPayee">Equipment Owner</label>
                   <div class="payee-search-wrapper">
                     <div class="payee-search-input-wrapper">
                       <input

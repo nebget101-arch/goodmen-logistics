@@ -203,8 +203,55 @@
                 type="text"
                 [(ngModel)]="newDriver.address"
                 class="form-input"
-                placeholder="123 Main St, City, ST 12345"
+                placeholder="123 Main St"
               />
+            </div>
+            <div class="dqf-field">
+              <label for="newDriverZipcode">Zip Code</label>
+              <input
+                id="newDriverZipcode"
+                type="text"
+                [(ngModel)]="newDriver.zipcode"
+                name="newDriverZipcode"
+                class="form-input"
+                placeholder="12345"
+                maxlength="5"
+                (input)="onZipCodeChange(newDriver.zipcode)"
+              />
+              <small *ngIf="zipLookupLoading" style="color:#94a3b8">Looking up zip...</small>
+              <small *ngIf="zipLookupError" style="color:#f87171">{{ zipLookupError }}</small>
+            </div>
+            <div class="dqf-field">
+              <label for="newDriverCity">City</label>
+              <input
+                id="newDriverCity"
+                type="text"
+                [(ngModel)]="newDriver.city"
+                name="newDriverCity"
+                class="form-input"
+                placeholder="City"
+              />
+            </div>
+            <div class="dqf-field">
+              <label for="newDriverState">State</label>
+              <app-ai-select
+                inputId="newDriverState"
+                [(ngModel)]="newDriver.state"
+                name="newDriverState"
+                [options]="US_STATES"
+                placeholder="Select state"
+                [allowEmpty]="true"
+              ></app-ai-select>
+            </div>
+            <div class="dqf-field">
+              <label for="newDriverStatus">Status</label>
+              <app-ai-select
+                inputId="newDriverStatus"
+                [(ngModel)]="newDriver.status"
+                name="newDriverStatus"
+                [options]="statusOptions"
+                placeholder="Select status"
+              ></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="dob">Date of Birth</label>
@@ -245,15 +292,14 @@
             </div>
             <div class="dqf-field">
               <label for="cdlState">CDL State *</label>
-              <input
-                id="cdlState"
-                type="text"
+              <app-ai-select
+                inputId="cdlState"
                 [(ngModel)]="newDriver.cdlState"
-                class="form-input"
-                placeholder="CA"
-                maxlength="2"
-                required
-              />
+                name="newDriverCdlState"
+                [options]="US_STATES"
+                placeholder="Select CDL state"
+                ariaLabel="CDL State"
+              ></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="cdlClass">CDL Class *</label>
@@ -351,7 +397,14 @@
             </div>
             <div class="dqf-field">
               <label for="editCdlState">CDL State *</label>
-              <input id="editCdlState" type="text" [(ngModel)]="editingDriver.cdlState" maxlength="2" class="form-input" />
+              <app-ai-select
+                inputId="editCdlState"
+                [(ngModel)]="editingDriver.cdlState"
+                name="editCdlState"
+                [options]="US_STATES"
+                placeholder="Select CDL state"
+                ariaLabel="CDL State"
+              ></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="editMedExpiry">Medical Cert Expiry</label>

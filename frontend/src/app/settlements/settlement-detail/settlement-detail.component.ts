@@ -79,7 +79,7 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
 
   readonly adjustmentApplyToOptions: AiSelectOption<string>[] = [
     { value: 'primary_payee', label: 'Primary payee' },
-    { value: 'additional_payee', label: 'Additional payee' },
+    { value: 'additional_payee', label: 'Equipment Owner' },
     { value: 'settlement', label: 'Settlement' }
   ];
 

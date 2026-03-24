@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { finalize } from 'rxjs/operators';
@@ -12,6 +13,45 @@ import { OperatingEntityContextService } from '../../services/operating-entity-c
   styleUrls: ['./dispatch-drivers.component.css']
 })
 export class DispatchDriversComponent implements OnInit, OnDestroy {
+
+  readonly statusOptions = [
+    { value: 'applicant', label: 'Applicant' },
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' }
+  ];
+
+  readonly US_STATES = [
+    { value: 'AL', label: 'Alabama (AL)' }, { value: 'AK', label: 'Alaska (AK)' },
+    { value: 'AZ', label: 'Arizona (AZ)' }, { value: 'AR', label: 'Arkansas (AR)' },
+    { value: 'CA', label: 'California (CA)' }, { value: 'CO', label: 'Colorado (CO)' },
+    { value: 'CT', label: 'Connecticut (CT)' }, { value: 'DC', label: 'Washington DC (DC)' },
+    { value: 'DE', label: 'Delaware (DE)' }, { value: 'FL', label: 'Florida (FL)' },
+    { value: 'GA', label: 'Georgia (GA)' }, { value: 'HI', label: 'Hawaii (HI)' },
+    { value: 'ID', label: 'Idaho (ID)' }, { value: 'IL', label: 'Illinois (IL)' },
+    { value: 'IN', label: 'Indiana (IN)' }, { value: 'IA', label: 'Iowa (IA)' },
+    { value: 'KS', label: 'Kansas (KS)' }, { value: 'KY', label: 'Kentucky (KY)' },
+    { value: 'LA', label: 'Louisiana (LA)' }, { value: 'ME', label: 'Maine (ME)' },
+    { value: 'MD', label: 'Maryland (MD)' }, { value: 'MA', label: 'Massachusetts (MA)' },
+    { value: 'MI', label: 'Michigan (MI)' }, { value: 'MN', label: 'Minnesota (MN)' },
+    { value: 'MS', label: 'Mississippi (MS)' }, { value: 'MO', label: 'Missouri (MO)' },
+    { value: 'MT', label: 'Montana (MT)' }, { value: 'NE', label: 'Nebraska (NE)' },
+    { value: 'NV', label: 'Nevada (NV)' }, { value: 'NH', label: 'New Hampshire (NH)' },
+    { value: 'NJ', label: 'New Jersey (NJ)' }, { value: 'NM', label: 'New Mexico (NM)' },
+    { value: 'NY', label: 'New York (NY)' }, { value: 'NC', label: 'North Carolina (NC)' },
+    { value: 'ND', label: 'North Dakota (ND)' }, { value: 'OH', label: 'Ohio (OH)' },
+    { value: 'OK', label: 'Oklahoma (OK)' }, { value: 'OR', label: 'Oregon (OR)' },
+    { value: 'PA', label: 'Pennsylvania (PA)' }, { value: 'RI', label: 'Rhode Island (RI)' },
+    { value: 'SC', label: 'South Carolina (SC)' }, { value: 'SD', label: 'South Dakota (SD)' },
+    { value: 'TN', label: 'Tennessee (TN)' }, { value: 'TX', label: 'Texas (TX)' },
+    { value: 'UT', label: 'Utah (UT)' }, { value: 'VT', label: 'Vermont (VT)' },
+    { value: 'VA', label: 'Virginia (VA)' }, { value: 'WA', label: 'Washington (WA)' },
+    { value: 'WV', label: 'West Virginia (WV)' }, { value: 'WI', label: 'Wisconsin (WI)' },
+    { value: 'WY', label: 'Wyoming (WY)' }
+  ];
+
+  zipLookupLoading = false;
+  zipLookupError = '';
+
   drivers: any[] = [];
   loading = true;
   showNewModal = false;
@@ -238,7 +278,8 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private router: Router,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private http: HttpClient
   ) {}
 
   ngOnInit(): void {
@@ -539,6 +580,25 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       additionalPayeeRate: null,
       settlementTemplateType: ''
     };
+  }
+
+  onZipCodeChange(zip: string): void {
+    this.zipLookupError = '';
+    if (!zip || zip.length !== 5 || !/^\d{5}$/.test(zip)) return;
+    this.zipLookupLoading = true;
+    this.http.get<any>(`https://api.zippopotam.us/us/${zip}`).subscribe({
+      next: (data) => {
+        if (data?.places?.length) {
+          this.newDriver.city = data.places[0]['place name'] || '';
+          this.newDriver.state = data.places[0]['state abbreviation'] || '';
+        }
+        this.zipLookupLoading = false;
+      },
+      error: () => {
+        this.zipLookupError = 'Zip not found — enter city/state manually';
+        this.zipLookupLoading = false;
+      }
+    });
   }
 
   private normalizeDate(value: any): string {
