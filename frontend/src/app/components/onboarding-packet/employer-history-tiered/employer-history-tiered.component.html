@@ -1,0 +1,155 @@
+<div class="tier-section">
+  <!-- Detailed Employment History (Past 3 Years) -->
+  <section class="onboard-panel onboard-panel-full">
+    <div class="onboard-panel-header">
+      <span class="material-symbols-outlined">work_history</span>
+      <div>
+        <h3 class="onboard-section-title">Detailed Employment History (Past 3 Years)</h3>
+        <p>Provide complete details for all employers in the past 3 years, including DOT-regulated positions.</p>
+      </div>
+    </div>
+
+    <div *ngFor="let emp of detailedEmployers; let i = index; trackBy: trackByIndex" class="tier-employer-card">
+      <div class="tier-employer-card-header">
+        <span class="tier-employer-number">Employer {{ i + 1 }}</span>
+        <button
+          *ngIf="detailedEmployers.length > 1"
+          type="button"
+          class="tier-remove-btn"
+          (click)="removeDetailedEmployer(i)"
+          aria-label="Remove employer"
+        >
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <div class="onboard-grid-2">
+        <div class="onboard-field">
+          <label>Employer Name *</label>
+          <input class="form-input" [(ngModel)]="emp.employerName" (ngModelChange)="emitChange()" placeholder="Company name" />
+        </div>
+        <div class="onboard-field">
+          <label>Phone</label>
+          <input class="form-input" [(ngModel)]="emp.employerPhone" (ngModelChange)="emitChange()" placeholder="(555) 555-5555" />
+        </div>
+        <div class="onboard-field onboard-field-full">
+          <label>Street Address</label>
+          <input class="form-input" [(ngModel)]="emp.employerStreet" (ngModelChange)="emitChange()" placeholder="Street address" />
+        </div>
+        <div class="onboard-field">
+          <label>City</label>
+          <input class="form-input" [(ngModel)]="emp.employerCity" (ngModelChange)="emitChange()" placeholder="City" />
+        </div>
+        <div class="onboard-field">
+          <label>State</label>
+          <input class="form-input" maxlength="2" [(ngModel)]="emp.employerState" (ngModelChange)="emitChange()" placeholder="OH" />
+        </div>
+        <div class="onboard-field">
+          <label>ZIP</label>
+          <input class="form-input" [(ngModel)]="emp.employerZip" (ngModelChange)="emitChange()" placeholder="ZIP code" />
+        </div>
+        <div class="onboard-field">
+          <label>Position Held</label>
+          <input class="form-input" [(ngModel)]="emp.positionHeld" (ngModelChange)="emitChange()" placeholder="Driver, Owner Operator, etc." />
+        </div>
+        <div class="onboard-field">
+          <label>From</label>
+          <input class="form-input" [(ngModel)]="emp.fromDate" (ngModelChange)="emitChange()" placeholder="MM/YYYY" />
+        </div>
+        <div class="onboard-field">
+          <label>To</label>
+          <input class="form-input" [(ngModel)]="emp.toDate" (ngModelChange)="emitChange()" placeholder="MM/YYYY or Present" />
+        </div>
+        <div class="onboard-field onboard-field-full">
+          <label>Reason for Leaving</label>
+          <input class="form-input" [(ngModel)]="emp.reasonForLeaving" (ngModelChange)="emitChange()" placeholder="Reason for leaving" />
+        </div>
+        <div class="onboard-field">
+          <div class="onboard-field-label">Subject to FMCSRs?</div>
+          <div class="onboard-radio-group">
+            <label class="onboard-choice"><input type="radio" [name]="'fmcsr-' + i" [value]="true" [(ngModel)]="emp.subjectToFmcsr" (ngModelChange)="emitChange()" /><span>Yes</span></label>
+            <label class="onboard-choice"><input type="radio" [name]="'fmcsr-' + i" [value]="false" [(ngModel)]="emp.subjectToFmcsr" (ngModelChange)="emitChange()" /><span>No</span></label>
+          </div>
+        </div>
+        <div class="onboard-field">
+          <div class="onboard-field-label">DOT Regulated?</div>
+          <div class="onboard-radio-group">
+            <label class="onboard-choice"><input type="radio" [name]="'dot-' + i" [value]="true" [(ngModel)]="emp.dotRegulated" (ngModelChange)="emitChange()" /><span>Yes</span></label>
+            <label class="onboard-choice"><input type="radio" [name]="'dot-' + i" [value]="false" [(ngModel)]="emp.dotRegulated" (ngModelChange)="emitChange()" /><span>No</span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button type="button" class="tier-add-btn" (click)="addDetailedEmployer()">
+      <span class="material-symbols-outlined">add_circle</span>
+      Add Employer (Past 3 Years)
+    </button>
+  </section>
+
+  <!-- CMV Employment History (Additional 7 Years) -->
+  <section class="onboard-panel onboard-panel-full">
+    <div class="onboard-panel-header">
+      <span class="material-symbols-outlined">local_shipping</span>
+      <div>
+        <h3 class="onboard-section-title">CMV Employment History (Additional 7 Years)</h3>
+        <p>List any employers where you operated a commercial motor vehicle during the 7 years before your most recent 3-year history.</p>
+      </div>
+    </div>
+
+    <div *ngFor="let emp of cmvEmployers; let i = index; trackBy: trackByIndex" class="tier-employer-card">
+      <div class="tier-employer-card-header">
+        <span class="tier-employer-number">CMV Employer {{ i + 1 }}</span>
+        <button
+          *ngIf="cmvEmployers.length > 1"
+          type="button"
+          class="tier-remove-btn"
+          (click)="removeCmvEmployer(i)"
+          aria-label="Remove CMV employer"
+        >
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <div class="onboard-grid-2">
+        <div class="onboard-field">
+          <label>Employer Name *</label>
+          <input class="form-input" [(ngModel)]="emp.employerName" (ngModelChange)="emitChange()" placeholder="Company name" />
+        </div>
+        <div class="onboard-field onboard-field-full">
+          <label>Address</label>
+          <input class="form-input" [(ngModel)]="emp.employerStreet" (ngModelChange)="emitChange()" placeholder="Street address" />
+        </div>
+        <div class="onboard-field">
+          <label>City</label>
+          <input class="form-input" [(ngModel)]="emp.employerCity" (ngModelChange)="emitChange()" placeholder="City" />
+        </div>
+        <div class="onboard-field">
+          <label>State</label>
+          <input class="form-input" maxlength="2" [(ngModel)]="emp.employerState" (ngModelChange)="emitChange()" placeholder="OH" />
+        </div>
+        <div class="onboard-field">
+          <label>ZIP</label>
+          <input class="form-input" [(ngModel)]="emp.employerZip" (ngModelChange)="emitChange()" placeholder="ZIP code" />
+        </div>
+        <div class="onboard-field">
+          <label>From</label>
+          <input class="form-input" [(ngModel)]="emp.fromDate" (ngModelChange)="emitChange()" placeholder="MM/YYYY" />
+        </div>
+        <div class="onboard-field">
+          <label>To</label>
+          <input class="form-input" [(ngModel)]="emp.toDate" (ngModelChange)="emitChange()" placeholder="MM/YYYY" />
+        </div>
+        <div class="onboard-field onboard-field-full">
+          <label>CMV Type</label>
+          <input class="form-input" [(ngModel)]="emp.cmvType" (ngModelChange)="emitChange()" placeholder="Tractor-trailer, Straight truck, Bus, etc." />
+        </div>
+      </div>
+    </div>
+
+    <button type="button" class="tier-add-btn" (click)="addCmvEmployer()">
+      <span class="material-symbols-outlined">add_circle</span>
+      Add CMV Employer (Years 4-10)
+    </button>
+  </section>
+</div>

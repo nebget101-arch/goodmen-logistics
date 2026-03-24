@@ -149,7 +149,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         }
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to load IFTA quarters';
+        this.error = this.friendlyError(err, 'Failed to load IFTA quarters');
         this.loading = false;
       }
     });
@@ -173,7 +173,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.saving = false;
-        this.error = err?.error?.error || 'Failed to create quarter';
+        this.error = this.friendlyError(err, 'Failed to create quarter');
       }
     });
   }
@@ -197,7 +197,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.loadFindings();
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to load selected quarter';
+        this.error = this.friendlyError(err, 'Failed to load selected quarter');
         this.loading = false;
       }
     });
@@ -216,7 +216,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.saving = false;
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to save quarter metadata';
+        this.error = this.friendlyError(err, 'Failed to save quarter metadata');
         this.saving = false;
       }
     });
@@ -240,7 +240,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.milesTotal = Number(resp.total || 0);
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to load mileage rows';
+        this.error = this.friendlyError(err, 'Failed to load mileage rows');
       }
     });
   }
@@ -267,7 +267,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.loadReportPreview();
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to add miles row';
+        this.error = this.friendlyError(err, 'Failed to add miles row');
       }
     });
   }
@@ -302,7 +302,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.loadReportPreview();
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to delete miles row';
+        this.error = this.friendlyError(err, 'Failed to delete miles row');
       }
     });
   }
@@ -320,7 +320,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
           this.loadReportPreview();
         },
         error: (err) => {
-          this.error = err?.error?.error || 'Failed to import miles CSV';
+          this.error = this.friendlyError(err, 'Failed to import miles CSV');
         }
       });
     }).catch(() => {
@@ -337,7 +337,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.fuelTotal = Number(resp.total || 0);
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to load fuel rows';
+        this.error = this.friendlyError(err, 'Failed to load fuel rows');
       }
     });
   }
@@ -379,7 +379,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.loadReportPreview();
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to add fuel row';
+        this.error = this.friendlyError(err, 'Failed to add fuel row');
       }
     });
   }
@@ -419,7 +419,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.loadReportPreview();
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to delete fuel row';
+        this.error = this.friendlyError(err, 'Failed to delete fuel row');
       }
     });
   }
@@ -437,7 +437,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
           this.loadReportPreview();
         },
         error: (err) => {
-          this.error = err?.error?.error || 'Failed to import fuel CSV';
+          this.error = this.friendlyError(err, 'Failed to import fuel CSV');
         }
       });
     }).catch(() => {
@@ -459,7 +459,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.saving = false;
-        this.error = err?.error?.error || 'Failed to run AI review';
+        this.error = this.friendlyError(err, 'Failed to run AI review');
       }
     });
   }
@@ -485,7 +485,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.loadReportPreview();
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to resolve finding';
+        this.error = this.friendlyError(err, 'Failed to resolve finding');
       }
     });
   }
@@ -523,7 +523,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.saving = false;
-        this.error = err?.error?.error || 'Finalize failed';
+        this.error = this.friendlyError(err, 'Finalize failed');
       }
     });
   }
@@ -533,7 +533,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
     this.ifta.exportCsv(this.selectedQuarterId, kind).subscribe({
       next: (blob) => this.downloadBlob(blob, `ifta-${kind}.csv`),
       error: (err) => {
-        this.error = err?.error?.error || `Failed to export ${kind} CSV`;
+        this.error = this.friendlyError(err, `Failed to export ${kind} CSV`);
       }
     });
   }
@@ -543,7 +543,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
     this.ifta.exportPdf(this.selectedQuarterId).subscribe({
       next: (blob) => this.downloadBlob(blob, 'ifta-summary.pdf'),
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to export PDF';
+        this.error = this.friendlyError(err, 'Failed to export PDF');
       }
     });
   }
@@ -556,7 +556,7 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
         this.downloadBlob(blob, 'ifta-filing-payload.json');
       },
       error: (err) => {
-        this.error = err?.error?.error || 'Failed to export payload JSON';
+        this.error = this.friendlyError(err, 'Failed to export payload JSON');
       }
     });
   }
@@ -574,6 +574,16 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
       },
       error: () => {}
     });
+  }
+
+  private friendlyError(err: any, fallback: string): string {
+    if (err?.status === 403) {
+      return 'You do not have permission to access IFTA data. Contact your administrator.';
+    }
+    if (err?.status === 401) {
+      return 'Your session has expired. Please log in again.';
+    }
+    return err?.error?.error || err?.error?.message || err?.message || fallback;
   }
 
   private clearBanners(): void {

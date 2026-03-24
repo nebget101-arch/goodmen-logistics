@@ -124,12 +124,31 @@ export class SettlementListComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Convert scientific-notation number strings to fixed-point without floating-point loss */
+  private sciToFixed(sci: string): string {
+    const m = sci.match(/^(\d+)\.?(\d*)[eE]([+-]?\d+)$/);
+    if (!m) return sci;
+    const digits = m[1] + m[2];
+    const exp = parseInt(m[3], 10);
+    const decimalPos = m[1].length + exp;
+    if (decimalPos >= digits.length) {
+      return digits + '0'.repeat(decimalPos - digits.length);
+    }
+    return decimalPos > 0 ? digits.slice(0, decimalPos) : '0';
+  }
+
+  private toSafeString(val: any): string {
+    if (val == null) return '';
+    const str = String(val);
+    return str.replace(/\d+\.?\d*[eE][+-]?\d+/g, (match) => this.sciToFixed(match));
+  }
+
   private mapSettlementRow(s: any): SettlementRow {
     const driver = this.drivers.find((d) => d.id === s.driver_id);
     const driverName = driver ? this.getDriverDisplayName(driver) : (s.driver_id || '—');
     return {
-      id: s.id,
-      settlementNumber: s.settlement_number || s.id,
+      id: this.toSafeString(s.id),
+      settlementNumber: this.toSafeString(s.settlement_number) || this.toSafeString(s.id),
       periodStart: this.toDateOnly(s.period_start),
       periodEnd: this.toDateOnly(s.period_end),
       driverId: s.driver_id || '',

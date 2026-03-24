@@ -45,14 +45,14 @@
       <span class="material-symbols-outlined">progress_activity</span>
       <div>
         <h2>Preparing your packet</h2>
-        <p>Loading your secure onboarding workspace…</p>
+        <p>Loading your secure onboarding workspace&hellip;</p>
       </div>
     </div>
 
     <div *ngIf="!loading && errorMessage" class="onboard-state-card onboard-warning">
       <span class="material-symbols-outlined">error</span>
       <div>
-        <h2>We couldn’t load this packet</h2>
+        <h2>We couldn't load this packet</h2>
         <p>{{ errorMessage }}</p>
       </div>
     </div>
@@ -71,39 +71,23 @@
           <div class="onboard-sidebar-card">
             <div class="onboard-sidebar-heading">Packet progress</div>
             <button
+              *ngFor="let step of steps; let i = index"
               type="button"
               class="onboard-step"
-              [class.active]="currentStep === 'employment_application'"
-              (click)="setStep('employment_application')"
+              [class.active]="currentStep === step.key"
+              (click)="setStep(step.key)"
             >
-              <div class="onboard-step-icon">
-                <span class="material-symbols-outlined">description</span>
+              <div class="onboard-step-icon" [class.onboard-step-icon-alt]="i % 2 === 1">
+                <span class="material-symbols-outlined">{{ step.icon }}</span>
               </div>
               <div class="onboard-step-copy">
-                <div class="onboard-step-title">Employment Application</div>
+                <div class="onboard-step-title">{{ step.label }}</div>
                 <div class="onboard-step-status">
-                  {{ isSectionCompleted('employment_application') ? 'Completed' : 'In progress' }}
+                  {{ step.sectionKey ? getSectionStatus(step.sectionKey) : (packetReady ? 'Ready' : 'Pending') }}
                 </div>
               </div>
-              <span class="material-symbols-outlined onboard-step-check" *ngIf="isSectionCompleted('employment_application')">check_circle</span>
-            </button>
-
-            <button
-              type="button"
-              class="onboard-step"
-              [class.active]="currentStep === 'mvr_authorization'"
-              (click)="setStep('mvr_authorization')"
-            >
-              <div class="onboard-step-icon onboard-step-icon-alt">
-                <span class="material-symbols-outlined">policy</span>
-              </div>
-              <div class="onboard-step-copy">
-                <div class="onboard-step-title">MVR Authorization</div>
-                <div class="onboard-step-status">
-                  {{ isSectionCompleted('mvr_authorization') ? 'Completed' : 'In progress' }}
-                </div>
-              </div>
-              <span class="material-symbols-outlined onboard-step-check" *ngIf="isSectionCompleted('mvr_authorization')">check_circle</span>
+              <span class="material-symbols-outlined onboard-step-check"
+                *ngIf="step.sectionKey ? isSectionCompleted(step.sectionKey) : packetReady">check_circle</span>
             </button>
           </div>
 
@@ -112,12 +96,14 @@
             <ul>
               <li>Complete each section accurately</li>
               <li>Review all driver details before signing</li>
+              <li>Sign all required consent forms</li>
               <li>Your responses save into the FleetNeuron onboarding workflow</li>
             </ul>
           </div>
         </aside>
 
         <section class="onboard-content">
+          <!-- STEP 1: EMPLOYMENT APPLICATION -->
           <form *ngIf="currentStep === 'employment_application'" (ngSubmit)="submitEmploymentApplication()" novalidate>
             <div class="onboard-form-header">
               <div>
@@ -159,7 +145,7 @@
                   <span class="material-symbols-outlined">home_pin</span>
                   <div>
                     <h3 class="onboard-section-title">Current Address</h3>
-                    <p>Where you currently reside and how long you’ve lived there.</p>
+                    <p>Where you currently reside and how long you've lived there.</p>
                   </div>
                 </div>
                 <div class="onboard-grid-2">
@@ -193,7 +179,7 @@
                   <span class="material-symbols-outlined">local_shipping</span>
                   <div>
                     <h3 class="onboard-section-title">Driving Experience Summary</h3>
-                    <p>Tell us what equipment you’ve handled, approximate miles, and the period of experience.</p>
+                    <p>Tell us what equipment you've handled, approximate miles, and the period of experience.</p>
                   </div>
                 </div>
                 <div class="onboard-field">
@@ -201,31 +187,15 @@
                 </div>
               </section>
 
-              <section class="onboard-panel onboard-panel-full">
-                <div class="onboard-panel-header">
-                  <span class="material-symbols-outlined">work_history</span>
-                  <div>
-                    <h3 class="onboard-section-title">Employment History</h3>
-                    <p>Provide your two most recent employers so the team can verify prior employment history.</p>
-                  </div>
-                </div>
-                <div class="onboard-grid-2">
-                  <div class="onboard-subpanel">
-                    <h4>Current / most recent employer</h4>
-                    <div class="onboard-field"><label for="eaCurEmpName">Employer name</label><input id="eaCurEmpName" class="form-input" [(ngModel)]="employment.currentEmployerName" name="eaCurEmpName" /></div>
-                    <div class="onboard-field"><label for="eaCurEmpPhone">Employer phone</label><input id="eaCurEmpPhone" class="form-input" [(ngModel)]="employment.currentEmployerPhone" name="eaCurEmpPhone" /></div>
-                    <div class="onboard-grid-2 onboard-grid-tight"><div class="onboard-field"><label for="eaCurEmpFrom">From</label><input id="eaCurEmpFrom" class="form-input" [(ngModel)]="employment.currentEmployerFrom" name="eaCurEmpFrom" placeholder="MM/YYYY" /></div><div class="onboard-field"><label for="eaCurEmpTo">To</label><input id="eaCurEmpTo" class="form-input" [(ngModel)]="employment.currentEmployerTo" name="eaCurEmpTo" placeholder="MM/YYYY" /></div></div>
-                    <div class="onboard-field"><label for="eaCurEmpReason">Reason for leaving</label><input id="eaCurEmpReason" class="form-input" [(ngModel)]="employment.currentEmployerReasonForLeaving" name="eaCurEmpReason" /></div>
-                  </div>
-                  <div class="onboard-subpanel">
-                    <h4>Previous employer</h4>
-                    <div class="onboard-field"><label for="eaPrevEmpName">Employer name</label><input id="eaPrevEmpName" class="form-input" [(ngModel)]="employment.previousEmployerName" name="eaPrevEmpName" /></div>
-                    <div class="onboard-field"><label for="eaPrevEmpPhone">Employer phone</label><input id="eaPrevEmpPhone" class="form-input" [(ngModel)]="employment.previousEmployerPhone" name="eaPrevEmpPhone" /></div>
-                    <div class="onboard-grid-2 onboard-grid-tight"><div class="onboard-field"><label for="eaPrevEmpFrom">From</label><input id="eaPrevEmpFrom" class="form-input" [(ngModel)]="employment.previousEmployerFrom" name="eaPrevEmpFrom" placeholder="MM/YYYY" /></div><div class="onboard-field"><label for="eaPrevEmpTo">To</label><input id="eaPrevEmpTo" class="form-input" [(ngModel)]="employment.previousEmployerTo" name="eaPrevEmpTo" placeholder="MM/YYYY" /></div></div>
-                    <div class="onboard-field"><label for="eaPrevEmpReason">Reason for leaving</label><input id="eaPrevEmpReason" class="form-input" [(ngModel)]="employment.previousEmployerReasonForLeaving" name="eaPrevEmpReason" /></div>
-                  </div>
-                </div>
-              </section>
+              <!-- 10-Year Tiered Employment History -->
+              <div class="onboard-panel-full">
+                <app-employer-history-tiered [data]="employment.employerHistory || null" (dataChange)="onEmployerHistoryChange($event)"></app-employer-history-tiered>
+              </div>
+
+              <!-- Disqualification History -->
+              <div class="onboard-panel-full">
+                <app-disqualification-history [data]="employment.disqualificationHistory || null" (dataChange)="onDisqualificationChange($event)"></app-disqualification-history>
+              </div>
 
               <section class="onboard-panel">
                 <div class="onboard-panel-header">
@@ -253,7 +223,7 @@
                 <div class="onboard-panel-header">
                   <span class="material-symbols-outlined">draw</span>
                   <div>
-                    <h3 class="onboard-section-title">Acknowledgment & Signature</h3>
+                    <h3 class="onboard-section-title">Acknowledgment &amp; Signature</h3>
                     <p>Certify that your information is complete and authorize the verification steps required for driver onboarding.</p>
                   </div>
                 </div>
@@ -268,7 +238,7 @@
             <div class="onboard-actions" *ngIf="!reviewMode">
               <button class="btn btn-secondary" type="button" (click)="saveEmploymentDraft()" [disabled]="saving || submittedEmployment">
                 <span class="material-symbols-outlined">save</span>
-                {{ saving ? 'Saving…' : 'Save Draft' }}
+                {{ saving ? 'Saving&hellip;' : 'Save Draft' }}
               </button>
               <button class="btn btn-primary" type="button" (click)="openReview()" [disabled]="saving || submittedEmployment">
                 <span class="material-symbols-outlined">preview</span>
@@ -288,17 +258,56 @@
                   </button>
                   <button class="btn btn-primary" type="submit" [disabled]="saving || submittedEmployment">
                     <span class="material-symbols-outlined">task_alt</span>
-                    {{ saving ? 'Submitting…' : 'Confirm Submit Employment Application' }}
+                    {{ saving ? 'Submitting&hellip;' : 'Confirm Submit Employment Application' }}
                   </button>
                 </div>
               </div>
             </div>
           </form>
 
-          <form *ngIf="currentStep === 'mvr_authorization'" (ngSubmit)="submitMvrAuthorization()" novalidate>
+          <!-- STEP 2: CONSENT FORMS -->
+          <div *ngIf="currentStep === 'consent_forms'">
             <div class="onboard-form-header">
               <div>
                 <div class="onboard-form-kicker">Step 2</div>
+                <h2>Consent Forms</h2>
+                <p class="onboard-subtitle">Review and sign each required consent form. All consents must be signed before your onboarding packet can be finalized.</p>
+              </div>
+              <div class="onboard-form-badge onboard-form-badge-alt">
+                <span class="material-symbols-outlined">verified_user</span>
+                <span>{{ signedConsents.size }}/{{ consentKeys.length }} signed</span>
+              </div>
+            </div>
+
+            <div *ngIf="allConsentsSigned" class="onboard-state-card onboard-success" style="margin-bottom: 18px;">
+              <span class="material-symbols-outlined">check_circle</span>
+              <div>
+                <h2>All consents signed</h2>
+                <p>You have completed all required consent forms. You may proceed to the next step.</p>
+              </div>
+            </div>
+
+            <div class="consent-list">
+              <app-consent-form *ngFor="let c of consentKeys" [consentKey]="c.key" [packetId]="packetId || ''" [token]="token || ''" (signed)="onConsentSigned($any($event))"></app-consent-form>
+            </div>
+
+            <div class="onboard-actions">
+              <button class="btn btn-secondary" type="button" (click)="setStep('employment_application')">
+                <span class="material-symbols-outlined">arrow_back</span>
+                Back
+              </button>
+              <button class="btn btn-primary" type="button" (click)="setStep('mvr_authorization')">
+                <span class="material-symbols-outlined">arrow_forward</span>
+                Continue to MVR
+              </button>
+            </div>
+          </div>
+
+          <!-- STEP 3: MVR AUTHORIZATION -->
+          <form *ngIf="currentStep === 'mvr_authorization'" (ngSubmit)="submitMvrAuthorization()" novalidate>
+            <div class="onboard-form-header">
+              <div>
+                <div class="onboard-form-kicker">Step 3</div>
                 <h2>MVR Authorization</h2>
                 <p class="onboard-subtitle">Authorize FleetNeuron AI to retrieve your MVR as part of driver qualification and employment screening.</p>
               </div>
@@ -322,9 +331,9 @@
             </div>
 
             <div class="onboard-actions onboard-actions-split">
-              <button class="btn btn-secondary" type="button" (click)="setStep('employment_application')" [disabled]="saving">
+              <button class="btn btn-secondary" type="button" (click)="setStep('consent_forms')" [disabled]="saving">
                 <span class="material-symbols-outlined">arrow_back</span>
-                Back to Employment Application
+                Back to Consent Forms
               </button>
               <button class="btn btn-primary" type="submit" [disabled]="saving">
                 <span class="material-symbols-outlined">verified</span>
@@ -332,9 +341,134 @@
               </button>
             </div>
           </form>
+
+          <!-- STEP 4: DOCUMENT UPLOADS -->
+          <div *ngIf="currentStep === 'document_uploads'">
+            <div class="onboard-form-header">
+              <div>
+                <div class="onboard-form-kicker">Step 4</div>
+                <h2>Document Uploads</h2>
+                <p class="onboard-subtitle">Upload any required documents such as CDL copies, medical cards, or other certifications.</p>
+              </div>
+              <div class="onboard-form-badge">
+                <span class="material-symbols-outlined">upload_file</span>
+                <span>Documents</span>
+              </div>
+            </div>
+
+            <div class="onboard-form-panel-grid">
+              <section class="onboard-panel onboard-panel-full">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">construction</span>
+                  <div>
+                    <h3 class="onboard-section-title">Coming Soon</h3>
+                    <p>Document upload functionality will be available in a future update.</p>
+                  </div>
+                </div>
+                <p class="onboard-small">This step will allow you to upload CDL copies, medical examiner certificates, and other supporting documentation required for your driver qualification file.</p>
+              </section>
+            </div>
+
+            <div class="onboard-actions onboard-actions-split">
+              <button class="btn btn-secondary" type="button" (click)="setStep('mvr_authorization')">
+                <span class="material-symbols-outlined">arrow_back</span>
+                Back to MVR
+              </button>
+              <button class="btn btn-primary" type="button" (click)="setStep('review_submit')">
+                <span class="material-symbols-outlined">arrow_forward</span>
+                Continue to Review
+              </button>
+            </div>
+          </div>
+
+          <!-- STEP 5: REVIEW & SUBMIT -->
+          <div *ngIf="currentStep === 'review_submit'">
+            <div class="onboard-form-header">
+              <div>
+                <div class="onboard-form-kicker">Step 5</div>
+                <h2>Review &amp; Submit</h2>
+                <p class="onboard-subtitle">Review all sections of your onboarding packet before final submission.</p>
+              </div>
+              <div class="onboard-form-badge" [class.onboard-form-badge-alt]="!packetReady">
+                <span class="material-symbols-outlined">{{ packetReady ? 'check_circle' : 'pending' }}</span>
+                <span>{{ packetReady ? 'Ready to submit' : 'Incomplete' }}</span>
+              </div>
+            </div>
+
+            <div class="onboard-form-panel-grid">
+              <section class="onboard-panel">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">description</span>
+                  <div>
+                    <h3 class="onboard-section-title">Employment Application</h3>
+                    <p>{{ isSectionCompleted('employment_application') ? 'Completed' : 'Not yet submitted' }}</p>
+                  </div>
+                </div>
+                <div class="review-summary" *ngIf="employment.firstName">
+                  <div class="review-row"><span class="review-label">Name</span><span class="review-value">{{ employment.firstName }} {{ employment.middleName }} {{ employment.lastName }}</span></div>
+                  <div class="review-row" *ngIf="employment.positionAppliedFor"><span class="review-label">Position</span><span class="review-value">{{ employment.positionAppliedFor }}</span></div>
+                  <div class="review-row" *ngIf="employment.licenseNumber"><span class="review-label">CDL</span><span class="review-value">{{ employment.licenseState }} {{ employment.licenseNumber }} ({{ employment.licenseClass }})</span></div>
+                </div>
+                <button class="btn btn-secondary review-edit-btn" type="button" (click)="setStep('employment_application')" *ngIf="!isSectionCompleted('employment_application')">
+                  <span class="material-symbols-outlined">edit</span> Edit
+                </button>
+              </section>
+
+              <section class="onboard-panel">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">verified_user</span>
+                  <div>
+                    <h3 class="onboard-section-title">Consent Forms</h3>
+                    <p>{{ signedConsents.size }}/{{ consentKeys.length }} consent forms signed</p>
+                  </div>
+                </div>
+                <div class="review-consent-list">
+                  <div *ngFor="let c of consentKeys" class="review-consent-item">
+                    <span class="material-symbols-outlined" [class.review-check]="isConsentSigned(c.key)" [class.review-pending]="!isConsentSigned(c.key)">
+                      {{ isConsentSigned(c.key) ? 'check_circle' : 'radio_button_unchecked' }}
+                    </span>
+                    <span>{{ c.label }}</span>
+                  </div>
+                </div>
+                <button class="btn btn-secondary review-edit-btn" type="button" (click)="setStep('consent_forms')" *ngIf="!allConsentsSigned">
+                  <span class="material-symbols-outlined">edit</span> Sign Remaining
+                </button>
+              </section>
+
+              <section class="onboard-panel">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">policy</span>
+                  <div>
+                    <h3 class="onboard-section-title">MVR Authorization</h3>
+                    <p>{{ isSectionCompleted('mvr_authorization') ? 'Completed' : 'Phase 2 placeholder' }}</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="onboard-panel">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">upload_file</span>
+                  <div>
+                    <h3 class="onboard-section-title">Document Uploads</h3>
+                    <p>{{ isSectionCompleted('document_uploads') ? 'Completed' : 'Coming soon' }}</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="onboard-actions onboard-actions-split">
+              <button class="btn btn-secondary" type="button" (click)="setStep('document_uploads')">
+                <span class="material-symbols-outlined">arrow_back</span>
+                Back
+              </button>
+              <button class="btn btn-primary" type="button" (click)="submitFinalPacket()" [disabled]="!packetReady">
+                <span class="material-symbols-outlined">send</span>
+                Submit Onboarding Packet
+              </button>
+            </div>
+          </div>
         </section>
       </div>
     </ng-container>
   </div>
 </div>
-

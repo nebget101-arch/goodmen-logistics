@@ -1,0 +1,368 @@
+/* Investigation History – dark fleet theme */
+.investigation-history {
+  margin-top: 0;
+}
+
+/* Loading */
+.ih-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.ih-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(59, 130, 246, 0.3);
+  border-top-color: rgba(59, 130, 246, 0.9);
+  border-radius: 50%;
+  animation: ih-spin 0.8s linear infinite;
+}
+
+@keyframes ih-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error */
+.ih-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 10px;
+  color: #fca5a5;
+  font-size: 13px;
+}
+
+.ih-retry-btn {
+  margin-left: auto;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: rgba(30, 58, 138, 0.5);
+  color: #e2e8f0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ih-retry-btn:hover {
+  background: rgba(30, 58, 138, 0.7);
+  border-color: rgba(59, 130, 246, 0.8);
+}
+
+/* Header */
+.ih-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.ih-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ih-title .material-symbols-outlined {
+  font-size: 20px;
+  color: rgba(56, 189, 248, 0.9);
+}
+
+.ih-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.83rem;
+  color: #94a3b8;
+}
+
+.ih-print-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.35), transparent 55%),
+    rgba(30, 58, 138, 0.5);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ih-print-btn:hover {
+  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.5), transparent 55%),
+    rgba(30, 58, 138, 0.7);
+  border-color: rgba(59, 130, 246, 0.8);
+}
+
+.ih-print-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+
+/* Empty state */
+.ih-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.ih-empty .material-symbols-outlined {
+  font-size: 20px;
+  color: rgba(56, 189, 248, 0.6);
+}
+
+/* Timeline */
+.ih-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+
+.ih-timeline::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(51, 65, 85, 0.6);
+}
+
+.ih-entry {
+  position: relative;
+  padding-bottom: 16px;
+  display: flex;
+  gap: 12px;
+}
+
+.ih-entry:last-child {
+  padding-bottom: 0;
+}
+
+.ih-entry-dot {
+  position: absolute;
+  left: -24px;
+  top: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  background: rgba(30, 41, 59, 0.9);
+  border: 2px solid rgba(51, 65, 85, 0.6);
+}
+
+.ih-entry-dot .material-symbols-outlined {
+  font-size: 12px;
+}
+
+.ih-entry-dot.ih-type-action {
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
+}
+
+.ih-entry-dot.ih-type-success {
+  border-color: rgba(34, 197, 94, 0.6);
+  color: #22c55e;
+}
+
+.ih-entry-dot.ih-type-warning {
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #f59e0b;
+}
+
+.ih-entry-dot.ih-type-info {
+  border-color: rgba(139, 92, 246, 0.6);
+  color: #a78bfa;
+}
+
+.ih-entry-dot.ih-type-default {
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #94a3b8;
+}
+
+/* Entry content */
+.ih-entry-content {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.ih-entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.ih-entry-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ih-entry-badge.ih-type-action {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
+}
+
+.ih-entry-badge.ih-type-success {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+
+.ih-entry-badge.ih-type-warning {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+}
+
+.ih-entry-badge.ih-type-info {
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  color: #c4b5fd;
+}
+
+.ih-entry-badge.ih-type-default {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+}
+
+.ih-entry-date {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ih-entry-employer {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 4px;
+}
+
+.ih-entry-summary {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.ih-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.ih-entry-user {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ih-entry-user .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.ih-entry-doc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: rgba(96, 165, 250, 0.95);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ih-entry-doc:hover {
+  text-decoration: underline;
+}
+
+.ih-entry-doc .material-symbols-outlined {
+  font-size: 14px;
+}
+
+/* Print styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #investigation-history-print,
+  #investigation-history-print * {
+    visibility: visible;
+  }
+
+  #investigation-history-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #fff;
+    color: #1e293b;
+    padding: 20px;
+  }
+
+  .ih-print-btn {
+    display: none;
+  }
+
+  .ih-entry-content {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+  }
+
+  .ih-title,
+  .ih-entry-employer {
+    color: #0f172a;
+  }
+
+  .ih-subtitle,
+  .ih-entry-summary,
+  .ih-entry-date {
+    color: #475569;
+  }
+
+  .ih-timeline::before {
+    background: #cbd5e1;
+  }
+
+  .ih-entry-dot {
+    background: #fff;
+    border-color: #94a3b8;
+    color: #475569;
+  }
+}
