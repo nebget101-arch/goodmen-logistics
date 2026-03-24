@@ -62,6 +62,7 @@ import { PreEmploymentGateComponent } from './components/drivers/pre-employment-
 import { InvestigationPanelComponent } from './components/drivers/investigation-panel/investigation-panel.component';
 import { RecordResponseModalComponent } from './components/drivers/investigation-panel/record-response-modal/record-response-modal.component';
 import { InvestigationHistoryComponent } from './components/drivers/investigation-history/investigation-history.component';
+import { DriverComplianceSectionComponent } from './components/drivers/driver-compliance-section/driver-compliance-section.component';
 
 @NgModule({
   declarations: [
@@ -113,7 +114,8 @@ import { InvestigationHistoryComponent } from './components/drivers/investigatio
     PreEmploymentGateComponent,
     InvestigationPanelComponent,
     RecordResponseModalComponent,
-    InvestigationHistoryComponent
+    InvestigationHistoryComponent,
+    DriverComplianceSectionComponent
   ],
   imports: [
     BrowserModule,
