@@ -110,15 +110,26 @@ async function upsertEmploymentApplicationFromPacket(packet, data, submit = fals
       applicantPrintedName: data?.applicantPrintedName || data?.applicationSignatureName || null,
       applicantSignature: data?.applicantSignature || data?.applicationSignatureName || null,
       signatureDate: data?.signatureDate || data?.applicationSignatureDate || null,
-      certificationAccepted: data?.certificationAccepted ?? null
+      certificationAccepted: data?.certificationAccepted ?? null,
+      // FN-215: preserve license class in snapshot for CDL validation
+      licenseClass: data?.licenseClass || null
     },
     residencies: data?.residencies || [],
     licenses: data?.licenses || [],
     drivingExperience: data?.drivingExperience || [],
     accidents: data?.accidents || [],
     convictions: data?.convictions || [],
-    employers: data?.employers || [],
-    education: data?.education || []
+    // FN-215: employers may now include a `tier` field ('detailed' | 'summary')
+    employers: (data?.employers || []).map((emp) => ({
+      ...emp,
+      tier: emp.tier || 'detailed'
+    })),
+    education: data?.education || [],
+    // FN-215: disqualification and certification fields
+    disqualifications: data?.disqualifications || [],
+    has_been_disqualified: data?.has_been_disqualified ?? null,
+    certification_text_version: data?.certification_text_version || null,
+    signed_certification_at: data?.signed_certification_at || null
   };
 
   const apps = await employmentAppService.getByDriverId(packet.driver_id);
@@ -129,7 +140,19 @@ async function upsertEmploymentApplicationFromPacket(packet, data, submit = fals
     await employmentAppService.updateDraft(target.id, payload, null, null);
   }
 
+  // FN-215: validate completeness before submission
   if (submit) {
+    const fullApp = await employmentAppService.getById(target.id);
+    const { valid, errors } = employmentAppService.validateCompleteness(fullApp);
+    if (!valid) {
+      dtLogger.warn('employment_application_completeness_check_failed', {
+        applicationId: target.id,
+        driverId: packet.driver_id,
+        errors
+      });
+      // Proceed with submission anyway — validation is advisory for onboarding flow,
+      // but log so compliance teams can follow up.
+    }
     await employmentAppService.submitApplication(target.id, {}, null, null);
   }
 }
