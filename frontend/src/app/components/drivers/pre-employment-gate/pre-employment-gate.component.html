@@ -1,0 +1,31 @@
+<div class="peg-widget" *ngIf="!loading">
+  <!-- Overall Banner -->
+  <div class="peg-banner" [ngClass]="cleared ? 'peg-cleared' : 'peg-blocked'">
+    <span class="peg-banner-icon material-symbols-outlined">
+      {{ cleared ? 'verified_user' : 'gpp_bad' }}
+    </span>
+    <div class="peg-banner-text">
+      <strong>{{ cleared ? 'CLEARED TO DRIVE' : 'NOT CLEARED' }}</strong>
+      <span class="peg-banner-sub" *ngIf="!cleared">
+        {{ unmetRequirements.length }} requirement{{ unmetRequirements.length !== 1 ? 's' : '' }} outstanding
+      </span>
+    </div>
+  </div>
+
+  <!-- Requirement Rows -->
+  <div class="peg-requirements">
+    <div *ngFor="let req of requirements" class="peg-req-row" [ngClass]="req.met ? 'peg-req-met' : 'peg-req-unmet'">
+      <span class="material-symbols-outlined peg-req-icon">
+        {{ req.met ? 'check_circle' : 'cancel' }}
+      </span>
+      <span class="peg-req-label">{{ req.label }}</span>
+      <a *ngIf="!req.met && req.link" [href]="req.link" class="peg-req-link">Resolve</a>
+    </div>
+  </div>
+</div>
+
+<!-- Loading State -->
+<div class="peg-widget peg-loading" *ngIf="loading">
+  <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
+  Loading clearance status...
+</div>
