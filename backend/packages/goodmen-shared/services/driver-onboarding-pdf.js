@@ -117,6 +117,183 @@ async function buildEmploymentApplicationPdf({ driver, application, signature })
   await drawText(page, sigName, 140, 210);
   await drawText(page, sigDate, 430, 210);
 
+  // ------------------------------------------------------------------
+  // FN-215: Additional pages for 10-year history, disqualifications,
+  //         and signed certification block.
+  // ------------------------------------------------------------------
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const margin = 50;
+  const lineHeight = 14;
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const textWidth = pageWidth - 2 * margin;
+  const bottomMargin = 60;
+
+  // Helper: get current page or add a new one if near the bottom
+  let extraPage = null;
+  let yPos = 0;
+
+  function ensurePage() {
+    if (!extraPage || yPos < bottomMargin) {
+      extraPage = pdfDoc.addPage([pageWidth, pageHeight]);
+      yPos = pageHeight - margin;
+    }
+    return extraPage;
+  }
+
+  function writeText(text, opts = {}) {
+    const p = ensurePage();
+    p.drawText(String(text || ''), {
+      x: opts.x || margin,
+      y: yPos,
+      size: opts.size || 9,
+      font: opts.bold ? boldFont : font,
+      color: opts.color || rgb(0, 0, 0),
+      maxWidth: opts.maxWidth || textWidth
+    });
+    yPos -= opts.lineSpacing || lineHeight;
+  }
+
+  function writeHeading(text) {
+    ensurePage();
+    yPos -= lineHeight * 0.5;
+    writeText(text, { size: 12, bold: true, lineSpacing: lineHeight * 1.5 });
+  }
+
+  function writeSectionSeparator() {
+    yPos -= lineHeight;
+  }
+
+  // --- Tiered Employer History ---
+  const employers = application.employers || [];
+  const detailedEmployers = employers.filter((e) => !e.tier || e.tier === 'detailed');
+  const summaryEmployers = employers.filter((e) => e.tier === 'summary');
+
+  if (detailedEmployers.length > 0) {
+    writeHeading('Detailed Employment History (3 Years)');
+    detailedEmployers.forEach((emp, idx) => {
+      writeText(`${idx + 1}. ${emp.employer_name || 'N/A'}`, { bold: true, size: 10 });
+      if (emp.address || emp.city || emp.state) {
+        writeText(`   Address: ${[emp.address, emp.city, emp.state, emp.zip].filter(Boolean).join(', ')}`, { x: margin + 15 });
+      }
+      if (emp.contact_name || emp.contact_phone) {
+        writeText(`   Contact: ${[emp.contact_name, emp.contact_phone].filter(Boolean).join(' | ')}`, { x: margin + 15 });
+      }
+      if (emp.start_date || emp.end_date) {
+        writeText(`   Period: ${safeDate(emp.start_date)} to ${safeDate(emp.end_date)}`, { x: margin + 15 });
+      }
+      if (emp.position_held) {
+        writeText(`   Position: ${emp.position_held}`, { x: margin + 15 });
+      }
+      if (emp.reason_for_leaving) {
+        writeText(`   Reason for Leaving: ${emp.reason_for_leaving}`, { x: margin + 15 });
+      }
+      if (emp.was_subject_to_fmcsr != null) {
+        writeText(`   Subject to FMCSRs: ${emp.was_subject_to_fmcsr ? 'Yes' : 'No'}`, { x: margin + 15 });
+      }
+      if (emp.was_safety_sensitive_function != null) {
+        writeText(`   Safety-Sensitive Function: ${emp.was_safety_sensitive_function ? 'Yes' : 'No'}`, { x: margin + 15 });
+      }
+      yPos -= lineHeight * 0.5;
+    });
+  }
+
+  if (summaryEmployers.length > 0) {
+    writeSectionSeparator();
+    writeHeading('CMV Employment History (Additional 7 Years)');
+    summaryEmployers.forEach((emp, idx) => {
+      writeText(`${idx + 1}. ${emp.employer_name || 'N/A'}`, { bold: true, size: 10 });
+      if (emp.city || emp.state) {
+        writeText(`   Location: ${[emp.city, emp.state].filter(Boolean).join(', ')}`, { x: margin + 15 });
+      }
+      if (emp.start_date || emp.end_date) {
+        writeText(`   Period: ${safeDate(emp.start_date)} to ${safeDate(emp.end_date)}`, { x: margin + 15 });
+      }
+      if (emp.position_held) {
+        writeText(`   Position: ${emp.position_held}`, { x: margin + 15 });
+      }
+      yPos -= lineHeight * 0.5;
+    });
+  }
+
+  // --- Disqualification History ---
+  const disqualifications = application.disqualifications || [];
+  writeSectionSeparator();
+  writeHeading('Disqualification History');
+  writeText(
+    'Have you ever been denied a license, had one suspended/revoked, or been disqualified?',
+    { size: 10 }
+  );
+  const disqAnswer = application.has_been_disqualified != null
+    ? (application.has_been_disqualified ? 'Yes' : 'No')
+    : 'Not answered';
+  writeText(`Answer: ${disqAnswer}`, { bold: true, size: 10 });
+  yPos -= lineHeight * 0.5;
+
+  if (application.has_been_disqualified && disqualifications.length > 0) {
+    // Table header
+    writeText('Type                State    Date          Reason', { bold: true, size: 8 });
+    writeText('--------------------------------------------------------------------', { size: 8 });
+    disqualifications.forEach((d) => {
+      const line = [
+        (d.type || '').padEnd(20),
+        (d.state || '').padEnd(9),
+        safeDate(d.date).padEnd(14),
+        d.reason || ''
+      ].join('');
+      writeText(line, { size: 8 });
+      if (d.reinstated) {
+        writeText(`   Reinstated: ${safeDate(d.reinstatement_date) || 'Yes'}`, { size: 8, x: margin + 15 });
+      }
+    });
+  }
+
+  // --- Signed Certification Block ---
+  writeSectionSeparator();
+  writeHeading('Applicant Certification');
+  if (application.certification_text_version) {
+    writeText(`Certification Text Version: ${application.certification_text_version}`, { size: 9 });
+  }
+  writeText(
+    'I certify that the information provided in this application is true and complete to the best',
+    { size: 9 }
+  );
+  writeText(
+    'of my knowledge. I understand that any misrepresentation or omission may be cause for denial',
+    { size: 9 }
+  );
+  writeText(
+    'of employment or dismissal if employed.',
+    { size: 9 }
+  );
+  yPos -= lineHeight;
+
+  // Signature image placeholder — if a base64 signature is provided, embed it
+  if (application.applicantSignature && application.applicantSignature.startsWith('data:image/png')) {
+    try {
+      const base64Data = application.applicantSignature.split(',')[1];
+      const sigBytes = Buffer.from(base64Data, 'base64');
+      const sigImage = await pdfDoc.embedPng(sigBytes);
+      const sigDims = sigImage.scale(0.5);
+      const p = ensurePage();
+      p.drawImage(sigImage, {
+        x: margin,
+        y: yPos - sigDims.height,
+        width: Math.min(sigDims.width, 200),
+        height: Math.min(sigDims.height, 50)
+      });
+      yPos -= Math.min(sigDims.height, 50) + lineHeight;
+    } catch (_sigErr) {
+      // Fall back to text signature if image embedding fails
+      writeText(`Signature: ${sigName}`, { bold: true, size: 10 });
+    }
+  } else {
+    writeText(`Signature: ${sigName}`, { bold: true, size: 10 });
+  }
+
+  const certDate = safeDate(application.signed_certification_at || signature?.signedAt || application.applicationSignatureDate);
+  writeText(`Date Signed: ${certDate}`, { size: 10 });
+
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
 }
