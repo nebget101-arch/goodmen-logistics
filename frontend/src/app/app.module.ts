@@ -58,6 +58,10 @@ import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
 import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/has-permission.directive';
 import { DriverComplianceSectionComponent } from './components/drivers/driver-compliance-section/driver-compliance-section.component';
+import { PreEmploymentGateComponent } from './components/drivers/pre-employment-gate/pre-employment-gate.component';
+import { InvestigationPanelComponent } from './components/drivers/investigation-panel/investigation-panel.component';
+import { RecordResponseModalComponent } from './components/drivers/investigation-panel/record-response-modal/record-response-modal.component';
+import { InvestigationHistoryComponent } from './components/drivers/investigation-history/investigation-history.component';
 
 @NgModule({
   declarations: [
@@ -105,7 +109,11 @@ import { DriverComplianceSectionComponent } from './components/drivers/driver-co
     PaymentMethodFormComponent,
     TrialBannerComponent,
     BillingComponent,
-    DriverComplianceSectionComponent
+    DriverComplianceSectionComponent,
+    PreEmploymentGateComponent,
+    InvestigationPanelComponent,
+    RecordResponseModalComponent,
+    InvestigationHistoryComponent
   ],
   imports: [
     BrowserModule,
