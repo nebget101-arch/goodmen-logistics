@@ -40,7 +40,7 @@
     <div class="inv-progress-wrapper">
       <div class="inv-progress-header">
         <span>Overall Progress</span>
-        <span class="inv-progress-pct">{{ investigationStatus.completedCount }}/{{ investigationStatus.totalCount }} complete ({{ progressPercent }}%)</span>
+        <span class="inv-progress-pct">{{ investigationStatus?.completedCount ?? 0 }}/{{ investigationStatus?.totalCount ?? 0 }} complete ({{ progressPercent }}%)</span>
       </div>
       <div class="inv-progress-track">
         <div class="inv-progress-fill" [style.width.%]="progressPercent"></div>
@@ -48,7 +48,7 @@
     </div>
 
     <!-- No employers -->
-    <div *ngIf="investigationStatus.pastEmployers.length === 0" class="inv-empty">
+    <div *ngIf="(investigationStatus?.pastEmployers?.length ?? 0) === 0" class="inv-empty">
       <span class="material-symbols-outlined">info</span>
       No past employers on record for this driver. Add employment history first.
     </div>
@@ -56,7 +56,7 @@
     <!-- Employer cards -->
     <div class="inv-employers">
       <div
-        *ngFor="let employer of investigationStatus.pastEmployers"
+        *ngFor="let employer of (investigationStatus?.pastEmployers ?? [])"
         class="inv-employer-card"
         [ngClass]="'inv-status-' + employer.status"
       >

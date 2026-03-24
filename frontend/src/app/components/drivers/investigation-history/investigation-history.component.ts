@@ -59,12 +59,13 @@ export class InvestigationHistoryComponent implements OnInit, OnChanges {
 
     this.investigationService.getHistoryFile(this.driverId).subscribe({
       next: (entries) => {
-        this.entries = entries;
+        this.entries = entries ?? [];
         this.loading = false;
       },
       error: (err) => {
         console.error('Error loading investigation history:', err);
         this.error = 'Unable to load investigation history file.';
+        this.entries = [];
         this.loading = false;
       }
     });

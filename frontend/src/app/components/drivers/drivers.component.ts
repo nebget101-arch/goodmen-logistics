@@ -416,7 +416,9 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   isExpiringSoon(dateStr: string): boolean {
+    if (!dateStr) return false;
     const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return false;
     const thirtyDaysFromNow = new Date(Date.now() + 30*24*60*60*1000);
     return date <= thirtyDaysFromNow;
   }
@@ -915,6 +917,7 @@ export class DriversComponent implements OnInit, OnDestroy {
     if (this.auditTrailData[key]) return; // already loaded
 
     this.auditTrailLoading[key] = true;
+    if (!this.selectedDriver) { this.auditTrailLoading[key] = false; return; }
     this.apiService.getDqfRequirementChanges(this.selectedDriver.id, key).subscribe({
       next: (changes) => {
         this.auditTrailData[key] = Array.isArray(changes) ? changes : (changes?.changes || []);
@@ -1005,6 +1008,7 @@ export class DriversComponent implements OnInit, OnDestroy {
         event.target.value = '';
         // Auto-mark requirement complete with evidence
         const docId = response?.document?.id;
+        if (!this.selectedDriver) return;
         this.apiService.updateDqfRequirementStatus(this.selectedDriver.id, requirementKey, {
           status: 'complete',
           evidenceDocumentId: docId,

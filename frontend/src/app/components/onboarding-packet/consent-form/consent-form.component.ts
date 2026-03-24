@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ConsentService, ConsentTemplate } from '../../../services/consent.service';
 
 @Component({
@@ -23,7 +23,7 @@ export class ConsentFormComponent implements OnInit {
   signing = false;
   signedSuccess = false;
 
-  constructor(private consentService: ConsentService) {}
+  constructor(private consentService: ConsentService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
     this.loadConsentTemplate();
@@ -38,11 +38,13 @@ export class ConsentFormComponent implements OnInit {
     this.consentService.loadConsent(this.packetId, this.consentKey, this.token).subscribe({
       next: (template) => {
         this.loading = false;
-        this.consent = template;
+        this.consent = template ?? null;
+        this.cdr.markForCheck();
       },
       error: (err) => {
         this.loading = false;
         this.errorMessage = err?.error?.message || 'Failed to load consent form.';
+        this.cdr.markForCheck();
       }
     });
   }
@@ -67,10 +69,12 @@ export class ConsentFormComponent implements OnInit {
           this.signing = false;
           this.signedSuccess = true;
           this.signed.emit(this.consentKey);
+          this.cdr.markForCheck();
         },
         error: (err) => {
           this.signing = false;
           this.errorMessage = err?.error?.message || 'Failed to submit signature. Please try again.';
+          this.cdr.markForCheck();
         }
       });
   }
