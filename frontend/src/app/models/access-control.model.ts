@@ -234,6 +234,12 @@ export const PERMISSIONS = {
   SAFETY_CLAIMS_FINANCIALS_EDIT: 'safety.claims.financials.edit',
   SAFETY_DOCUMENTS_UPLOAD: 'safety.documents.upload',
   SAFETY_REPORTS_VIEW: 'safety.reports.view',
+
+  // Annual compliance module
+  ANNUAL_COMPLIANCE_VIEW: 'annual_compliance.view',
+  ANNUAL_COMPLIANCE_EDIT: 'annual_compliance.edit',
+  ANNUAL_COMPLIANCE_GENERATE: 'annual_compliance.generate',
+  ANNUAL_COMPLIANCE_EXPORT: 'annual_compliance.export',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
@@ -274,4 +280,5 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
     PERMISSIONS.LEASE_FINANCING_DRIVER_VIEW,
   ],
   safety_claims: [PERMISSIONS.SAFETY_INCIDENTS_VIEW, PERMISSIONS.SAFETY_CLAIMS_VIEW, PERMISSIONS.SAFETY_REPORTS_VIEW],
+  annual_compliance: [PERMISSIONS.ANNUAL_COMPLIANCE_VIEW, PERMISSIONS.ANNUAL_COMPLIANCE_EDIT, PERMISSIONS.ANNUAL_COMPLIANCE_GENERATE, PERMISSIONS.ANNUAL_COMPLIANCE_EXPORT],
 };

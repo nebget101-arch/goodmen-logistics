@@ -11,11 +11,12 @@ interface SafetyTab { label: string; path: string; icon: string; }
 })
 export class SafetyShellComponent implements OnInit {
   tabs: SafetyTab[] = [
-    { label: 'Overview',            path: '/safety',           icon: 'dashboard' },
-    { label: 'Accidents',           path: '/safety/accidents', icon: 'car_crash' },
-    { label: 'Claims',              path: '/safety/claims',    icon: 'description' },
-    { label: 'Tasks',               path: '/safety/tasks',     icon: 'checklist' },
-    { label: 'Reports',             path: '/safety/reports',   icon: 'analytics' },
+    { label: 'Overview',            path: '/safety',              icon: 'dashboard' },
+    { label: 'Accidents',           path: '/safety/accidents',    icon: 'car_crash' },
+    { label: 'Claims',              path: '/safety/claims',       icon: 'description' },
+    { label: 'Tasks',               path: '/safety/tasks',        icon: 'checklist' },
+    { label: 'Reports',             path: '/safety/reports',      icon: 'analytics' },
+    { label: 'Compliance',          path: '/safety/compliance',   icon: 'verified' },
   ];
 
   activeTab = '/safety';
