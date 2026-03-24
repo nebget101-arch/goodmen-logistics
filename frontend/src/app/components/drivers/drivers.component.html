@@ -619,16 +619,16 @@
         <ng-container *ngIf="!dqfRequirementsLoading">
 
         <!-- Pre-Drive Gate Banner -->
-        <div *ngIf="!clearanceLoading" class="dqf-gate-banner"
-             [ngClass]="clearanceStatus.cleared ? 'dqf-gate-cleared' : 'dqf-gate-blocked'">
+        <div *ngIf="!clearanceLoading && clearanceStatus" class="dqf-gate-banner"
+             [ngClass]="clearanceStatus?.cleared ? 'dqf-gate-cleared' : 'dqf-gate-blocked'">
           <div class="dqf-gate-icon">
             <span class="material-symbols-outlined">
-              {{ clearanceStatus.cleared ? 'verified' : 'gpp_bad' }}
+              {{ clearanceStatus?.cleared ? 'verified' : 'gpp_bad' }}
             </span>
           </div>
           <div class="dqf-gate-text">
-            <strong>{{ clearanceStatus.cleared ? 'CLEARED TO DRIVE' : 'NOT CLEARED TO DRIVE' }}</strong>
-            <span *ngIf="!clearanceStatus.cleared && clearanceStatus.missingItems.length > 0" class="dqf-gate-missing">
+            <strong>{{ clearanceStatus?.cleared ? 'CLEARED TO DRIVE' : 'NOT CLEARED TO DRIVE' }}</strong>
+            <span *ngIf="!clearanceStatus?.cleared && clearanceStatus?.missingItems?.length" class="dqf-gate-missing">
               Missing: {{ clearanceStatus.missingItems.join(', ') }}
             </span>
           </div>
