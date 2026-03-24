@@ -284,6 +284,12 @@
   color: rgba(148, 163, 184, 0.7);
 }
 
+.dispatch-drivers-dashboard .form-input.phone-input,
+.dispatch-drivers-dashboard .form-input.phone-input::placeholder {
+  text-align: center;
+  color: rgba(148, 163, 184, 0.7);
+}
+
 .dispatch-drivers-dashboard .field label,
 .dispatch-drivers-dashboard .pay-label {
   font-size: 12px;

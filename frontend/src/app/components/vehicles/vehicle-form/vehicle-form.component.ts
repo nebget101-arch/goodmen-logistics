@@ -112,24 +112,16 @@ export class VehicleFormComponent implements OnInit, OnChanges {
     'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
   ];
 
-  get stateSelectOptions(): { value: string; label: string }[] {
-    return this.states.map(s => ({ value: s, label: s }));
-  }
+  makes = ['Freightliner', 'Kenworth', 'Peterbilt', 'Volvo', 'Mack', 'International', 'Western Star'];
 
-  get driverSelectOptions(): { value: string; label: string }[] {
-    return this.drivers.map(d => ({ value: d.id, label: `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Unknown' }));
-  }
-
-  get makeSelectOptions(): { value: string; label: string }[] {
-    return this.makes.map(m => ({ value: m, label: m }));
-  }
+  readonly stateSelectOptions = this.states.map(s => ({ value: s, label: s }));
+  readonly makeSelectOptions = this.makes.map(m => ({ value: m, label: m }));
+  driverSelectOptions: { value: string; label: string }[] = [];
 
   statusSelectOptions = [
     { value: 'in-service', label: 'In Service' },
     { value: 'out-of-service', label: 'Out of Service' }
   ];
-
-  makes = ['Freightliner', 'Kenworth', 'Peterbilt', 'Volvo', 'Mack', 'International', 'Western Star'];
 
   readonly trailerTypeOptions = [
     { id: 'AC', value: 'Auto Carrier' },
@@ -318,9 +310,14 @@ export class VehicleFormComponent implements OnInit, OnChanges {
     this.apiService.getDispatchDrivers().subscribe({
       next: (data: any[]) => {
         this.drivers = Array.isArray(data) ? data : [];
+        this.driverSelectOptions = this.drivers.map(d => ({
+          value: d.id,
+          label: `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Unknown'
+        }));
       },
       error: () => {
         this.drivers = [];
+        this.driverSelectOptions = [];
       }
     });
   }

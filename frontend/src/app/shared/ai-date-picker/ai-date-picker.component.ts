@@ -49,6 +49,9 @@ export class AiDatePickerComponent implements ControlValueAccessor {
     return this._disabled;
   }
 
+  /** Used as startAt fallback so the picker opens on today when no value is set. */
+  readonly today = new Date();
+
   value: Date | null = null;
 
   private onChange: (v: string | null) => void = () => {};

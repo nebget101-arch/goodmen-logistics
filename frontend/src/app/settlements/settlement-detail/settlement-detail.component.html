@@ -71,7 +71,7 @@
             <div class="value">{{ primaryPayee?.name || settlement.primary_payee_id || '—' }}</div>
           </div>
           <div class="summary-item">
-            <div class="label">Additional payee</div>
+            <div class="label">Equipment Owner</div>
             <div class="value">{{ additionalPayee?.name || settlement.additional_payee_id || '—' }}</div>
           </div>
           <div class="summary-item">
@@ -95,7 +95,7 @@
             <div class="metric-value">${{ settlement.subtotal_driver_pay | number:'1.2-2' }}</div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">Additional payee subtotal</div>
+            <div class="metric-label">Equipment Owner subtotal</div>
             <div class="metric-value">${{ settlement.subtotal_additional_payee | number:'1.2-2' }}</div>
           </div>
           <div class="metric-card metric-warn">
@@ -144,7 +144,7 @@
               <th>Miles</th>
               <th>Gross</th>
               <th>Driver pay</th>
-              <th>Additional payee</th>
+              <th>Equipment Owner</th>
               <th *ngIf="!isLocked()">Actions</th>
             </tr>
           </thead>
@@ -385,7 +385,7 @@
       </div>
       <div class="email-options">
         <label><input type="checkbox" [(ngModel)]="emailOptions.to_driver" /> Send to driver</label>
-        <label><input type="checkbox" [(ngModel)]="emailOptions.to_additional_payee" /> Send to additional payee</label>
+        <label><input type="checkbox" [(ngModel)]="emailOptions.to_additional_payee" /> Send to Equipment Owner</label>
         <label><input type="checkbox" [(ngModel)]="emailOptions.cc_internal" /> CC internal</label>
       </div>
       <button type="button" class="btn-primary" (click)="sendEmail()" [disabled]="saving || loading">
