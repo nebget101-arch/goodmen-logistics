@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { finalize } from 'rxjs/operators';
@@ -6,6 +6,16 @@ import { ApiService } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AccessControlService } from '../../services/access-control.service';
+import {
+  DrugAlcoholTest,
+  DrugTestType,
+  SubstanceType,
+  DrugTestResult,
+  DRUG_TEST_TYPE_LABELS,
+  SUBSTANCE_TYPE_LABELS,
+  DRUG_TEST_RESULT_LABELS
+} from '../../models/drug-alcohol.model';
+import { InvestigationHistoryComponent } from './investigation-history/investigation-history.component';
 
 @Component({
   selector: 'app-drivers',
@@ -102,6 +112,50 @@ export class DriversComponent implements OnInit, OnDestroy {
   dqfRequirementsLoading = false;
   dqfCompleteness = 0;
   updateingRequirementKey: string | null = null;
+
+  // Categorized DQF requirements
+  dqfCategories: {
+    key: string;
+    label: string;
+    requirements: any[];
+    expanded: boolean;
+  }[] = [];
+
+  // Clearance status
+  clearanceStatus: { cleared: boolean; requirements?: any[]; missingItems: string[] } = {
+    cleared: false,
+    missingItems: []
+  };
+  clearanceLoading = false;
+
+  // ── Drug & Alcohol Test Management (FN-214) ──
+  drugAlcoholTests: DrugAlcoholTest[] = [];
+  drugAlcoholTestsLoading = false;
+  showDrugTestForm = false;
+  editingDrugTest: DrugAlcoholTest | null = null;
+  savingDrugTest = false;
+  drugTestTypeFilter: DrugTestType | '' = '';
+  drugTestClearinghouseFilter: 'pending' | '' = '';
+
+  drugTestTypeLabels = DRUG_TEST_TYPE_LABELS;
+  substanceTypeLabels = SUBSTANCE_TYPE_LABELS;
+  drugTestResultLabels = DRUG_TEST_RESULT_LABELS;
+
+  drugTestTypes: DrugTestType[] = [
+    'pre_employment', 'random', 'reasonable_suspicion',
+    'post_accident', 'return_to_duty', 'follow_up'
+  ];
+  substanceTypes: SubstanceType[] = ['drug', 'alcohol', 'both'];
+  drugTestResults: DrugTestResult[] = ['negative', 'positive', 'refused', 'cancelled', 'invalid'];
+
+  newDrugTest: DrugAlcoholTest = this.getEmptyDrugTest('');
+
+  // Audit trail
+  auditTrailOpen: { [key: string]: boolean } = {};
+  auditTrailData: { [key: string]: any[] } = {};
+  auditTrailLoading: { [key: string]: boolean } = {};
+
+  @ViewChild('investigationHistory') investigationHistory?: InvestigationHistoryComponent;
 
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
@@ -362,7 +416,9 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   isExpiringSoon(dateStr: string): boolean {
+    if (!dateStr) return false;
     const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return false;
     const thirtyDaysFromNow = new Date(Date.now() + 30*24*60*60*1000);
     return date <= thirtyDaysFromNow;
   }
@@ -452,6 +508,7 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.loadDQFStatus(driver);
     this.loadDriverDocuments(driver.id);
     this.loadDriverSafetySummary(driver.id);
+    this.loadDrugAlcoholTests(driver.id);
   }
 
   loadDriverDocuments(driverId: string): void {
@@ -595,6 +652,12 @@ export class DriversComponent implements OnInit, OnDestroy {
       lastIncidentDate: null,
       recentIncidents: []
     };
+    // Reset drug/alcohol test state
+    this.drugAlcoholTests = [];
+    this.showDrugTestForm = false;
+    this.editingDrugTest = null;
+    this.drugTestTypeFilter = '';
+    this.drugTestClearinghouseFilter = '';
   }
 
   loadDriverSafetySummary(driverId: string): void {
@@ -636,12 +699,18 @@ export class DriversComponent implements OnInit, OnDestroy {
   loadDQFStatus(driver: any): void {
     // Load dynamic DQF requirements from server
     this.dqfRequirementsLoading = true;
+    this.auditTrailOpen = {};
+    this.auditTrailData = {};
+    this.auditTrailLoading = {};
     this.apiService.getDqfDriver(driver.id).subscribe({
       next: (response) => {
         const dqfData = response?.dqf || {};
         this.dqfRequirements = dqfData.requirements || [];
         this.dqfCompleteness = dqfData.completeness || 0;
         this.dqfRequirementsLoading = false;
+
+        // Build categorized view
+        this.buildDqfCategories();
 
         // Keep legacy form for backward compat
         this.dqfForm = {
@@ -660,8 +729,209 @@ export class DriversComponent implements OnInit, OnDestroy {
         // Fallback to legacy calculation
         this.dqfRequirements = [];
         this.dqfCompleteness = driver.dqfCompleteness || 0;
+        this.buildDqfCategories();
       }
     });
+
+    // Load clearance status
+    this.loadClearanceStatus(driver.id);
+  }
+
+  loadClearanceStatus(driverId: string): void {
+    this.clearanceLoading = true;
+    this.apiService.getDriverClearanceStatus(driverId).subscribe({
+      next: (status) => {
+        this.clearanceStatus = {
+          cleared: status?.cleared ?? false,
+          requirements: status?.requirements,
+          missingItems: status?.missingItems ?? (status as any)?.missing ?? []
+        };
+        this.clearanceLoading = false;
+      },
+      error: () => {
+        // Fallback: derive clearance from pre-hire requirements
+        this.clearanceStatus = this.deriveClearanceFromRequirements();
+        this.clearanceLoading = false;
+      }
+    });
+  }
+
+  /** Derive clearance status locally when API is unavailable */
+  private deriveClearanceFromRequirements(): { cleared: boolean; missingItems: string[] } {
+    const preHireKeys = this.getCategoryKeyMap()['pre_hire'] || [];
+    const missing: string[] = [];
+    for (const req of this.dqfRequirements) {
+      if (preHireKeys.includes(req.key) && req.status !== 'complete') {
+        missing.push(req.label || req.key);
+      }
+    }
+    return { cleared: missing.length === 0, missingItems: missing };
+  }
+
+  /** Map of category key -> array of requirement keys that belong to it */
+  private getCategoryKeyMap(): Record<string, string[]> {
+    return {
+      pre_hire: [
+        'employment_application',
+        'pre_employment_drug_test_completed',
+        'clearinghouse_full_query_consent',
+        'road_test_certificate',
+        'medical_examiners_certificate',
+        'nrcme_verification',
+        'fcra_authorization',
+        'consent_forms_signed',
+        'release_of_info_signed'
+      ],
+      within_30_days: [
+        'mvr_all_states',
+        'previous_employer_investigation',
+        'driver_investigation_history'
+      ],
+      ongoing: [
+        'driver_license_front_on_file',
+        'driver_license_back_on_file',
+        'medical_card_front_on_file',
+        'medical_card_back_on_file',
+        'green_card_on_file',
+        'eldt_certificate',
+        'medical_variance_spe'
+      ],
+      annual: [
+        'annual_mvr_inquiry',
+        'annual_driving_record_review',
+        'annual_clearinghouse_limited_query',
+        'medical_cert_renewal'
+      ]
+    };
+  }
+
+  /** CFR references for known requirement keys */
+  getCfrReference(key: string): string {
+    const refs: Record<string, string> = {
+      employment_application: '49 CFR 391.21',
+      pre_employment_drug_test_completed: '49 CFR 382.301',
+      clearinghouse_full_query_consent: '49 CFR 382.701',
+      road_test_certificate: '49 CFR 391.31',
+      medical_examiners_certificate: '49 CFR 391.43',
+      nrcme_verification: '49 CFR 391.23(m)',
+      fcra_authorization: 'FCRA 15 USC 1681',
+      consent_forms_signed: '49 CFR 391.23',
+      release_of_info_signed: '49 CFR 391.23(d)',
+      mvr_all_states: '49 CFR 391.23(a)',
+      previous_employer_investigation: '49 CFR 391.23(d)',
+      driver_investigation_history: '49 CFR 391.53',
+      driver_license_front_on_file: '49 CFR 391.51(b)(2)',
+      driver_license_back_on_file: '49 CFR 391.51(b)(2)',
+      medical_card_front_on_file: '49 CFR 391.51(b)(7)',
+      medical_card_back_on_file: '49 CFR 391.51(b)(7)',
+      green_card_on_file: '8 CFR 274a.2',
+      eldt_certificate: '49 CFR 380.609',
+      medical_variance_spe: '49 CFR 391.49',
+      annual_mvr_inquiry: '49 CFR 391.25(a)',
+      annual_driving_record_review: '49 CFR 391.25(c)',
+      annual_clearinghouse_limited_query: '49 CFR 382.701(b)',
+      medical_cert_renewal: '49 CFR 391.45'
+    };
+    return refs[key] || '';
+  }
+
+  /** Build categories from flat requirements array */
+  buildDqfCategories(): void {
+    const categoryMap = this.getCategoryKeyMap();
+    const categoryDefs: { key: string; label: string }[] = [
+      { key: 'pre_hire', label: 'Pre-Hire Documents (Before Driving)' },
+      { key: 'within_30_days', label: 'Within 30 Days of Hire' },
+      { key: 'ongoing', label: 'Ongoing Documents' },
+      { key: 'annual', label: 'Annual Requirements' }
+    ];
+
+    const assignedKeys = new Set<string>();
+    this.dqfCategories = categoryDefs.map(cat => {
+      const keys = categoryMap[cat.key] || [];
+      const reqs = keys
+        .map(k => this.dqfRequirements.find(r => r.key === k))
+        .filter(r => !!r);
+      reqs.forEach(r => assignedKeys.add(r.key));
+
+      const hasIncomplete = reqs.some(r => r.status !== 'complete');
+      return {
+        key: cat.key,
+        label: cat.label,
+        requirements: reqs,
+        expanded: hasIncomplete
+      };
+    });
+
+    // Any remaining requirements not in a category go into "Other"
+    const uncategorized = this.dqfRequirements.filter(r => !assignedKeys.has(r.key));
+    if (uncategorized.length > 0) {
+      this.dqfCategories.push({
+        key: 'other',
+        label: 'Other Requirements',
+        requirements: uncategorized,
+        expanded: uncategorized.some(r => r.status !== 'complete')
+      });
+    }
+  }
+
+  getCategoryCompletedCount(category: { requirements: any[] }): number {
+    return category.requirements.filter(r => r.status === 'complete').length;
+  }
+
+  getCategoryCompletionPct(category: { requirements: any[] }): number {
+    if (category.requirements.length === 0) return 100;
+    return Math.round((this.getCategoryCompletedCount(category) / category.requirements.length) * 100);
+  }
+
+  toggleCategory(category: { expanded: boolean }): void {
+    category.expanded = !category.expanded;
+  }
+
+  getStatusChipClass(status: string): string {
+    switch (status) {
+      case 'complete': return 'dqf-chip-complete';
+      case 'received':
+      case 'sent': return 'dqf-chip-in-progress';
+      case 'n/a': return 'dqf-chip-na';
+      default: return 'dqf-chip-missing';
+    }
+  }
+
+  getStatusChipLabel(status: string): string {
+    switch (status) {
+      case 'complete': return 'Complete';
+      case 'received': return 'In Progress';
+      case 'sent': return 'In Progress';
+      case 'n/a': return 'N/A';
+      default: return 'Missing';
+    }
+  }
+
+  toggleAuditTrail(req: any): void {
+    const key = req.key;
+    if (this.auditTrailOpen[key]) {
+      this.auditTrailOpen[key] = false;
+      return;
+    }
+    this.auditTrailOpen[key] = true;
+    if (this.auditTrailData[key]) return; // already loaded
+
+    this.auditTrailLoading[key] = true;
+    if (!this.selectedDriver) { this.auditTrailLoading[key] = false; return; }
+    this.apiService.getDqfRequirementChanges(this.selectedDriver.id, key).subscribe({
+      next: (changes) => {
+        this.auditTrailData[key] = Array.isArray(changes) ? changes : (changes?.changes || []);
+        this.auditTrailLoading[key] = false;
+      },
+      error: () => {
+        this.auditTrailData[key] = [];
+        this.auditTrailLoading[key] = false;
+      }
+    });
+  }
+
+  printDqfReport(): void {
+    window.print();
   }
 
   updateRequirementStatus(requirement: any, newStatus: string): void {
@@ -689,6 +959,10 @@ export class DriversComponent implements OnInit, OnDestroy {
         const total = this.dqfRequirements.reduce((sum, r) => sum + (r.weight || 1), 0);
         const done = this.dqfRequirements.filter(r => r.status === 'complete').reduce((sum, r) => sum + (r.weight || 1), 0);
         this.dqfCompleteness = total > 0 ? Math.round((done / total) * 100) : 0;
+        // Rebuild categories to reflect new status
+        this.buildDqfCategories();
+        // Re-derive clearance status
+        this.clearanceStatus = this.deriveClearanceFromRequirements();
       },
       error: (err) => {
         console.error('Error updating requirement', err);
@@ -734,6 +1008,7 @@ export class DriversComponent implements OnInit, OnDestroy {
         event.target.value = '';
         // Auto-mark requirement complete with evidence
         const docId = response?.document?.id;
+        if (!this.selectedDriver) return;
         this.apiService.updateDqfRequirementStatus(this.selectedDriver.id, requirementKey, {
           status: 'complete',
           evidenceDocumentId: docId,
@@ -876,5 +1151,182 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.showDQFForm = false;
     this.selectedDriver = null;
     this.onboardingModal.open(driver);
+  }
+
+  // ========== Drug & Alcohol Test Management (FN-214) ==========
+
+  getEmptyDrugTest(driverId: string): DrugAlcoholTest {
+    return {
+      driver_id: driverId,
+      test_type: 'pre_employment',
+      substance_type: 'drug',
+      panel_details: {
+        marijuana: true,
+        cocaine: true,
+        opiates: true,
+        amphetamines: true,
+        pcp: true
+      },
+      collection_site: '',
+      collection_date: '',
+      lab_name: '',
+      mro_name: '',
+      mro_verified: false,
+      ccf_number: '',
+      result: undefined,
+      clearinghouse_reported: 'not_reported',
+      notes: ''
+    };
+  }
+
+  loadDrugAlcoholTests(driverId: string): void {
+    this.drugAlcoholTestsLoading = true;
+    this.apiService.getDrugAlcoholTests(driverId).subscribe({
+      next: (tests) => {
+        this.drugAlcoholTests = tests || [];
+        this.drugAlcoholTestsLoading = false;
+      },
+      error: () => {
+        this.drugAlcoholTests = [];
+        this.drugAlcoholTestsLoading = false;
+      }
+    });
+  }
+
+  get filteredDrugTests(): DrugAlcoholTest[] {
+    let list = this.drugAlcoholTests;
+    if (this.drugTestTypeFilter) {
+      list = list.filter(t => t.test_type === this.drugTestTypeFilter);
+    }
+    if (this.drugTestClearinghouseFilter === 'pending') {
+      list = list.filter(t => t.clearinghouse_reported !== 'reported');
+    }
+    return list;
+  }
+
+  openAddDrugTest(): void {
+    if (!this.selectedDriver) return;
+    this.newDrugTest = this.getEmptyDrugTest(this.selectedDriver.id);
+    this.editingDrugTest = null;
+    this.showDrugTestForm = true;
+  }
+
+  openEditDrugTest(test: DrugAlcoholTest): void {
+    this.editingDrugTest = { ...test };
+    if (!this.editingDrugTest.panel_details) {
+      this.editingDrugTest.panel_details = {
+        marijuana: true, cocaine: true, opiates: true,
+        amphetamines: true, pcp: true
+      };
+    }
+    this.showDrugTestForm = true;
+  }
+
+  cancelDrugTestForm(): void {
+    this.showDrugTestForm = false;
+    this.editingDrugTest = null;
+  }
+
+  get activeDrugTestForm(): DrugAlcoholTest {
+    return this.editingDrugTest || this.newDrugTest;
+  }
+
+  showPanelDetails(): boolean {
+    const form = this.activeDrugTestForm;
+    return form.substance_type === 'drug' || form.substance_type === 'both';
+  }
+
+  saveDrugTest(): void {
+    if (!this.canManageDrivers || !this.selectedDriver) return;
+
+    const form = this.activeDrugTestForm;
+    if (!form.test_type || !form.substance_type) {
+      alert('Please fill in all required fields (Test Type, Substance Type).');
+      return;
+    }
+
+    this.savingDrugTest = true;
+
+    if (this.editingDrugTest && this.editingDrugTest.id) {
+      this.apiService.updateDrugAlcoholTest(this.editingDrugTest.id, form).pipe(
+        finalize(() => (this.savingDrugTest = false))
+      ).subscribe({
+        next: (updated) => {
+          const idx = this.drugAlcoholTests.findIndex(t => t.id === updated.id);
+          if (idx >= 0) {
+            this.drugAlcoholTests[idx] = updated;
+          }
+          this.showDrugTestForm = false;
+          this.editingDrugTest = null;
+        },
+        error: () => {
+          alert('Failed to update drug/alcohol test. Please try again.');
+        }
+      });
+    } else {
+      this.apiService.createDrugAlcoholTest(this.selectedDriver.id, form).pipe(
+        finalize(() => (this.savingDrugTest = false))
+      ).subscribe({
+        next: (created) => {
+          this.drugAlcoholTests.unshift(created);
+          this.showDrugTestForm = false;
+        },
+        error: () => {
+          alert('Failed to create drug/alcohol test. Please try again.');
+        }
+      });
+    }
+  }
+
+  markClearinghouseReported(test: DrugAlcoholTest): void {
+    if (!test.id) return;
+    this.apiService.markTestClearinghouseReported(test.id).subscribe({
+      next: () => {
+        const idx = this.drugAlcoholTests.findIndex(t => t.id === test.id);
+        if (idx >= 0) {
+          this.drugAlcoholTests[idx] = {
+            ...this.drugAlcoholTests[idx],
+            clearinghouse_reported: 'reported'
+          };
+        }
+      },
+      error: () => {
+        alert('Failed to mark test as reported. Please try again.');
+      }
+    });
+  }
+
+  getTestTypeBadgeClass(testType: DrugTestType): string {
+    switch (testType) {
+      case 'pre_employment': return 'da-badge-blue';
+      case 'random': return 'da-badge-cyan';
+      case 'reasonable_suspicion': return 'da-badge-amber';
+      case 'post_accident': return 'da-badge-red';
+      case 'return_to_duty': return 'da-badge-purple';
+      case 'follow_up': return 'da-badge-slate';
+      default: return 'da-badge-slate';
+    }
+  }
+
+  getResultBadgeClass(result: DrugTestResult | undefined): string {
+    switch (result) {
+      case 'negative': return 'badge-success';
+      case 'positive': return 'badge-danger';
+      case 'refused': return 'badge-danger';
+      case 'cancelled': return 'badge-warning';
+      case 'invalid': return 'badge-warning';
+      default: return 'badge-warning';
+    }
+  }
+
+  onDrugTestCollectionDateChange(date: string): void {
+    this.activeDrugTestForm.collection_date = date;
+  }
+
+  // ========== Employer Investigation History ==========
+  onInvestigationHistoryUpdated(): void {
+    if (this.investigationHistory) {
+      this.investigationHistory.loadHistory();
+    }
   }
 }

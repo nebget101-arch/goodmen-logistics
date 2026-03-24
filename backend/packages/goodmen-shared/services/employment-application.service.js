@@ -57,9 +57,7 @@ function mapEmployerToDb(emp, applicationId) {
 }
 
 async function createDraft(driverId, payload, userId, context = null) {
-  const now = new Date();
-
-  // Build applicant snapshot including new fields
+  // Build applicant snapshot including new fields (work auth, drug/alcohol, driving exp)
   const applicantSnapshot = {
     ...(payload.applicantSnapshot || {}),
     workAuthorization: payload.workAuthorization || null,
@@ -69,7 +67,8 @@ async function createDraft(driverId, payload, userId, context = null) {
     hasViolations: payload.hasViolations || null
   };
 
-  const [row] = await db('employment_applications').insert({
+  // Build the insert payload — include FN-215 columns when provided (nullable for backward compat)
+  const insertData = {
     driver_id: driverId,
     tenant_id: context?.tenantId || null,
     operating_entity_id: context?.operatingEntityId || null,
@@ -78,11 +77,24 @@ async function createDraft(driverId, payload, userId, context = null) {
     created_by: userId || null,
     updated_by: userId || null,
     applicant_snapshot: JSON.stringify(applicantSnapshot)
-  }).returning('*');
+  };
+
+  // FN-215: disqualification and certification columns
+  if (payload.has_been_disqualified != null) {
+    insertData.has_been_disqualified = payload.has_been_disqualified;
+  }
+  if (payload.certification_text_version != null) {
+    insertData.certification_text_version = payload.certification_text_version;
+  }
+  if (payload.signed_certification_at != null) {
+    insertData.signed_certification_at = payload.signed_certification_at;
+  }
+
+  const [row] = await db('employment_applications').insert(insertData).returning('*');
 
   // save nested rows if provided
   if (payload.residencies && payload.residencies.length) {
-    const rows = payload.residencies.map(r => ({
+    const rows = payload.residencies.map((r) => ({
       application_id: row.id,
       residency_type: r.residencyType || r.residency_type || null,
       street: r.street || null,
@@ -94,7 +106,7 @@ async function createDraft(driverId, payload, userId, context = null) {
     await db('employment_application_residencies').insert(rows);
   }
   if (payload.licenses && payload.licenses.length) {
-    const rows = payload.licenses.map(r => ({
+    const rows = payload.licenses.map((r) => ({
       application_id: row.id,
       state: r.state || null,
       license_number: r.licenseNumber || r.license_number || null,
@@ -104,12 +116,17 @@ async function createDraft(driverId, payload, userId, context = null) {
     }));
     await db('employment_application_licenses').insert(rows);
   }
+  if (payload.drivingExperience && payload.drivingExperience.length) {
+    const rows = payload.drivingExperience.map((r) => ({ ...r, application_id: row.id }));
+    await db('employment_application_driving_experience').insert(rows);
+  }
   if (payload.employers && payload.employers.length) {
-    const rows = payload.employers.map(r => mapEmployerToDb(r, row.id));
+    // FN-215: employers now support a `tier` field ('detailed' | 'summary')
+    const rows = payload.employers.map((r) => mapEmployerToDb(r, row.id));
     await db('employment_application_employers').insert(rows);
   }
   if (payload.accidents && payload.accidents.length) {
-    const rows = payload.accidents.map(r => ({
+    const rows = payload.accidents.map((r) => ({
       application_id: row.id,
       date: r.date || null,
       nature_of_accident: r.natureOfAccident || r.nature_of_accident || null,
@@ -122,7 +139,7 @@ async function createDraft(driverId, payload, userId, context = null) {
   }
   if (payload.violations && payload.violations.length) {
     try {
-      const rows = payload.violations.map(r => ({
+      const rows = payload.violations.map((r) => ({
         application_id: row.id,
         location: r.location || null,
         date: r.date || null,
@@ -135,7 +152,7 @@ async function createDraft(driverId, payload, userId, context = null) {
     }
   }
   if (payload.convictions && payload.convictions.length) {
-    const rows = payload.convictions.map(r => ({
+    const rows = payload.convictions.map((r) => ({
       application_id: row.id,
       date_convicted: r.dateConvicted || r.date_convicted || null,
       violation: r.violation || null,
@@ -145,7 +162,7 @@ async function createDraft(driverId, payload, userId, context = null) {
     await db('employment_application_convictions').insert(rows);
   }
   if (payload.education && payload.education.length) {
-    const rows = payload.education.map(r => ({
+    const rows = payload.education.map((r) => ({
       application_id: row.id,
       school_type: r.schoolType || r.school_type || null,
       school_name_and_location: r.schoolNameAndLocation || r.school_name_and_location || null,
@@ -156,23 +173,17 @@ async function createDraft(driverId, payload, userId, context = null) {
     }));
     await db('employment_application_education').insert(rows);
   }
-  if (payload.drivingExperience && Array.isArray(payload.drivingExperience)) {
-    const rows = payload.drivingExperience.map(r => ({
-      application_id: row.id,
-      class_of_equipment: r.classOfEquipment || r.class_of_equipment || null,
-      type_of_equipment: r.typeOfEquipment || r.type_of_equipment || null,
-      date_from: r.dateFrom || r.date_from || null,
-      date_to: r.dateTo || r.date_to || null,
-      approximate_miles_total: r.approximateMilesTotal || r.approximate_miles_total || null
-    }));
-    await db('employment_application_driving_experience').insert(rows);
+  // FN-215: insert disqualifications if provided
+  if (payload.disqualifications && payload.disqualifications.length) {
+    const rows = payload.disqualifications.map((r) => ({ ...r, application_id: row.id }));
+    await db('employment_application_disqualifications').insert(rows);
   }
 
   return row;
 }
 
 async function updateDraft(applicationId, payload, userId, context = null) {
-  return db.transaction(async trx => {
+  return db.transaction(async (trx) => {
     const app = await trx('employment_applications').where({ id: applicationId }).first();
     if (!app) throw new Error('Application not found');
 
@@ -186,21 +197,35 @@ async function updateDraft(applicationId, payload, userId, context = null) {
       hasViolations: payload.hasViolations || (app.applicant_snapshot || {}).hasViolations || null
     };
 
-    await trx('employment_applications').where({ id: applicationId }).update({
+    const patch = {
       application_date: payload.applicationDate || app.application_date,
       updated_at: trx.fn.now(),
       updated_by: userId || app.updated_by,
       applicant_snapshot: JSON.stringify(applicantSnapshot)
-    });
+    };
 
-    // replace child collections atomically
+    // FN-215: new columns — only overwrite when explicitly provided
+    if (payload.has_been_disqualified != null) {
+      patch.has_been_disqualified = payload.has_been_disqualified;
+    }
+    if (payload.certification_text_version != null) {
+      patch.certification_text_version = payload.certification_text_version;
+    }
+    if (payload.signed_certification_at != null) {
+      patch.signed_certification_at = payload.signed_certification_at;
+    }
+
+    await trx('employment_applications').where({ id: applicationId }).update(patch);
+
+    // replace child collections atomically (FN-215: employers now carry `tier`, disqualifications added)
     const collections = [
       { key: 'residencies', table: 'employment_application_residencies' },
       { key: 'licenses', table: 'employment_application_licenses' },
       { key: 'accidents', table: 'employment_application_accidents' },
       { key: 'convictions', table: 'employment_application_convictions' },
       { key: 'employers', table: 'employment_application_employers' },
-      { key: 'education', table: 'employment_application_education' }
+      { key: 'education', table: 'employment_application_education' },
+      { key: 'disqualifications', table: 'employment_application_disqualifications' }
     ];
 
     for (const c of collections) {
@@ -209,9 +234,9 @@ async function updateDraft(applicationId, payload, userId, context = null) {
         if (payload[c.key].length) {
           let rows;
           if (c.key === 'employers') {
-            rows = payload[c.key].map(r => mapEmployerToDb(r, applicationId));
+            rows = payload[c.key].map((r) => mapEmployerToDb(r, applicationId));
           } else if (c.key === 'residencies') {
-            rows = payload[c.key].map(r => ({
+            rows = payload[c.key].map((r) => ({
               application_id: applicationId,
               residency_type: r.residencyType || r.residency_type || null,
               street: r.street || null,
@@ -221,7 +246,7 @@ async function updateDraft(applicationId, payload, userId, context = null) {
               years_at_address: r.yearsAtAddress || r.years_at_address || null
             }));
           } else if (c.key === 'licenses') {
-            rows = payload[c.key].map(r => ({
+            rows = payload[c.key].map((r) => ({
               application_id: applicationId,
               state: r.state || null,
               license_number: r.licenseNumber || r.license_number || null,
@@ -230,7 +255,7 @@ async function updateDraft(applicationId, payload, userId, context = null) {
               expiration_date: r.expirationDate || r.expiration_date || null
             }));
           } else if (c.key === 'accidents') {
-            rows = payload[c.key].map(r => ({
+            rows = payload[c.key].map((r) => ({
               application_id: applicationId,
               date: r.date || null,
               nature_of_accident: r.natureOfAccident || r.nature_of_accident || null,
@@ -240,7 +265,7 @@ async function updateDraft(applicationId, payload, userId, context = null) {
               hazardous_material_spill: r.hazardousMaterialSpill || r.hazardous_material_spill || false
             }));
           } else {
-            rows = payload[c.key].map(r => ({ ...r, application_id: applicationId }));
+            rows = payload[c.key].map((r) => ({ ...r, application_id: applicationId }));
           }
           await trx(c.table).insert(rows);
         }
@@ -253,7 +278,7 @@ async function updateDraft(applicationId, payload, userId, context = null) {
         if (await trx.schema.hasTable('employment_application_violations')) {
           await trx('employment_application_violations').where({ application_id: applicationId }).del();
           if (payload.violations.length) {
-            const rows = payload.violations.map(r => ({
+            const rows = payload.violations.map((r) => ({
               application_id: applicationId,
               location: r.location || null,
               date: r.date || null,
@@ -285,6 +310,7 @@ async function getById(applicationId, context = null) {
   const education = await db('employment_application_education').where({ application_id: applicationId }).orderBy('id');
   const documents = await db('employment_application_documents').where({ application_id: applicationId }).orderBy('uploaded_at');
 
+  // Fetch violations — tolerate missing table for pre-migration schemas
   let violations = [];
   try {
     if (await db.schema.hasTable('employment_application_violations')) {
@@ -292,7 +318,17 @@ async function getById(applicationId, context = null) {
     }
   } catch { /* table may not exist yet */ }
 
-  return { ...app, residencies, licenses, drivingExperience, accidents, convictions, employers, education, documents, violations };
+  // FN-215: fetch disqualifications — tolerate missing table for pre-migration schemas
+  let disqualifications = [];
+  try {
+    disqualifications = await db('employment_application_disqualifications')
+      .where({ application_id: applicationId })
+      .orderBy('id');
+  } catch (e) {
+    dtLogger.warn('disqualifications_fetch_skipped', { applicationId, error: e?.message || String(e) });
+  }
+
+  return { ...app, residencies, licenses, drivingExperience, accidents, convictions, employers, education, documents, violations, disqualifications };
 }
 
 async function getByDriverId(driverId, context = null) {
@@ -302,7 +338,7 @@ async function getByDriverId(driverId, context = null) {
 
 async function submitApplication(applicationId, payload, userId, context = null) {
   // Orchestration: validate, persist, set status, generate PDF, upload to R2, update records & DQF
-  return db.transaction(async trx => {
+  return db.transaction(async (trx) => {
     const app = await trx('employment_applications').where({ id: applicationId }).forUpdate().first();
     if (!app) throw new Error('Application not found');
     if (app.status && app.status !== 'draft') throw new Error('Application already submitted or in processing');
@@ -421,11 +457,11 @@ async function submitApplication(applicationId, payload, userId, context = null)
     try {
       const hasApplicationDate = await trx.schema.hasColumn('drivers', 'application_date');
       const hasUpdatedAt = await trx.schema.hasColumn('drivers', 'updated_at');
-      const patch = {};
-      if (hasApplicationDate) patch.application_date = trx.fn.now();
-      if (hasUpdatedAt) patch.updated_at = trx.fn.now();
-      if (Object.keys(patch).length > 0) {
-        await trx('drivers').where({ id: app.driver_id }).update(patch);
+      const driverPatch = {};
+      if (hasApplicationDate) driverPatch.application_date = trx.fn.now();
+      if (hasUpdatedAt) driverPatch.updated_at = trx.fn.now();
+      if (Object.keys(driverPatch).length > 0) {
+        await trx('drivers').where({ id: app.driver_id }).update(driverPatch);
       }
     } catch (e) {
       dtLogger.warn('driver_update_failed', { applicationId, error: e?.message || String(e) });
@@ -436,10 +472,81 @@ async function submitApplication(applicationId, payload, userId, context = null)
   });
 }
 
+/**
+ * FN-215: Validate that an employment application meets FMCSA completeness rules.
+ *
+ * Rules:
+ *  - At least 3 years of 'detailed' employer history (or a gap explanation).
+ *  - If the applicant holds or is applying for a CDL, 10 years of total history
+ *    is required (3 detailed + 7 summary).
+ *  - The disqualification section must be answered (has_been_disqualified is not null).
+ *
+ * @param {object} application - A full application object (as returned by getById).
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+function validateCompleteness(application) {
+  const errors = [];
+  const employers = application.employers || [];
+
+  // Separate employers by tier
+  const detailed = employers.filter((e) => !e.tier || e.tier === 'detailed');
+  const summary = employers.filter((e) => e.tier === 'summary');
+
+  // Calculate total years covered by each tier
+  const calcYears = (list) => {
+    let totalMonths = 0;
+    for (const emp of list) {
+      if (emp.start_date && emp.end_date) {
+        const start = new Date(emp.start_date);
+        const end = new Date(emp.end_date);
+        if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+          totalMonths += (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+        }
+      }
+    }
+    return totalMonths / 12;
+  };
+
+  const detailedYears = calcYears(detailed);
+  const summaryYears = calcYears(summary);
+
+  // Check: at least 3 years of detailed employers
+  if (detailedYears < 3 && detailed.length === 0) {
+    errors.push('At least 3 years of detailed employment history is required.');
+  } else if (detailedYears < 3) {
+    errors.push(
+      `Detailed employment history covers approximately ${detailedYears.toFixed(1)} years; at least 3 years required.`
+    );
+  }
+
+  // Check: CDL applicants need 10 years total (3 detailed + 7 summary)
+  const snapshot = application.applicant_snapshot || {};
+  const licenses = application.licenses || [];
+  const isCdl = snapshot.licenseClass
+    || licenses.some((l) => l.license_class && /^[ABC]$/i.test(l.license_class));
+
+  if (isCdl) {
+    const totalYears = detailedYears + summaryYears;
+    if (totalYears < 10) {
+      errors.push(
+        `CDL applicants require 10 years of employment history (3 detailed + 7 summary). Current total: approximately ${totalYears.toFixed(1)} years.`
+      );
+    }
+  }
+
+  // Check: disqualification section must be answered
+  if (application.has_been_disqualified == null) {
+    errors.push('Disqualification section must be answered (has_been_disqualified is required).');
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 module.exports = {
   createDraft,
   updateDraft,
   getById,
   getByDriverId,
-  submitApplication
+  submitApplication,
+  validateCompleteness
 };

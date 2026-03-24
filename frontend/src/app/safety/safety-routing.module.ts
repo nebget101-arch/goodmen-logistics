@@ -11,6 +11,7 @@ import { SafetyAccidentDetailComponent } from './safety-accident-detail/safety-a
 import { SafetyClaimsComponent } from './safety-claims/safety-claims.component';
 import { SafetyTasksComponent } from './safety-tasks/safety-tasks.component';
 import { SafetyReportsComponent } from './safety-reports/safety-reports.component';
+import { ComplianceDashboardComponent } from './compliance-dashboard/compliance-dashboard.component';
 
 const SAFETY_PERMS = [
   PERMISSIONS.SAFETY_INCIDENTS_VIEW,
@@ -32,6 +33,7 @@ const routes: Routes = [
       { path: 'claims', component: SafetyClaimsComponent },
       { path: 'tasks', component: SafetyTasksComponent },
       { path: 'reports', component: SafetyReportsComponent },
+      { path: 'compliance', component: ComplianceDashboardComponent },
     ]
   }
 ];

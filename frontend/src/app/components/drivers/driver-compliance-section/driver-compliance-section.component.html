@@ -1,0 +1,120 @@
+<div class="compliance-section">
+  <div class="section-title-row">
+    <h3>
+      <span class="material-symbols-outlined section-icon">verified</span>
+      Annual Compliance
+    </h3>
+    <div class="year-selector">
+      <label for="compYearSelect">Year:</label>
+      <select id="compYearSelect" [(ngModel)]="selectedYear" (ngModelChange)="onYearChange()">
+        <option *ngFor="let y of yearOptions" [ngValue]="y">{{ y }}</option>
+      </select>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading-state">Loading compliance items...</div>
+  <div *ngIf="error" class="alert-error">{{ error }}</div>
+
+  <div *ngIf="!loading && items.length === 0" class="empty-state">
+    No compliance items for {{ selectedYear }}. Use the fleet compliance dashboard to generate annual items.
+  </div>
+
+  <div class="items-list" *ngIf="!loading && items.length > 0">
+    <div
+      *ngFor="let item of items"
+      class="compliance-item"
+      [class.item-complete]="item.status === 'complete'"
+      [class.item-overdue]="item.status === 'overdue'"
+      [class.item-due-soon]="item.status === 'due_soon'">
+
+      <div class="item-header">
+        <div class="item-type">
+          <span class="material-symbols-outlined item-icon">{{ typeIcon(item.type) }}</span>
+          <span class="item-type-label">{{ typeLabel(item.type) }}</span>
+        </div>
+        <span class="status-chip" [ngClass]="statusClass(item.status)">
+          {{ statusLabel(item.status) }}
+        </span>
+      </div>
+
+      <div class="item-details">
+        <div class="detail">
+          <span class="detail-label">Due Date</span>
+          <span class="detail-value">{{ formatDate(item.dueDate) }}</span>
+        </div>
+        <div class="detail" *ngIf="item.completedDate">
+          <span class="detail-label">Completed</span>
+          <span class="detail-value">{{ formatDate(item.completedDate) }}</span>
+        </div>
+        <div class="detail" *ngIf="item.reviewerName">
+          <span class="detail-label">Reviewer</span>
+          <span class="detail-value">{{ item.reviewerName }}</span>
+        </div>
+        <div class="detail" *ngIf="item.determination">
+          <span class="detail-label">Determination</span>
+          <span class="detail-value determination">{{ item.determination }}</span>
+        </div>
+        <div class="detail" *ngIf="item.notes">
+          <span class="detail-label">Notes</span>
+          <span class="detail-value">{{ item.notes }}</span>
+        </div>
+      </div>
+
+      <!-- Mark Complete button -->
+      <div class="item-actions" *ngIf="item.status !== 'complete'">
+        <button
+          *ngIf="completingItemId !== item.id"
+          type="button"
+          class="btn btn-sm btn-primary"
+          (click)="startComplete(item)">
+          <span class="material-symbols-outlined">check_circle</span>
+          Mark Complete
+        </button>
+      </div>
+
+      <!-- Inline completion form -->
+      <div class="complete-form" *ngIf="completingItemId === item.id">
+        <form [formGroup]="completeForm" (ngSubmit)="submitComplete(item)">
+          <div class="form-row">
+            <label for="reviewerName">Reviewer Name *</label>
+            <input
+              id="reviewerName"
+              type="text"
+              formControlName="reviewerName"
+              placeholder="Enter reviewer name"
+              class="form-input" />
+          </div>
+          <div class="form-row">
+            <label for="determination">Determination *</label>
+            <select id="determination" formControlName="determination" class="form-input">
+              <option *ngFor="let opt of determinationOptions" [value]="opt.value">{{ opt.label }}</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="notes">Notes</label>
+            <textarea
+              id="notes"
+              formControlName="notes"
+              placeholder="Optional notes"
+              rows="2"
+              class="form-input"></textarea>
+          </div>
+          <div class="form-actions">
+            <button
+              type="submit"
+              class="btn btn-sm btn-primary"
+              [disabled]="completeForm.invalid || saving">
+              {{ saving ? 'Saving...' : 'Confirm Complete' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-secondary"
+              (click)="cancelComplete()">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
