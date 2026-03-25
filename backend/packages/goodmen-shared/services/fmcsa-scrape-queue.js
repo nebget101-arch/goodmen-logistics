@@ -29,13 +29,14 @@ function createScrapeQueue(knex, redisUrl) {
   };
 
   // ── Queue instance ────────────────────────────────────────────────
+  // IMPORTANT: Do NOT pass `redis: redisUrl` alongside `createClient` —
+  // Bull ignores createClient when redis is present, causing default
+  // ioredis options (maxRetriesPerRequest=20) which crash the process.
+  const Redis = require('ioredis');
   const queue = new Queue('fmcsa-scrape', {
-    redis: redisUrl,
     prefix: 'fmcsa',
     createClient(type) {
-      // Bull creates 3 Redis clients; each needs the same options
-      const Redis = require('ioredis');
-      return new Redis(redisUrl, redisOpts);
+      return new Redis(redisUrl, { ...redisOpts });
     },
     limiter: { max: 1, duration: 3000 },
     defaultJobOptions: {
