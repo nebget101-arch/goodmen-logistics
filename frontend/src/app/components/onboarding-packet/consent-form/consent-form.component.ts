@@ -1,5 +1,5 @@
 import { Component, Input, Output, EventEmitter, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
-import { ConsentService, ConsentTemplate, ConsentCapturedFields } from '../../../services/consent.service';
+import { ConsentService, ConsentTemplate, ConsentCapturedFields, ConsentLoadResult } from '../../../services/consent.service';
 
 export interface UsState {
   code: string;
@@ -108,9 +108,19 @@ export class ConsentFormComponent implements OnInit {
       return;
     }
     this.consentService.loadConsent(this.packetId, this.consentKey, this.token).subscribe({
-      next: (template) => {
+      next: (result: ConsentLoadResult) => {
         this.loading = false;
-        this.consent = template ?? null;
+        this.consent = result.template ?? null;
+        // FN-252: If consent is already signed, mark as completed and notify parent
+        if (result.isSigned || result.consent?.status === 'signed') {
+          this.signedSuccess = true;
+          this.signedDate = result.consent?.signed_at
+            ? new Date(result.consent.signed_at).toLocaleDateString('en-US', {
+                year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+              })
+            : null;
+          this.signed.emit(this.consentKey);
+        }
         this.cdr.markForCheck();
       },
       error: (err) => {
