@@ -401,10 +401,11 @@ async function submitApplication(applicationId, payload, userId, context = null)
       }
     }
 
-    // Upload to storage (R2)
+    // Upload to storage (R2) with structured folder path
     let uploadResult;
     try {
-      const res = await r2.uploadBuffer({ buffer: pdfBuf, fileName: driverFileName, contentType: 'application/pdf' });
+      const r2Key = `drivers/${app.driver_id}/employment-application/${driverFileName}`;
+      const res = await r2.uploadBuffer({ buffer: pdfBuf, key: r2Key, contentType: 'application/pdf' });
       uploadResult = { objectKey: res.key, bucketName: process.env.R2_BUCKET, fileName: driverFileName, contentType: 'application/pdf', fileSize: pdfBuf.length };
     } catch (e) {
       dtLogger.error('r2_upload_failed', { applicationId, error: e?.message || String(e) });
