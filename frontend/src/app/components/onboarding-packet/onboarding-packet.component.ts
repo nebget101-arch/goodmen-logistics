@@ -273,8 +273,7 @@ export class OnboardingPacketComponent implements OnInit {
     { key: 'cdl_front', label: 'CDL - Front', description: 'Front of your Commercial Driver\'s License', icon: 'badge', required: true },
     { key: 'cdl_back', label: 'CDL - Back', description: 'Back of your Commercial Driver\'s License', icon: 'badge', required: true },
     { key: 'medical_certificate', label: 'Medical Examiner\'s Certificate', description: 'DOT Medical Card (Form MCSA-5876)', icon: 'medical_information', required: true },
-    { key: 'social_security_card', label: 'Social Security Card', description: 'Copy of your Social Security Card', icon: 'credit_card', required: true },
-    { key: 'proof_of_address', label: 'Proof of Address', description: 'Utility bill, bank statement, or lease agreement', icon: 'home', required: true },
+    { key: 'social_security_card', label: 'Social Security Card', description: 'Copy of your Social Security Card', icon: 'credit_card', required: false },
     { key: 'other_certification', label: 'Other Certification', description: 'Any additional certifications or endorsements', icon: 'workspace_premium', required: false }
   ];
   uploadedDocuments: Map<string, UploadedDocument> = new Map();
