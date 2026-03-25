@@ -113,6 +113,27 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
           this.history = resp.snapshots.sort(
             (a, b) => new Date(a.scraped_at).getTime() - new Date(b.scraped_at).getTime()
           );
+
+          // Merge latest snapshot data into carrier for the info card
+          if (this.history.length > 0 && this.carrier) {
+            const latest = this.history[this.history.length - 1];
+            this.carrier = {
+              ...this.carrier,
+              total_drivers: latest.total_drivers ?? this.carrier.total_drivers,
+              total_power_units: latest.total_power_units ?? this.carrier.total_power_units,
+              operating_status: latest.operating_status ?? this.carrier.operating_status,
+              safety_rating: latest.safety_rating ?? this.carrier.safety_rating,
+              safety_rating_date: latest.safety_rating_date ?? (this.carrier as any).safety_rating_date,
+              scraped_at: latest.scraped_at,
+              authority_common: latest.authority_common ?? this.carrier.authority_common,
+              authority_contract: latest.authority_contract ?? this.carrier.authority_contract,
+              authority_broker: latest.authority_broker ?? this.carrier.authority_broker,
+              bipd_insurance_on_file: latest.bipd_insurance_on_file ?? this.carrier.bipd_insurance_on_file,
+              cargo_insurance_on_file: latest.cargo_insurance_on_file ?? this.carrier.cargo_insurance_on_file,
+              bond_insurance_on_file: latest.bond_insurance_on_file ?? this.carrier.bond_insurance_on_file,
+            } as any;
+          }
+
           this.buildChartData();
           this.loading = false;
           if (this.chartReady) {
@@ -211,10 +232,32 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  getScoreClass(score: number | null): string {
+  getUsdotStatus(): string {
+    return (this.carrier as any)?.usdot_status || 'N/A';
+  }
+
+  getUsdotStatusClass(): string {
+    const status = ((this.carrier as any)?.usdot_status || '').toLowerCase();
+    return status === 'active' ? 'status-active' : 'status-inactive';
+  }
+
+  getOperatingAuthorityClass(): string {
+    const cleaned = this.cleanOperatingStatus(this.carrier?.operating_status || null).toLowerCase();
+    return cleaned.includes('authorized') && !cleaned.includes('not') ? 'status-active' : 'status-inactive';
+  }
+
+  cleanOperatingStatus(status: string | null): string {
+    if (!status) return 'N/A';
+    const cleaned = status.replace(/\s*\*.*$/i, '').trim();
+    return cleaned || status.split('*')[0].trim() || 'N/A';
+  }
+
+  getScoreClass(score: number | string | null): string {
     if (score === null || score === undefined) return 'score-na';
-    if (score >= 75) return 'score-danger';
-    if (score >= 50) return 'score-warning';
+    const num = typeof score === 'string' ? parseFloat(score) : score;
+    if (isNaN(num)) return 'score-na';
+    if (num >= 75) return 'score-danger';
+    if (num >= 50) return 'score-warning';
     return 'score-good';
   }
 

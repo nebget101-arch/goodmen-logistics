@@ -35,10 +35,18 @@
             <span class="info-value">{{ carrier.mc_number || 'N/A' }}</span>
           </div>
           <div class="info-row">
-            <span class="info-label">Operating Status</span>
+            <span class="info-label">USDOT Status</span>
             <span class="info-value">
-              <span class="status-indicator" [ngClass]="carrier.operating_status?.toLowerCase() === 'active' ? 'status-active' : 'status-inactive'">
-                {{ carrier.operating_status || 'N/A' }}
+              <span class="status-indicator" [ngClass]="getUsdotStatusClass()">
+                {{ getUsdotStatus() }}
+              </span>
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Operating Authority</span>
+            <span class="info-value">
+              <span class="status-indicator" [ngClass]="getOperatingAuthorityClass()">
+                {{ cleanOperatingStatus(carrier.operating_status) }}
               </span>
             </span>
           </div>
