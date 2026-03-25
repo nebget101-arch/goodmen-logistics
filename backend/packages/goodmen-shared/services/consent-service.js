@@ -60,7 +60,7 @@ async function createConsentRequest({ driverId, consentKey, packetId, expiresAt 
     const consentResult = await client.query(
       `INSERT INTO driver_consents (
         driver_id,
-        template_id,
+        consent_template_id,
         consent_key,
         consent_version,
         packet_id,
@@ -82,7 +82,7 @@ async function createConsentRequest({ driverId, consentKey, packetId, expiresAt 
     const consent = consentResult.rows[0];
 
     await client.query(
-      `INSERT INTO consent_audit_log (consent_id, action, performed_by, ip_address, user_agent)
+      `INSERT INTO consent_audit_log (driver_consent_id, action, performed_by, ip_address, user_agent)
        VALUES ($1, 'sent', NULL, NULL, NULL)`,
       [consent.id]
     );
@@ -99,9 +99,11 @@ async function createConsentRequest({ driverId, consentKey, packetId, expiresAt 
 
 async function signConsent(consentId, { signerName, signatureType, signatureValue, ipAddress, userAgent }) {
   if (!consentId) throw new Error('consentId is required');
-  if (!signerName || !signatureValue) {
-    throw new Error('signerName and signatureValue are required');
+  if (!signerName) {
+    throw new Error('signerName is required');
   }
+  // FN-243: Default signatureValue to signerName (typed name IS the e-signature)
+  if (!signatureValue) signatureValue = signerName;
 
   const client = await getClient();
   try {
@@ -125,7 +127,7 @@ async function signConsent(consentId, { signerName, signatureType, signatureValu
 
     const templateRes = await client.query(
       'SELECT * FROM consent_templates WHERE id = $1',
-      [consent.template_id]
+      [consent.consent_template_id]
     );
     const template = templateRes.rows[0];
     if (!template) {
@@ -158,7 +160,7 @@ async function signConsent(consentId, { signerName, signatureType, signatureValu
     );
 
     await client.query(
-      `INSERT INTO consent_audit_log (consent_id, action, performed_by, ip_address, user_agent)
+      `INSERT INTO consent_audit_log (driver_consent_id, action, performed_by, ip_address, user_agent)
        VALUES ($1, 'signed', $2, $3, $4)`,
       [consentId, signerName, ipAddress || null, userAgent || null]
     );
