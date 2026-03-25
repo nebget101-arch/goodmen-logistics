@@ -132,7 +132,7 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
 
     this.chartData = this.BASIC_CATEGORIES.map(cat => ({
       label: cat.label,
-      data: this.history.map(s => (s as Record<string, unknown>)[cat.key] as number | null),
+      data: this.history.map(s => (s as any)[cat.key] as number | null),
       borderColor: cat.color,
       backgroundColor: cat.color + '20',
       tension: 0.3,
