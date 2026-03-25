@@ -17,6 +17,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // ─── Database initialization ─────────────────────────────────────────────────
 const knexConfig = require('@goodmen/database/knexfile');
 const knex = require('knex')(knexConfig[process.env.NODE_ENV || 'development'] || knexConfig.development);
+const { setDatabase } = require('@goodmen/shared/internal/db');
+setDatabase({ knex });
 
 // ─── Auth middleware (needed for FMCSA safety routes) ────────────────────────
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
