@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
+import { ConsentService } from '../../services/consent.service';
 import { SeoService } from '../../services/seo.service';
 import { SEO_PUBLIC } from '../../services/seo-public-presets';
 import { EmployerHistoryData } from './employer-history-tiered/employer-history-tiered.component';
@@ -296,6 +297,7 @@ export class OnboardingPacketComponent implements OnInit {
   constructor(
     private route: ActivatedRoute,
     private apiService: ApiService,
+    private consentService: ConsentService,
     private seo: SeoService
   ) {
     this.packetId = this.route.snapshot.paramMap.get('packetId');
@@ -320,6 +322,7 @@ export class OnboardingPacketComponent implements OnInit {
         this.driver = res.driver || null;
         this.sections = res.sections || [];
         this.hydrateFromSections();
+        this.loadConsentStatuses();
       },
       error: (err) => {
         this.loading = false;
@@ -346,6 +349,25 @@ export class OnboardingPacketComponent implements OnInit {
     if (consentData?.signedConsents) {
       consentData.signedConsents.forEach((key) => this.signedConsents.add(key));
     }
+  }
+
+  /** FN-252: Load signed consent statuses from API to rehydrate after page refresh */
+  private loadConsentStatuses(): void {
+    if (!this.packetId || !this.token) return;
+    this.consentService.getConsentStatuses(this.packetId, this.token).subscribe({
+      next: (res) => {
+        for (const c of (res.consents || [])) {
+          if (c.status === 'signed') {
+            this.signedConsents.add(c.consent_key);
+          }
+        }
+        // Trigger change detection by replacing the Set reference
+        this.signedConsents = new Set(this.signedConsents);
+      },
+      error: () => {
+        // Silently fail — consent statuses will show as pending
+      }
+    });
   }
 
   /** Pre-fill certification fields from the employment application data (FN-233) */

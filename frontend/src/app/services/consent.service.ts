@@ -22,6 +22,12 @@ export interface ConsentCapturedFields {
   stateOfIssue?: string;
 }
 
+export interface ConsentLoadResult {
+  template: ConsentTemplate;
+  isSigned: boolean;
+  consent: { id: string; status: string; signed_at: string; signer_name: string } | null;
+}
+
 export interface ConsentSignaturePayload {
   signerName: string;
   agreed: boolean;
@@ -47,25 +53,30 @@ export class ConsentService {
    * Load a consent template for a public onboarding packet.
    * GET /public/consents/:packetId/:consentKey?token=...
    */
-  loadConsent(packetId: string, consentKey: string, token: string): Observable<ConsentTemplate> {
+  loadConsent(packetId: string, consentKey: string, token: string): Observable<ConsentLoadResult> {
     const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/consents');
-    return this.http.get<any>(
+    return this.http.get<Record<string, unknown>>(
       `${publicBase}/${encodeURIComponent(packetId)}/${encodeURIComponent(consentKey)}`,
       { params: { token } }
     ).pipe(
-      map((resp: any) => {
-        // FN-240: API returns { template: { body_text, ... }, ... }
+      map((resp: Record<string, unknown>) => {
+        // FN-240: API returns { template: { body_text, ... }, consent, isSigned, ... }
         // Frontend expects flat ConsentTemplate with htmlContent
-        const tpl = resp.template || resp;
+        const tpl = (resp['template'] || resp) as Record<string, unknown>;
+        const template: ConsentTemplate = {
+          consentKey: (tpl['key'] as string) || consentKey,
+          title: (tpl['title'] as string) || '',
+          version: String(tpl['version'] || ''),
+          effectiveDate: (tpl['effective_date'] as string) || (tpl['effectiveDate'] as string) || '',
+          htmlContent: (tpl['body_text'] as string) || (tpl['htmlContent'] as string) || '',
+          requiresSignature: (tpl['requires_signature'] as boolean) ?? (tpl['requiresSignature'] as boolean) ?? true,
+          captureFields: (tpl['capture_fields'] as string[]) || (tpl['captureFields'] as string[]) || []
+        };
         return {
-          consentKey: tpl.key || consentKey,
-          title: tpl.title || '',
-          version: String(tpl.version || ''),
-          effectiveDate: tpl.effective_date || tpl.effectiveDate || '',
-          htmlContent: tpl.body_text || tpl.htmlContent || '',
-          requiresSignature: tpl.requires_signature ?? tpl.requiresSignature ?? true,
-          captureFields: tpl.capture_fields || tpl.captureFields || []
-        } as ConsentTemplate;
+          template,
+          isSigned: !!resp['isSigned'],
+          consent: (resp['consent'] as ConsentLoadResult['consent']) || null
+        };
       })
     );
   }
@@ -84,6 +95,18 @@ export class ConsentService {
     return this.http.post<{ success: boolean }>(
       `${publicBase}/${encodeURIComponent(packetId)}/${encodeURIComponent(consentKey)}/sign`,
       signatureData,
+      { params: { token } }
+    );
+  }
+
+  /**
+   * Get all signed consent statuses for a public onboarding packet.
+   * GET /public/consents/:packetId/status?token=...
+   */
+  getConsentStatuses(packetId: string, token: string): Observable<{ consents: { consent_key: string; status: string; signed_at: string }[] }> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/consents');
+    return this.http.get<{ consents: { consent_key: string; status: string; signed_at: string }[] }>(
+      `${publicBase}/${encodeURIComponent(packetId)}/status`,
       { params: { token } }
     );
   }

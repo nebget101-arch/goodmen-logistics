@@ -348,4 +348,40 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
   }
 });
 
+// GET /public/consents/:packetId/status?token=...
+// Return all signed consent statuses for this packet (used to rehydrate UI after refresh)
+router.get('/:packetId/status', rateLimited, async (req, res) => {
+  const start = Date.now();
+  try {
+    const { packetId } = req.params;
+    const { token } = req.query;
+
+    const { packet, error, status } = await loadPacketWithToken(packetId, token);
+    if (error) {
+      return res.status(status || 400).json({ message: error });
+    }
+
+    // Query signed consents by packet_id OR driver_id to catch consents signed without packet link
+    const result = await query(
+      `SELECT consent_key, status, signed_at
+       FROM driver_consents
+       WHERE (packet_id = $1 OR driver_id = $2) AND status = 'signed'
+       ORDER BY signed_at DESC`,
+      [packetId, packet.driver_id]
+    );
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('GET', `/public/consents/${packetId}/status`, 200, duration);
+
+    return res.json({ consents: result.rows });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('public_consent_status_failed', error, { params: req.params });
+    dtLogger.trackRequest('GET', `/public/consents/${req.params.packetId}/status`, 500, duration);
+    // eslint-disable-next-line no-console
+    console.error('Error in public consent status GET:', error);
+    return res.status(500).json({ message: 'Failed to load consent statuses' });
+  }
+});
+
 module.exports = router;
