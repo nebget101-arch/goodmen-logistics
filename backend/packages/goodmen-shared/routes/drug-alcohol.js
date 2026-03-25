@@ -292,31 +292,47 @@ router.post('/driver/:driverId/tests/:testId/result-document', upload.single('fi
     const r2Result = await uploadBuffer({
       buffer: file.buffer,
       fileName,
-      contentType,
-      prefix: `drivers/${driverId}/drug-test-results`
+      contentType
     });
 
-    // Create driver_documents record
+    // Create driver_document_blobs record with the file buffer
+    const blobRes = await query(
+      `INSERT INTO driver_document_blobs (bytes) VALUES ($1) RETURNING *`,
+      [file.buffer]
+    );
+    const blob = blobRes.rows[0];
+
+    // Create driver_documents record (matches actual schema)
     const docRes = await query(
-      `INSERT INTO driver_documents (driver_id, doc_type, file_name, content_type, r2_key, uploaded_by, created_at)
-       VALUES ($1, 'drug_test_result', $2, $3, $4, $5, NOW())
+      `INSERT INTO driver_documents (driver_id, doc_type, file_name, mime_type, size_bytes, storage_mode, storage_key, blob_id)
+       VALUES ($1, 'drug_test_result', $2, $3, $4, 'r2', $5, $6)
        RETURNING *`,
-      [driverId, fileName, contentType, r2Result.key, req.context?.userId || null]
+      [driverId, fileName, contentType, file.buffer.length, r2Result.key || '', blob.id]
     );
     const doc = docRes.rows[0];
-
-    // Create driver_document_blobs record with the file buffer
-    await query(
-      `INSERT INTO driver_document_blobs (document_id, file_data, created_at)
-       VALUES ($1, $2, NOW())`,
-      [doc.id, file.buffer]
-    );
 
     // Update drug_alcohol_tests.result_document_id
     await query(
       `UPDATE drug_alcohol_tests SET result_document_id = $1, updated_at = NOW() WHERE id = $2`,
       [doc.id, testId]
     );
+
+    // FN-225: Trigger DQF integration now that we have the evidence document
+    try {
+      const testRow = await query(
+        `SELECT test_type, result, result_received_date FROM drug_alcohol_tests WHERE id = $1`,
+        [testId]
+      );
+      if (testRow.rows.length > 0) {
+        const t = testRow.rows[0];
+        if (t.test_type === 'pre_employment' && t.result) {
+          const userId = req.context?.userId || null;
+          await handleDqfIntegration(driverId, t.test_type, t.result, userId, doc.id, t.result_received_date);
+        }
+      }
+    } catch (dqfErr) {
+      console.error('DQF integration after result doc upload failed:', dqfErr);
+    }
 
     const duration = Date.now() - startTime;
     dtLogger.trackDatabase('INSERT', 'driver_documents', duration, true, { docId: doc.id, testId });
@@ -326,8 +342,8 @@ router.post('/driver/:driverId/tests/:testId/result-document', upload.single('fi
       id: doc.id,
       doc_type: doc.doc_type,
       file_name: doc.file_name,
-      content_type: doc.content_type,
-      r2_key: r2Result.key,
+      mime_type: doc.mime_type,
+      storage_key: doc.storage_key,
       created_at: doc.created_at
     });
   } catch (error) {
