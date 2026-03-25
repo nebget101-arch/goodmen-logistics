@@ -452,7 +452,7 @@ async function getInvestigationStatus(driverId) {
   const driver = driverRes.rows[0];
 
   // Fetch all DOT-regulated past employers with investigation data
-  const employersRes = await query(
+  let employersRes = await query(
     `SELECT pe.id, pe.employer_name, pe.contact_name, pe.contact_phone,
             pe.contact_email, pe.contact_fax, pe.start_date, pe.end_date,
             pe.position_held, pe.is_dot_regulated,
@@ -460,10 +460,82 @@ async function getInvestigationStatus(driverId) {
             pe.inquiry_sent_at, pe.follow_up_sent_at, pe.response_received_at,
             pe.good_faith_efforts
        FROM driver_past_employers pe
-      WHERE pe.driver_id = $1 AND pe.is_dot_regulated = true
+      WHERE pe.driver_id = $1
       ORDER BY pe.end_date DESC NULLS LAST`,
     [driverId]
   );
+
+  // FN-224: Fallback — if driver_past_employers is empty, auto-sync from
+  // employment_application_employers (for drivers who submitted before FN-222)
+  if (employersRes.rows.length === 0) {
+    try {
+      const appRes = await query(
+        `SELECT eae.*
+           FROM employment_application_employers eae
+           JOIN employment_applications ea ON ea.id = eae.application_id
+          WHERE ea.driver_id = $1
+          ORDER BY eae.id`,
+        [driverId]
+      );
+
+      if (appRes.rows.length > 0) {
+        // Auto-sync: insert into driver_past_employers
+        const parseMonthYear = (val) => {
+          if (!val) return null;
+          const str = String(val).trim().toLowerCase();
+          if (str === 'present' || str === 'current') return null;
+          const parts = str.split('/');
+          if (parts.length === 2) {
+            const [mm, yyyy] = parts;
+            const m = parseInt(mm, 10);
+            const y = parseInt(yyyy, 10);
+            if (m >= 1 && m <= 12 && y >= 1900) return `${y}-${String(m).padStart(2, '0')}-01`;
+          }
+          return null;
+        };
+
+        for (const emp of appRes.rows) {
+          await query(
+            `INSERT INTO driver_past_employers (
+              driver_id, employer_name, contact_name, contact_phone, contact_email,
+              position_held, start_date, end_date, reason_for_leaving,
+              is_dot_regulated, investigation_status
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            [
+              driverId,
+              emp.company_name || 'Unknown',
+              emp.contact_person || null,
+              emp.phone || null,
+              emp.employer_email || null,
+              emp.position_held || null,
+              parseMonthYear(emp.from_month_year),
+              parseMonthYear(emp.to_month_year),
+              emp.reason_for_leaving || null,
+              emp.was_cmv || false,
+              'not_started'
+            ]
+          );
+        }
+
+        // Re-fetch the newly synced employers
+        employersRes = await query(
+          `SELECT pe.id, pe.employer_name, pe.contact_name, pe.contact_phone,
+                  pe.contact_email, pe.contact_fax, pe.start_date, pe.end_date,
+                  pe.position_held, pe.is_dot_regulated,
+                  pe.investigation_status, pe.deadline_date,
+                  pe.inquiry_sent_at, pe.follow_up_sent_at, pe.response_received_at,
+                  pe.good_faith_efforts
+             FROM driver_past_employers pe
+            WHERE pe.driver_id = $1
+            ORDER BY pe.end_date DESC NULLS LAST`,
+          [driverId]
+        );
+      }
+    } catch (fallbackErr) {
+      // Log but don't fail — the main query already returned empty
+      console.error('FN-224: Employer sync fallback failed:', fallbackErr?.message || fallbackErr);
+    }
+  }
 
   // Fetch any responses for those employers
   const employerIds = employersRes.rows.map((e) => e.id);
