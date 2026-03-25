@@ -98,7 +98,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const { key: storageKey } = await uploadBuffer({
       buffer: req.file.buffer,
       contentType: req.file.mimetype,
-      prefix: `dqf-documents/${driverId}`,
+      prefix: `drivers/${driverId}/dqf-documents`,
       fileName: safeName
     });
 
