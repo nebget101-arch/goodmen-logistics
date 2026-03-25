@@ -6,7 +6,7 @@ const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange } = require('../services/dqf-service');
 const { createDriverDocument } = require('../services/driver-storage-service');
-const { buildEmploymentApplicationPdf } = require('../services/driver-onboarding-pdf');
+const { generateEmploymentApplicationPdf } = require('../services/pdf.service');
 
 // File upload (memory storage - max 10 MB, PDF/image only)
 const upload = multer({
@@ -471,24 +471,42 @@ router.post('/driver/:driverId/auto-pull-emp-app', async (req, res) => {
     const section = sectionRes.rows[0];
     const applicationData = section.data || {};
 
-    // Load signature if available
-    const esignRes = await query(
-      `SELECT signer_name, signed_at
-       FROM driver_esignatures
-       WHERE packet_id = $1
-         AND section_key = 'employment_application'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [section.packet_id]
-    );
-    const signature = esignRes.rows[0] || null;
+    // Load operating entity for company info on PDF header
+    let operatingEntity = null;
+    if (driver.operating_entity_id) {
+      const oeRes = await query(
+        `SELECT name, address, city, state, zip, phone, email FROM operating_entities WHERE id = $1`,
+        [driver.operating_entity_id]
+      );
+      if (oeRes.rows.length > 0) {
+        const oe = oeRes.rows[0];
+        operatingEntity = {
+          name: oe.name,
+          address: [oe.address, oe.city, oe.state, oe.zip].filter(Boolean).join(', '),
+          phone: oe.phone,
+          email: oe.email
+        };
+      }
+    }
 
-    // 3. Generate the PDF
-    const buffer = await buildEmploymentApplicationPdf({
-      driver,
-      application: applicationData,
-      signature
-    });
+    // 3. Generate the PDF using the professional generator from pdf.service.js
+    // Transform section data into the fullApp format expected by generateEmploymentApplicationPdf
+    const fullApp = {
+      id: section.packet_id,
+      applicant_snapshot: applicationData,
+      employers: applicationData.employers || [],
+      residencies: applicationData.residencies || [],
+      licenses: applicationData.licenses || [],
+      accidents: applicationData.accidents || [],
+      violations: applicationData.violations || [],
+      convictions: applicationData.convictions || [],
+      signed_certification_at: applicationData.signatureDate || applicationData.submittedAt
+    };
+    const pdfContext = {};
+    if (operatingEntity) pdfContext.operatingEntity = operatingEntity;
+    if (applicationData.auditTrail) pdfContext.auditTrail = applicationData.auditTrail;
+
+    const buffer = await generateEmploymentApplicationPdf(fullApp, pdfContext);
 
     const firstName = (driver.first_name || '').trim();
     const lastName = (driver.last_name || '').trim();
