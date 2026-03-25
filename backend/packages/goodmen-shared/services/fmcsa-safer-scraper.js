@@ -97,7 +97,7 @@ function parseDate(text) {
  * was not found or the page could not be parsed.
  */
 async function scrapeCompanySnapshot(dotNumber) {
-  const url = `https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY&query_type=queryCarrierSnapshot&query_param=DOT_NUMBER&query_string=${encodeURIComponent(dotNumber)}`;
+  const url = `https://safer.fmcsa.dot.gov/query.asp?searchtype=ANY&query_type=queryCarrierSnapshot&query_param=USDOT&query_string=${encodeURIComponent(dotNumber)}`;
 
   const html = await fetchWithRetry(url);
   if (!html) return null;
