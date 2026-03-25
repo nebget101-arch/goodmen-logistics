@@ -499,6 +499,37 @@ input[type='date'].form-input {
   color: #cbd5e1;
 }
 
+.onboard-radio-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.onboard-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(2, 6, 23, 0.48);
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.onboard-radio:has(input:checked) {
+  border-color: #2dd4bf;
+  background: rgba(45, 212, 191, 0.08);
+  color: #f0fdfa;
+}
+
+.onboard-radio input[type="radio"] {
+  accent-color: #2dd4bf;
+  margin: 0;
+}
+
 .onboard-subpanel {
   padding: 16px;
   border-radius: 18px;
