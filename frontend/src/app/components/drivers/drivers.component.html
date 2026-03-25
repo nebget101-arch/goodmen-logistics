@@ -452,6 +452,7 @@
               </div>
               <div class="da-test-meta">
                 <span *ngIf="test.collection_date">{{ test.collection_date | date:'shortDate' }}</span>
+                <span *ngIf="test.result_received_date">Result Received: {{ test.result_received_date | date:'shortDate' }}</span>
                 <span *ngIf="test.ccf_number">CCF: {{ test.ccf_number }}</span>
                 <span *ngIf="test.mro_verified" class="da-mro-verified">MRO Verified</span>
               </div>
@@ -542,6 +543,16 @@
                       <span class="da-toggle-thumb"></span>
                     </span>
                   </label>
+                </div>
+                <div class="dqf-field">
+                  <label>Result Received Date</label>
+                  <app-ai-date-picker
+                    [label]="''"
+                    ariaLabel="Result Received Date"
+                    [(ngModel)]="activeDrugTestForm.result_received_date"
+                    name="daResultReceivedDate"
+                    placeholder="MM/DD/YYYY"
+                  ></app-ai-date-picker>
                 </div>
               </div>
             </div>

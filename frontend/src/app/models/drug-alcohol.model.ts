@@ -40,6 +40,7 @@ export interface DrugAlcoholTest {
   mro_verified?: boolean;
   ccf_number?: string;
   result?: DrugTestResult;
+  result_received_date?: string;
   clearinghouse_reported?: ClearinghouseReportingStatus;
   notes?: string;
   created_at?: string;
