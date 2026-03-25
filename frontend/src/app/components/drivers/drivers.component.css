@@ -727,6 +727,12 @@
   background: rgba(239, 68, 68, 0.04);
 }
 
+/* FN-261: Warning row styling for due-soon items */
+.drivers-dashboard .dqf-req-row.dqf-status-warning {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.06);
+}
+
 .drivers-dashboard .dqf-req-main {
   display: flex;
   align-items: center;
@@ -1392,6 +1398,13 @@
   background: rgba(100, 116, 139, 0.2);
   border: 1px solid rgba(100, 116, 139, 0.4);
   color: #94a3b8;
+}
+
+/* FN-261: Warning/Due Soon badge — amber/yellow distinct from in_progress */
+.drivers-dashboard .dqf-chip-warning {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
 }
 
 .drivers-dashboard .dqf-chip-mini {
@@ -2069,6 +2082,13 @@
     border-color: #94a3b8;
   }
 
+  /* FN-261: Warning chip for print */
+  .drivers-dashboard .dqf-chip-warning {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #f59e0b;
+  }
+
   .drivers-dashboard .dqf-modal-body {
     padding: 12px;
   }
@@ -2088,6 +2108,12 @@
   border-radius: 10px;
   background: rgba(15, 23, 42, 0.5);
   overflow: hidden;
+}
+
+/* FN-261: Inline prehire docs within tab panel */
+.prehire-docs-section.prehire-docs-inline {
+  margin-top: 16px;
+  border-color: rgba(51, 65, 85, 0.4);
 }
 
 .prehire-docs-header {
