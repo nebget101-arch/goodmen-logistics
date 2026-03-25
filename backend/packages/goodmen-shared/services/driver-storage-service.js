@@ -8,19 +8,47 @@ async function storeDocumentBytes(buffer) {
   return result.rows[0].id;
 }
 
+/**
+ * FN-244: Standard folder paths for driver documents.
+ * All documents stored via createDriverDocument use a consistent
+ * storage_key path: drivers/{driverId}/{folder}/{fileName}
+ *
+ * Recognized folders:
+ *   employment-application  – employment application PDFs
+ *   consents                – consent / authorization PDFs
+ *   drug-tests              – drug & alcohol test results
+ *   dqf-documents           – DQF requirement uploads
+ *   documents               – general driver documents (default)
+ */
+const STANDARD_FOLDERS = new Set([
+  'employment-application',
+  'consents',
+  'drug-tests',
+  'dqf-documents',
+  'onboarding-documents',
+  'documents'
+]);
+
+function buildStorageKey(driverId, folder, fileName) {
+  const safeFolder = STANDARD_FOLDERS.has(folder) ? folder : 'documents';
+  return `drivers/${driverId}/${safeFolder}/${fileName}`;
+}
+
 async function createDriverDocument({
   driverId,
   packetId = null,
   docType,
   fileName,
   mimeType,
-  bytes
+  bytes,
+  folder = 'documents'
 }) {
   if (!driverId || !docType || !fileName || !mimeType || !bytes) {
     throw new Error('Missing required arguments to createDriverDocument');
   }
 
   const blobId = await storeDocumentBytes(bytes);
+  const storageKey = buildStorageKey(driverId, folder, fileName);
 
   const result = await query(
     `INSERT INTO driver_documents (
@@ -43,7 +71,7 @@ async function createDriverDocument({
       fileName,
       mimeType,
       Buffer.byteLength(bytes),
-      blobId.toString(),
+      storageKey,
       blobId
     ]
   );
@@ -53,6 +81,8 @@ async function createDriverDocument({
 
 module.exports = {
   storeDocumentBytes,
-  createDriverDocument
+  createDriverDocument,
+  buildStorageKey,
+  STANDARD_FOLDERS
 };
 

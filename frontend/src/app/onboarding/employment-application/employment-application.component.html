@@ -2,124 +2,829 @@
   <div class="ea-glow ea-glow-left"></div>
   <div class="ea-glow ea-glow-right"></div>
 
-  <div class="ea-card">
+  <!-- Success State -->
+  <div *ngIf="submitted" class="ea-card ea-success-card">
+    <div class="ea-success-icon">
+      <span class="material-symbols-outlined">check_circle</span>
+    </div>
+    <h2 class="ea-title" style="text-align:center;">Application Submitted Successfully</h2>
+    <p class="ea-subtitle" style="text-align:center;">Your employment application has been submitted and a PDF has been generated for your records.</p>
+  </div>
+
+  <div class="ea-card" *ngIf="!submitted">
     <form [formGroup]="form">
+
+      <!-- Header with Employer Info -->
       <header class="ea-header">
-        <h2 class="ea-title">Applicant Information</h2>
-        <p class="ea-subtitle">Personal details for your employment application record.</p>
+        <h2 class="ea-title">Driver Employment Application</h2>
+        <div class="ea-employer-info" *ngIf="employerName">
+          <p class="ea-employer-name">{{ employerName }}</p>
+          <p class="ea-employer-address" *ngIf="employerAddress">{{ employerAddress }}, {{ employerCity }}, {{ employerState }} {{ employerZip }}</p>
+        </div>
+        <p class="ea-subtitle">An Equal Opportunity Employer</p>
       </header>
 
+      <!-- 49 CFR Notice -->
+      <section class="ea-notice">
+        <h4 class="ea-notice-title">PLEASE READ COMPLETELY</h4>
+        <p>The information requested on this form is required by federal law (49 CFR) to be provided by any driver applying for a commercial driver position as defined in 49 CFR 390.5. Failure to complete required areas can place both the applicant and carrier in violation of federal law. Information provided will be verified by carrier as required under various parts of 49 CFR, including Part 382 and Part 391.</p>
+        <p>If unsure of question or require help with completing form please ask carrier representative.</p>
+        <p class="ea-notice-bold">PLEASE PRINT CLEARLY AND SIGN YOUR FULL LEGAL NAME AT THE END WHERE REQUIRED.</p>
+        <p class="ea-notice-bold">FALSE STATEMENTS MAY RESULT IN REFUSAL TO HIRE OR IMMEDIATE TERMINATION.</p>
+      </section>
+
+      <!-- ========== APPLICANT INFORMATION ========== -->
       <section class="ea-panel" formGroupName="applicant">
         <div class="ea-panel-header">
           <span class="material-symbols-outlined">person</span>
-          <h3>Applicant</h3>
+          <div>
+            <h3>APPLICANT INFORMATION</h3>
+            <p class="ea-panel-desc">Personal details used to create and verify your application record.</p>
+          </div>
         </div>
         <div class="ea-grid-2">
           <div class="ea-field">
-            <label for="eaFirstName">First Name *</label>
+            <label for="eaFirstName">First Name <span class="req">*</span></label>
             <input id="eaFirstName" formControlName="firstName" class="ea-input" placeholder="First name" />
           </div>
           <div class="ea-field">
             <label for="eaMiddleName">Middle Name</label>
-            <input id="eaMiddleName" formControlName="middleName" class="ea-input" placeholder="Optional" />
+            <input id="eaMiddleName" formControlName="middleName" class="ea-input" placeholder="Optional middle name" />
           </div>
           <div class="ea-field">
-            <label for="eaLastName">Last Name *</label>
+            <label for="eaLastName">Last Name <span class="req">*</span></label>
             <input id="eaLastName" formControlName="lastName" class="ea-input" placeholder="Last name" />
           </div>
           <div class="ea-field">
-            <label for="eaPhone">Phone</label>
+            <label for="eaPhone">Phone <span class="req">*</span></label>
             <input id="eaPhone" formControlName="phone" class="ea-input" placeholder="(555) 555-5555" />
           </div>
-          <div class="ea-field ea-field-full">
-            <label for="eaEmail">Email</label>
+          <div class="ea-field">
+            <label for="eaEmail">Email <span class="req">*</span></label>
             <input id="eaEmail" type="email" formControlName="email" class="ea-input" placeholder="name@example.com" />
+          </div>
+          <div class="ea-field">
+            <label for="eaDOB">Date of Birth <span class="req">*</span></label>
+            <input id="eaDOB" type="date" formControlName="dateOfBirth" class="ea-input" />
+          </div>
+          <div class="ea-field">
+            <label for="eaSSN">Social Security Number <span class="req">*</span></label>
+            <input id="eaSSN" class="ea-input" [value]="getSsnDisplay()" (input)="onSsnInput($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" />
+          </div>
+          <div class="ea-field">
+            <label for="eaPosition">Position Applied For <span class="req">*</span></label>
+            <input id="eaPosition" formControlName="positionAppliedFor" class="ea-input" placeholder="e.g. Company Driver" />
+          </div>
+          <div class="ea-field">
+            <label for="eaAppDate">Date of Application</label>
+            <input id="eaAppDate" type="date" formControlName="dateOfApplication" class="ea-input" />
           </div>
         </div>
       </section>
 
-      <section class="ea-panel">
+      <!-- ========== CURRENT ADDRESS ========== -->
+      <section class="ea-panel" formGroupName="currentAddress">
         <div class="ea-panel-header">
           <span class="material-symbols-outlined">home_pin</span>
-          <h3>Residency</h3>
+          <div>
+            <h3>CURRENT ADDRESS</h3>
+            <p class="ea-panel-desc">Where you currently reside and how long you've lived there.</p>
+          </div>
         </div>
-        <div formArrayName="residencies">
-          <div *ngFor="let r of residencies.controls; let i = index" [formGroupName]="i" class="ea-residency-block">
+        <div class="ea-grid-2">
+          <div class="ea-field ea-field-full">
+            <label>Street <span class="req">*</span></label>
+            <input formControlName="street" class="ea-input" placeholder="Street address" />
+          </div>
+          <div class="ea-field">
+            <label>City <span class="req">*</span></label>
+            <input formControlName="city" class="ea-input" placeholder="City" />
+          </div>
+          <div class="ea-field">
+            <label>State <span class="req">*</span></label>
+            <select formControlName="state" class="ea-input">
+              <option value="">Select state</option>
+              <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+            </select>
+          </div>
+          <div class="ea-field">
+            <label>ZIP <span class="req">*</span></label>
+            <input formControlName="zip" class="ea-input" placeholder="ZIP code" maxlength="10" />
+          </div>
+          <div class="ea-field">
+            <label>Years at Address <span class="req">*</span></label>
+            <input formControlName="yearsAtAddress" class="ea-input" type="number" placeholder="Years" min="0" step="0.5" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Dynamic Previous Addresses (if < 3 years) -->
+      <div *ngIf="needMoreAddresses && (form.get('currentAddress.yearsAtAddress')?.value > 0)" class="ea-dynamic-section">
+        <div class="ea-info-banner">
+          <span class="material-symbols-outlined">info</span>
+          <span>You have {{ totalResidencyYears | number:'1.1-1' }} of 3 required years of address history. Please add previous addresses.</span>
+        </div>
+
+        <div formArrayName="previousAddresses">
+          <div *ngFor="let addr of previousAddresses.controls; let i = index" class="ea-panel ea-sub-panel" [formGroupName]="i">
+            <div class="ea-panel-header ea-panel-header-sm">
+              <h4>Previous Address {{ i + 1 }}</h4>
+              <button type="button" class="ea-btn-icon" (click)="removePreviousAddress(i)" title="Remove">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
             <div class="ea-grid-2">
-              <div class="ea-field">
-                <label>Type</label>
-                <input formControlName="residencyType" class="ea-input" placeholder="Current / Mailing / Previous" />
-              </div>
               <div class="ea-field ea-field-full">
-                <label>Street</label>
+                <label>Street <span class="req">*</span></label>
                 <input formControlName="street" class="ea-input" placeholder="Street address" />
               </div>
               <div class="ea-field">
-                <label>City</label>
+                <label>City <span class="req">*</span></label>
                 <input formControlName="city" class="ea-input" placeholder="City" />
               </div>
               <div class="ea-field">
-                <label>State</label>
-                <input formControlName="state" class="ea-input" placeholder="State" maxlength="2" />
+                <label>State <span class="req">*</span></label>
+                <select formControlName="state" class="ea-input">
+                  <option value="">Select state</option>
+                  <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+                </select>
+              </div>
+              <div class="ea-field">
+                <label>ZIP <span class="req">*</span></label>
+                <input formControlName="zip" class="ea-input" placeholder="ZIP code" maxlength="10" />
+              </div>
+              <div class="ea-field">
+                <label>Years at Address <span class="req">*</span></label>
+                <input formControlName="yearsAtAddress" class="ea-input" type="number" placeholder="Years" min="0" step="0.5" />
               </div>
             </div>
           </div>
         </div>
+        <button type="button" class="ea-btn ea-btn-add" (click)="addPreviousAddress()">
+          <span class="material-symbols-outlined">add</span> Add Previous Address
+        </button>
+      </div>
+
+      <!-- ========== WORK AUTHORIZATION & CRIMINAL BACKGROUND ========== -->
+      <section class="ea-panel" formGroupName="workAuthorization">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">verified_user</span>
+          <div>
+            <h3>WORK AUTHORIZATION & BACKGROUND</h3>
+            <p class="ea-panel-desc">Federal compliance and background information.</p>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>Are you legally authorized to work in the United States as a commercial driver under 49 CFR? <span class="req">*</span></label>
+          <div class="ea-radio-group">
+            <label class="ea-radio"><input type="radio" formControlName="legallyAuthorizedToWork" value="yes" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" formControlName="legallyAuthorizedToWork" value="no" /> <span>No</span></label>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>Have you ever been convicted of a felony? <span class="req">*</span></label>
+          <p class="ea-hint">If yes, please explain fully. Conviction of a crime is not an automatic bar to employment &mdash; all circumstances will be considered.</p>
+          <div class="ea-radio-group">
+            <label class="ea-radio"><input type="radio" formControlName="convictedOfFelony" value="yes" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" formControlName="convictedOfFelony" value="no" /> <span>No</span></label>
+          </div>
+          <div *ngIf="form.get('workAuthorization.convictedOfFelony')?.value === 'yes'" class="ea-conditional-field">
+            <label>Please provide details:</label>
+            <textarea formControlName="felonyDetails" class="ea-input ea-textarea" rows="3" placeholder="Explain the circumstances..."></textarea>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>Is there any reason you might be unable to perform the functions of the job for which you have applied? Are you applying for ADA consideration? <span class="req">*</span></label>
+          <p class="ea-hint">If yes, explain if you wish.</p>
+          <div class="ea-radio-group">
+            <label class="ea-radio"><input type="radio" formControlName="unableToPerformFunctions" value="yes" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" formControlName="unableToPerformFunctions" value="no" /> <span>No</span></label>
+          </div>
+          <div *ngIf="form.get('workAuthorization.unableToPerformFunctions')?.value === 'yes'" class="ea-conditional-field">
+            <label>Please provide details:</label>
+            <textarea formControlName="adaDetails" class="ea-input ea-textarea" rows="3" placeholder="Explain if you wish..."></textarea>
+          </div>
+        </div>
       </section>
 
+      <!-- ========== EMPLOYMENT HISTORY ========== -->
       <section class="ea-panel">
         <div class="ea-panel-header">
-          <span class="material-symbols-outlined">local_shipping</span>
-          <h3>Driving Experience</h3>
+          <span class="material-symbols-outlined">work</span>
+          <div>
+            <h3>EMPLOYMENT HISTORY</h3>
+            <p class="ea-panel-desc">Employment record for the preceding 3 years minimum.</p>
+          </div>
         </div>
-        <div class="ea-table-wrap">
-          <table class="ea-table">
-            <thead>
-              <tr>
-                <th>Equipment</th>
-                <th>Type</th>
-                <th>From</th>
-                <th>To</th>
-                <th>Miles</th>
-              </tr>
-            </thead>
-            <tbody formArrayName="drivingExperience">
-              <tr *ngFor="let d of drivingExperience.controls; let i = index" [formGroupName]="i">
-                <td data-label="Equipment"><input formControlName="classOfEquipment" class="ea-input-inline" /></td>
-                <td data-label="Type"><input formControlName="typeOfEquipment" class="ea-input-inline" /></td>
-                <td data-label="From">
-                  <app-ai-date-picker
-                    formControlName="dateFrom"
-                    [inline]="true"
-                    [inputId]="'eaDriveFrom' + i"
-                    placeholder="From"
-                    ariaLabel="Driving experience from date"
-                  ></app-ai-date-picker>
-                </td>
-                <td data-label="To">
-                  <app-ai-date-picker
-                    formControlName="dateTo"
-                    [inline]="true"
-                    [inputId]="'eaDriveTo' + i"
-                    placeholder="To"
-                    ariaLabel="Driving experience to date"
-                  ></app-ai-date-picker>
-                </td>
-                <td data-label="Miles"><input formControlName="approximateMilesTotal" class="ea-input-inline" placeholder="Miles" /></td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="ea-info-banner" style="margin-bottom:16px;">
+          <span class="material-symbols-outlined">info</span>
+          <span>All applicants must provide the following information for any previous employer during the preceding 3 years. Complete all areas below. Applicants shall also provide an additional 7 years of information for those employers for whom the applicant has operated a commercial motor vehicle (CMV).</span>
+        </div>
+
+        <!-- Current Employer -->
+        <div class="ea-sub-section" formGroupName="currentEmployer">
+          <h4 class="ea-sub-title">Current / Most Recent Employer</h4>
+          <div class="ea-grid-2">
+            <div class="ea-field ea-field-full">
+              <label>Employer Name <span class="req">*</span></label>
+              <input formControlName="employerName" class="ea-input" placeholder="Company name" />
+            </div>
+            <div class="ea-field ea-field-full">
+              <label>Street Address <span class="req">*</span></label>
+              <input formControlName="streetAddress" class="ea-input" placeholder="Street address" />
+            </div>
+            <div class="ea-field">
+              <label>City <span class="req">*</span></label>
+              <input formControlName="city" class="ea-input" placeholder="City" />
+            </div>
+            <div class="ea-field">
+              <label>State <span class="req">*</span></label>
+              <select formControlName="state" class="ea-input">
+                <option value="">Select state</option>
+                <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+              </select>
+            </div>
+            <div class="ea-field">
+              <label>ZIP Code <span class="req">*</span></label>
+              <input formControlName="zipCode" class="ea-input" placeholder="ZIP code" />
+            </div>
+            <div class="ea-field">
+              <label>Position Held <span class="req">*</span></label>
+              <input formControlName="positionHeld" class="ea-input" placeholder="Position held" />
+            </div>
+            <div class="ea-field">
+              <label>From (MM/YYYY) <span class="req">*</span></label>
+              <input formControlName="fromDate" class="ea-input" placeholder="MM/YYYY" maxlength="7" />
+            </div>
+            <div class="ea-field">
+              <label>To (MM/YYYY)</label>
+              <input formControlName="toDate" class="ea-input" placeholder="MM/YYYY or Present" maxlength="7" />
+            </div>
+            <div class="ea-field">
+              <label>Contact Person <span class="req">*</span></label>
+              <input formControlName="contactPerson" class="ea-input" placeholder="Contact person name" />
+            </div>
+            <div class="ea-field">
+              <label>Phone Number <span class="req">*</span></label>
+              <input formControlName="phoneNumber" class="ea-input" placeholder="(555) 555-5555" />
+            </div>
+            <div class="ea-field">
+              <label>Salary/Wage</label>
+              <input formControlName="salaryWage" class="ea-input" placeholder="Optional" />
+            </div>
+            <div class="ea-field">
+              <label>Reason for Leaving <span class="req">*</span></label>
+              <input formControlName="reasonForLeaving" class="ea-input" placeholder="Reason for leaving" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Previous Employers -->
+        <div *ngIf="needMoreEmployers && totalEmployerYears > 0" class="ea-info-banner" style="margin-top:16px;">
+          <span class="material-symbols-outlined">info</span>
+          <span>You have {{ totalEmployerYears | number:'1.1-1' }} of 3 required years of employment history. Please add previous employers.</span>
+        </div>
+
+        <div formArrayName="previousEmployers">
+          <div *ngFor="let emp of previousEmployers.controls; let i = index" class="ea-sub-section" [formGroupName]="i" style="margin-top:16px;">
+            <div class="ea-panel-header ea-panel-header-sm">
+              <h4 class="ea-sub-title">Previous Employer {{ i + 1 }}</h4>
+              <button type="button" class="ea-btn-icon" (click)="removePreviousEmployer(i)" title="Remove">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div class="ea-grid-2">
+              <div class="ea-field ea-field-full">
+                <label>Employer Name <span class="req">*</span></label>
+                <input formControlName="employerName" class="ea-input" placeholder="Company name" />
+              </div>
+              <div class="ea-field ea-field-full">
+                <label>Street Address <span class="req">*</span></label>
+                <input formControlName="streetAddress" class="ea-input" placeholder="Street address" />
+              </div>
+              <div class="ea-field">
+                <label>City <span class="req">*</span></label>
+                <input formControlName="city" class="ea-input" placeholder="City" />
+              </div>
+              <div class="ea-field">
+                <label>State <span class="req">*</span></label>
+                <select formControlName="state" class="ea-input">
+                  <option value="">Select state</option>
+                  <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+                </select>
+              </div>
+              <div class="ea-field">
+                <label>ZIP Code <span class="req">*</span></label>
+                <input formControlName="zipCode" class="ea-input" placeholder="ZIP code" />
+              </div>
+              <div class="ea-field">
+                <label>Position Held <span class="req">*</span></label>
+                <input formControlName="positionHeld" class="ea-input" placeholder="Position held" />
+              </div>
+              <div class="ea-field">
+                <label>From (MM/YYYY) <span class="req">*</span></label>
+                <input formControlName="fromDate" class="ea-input" placeholder="MM/YYYY" maxlength="7" />
+              </div>
+              <div class="ea-field">
+                <label>To (MM/YYYY) <span class="req">*</span></label>
+                <input formControlName="toDate" class="ea-input" placeholder="MM/YYYY" maxlength="7" />
+              </div>
+              <div class="ea-field">
+                <label>Contact Person <span class="req">*</span></label>
+                <input formControlName="contactPerson" class="ea-input" placeholder="Contact person name" />
+              </div>
+              <div class="ea-field">
+                <label>Phone Number <span class="req">*</span></label>
+                <input formControlName="phoneNumber" class="ea-input" placeholder="(555) 555-5555" />
+              </div>
+              <div class="ea-field">
+                <label>Salary/Wage</label>
+                <input formControlName="salaryWage" class="ea-input" placeholder="Optional" />
+              </div>
+              <div class="ea-field">
+                <label>Reason for Leaving <span class="req">*</span></label>
+                <input formControlName="reasonForLeaving" class="ea-input" placeholder="Reason for leaving" />
+              </div>
+              <div class="ea-field ea-field-full">
+                <label class="ea-checkbox">
+                  <input type="checkbox" formControlName="wasCMV" />
+                  <span>This employer involved operating a Commercial Motor Vehicle (CMV)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="ea-btn ea-btn-add" style="margin-top:12px;" (click)="addPreviousEmployer()">
+          <span class="material-symbols-outlined">add</span> Add Previous Employer
+        </button>
+      </section>
+
+      <!-- ========== ACCIDENT RECORD ========== -->
+      <section class="ea-panel">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">car_crash</span>
+          <div>
+            <h3>ACCIDENT RECORD</h3>
+            <p class="ea-panel-desc">Provide information for any accident you were involved in during the preceding 3 years. If none, write NONE.</p>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>Have you been involved in any accidents in the past 5 years?</label>
+          <div class="ea-radio-group">
+            <label class="ea-radio"><input type="radio" [value]="'yes'" [checked]="form.get('hasAccidents')?.value === 'yes'" (change)="onHasAccidentsChange('yes')" name="hasAccidents" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" [value]="'no'" [checked]="form.get('hasAccidents')?.value === 'no'" (change)="onHasAccidentsChange('no')" name="hasAccidents" /> <span>No</span></label>
+          </div>
+        </div>
+
+        <div *ngIf="form.get('hasAccidents')?.value === 'yes'" formArrayName="accidents">
+          <div *ngFor="let acc of accidents.controls; let i = index" class="ea-sub-section" [formGroupName]="i">
+            <div class="ea-panel-header ea-panel-header-sm">
+              <h4>Accident {{ i + 1 }}</h4>
+              <button type="button" class="ea-btn-icon" (click)="removeAccident(i)" title="Remove">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div class="ea-grid-2">
+              <div class="ea-field">
+                <label>Date <span class="req">*</span></label>
+                <input type="date" formControlName="date" class="ea-input" />
+              </div>
+              <div class="ea-field">
+                <label>Nature of Accident <span class="req">*</span></label>
+                <select formControlName="natureOfAccident" class="ea-input">
+                  <option value="">Select type</option>
+                  <option value="Head-On">Head-On</option>
+                  <option value="Rear-End">Rear-End</option>
+                  <option value="Overturn">Overturn</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="ea-field">
+                <label>Fatalities</label>
+                <input formControlName="fatalities" class="ea-input" type="number" min="0" />
+              </div>
+              <div class="ea-field">
+                <label>Injuries</label>
+                <input formControlName="injuries" class="ea-input" type="number" min="0" />
+              </div>
+              <div class="ea-field ea-field-full">
+                <label class="ea-checkbox">
+                  <input type="checkbox" formControlName="hazardousMaterialSpill" />
+                  <span>Hazardous Material Spill</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="ea-btn ea-btn-add" (click)="addAccident()">
+            <span class="material-symbols-outlined">add</span> Add Another Accident
+          </button>
         </div>
       </section>
 
+      <!-- ========== TRAFFIC CONVICTIONS ========== -->
+      <section class="ea-panel">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">gavel</span>
+          <div>
+            <h3>TRAFFIC CONVICTIONS</h3>
+            <p class="ea-panel-desc">Provide information for all motor vehicle violations for which you were convicted or pled guilty to during the preceding 3 years (do not include parking tickets). If none, write NONE.</p>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>Have you had any motor vehicle violations in the past 5 years?</label>
+          <div class="ea-radio-group">
+            <label class="ea-radio"><input type="radio" [value]="'yes'" [checked]="form.get('hasViolations')?.value === 'yes'" (change)="onHasViolationsChange('yes')" name="hasViolations" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" [value]="'no'" [checked]="form.get('hasViolations')?.value === 'no'" (change)="onHasViolationsChange('no')" name="hasViolations" /> <span>No</span></label>
+          </div>
+        </div>
+
+        <div *ngIf="form.get('hasViolations')?.value === 'yes'" formArrayName="violations">
+          <div *ngFor="let viol of violations.controls; let i = index" class="ea-sub-section" [formGroupName]="i">
+            <div class="ea-panel-header ea-panel-header-sm">
+              <h4>Violation {{ i + 1 }}</h4>
+              <button type="button" class="ea-btn-icon" (click)="removeViolation(i)" title="Remove">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div class="ea-grid-2">
+              <div class="ea-field">
+                <label>Location <span class="req">*</span></label>
+                <input formControlName="location" class="ea-input" placeholder="City, State" />
+              </div>
+              <div class="ea-field">
+                <label>Date <span class="req">*</span></label>
+                <input type="date" formControlName="date" class="ea-input" />
+              </div>
+              <div class="ea-field">
+                <label>Charge <span class="req">*</span></label>
+                <input formControlName="charge" class="ea-input" placeholder="Charge / violation" />
+              </div>
+              <div class="ea-field">
+                <label>Penalty <span class="req">*</span></label>
+                <input formControlName="penalty" class="ea-input" placeholder="Penalty assessed" />
+              </div>
+            </div>
+          </div>
+          <button type="button" class="ea-btn ea-btn-add" (click)="addViolation()">
+            <span class="material-symbols-outlined">add</span> Add Another Violation
+          </button>
+        </div>
+      </section>
+
+      <!-- ========== LICENSE HISTORY ========== -->
+      <section class="ea-panel">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">badge</span>
+          <div>
+            <h3>DISQUALIFICATIONS / LICENSE HISTORY</h3>
+            <p class="ea-panel-desc">List all driver licenses or permits held in the past 3 years.</p>
+          </div>
+        </div>
+
+        <div formArrayName="licenses">
+          <div *ngFor="let lic of licenses.controls; let i = index" class="ea-sub-section" [formGroupName]="i">
+            <div class="ea-panel-header ea-panel-header-sm">
+              <h4>License {{ i + 1 }}</h4>
+              <button type="button" class="ea-btn-icon" *ngIf="licenses.length > 1" (click)="removeLicense(i)" title="Remove">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div class="ea-grid-2">
+              <div class="ea-field">
+                <label>State <span class="req">*</span></label>
+                <select formControlName="state" class="ea-input">
+                  <option value="">Select state</option>
+                  <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+                </select>
+              </div>
+              <div class="ea-field">
+                <label>License No. <span class="req">*</span></label>
+                <input formControlName="licenseNumber" class="ea-input" placeholder="License number" />
+              </div>
+              <div class="ea-field">
+                <label>Type <span class="req">*</span></label>
+                <select formControlName="type" class="ea-input">
+                  <option value="">Select type</option>
+                  <option value="CDL-A">CDL Class A</option>
+                  <option value="CDL-B">CDL Class B</option>
+                  <option value="CDL-C">CDL Class C</option>
+                  <option value="Non-CDL">Non-CDL</option>
+                  <option value="Learner Permit">Learner Permit</option>
+                </select>
+              </div>
+              <div class="ea-field">
+                <label>Expiration Date <span class="req">*</span></label>
+                <input type="date" formControlName="expirationDate" class="ea-input" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="ea-btn ea-btn-add" (click)="addLicense()">
+          <span class="material-symbols-outlined">add</span> Add Another License
+        </button>
+      </section>
+
+      <!-- ========== DRIVING EXPERIENCE ========== -->
+      <section class="ea-panel" formGroupName="drivingExperience">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">local_shipping</span>
+          <div>
+            <h3>DRIVING EXPERIENCE</h3>
+            <p class="ea-panel-desc">Check YES or NO for each class of equipment. If YES, provide details.</p>
+          </div>
+        </div>
+
+        <!-- Straight Truck -->
+        <div class="ea-exp-row" formGroupName="straightTruck">
+          <div class="ea-exp-header">
+            <label class="ea-checkbox">
+              <input type="checkbox" formControlName="hasExperience" />
+              <span>Straight Truck</span>
+            </label>
+          </div>
+          <div *ngIf="form.get('drivingExperience.straightTruck.hasExperience')?.value" class="ea-grid-4">
+            <div class="ea-field">
+              <label>Type of Equipment</label>
+              <input formControlName="typeOfEquipment" class="ea-input ea-input-sm" placeholder="Van, Tank, Flat, Dump, Refer" />
+            </div>
+            <div class="ea-field">
+              <label>From (MM/YYYY)</label>
+              <input formControlName="dateFrom" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>To (MM/YYYY)</label>
+              <input formControlName="dateTo" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>Approx. Miles</label>
+              <input formControlName="approxMiles" class="ea-input ea-input-sm" placeholder="Total miles" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Tractor and Semi-Trailer -->
+        <div class="ea-exp-row" formGroupName="tractorSemiTrailer">
+          <div class="ea-exp-header">
+            <label class="ea-checkbox">
+              <input type="checkbox" formControlName="hasExperience" />
+              <span>Tractor and Semi-Trailer</span>
+            </label>
+          </div>
+          <div *ngIf="form.get('drivingExperience.tractorSemiTrailer.hasExperience')?.value" class="ea-grid-4">
+            <div class="ea-field">
+              <label>Type of Equipment</label>
+              <input formControlName="typeOfEquipment" class="ea-input ea-input-sm" placeholder="Van, Tank, Flat, Dump, Refer" />
+            </div>
+            <div class="ea-field">
+              <label>From (MM/YYYY)</label>
+              <input formControlName="dateFrom" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>To (MM/YYYY)</label>
+              <input formControlName="dateTo" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>Approx. Miles</label>
+              <input formControlName="approxMiles" class="ea-input ea-input-sm" placeholder="Total miles" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Tractor Two Trailers -->
+        <div class="ea-exp-row" formGroupName="tractorTwoTrailers">
+          <div class="ea-exp-header">
+            <label class="ea-checkbox">
+              <input type="checkbox" formControlName="hasExperience" />
+              <span>Tractor Two Trailers</span>
+            </label>
+          </div>
+          <div *ngIf="form.get('drivingExperience.tractorTwoTrailers.hasExperience')?.value" class="ea-grid-4">
+            <div class="ea-field">
+              <label>Type of Equipment</label>
+              <input formControlName="typeOfEquipment" class="ea-input ea-input-sm" placeholder="Van, Tank, Flat, Dump, Refer" />
+            </div>
+            <div class="ea-field">
+              <label>From (MM/YYYY)</label>
+              <input formControlName="dateFrom" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>To (MM/YYYY)</label>
+              <input formControlName="dateTo" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>Approx. Miles</label>
+              <input formControlName="approxMiles" class="ea-input ea-input-sm" placeholder="Total miles" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Motorcoach School Bus (More than 8 passengers) -->
+        <div class="ea-exp-row" formGroupName="motorcoachSchoolBus">
+          <div class="ea-exp-header">
+            <label class="ea-checkbox">
+              <input type="checkbox" formControlName="hasExperience" />
+              <span>Motorcoach / School Bus (More than 8 Passengers)</span>
+            </label>
+          </div>
+          <div *ngIf="form.get('drivingExperience.motorcoachSchoolBus.hasExperience')?.value" class="ea-grid-4">
+            <div class="ea-field">
+              <label>Type of Equipment</label>
+              <input formControlName="typeOfEquipment" class="ea-input ea-input-sm" placeholder="Type" />
+            </div>
+            <div class="ea-field">
+              <label>From (MM/YYYY)</label>
+              <input formControlName="dateFrom" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>To (MM/YYYY)</label>
+              <input formControlName="dateTo" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>Approx. Miles</label>
+              <input formControlName="approxMiles" class="ea-input ea-input-sm" placeholder="Total miles" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Motorcoach School Bus (More than 15 passengers) -->
+        <div class="ea-exp-row" formGroupName="motorcoachSchoolBusMore15">
+          <div class="ea-exp-header">
+            <label class="ea-checkbox">
+              <input type="checkbox" formControlName="hasExperience" />
+              <span>Motorcoach / School Bus (More than 15 Passengers)</span>
+            </label>
+          </div>
+          <div *ngIf="form.get('drivingExperience.motorcoachSchoolBusMore15.hasExperience')?.value" class="ea-grid-4">
+            <div class="ea-field">
+              <label>Type of Equipment</label>
+              <input formControlName="typeOfEquipment" class="ea-input ea-input-sm" placeholder="Type" />
+            </div>
+            <div class="ea-field">
+              <label>From (MM/YYYY)</label>
+              <input formControlName="dateFrom" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>To (MM/YYYY)</label>
+              <input formControlName="dateTo" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>Approx. Miles</label>
+              <input formControlName="approxMiles" class="ea-input ea-input-sm" placeholder="Total miles" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Other -->
+        <div class="ea-exp-row" formGroupName="other">
+          <div class="ea-exp-header">
+            <label class="ea-checkbox">
+              <input type="checkbox" formControlName="hasExperience" />
+              <span>Other</span>
+            </label>
+          </div>
+          <div *ngIf="form.get('drivingExperience.other.hasExperience')?.value" class="ea-grid-4">
+            <div class="ea-field ea-field-full">
+              <label>Description</label>
+              <input formControlName="description" class="ea-input ea-input-sm" placeholder="Describe equipment" />
+            </div>
+            <div class="ea-field">
+              <label>Type of Equipment</label>
+              <input formControlName="typeOfEquipment" class="ea-input ea-input-sm" placeholder="Type" />
+            </div>
+            <div class="ea-field">
+              <label>From (MM/YYYY)</label>
+              <input formControlName="dateFrom" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>To (MM/YYYY)</label>
+              <input formControlName="dateTo" class="ea-input ea-input-sm" placeholder="MM/YYYY" />
+            </div>
+            <div class="ea-field">
+              <label>Approx. Miles</label>
+              <input formControlName="approxMiles" class="ea-input ea-input-sm" placeholder="Total miles" />
+            </div>
+          </div>
+        </div>
+
+        <div class="ea-field" style="margin-top:16px;">
+          <label>List states operated in for the last five years:</label>
+          <input formControlName="statesOperatedIn" class="ea-input" placeholder="e.g. TX, CA, NY, FL" />
+        </div>
+      </section>
+
+      <!-- ========== DRUG AND ALCOHOL INFORMATION ========== -->
+      <section class="ea-panel" formGroupName="drugAlcohol">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">science</span>
+          <div>
+            <h3>DRUG &amp; ALCOHOL INFORMATION</h3>
+            <p class="ea-panel-desc">In the previous three (3) years have you:</p>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>1. Violated the Alcohol and Controlled Substance prohibitions under subpart B of 49CFR Part 382 or 49CFR Part 40? <span class="req">*</span></label>
+          <div class="ea-radio-group ea-radio-group-3">
+            <label class="ea-radio"><input type="radio" formControlName="violatedSubstanceProhibitions" value="yes" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" formControlName="violatedSubstanceProhibitions" value="no" /> <span>No</span></label>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>2. Failed to undertake or complete a rehabilitation program prescribed by a SAP pursuant to 49CFR 382.605? <span class="req">*</span></label>
+          <div class="ea-radio-group ea-radio-group-3">
+            <label class="ea-radio"><input type="radio" formControlName="failedRehabProgram" value="yes" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" formControlName="failedRehabProgram" value="no" /> <span>No</span></label>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>3. Had an alcohol test result of 0.04 or higher? <span class="req">*</span></label>
+          <div class="ea-radio-group ea-radio-group-3">
+            <label class="ea-radio"><input type="radio" formControlName="alcoholTestResult04OrHigher" value="yes" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" formControlName="alcoholTestResult04OrHigher" value="no" /> <span>No</span></label>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>4. Tested positive for controlled substances? <span class="req">*</span></label>
+          <div class="ea-radio-group ea-radio-group-3">
+            <label class="ea-radio"><input type="radio" formControlName="positiveControlledSubstancesTest" value="yes" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" formControlName="positiveControlledSubstancesTest" value="no" /> <span>No</span></label>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>5. Refused to submit to a required alcohol or controlled substances test (including verified adulterated or substituted drug test results)? <span class="req">*</span></label>
+          <div class="ea-radio-group ea-radio-group-3">
+            <label class="ea-radio"><input type="radio" formControlName="refusedRequiredTest" value="yes" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" formControlName="refusedRequiredTest" value="no" /> <span>No</span></label>
+          </div>
+        </div>
+
+        <div class="ea-question">
+          <label>6. Had any other violation of DOT agency drug and alcohol testing regulations? <span class="req">*</span></label>
+          <div class="ea-radio-group ea-radio-group-3">
+            <label class="ea-radio"><input type="radio" formControlName="otherDOTViolation" value="yes" /> <span>Yes</span></label>
+            <label class="ea-radio"><input type="radio" formControlName="otherDOTViolation" value="no" /> <span>No</span></label>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== CERTIFICATION ========== -->
+      <section class="ea-panel" formGroupName="certification">
+        <div class="ea-panel-header">
+          <span class="material-symbols-outlined">draw</span>
+          <div>
+            <h3>APPLICANT CERTIFICATION</h3>
+            <p class="ea-panel-desc">To be read and signed by applicant.</p>
+          </div>
+        </div>
+
+        <div class="ea-certification-text">
+          <p>I authorize investigations into my personal, employment, financial and related history as necessary for employment decisions.</p>
+          <p>I understand that false or misleading information may result in discharge.</p>
+          <p>I understand prior employers may be contacted for safety performance history as required by 49 CFR 391.23.</p>
+          <p>I have the right to review, correct, and rebut information provided by previous employers.</p>
+          <p>I certify this application is true and complete to the best of my knowledge.</p>
+        </div>
+
+        <div class="ea-grid-2" style="margin-top:16px;">
+          <div class="ea-field">
+            <label>Applicant Printed Name <span class="req">*</span></label>
+            <input formControlName="applicantPrintedName" class="ea-input" placeholder="Full legal name" />
+          </div>
+          <div class="ea-field">
+            <label>Signature <span class="req">*</span></label>
+            <input formControlName="applicantSignature" class="ea-input ea-input-signature" placeholder="Type your full legal name as signature" />
+          </div>
+          <div class="ea-field">
+            <label>Date <span class="req">*</span></label>
+            <input type="date" formControlName="signatureDate" class="ea-input" />
+          </div>
+          <div class="ea-field ea-field-full">
+            <label class="ea-checkbox">
+              <input type="checkbox" formControlName="certificationAccepted" />
+              <span>I certify that the information provided above is true and correct to the best of my knowledge. <span class="req">*</span></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== ACTIONS ========== -->
       <div class="ea-actions">
         <button type="button" class="ea-btn ea-btn-secondary" (click)="autosave()" [disabled]="saving">
           <span class="material-symbols-outlined">save</span>
-          {{ saving ? 'Saving…' : 'Save Draft' }}
+          {{ saving ? 'Saving...' : 'Save Draft' }}
         </button>
-        <button type="button" class="ea-btn ea-btn-primary" (click)="submit()">
-          <span class="material-symbols-outlined">preview</span>
-          Review & Submit
+        <button type="button" class="ea-btn ea-btn-primary" (click)="submit()" [disabled]="submitting">
+          <span class="material-symbols-outlined">send</span>
+          {{ submitting ? 'Submitting...' : 'Review & Submit' }}
         </button>
       </div>
     </form>

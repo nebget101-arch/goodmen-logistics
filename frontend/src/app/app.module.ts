@@ -57,6 +57,14 @@ import { BillingComponent } from './billing/billing.component';
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
 import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/has-permission.directive';
+import { DriverComplianceSectionComponent } from './components/drivers/driver-compliance-section/driver-compliance-section.component';
+import { PreEmploymentGateComponent } from './components/drivers/pre-employment-gate/pre-employment-gate.component';
+import { InvestigationPanelComponent } from './components/drivers/investigation-panel/investigation-panel.component';
+import { RecordResponseModalComponent } from './components/drivers/investigation-panel/record-response-modal/record-response-modal.component';
+import { InvestigationHistoryComponent } from './components/drivers/investigation-history/investigation-history.component';
+import { ConsentFormComponent } from './components/onboarding-packet/consent-form/consent-form.component';
+import { EmployerHistoryTieredComponent } from './components/onboarding-packet/employer-history-tiered/employer-history-tiered.component';
+import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
 
 @NgModule({
   declarations: [
@@ -103,7 +111,15 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/
     RoadsideAiCallerComponent,
     PaymentMethodFormComponent,
     TrialBannerComponent,
-    BillingComponent
+    BillingComponent,
+    DriverComplianceSectionComponent,
+    PreEmploymentGateComponent,
+    InvestigationPanelComponent,
+    RecordResponseModalComponent,
+    InvestigationHistoryComponent,
+    ConsentFormComponent,
+    EmployerHistoryTieredComponent,
+    DisqualificationHistoryComponent
   ],
   imports: [
     BrowserModule,

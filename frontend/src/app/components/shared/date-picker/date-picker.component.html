@@ -10,10 +10,11 @@
     (ngModelChange)="value = $event"
   />
   <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
-  <mat-datepicker
-    #picker
-    [startView]="startView"
-    [touchUi]="touchUi"
-  ></mat-datepicker>
+  <mat-datepicker #picker [startView]="startView" [touchUi]="touchUi">
+    <mat-datepicker-actions>
+      <button mat-button class="dp-footer-btn dp-footer-today" (click)="setToday(picker)">Today</button>
+      <button mat-button class="dp-footer-btn dp-footer-clear" (click)="clearDate(picker)">Clear</button>
+    </mat-datepicker-actions>
+  </mat-datepicker>
 </mat-form-field>
 

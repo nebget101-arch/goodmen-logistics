@@ -1,0 +1,202 @@
+<div *ngIf="loading" class="loading-state">Loading compliance dashboard...</div>
+<div *ngIf="error" class="alert-error">{{ error }}</div>
+
+<ng-container *ngIf="!loading && summary">
+  <!-- ═══ Summary Cards ═══ -->
+  <div class="kpi-row">
+    <div class="kpi-card kpi-blue">
+      <span class="material-symbols-outlined kpi-icon">groups</span>
+      <span class="kpi-label">Total Drivers</span>
+      <span class="kpi-value">{{ summary.totalDrivers }}</span>
+      <span class="kpi-sub">{{ summary.fullyCompliantPercent }}% fully compliant</span>
+    </div>
+
+    <button
+      type="button"
+      class="kpi-card kpi-red"
+      [class.kpi-alert]="summary.overdueCount > 0"
+      (click)="onFilterChange('overdue')">
+      <span class="material-symbols-outlined kpi-icon">error</span>
+      <span class="kpi-label">Overdue Items</span>
+      <span class="kpi-value">{{ summary.overdueCount }}</span>
+      <span class="kpi-sub">Click to filter</span>
+    </button>
+
+    <button
+      type="button"
+      class="kpi-card kpi-yellow"
+      [class.kpi-alert]="summary.dueSoonCount > 0"
+      (click)="onFilterChange('due_soon')">
+      <span class="material-symbols-outlined kpi-icon">schedule</span>
+      <span class="kpi-label">Due in 30 Days</span>
+      <span class="kpi-value">{{ summary.dueSoonCount }}</span>
+      <span class="kpi-sub">Click to filter</span>
+    </button>
+
+    <div class="kpi-card kpi-orange">
+      <span class="material-symbols-outlined kpi-icon">medical_information</span>
+      <span class="kpi-label">Medical Certs Expiring</span>
+      <div class="kpi-bands">
+        <span class="band band-red">{{ summary.medicalCertsExpiring30 }} <small>30d</small></span>
+        <span class="band band-yellow">{{ summary.medicalCertsExpiring60 }} <small>60d</small></span>
+        <span class="band band-green">{{ summary.medicalCertsExpiring90 }} <small>90d</small></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Bulk Actions ═══ -->
+  <div class="action-row">
+    <div class="year-selector">
+      <label for="yearSelect">Year:</label>
+      <select id="yearSelect" [(ngModel)]="selectedYear">
+        <option *ngFor="let y of yearOptions" [ngValue]="y">{{ y }}</option>
+      </select>
+    </div>
+    <button
+      type="button"
+      class="btn btn-primary"
+      [disabled]="generating"
+      (click)="generateItems()">
+      <span class="material-symbols-outlined">auto_fix_high</span>
+      {{ generating ? 'Generating...' : 'Generate Annual Items' }}
+    </button>
+    <button
+      type="button"
+      class="btn btn-secondary"
+      [disabled]="exporting"
+      (click)="exportReport()">
+      <span class="material-symbols-outlined">download</span>
+      {{ exporting ? 'Exporting...' : 'Export Report' }}
+    </button>
+    <button type="button" class="btn btn-secondary" (click)="loadAll()">
+      <span class="material-symbols-outlined">refresh</span> Refresh
+    </button>
+  </div>
+
+  <!-- ═══ Compliance Grid ═══ -->
+  <section class="section-card">
+    <div class="section-header">
+      <h2>Fleet Compliance Grid</h2>
+      <div class="filter-bar">
+        <button
+          *ngFor="let f of ['all', 'overdue', 'due_soon', 'compliant']"
+          type="button"
+          class="filter-btn"
+          [class.active]="statusFilter === f"
+          (click)="onFilterChange($any(f))">
+          {{ f === 'all' ? 'All' : f === 'overdue' ? 'Overdue' : f === 'due_soon' ? 'Due Soon' : 'Compliant' }}
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="loadingGrid" class="loading-state">Loading compliance data...</div>
+
+    <div class="table-wrap" *ngIf="!loadingGrid">
+      <table class="compliance-table" aria-label="Fleet compliance grid">
+        <thead>
+          <tr>
+            <th class="sortable" (click)="onSort('driverName')">
+              Driver Name
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('driverName') }}</span>
+            </th>
+            <th class="sortable" (click)="onSort('mvrInquiry')">
+              MVR Inquiry
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('mvrInquiry') }}</span>
+            </th>
+            <th class="sortable" (click)="onSort('drivingRecordReview')">
+              Driving Record Review
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('drivingRecordReview') }}</span>
+            </th>
+            <th class="sortable" (click)="onSort('clearinghouseQuery')">
+              Clearinghouse Query
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('clearinghouseQuery') }}</span>
+            </th>
+            <th class="sortable" (click)="onSort('medicalCert')">
+              Medical Cert
+              <span class="material-symbols-outlined sort-icon">{{ sortIcon('medicalCert') }}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let row of filteredRows"
+            class="clickable-row"
+            (click)="goToDriver(row.driverId)"
+            [attr.aria-label]="'View compliance for ' + row.driverName">
+            <td class="driver-name">{{ row.driverName }}</td>
+            <td>
+              <span class="status-chip" [ngClass]="statusClass(row.mvrInquiry.status)">
+                {{ statusLabel(row.mvrInquiry.status) }}
+              </span>
+              <span class="cell-date" *ngIf="row.mvrInquiry.dueDate">{{ formatDate(row.mvrInquiry.dueDate) }}</span>
+            </td>
+            <td>
+              <span class="status-chip" [ngClass]="statusClass(row.drivingRecordReview.status)">
+                {{ statusLabel(row.drivingRecordReview.status) }}
+              </span>
+              <span class="cell-date" *ngIf="row.drivingRecordReview.dueDate">{{ formatDate(row.drivingRecordReview.dueDate) }}</span>
+            </td>
+            <td>
+              <span class="status-chip" [ngClass]="statusClass(row.clearinghouseQuery.status)">
+                {{ statusLabel(row.clearinghouseQuery.status) }}
+              </span>
+              <span class="cell-date" *ngIf="row.clearinghouseQuery.dueDate">{{ formatDate(row.clearinghouseQuery.dueDate) }}</span>
+            </td>
+            <td>
+              <span class="status-chip" [ngClass]="statusClass(row.medicalCert.status)">
+                {{ statusLabel(row.medicalCert.status) }}
+              </span>
+              <span class="cell-date" *ngIf="row.medicalCert.dueDate">{{ formatDate(row.medicalCert.dueDate) }}</span>
+            </td>
+          </tr>
+          <tr *ngIf="filteredRows.length === 0">
+            <td colspan="5" class="empty-state">No compliance records match the current filter.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══ Medical Cert Expiry Section ═══ -->
+  <section class="section-card">
+    <div class="section-header">
+      <h2>Medical Certificate Expiry</h2>
+    </div>
+
+    <div *ngIf="loadingMedical" class="loading-state">Loading medical cert data...</div>
+
+    <div class="table-wrap" *ngIf="!loadingMedical">
+      <table class="compliance-table" aria-label="Medical certificate expiry report">
+        <thead>
+          <tr>
+            <th>Driver Name</th>
+            <th>CDL #</th>
+            <th>Expiry Date</th>
+            <th>Days Remaining</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of medicalRows" [ngClass]="urgencyClass(row.urgency)">
+            <td>
+              <button type="button" class="link-btn" (click)="goToDriver(row.driverId)">
+                {{ row.driverName }}
+              </button>
+            </td>
+            <td class="mono">{{ row.cdlNumber }}</td>
+            <td>{{ formatDate(row.expiryDate) }}</td>
+            <td class="mono">{{ row.daysRemaining }}</td>
+            <td>
+              <span class="status-chip" [ngClass]="'chip-medical-' + row.urgency">
+                {{ urgencyLabel(row.urgency) }}
+              </span>
+            </td>
+          </tr>
+          <tr *ngIf="medicalRows.length === 0">
+            <td colspan="5" class="empty-state">No medical certificate data available.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</ng-container>

@@ -771,8 +771,9 @@ export class ApiService {
     driverId: string,
     requirementKey: string,
     payload: {
-      status: 'missing' | 'sent' | 'received' | 'complete';
+      status: 'missing' | 'sent' | 'received' | 'complete' | 'review_required';
       evidenceDocumentId?: string;
+      completionDate?: string;
       note?: string;
     }
   ): Observable<any> {
@@ -785,6 +786,68 @@ export class ApiService {
   getDqfRequirementChanges(driverId: string, requirementKey: string): Observable<any> {
     return this.http.get(
       `${this.baseUrl}/dqf/requirement/${driverId}/${requirementKey}/changes`
+    );
+  }
+
+  getDriverClearanceStatus(driverId: string): Observable<{
+    cleared: boolean;
+    requirements?: { key: string; label: string; met: boolean; link?: string }[];
+    missingItems: string[];
+  }> {
+    return this.http.get<{ cleared: boolean; requirements?: { key: string; label: string; met: boolean; link?: string }[]; missingItems: string[] }>(
+      `${this.baseUrl}/drug-alcohol/driver/${driverId}/clearance-status`
+    );
+  }
+
+  // ── Pre-Hire Documents (FN-237) ──
+  getDriverPrehireDocuments(driverId: string): Observable<any[]> {
+    return this.http.get<any[]>(
+      `${this.baseUrl}/dqf/driver/${driverId}/prehire-documents`
+    );
+  }
+
+  // ── FN-240: Auto-pull employment application document ──
+  autoPullEmploymentApp(driverId: string): Observable<any> {
+    return this.http.post<any>(
+      `${this.baseUrl}/dqf/driver/${driverId}/auto-pull-emp-app`,
+      {}
+    );
+  }
+
+  // ── Drug & Alcohol Test Management (FN-214) ──
+  getDrugAlcoholTests(driverId: string): Observable<any[]> {
+    return this.http.get<any[]>(
+      `${this.baseUrl}/drug-alcohol/driver/${driverId}/tests`
+    );
+  }
+
+  createDrugAlcoholTest(driverId: string, payload: any): Observable<any> {
+    return this.http.post(
+      `${this.baseUrl}/drug-alcohol/driver/${driverId}/tests`,
+      payload
+    );
+  }
+
+  updateDrugAlcoholTest(testId: string, payload: any): Observable<any> {
+    return this.http.put(
+      `${this.baseUrl}/drug-alcohol/tests/${testId}`,
+      payload
+    );
+  }
+
+  markTestClearinghouseReported(testId: string): Observable<any> {
+    return this.http.patch(
+      `${this.baseUrl}/drug-alcohol/tests/${testId}/clearinghouse-reported`,
+      {}
+    );
+  }
+
+  uploadDrugTestResultDocument(driverId: string, testId: string, file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post(
+      `${this.baseUrl}/drug-alcohol/driver/${driverId}/tests/${testId}/result-document`,
+      formData
     );
   }
 
@@ -844,6 +907,47 @@ export class ApiService {
     return this.http.post(
       `${publicBase}/${encodeURIComponent(packetId)}/esignatures`,
       payload,
+      { params: { token } }
+    );
+  }
+
+  // Public onboarding document upload (FN-250)
+  uploadOnboardingDocument(
+    packetId: string,
+    docType: string,
+    file: File,
+    token: string
+  ): Observable<{ document: { id: string; document_type: string; file_name: string; uploaded_at: string } }> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('documentType', docType);
+    return this.http.post<{ document: { id: string; document_type: string; file_name: string; uploaded_at: string } }>(
+      `${publicBase}/${encodeURIComponent(packetId)}/upload-document`,
+      formData,
+      { params: { token } }
+    );
+  }
+
+  getOnboardingDocuments(
+    packetId: string,
+    token: string
+  ): Observable<{ documents: { id: string; document_type: string; file_name: string; uploaded_at: string }[] }> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    return this.http.get<{ documents: { id: string; document_type: string; file_name: string; uploaded_at: string }[] }>(
+      `${publicBase}/${encodeURIComponent(packetId)}/documents`,
+      { params: { token } }
+    );
+  }
+
+  deleteOnboardingDocument(
+    packetId: string,
+    documentId: string,
+    token: string
+  ): Observable<{ success: boolean }> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    return this.http.delete<{ success: boolean }>(
+      `${publicBase}/${encodeURIComponent(packetId)}/documents/${encodeURIComponent(documentId)}`,
       { params: { token } }
     );
   }

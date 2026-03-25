@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
@@ -7,6 +7,16 @@ import { ApiService } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AccessControlService } from '../../services/access-control.service';
+import {
+  DrugAlcoholTest,
+  DrugTestType,
+  SubstanceType,
+  DrugTestResult,
+  DRUG_TEST_TYPE_LABELS,
+  SUBSTANCE_TYPE_LABELS,
+  DRUG_TEST_RESULT_LABELS
+} from '../../models/drug-alcohol.model';
+import { InvestigationHistoryComponent } from './investigation-history/investigation-history.component';
 
 @Component({
   selector: 'app-drivers',
@@ -92,7 +102,23 @@ export class DriversComponent implements OnInit, OnDestroy {
   
   driverDocuments: any[] = [];
   uploadingDocuments: { [key: string]: boolean } = {};
-  
+
+  // Pre-Hire Documents (FN-237)
+  prehireDocuments: any[] = [];
+  prehireDocumentsLoading = false;
+
+  /** Human-readable labels for pre-hire document types */
+  prehireDocTypeLabels: Record<string, string> = {
+    employment_application_signed: 'Employment Application Document',
+    consent_fcra_disclosure_signed: 'FCRA Disclosure',
+    consent_fcra_authorization_signed: 'FCRA Authorization',
+    consent_release_of_information_signed: 'Release of Info / DQ & Safety',
+    consent_drug_alcohol_release_signed: 'Release of Info / Drug & Alcohol',
+    consent_mvr_disclosure_signed: 'MVR Disclosure',
+    consent_mvr_authorization_signed: 'MVR Authorization',
+    consent_mvr_release_of_liability_signed: 'MVR Release of Liability'
+  };
+
   saving = false;
   canManageDrivers = false;
   canAccessDqf = false;
@@ -139,11 +165,67 @@ export class DriversComponent implements OnInit, OnDestroy {
     recentIncidents: []
   };
 
+  // FN-240: Label overrides for DQF requirement display names
+  dqfLabelOverrides: Record<string, string> = {
+    employment_application_submitted: 'Employment Application Document'
+  };
+
+  // FN-240: Auto-pull state
+  autoPullingEmpApp = false;
+  autoPullEmpAppError = '';
+
   // Dynamic DQF requirements
   dqfRequirements: any[] = [];
   dqfRequirementsLoading = false;
   dqfCompleteness = 0;
   updateingRequirementKey: string | null = null;
+
+  // Categorized DQF requirements
+  dqfCategories: {
+    key: string;
+    label: string;
+    requirements: any[];
+    expanded: boolean;
+  }[] = [];
+
+  // FN-258: Active DQF tab for tab navigation
+  activeDqfTab = 'pre_hire';
+
+  // Clearance status
+  clearanceStatus: { cleared: boolean; requirements?: any[]; missingItems: string[] } = {
+    cleared: false,
+    missingItems: []
+  };
+  clearanceLoading = false;
+
+  // ── Drug & Alcohol Test Management (FN-214) ──
+  drugAlcoholTests: DrugAlcoholTest[] = [];
+  drugAlcoholTestsLoading = false;
+  showDrugTestForm = false;
+  editingDrugTest: DrugAlcoholTest | null = null;
+  savingDrugTest = false;
+  drugTestTypeFilter: DrugTestType | '' = '';
+  drugTestClearinghouseFilter: 'pending' | '' = '';
+
+  drugTestTypeLabels = DRUG_TEST_TYPE_LABELS;
+  substanceTypeLabels = SUBSTANCE_TYPE_LABELS;
+  drugTestResultLabels = DRUG_TEST_RESULT_LABELS;
+
+  drugTestTypes: DrugTestType[] = [
+    'pre_employment', 'random', 'reasonable_suspicion',
+    'post_accident', 'return_to_duty', 'follow_up'
+  ];
+  substanceTypes: SubstanceType[] = ['drug', 'alcohol', 'both'];
+  drugTestResults: DrugTestResult[] = ['negative', 'positive', 'refused', 'cancelled', 'invalid'];
+
+  newDrugTest: DrugAlcoholTest = this.getEmptyDrugTest('');
+
+  // Audit trail
+  auditTrailOpen: { [key: string]: boolean } = {};
+  auditTrailData: { [key: string]: any[] } = {};
+  auditTrailLoading: { [key: string]: boolean } = {};
+
+  @ViewChild('investigationHistory') investigationHistory?: InvestigationHistoryComponent;
 
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
@@ -429,7 +511,9 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   isExpiringSoon(dateStr: string): boolean {
+    if (!dateStr) return false;
     const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return false;
     const thirtyDaysFromNow = new Date(Date.now() + 30*24*60*60*1000);
     return date <= thirtyDaysFromNow;
   }
@@ -516,9 +600,38 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.showDQFForm = true;
     this.showAddForm = false;
     this.editingDriver = null;
+    this.activeDqfTab = 'pre_hire';
     this.loadDQFStatus(driver);
     this.loadDriverDocuments(driver.id);
     this.loadDriverSafetySummary(driver.id);
+    this.loadDrugAlcoholTests(driver.id);
+    this.loadPrehireDocuments(driver.id);
+  }
+
+  /** Load pre-hire documents for a driver (FN-237) */
+  loadPrehireDocuments(driverId: string): void {
+    this.prehireDocumentsLoading = true;
+    this.prehireDocuments = [];
+    this.apiService.getDriverPrehireDocuments(driverId).subscribe({
+      next: (docs) => {
+        this.prehireDocuments = docs || [];
+        this.prehireDocumentsLoading = false;
+      },
+      error: () => {
+        this.prehireDocuments = [];
+        this.prehireDocumentsLoading = false;
+      }
+    });
+  }
+
+  /** Get human-readable label for a pre-hire document type */
+  getPrehireDocLabel(docType: string): string {
+    return this.prehireDocTypeLabels[docType] || docType;
+  }
+
+  /** Get the download URL for a pre-hire document */
+  getPrehireDocDownloadUrl(doc: any): string {
+    return `${this.apiService.getBaseUrl()}/dqf/documents/${doc.id}/download`;
   }
 
   loadDriverDocuments(driverId: string): void {
@@ -662,6 +775,12 @@ export class DriversComponent implements OnInit, OnDestroy {
       lastIncidentDate: null,
       recentIncidents: []
     };
+    // Reset drug/alcohol test state
+    this.drugAlcoholTests = [];
+    this.showDrugTestForm = false;
+    this.editingDrugTest = null;
+    this.drugTestTypeFilter = '';
+    this.drugTestClearinghouseFilter = '';
   }
 
   loadDriverSafetySummary(driverId: string): void {
@@ -703,12 +822,18 @@ export class DriversComponent implements OnInit, OnDestroy {
   loadDQFStatus(driver: any): void {
     // Load dynamic DQF requirements from server
     this.dqfRequirementsLoading = true;
+    this.auditTrailOpen = {};
+    this.auditTrailData = {};
+    this.auditTrailLoading = {};
     this.apiService.getDqfDriver(driver.id).subscribe({
       next: (response) => {
         const dqfData = response?.dqf || {};
         this.dqfRequirements = dqfData.requirements || [];
         this.dqfCompleteness = dqfData.completeness || 0;
         this.dqfRequirementsLoading = false;
+
+        // Build categorized view
+        this.buildDqfCategories();
 
         // Keep legacy form for backward compat
         this.dqfForm = {
@@ -727,8 +852,262 @@ export class DriversComponent implements OnInit, OnDestroy {
         // Fallback to legacy calculation
         this.dqfRequirements = [];
         this.dqfCompleteness = driver.dqfCompleteness || 0;
+        this.buildDqfCategories();
       }
     });
+
+    // Load clearance status
+    this.loadClearanceStatus(driver.id);
+  }
+
+  loadClearanceStatus(driverId: string): void {
+    this.clearanceLoading = true;
+    this.apiService.getDriverClearanceStatus(driverId).subscribe({
+      next: (status) => {
+        this.clearanceStatus = {
+          cleared: status?.cleared ?? false,
+          requirements: status?.requirements,
+          missingItems: status?.missingItems ?? (status as any)?.missing ?? []
+        };
+        this.clearanceLoading = false;
+      },
+      error: () => {
+        // Fallback: derive clearance from pre-hire requirements
+        this.clearanceStatus = this.deriveClearanceFromRequirements();
+        this.clearanceLoading = false;
+      }
+    });
+  }
+
+  /** Derive clearance status locally when API is unavailable */
+  private deriveClearanceFromRequirements(): { cleared: boolean; missingItems: string[] } {
+    const preHireKeys = this.getCategoryKeyMap()['pre_hire'] || [];
+    const missing: string[] = [];
+    for (const req of this.dqfRequirements) {
+      if (preHireKeys.includes(req.key) && req.status !== 'complete') {
+        missing.push(req.label || req.key);
+      }
+    }
+    return { cleared: missing.length === 0, missingItems: missing };
+  }
+
+  /** Map of category key -> array of requirement keys that belong to it */
+  private getCategoryKeyMap(): Record<string, string[]> {
+    return {
+      pre_hire: [
+        'employment_application',
+        'employment_application_submitted',
+        'pre_employment_drug_test_completed',
+        'clearinghouse_full_query_consent',
+        'road_test_certificate',
+        'medical_examiners_certificate',
+        'nrcme_verification',
+        'fcra_authorization',
+        'fcra_disclosure_signed',
+        'fcra_authorization_signed',
+        'release_of_info_dq_safety_signed',
+        'drug_alcohol_release_signed',
+        'consent_forms_signed',
+        'release_of_info_signed',
+        'mvr_disclosure_signed',
+        'mvr_authorization_signed',
+        'mvr_release_of_liability_signed'
+      ],
+      pre_hire_checklist: [
+        'employment_application_completed',
+        'cdl_on_file',
+        'clearinghouse_consent_sent',
+        'clearinghouse_consent_received',
+        'clearinghouse_result_received',
+        'employment_verification_submitted',
+        'mvr_authorization_signed',
+        'pre_employment_drug_test_submitted',
+        'pre_employment_drug_test_result_received',
+        'psp_consent'
+      ],
+      within_30_days: [
+        'mvr_all_states',
+        'previous_employer_investigation',
+        'driver_investigation_history'
+      ],
+      ongoing: [
+        'driver_license_front_on_file',
+        'driver_license_back_on_file',
+        'medical_card_front_on_file',
+        'medical_card_back_on_file',
+        'green_card_on_file',
+        'eldt_certificate',
+        'medical_variance_spe'
+      ],
+      annual: [
+        'annual_mvr_inquiry',
+        'annual_driving_record_review',
+        'annual_clearinghouse_limited_query',
+        'medical_cert_renewal'
+      ]
+    };
+  }
+
+  /** CFR references for known requirement keys */
+  getCfrReference(key: string): string {
+    const refs: Record<string, string> = {
+      employment_application: '49 CFR 391.21',
+      pre_employment_drug_test_completed: '49 CFR 382.301',
+      clearinghouse_full_query_consent: '49 CFR 382.701',
+      road_test_certificate: '49 CFR 391.31',
+      medical_examiners_certificate: '49 CFR 391.43',
+      nrcme_verification: '49 CFR 391.23(m)',
+      fcra_authorization: 'FCRA 15 USC 1681',
+      consent_forms_signed: '49 CFR 391.23',
+      release_of_info_signed: '49 CFR 391.23(d)',
+      mvr_all_states: '49 CFR 391.23(a)',
+      previous_employer_investigation: '49 CFR 391.23(d)',
+      driver_investigation_history: '49 CFR 391.53',
+      driver_license_front_on_file: '49 CFR 391.51(b)(2)',
+      driver_license_back_on_file: '49 CFR 391.51(b)(2)',
+      medical_card_front_on_file: '49 CFR 391.51(b)(7)',
+      medical_card_back_on_file: '49 CFR 391.51(b)(7)',
+      green_card_on_file: '8 CFR 274a.2',
+      eldt_certificate: '49 CFR 380.609',
+      medical_variance_spe: '49 CFR 391.49',
+      annual_mvr_inquiry: '49 CFR 391.25(a)',
+      annual_driving_record_review: '49 CFR 391.25(c)',
+      annual_clearinghouse_limited_query: '49 CFR 382.701(b)',
+      medical_cert_renewal: '49 CFR 391.45',
+      employment_application_completed: '49 CFR 391.21',
+      cdl_on_file: '49 CFR 391.51(b)(2)',
+      clearinghouse_consent_sent: '49 CFR 382.701',
+      clearinghouse_consent_received: '49 CFR 382.701',
+      clearinghouse_result_received: '49 CFR 382.701',
+      employment_verification_submitted: '49 CFR 391.23(d)',
+      mvr_authorization_signed: '49 CFR 391.23(a)',
+      pre_employment_drug_test_submitted: '49 CFR 382.301',
+      pre_employment_drug_test_result_received: '49 CFR 382.301',
+      psp_consent: '49 CFR 391.23(i)',
+      // FN-236: Pre-hire consent form CFR references
+      fcra_disclosure_signed: '15 U.S.C. \u00A7 1681',
+      fcra_authorization_signed: '15 U.S.C. \u00A7 1681b',
+      release_of_info_dq_safety_signed: '49 CFR \u00A7391.23',
+      drug_alcohol_release_signed: '49 CFR Part 40',
+      mvr_disclosure_signed: '15 U.S.C. \u00A71681b(b)(2)',
+      mvr_release_of_liability_signed: '15 U.S.C. \u00A71681b(b)(2)',
+      employment_application_submitted: '49 CFR 391.21'
+    };
+    return refs[key] || '';
+  }
+
+  /** Build categories from flat requirements array */
+  buildDqfCategories(): void {
+    const categoryMap = this.getCategoryKeyMap();
+    const categoryDefs: { key: string; label: string }[] = [
+      { key: 'pre_hire', label: 'Pre-Hire Documents (Before Driving)' },
+      { key: 'pre_hire_checklist', label: 'Pre-Hire Checklist' },
+      { key: 'within_30_days', label: 'Within 30 Days of Hire' },
+      { key: 'ongoing', label: 'Ongoing Documents' },
+      { key: 'annual', label: 'Annual Requirements' }
+    ];
+
+    const assignedKeys = new Set<string>();
+    this.dqfCategories = categoryDefs.map(cat => {
+      const keys = categoryMap[cat.key] || [];
+      const reqs = keys
+        .map(k => this.dqfRequirements.find(r => r.key === k))
+        .filter(r => !!r);
+      reqs.forEach(r => assignedKeys.add(r.key));
+
+      const hasIncomplete = reqs.some(r => r.status !== 'complete');
+      return {
+        key: cat.key,
+        label: cat.label,
+        requirements: reqs,
+        expanded: hasIncomplete
+      };
+    });
+
+    // Any remaining requirements not in a category go into "Other"
+    const uncategorized = this.dqfRequirements.filter(r => !assignedKeys.has(r.key));
+    if (uncategorized.length > 0) {
+      this.dqfCategories.push({
+        key: 'other',
+        label: 'Other Requirements',
+        requirements: uncategorized,
+        expanded: uncategorized.some(r => r.status !== 'complete')
+      });
+    }
+  }
+
+  getCategoryCompletedCount(category: { requirements: any[] }): number {
+    return category.requirements.filter(r => r.status === 'complete').length;
+  }
+
+  getCategoryCompletionPct(category: { requirements: any[] }): number {
+    if (category.requirements.length === 0) return 100;
+    return Math.round((this.getCategoryCompletedCount(category) / category.requirements.length) * 100);
+  }
+
+  toggleCategory(category: { expanded: boolean }): void {
+    category.expanded = !category.expanded;
+  }
+
+  /** FN-258: Switch active DQF tab */
+  setActiveDqfTab(tabKey: string): void {
+    this.activeDqfTab = tabKey;
+  }
+
+  /** FN-258: Return "done/total" string for tab badge */
+  getCategoryCompletionCount(cat: { requirements: any[] }): string {
+    const total = cat.requirements?.length || 0;
+    const done = cat.requirements?.filter((r: any) => r.status === 'complete').length || 0;
+    return `${done}/${total}`;
+  }
+
+  getStatusChipClass(status: string): string {
+    switch (status) {
+      case 'complete': return 'dqf-chip-complete';
+      case 'received':
+      case 'sent': return 'dqf-chip-in-progress';
+      case 'review_required': return 'dqf-chip-review';
+      case 'n/a': return 'dqf-chip-na';
+      default: return 'dqf-chip-missing';
+    }
+  }
+
+  getStatusChipLabel(status: string): string {
+    switch (status) {
+      case 'complete': return 'Complete';
+      case 'received': return 'In Progress';
+      case 'sent': return 'In Progress';
+      case 'review_required': return 'Review Required';
+      case 'n/a': return 'N/A';
+      default: return 'Missing';
+    }
+  }
+
+  toggleAuditTrail(req: any): void {
+    const key = req.key;
+    if (this.auditTrailOpen[key]) {
+      this.auditTrailOpen[key] = false;
+      return;
+    }
+    this.auditTrailOpen[key] = true;
+    if (this.auditTrailData[key]) return; // already loaded
+
+    this.auditTrailLoading[key] = true;
+    if (!this.selectedDriver) { this.auditTrailLoading[key] = false; return; }
+    this.apiService.getDqfRequirementChanges(this.selectedDriver.id, key).subscribe({
+      next: (changes) => {
+        this.auditTrailData[key] = Array.isArray(changes) ? changes : (changes?.changes || []);
+        this.auditTrailLoading[key] = false;
+      },
+      error: () => {
+        this.auditTrailData[key] = [];
+        this.auditTrailLoading[key] = false;
+      }
+    });
+  }
+
+  printDqfReport(): void {
+    window.print();
   }
 
   updateRequirementStatus(requirement: any, newStatus: string): void {
@@ -756,9 +1135,59 @@ export class DriversComponent implements OnInit, OnDestroy {
         const total = this.dqfRequirements.reduce((sum, r) => sum + (r.weight || 1), 0);
         const done = this.dqfRequirements.filter(r => r.status === 'complete').reduce((sum, r) => sum + (r.weight || 1), 0);
         this.dqfCompleteness = total > 0 ? Math.round((done / total) * 100) : 0;
+        // Rebuild categories to reflect new status
+        this.buildDqfCategories();
+        // Re-derive clearance status
+        this.clearanceStatus = this.deriveClearanceFromRequirements();
       },
       error: (err) => {
         console.error('Error updating requirement', err);
+        alert('Failed to update requirement status');
+        this.updateingRequirementKey = null;
+      }
+    });
+  }
+
+  // FN-223: Keys that require a date when marking done (inline date picker)
+  readonly dateCaptureDqfKeys = [
+    'clearinghouse_consent_sent',
+    'clearinghouse_consent_received',
+    'clearinghouse_result_received'
+  ];
+  dqfDateInputs: Record<string, string> = {};
+
+  requiresDateCapture(key: string): boolean {
+    return this.dateCaptureDqfKeys.includes(key);
+  }
+
+  updateRequirementStatusWithDate(requirement: any, newStatus: string): void {
+    if (!this.canManageDrivers || !this.selectedDriver) return;
+    const dateVal = this.dqfDateInputs[requirement.key];
+    this.updateingRequirementKey = requirement.key;
+    this.apiService.updateDqfRequirementStatus(
+      this.selectedDriver.id,
+      requirement.key,
+      {
+        status: newStatus as any,
+        completionDate: dateVal || undefined,
+        note: dateVal ? `Completed on ${dateVal}` : 'Updated via drivers form'
+      }
+    ).subscribe({
+      next: () => {
+        const idx = this.dqfRequirements.findIndex(r => r.key === requirement.key);
+        if (idx >= 0) {
+          this.dqfRequirements[idx].status = newStatus;
+          this.dqfRequirements[idx].completion_date = dateVal || null;
+        }
+        this.updateingRequirementKey = null;
+        this.dqfDateInputs[requirement.key] = '';
+        const total = this.dqfRequirements.reduce((sum, r) => sum + (r.weight || 1), 0);
+        const done = this.dqfRequirements.filter(r => r.status === 'complete').reduce((sum, r) => sum + (r.weight || 1), 0);
+        this.dqfCompleteness = total > 0 ? Math.round((done / total) * 100) : 0;
+        this.buildDqfCategories();
+        this.clearanceStatus = this.deriveClearanceFromRequirements();
+      },
+      error: () => {
         alert('Failed to update requirement status');
         this.updateingRequirementKey = null;
       }
@@ -776,6 +1205,31 @@ export class DriversComponent implements OnInit, OnDestroy {
     return docKeys.includes(key);
   }
 
+  /** FN-240: Get display label for a DQF requirement, applying frontend overrides */
+  getDqfReqLabel(req: { key: string; label: string }): string {
+    return this.dqfLabelOverrides[req.key] || req.label;
+  }
+
+  /** FN-240: Auto-pull employment application document from onboarding packet */
+  autoPullEmploymentApp(): void {
+    if (!this.selectedDriver) return;
+    this.autoPullingEmpApp = true;
+    this.autoPullEmpAppError = '';
+    this.apiService.autoPullEmploymentApp(this.selectedDriver.id).subscribe({
+      next: () => {
+        this.autoPullingEmpApp = false;
+        // Reload DQF status and pre-hire documents to reflect the completed requirement
+        this.loadDQFStatus(this.selectedDriver);
+        this.loadPrehireDocuments(this.selectedDriver.id);
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.autoPullingEmpApp = false;
+        this.autoPullEmpAppError = err?.error?.message || 'Failed to pull employment application. Please try again.';
+        console.error('Failed to pull employment application:', err);
+      }
+    });
+  }
+
   onDQFFileSelectedForKey(event: any, requirementKey: string): void {
     if (!this.canManageDrivers) return;
 
@@ -789,7 +1243,8 @@ export class DriversComponent implements OnInit, OnDestroy {
       medical_card_back_on_file: 'medical_card_back',
       green_card_on_file: 'green_card',
       pre_employment_drug_test_completed: 'drug_test_result',
-      release_of_info_signed: 'release_of_info'
+      release_of_info_signed: 'release_of_info',
+      employment_application_submitted: 'employment_application'
     };
 
     const docType = docTypeMap[requirementKey] || requirementKey;
@@ -801,6 +1256,7 @@ export class DriversComponent implements OnInit, OnDestroy {
         event.target.value = '';
         // Auto-mark requirement complete with evidence
         const docId = response?.document?.id;
+        if (!this.selectedDriver) return;
         this.apiService.updateDqfRequirementStatus(this.selectedDriver.id, requirementKey, {
           status: 'complete',
           evidenceDocumentId: docId,
@@ -943,5 +1399,255 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.showDQFForm = false;
     this.selectedDriver = null;
     this.onboardingModal.open(driver);
+  }
+
+  // ========== Drug & Alcohol Test Management (FN-214) ==========
+
+  getEmptyDrugTest(driverId: string): DrugAlcoholTest {
+    return {
+      driver_id: driverId,
+      test_type: 'pre_employment',
+      substance_type: 'drug',
+      panel_details: {
+        marijuana: true,
+        cocaine: true,
+        opiates: true,
+        amphetamines: true,
+        pcp: true
+      },
+      collection_site: '',
+      collection_date: '',
+      lab_name: '',
+      mro_name: '',
+      mro_verified: false,
+      ccf_number: '',
+      result: undefined,
+      result_received_date: '',
+      clearinghouse_reported: 'not_reported',
+      notes: ''
+    };
+  }
+
+  loadDrugAlcoholTests(driverId: string): void {
+    this.drugAlcoholTestsLoading = true;
+    this.apiService.getDrugAlcoholTests(driverId).subscribe({
+      next: (tests) => {
+        this.drugAlcoholTests = tests || [];
+        this.drugAlcoholTestsLoading = false;
+      },
+      error: () => {
+        this.drugAlcoholTests = [];
+        this.drugAlcoholTestsLoading = false;
+      }
+    });
+  }
+
+  get filteredDrugTests(): DrugAlcoholTest[] {
+    let list = this.drugAlcoholTests;
+    if (this.drugTestTypeFilter) {
+      list = list.filter(t => t.test_type === this.drugTestTypeFilter);
+    }
+    if (this.drugTestClearinghouseFilter === 'pending') {
+      list = list.filter(t => t.clearinghouse_reported !== 'reported');
+    }
+    return list;
+  }
+
+  openAddDrugTest(): void {
+    if (!this.selectedDriver) return;
+    this.newDrugTest = this.getEmptyDrugTest(this.selectedDriver.id);
+    this.editingDrugTest = null;
+    this.drugTestResultFile = null;
+    this.drugTestResultFileName = '';
+    this.drugTestResultError = '';
+    this.showDrugTestForm = true;
+  }
+
+  // FN-225: Drug test result attachment
+  drugTestResultFile: File | null = null;
+  drugTestResultFileName: string = '';
+  drugTestResultError: string = '';
+  uploadingDrugTestDoc: boolean = false;
+
+  onDrugTestResultFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.drugTestResultFile = input.files[0];
+      this.drugTestResultFileName = input.files[0].name;
+      this.drugTestResultError = '';
+    }
+  }
+
+  openEditDrugTest(test: DrugAlcoholTest): void {
+    this.drugTestResultFile = null;
+    this.drugTestResultFileName = test.result_document_id ? 'Previously uploaded' : '';
+    this.drugTestResultError = '';
+    this.editingDrugTest = { ...test };
+    if (!this.editingDrugTest.panel_details) {
+      this.editingDrugTest.panel_details = {
+        marijuana: true, cocaine: true, opiates: true,
+        amphetamines: true, pcp: true
+      };
+    }
+    this.showDrugTestForm = true;
+  }
+
+  cancelDrugTestForm(): void {
+    this.showDrugTestForm = false;
+    this.editingDrugTest = null;
+  }
+
+  get activeDrugTestForm(): DrugAlcoholTest {
+    return this.editingDrugTest || this.newDrugTest;
+  }
+
+  showPanelDetails(): boolean {
+    const form = this.activeDrugTestForm;
+    return form.substance_type === 'drug' || form.substance_type === 'both';
+  }
+
+  saveDrugTest(): void {
+    if (!this.canManageDrivers || !this.selectedDriver) return;
+
+    const form = this.activeDrugTestForm;
+    if (!form.test_type || !form.substance_type) {
+      alert('Please fill in all required fields (Test Type, Substance Type).');
+      return;
+    }
+
+    // FN-225: Validate attachment required when result is selected
+    const hasExistingDoc = this.editingDrugTest?.result_document_id;
+    if (form.result && !this.drugTestResultFile && !hasExistingDoc) {
+      this.drugTestResultError = 'Please upload the drug test result document before saving.';
+      return;
+    }
+    this.drugTestResultError = '';
+
+    this.savingDrugTest = true;
+    const driverId = this.selectedDriver.id;
+
+    if (this.editingDrugTest && this.editingDrugTest.id) {
+      this.apiService.updateDrugAlcoholTest(this.editingDrugTest.id, form).pipe(
+        finalize(() => (this.savingDrugTest = false))
+      ).subscribe({
+        next: (updated) => {
+          const idx = this.drugAlcoholTests.findIndex(t => t.id === updated.id);
+          if (idx >= 0) {
+            this.drugAlcoholTests[idx] = updated;
+          }
+          // FN-225: Upload result doc if a new file was selected
+          if (this.drugTestResultFile && updated.id) {
+            this.uploadResultDocument(driverId, updated.id);
+          }
+          this.showDrugTestForm = false;
+          this.editingDrugTest = null;
+          this.drugTestResultFile = null;
+          this.drugTestResultFileName = '';
+        },
+        error: () => {
+          alert('Failed to update drug/alcohol test. Please try again.');
+        }
+      });
+    } else {
+      this.apiService.createDrugAlcoholTest(driverId, form).pipe(
+        finalize(() => (this.savingDrugTest = false))
+      ).subscribe({
+        next: (created) => {
+          this.drugAlcoholTests.unshift(created);
+          // FN-225: Upload result doc after creating the test
+          if (this.drugTestResultFile && created.id) {
+            this.uploadResultDocument(driverId, created.id);
+          }
+          this.showDrugTestForm = false;
+          this.drugTestResultFile = null;
+          this.drugTestResultFileName = '';
+        },
+        error: () => {
+          alert('Failed to create drug/alcohol test. Please try again.');
+        }
+      });
+    }
+  }
+
+  /** FN-225: Upload the result document after test create/update */
+  private uploadResultDocument(driverId: string, testId: string): void {
+    if (!this.drugTestResultFile) return;
+    this.apiService.uploadDrugTestResultDocument(driverId, testId, this.drugTestResultFile).subscribe({
+      next: (doc) => {
+        // Update the test in the list with the new document ID
+        const idx = this.drugAlcoholTests.findIndex(t => t.id === testId);
+        if (idx >= 0) {
+          this.drugAlcoholTests[idx].result_document_id = doc.id;
+        }
+        // Reload DQF to reflect auto-completed requirements
+        if (this.selectedDriver) {
+          this.apiService.getDqfDriver(this.selectedDriver.id).subscribe({
+            next: (resp) => {
+              const dqf = resp?.dqf || {};
+              this.dqfRequirements = dqf.requirements || [];
+              this.dqfCompleteness = dqf.completeness || 0;
+              this.buildDqfCategories();
+              this.clearanceStatus = this.deriveClearanceFromRequirements();
+            }
+          });
+        }
+      },
+      error: (err) => {
+        console.error('Failed to upload drug test result document:', err);
+        alert('Test saved but failed to upload result document. Please try again via Edit.');
+      }
+    });
+  }
+
+  markClearinghouseReported(test: DrugAlcoholTest): void {
+    if (!test.id) return;
+    this.apiService.markTestClearinghouseReported(test.id).subscribe({
+      next: () => {
+        const idx = this.drugAlcoholTests.findIndex(t => t.id === test.id);
+        if (idx >= 0) {
+          this.drugAlcoholTests[idx] = {
+            ...this.drugAlcoholTests[idx],
+            clearinghouse_reported: 'reported'
+          };
+        }
+      },
+      error: () => {
+        alert('Failed to mark test as reported. Please try again.');
+      }
+    });
+  }
+
+  getTestTypeBadgeClass(testType: DrugTestType): string {
+    switch (testType) {
+      case 'pre_employment': return 'da-badge-blue';
+      case 'random': return 'da-badge-cyan';
+      case 'reasonable_suspicion': return 'da-badge-amber';
+      case 'post_accident': return 'da-badge-red';
+      case 'return_to_duty': return 'da-badge-purple';
+      case 'follow_up': return 'da-badge-slate';
+      default: return 'da-badge-slate';
+    }
+  }
+
+  getResultBadgeClass(result: DrugTestResult | undefined): string {
+    switch (result) {
+      case 'negative': return 'badge-success';
+      case 'positive': return 'badge-danger';
+      case 'refused': return 'badge-danger';
+      case 'cancelled': return 'badge-warning';
+      case 'invalid': return 'badge-warning';
+      default: return 'badge-warning';
+    }
+  }
+
+  onDrugTestCollectionDateChange(date: string): void {
+    this.activeDrugTestForm.collection_date = date;
+  }
+
+  // ========== Employer Investigation History ==========
+  onInvestigationHistoryUpdated(): void {
+    if (this.investigationHistory) {
+      this.investigationHistory.loadHistory();
+    }
   }
 }

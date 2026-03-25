@@ -1,7 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
-import { debounceTime, Subject } from 'rxjs';
+import { debounceTime, Subject, Subscription } from 'rxjs';
 import { PermissionHelperService } from '../../services/permission-helper.service';
 import { PERMISSIONS } from '../../models/access-control.model';
 
@@ -33,7 +33,7 @@ type SortOrder = 'asc' | 'desc';
   templateUrl: './vehicles.component.html',
   styleUrls: ['./vehicles.component.css']
 })
-export class VehiclesComponent implements OnInit {
+export class VehiclesComponent implements OnInit, OnDestroy {
   readonly perms = PERMISSIONS;
   // Data state
   allVehicles: Vehicle[] = [];
@@ -48,6 +48,7 @@ export class VehiclesComponent implements OnInit {
   selectedStatus = 'all';
   presetFilter: 'maintenance-due' | null = null;
   private searchSubject = new Subject<string>();
+  private searchSubscription: Subscription | null = null;
 
   // Sort state
   sortField: SortField = 'unit_number';
@@ -129,12 +130,18 @@ export class VehiclesComponent implements OnInit {
     });
 
     // Debounce search input to reduce API calls
-    this.searchSubject.pipe(
+    this.searchSubscription = this.searchSubject.pipe(
       debounceTime(300)
     ).subscribe(query => {
       this.searchQuery = query;
       this.applyFiltersAndSort();
     });
+  }
+
+  ngOnDestroy(): void {
+    this.searchSubscription?.unsubscribe();
+    this.searchSubscription = null;
+    this.searchSubject.complete();
   }
 
   loadVehicles(): void {

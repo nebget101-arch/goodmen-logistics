@@ -1,9 +1,31 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const auth = require('./auth-middleware');
 const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange } = require('../services/dqf-service');
+const { createDriverDocument } = require('../services/driver-storage-service');
+const { buildEmploymentApplicationPdf } = require('../services/driver-onboarding-pdf');
+
+// File upload (memory storage - max 10 MB, PDF/image only)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/tiff'
+    ];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF and image files are accepted'));
+    }
+  }
+});
 
 // Admin / safety only
 router.use(auth(['admin', 'safety']));
@@ -89,6 +111,7 @@ router.get('/drivers/:driverId', async (req, res) => {
          r.weight,
          COALESCE(s.status, 'missing') AS status,
          s.evidence_document_id,
+         s.completion_date,
          s.last_updated_at
        FROM dqf_requirements r
        LEFT JOIN dqf_driver_status s
@@ -207,7 +230,7 @@ router.get('/documents/:id/download', async (req, res) => {
 router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
   try {
     const { driverId, requirementKey } = req.params;
-    const { status, evidenceDocumentId, note } = req.body;
+    const { status, evidenceDocumentId, note, completionDate } = req.body;
 
     const driverScopeRes = await query(
       `SELECT id, operating_entity_id
@@ -233,8 +256,8 @@ router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
     );
     const oldStatus = currentRes.rows.length > 0 ? currentRes.rows[0].status : 'missing';
 
-    // Update the requirement
-    await upsertRequirementStatus(driverId, requirementKey, status, evidenceDocumentId || null);
+    // FN-223: Update the requirement with optional completion_date
+    await upsertRequirementStatus(driverId, requirementKey, status, evidenceDocumentId || null, completionDate || null);
 
     // Log the change
     const userId = req.user?.id || null;
@@ -307,6 +330,290 @@ router.get('/requirement/:driverId/:requirementKey/changes', async (req, res) =>
     // eslint-disable-next-line no-console
     console.error('Error in GET /api/dqf/requirement/:driverId/:requirementKey/changes', error);
     return res.status(500).json({ message: 'Failed to fetch requirement changes' });
+  }
+});
+
+// FN-237: GET /api/dqf/driver/:driverId/prehire-documents
+// List all pre-hire documents for a driver (employment app + consent forms)
+router.get('/driver/:driverId/prehire-documents', async (req, res) => {
+  const start = Date.now();
+  try {
+    const { driverId } = req.params;
+
+    // Validate driver exists and OE access
+    const driverRes = await query(
+      'SELECT id, operating_entity_id FROM drivers WHERE id = $1',
+      [driverId]
+    );
+    if (driverRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    if (req.context?.operatingEntityId && driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    const docs = await query(
+      `SELECT
+         id,
+         driver_id,
+         packet_id,
+         doc_type,
+         file_name,
+         mime_type,
+         size_bytes,
+         created_at
+       FROM driver_documents
+       WHERE driver_id = $1
+         AND doc_type IN (
+           'employment_application_signed',
+           'employment_application_pdf',
+           'consent_fcra_disclosure_signed',
+           'consent_fcra_authorization_signed',
+           'consent_release_of_information_signed',
+           'consent_drug_alcohol_release_signed',
+           'consent_clearinghouse_full_signed',
+           'consent_psp_consent_signed',
+           'consent_mvr_disclosure_signed',
+           'consent_mvr_authorization_signed',
+           'consent_mvr_release_of_liability_signed',
+           'onboarding_cdl_front',
+           'onboarding_cdl_back',
+           'onboarding_medical_certificate',
+           'onboarding_social_security_card',
+           'onboarding_other_certification'
+         )
+         AND (deleted_at IS NULL)
+       ORDER BY created_at DESC`,
+      [driverId]
+    );
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('GET', `/api/dqf/driver/${driverId}/prehire-documents`, 200, duration, {
+      driverId,
+      count: docs.rows.length
+    });
+
+    return res.json(docs.rows);
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('dqf_prehire_documents_failed', error, { driverId: req.params.driverId });
+    dtLogger.trackRequest('GET', `/api/dqf/driver/${req.params.driverId}/prehire-documents`, 500, duration);
+    // eslint-disable-next-line no-console
+    console.error('Error in GET /api/dqf/driver/:driverId/prehire-documents', error);
+    return res.status(500).json({ message: 'Failed to load pre-hire documents' });
+  }
+});
+
+// FN-240: POST /api/dqf/driver/:driverId/auto-pull-emp-app
+// Auto-pull an existing employment application document into the DQF checklist.
+// Looks for an already-generated `employment_application_signed` document first;
+// if none exists, regenerates the PDF from the onboarding packet data.
+router.post('/driver/:driverId/auto-pull-emp-app', async (req, res) => {
+  const start = Date.now();
+  try {
+    const { driverId } = req.params;
+
+    // Validate driver exists and OE access
+    const driverRes = await query(
+      'SELECT id, first_name, last_name, operating_entity_id FROM drivers WHERE id = $1',
+      [driverId]
+    );
+    if (driverRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    const driver = driverRes.rows[0];
+    if (req.context?.operatingEntityId && driver.operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // 1. Check if there's already an employment_application_signed document
+    const existingDocRes = await query(
+      `SELECT id
+       FROM driver_documents
+       WHERE driver_id = $1
+         AND doc_type = 'employment_application_signed'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [driverId]
+    );
+
+    if (existingDocRes.rows.length > 0) {
+      const existingDoc = existingDocRes.rows[0];
+      await upsertRequirementStatus(driverId, 'employment_application_submitted', 'complete', existingDoc.id);
+      await computeAndUpdateDqfCompleteness(driverId);
+
+      const userId = req.user?.id || null;
+      await logStatusChange(driverId, 'employment_application_submitted', 'missing', 'complete', userId, 'Auto-pulled existing employment application document');
+
+      const duration = Date.now() - start;
+      dtLogger.trackRequest('POST', `/api/dqf/driver/${driverId}/auto-pull-emp-app`, 200, duration);
+
+      return res.json({ success: true, documentId: existingDoc.id, source: 'existing' });
+    }
+
+    // 2. No document exists -- check for a completed onboarding section with employment app data
+    const sectionRes = await query(
+      `SELECT dos.data, dos.packet_id
+       FROM driver_onboarding_sections dos
+       JOIN driver_onboarding_packets dop ON dop.id = dos.packet_id
+       WHERE dop.driver_id = $1
+         AND dos.section_key = 'employment_application'
+         AND dos.status = 'completed'
+       ORDER BY dos.completed_at DESC
+       LIMIT 1`,
+      [driverId]
+    );
+
+    if (sectionRes.rows.length === 0) {
+      return res.status(404).json({ error: 'No employment application found for this driver' });
+    }
+
+    const section = sectionRes.rows[0];
+    const applicationData = section.data || {};
+
+    // Load signature if available
+    const esignRes = await query(
+      `SELECT signer_name, signed_at
+       FROM driver_esignatures
+       WHERE packet_id = $1
+         AND section_key = 'employment_application'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [section.packet_id]
+    );
+    const signature = esignRes.rows[0] || null;
+
+    // 3. Generate the PDF
+    const buffer = await buildEmploymentApplicationPdf({
+      driver,
+      application: applicationData,
+      signature
+    });
+
+    const firstName = (driver.first_name || '').trim();
+    const lastName = (driver.last_name || '').trim();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const pdfFileName = firstName || lastName
+      ? `employment_application_${firstName}_${lastName}_${dateStr}.pdf`.replace(/\s+/g, '_')
+      : `employment_application_${driver.id}_${dateStr}.pdf`;
+
+    const empDoc = await createDriverDocument({
+      driverId: driver.id,
+      packetId: section.packet_id,
+      docType: 'employment_application_signed',
+      fileName: pdfFileName,
+      mimeType: 'application/pdf',
+      bytes: buffer,
+      folder: 'employment-application'
+    });
+
+    // 4. Mark DQF requirement complete
+    await upsertRequirementStatus(driverId, 'employment_application_submitted', 'complete', empDoc.id);
+    await computeAndUpdateDqfCompleteness(driverId);
+
+    const userId = req.user?.id || null;
+    await logStatusChange(driverId, 'employment_application_submitted', 'missing', 'complete', userId, 'Auto-generated employment application document from onboarding data');
+
+    dtLogger.info('dqf_auto_pull_emp_app_generated', { driverId, documentId: empDoc.id });
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('POST', `/api/dqf/driver/${driverId}/auto-pull-emp-app`, 200, duration);
+
+    return res.json({ success: true, documentId: empDoc.id, source: 'generated' });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('dqf_auto_pull_emp_app_failed', error, { driverId: req.params.driverId });
+    dtLogger.trackRequest('POST', `/api/dqf/driver/${req.params.driverId}/auto-pull-emp-app`, 500, duration);
+    // eslint-disable-next-line no-console
+    console.error('Error in POST /api/dqf/driver/:driverId/auto-pull-emp-app', error);
+    return res.status(500).json({ message: 'Failed to auto-pull employment application' });
+  }
+});
+
+// FN-240: POST /api/dqf/driver/:driverId/requirement/:requirementKey/upload
+// Upload a document file for any DQF requirement and mark it complete.
+router.post('/driver/:driverId/requirement/:requirementKey/upload', upload.single('file'), async (req, res) => {
+  const start = Date.now();
+  try {
+    const { driverId, requirementKey } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'file is required' });
+    }
+
+    // Validate driver exists and OE access
+    const driverRes = await query(
+      'SELECT id, first_name, last_name, operating_entity_id FROM drivers WHERE id = $1',
+      [driverId]
+    );
+    if (driverRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    const driver = driverRes.rows[0];
+    if (req.context?.operatingEntityId && driver.operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // Validate that the requirement key exists
+    const reqRes = await query(
+      'SELECT key FROM dqf_requirements WHERE key = $1',
+      [requirementKey]
+    );
+    if (reqRes.rows.length === 0) {
+      return res.status(400).json({ message: `Unknown requirement key: ${requirementKey}` });
+    }
+
+    // Store the document
+    const doc = await createDriverDocument({
+      driverId: driver.id,
+      packetId: null,
+      docType: `dqf_upload_${requirementKey}`,
+      fileName: req.file.originalname || 'upload.pdf',
+      mimeType: req.file.mimetype || 'application/pdf',
+      bytes: req.file.buffer,
+      folder: 'dqf-documents'
+    });
+
+    // Get current status for audit log
+    const currentRes = await query(
+      'SELECT status FROM dqf_driver_status WHERE driver_id = $1 AND requirement_key = $2',
+      [driverId, requirementKey]
+    );
+    const oldStatus = currentRes.rows.length > 0 ? currentRes.rows[0].status : 'missing';
+
+    // Mark requirement complete with evidence
+    await upsertRequirementStatus(driverId, requirementKey, 'complete', doc.id);
+    await computeAndUpdateDqfCompleteness(driverId);
+
+    const userId = req.user?.id || null;
+    await logStatusChange(driverId, requirementKey, oldStatus, 'complete', userId, 'Document uploaded manually');
+
+    dtLogger.info('dqf_requirement_document_uploaded', {
+      driverId,
+      requirementKey,
+      documentId: doc.id,
+      fileName: req.file.originalname
+    });
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('POST', `/api/dqf/driver/${driverId}/requirement/${requirementKey}/upload`, 200, duration);
+
+    return res.json({
+      success: true,
+      documentId: doc.id,
+      requirementKey,
+      status: 'complete'
+    });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('dqf_requirement_upload_failed', error, {
+      driverId: req.params.driverId,
+      requirementKey: req.params.requirementKey
+    });
+    dtLogger.trackRequest('POST', `/api/dqf/driver/${req.params.driverId}/requirement/${req.params.requirementKey}/upload`, 500, duration);
+    // eslint-disable-next-line no-console
+    console.error('Error in POST /api/dqf/driver/:driverId/requirement/:requirementKey/upload', error);
+    return res.status(500).json({ message: 'Failed to upload document' });
   }
 });
 
