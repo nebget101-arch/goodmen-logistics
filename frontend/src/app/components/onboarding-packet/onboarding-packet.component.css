@@ -932,3 +932,160 @@ input[type='date'].form-input {
   border-radius: 8px;
 }
 
+/* ── Consent Card List ── */
+.consent-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(51, 65, 85, 0.6);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.consent-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #22c55e, #38bdf8);
+  transition: width 0.4s ease;
+}
+
+.consent-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.consent-card {
+  border-radius: 18px;
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  background: rgba(15, 23, 42, 0.6);
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.consent-card:hover {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.consent-card-completed {
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.consent-card-completed:hover {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.consent-card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 18px;
+  background: none;
+  border: none;
+  color: #e2e8f0;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.consent-card-header:hover {
+  background: rgba(56, 189, 248, 0.04);
+}
+
+.consent-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.1);
+  flex-shrink: 0;
+}
+
+.consent-card-icon .material-symbols-outlined {
+  font-size: 20px;
+  color: #38bdf8;
+}
+
+.consent-card-completed .consent-card-icon {
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.consent-card-completed .consent-card-icon .material-symbols-outlined {
+  color: #4ade80;
+}
+
+.consent-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.consent-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: 2px;
+}
+
+.consent-card-subtitle {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.consent-card-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.consent-badge-pending {
+  background: rgba(234, 179, 8, 0.14);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.consent-badge-completed {
+  background: rgba(34, 197, 94, 0.14);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.consent-card-chevron {
+  color: #94a3b8;
+  font-size: 20px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.consent-card-chevron-open {
+  transform: rotate(180deg);
+}
+
+.consent-card-body {
+  padding: 0 18px 18px;
+}
+
+@media (max-width: 640px) {
+  .consent-card-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .consent-card-badge {
+    order: 4;
+    margin-left: 54px;
+  }
+
+  .consent-card-body {
+    padding: 0 14px 14px;
+  }
+}
+

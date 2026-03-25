@@ -9,7 +9,8 @@ const CONSENT_DQF_MAP = {
   clearinghouse_full: 'clearinghouse_consent_received',
   release_of_information: 'release_of_info_signed',
   fcra_authorization: 'fcra_authorization',
-  psp_consent: 'psp_consent'
+  psp_consent: 'psp_consent',
+  drug_alcohol_release: 'drug_alcohol_release_signed'
 };
 
 async function getActiveTemplates() {
