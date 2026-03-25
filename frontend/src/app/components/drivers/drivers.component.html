@@ -560,6 +560,22 @@
               <label>Notes</label>
               <textarea [(ngModel)]="activeDrugTestForm.notes" class="form-input" rows="2" placeholder="Additional notes..."></textarea>
             </div>
+            <!-- FN-225: Result document upload -->
+            <div class="dqf-field" *ngIf="activeDrugTestForm.result">
+              <label>Test Result Document *</label>
+              <div class="da-file-upload-row">
+                <label class="da-file-upload-btn">
+                  <span class="material-symbols-outlined" style="font-size:16px;">upload_file</span>
+                  {{ drugTestResultFile ? drugTestResultFile.name : 'Choose file...' }}
+                  <input type="file" (change)="onDrugTestResultFileSelected($event)" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" />
+                </label>
+                <span *ngIf="drugTestResultFileName" class="da-file-name">{{ drugTestResultFileName }}</span>
+              </div>
+              <div *ngIf="drugTestResultError" class="da-validation-error">
+                <span class="material-symbols-outlined" style="font-size:14px;">error</span>
+                {{ drugTestResultError }}
+              </div>
+            </div>
             <div class="da-form-actions">
               <button class="btn" type="button" (click)="cancelDrugTestForm()" [disabled]="savingDrugTest">Cancel</button>
               <button class="btn btn-primary" type="button" (click)="saveDrugTest()" [disabled]="savingDrugTest">

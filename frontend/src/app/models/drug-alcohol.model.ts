@@ -41,6 +41,7 @@ export interface DrugAlcoholTest {
   ccf_number?: string;
   result?: DrugTestResult;
   result_received_date?: string;
+  result_document_id?: string;
   clearinghouse_reported?: ClearinghouseReportingStatus;
   notes?: string;
   created_at?: string;

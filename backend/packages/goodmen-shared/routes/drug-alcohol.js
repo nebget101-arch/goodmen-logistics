@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
+const { uploadBuffer } = require('../storage/r2-storage');
 const {
   upsertRequirementStatus,
   computeAndUpdateDqfCompleteness,
@@ -53,7 +56,7 @@ async function validateDriverAccess(driverId, context) {
  *   AND mark pre_employment_drug_test_completed as complete (with evidence doc)
  * - Result non-negative → mark pre_employment_drug_test_result_received as 'review_required'
  */
-async function handleDqfIntegration(driverId, testType, testResult, userId, resultDocumentId) {
+async function handleDqfIntegration(driverId, testType, testResult, userId, resultDocumentId, resultReceivedDate) {
   if (testType !== 'pre_employment') return;
 
   // FN-223: Mark test as submitted (always, on create)
@@ -66,17 +69,24 @@ async function handleDqfIntegration(driverId, testType, testResult, userId, resu
 
   if (testResult) {
     const upperResult = testResult.toUpperCase();
+    const completionDate = resultReceivedDate || null;
 
     if (upperResult === 'NEGATIVE') {
-      // FN-223: Negative result → complete both result_received and completed
-      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'complete', resultDocumentId || null);
+      // FN-223/FN-225: Negative result → complete both result_received and completed
+      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'complete', resultDocumentId || null, completionDate);
       await logStatusChange(driverId, 'pre_employment_drug_test_result_received', null, 'complete', userId, 'Negative pre-employment result received');
 
-      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_completed', 'complete', resultDocumentId || null);
-      await logStatusChange(driverId, 'pre_employment_drug_test_completed', null, 'complete', userId, 'Negative pre-employment result recorded');
+      // FN-225: Only mark completed with evidence doc when we have both negative result AND document
+      if (resultDocumentId) {
+        await upsertRequirementStatus(driverId, 'pre_employment_drug_test_completed', 'complete', resultDocumentId, completionDate);
+        await logStatusChange(driverId, 'pre_employment_drug_test_completed', null, 'complete', userId, 'Negative pre-employment result recorded with evidence document');
+      } else {
+        await upsertRequirementStatus(driverId, 'pre_employment_drug_test_completed', 'complete', null, completionDate);
+        await logStatusChange(driverId, 'pre_employment_drug_test_completed', null, 'complete', userId, 'Negative pre-employment result recorded');
+      }
     } else {
       // FN-223: Non-negative result → mark result_received as review_required
-      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'review_required', resultDocumentId || null);
+      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'review_required', resultDocumentId || null, completionDate);
       await logStatusChange(
         driverId, 'pre_employment_drug_test_result_received', null, 'review_required', userId,
         `Insufficient result: ${testResult}. Review required.`
@@ -250,6 +260,82 @@ router.get('/driver/:driverId/clearance-status', async (req, res) => {
   }
 });
 
+// ---------- POST upload result document for a test ----------
+router.post('/driver/:driverId/tests/:testId/result-document', upload.single('file'), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { driverId, testId } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const driver = await validateDriverAccess(driverId, req.context);
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // Verify the test exists and belongs to this driver
+    const testRes = await query(
+      `SELECT id, driver_id FROM drug_alcohol_tests WHERE id = $1 AND driver_id = $2`,
+      [testId, driverId]
+    );
+    if (testRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Test record not found for this driver' });
+    }
+
+    const file = req.file;
+    const fileName = file.originalname || 'drug_test_result';
+    const contentType = file.mimetype || 'application/octet-stream';
+
+    // Upload to R2
+    const r2Result = await uploadBuffer({
+      buffer: file.buffer,
+      fileName,
+      contentType,
+      prefix: `drivers/${driverId}/drug-test-results`
+    });
+
+    // Create driver_documents record
+    const docRes = await query(
+      `INSERT INTO driver_documents (driver_id, doc_type, file_name, content_type, r2_key, uploaded_by, created_at)
+       VALUES ($1, 'drug_test_result', $2, $3, $4, $5, NOW())
+       RETURNING *`,
+      [driverId, fileName, contentType, r2Result.key, req.context?.userId || null]
+    );
+    const doc = docRes.rows[0];
+
+    // Create driver_document_blobs record with the file buffer
+    await query(
+      `INSERT INTO driver_document_blobs (document_id, file_data, created_at)
+       VALUES ($1, $2, NOW())`,
+      [doc.id, file.buffer]
+    );
+
+    // Update drug_alcohol_tests.result_document_id
+    await query(
+      `UPDATE drug_alcohol_tests SET result_document_id = $1, updated_at = NOW() WHERE id = $2`,
+      [doc.id, testId]
+    );
+
+    const duration = Date.now() - startTime;
+    dtLogger.trackDatabase('INSERT', 'driver_documents', duration, true, { docId: doc.id, testId });
+    dtLogger.trackRequest('POST', `/api/drug-alcohol/driver/${driverId}/tests/${testId}/result-document`, 201, duration);
+
+    return res.status(201).json({
+      id: doc.id,
+      doc_type: doc.doc_type,
+      file_name: doc.file_name,
+      content_type: doc.content_type,
+      r2_key: r2Result.key,
+      created_at: doc.created_at
+    });
+  } catch (error) {
+    console.error('Error uploading drug test result document:', error);
+    return res.status(500).json({ message: 'Failed to upload result document' });
+  }
+});
+
 // ---------- POST create new test record ----------
 // Support both POST / (original) and POST /driver/:driverId/tests (frontend)
 router.post(['/', '/driver/:driverId/tests'], async (req, res) => {
@@ -324,7 +410,7 @@ router.post(['/', '/driver/:driverId/tests'], async (req, res) => {
     if (testType) {
       try {
         const userId = req.context?.userId || null;
-        await handleDqfIntegration(driverId, testType, testResult, userId, createdRow?.result_document_id);
+        await handleDqfIntegration(driverId, testType, testResult, userId, createdRow?.result_document_id, resultReceivedDate);
       } catch (dqfError) {
         // Log but do not fail the request -- the test record was already saved
         console.error('DQF integration error after test creation:', dqfError);
@@ -442,7 +528,8 @@ router.put(['/:id', '/tests/:id'], async (req, res) => {
     if (resolvedType) {
       try {
         const userId = req.context?.userId || null;
-        await handleDqfIntegration(existing.driver_id, resolvedType, resolvedResult, userId, updatedRow?.result_document_id);
+        const resolvedReceivedDate = resultReceivedDate || existing.result_received_date;
+        await handleDqfIntegration(existing.driver_id, resolvedType, resolvedResult, userId, updatedRow?.result_document_id, resolvedReceivedDate);
       } catch (dqfError) {
         console.error('DQF integration error after test update:', dqfError);
       }
