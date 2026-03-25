@@ -389,7 +389,10 @@
           </h3>
           <p class="dqf-modal-subtitle">49 CFR 391.51 - Required Documents for Driver Qualification File</p>
         </div>
-        <button class="dqf-close-btn" type="button" (click)="closeDQFForm()" [disabled]="saving">✕</button>
+        <button class="dqf-close-btn-ai" type="button" (click)="closeDQFForm()" [disabled]="saving" title="Close DQF Checklist">
+          <span class="dqf-close-btn-glow"></span>
+          <span class="material-symbols-outlined">close</span>
+        </button>
       </div>
       <div class="dqf-modal-body">
         <!-- Pre-Employment Clearance Gate (FN-214) -->

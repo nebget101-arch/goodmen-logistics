@@ -385,6 +385,80 @@
   color: #f1f5f9;
 }
 
+.drivers-dashboard .dqf-close-btn-ai {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8));
+  color: #38bdf8;
+  cursor: pointer;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.drivers-dashboard .dqf-close-btn-ai .material-symbols-outlined {
+  font-size: 24px;
+  font-weight: 600;
+  position: relative;
+  z-index: 2;
+  transition: transform 0.3s ease, color 0.3s ease;
+}
+
+.drivers-dashboard .dqf-close-btn-glow {
+  position: absolute;
+  inset: -2px;
+  border-radius: 14px;
+  background: conic-gradient(
+    from 0deg,
+    rgba(56, 189, 248, 0.4),
+    rgba(139, 92, 246, 0.3),
+    rgba(34, 211, 238, 0.4),
+    rgba(56, 189, 248, 0.4)
+  );
+  opacity: 0;
+  z-index: 0;
+  transition: opacity 0.3s ease;
+  animation: dqf-close-glow-spin 4s linear infinite;
+}
+
+@keyframes dqf-close-glow-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.drivers-dashboard .dqf-close-btn-ai:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(51, 65, 85, 0.9));
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.2), 0 0 40px rgba(139, 92, 246, 0.1);
+  transform: scale(1.05);
+}
+
+.drivers-dashboard .dqf-close-btn-ai:hover .dqf-close-btn-glow {
+  opacity: 1;
+}
+
+.drivers-dashboard .dqf-close-btn-ai:hover .material-symbols-outlined {
+  color: #e0f2fe;
+  transform: rotate(90deg);
+}
+
+.drivers-dashboard .dqf-close-btn-ai:active {
+  transform: scale(0.95);
+}
+
+.drivers-dashboard .dqf-close-btn-ai:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .drivers-dashboard .dqf-modal-body {
   padding: 18px 20px;
   overflow: auto;
