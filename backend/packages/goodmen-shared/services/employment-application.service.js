@@ -23,6 +23,7 @@ function mapEmployerToDb(emp, applicationId) {
     reason_for_leaving: emp.reasonForLeaving || emp.reason_for_leaving || null,
     salary: emp.salaryWage || emp.salary || null,
     contact_person: emp.contactPerson || emp.contact_person || null,
+    employer_email: emp.employerEmail || emp.employer_email || null,
     is_current: emp.isCurrent || emp.is_current || false,
     was_cmv: emp.wasCMV || emp.was_cmv || false,
     subject_to_fmcsr: emp.subjectToFMCSR ?? emp.subject_to_fmcsr ?? null,
@@ -476,6 +477,62 @@ async function submitApplication(applicationId, payload, userId, context = null)
       }
     } catch (e) {
       dtLogger.warn('driver_update_failed', { applicationId, error: e?.message || String(e) });
+    }
+
+    // FN-222: Sync employers from the application to driver_past_employers
+    // so they appear in the employer investigations tracker.
+    try {
+      if (await trx.schema.hasTable('driver_past_employers')) {
+        const appEmployers = await trx('employment_application_employers')
+          .where({ application_id: applicationId });
+
+        if (appEmployers.length > 0) {
+          // Clear existing past employers for this driver (fresh sync on each submission)
+          await trx('driver_past_employers').where({ driver_id: app.driver_id }).del();
+
+          for (const emp of appEmployers) {
+            // Parse MM/YYYY dates to ISO dates for start_date / end_date
+            const parseMonthYear = (val) => {
+              if (!val) return null;
+              const str = String(val).trim().toLowerCase();
+              if (str === 'present' || str === 'current') return null;
+              const parts = str.split('/');
+              if (parts.length === 2) {
+                const [mm, yyyy] = parts;
+                const m = parseInt(mm, 10);
+                const y = parseInt(yyyy, 10);
+                if (m >= 1 && m <= 12 && y >= 1900) {
+                  return `${y}-${String(m).padStart(2, '0')}-01`;
+                }
+              }
+              return null;
+            };
+
+            await trx('driver_past_employers').insert({
+              driver_id: app.driver_id,
+              employer_name: emp.company_name || 'Unknown',
+              contact_name: emp.contact_person || null,
+              contact_phone: emp.phone || null,
+              contact_email: emp.employer_email || null,
+              position_held: emp.position_held || null,
+              start_date: parseMonthYear(emp.from_month_year),
+              end_date: parseMonthYear(emp.to_month_year),
+              reason_for_leaving: emp.reason_for_leaving || null,
+              is_dot_regulated: emp.was_cmv || false,
+              subject_to_drug_alcohol_testing: emp.safety_sensitive_dot_function || false,
+              investigation_status: 'not_started'
+            });
+          }
+
+          dtLogger.info('employer_sync_complete', {
+            applicationId,
+            driverId: app.driver_id,
+            employerCount: appEmployers.length
+          });
+        }
+      }
+    } catch (e) {
+      dtLogger.warn('employer_sync_failed', { applicationId, error: e?.message || String(e) });
     }
 
     const final = await trx('employment_applications').where({ id: applicationId }).first();
