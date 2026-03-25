@@ -764,7 +764,6 @@
                     <span>{{ uploadingDocType === docType.key ? 'Uploading...' : 'Take Photo or Choose File' }}</span>
                     <input type="file"
                            accept="image/*,application/pdf"
-                           capture="environment"
                            class="doc-upload-input"
                            [disabled]="uploadingDocType !== null"
                            (change)="onDocumentFileSelected($event, docType.key)" />
