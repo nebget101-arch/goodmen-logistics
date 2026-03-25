@@ -247,8 +247,9 @@ router.post(['/', '/driver/:driverId/tests'], async (req, res) => {
     const ccfNumber = body.ccfNumber || body.ccf_number;
     const labName = body.labName || body.lab_name;
     const notes = body.notes;
+    const resultReceivedDate = body.resultReceivedDate || body.result_received_date;
 
-    // driverId is always required; testDate + result required only if provided (form may skip)
+    // driverId is always required; result is optional (test may be scheduled before results arrive)
     if (!driverId) {
       return res.status(400).json({ message: 'driverId is required (URL param or body)' });
     }
@@ -276,19 +277,20 @@ router.post(['/', '/driver/:driverId/tests'], async (req, res) => {
       `INSERT INTO drug_alcohol_tests (
         driver_id, test_date, result,
         test_type, substance_type, panel_details, collection_site,
-        collection_date, result_date, mro_name, mro_verified,
+        collection_date, result_date, result_received_date, mro_name, mro_verified,
         ccf_number, lab_name, notes,
         reported_to_clearinghouse,
         created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, false, NOW())
       RETURNING *`,
       [
         driverId, testDate || collectionDate || null, testResult || null,
         testType || null, substanceType || null,
         panelDetails ? JSON.stringify(panelDetails) : null,
         collectionSite || null,
-        collectionDate || null, resultDate || null, mroName || null, mroVerified ?? null,
+        collectionDate || null, resultDate || null, resultReceivedDate || null,
+        mroName || null, mroVerified ?? null,
         ccfNumber || null, labName || null, notes || null
       ]
     );
@@ -360,6 +362,7 @@ router.put(['/:id', '/tests/:id'], async (req, res) => {
     const ccfNumber = b.ccfNumber || b.ccf_number;
     const labName = b.labName || b.lab_name;
     const notes = b.notes;
+    const resultReceivedDate = b.resultReceivedDate || b.result_received_date;
 
     // Validate testType if provided
     if (testType && !VALID_TEST_TYPES.includes(testType)) {
@@ -385,20 +388,22 @@ router.put(['/:id', '/tests/:id'], async (req, res) => {
         collection_site = COALESCE($6, collection_site),
         collection_date = COALESCE($7, collection_date),
         result_date = COALESCE($8, result_date),
-        mro_name = COALESCE($9, mro_name),
-        mro_verified = COALESCE($10, mro_verified),
-        ccf_number = COALESCE($11, ccf_number),
-        lab_name = COALESCE($12, lab_name),
-        notes = COALESCE($13, notes),
+        result_received_date = COALESCE($9, result_received_date),
+        mro_name = COALESCE($10, mro_name),
+        mro_verified = COALESCE($11, mro_verified),
+        ccf_number = COALESCE($12, ccf_number),
+        lab_name = COALESCE($13, lab_name),
+        notes = COALESCE($14, notes),
         updated_at = NOW()
-      WHERE id = $14
+      WHERE id = $15
       RETURNING *`,
       [
         testDate || null, testResult || null,
         testType || null, substanceType || null,
         panelDetails ? JSON.stringify(panelDetails) : null,
         collectionSite || null,
-        collectionDate || null, resultDate || null, mroName || null, mroVerified ?? null,
+        collectionDate || null, resultDate || null, resultReceivedDate || null,
+        mroName || null, mroVerified ?? null,
         ccfNumber || null, labName || null, notes || null,
         testId
       ]
