@@ -146,6 +146,9 @@ export class DriversComponent implements OnInit, OnDestroy {
     expanded: boolean;
   }[] = [];
 
+  // FN-258: Active DQF tab for tab navigation
+  activeDqfTab = 'pre_hire';
+
   // Clearance status
   clearanceStatus: { cleared: boolean; requirements?: any[]; missingItems: string[] } = {
     cleared: false,
@@ -530,6 +533,7 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.showDQFForm = true;
     this.showAddForm = false;
     this.editingDriver = null;
+    this.activeDqfTab = 'pre_hire';
     this.loadDQFStatus(driver);
     this.loadDriverDocuments(driver.id);
     this.loadDriverSafetySummary(driver.id);
@@ -976,6 +980,18 @@ export class DriversComponent implements OnInit, OnDestroy {
 
   toggleCategory(category: { expanded: boolean }): void {
     category.expanded = !category.expanded;
+  }
+
+  /** FN-258: Switch active DQF tab */
+  setActiveDqfTab(tabKey: string): void {
+    this.activeDqfTab = tabKey;
+  }
+
+  /** FN-258: Return "done/total" string for tab badge */
+  getCategoryCompletionCount(cat: { requirements: any[] }): string {
+    const total = cat.requirements?.length || 0;
+    const done = cat.requirements?.filter((r: any) => r.status === 'complete').length || 0;
+    return `${done}/${total}`;
   }
 
   getStatusChipClass(status: string): string {

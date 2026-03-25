@@ -689,20 +689,23 @@
           </div>
         </div>
 
-        <!-- Category Accordions -->
-        <div *ngFor="let cat of dqfCategories" class="dqf-category-accordion">
-          <button type="button" class="dqf-category-header" (click)="toggleCategory(cat)"
-                  [attr.aria-expanded]="cat.expanded">
-            <span class="material-symbols-outlined dqf-category-chevron"
-                  [class.dqf-chevron-open]="cat.expanded">chevron_right</span>
-            <span class="dqf-category-title">{{ cat.label }}</span>
-            <span class="dqf-category-count"
-                  [ngClass]="getCategoryCompletedCount(cat) === cat.requirements.length ? 'dqf-count-complete' : 'dqf-count-incomplete'">
-              {{ getCategoryCompletedCount(cat) }}/{{ cat.requirements.length }}
+        <!-- FN-258: Tab Navigation Bar -->
+        <div class="dqf-tab-bar">
+          <button *ngFor="let cat of dqfCategories"
+                  type="button"
+                  class="dqf-tab-btn"
+                  [class.active]="activeDqfTab === cat.key"
+                  (click)="setActiveDqfTab(cat.key)">
+            <span class="dqf-tab-label">{{ cat.label }}</span>
+            <span class="dqf-tab-badge"
+                  [ngClass]="getCategoryCompletionPct(cat) === 100 ? 'badge-complete' : 'badge-incomplete'">
+              {{ getCategoryCompletionCount(cat) }}
             </span>
           </button>
+        </div>
 
-          <div class="dqf-category-body" *ngIf="cat.expanded">
+        <!-- FN-258: Tab Content Panels -->
+        <div *ngFor="let cat of dqfCategories" class="dqf-tab-panel" [class.active]="activeDqfTab === cat.key">
             <div *ngFor="let req of cat.requirements" class="dqf-req-row" [ngClass]="'dqf-status-' + req.status">
               <div class="dqf-req-main">
                 <!-- Status chip -->
@@ -807,8 +810,7 @@
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+        </div><!-- /dqf-tab-panel (FN-258) -->
 
         <!-- Pre-Hire Documents (FN-237) -->
         <section class="prehire-docs-section">
