@@ -782,6 +782,17 @@ export class DriversComponent implements OnInit, OnDestroy {
         'consent_forms_signed',
         'release_of_info_signed'
       ],
+      pre_hire_checklist: [
+        'employment_application_completed',
+        'cdl_on_file',
+        'clearinghouse_consent_sent',
+        'clearinghouse_consent_received',
+        'clearinghouse_result_received',
+        'employment_verification_submitted',
+        'mvr_authorization_signed',
+        'pre_employment_drug_test_submitted',
+        'psp_consent'
+      ],
       within_30_days: [
         'mvr_all_states',
         'previous_employer_investigation',
@@ -830,7 +841,16 @@ export class DriversComponent implements OnInit, OnDestroy {
       annual_mvr_inquiry: '49 CFR 391.25(a)',
       annual_driving_record_review: '49 CFR 391.25(c)',
       annual_clearinghouse_limited_query: '49 CFR 382.701(b)',
-      medical_cert_renewal: '49 CFR 391.45'
+      medical_cert_renewal: '49 CFR 391.45',
+      employment_application_completed: '49 CFR 391.21',
+      cdl_on_file: '49 CFR 391.51(b)(2)',
+      clearinghouse_consent_sent: '49 CFR 382.701',
+      clearinghouse_consent_received: '49 CFR 382.701',
+      clearinghouse_result_received: '49 CFR 382.701',
+      employment_verification_submitted: '49 CFR 391.23(d)',
+      mvr_authorization_signed: '49 CFR 391.23(a)',
+      pre_employment_drug_test_submitted: '49 CFR 382.301',
+      psp_consent: '49 CFR 391.23(i)'
     };
     return refs[key] || '';
   }
@@ -840,6 +860,7 @@ export class DriversComponent implements OnInit, OnDestroy {
     const categoryMap = this.getCategoryKeyMap();
     const categoryDefs: { key: string; label: string }[] = [
       { key: 'pre_hire', label: 'Pre-Hire Documents (Before Driving)' },
+      { key: 'pre_hire_checklist', label: 'Pre-Hire Checklist' },
       { key: 'within_30_days', label: 'Within 30 Days of Hire' },
       { key: 'ongoing', label: 'Ongoing Documents' },
       { key: 'annual', label: 'Annual Requirements' }
