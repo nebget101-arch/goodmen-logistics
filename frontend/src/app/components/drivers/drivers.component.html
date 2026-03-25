@@ -762,8 +762,8 @@
                       <span class="material-symbols-outlined" style="font-size:14px;">undo</span> Undo
                     </button>
                   </ng-container>
-                  <!-- Evidence link if document attached -->
-                  <a *ngIf="req.evidence_document_id"
+                  <!-- Evidence link if document attached (FN-230/231: hide download on checklist sections) -->
+                  <a *ngIf="req.evidence_document_id && cat.key !== 'pre_hire_checklist'"
                      class="dqf-evidence-link"
                      href="#" (click)="downloadEvidenceDoc(req.evidence_document_id); $event.preventDefault()">
                     <span class="material-symbols-outlined" style="font-size:14px;">download</span>
