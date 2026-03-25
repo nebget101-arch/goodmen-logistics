@@ -132,6 +132,19 @@ export class DriversComponent implements OnInit, OnDestroy {
   autoPullingEmpApp = false;
   autoPullEmpAppError = '';
 
+  // FN-264: MVR report upload and extracted data
+  mvrData: {
+    license_status?: string;
+    license_class?: string;
+    violations_count?: number;
+    accidents_count?: number;
+    points_total?: number;
+    report_date?: string;
+    document_id?: string;
+  } | null = null;
+  mvrDataLoading = false;
+  mvrUploadProgress = false;
+
   // Dynamic DQF requirements
   dqfRequirements: any[] = [];
   dqfRequirementsLoading = false;
@@ -539,6 +552,7 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.loadDriverSafetySummary(driver.id);
     this.loadDrugAlcoholTests(driver.id);
     this.loadPrehireDocuments(driver.id);
+    this.loadMvrData(driver.id);
   }
 
   /** Load pre-hire documents for a driver (FN-237) */
@@ -860,7 +874,9 @@ export class DriversComponent implements OnInit, OnDestroy {
         'pre_employment_drug_test_result_received',
         'psp_consent',
         // FN-261: Moved from Other to Pre-Hire Checklist
-        'pre_employment_drug_test_scheduled'
+        'pre_employment_drug_test_scheduled',
+        // FN-264: MVR data received checklist item
+        'mvr_data_received'
       ],
       within_30_days: [
         'mvr_all_states',
@@ -929,7 +945,9 @@ export class DriversComponent implements OnInit, OnDestroy {
       employment_application_submitted: '49 CFR 391.21',
       // FN-261: New requirement CFR references
       pre_employment_drug_test_scheduled: '49 CFR 382.301',
-      employment_verification_received: '49 CFR 391.23(d)'
+      employment_verification_received: '49 CFR 391.23(d)',
+      // FN-264: MVR data received
+      mvr_data_received: '49 CFR 391.23(a)(1)'
     };
     return refs[key] || '';
   }
@@ -1263,6 +1281,48 @@ export class DriversComponent implements OnInit, OnDestroy {
         this.autoPullingEmpApp = false;
         this.autoPullEmpAppError = err?.error?.message || 'Failed to pull employment application. Please try again.';
         console.error('Failed to pull employment application:', err);
+      }
+    });
+  }
+
+  /** FN-264: Upload an MVR report PDF and store extracted data */
+  uploadMvrReport(driverId: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input?.files?.[0];
+    if (!file) return;
+
+    this.mvrUploadProgress = true;
+    this.apiService.uploadMvrReport(driverId, file).subscribe({
+      next: (response: Record<string, unknown>) => {
+        this.mvrUploadProgress = false;
+        this.mvrData = (response?.['mvr_data'] as typeof this.mvrData) || null;
+        input.value = '';
+        // Reload DQF status to reflect completed requirement
+        if (this.selectedDriver) {
+          this.loadDQFStatus(this.selectedDriver);
+        }
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.mvrUploadProgress = false;
+        input.value = '';
+        console.error('MVR upload failed:', err);
+        alert(err?.error?.message || 'Failed to upload MVR report. Please try again.');
+      }
+    });
+  }
+
+  /** FN-264: Load previously extracted MVR data for a driver */
+  loadMvrData(driverId: string): void {
+    this.mvrDataLoading = true;
+    this.mvrData = null;
+    this.apiService.getMvrData(driverId).subscribe({
+      next: (data: unknown) => {
+        this.mvrData = (data as typeof this.mvrData) || null;
+        this.mvrDataLoading = false;
+      },
+      error: () => {
+        this.mvrData = null;
+        this.mvrDataLoading = false;
       }
     });
   }

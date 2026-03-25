@@ -2214,6 +2214,71 @@
   border-color: rgba(56, 189, 248, 0.4);
 }
 
+/* FN-264: MVR summary card */
+.drivers-dashboard .mvr-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  margin-top: 6px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.drivers-dashboard .mvr-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.drivers-dashboard .mvr-summary-row:last-of-type {
+  border-bottom: none;
+}
+
+.drivers-dashboard .mvr-summary-label {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.drivers-dashboard .mvr-summary-value {
+  font-size: 12px;
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.drivers-dashboard .mvr-violation-count {
+  color: #ef4444;
+}
+
+.drivers-dashboard .mvr-accident-count {
+  color: #ef4444;
+}
+
+.drivers-dashboard .mvr-clean-count {
+  color: #22c55e;
+}
+
+.drivers-dashboard .mvr-download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #38bdf8;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.drivers-dashboard .mvr-download-link:hover {
+  text-decoration: underline;
+}
+
 .prehire-docs-empty {
   padding: 20px 18px;
   font-size: 13px;
