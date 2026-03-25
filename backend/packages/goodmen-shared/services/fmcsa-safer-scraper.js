@@ -112,8 +112,15 @@ async function scrapeCompanySnapshot(dotNumber) {
     bodyText.includes('0 records found') ||
     bodyText.includes('Record not found')
   ) {
-    console.error(`${LOG_PREFIX} No carrier found for DOT ${dotNumber}`);
+    // Log first 300 chars for debugging
+    console.error(`${LOG_PREFIX} No carrier found for DOT ${dotNumber} — page snippet: ${bodyText.substring(0, 300).replace(/\s+/g, ' ')}`);
     return null;
+  }
+
+  // If we got HTML but can't find any table data, log for debugging
+  const tableCount = $('tr').length;
+  if (tableCount < 3) {
+    console.warn(`${LOG_PREFIX} DOT ${dotNumber}: page loaded but only ${tableCount} table rows found — possible CAPTCHA or block. Snippet: ${bodyText.substring(0, 200).replace(/\s+/g, ' ')}`);
   }
 
   // Build a label -> value map from all table cells.
