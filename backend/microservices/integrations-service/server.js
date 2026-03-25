@@ -68,6 +68,10 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 let scrapeQueueInstance = null;
 
 async function initScrapeQueue() {
+  if (!process.env.REDIS_URL) {
+    console.warn('[integrations] REDIS_URL not set — FMCSA scrape queue disabled. Dashboard API still works.');
+    return;
+  }
   try {
     const { createScrapeQueue } = require('@goodmen/shared/services/fmcsa-scrape-queue');
     scrapeQueueInstance = createScrapeQueue(knex, REDIS_URL);

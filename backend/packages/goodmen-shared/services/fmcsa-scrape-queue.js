@@ -16,8 +16,28 @@ function createScrapeQueue(knex, redisUrl) {
   if (!knex) throw new Error(`${LOG_PREFIX} knex instance is required`);
   if (!redisUrl) throw new Error(`${LOG_PREFIX} redisUrl is required`);
 
+  // ── Parse Redis URL and build options ─────────────────────────────
+  const useTls = redisUrl.startsWith('rediss://');
+  const redisOpts = {
+    maxRetriesPerRequest: null,   // prevent crash on connection loss
+    enableReadyCheck: false,       // don't block on READY check
+    retryStrategy(times) {
+      if (times > 10) return null;
+      return Math.min(times * 3000, 30000);
+    },
+    ...(useTls ? { tls: { rejectUnauthorized: false } } : {}),
+  };
+
   // ── Queue instance ────────────────────────────────────────────────
-  const queue = new Queue('fmcsa-scrape', redisUrl, {
+  // IMPORTANT: Do NOT pass `redis: redisUrl` alongside `createClient` —
+  // Bull ignores createClient when redis is present, causing default
+  // ioredis options (maxRetriesPerRequest=20) which crash the process.
+  const Redis = require('ioredis');
+  const queue = new Queue('fmcsa-scrape', {
+    prefix: 'fmcsa',
+    createClient(type) {
+      return new Redis(redisUrl, { ...redisOpts });
+    },
     limiter: { max: 1, duration: 3000 },
     defaultJobOptions: {
       attempts: 3,
@@ -28,8 +48,19 @@ function createScrapeQueue(knex, redisUrl) {
     },
   });
 
+  let redisConnected = false;
   queue.on('error', (err) => {
-    console.error(`${LOG_PREFIX} Queue error:`, err.message);
+    if (!redisConnected) {
+      // Only log once during initial connection attempts
+      console.warn(`${LOG_PREFIX} Queue error (Redis may be unavailable):`, err.message);
+    } else {
+      console.error(`${LOG_PREFIX} Queue error:`, err.message);
+    }
+  });
+
+  queue.client.on('ready', () => {
+    redisConnected = true;
+    console.log(`${LOG_PREFIX} Redis connected`);
   });
 
   queue.on('failed', (job, err) => {
