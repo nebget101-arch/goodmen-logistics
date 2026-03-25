@@ -518,12 +518,12 @@
                 </div>
               </section>
 
-              <!-- CERTIFICATION -->
+              <!-- APPLICANT CERTIFICATION & SIGNATURE (FN-233) -->
               <section class="onboard-panel onboard-panel-full onboard-panel-signature">
                 <div class="onboard-panel-header">
                   <span class="material-symbols-outlined">draw</span>
                   <div>
-                    <h3 class="onboard-section-title">Applicant Certification</h3>
+                    <h3 class="onboard-section-title">Applicant Certification &amp; Signature</h3>
                     <p>To be read and signed by applicant.</p>
                   </div>
                 </div>
@@ -534,10 +534,58 @@
                   <p>I have the right to review, correct, and rebut information provided by previous employers.</p>
                   <p>I certify this application is true and complete to the best of my knowledge.</p>
                 </div>
+
+                <!-- Certification Identity Fields (FN-233) -->
                 <div class="onboard-grid-2" style="margin-top:16px;">
-                  <div class="onboard-field"><label>Applicant Printed Name *</label><input class="form-input" [(ngModel)]="employment.applicationSignatureName" name="eaSigName" placeholder="Full legal name" required /></div>
-                  <div class="onboard-field"><label>Signature *</label><input class="form-input form-input-signature" [(ngModel)]="employment.applicationSignatureName" name="eaSig" placeholder="Type your full legal name as signature" required /></div>
-                  <div class="onboard-field"><label>Date *</label><input type="date" class="form-input" [(ngModel)]="employment.applicationSignatureDate" name="eaSigDate" required /></div>
+                  <div class="onboard-field">
+                    <label>Full Name *</label>
+                    <input class="form-input" [(ngModel)]="employment.certificationFields!.fullName" name="certFullName" placeholder="Full legal name" required />
+                  </div>
+                  <div class="onboard-field">
+                    <label>Date of Birth *</label>
+                    <input type="date" class="form-input" [(ngModel)]="employment.certificationFields!.dateOfBirth" name="certDob" required />
+                  </div>
+                  <div class="onboard-field">
+                    <label>SSN Last 4 *</label>
+                    <input class="form-input" [(ngModel)]="employment.certificationFields!.ssnLast4" name="certSsnLast4"
+                           placeholder="1234" maxlength="4" pattern="[0-9]{4}" inputmode="numeric"
+                           style="letter-spacing:4px; font-family:monospace;" required />
+                  </div>
+                  <div class="onboard-field">
+                    <label>Driver's License Number *</label>
+                    <input class="form-input" [(ngModel)]="employment.certificationFields!.driversLicenseNumber" name="certDlNumber" placeholder="License number" required />
+                  </div>
+                  <div class="onboard-field">
+                    <label>State of Issue *</label>
+                    <select class="form-input" [(ngModel)]="employment.certificationFields!.stateOfIssue" name="certStateOfIssue" required>
+                      <option value="" disabled selected>Select state</option>
+                      <option *ngFor="let st of usStates" [value]="st">{{ st }}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Certification Checkbox -->
+                <div class="onboard-cert-checkbox" style="margin-top:16px;">
+                  <label class="onboard-choice">
+                    <input type="checkbox" [(ngModel)]="employment.certificationFields!.certifyTrueAndAccurate" name="certCheckbox" required />
+                    <span>I certify that the information provided in this application is true and accurate to the best of my knowledge.</span>
+                  </label>
+                </div>
+
+                <!-- Signature & Date -->
+                <div class="onboard-grid-2" style="margin-top:16px;">
+                  <div class="onboard-field">
+                    <label>Applicant Printed Name *</label>
+                    <input class="form-input" [(ngModel)]="employment.applicationSignatureName" name="eaSigName" placeholder="Full legal name" required />
+                  </div>
+                  <div class="onboard-field">
+                    <label>Typed Signature *</label>
+                    <input class="form-input form-input-signature" [(ngModel)]="employment.certificationFields!.typedSignature" name="certTypedSig" placeholder="Type your full legal name as signature" required />
+                  </div>
+                  <div class="onboard-field">
+                    <label>Date</label>
+                    <input type="date" class="form-input" [(ngModel)]="employment.certificationFields!.signatureDate" name="certSigDate" readonly />
+                  </div>
                 </div>
               </section>
             </div>

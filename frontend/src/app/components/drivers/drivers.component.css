@@ -1888,3 +1888,119 @@
     color: #0f172a;
   }
 }
+
+/* =============================================
+   Pre-Hire Documents Section (FN-237)
+   ============================================= */
+.prehire-docs-section {
+  margin-top: 20px;
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+  overflow: hidden;
+}
+
+.prehire-docs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: rgba(30, 41, 59, 0.6);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+.prehire-docs-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prehire-docs-header h4 .material-symbols-outlined {
+  font-size: 18px;
+  color: #38bdf8;
+}
+
+.prehire-docs-list {
+  padding: 4px 0;
+}
+
+.prehire-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+  transition: background 0.15s ease;
+}
+
+.prehire-doc-row:last-child {
+  border-bottom: none;
+}
+
+.prehire-doc-row:hover {
+  background: rgba(56, 189, 248, 0.04);
+}
+
+.prehire-doc-status {
+  flex-shrink: 0;
+}
+
+.prehire-doc-check {
+  font-size: 18px;
+  color: #22c55e;
+}
+
+.prehire-doc-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prehire-doc-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.prehire-doc-date {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.prehire-doc-actions {
+  flex-shrink: 0;
+}
+
+.prehire-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.prehire-download-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.prehire-docs-empty {
+  padding: 20px 18px;
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+}

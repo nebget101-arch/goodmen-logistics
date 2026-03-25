@@ -361,9 +361,9 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   }
   y -= 12;
 
-  // === CERTIFICATION ===
-  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 130));
-  drawSectionHeader(page, bold, 'APPLICANT CERTIFICATION', y);
+  // === APPLICANT CERTIFICATION & SIGNATURE (FN-233) ===
+  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 180));
+  drawSectionHeader(page, bold, 'APPLICANT CERTIFICATION & SIGNATURE', y);
   y -= 16;
   const certParagraphs = [
     'I authorize investigations into my personal, employment, financial and related history.',
@@ -377,13 +377,35 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     drawLine(page, font, p, 36, y, 9);
     y -= 14;
   }
+  y -= 10;
+
+  // FN-233: Captured applicant identity fields
+  const certFullName = [applicant.firstName, applicant.middleName, applicant.lastName].filter(Boolean).join(' ');
+  drawLine(page, font, `Full Name: ${asText(certFullName)}`, 36, y, 9);
+  y -= 13;
+  drawLine(page, font, `Date of Birth: ${fmtDate(applicant.dateOfBirth)}`, 36, y, 9);
+  y -= 13;
+  drawLine(page, font, `SSN: ${maskSSN(applicant.ssn)}`, 36, y, 9);
+  y -= 13;
+  // License number from snapshot or from licenses array
+  const certLicenseNum = applicant.licenseNumber || (licenses.length > 0 ? (licenses[0].license_number || licenses[0].licenseNumber) : '') || '';
+  const certLicenseState = applicant.licenseState || (licenses.length > 0 ? licenses[0].state : '') || '';
+  drawLine(page, font, `Driver's License Number: ${asText(certLicenseNum)}`, 36, y, 9);
+  y -= 13;
+  drawLine(page, font, `State of Issue: ${asText(certLicenseState)}`, 36, y, 9);
   y -= 16;
+
   const cert = applicant.certification || {};
   drawLine(page, font, `Applicant Signature: ${asText(cert.applicantSignature || applicant.applicantSignature || applicant.applicantPrintedName || [applicant.firstName, applicant.lastName].filter(Boolean).join(' '))}`, 36, y, 10);
   y -= 16;
-  drawLine(page, font, `Date: ${fmtDate(cert.signatureDate || applicant.signatureDate || fullApp.signed_at || fullApp.submitted_at)}`, 36, y, 10);
+  drawLine(page, font, `Date: ${fmtDate(fullApp.signed_certification_at || cert.signatureDate || applicant.signatureDate || fullApp.signed_at || fullApp.submitted_at)}`, 36, y, 10);
   y -= 16;
-  drawLine(page, font, `Applicant Name (printed): ${asText(cert.applicantPrintedName || applicant.applicantPrintedName || [applicant.firstName, applicant.middleName, applicant.lastName].filter(Boolean).join(' '))}`, 36, y, 10);
+  drawLine(page, font, `Applicant Name (printed): ${asText(cert.applicantPrintedName || applicant.applicantPrintedName || certFullName)}`, 36, y, 10);
+  y -= 12;
+  // FN-233: Electronic signature acknowledgment
+  drawLine(page, font, 'This application was signed electronically. The signer consents to the use of electronic', 36, y, 7);
+  y -= 10;
+  drawLine(page, font, 'signatures in accordance with applicable law.', 36, y, 7);
 
   // === DOCUMENT AUDIT TRAIL ===
   const audit = context.auditTrail || applicant.auditTrail || {};

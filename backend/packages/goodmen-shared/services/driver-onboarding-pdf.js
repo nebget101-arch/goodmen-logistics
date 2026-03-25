@@ -262,9 +262,9 @@ async function buildEmploymentApplicationPdf({ driver, application, signature })
     });
   }
 
-  // --- Signed Certification Block ---
+  // --- Applicant Certification & Signature (FN-233) ---
   writeSectionSeparator();
-  writeHeading('Applicant Certification');
+  writeHeading('Applicant Certification & Signature');
   if (application.certification_text_version) {
     writeText(`Certification Text Version: ${application.certification_text_version}`, { size: 9 });
   }
@@ -281,6 +281,19 @@ async function buildEmploymentApplicationPdf({ driver, application, signature })
     { size: 9 }
   );
   yPos -= lineHeight;
+
+  // FN-233: Captured applicant identity fields
+  const certFullName = [
+    application.firstName || driver?.first_name || '',
+    application.middleName || '',
+    application.lastName || driver?.last_name || ''
+  ].filter(Boolean).join(' ');
+  writeText(`Full Name: ${certFullName}`, { size: 9 });
+  writeText(`Date of Birth: ${safeDate(application.dateOfBirth)}`, { size: 9 });
+  writeText(`SSN: ${maskSSN(application.ssn || application.ssnLast4)}`, { size: 9 });
+  writeText(`Driver's License Number: ${application.licenseNumber || driver?.cdl_number || 'N/A'}`, { size: 9 });
+  writeText(`State of Issue: ${application.licenseState || driver?.cdl_state || 'N/A'}`, { size: 9 });
+  yPos -= lineHeight * 0.5;
 
   // Signature image placeholder — if a base64 signature is provided, embed it
   if (application.applicantSignature && application.applicantSignature.startsWith('data:image/png')) {
@@ -307,6 +320,8 @@ async function buildEmploymentApplicationPdf({ driver, application, signature })
 
   const certDate = safeDate(application.signed_certification_at || signature?.signedAt || application.applicationSignatureDate);
   writeText(`Date Signed: ${certDate}`, { size: 10 });
+  writeText('This application was signed electronically. The signer consents to the use', { size: 7, color: rgb(0.4, 0.4, 0.4) });
+  writeText('of electronic signatures in accordance with applicable law.', { size: 7, color: rgb(0.4, 0.4, 0.4) });
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
@@ -736,8 +751,8 @@ async function generateConsentPdf({ template, consent, company, driver }) {
   drawTextLine('Electronic signature acknowledged', { size: 9 });
   yPos -= lineHeight;
 
-  // ── Footer: Document ID and IP ────────────────────────────────────────
-  ensureSpace(lineHeight * 3);
+  // ── FN-234: Audit Trail Footer ──────────────────────────────────────
+  ensureSpace(lineHeight * 7);
   page.drawLine({
     start: { x: margin, y: yPos },
     end: { x: pageWidth - margin, y: yPos },
@@ -746,10 +761,16 @@ async function generateConsentPdf({ template, consent, company, driver }) {
   });
   yPos -= lineHeight;
 
+  drawTextLine('AUDIT TRAIL', { size: 9, bold: true, color: rgb(0.3, 0.3, 0.3) });
+  drawTextLine('Document signed electronically', { size: 7, color: rgb(0.5, 0.5, 0.5) });
+  const auditSignedAt = consent.signed_at
+    ? new Date(consent.signed_at).toISOString()
+    : new Date().toISOString();
+  drawTextLine(`Date/Time: ${auditSignedAt}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
+  drawTextLine(`IP Address: ${consent.ip_address || 'N/A'}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
+  const auditUa = (consent.user_agent || 'N/A').slice(0, 80);
+  drawTextLine(`User Agent: ${auditUa}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
   drawTextLine(`Document ID: ${consent.id || 'N/A'}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
-  if (consent.ip_address) {
-    drawTextLine(`IP: ${consent.ip_address}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
-  }
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);

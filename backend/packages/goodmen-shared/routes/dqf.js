@@ -311,5 +311,67 @@ router.get('/requirement/:driverId/:requirementKey/changes', async (req, res) =>
   }
 });
 
+// FN-237: GET /api/dqf/driver/:driverId/prehire-documents
+// List all pre-hire documents for a driver (employment app + consent forms)
+router.get('/driver/:driverId/prehire-documents', async (req, res) => {
+  const start = Date.now();
+  try {
+    const { driverId } = req.params;
+
+    // Validate driver exists and OE access
+    const driverRes = await query(
+      'SELECT id, operating_entity_id FROM drivers WHERE id = $1',
+      [driverId]
+    );
+    if (driverRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    if (req.context?.operatingEntityId && driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    const docs = await query(
+      `SELECT
+         id,
+         driver_id,
+         packet_id,
+         doc_type,
+         file_name,
+         mime_type,
+         size_bytes,
+         created_at
+       FROM driver_documents
+       WHERE driver_id = $1
+         AND doc_type IN (
+           'employment_application_signed',
+           'employment_application_pdf',
+           'consent_fcra_disclosure_signed',
+           'consent_fcra_authorization_signed',
+           'consent_release_of_information_signed',
+           'consent_drug_alcohol_release_signed',
+           'consent_clearinghouse_full_signed',
+           'consent_psp_consent_signed'
+         )
+       ORDER BY created_at DESC`,
+      [driverId]
+    );
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('GET', `/api/dqf/driver/${driverId}/prehire-documents`, 200, duration, {
+      driverId,
+      count: docs.rows.length
+    });
+
+    return res.json(docs.rows);
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('dqf_prehire_documents_failed', error, { driverId: req.params.driverId });
+    dtLogger.trackRequest('GET', `/api/dqf/driver/${req.params.driverId}/prehire-documents`, 500, duration);
+    // eslint-disable-next-line no-console
+    console.error('Error in GET /api/dqf/driver/:driverId/prehire-documents', error);
+    return res.status(500).json({ message: 'Failed to load pre-hire documents' });
+  }
+});
+
 module.exports = router;
 

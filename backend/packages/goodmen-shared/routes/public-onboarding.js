@@ -9,6 +9,8 @@ const {
   buildMvrAuthorizationPdf
 } = require('../services/driver-onboarding-pdf');
 const employmentAppService = require('../services/employment-application.service');
+// FN-235: DQF integration for employment application submission
+const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('../services/dqf-service');
 
 function hasMeaningfulData(data) {
   if (!data || typeof data !== 'object') return false;
@@ -312,11 +314,12 @@ async function loadPacketWithToken(packetId, token, forUpdate = false) {
 
 async function maybeGenerateOnboardingPdfs(packetId) {
   // Check if we already have PDFs for this packet
+  // FN-235: Also check for 'employment_application_signed' doc type
   const existingDocsRes = await query(
     `SELECT doc_type
      FROM driver_documents
      WHERE packet_id = $1
-       AND doc_type IN ('employment_application_pdf', 'mvr_authorization_pdf')`,
+       AND doc_type IN ('employment_application_pdf', 'employment_application_signed', 'mvr_authorization_pdf')`,
     [packetId]
   );
   const existingTypes = new Set(existingDocsRes.rows.map((r) => r.doc_type));
@@ -379,9 +382,11 @@ async function maybeGenerateOnboardingPdfs(packetId) {
   });
 
   // Employment application PDF
+  // FN-235: Use 'employment_application_signed' docType for pre-hire documents visibility
   if (
     sections.employment_application &&
     sections.employment_application.status === 'completed' &&
+    !existingTypes.has('employment_application_signed') &&
     !existingTypes.has('employment_application_pdf')
   ) {
     const applicationData = sections.employment_application.data || {};
@@ -395,18 +400,31 @@ async function maybeGenerateOnboardingPdfs(packetId) {
     // FN-216: use "{FirstName} {LastName} - Employment Application.pdf" filename
     const firstName = (driver.first_name || '').trim();
     const lastName = (driver.last_name || '').trim();
+    const dateStr = new Date().toISOString().slice(0, 10);
     const pdfFileName = firstName || lastName
-      ? `${firstName} ${lastName} - Employment Application.pdf`.trim()
-      : 'Employment Application.pdf';
-    await createDriverDocument({
+      ? `employment_application_${firstName}_${lastName}_${dateStr}.pdf`.replace(/\s+/g, '_')
+      : `employment_application_${driver.id}_${dateStr}.pdf`;
+    const empDoc = await createDriverDocument({
       driverId: driver.id,
       packetId: packet.id,
-      docType: 'employment_application_pdf',
+      docType: 'employment_application_signed',
       fileName: pdfFileName,
       mimeType: 'application/pdf',
       bytes: buffer
     });
-    dtLogger.info('driver_employment_application_pdf_created', { packetId, driverId: driver.id });
+    dtLogger.info('driver_employment_application_pdf_created', { packetId, driverId: driver.id, documentId: empDoc.id });
+
+    // FN-235: Mark DQF requirement 'employment_application_submitted' complete with evidence
+    try {
+      await upsertRequirementStatus(driver.id, 'employment_application_submitted', 'complete', empDoc.id);
+      await computeAndUpdateDqfCompleteness(driver.id);
+    } catch (dqfErr) {
+      // Non-blocking: DQF update failure should not break PDF generation
+      dtLogger.warn('employment_app_dqf_update_failed', {
+        driverId: driver.id,
+        error: dqfErr?.message || String(dqfErr)
+      });
+    }
   }
 
   // MVR authorization PDF
