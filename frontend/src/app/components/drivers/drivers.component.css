@@ -344,6 +344,9 @@
 }
 
 .drivers-dashboard .modal-header.dqf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.25);
   background: rgba(30, 41, 59, 0.4);
@@ -377,8 +380,9 @@
   color: var(--text-light);
   cursor: pointer;
   font-size: 20px;
-  padding: 4px;
+  padding: 4px 8px;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .drivers-dashboard .dqf-close-btn:hover {
