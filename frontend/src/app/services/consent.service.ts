@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
 export interface ConsentTemplate {
@@ -10,6 +11,7 @@ export interface ConsentTemplate {
   effectiveDate: string;
   htmlContent: string;
   requiresSignature: boolean;
+  captureFields?: string[];
 }
 
 export interface ConsentCapturedFields {
@@ -47,9 +49,24 @@ export class ConsentService {
    */
   loadConsent(packetId: string, consentKey: string, token: string): Observable<ConsentTemplate> {
     const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/consents');
-    return this.http.get<ConsentTemplate>(
+    return this.http.get<any>(
       `${publicBase}/${encodeURIComponent(packetId)}/${encodeURIComponent(consentKey)}`,
       { params: { token } }
+    ).pipe(
+      map((resp: any) => {
+        // FN-240: API returns { template: { body_text, ... }, ... }
+        // Frontend expects flat ConsentTemplate with htmlContent
+        const tpl = resp.template || resp;
+        return {
+          consentKey: tpl.key || consentKey,
+          title: tpl.title || '',
+          version: String(tpl.version || ''),
+          effectiveDate: tpl.effective_date || tpl.effectiveDate || '',
+          htmlContent: tpl.body_text || tpl.htmlContent || '',
+          requiresSignature: tpl.requires_signature ?? tpl.requiresSignature ?? true,
+          captureFields: tpl.capture_fields || tpl.captureFields || []
+        } as ConsentTemplate;
+      })
     );
   }
 
