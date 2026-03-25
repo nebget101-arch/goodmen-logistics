@@ -46,18 +46,42 @@ async function validateDriverAccess(driverId, context) {
 /**
  * After creating or updating a test, update DQF requirements when the test
  * is a pre-employment drug test.
+ *
+ * FN-223: Enhanced lifecycle:
+ * - Test created → mark pre_employment_drug_test_submitted as complete
+ * - Result NEGATIVE → mark pre_employment_drug_test_result_received as complete
+ *   AND mark pre_employment_drug_test_completed as complete (with evidence doc)
+ * - Result non-negative → mark pre_employment_drug_test_result_received as 'review_required'
  */
-async function handleDqfIntegration(driverId, testType, testResult, userId) {
+async function handleDqfIntegration(driverId, testType, testResult, userId, resultDocumentId) {
   if (testType !== 'pre_employment') return;
+
+  // FN-223: Mark test as submitted (always, on create)
+  await upsertRequirementStatus(driverId, 'pre_employment_drug_test_submitted', 'complete', null);
+  await logStatusChange(driverId, 'pre_employment_drug_test_submitted', null, 'complete', userId, 'Pre-employment drug test created');
 
   // Mark the scheduled requirement as in_progress
   await upsertRequirementStatus(driverId, 'pre_employment_drug_test_scheduled', 'in_progress', null);
   await logStatusChange(driverId, 'pre_employment_drug_test_scheduled', null, 'in_progress', userId, 'Test record created');
 
-  // If negative result, mark completed
-  if (testResult && testResult.toUpperCase() === 'NEGATIVE') {
-    await upsertRequirementStatus(driverId, 'pre_employment_drug_test_completed', 'complete', null);
-    await logStatusChange(driverId, 'pre_employment_drug_test_completed', null, 'complete', userId, 'Negative pre-employment result recorded');
+  if (testResult) {
+    const upperResult = testResult.toUpperCase();
+
+    if (upperResult === 'NEGATIVE') {
+      // FN-223: Negative result → complete both result_received and completed
+      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'complete', resultDocumentId || null);
+      await logStatusChange(driverId, 'pre_employment_drug_test_result_received', null, 'complete', userId, 'Negative pre-employment result received');
+
+      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_completed', 'complete', resultDocumentId || null);
+      await logStatusChange(driverId, 'pre_employment_drug_test_completed', null, 'complete', userId, 'Negative pre-employment result recorded');
+    } else {
+      // FN-223: Non-negative result → mark result_received as review_required
+      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'review_required', resultDocumentId || null);
+      await logStatusChange(
+        driverId, 'pre_employment_drug_test_result_received', null, 'review_required', userId,
+        `Insufficient result: ${testResult}. Review required.`
+      );
+    }
   }
 
   await computeAndUpdateDqfCompleteness(driverId);
@@ -296,10 +320,11 @@ router.post(['/', '/driver/:driverId/tests'], async (req, res) => {
     );
 
     // DQF integration for pre-employment tests
+    const createdRow = result.rows[0];
     if (testType) {
       try {
         const userId = req.context?.userId || null;
-        await handleDqfIntegration(driverId, testType, testResult, userId);
+        await handleDqfIntegration(driverId, testType, testResult, userId, createdRow?.result_document_id);
       } catch (dqfError) {
         // Log but do not fail the request -- the test record was already saved
         console.error('DQF integration error after test creation:', dqfError);
@@ -417,7 +442,7 @@ router.put(['/:id', '/tests/:id'], async (req, res) => {
     if (resolvedType) {
       try {
         const userId = req.context?.userId || null;
-        await handleDqfIntegration(existing.driver_id, resolvedType, resolvedResult, userId);
+        await handleDqfIntegration(existing.driver_id, resolvedType, resolvedResult, userId, updatedRow?.result_document_id);
       } catch (dqfError) {
         console.error('DQF integration error after test update:', dqfError);
       }
