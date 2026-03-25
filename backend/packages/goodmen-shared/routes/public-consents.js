@@ -9,6 +9,9 @@ const {
   checkConsentStatus,
   createConsentRequest
 } = require('../services/consent-service');
+const { generateConsentPdf } = require('../services/driver-onboarding-pdf');
+const { createDriverDocument } = require('../services/driver-storage-service');
+const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('../services/dqf-service');
 
 // Basic rate limit placeholder (per-process, same pattern as public-onboarding.js)
 const recentRequests = new Map();
@@ -56,6 +59,55 @@ async function loadPacketWithToken(packetId, token) {
   return { packet };
 }
 
+/**
+ * Load driver and operating entity details for template placeholder replacement.
+ */
+async function loadDriverAndEntity(driverId) {
+  const driverRes = await query(
+    'SELECT id, first_name, last_name, operating_entity_id FROM drivers WHERE id = $1',
+    [driverId]
+  );
+  const driver = driverRes.rows[0] || null;
+  let operatingEntity = null;
+
+  if (driver && driver.operating_entity_id) {
+    const oeRes = await query(
+      'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1',
+      [driver.operating_entity_id]
+    );
+    operatingEntity = oeRes.rows[0] || null;
+  }
+
+  return { driver, operatingEntity };
+}
+
+/**
+ * Replace template placeholders with operating entity and driver data.
+ */
+function replaceTemplatePlaceholders(bodyText, { driver, operatingEntity }) {
+  if (!bodyText) return bodyText;
+
+  const companyName = operatingEntity?.name || operatingEntity?.legal_name || 'Company Name';
+  const companyAddress = operatingEntity
+    ? [
+      operatingEntity.address_line1,
+      operatingEntity.address_line2,
+      operatingEntity.city,
+      operatingEntity.state,
+      operatingEntity.zip_code
+    ].filter(Boolean).join(', ')
+    : '';
+  const driverFullName = driver
+    ? `${driver.first_name || ''} ${driver.last_name || ''}`.trim()
+    : '';
+
+  let result = bodyText;
+  result = result.replace(/\{\{companyName\}\}/g, companyName);
+  result = result.replace(/\{\{companyAddress\}\}/g, companyAddress);
+  result = result.replace(/\{\{driverFullName\}\}/g, driverFullName);
+  return result;
+}
+
 // GET /public/consents/:packetId/:consentKey?token=...
 // Load consent template + current status for the driver in this packet
 router.get('/:packetId/:consentKey', rateLimited, async (req, res) => {
@@ -74,6 +126,12 @@ router.get('/:packetId/:consentKey', rateLimited, async (req, res) => {
       return res.status(404).json({ message: `No active consent template found for key: ${consentKey}` });
     }
 
+    // Load driver and operating entity for placeholder replacement
+    const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id);
+
+    // Replace placeholders in template body text
+    const renderedBodyText = replaceTemplatePlaceholders(template.body_text, { driver, operatingEntity });
+
     const isSigned = await checkConsentStatus(packet.driver_id, consentKey);
 
     // Also load existing consent record for this packet+key if it exists
@@ -90,17 +148,36 @@ router.get('/:packetId/:consentKey', rateLimited, async (req, res) => {
     const duration = Date.now() - start;
     dtLogger.trackRequest('GET', `/public/consents/${packetId}/${consentKey}`, 200, duration);
 
+    const companyName = operatingEntity?.name || operatingEntity?.legal_name || 'Company Name';
+    const companyAddress = operatingEntity
+      ? [
+        operatingEntity.address_line1,
+        operatingEntity.address_line2,
+        operatingEntity.city,
+        operatingEntity.state,
+        operatingEntity.zip_code
+      ].filter(Boolean).join(', ')
+      : '';
+    const driverFullName = driver
+      ? `${driver.first_name || ''} ${driver.last_name || ''}`.trim()
+      : '';
+
     return res.json({
       template: {
         id: template.id,
         key: template.key,
         title: template.title,
-        body_text: template.body_text,
-        version: template.version
+        body_text: renderedBodyText,
+        version: template.version,
+        requires_signature: template.requires_signature,
+        capture_fields: template.capture_fields
       },
       consent: existingConsent,
       isSigned,
-      driverId: packet.driver_id
+      driverId: packet.driver_id,
+      companyName,
+      companyAddress,
+      driverFullName
     });
   } catch (error) {
     const duration = Date.now() - start;
@@ -119,7 +196,7 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
   try {
     const { packetId, consentKey } = req.params;
     const { token } = req.query;
-    const { signerName, signatureType, signatureValue } = req.body || {};
+    const { signerName, signatureType, signatureValue, captureData } = req.body || {};
 
     if (!signerName || !signatureValue) {
       return res.status(400).json({ message: 'signerName and signatureValue are required' });
@@ -160,6 +237,71 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
       userAgent: req.headers['user-agent'] || null
     });
 
+    // ── Generate PDF and upload as pre-hire document ──────────────────
+    let documentId = null;
+    try {
+      const template = await getTemplateByKey(consentKey);
+      const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id);
+
+      const companyName = operatingEntity?.name || operatingEntity?.legal_name || 'Company Name';
+      const companyAddress = operatingEntity
+        ? [
+          operatingEntity.address_line1,
+          operatingEntity.address_line2,
+          operatingEntity.city,
+          operatingEntity.state,
+          operatingEntity.zip_code
+        ].filter(Boolean).join(', ')
+        : '';
+
+      const pdfBuffer = await generateConsentPdf({
+        template,
+        consent: {
+          id: signed.id,
+          signer_name: signed.signer_name || signerName,
+          signed_at: signed.signed_at,
+          ip_address: signed.ip_address || req.ip,
+          capture_data: captureData || {}
+        },
+        company: { name: companyName, address: companyAddress },
+        driver
+      });
+
+      const dateStr = new Date().toISOString().split('T')[0];
+      const doc = await createDriverDocument({
+        driverId: packet.driver_id,
+        packetId,
+        docType: `consent_${consentKey}_signed`,
+        fileName: `${consentKey}_signed_${dateStr}.pdf`,
+        mimeType: 'application/pdf',
+        bytes: pdfBuffer
+      });
+      documentId = doc.id;
+
+      // Update DQF requirement with evidence document ID
+      const CONSENT_DQF_MAP = {
+        clearinghouse_full: 'clearinghouse_consent_received',
+        release_of_information: 'release_of_info_signed',
+        fcra_authorization: 'fcra_authorization',
+        psp_consent: 'psp_consent',
+        drug_alcohol_release: 'drug_alcohol_release_signed'
+      };
+      const dqfKey = CONSENT_DQF_MAP[consentKey];
+      if (dqfKey && documentId) {
+        await upsertRequirementStatus(packet.driver_id, dqfKey, 'complete', documentId);
+        await computeAndUpdateDqfCompleteness(packet.driver_id);
+      }
+    } catch (pdfErr) {
+      // Non-blocking: PDF generation failure should not break consent signing
+      // eslint-disable-next-line no-console
+      console.error('consent_pdf_generation_failed', pdfErr);
+      dtLogger.error('consent_pdf_generation_failed', pdfErr, {
+        consentId: signed.id,
+        consentKey,
+        packetId
+      });
+    }
+
     const duration = Date.now() - start;
     dtLogger.trackRequest(
       'POST',
@@ -171,7 +313,8 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
     return res.json({
       consentId: signed.id,
       status: signed.status,
-      signedAt: signed.signed_at
+      signedAt: signed.signed_at,
+      documentId
     });
   } catch (error) {
     const duration = Date.now() - start;

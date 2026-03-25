@@ -537,9 +537,228 @@ async function buildReleaseOfInformationPdf({ driver, employers }) {
   return Buffer.from(pdfBytes);
 }
 
+/**
+ * Strip HTML tags and convert to plain-text lines suitable for PDF rendering.
+ * Handles <li> as bullet points, <br/> as newlines, and collapses whitespace.
+ */
+function htmlToPlainLines(html) {
+  if (!html) return [];
+  let text = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<li>/gi, '  \u2022 ')
+    .replace(/<\/h[1-6]>/gi, '\n\n')
+    .replace(/<h[1-6][^>]*>/gi, '')
+    .replace(/<ol>/gi, '')
+    .replace(/<\/ol>/gi, '\n')
+    .replace(/<ul>/gi, '')
+    .replace(/<\/ul>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\u00A7/g, '\u00A7'); // keep section symbol
+
+  // Collapse multiple blank lines
+  const lines = text.split('\n');
+  const result = [];
+  let prevBlank = false;
+  for (const line of lines) {
+    const trimmed = line.replace(/\s+/g, ' ').trim();
+    if (trimmed === '') {
+      if (!prevBlank) result.push('');
+      prevBlank = true;
+    } else {
+      result.push(trimmed);
+      prevBlank = false;
+    }
+  }
+  return result;
+}
+
+/**
+ * Word-wrap a single line of text to fit within maxWidth pixels.
+ * Returns an array of lines.
+ */
+function wrapText(text, font, fontSize, maxWidth) {
+  if (!text) return [''];
+  const words = text.split(' ');
+  const lines = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    const width = font.widthOfTextAtSize(testLine, fontSize);
+    if (width > maxWidth && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+/**
+ * Generate a PDF for a signed consent form.
+ *
+ * @param {object} params
+ * @param {object} params.template - consent template (title, body_text, cfr_reference)
+ * @param {object} params.consent  - signed consent record (id, signer_name, signed_at, ip_address, capture_data)
+ * @param {object} params.company  - { name, address }
+ * @param {object} params.driver   - { first_name, last_name }
+ * @returns {Promise<Buffer>} PDF buffer
+ */
+async function generateConsentPdf({ template, consent, company, driver }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const margin = 50;
+  const textWidth = pageWidth - 2 * margin;
+  const lineHeight = 13;
+  const bottomMargin = 60;
+
+  let page = pdfDoc.addPage([pageWidth, pageHeight]);
+  let yPos = pageHeight - margin;
+
+  function ensureSpace(needed) {
+    if (yPos - needed < bottomMargin) {
+      page = pdfDoc.addPage([pageWidth, pageHeight]);
+      yPos = pageHeight - margin;
+    }
+  }
+
+  function drawTextLine(text, opts = {}) {
+    const size = opts.size || 9;
+    const f = opts.bold ? boldFont : font;
+    const x = opts.x || margin;
+
+    const wrapped = wrapText(text || '', f, size, opts.maxWidth || textWidth);
+    for (const line of wrapped) {
+      ensureSpace(lineHeight);
+      page.drawText(line, {
+        x,
+        y: yPos,
+        size,
+        font: f,
+        color: opts.color || rgb(0, 0, 0)
+      });
+      yPos -= lineHeight;
+    }
+  }
+
+  // ── Header: Company info ──────────────────────────────────────────────
+  const companyName = company?.name || 'Company Name';
+  const companyAddress = company?.address || '';
+
+  drawTextLine(companyName, { size: 12, bold: true });
+  if (companyAddress) {
+    drawTextLine(companyAddress, { size: 9 });
+  }
+  yPos -= lineHeight;
+
+  // ── Title ─────────────────────────────────────────────────────────────
+  drawTextLine(template.title || 'Consent Form', { size: 14, bold: true });
+  yPos -= lineHeight * 0.5;
+
+  if (template.cfr_reference) {
+    drawTextLine(`Reference: ${template.cfr_reference}`, { size: 8, color: rgb(0.4, 0.4, 0.4) });
+  }
+  yPos -= lineHeight;
+
+  // ── Body text ─────────────────────────────────────────────────────────
+  const driverFullName = driver
+    ? `${driver.first_name || ''} ${driver.last_name || ''}`.trim()
+    : '';
+
+  let bodyText = template.body_text || '';
+  bodyText = bodyText.replace(/\{\{companyName\}\}/g, companyName);
+  bodyText = bodyText.replace(/\{\{companyAddress\}\}/g, companyAddress);
+  bodyText = bodyText.replace(/\{\{driverFullName\}\}/g, driverFullName);
+
+  const plainLines = htmlToPlainLines(bodyText);
+  for (const line of plainLines) {
+    if (line === '') {
+      yPos -= lineHeight * 0.5;
+    } else {
+      drawTextLine(line, { size: 9 });
+    }
+  }
+
+  yPos -= lineHeight;
+
+  // ── Captured fields section ───────────────────────────────────────────
+  const captureData = consent.capture_data || {};
+  const captureKeys = Object.keys(captureData);
+  if (captureKeys.length > 0) {
+    ensureSpace(lineHeight * (captureKeys.length + 3));
+    drawTextLine('CAPTURED INFORMATION', { size: 10, bold: true });
+    yPos -= lineHeight * 0.3;
+
+    const fieldLabels = {
+      fullName: 'Full Name',
+      dateOfBirth: 'Date of Birth',
+      ssnLast4: 'SSN (Last 4)',
+      driversLicenseNumber: "Driver's License Number",
+      stateOfIssue: 'State of Issue'
+    };
+
+    for (const key of captureKeys) {
+      const label = fieldLabels[key] || key;
+      drawTextLine(`${label}: ${captureData[key] || ''}`, { size: 9 });
+    }
+    yPos -= lineHeight;
+  }
+
+  // ── Signature section ─────────────────────────────────────────────────
+  ensureSpace(lineHeight * 6);
+  page.drawLine({
+    start: { x: margin, y: yPos },
+    end: { x: pageWidth - margin, y: yPos },
+    thickness: 0.5
+  });
+  yPos -= lineHeight;
+
+  drawTextLine('SIGNATURE', { size: 10, bold: true });
+  yPos -= lineHeight * 0.3;
+
+  drawTextLine(`Signed by: ${consent.signer_name || ''}`, { size: 9 });
+  const signedDate = consent.signed_at
+    ? new Date(consent.signed_at).toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
+    : new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+  drawTextLine(`Date: ${signedDate}`, { size: 9 });
+  drawTextLine('Electronic signature acknowledged', { size: 9 });
+  yPos -= lineHeight;
+
+  // ── Footer: Document ID and IP ────────────────────────────────────────
+  ensureSpace(lineHeight * 3);
+  page.drawLine({
+    start: { x: margin, y: yPos },
+    end: { x: pageWidth - margin, y: yPos },
+    thickness: 0.5,
+    color: rgb(0.7, 0.7, 0.7)
+  });
+  yPos -= lineHeight;
+
+  drawTextLine(`Document ID: ${consent.id || 'N/A'}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
+  if (consent.ip_address) {
+    drawTextLine(`IP: ${consent.ip_address}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
+  }
+
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
+}
+
 module.exports = {
   buildEmploymentApplicationPdf,
   buildMvrAuthorizationPdf,
-  buildReleaseOfInformationPdf
+  buildReleaseOfInformationPdf,
+  generateConsentPdf
 };
 
