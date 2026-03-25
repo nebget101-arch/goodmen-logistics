@@ -2,35 +2,10 @@ const db = require('../internal/db').knex;
 const pdfService = require('./pdf.service');
 const r2 = require('../storage/r2-storage');
 const dtLogger = require('../utils/logger');
+const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange } = require('./dqf-service');
 
-async function resolveEmploymentRequirementKeys(trx) {
-  const keys = [];
-  if (!(await trx.schema.hasTable('dqf_requirements'))) return keys;
-
-  const preferred = [
-    'application_for_employment',
-    'employment_application_completed',
-    'employment_application_signed',
-    'employment_application',
-    'application'
-  ];
-
-  const preferredRows = await trx('dqf_requirements')
-    .select('key')
-    .whereIn('key', preferred);
-
-  preferredRows.forEach((r) => keys.push(r.key));
-
-  if (keys.length === 0) {
-    const labelRows = await trx('dqf_requirements')
-      .select('key', 'label')
-      .whereRaw('LOWER(label) LIKE ?', ['%application%employment%'])
-      .limit(2);
-    labelRows.forEach((r) => keys.push(r.key));
-  }
-
-  return [...new Set(keys)];
-}
+// The canonical DQF requirement key for employment application under Pre-Hire Documents
+const EMPLOYMENT_APP_REQUIREMENT_KEY = 'employment_application';
 
 function mapEmployerToDb(emp, applicationId) {
   return {
@@ -432,7 +407,7 @@ async function submitApplication(applicationId, payload, userId, context = null)
           driver_id: app.driver_id,
           packet_id: null,
           doc_type: 'employment_application_pdf',
-          file_name: uploadResult.fileName || `driver-employment-application-${app.driver_id}.pdf`,
+          file_name: uploadResult.fileName || driverFileName,
           mime_type: 'application/pdf',
           size_bytes: uploadResult.fileSize || pdfBuf.length,
           storage_mode: 'r2',
@@ -457,36 +432,34 @@ async function submitApplication(applicationId, payload, userId, context = null)
       updated_at: trx.fn.now()
     });
 
-    // Link to DQF checklist/status
+    // Link to DQF Pre-Hire Documents: mark employment_application requirement as complete
     try {
-      if (await trx.schema.hasTable('dqf_driver_status')) {
-        const requirementKeys = await resolveEmploymentRequirementKeys(trx);
-        for (const requirementKey of requirementKeys) {
-          await trx.raw(
-            `
-              INSERT INTO dqf_driver_status (
-                driver_id,
-                requirement_key,
-                status,
-                evidence_document_id,
-                last_updated_at
-              )
-              VALUES (?, ?, ?, ?, NOW())
-              ON CONFLICT (driver_id, requirement_key)
-              DO UPDATE SET
-                status = EXCLUDED.status,
-                evidence_document_id = EXCLUDED.evidence_document_id,
-                last_updated_at = NOW()
-            `,
-            [
-              app.driver_id,
-              requirementKey,
-              'complete',
-              dqfDriverDocument?.id || null
-            ]
-          );
-        }
-      }
+      await upsertRequirementStatus(
+        app.driver_id,
+        EMPLOYMENT_APP_REQUIREMENT_KEY,
+        'complete',
+        dqfDriverDocument?.id || null
+      );
+
+      // Log the status change for audit trail
+      await logStatusChange(
+        app.driver_id,
+        EMPLOYMENT_APP_REQUIREMENT_KEY,
+        'missing',
+        'complete',
+        userId || null,
+        `Employment application submitted. PDF: ${uploadResult.fileName || 'generated'}`
+      );
+
+      // Recompute overall DQF completeness percentage
+      await computeAndUpdateDqfCompleteness(app.driver_id);
+
+      dtLogger.info('dqf_employment_application_marked_complete', {
+        applicationId,
+        driverId: app.driver_id,
+        evidenceDocumentId: dqfDriverDocument?.id || null,
+        fileName: uploadResult.fileName
+      });
     } catch (e) {
       dtLogger.warn('dqf_update_failed', { applicationId, error: e?.message || String(e) });
     }
