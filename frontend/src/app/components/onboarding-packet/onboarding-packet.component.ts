@@ -25,6 +25,7 @@ export interface EmployerEntry {
   toDate?: string;
   contactPerson?: string;
   phoneNumber?: string;
+  employerEmail?: string;
   salaryWage?: string;
   reasonForLeaving?: string;
   wasCMV?: boolean;

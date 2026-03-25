@@ -272,8 +272,10 @@
                   <div class="onboard-field"><label>To (MM/YYYY)</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.toDate" name="ceTo" placeholder="MM/YYYY or Present" maxlength="7" /></div>
                   <div class="onboard-field"><label>Contact Person *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.contactPerson" name="ceContact" placeholder="Contact person" required /></div>
                   <div class="onboard-field"><label>Phone Number *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.phoneNumber" name="cePhone" placeholder="(555) 555-5555" required /></div>
+                  <div class="onboard-field"><label>Employer Email *</label><input class="form-input" type="email" [(ngModel)]="employment.currentEmployer!.employerEmail" name="ceEmail" placeholder="employer@company.com" required /></div>
                   <div class="onboard-field"><label>Salary/Wage</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.salaryWage" name="ceSalary" placeholder="Optional" /></div>
                   <div class="onboard-field"><label>Reason for Leaving *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.reasonForLeaving" name="ceReason" placeholder="Reason" required /></div>
+                  <div class="onboard-field onboard-field-full"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="employment.currentEmployer!.wasCMV" name="ceCMV" /><span>Did this employer involve operating a Commercial Motor Vehicle (CMV)?</span></label></div>
                 </div>
 
                 <div *ngIf="needMoreEmployers && totalEmployerYears > 0" class="onboard-info-banner" style="margin-top:16px;">
@@ -302,6 +304,7 @@
                     <div class="onboard-field"><label>To (MM/YYYY) *</label><input class="form-input" [(ngModel)]="emp.toDate" [name]="'peTo'+i" placeholder="MM/YYYY" maxlength="7" (ngModelChange)="recalcEmployerYears()" /></div>
                     <div class="onboard-field"><label>Contact Person *</label><input class="form-input" [(ngModel)]="emp.contactPerson" [name]="'peContact'+i" placeholder="Contact" /></div>
                     <div class="onboard-field"><label>Phone *</label><input class="form-input" [(ngModel)]="emp.phoneNumber" [name]="'pePhone'+i" placeholder="Phone" /></div>
+                    <div class="onboard-field"><label>Employer Email *</label><input class="form-input" type="email" [(ngModel)]="emp.employerEmail" [name]="'peEmail'+i" placeholder="employer@company.com" required /></div>
                     <div class="onboard-field"><label>Salary/Wage</label><input class="form-input" [(ngModel)]="emp.salaryWage" [name]="'peSalary'+i" placeholder="Optional" /></div>
                     <div class="onboard-field"><label>Reason for Leaving *</label><input class="form-input" [(ngModel)]="emp.reasonForLeaving" [name]="'peReason'+i" placeholder="Reason" /></div>
                     <div class="onboard-field onboard-field-full"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="emp.wasCMV" [name]="'peCMV'+i" /><span>This employer involved operating a CMV</span></label></div>
