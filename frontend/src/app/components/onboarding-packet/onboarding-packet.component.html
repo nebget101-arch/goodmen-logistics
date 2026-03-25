@@ -763,7 +763,7 @@
                     <span class="material-symbols-outlined">photo_camera</span>
                     <span>{{ uploadingDocType === docType.key ? 'Uploading...' : 'Take Photo or Choose File' }}</span>
                     <input type="file"
-                           accept="image/*,application/pdf"
+                           accept="image/*,.heic,.heif,.pdf,application/pdf"
                            class="doc-upload-input"
                            [disabled]="uploadingDocType !== null"
                            (change)="onDocumentFileSelected($event, docType.key)" />
@@ -777,19 +777,33 @@
 
                 <!-- Uploaded state -->
                 <div *ngIf="uploadedDocuments.has(docType.key)" class="doc-upload-card-body doc-upload-card-body-uploaded">
+                  <div class="doc-upload-success-banner">
+                    <span class="material-symbols-outlined" style="color: #4ade80; font-size: 22px;">check_circle</span>
+                    <span style="color: #4ade80; font-weight: 600;">Document Uploaded Successfully</span>
+                  </div>
                   <div class="doc-upload-file-info">
-                    <span class="material-symbols-outlined" style="color: #4ade80; font-size: 20px;">description</span>
+                    <span class="material-symbols-outlined" style="color: #94a3b8; font-size: 20px;">description</span>
                     <div class="doc-upload-file-details">
                       <span class="doc-upload-file-name">{{ uploadedDocuments.get(docType.key)?.file_name }}</span>
                       <span class="doc-upload-file-date">Uploaded {{ uploadedDocuments.get(docType.key)?.uploaded_at | date:'short' }}</span>
                     </div>
                   </div>
-                  <button class="doc-upload-delete-btn"
-                          type="button"
-                          [disabled]="deletingDocType === docType.key"
-                          (click)="deleteUploadedDocument(docType.key, uploadedDocuments.get(docType.key)?.id || '')">
-                    <span class="material-symbols-outlined">{{ deletingDocType === docType.key ? 'hourglass_top' : 'close' }}</span>
-                  </button>
+                  <div class="doc-upload-actions">
+                    <button class="doc-upload-replace-btn"
+                            type="button"
+                            [disabled]="deletingDocType === docType.key"
+                            (click)="deleteUploadedDocument(docType.key, uploadedDocuments.get(docType.key)?.id || '')">
+                      <span class="material-symbols-outlined">swap_horiz</span>
+                      Replace
+                    </button>
+                    <button class="doc-upload-remove-btn"
+                            type="button"
+                            [disabled]="deletingDocType === docType.key"
+                            (click)="deleteUploadedDocument(docType.key, uploadedDocuments.get(docType.key)?.id || '')">
+                      <span class="material-symbols-outlined">{{ deletingDocType === docType.key ? 'hourglass_top' : 'delete' }}</span>
+                      {{ deletingDocType === docType.key ? 'Removing...' : 'Remove' }}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
