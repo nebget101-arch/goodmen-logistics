@@ -97,7 +97,7 @@ async function createConsentRequest({ driverId, consentKey, packetId, expiresAt 
   }
 }
 
-async function signConsent(consentId, { signerName, signatureType, signatureValue, ipAddress, userAgent }) {
+async function signConsent(consentId, { signerName, signatureType, signatureValue, ipAddress, userAgent, userId }) {
   if (!consentId) throw new Error('consentId is required');
   if (!signerName) {
     throw new Error('signerName is required');
@@ -160,9 +160,9 @@ async function signConsent(consentId, { signerName, signatureType, signatureValu
     );
 
     await client.query(
-      `INSERT INTO consent_audit_log (driver_consent_id, action, performed_by, ip_address, user_agent)
-       VALUES ($1, 'signed', $2, $3, $4)`,
-      [consentId, signerName, ipAddress || null, userAgent || null]
+      `INSERT INTO consent_audit_log (driver_consent_id, action, performed_by, ip_address, user_agent, metadata)
+       VALUES ($1, 'signed', $2, $3, $4, $5)`,
+      [consentId, userId || null, ipAddress || null, userAgent || null, JSON.stringify({ signer_name: signerName })]
     );
 
     await client.query('COMMIT');
