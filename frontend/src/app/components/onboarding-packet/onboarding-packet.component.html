@@ -688,57 +688,18 @@
                 <span class="material-symbols-outlined">arrow_back</span>
                 Back
               </button>
-              <button class="btn btn-primary" type="button" (click)="setStep('mvr_authorization')">
+              <button class="btn btn-primary" type="button" (click)="setStep('document_uploads')">
                 <span class="material-symbols-outlined">arrow_forward</span>
-                Continue to MVR
+                Continue to Documents
               </button>
             </div>
           </div>
 
-          <!-- STEP 3: MVR AUTHORIZATION -->
-          <form *ngIf="currentStep === 'mvr_authorization'" (ngSubmit)="submitMvrAuthorization()" novalidate>
-            <div class="onboard-form-header">
-              <div>
-                <div class="onboard-form-kicker">Step 3</div>
-                <h2>MVR Authorization</h2>
-                <p class="onboard-subtitle">Authorize FleetNeuron AI to retrieve your MVR as part of driver qualification and employment screening.</p>
-              </div>
-              <div class="onboard-form-badge onboard-form-badge-alt">
-                <span class="material-symbols-outlined">verified_user</span>
-                <span>Consent required</span>
-              </div>
-            </div>
-
-            <div class="onboard-form-panel-grid">
-              <section class="onboard-panel onboard-panel-full">
-                <div class="onboard-panel-header">
-                  <span class="material-symbols-outlined">construction</span>
-                  <div>
-                    <h3 class="onboard-section-title">Phase 2 Placeholder</h3>
-                    <p>MVR Authorization is intentionally not implemented in this phase.</p>
-                  </div>
-                </div>
-                <p class="onboard-small">Next phase will include a dedicated MVR authorization tab, separate MVR PDF generation, Cloudflare R2 upload, and separate DQF checklist item.</p>
-              </section>
-            </div>
-
-            <div class="onboard-actions onboard-actions-split">
-              <button class="btn btn-secondary" type="button" (click)="setStep('consent_forms')" [disabled]="saving">
-                <span class="material-symbols-outlined">arrow_back</span>
-                Back to Consent Forms
-              </button>
-              <button class="btn btn-primary" type="submit" [disabled]="saving">
-                <span class="material-symbols-outlined">verified</span>
-                Acknowledge Placeholder
-              </button>
-            </div>
-          </form>
-
-          <!-- STEP 4: DOCUMENT UPLOADS -->
+          <!-- STEP 3: DOCUMENT UPLOADS -->
           <div *ngIf="currentStep === 'document_uploads'">
             <div class="onboard-form-header">
               <div>
-                <div class="onboard-form-kicker">Step 4</div>
+                <div class="onboard-form-kicker">Step 3</div>
                 <h2>Document Uploads</h2>
                 <p class="onboard-subtitle">Upload any required documents such as CDL copies, medical cards, or other certifications.</p>
               </div>
@@ -762,9 +723,9 @@
             </div>
 
             <div class="onboard-actions onboard-actions-split">
-              <button class="btn btn-secondary" type="button" (click)="setStep('mvr_authorization')">
+              <button class="btn btn-secondary" type="button" (click)="setStep('consent_forms')">
                 <span class="material-symbols-outlined">arrow_back</span>
-                Back to MVR
+                Back to Consent Forms
               </button>
               <button class="btn btn-primary" type="button" (click)="setStep('review_submit')">
                 <span class="material-symbols-outlined">arrow_forward</span>
@@ -777,7 +738,7 @@
           <div *ngIf="currentStep === 'review_submit'">
             <div class="onboard-form-header">
               <div>
-                <div class="onboard-form-kicker">Step 5</div>
+                <div class="onboard-form-kicker">Step 4</div>
                 <h2>Review &amp; Submit</h2>
                 <p class="onboard-subtitle">Review all sections of your onboarding packet before final submission.</p>
               </div>
@@ -825,16 +786,6 @@
                 <button class="btn btn-secondary review-edit-btn" type="button" (click)="setStep('consent_forms')" *ngIf="!allConsentsSigned">
                   <span class="material-symbols-outlined">edit</span> Sign Remaining
                 </button>
-              </section>
-
-              <section class="onboard-panel">
-                <div class="onboard-panel-header">
-                  <span class="material-symbols-outlined">policy</span>
-                  <div>
-                    <h3 class="onboard-section-title">MVR Authorization</h3>
-                    <p>{{ isSectionCompleted('mvr_authorization') ? 'Completed' : 'Phase 2 placeholder' }}</p>
-                  </div>
-                </div>
               </section>
 
               <section class="onboard-panel">

@@ -170,7 +170,6 @@ export interface MvrForm {
 export type PacketStep =
   | 'employment_application'
   | 'consent_forms'
-  | 'mvr_authorization'
   | 'document_uploads'
   | 'review_submit';
 
@@ -250,7 +249,6 @@ export class OnboardingPacketComponent implements OnInit {
   steps: { key: PacketStep; label: string; icon: string; sectionKey?: string }[] = [
     { key: 'employment_application', label: 'Employment Application', icon: 'description', sectionKey: 'employment_application' },
     { key: 'consent_forms', label: 'Consent Forms', icon: 'verified_user', sectionKey: 'consent_forms' },
-    { key: 'mvr_authorization', label: 'MVR Authorization', icon: 'policy', sectionKey: 'mvr_authorization' },
     { key: 'document_uploads', label: 'Document Uploads', icon: 'upload_file', sectionKey: 'document_uploads' },
     { key: 'review_submit', label: 'Review & Submit', icon: 'fact_check' }
   ];
@@ -453,10 +451,6 @@ export class OnboardingPacketComponent implements OnInit {
           this.errorMessage = err?.error?.message || 'Failed to save employment application.';
         }
       });
-  }
-
-  submitMvrAuthorization(): void {
-    this.saveSuccess = 'MVR Authorization is not part of this phase yet. Placeholder only.';
   }
 
   submitFinalPacket(): void {
