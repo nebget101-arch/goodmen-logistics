@@ -325,20 +325,25 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
       documentId = doc.id;
 
       // Update DQF requirement with evidence document ID
+      // Maps consent key → array of DQF requirement keys to mark complete
       const CONSENT_DQF_MAP = {
-        clearinghouse_full: 'clearinghouse_consent_received',
-        release_of_information: 'release_of_info_signed',
-        fcra_authorization: 'fcra_authorization',
-        psp_consent: 'psp_consent',
-        drug_alcohol_release: 'drug_alcohol_release_signed',
+        clearinghouse_full: ['clearinghouse_consent_received'],
+        release_of_information: ['release_of_info_signed'],
+        fcra_authorization: ['fcra_authorization'],
+        psp_consent: ['psp_consent', 'psp_authorization_document'],
+        drug_alcohol_release: ['drug_alcohol_release_signed'],
         // FN-238: MVR consent form DQF mappings
-        mvr_disclosure: 'mvr_disclosure_signed',
-        mvr_authorization: 'mvr_authorization_signed',
-        mvr_release_of_liability: 'mvr_release_of_liability_signed'
+        mvr_disclosure: ['mvr_disclosure_signed'],
+        mvr_authorization: ['mvr_authorization_signed'],
+        mvr_release_of_liability: ['mvr_release_of_liability_signed']
       };
-      const dqfKey = CONSENT_DQF_MAP[consentKey];
-      if (dqfKey && documentId) {
-        await upsertRequirementStatus(packet.driver_id, dqfKey, 'complete', documentId);
+      const dqfKeys = CONSENT_DQF_MAP[consentKey] || [];
+      for (const dqfKey of dqfKeys) {
+        if (documentId) {
+          await upsertRequirementStatus(packet.driver_id, dqfKey, 'complete', documentId);
+        }
+      }
+      if (dqfKeys.length > 0) {
         await computeAndUpdateDqfCompleteness(packet.driver_id);
       }
     } catch (pdfErr) {
