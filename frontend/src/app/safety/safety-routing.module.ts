@@ -12,12 +12,16 @@ import { SafetyClaimsComponent } from './safety-claims/safety-claims.component';
 import { SafetyTasksComponent } from './safety-tasks/safety-tasks.component';
 import { SafetyReportsComponent } from './safety-reports/safety-reports.component';
 import { ComplianceDashboardComponent } from './compliance-dashboard/compliance-dashboard.component';
+import { FmcsaDashboardComponent } from './fmcsa-dashboard/fmcsa-dashboard.component';
+import { FmcsaCarriersComponent } from './fmcsa-carriers/fmcsa-carriers.component';
+import { FmcsaCarrierDetailComponent } from './fmcsa-carrier-detail/fmcsa-carrier-detail.component';
 
 const SAFETY_PERMS = [
   PERMISSIONS.SAFETY_INCIDENTS_VIEW,
   PERMISSIONS.SAFETY_INCIDENTS_CREATE,
   PERMISSIONS.SAFETY_CLAIMS_VIEW,
   PERMISSIONS.SAFETY_REPORTS_VIEW,
+  PERMISSIONS.FMCSA_SAFETY_VIEW,
 ];
 
 const routes: Routes = [
@@ -34,6 +38,9 @@ const routes: Routes = [
       { path: 'tasks', component: SafetyTasksComponent },
       { path: 'reports', component: SafetyReportsComponent },
       { path: 'compliance', component: ComplianceDashboardComponent },
+      { path: 'fmcsa', component: FmcsaDashboardComponent },
+      { path: 'fmcsa/carriers', component: FmcsaCarriersComponent },
+      { path: 'fmcsa/carriers/:id', component: FmcsaCarrierDetailComponent },
     ]
   }
 ];
