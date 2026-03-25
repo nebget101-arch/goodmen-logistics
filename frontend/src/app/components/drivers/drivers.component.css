@@ -732,6 +732,50 @@
   background: rgba(100, 116, 139, 0.3);
 }
 
+/* FN-240: Pull from App button for employment application */
+.drivers-dashboard .dqf-pull-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  transition: background 0.15s;
+}
+
+.drivers-dashboard .dqf-pull-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.3);
+  border-color: rgba(56, 189, 248, 0.9);
+}
+
+.drivers-dashboard .dqf-pull-btn:disabled,
+.drivers-dashboard .dqf-pull-btn.pulling {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.drivers-dashboard .dqf-pull-error {
+  font-size: 11px;
+  color: #ef4444;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes dqf-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.drivers-dashboard .dqf-spin {
+  animation: dqf-spin 1s linear infinite;
+}
+
 /* FN-223: Inline date input for clearinghouse items */
 .drivers-dashboard .dqf-date-input {
   padding: 4px 8px;
@@ -1764,6 +1808,8 @@
   .drivers-dashboard .dqf-modal-footer,
   .drivers-dashboard .dqf-print-bar,
   .drivers-dashboard .dqf-upload-btn,
+  .drivers-dashboard .dqf-pull-btn,
+  .drivers-dashboard .dqf-pull-error,
   .drivers-dashboard .dqf-status-btn,
   .drivers-dashboard .dqf-audit-btn,
   .drivers-dashboard .safety-history-widget {
