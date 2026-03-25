@@ -256,7 +256,8 @@ export class OnboardingPacketComponent implements OnInit {
     { key: 'drug_alcohol_release', label: 'Release of Information Authorization (Drug & Alcohol)', icon: 'local_pharmacy', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] },
     { key: 'mvr_disclosure', label: 'MVR Disclosure', icon: 'description', requiresSignature: true, captureFields: ['fullName'] },
     { key: 'mvr_authorization', label: 'MVR Authorization', icon: 'how_to_reg', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] },
-    { key: 'mvr_release_of_liability', label: 'MVR Release of Liability', icon: 'gavel', requiresSignature: true, captureFields: [] }
+    { key: 'mvr_release_of_liability', label: 'MVR Release of Liability', icon: 'gavel', requiresSignature: true, captureFields: [] },
+    { key: 'psp_consent', label: 'PSP Disclosure and Authorization', icon: 'security', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] }
   ];
 
   signedConsents: Set<string> = new Set();
