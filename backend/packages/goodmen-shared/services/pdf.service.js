@@ -18,11 +18,18 @@ function yn(v) {
   return '';
 }
 
-function maskSsn(ssn) {
-  if (!ssn) return '';
+/**
+ * Mask a Social Security Number to show only the last 4 digits.
+ * Accepts formats like "123456789", "123-45-6789", or partial values.
+ * @param {string|number|null|undefined} ssn
+ * @returns {string} e.g. "XXX-XX-6789" or "N/A"
+ */
+function maskSSN(ssn) {
+  if (ssn === null || ssn === undefined || String(ssn).trim() === '') return 'N/A';
   const digits = String(ssn).replace(/\D/g, '');
-  if (digits.length < 5) return '***-**-****';
-  return `***-**-${digits.slice(5)}`;
+  if (digits.length < 4) return 'N/A';
+  const last4 = digits.slice(-4);
+  return `XXX-XX-${last4}`;
 }
 
 function drawLine(page, font, txt, x, y, size = 9) {
@@ -187,7 +194,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   drawLine(page, font, `EMAIL: ${asText(applicant.email)}`, 220, y);
   y -= 13;
   drawLine(page, font, `DATE OF BIRTH: ${fmtDate(applicant.dateOfBirth)}`, 36, y);
-  drawLine(page, font, `SSN: ${maskSsn(applicant.ssn)}`, 220, y);
+  drawLine(page, font, `SSN: ${maskSSN(applicant.ssn)}`, 220, y);
   y -= 13;
   drawLine(page, font, `POSITION APPLIED FOR: ${asText(applicant.positionAppliedFor)}`, 36, y);
   drawLine(page, font, `DATE OF APPLICATION: ${fmtDate(applicant.dateOfApplication || fullApp.application_date)}`, 300, y);

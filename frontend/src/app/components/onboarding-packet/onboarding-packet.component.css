@@ -883,6 +883,48 @@ input[type='date'].form-input {
   color: #60a5fa;
 }
 
+/* === SSN Field with Toggle === */
+.ssn-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ssn-input {
+  padding-right: 44px;
+}
+
+.ssn-toggle-btn {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.ssn-toggle-btn:hover {
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.ssn-toggle-btn:focus-visible {
+  outline: 2px solid rgba(45, 212, 191, 0.45);
+  outline-offset: 1px;
+}
+
+.ssn-toggle-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
 /* === Small Input === */
 .form-input-sm {
   padding: 8px 10px;
