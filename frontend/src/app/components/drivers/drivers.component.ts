@@ -560,7 +560,7 @@ export class DriversComponent implements OnInit, OnDestroy {
 
   /** Get the download URL for a pre-hire document */
   getPrehireDocDownloadUrl(doc: any): string {
-    return `${this.apiService.getBaseUrl()}/api/dqf/documents/${doc.id}/download`;
+    return `${this.apiService.getBaseUrl()}/dqf/documents/${doc.id}/download`;
   }
 
   loadDriverDocuments(driverId: string): void {

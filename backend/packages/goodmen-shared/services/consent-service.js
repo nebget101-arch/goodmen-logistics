@@ -212,7 +212,8 @@ async function signConsent(consentId, { signerName, signatureType, signatureValu
         docType,
         fileName,
         mimeType: 'application/pdf',
-        bytes: pdfBuffer
+        bytes: pdfBuffer,
+        folder: 'consents'
       });
       consentDocId = doc.id;
 

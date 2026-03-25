@@ -279,7 +279,8 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
         docType: `consent_${consentKey}_signed`,
         fileName: `${consentKey}_signed_${dateStr}.pdf`,
         mimeType: 'application/pdf',
-        bytes: pdfBuffer
+        bytes: pdfBuffer,
+        folder: 'consents'
       });
       documentId = doc.id;
 

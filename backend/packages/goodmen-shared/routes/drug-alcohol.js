@@ -288,11 +288,12 @@ router.post('/driver/:driverId/tests/:testId/result-document', upload.single('fi
     const fileName = file.originalname || 'drug_test_result';
     const contentType = file.mimetype || 'application/octet-stream';
 
-    // Upload to R2
+    // Upload to R2 (FN-244: standardized folder path)
     const r2Result = await uploadBuffer({
       buffer: file.buffer,
       fileName,
-      contentType
+      contentType,
+      prefix: `drivers/${driverId}/drug-tests`
     });
 
     // Create driver_document_blobs record with the file buffer

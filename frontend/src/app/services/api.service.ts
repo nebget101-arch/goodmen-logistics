@@ -802,14 +802,14 @@ export class ApiService {
   // ── Pre-Hire Documents (FN-237) ──
   getDriverPrehireDocuments(driverId: string): Observable<any[]> {
     return this.http.get<any[]>(
-      `${this.baseUrl}/api/dqf/driver/${driverId}/prehire-documents`
+      `${this.baseUrl}/dqf/driver/${driverId}/prehire-documents`
     );
   }
 
   // ── FN-240: Auto-pull employment application document ──
   autoPullEmploymentApp(driverId: string): Observable<any> {
     return this.http.post<any>(
-      `${this.baseUrl}/api/dqf/driver/${driverId}/auto-pull-emp-app`,
+      `${this.baseUrl}/dqf/driver/${driverId}/auto-pull-emp-app`,
       {}
     );
   }

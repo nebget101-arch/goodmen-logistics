@@ -497,7 +497,8 @@ router.post('/driver/:driverId/auto-pull-emp-app', async (req, res) => {
       docType: 'employment_application_signed',
       fileName: pdfFileName,
       mimeType: 'application/pdf',
-      bytes: buffer
+      bytes: buffer,
+      folder: 'employment-application'
     });
 
     // 4. Mark DQF requirement complete
@@ -563,7 +564,8 @@ router.post('/driver/:driverId/requirement/:requirementKey/upload', upload.singl
       docType: `dqf_upload_${requirementKey}`,
       fileName: req.file.originalname || 'upload.pdf',
       mimeType: req.file.mimetype || 'application/pdf',
-      bytes: req.file.buffer
+      bytes: req.file.buffer,
+      folder: 'dqf-documents'
     });
 
     // Get current status for audit log

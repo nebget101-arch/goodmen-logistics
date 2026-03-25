@@ -410,7 +410,8 @@ async function maybeGenerateOnboardingPdfs(packetId) {
       docType: 'employment_application_signed',
       fileName: pdfFileName,
       mimeType: 'application/pdf',
-      bytes: buffer
+      bytes: buffer,
+      folder: 'employment-application'
     });
     dtLogger.info('driver_employment_application_pdf_created', { packetId, driverId: driver.id, documentId: empDoc.id });
 
@@ -446,7 +447,8 @@ async function maybeGenerateOnboardingPdfs(packetId) {
       docType: 'mvr_authorization_pdf',
       fileName: `mvr_authorization_${driver.last_name || 'driver'}.pdf`,
       mimeType: 'application/pdf',
-      bytes: buffer
+      bytes: buffer,
+      folder: 'consents'
     });
     dtLogger.info('driver_mvr_authorization_pdf_created', { packetId, driverId: driver.id });
   }
