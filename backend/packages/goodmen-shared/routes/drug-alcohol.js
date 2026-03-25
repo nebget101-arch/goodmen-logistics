@@ -176,7 +176,8 @@ router.get('/summary', async (req, res) => {
 });
 
 // ---------- GET records by driver ID ----------
-router.get('/driver/:driverId', async (req, res) => {
+// Support both /driver/:driverId and /driver/:driverId/tests (frontend uses the latter)
+router.get(['/driver/:driverId', '/driver/:driverId/tests'], async (req, res) => {
   const startTime = Date.now();
   try {
     const driver = await validateDriverAccess(req.params.driverId, req.context);
@@ -226,29 +227,30 @@ router.get('/driver/:driverId/clearance-status', async (req, res) => {
 });
 
 // ---------- POST create new test record ----------
-router.post('/', async (req, res) => {
+// Support both POST / (original) and POST /driver/:driverId/tests (frontend)
+router.post(['/', '/driver/:driverId/tests'], async (req, res) => {
   const startTime = Date.now();
   try {
-    const {
-      driverId,
-      testDate,
-      result: testResult,
-      testType,
-      substanceType,
-      panelDetails,
-      collectionSite,
-      collectionDate,
-      resultDate,
-      mroName,
-      mroVerified,
-      ccfNumber,
-      labName,
-      notes
-    } = req.body;
+    // Accept both camelCase and snake_case field names (frontend sends snake_case)
+    const body = req.body;
+    const driverId = req.params.driverId || body.driverId || body.driver_id;
+    const testDate = body.testDate || body.test_date || body.collection_date;
+    const testResult = body.result || body.test_result;
+    const testType = body.testType || body.test_type;
+    const substanceType = body.substanceType || body.substance_type;
+    const panelDetails = body.panelDetails || body.panel_details;
+    const collectionSite = body.collectionSite || body.collection_site;
+    const collectionDate = body.collectionDate || body.collection_date;
+    const resultDate = body.resultDate || body.result_date;
+    const mroName = body.mroName || body.mro_name;
+    const mroVerified = body.mroVerified ?? body.mro_verified;
+    const ccfNumber = body.ccfNumber || body.ccf_number;
+    const labName = body.labName || body.lab_name;
+    const notes = body.notes;
 
-    // Backward-compatible validation: original required fields
-    if (!driverId || !testDate || !testResult) {
-      return res.status(400).json({ message: 'driverId, testDate, and result are required' });
+    // driverId is always required; testDate + result required only if provided (form may skip)
+    if (!driverId) {
+      return res.status(400).json({ message: 'driverId is required (URL param or body)' });
     }
 
     // Validate testType if provided
@@ -282,8 +284,10 @@ router.post('/', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, NOW())
       RETURNING *`,
       [
-        driverId, testDate, testResult,
-        testType || null, substanceType || null, panelDetails || null, collectionSite || null,
+        driverId, testDate || collectionDate || null, testResult || null,
+        testType || null, substanceType || null,
+        panelDetails ? JSON.stringify(panelDetails) : null,
+        collectionSite || null,
         collectionDate || null, resultDate || null, mroName || null, mroVerified ?? null,
         ccfNumber || null, labName || null, notes || null
       ]
@@ -312,7 +316,8 @@ router.post('/', async (req, res) => {
 });
 
 // ---------- PUT update existing test record ----------
-router.put('/:id', async (req, res) => {
+// Support both PUT /:id (original) and PUT /tests/:id (frontend)
+router.put(['/:id', '/tests/:id'], async (req, res) => {
   const startTime = Date.now();
   try {
     const testId = req.params.id;
@@ -340,21 +345,21 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Test record not found' });
     }
 
-    const {
-      testDate,
-      result: testResult,
-      testType,
-      substanceType,
-      panelDetails,
-      collectionSite,
-      collectionDate,
-      resultDate,
-      mroName,
-      mroVerified,
-      ccfNumber,
-      labName,
-      notes
-    } = req.body;
+    // Accept both camelCase and snake_case field names
+    const b = req.body;
+    const testDate = b.testDate || b.test_date;
+    const testResult = b.result || b.test_result;
+    const testType = b.testType || b.test_type;
+    const substanceType = b.substanceType || b.substance_type;
+    const panelDetails = b.panelDetails || b.panel_details;
+    const collectionSite = b.collectionSite || b.collection_site;
+    const collectionDate = b.collectionDate || b.collection_date;
+    const resultDate = b.resultDate || b.result_date;
+    const mroName = b.mroName || b.mro_name;
+    const mroVerified = b.mroVerified ?? b.mro_verified;
+    const ccfNumber = b.ccfNumber || b.ccf_number;
+    const labName = b.labName || b.lab_name;
+    const notes = b.notes;
 
     // Validate testType if provided
     if (testType && !VALID_TEST_TYPES.includes(testType)) {
@@ -390,7 +395,9 @@ router.put('/:id', async (req, res) => {
       RETURNING *`,
       [
         testDate || null, testResult || null,
-        testType || null, substanceType || null, panelDetails || null, collectionSite || null,
+        testType || null, substanceType || null,
+        panelDetails ? JSON.stringify(panelDetails) : null,
+        collectionSite || null,
         collectionDate || null, resultDate || null, mroName || null, mroVerified ?? null,
         ccfNumber || null, labName || null, notes || null,
         testId
@@ -422,8 +429,9 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// ---------- POST mark test as reported to Clearinghouse ----------
-router.post('/:id/mark-reported', async (req, res) => {
+// ---------- Mark test as reported to Clearinghouse ----------
+// Handler shared by POST /:id/mark-reported and PATCH /tests/:id/clearinghouse-reported
+async function markTestReportedHandler(req, res) {
   const startTime = Date.now();
   try {
     const testId = req.params.id;
@@ -461,13 +469,16 @@ router.post('/:id/mark-reported', async (req, res) => {
 
     const duration = Date.now() - startTime;
     dtLogger.trackDatabase('UPDATE', 'drug_alcohol_tests', duration, true, { testId });
-    dtLogger.trackRequest('POST', `/api/drug-alcohol/${testId}/mark-reported`, 200, duration);
+    dtLogger.trackRequest(req.method, req.originalUrl, 200, duration);
 
     return res.json(result.rows[0]);
   } catch (error) {
     console.error('Error marking test as reported:', error);
     return res.status(500).json({ message: 'Failed to mark test as reported' });
   }
-});
+}
+
+router.post('/:id/mark-reported', markTestReportedHandler);
+router.patch('/tests/:id/clearinghouse-reported', markTestReportedHandler);
 
 module.exports = router;
