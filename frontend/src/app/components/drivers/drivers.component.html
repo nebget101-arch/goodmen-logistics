@@ -746,11 +746,11 @@
 
         <!-- FN-258: Tab Content Panels -->
         <div *ngFor="let cat of dqfCategories" class="dqf-tab-panel" [class.active]="activeDqfTab === cat.key">
-            <div *ngFor="let req of cat.requirements" class="dqf-req-row" [ngClass]="'dqf-status-' + req.status">
+            <div *ngFor="let req of cat.requirements" class="dqf-req-row" [ngClass]="'dqf-status-' + getEffectiveStatus(req)">
               <div class="dqf-req-main">
-                <!-- Status chip -->
-                <span class="dqf-status-chip" [ngClass]="getStatusChipClass(req.status)">
-                  {{ getStatusChipLabel(req.status) }}
+                <!-- Status chip (FN-261: use effective status for warning overrides) -->
+                <span class="dqf-status-chip" [ngClass]="getStatusChipClass(getEffectiveStatus(req))">
+                  {{ getStatusChipLabel(getEffectiveStatus(req)) }}
                 </span>
                 <!-- Requirement info -->
                 <div class="dqf-req-info">
@@ -850,44 +850,45 @@
                 </div>
               </div>
             </div>
+            <!-- FN-261: Pre-Hire Documents section embedded within pre_hire tab -->
+            <ng-container *ngIf="cat.key === 'pre_hire'">
+              <section class="prehire-docs-section prehire-docs-inline">
+                <div class="prehire-docs-header">
+                  <h4>
+                    <span class="material-symbols-outlined">folder_open</span>
+                    Pre-Hire Documents (Change History)
+                  </h4>
+                </div>
+
+                <div *ngIf="prehireDocumentsLoading" class="dqf-loading">
+                  <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
+                  Loading pre-hire documents...
+                </div>
+
+                <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length > 0" class="prehire-docs-list">
+                  <div *ngFor="let doc of prehireDocuments" class="prehire-doc-row">
+                    <div class="prehire-doc-status">
+                      <span class="material-symbols-outlined prehire-doc-check">check_circle</span>
+                    </div>
+                    <div class="prehire-doc-info">
+                      <span class="prehire-doc-name">{{ getPrehireDocLabel(doc.doc_type) }}</span>
+                      <span class="prehire-doc-date" *ngIf="doc.created_at">Signed {{ doc.created_at | date:'mediumDate' }}</span>
+                    </div>
+                    <div class="prehire-doc-actions">
+                      <a class="prehire-download-btn" [href]="getPrehireDocDownloadUrl(doc)" target="_blank" rel="noopener">
+                        <span class="material-symbols-outlined" style="font-size:15px;">download</span>
+                        Download
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length === 0" class="prehire-docs-empty">
+                  No pre-hire documents on file. Documents appear here once the driver signs their onboarding packet.
+                </div>
+              </section>
+            </ng-container>
         </div><!-- /dqf-tab-panel (FN-258) -->
-
-        <!-- Pre-Hire Documents (FN-237) -->
-        <section class="prehire-docs-section">
-          <div class="prehire-docs-header">
-            <h4>
-              <span class="material-symbols-outlined">folder_open</span>
-              Pre-Hire Documents
-            </h4>
-          </div>
-
-          <div *ngIf="prehireDocumentsLoading" class="dqf-loading">
-            <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
-            Loading pre-hire documents...
-          </div>
-
-          <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length > 0" class="prehire-docs-list">
-            <div *ngFor="let doc of prehireDocuments" class="prehire-doc-row">
-              <div class="prehire-doc-status">
-                <span class="material-symbols-outlined prehire-doc-check">check_circle</span>
-              </div>
-              <div class="prehire-doc-info">
-                <span class="prehire-doc-name">{{ getPrehireDocLabel(doc.doc_type) }}</span>
-                <span class="prehire-doc-date" *ngIf="doc.created_at">Signed {{ doc.created_at | date:'mediumDate' }}</span>
-              </div>
-              <div class="prehire-doc-actions">
-                <a class="prehire-download-btn" [href]="getPrehireDocDownloadUrl(doc)" target="_blank" rel="noopener">
-                  <span class="material-symbols-outlined" style="font-size:15px;">download</span>
-                  Download
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length === 0" class="prehire-docs-empty">
-            No pre-hire documents on file. Documents appear here once the driver signs their onboarding packet.
-          </div>
-        </section>
 
         <!-- Legacy Checklist (shown only if no dynamic requirements) -->
         <ng-container *ngIf="dqfRequirements.length === 0">
