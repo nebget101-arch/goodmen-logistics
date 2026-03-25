@@ -869,6 +869,14 @@ router.get('/driver/:driverId/mvr-data', async (req, res) => {
       return res.status(404).json({ message: 'Driver not found' });
     }
 
+    // Check if table exists (graceful fallback before migration runs)
+    const tableCheck = await query(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'driver_mvr_reports') AS exists`
+    );
+    if (!tableCheck.rows[0]?.exists) {
+      return res.json({ driverId, reports: [] });
+    }
+
     const result = await query(
       `SELECT
          id,
