@@ -769,7 +769,7 @@
                            [disabled]="uploadingDocType !== null"
                            (change)="onDocumentFileSelected($event, docType.key)" />
                   </label>
-                  <span class="doc-upload-hint">JPG, PNG, or PDF up to 10 MB</span>
+                  <span class="doc-upload-hint">JPG, PNG, HEIC, or PDF up to 10 MB</span>
                   <!-- Spinner overlay while uploading this specific doc -->
                   <div *ngIf="uploadingDocType === docType.key" class="doc-upload-spinner">
                     <div class="doc-upload-spinner-ring"></div>
