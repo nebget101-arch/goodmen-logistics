@@ -860,7 +860,8 @@ export class DriversComponent implements OnInit, OnDestroy {
         'driver_license_front_on_file',
         'driver_license_back_on_file',
         'medical_card_front_on_file',
-        'medical_card_back_on_file'
+        'medical_card_back_on_file',
+        'psp_authorization_document'
       ],
       pre_hire_checklist: [
         'employment_application_completed',
@@ -935,6 +936,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       pre_employment_drug_test_submitted: '49 CFR 382.301',
       pre_employment_drug_test_result_received: '49 CFR 382.301',
       psp_consent: '49 CFR 391.23(i)',
+      psp_authorization_document: 'FMCSA PSP / 49 C.F.R. §383.5',
       // FN-236: Pre-hire consent form CFR references
       fcra_disclosure_signed: '15 U.S.C. \u00A7 1681',
       fcra_authorization_signed: '15 U.S.C. \u00A7 1681b',
