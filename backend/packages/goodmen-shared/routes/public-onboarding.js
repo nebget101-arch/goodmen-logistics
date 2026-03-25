@@ -1,14 +1,56 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
 const { query, getClient } = require('../internal/db');
 const { hashToken } = require('../services/token-service');
 const dtLogger = require('../utils/logger');
 const { createDriverDocument } = require('../services/driver-storage-service');
+const { uploadBuffer } = require('../storage/r2-storage');
 const {
   buildEmploymentApplicationPdf,
   buildMvrAuthorizationPdf
 } = require('../services/driver-onboarding-pdf');
 const employmentAppService = require('../services/employment-application.service');
+// FN-235: DQF integration for employment application submission
+const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('../services/dqf-service');
+
+// FN-250: Multer config for onboarding document uploads (memory storage for R2)
+const onboardingUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    const allowedMimes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/heic',
+      'image/heif'
+    ];
+    if (allowedMimes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+    cb(new Error('Only PDF and image files (JPEG, PNG, GIF, WebP) are allowed'));
+  }
+});
+
+// FN-250: Allowed onboarding document types
+const ALLOWED_ONBOARDING_DOC_TYPES = new Set([
+  'cdl_front',
+  'cdl_back',
+  'medical_certificate',
+  'social_security_card',
+  'other_certification'
+]);
+
+// FN-250: Map onboarding doc types to DQF requirement keys for auto-completion
+const DOC_TYPE_TO_DQF_REQUIREMENT = {
+  cdl_front: 'cdl_on_file',
+  cdl_back: 'cdl_on_file',
+  medical_certificate: 'medical_cert_on_file'
+};
 
 function hasMeaningfulData(data) {
   if (!data || typeof data !== 'object') return false;
@@ -87,7 +129,85 @@ async function safeOptionalQuery(sql, params = [], fallbackRows = []) {
   }
 }
 
-async function upsertEmploymentApplicationFromPacket(packet, data, submit = false) {
+async function upsertEmploymentApplicationFromPacket(packet, data, submit = false, reqMeta = {}) {
+  // FN-216: Build employers from currentEmployer + previousEmployers if structured employers array is empty
+  let employers = data?.employers || [];
+  if (!employers.length) {
+    if (data?.currentEmployer && typeof data.currentEmployer === 'object') {
+      employers.push({ ...data.currentEmployer, isCurrent: true, tier: 'detailed' });
+    }
+    if (Array.isArray(data?.previousEmployers)) {
+      for (const pe of data.previousEmployers) {
+        employers.push({ ...pe, isCurrent: false, tier: 'detailed' });
+      }
+    }
+  }
+  employers = employers.map((emp) => ({ ...emp, tier: emp.tier || 'detailed' }));
+
+  // FN-216: Build residencies from current address + previousAddresses if structured residencies array is empty
+  let residencies = data?.residencies || [];
+  if (!residencies.length) {
+    if (data?.addressStreet || data?.addressCity) {
+      residencies.push({
+        residencyType: 'current',
+        street: data.addressStreet || '',
+        city: data.addressCity || '',
+        state: data.addressState || '',
+        zip: data.addressZip || '',
+        yearsAtAddress: data.yearsAtAddress || ''
+      });
+    }
+    if (Array.isArray(data?.previousAddresses)) {
+      for (const pa of data.previousAddresses) {
+        residencies.push({
+          residencyType: 'previous',
+          street: pa.street || '',
+          city: pa.city || '',
+          state: pa.state || '',
+          zip: pa.zip || '',
+          yearsAtAddress: pa.yearsAtAddress || ''
+        });
+      }
+    }
+  }
+
+  // FN-216: Build workAuthorization from new onboarding form fields
+  const workAuthorization = data?.workAuthorization || {
+    legallyAuthorizedToWork: data?.legallyAuthorizedToWork ?? null,
+    convictedOfFelony: data?.convictedOfFelony ?? null,
+    felonyDetails: data?.felonyDetails || null,
+    unableToPerformFunctions: data?.unableToPerformFunctions ?? null,
+    adaDetails: data?.adaDetails || null
+  };
+
+  // FN-216: Build drugAlcohol from new onboarding form fields
+  const drugAlcohol = data?.drugAlcohol || {
+    violatedSubstanceProhibitions: data?.violatedSubstanceProhibitions ?? null,
+    failedRehabProgram: data?.failedRehabProgram ?? null,
+    alcoholTestResult04OrHigher: data?.alcoholTestResult04OrHigher ?? null,
+    positiveControlledSubstancesTest: data?.positiveControlledSubstancesTest ?? null,
+    refusedRequiredTest: data?.refusedRequiredTest ?? null,
+    otherDOTViolation: data?.otherDOTViolation ?? null
+  };
+
+  // FN-216: Build drivingExperience from individual equipment fields
+  const drivingExperience = data?.drivingExperience || {
+    straightTruck: data?.straightTruck || null,
+    tractorSemiTrailer: data?.tractorSemiTrailer || null,
+    tractorTwoTrailers: data?.tractorTwoTrailers || null,
+    motorcoachSchoolBus: data?.motorcoachSchoolBus || null,
+    motorcoachSchoolBusMore15: data?.motorcoachSchoolBusMore15 || null,
+    otherEquipment: data?.otherEquipment || null,
+    statesOperatedIn: data?.statesOperatedIn || null
+  };
+
+  // FN-216: Build audit trail from request metadata
+  const auditTrail = {
+    ipAddress: reqMeta.ipAddress || null,
+    userAgent: reqMeta.userAgent || null,
+    submittedAt: new Date().toISOString()
+  };
+
   const payload = {
     applicationDate: data?.applicationDate || data?.dateOfApplication || null,
     applicantSnapshot: {
@@ -110,26 +230,95 @@ async function upsertEmploymentApplicationFromPacket(packet, data, submit = fals
       applicantPrintedName: data?.applicantPrintedName || data?.applicationSignatureName || null,
       applicantSignature: data?.applicantSignature || data?.applicationSignatureName || null,
       signatureDate: data?.signatureDate || data?.applicationSignatureDate || null,
-      certificationAccepted: data?.certificationAccepted ?? null
+      certificationAccepted: data?.certificationAccepted ?? null,
+      // FN-215: preserve license class in snapshot for CDL validation
+      licenseClass: data?.licenseClass || null,
+      // FN-216: preserve new form fields in snapshot for PDF fallback reads
+      addressStreet: data?.addressStreet || null,
+      addressCity: data?.addressCity || null,
+      addressState: data?.addressState || null,
+      addressZip: data?.addressZip || null,
+      yearsAtAddress: data?.yearsAtAddress || null,
+      previousAddresses: data?.previousAddresses || null,
+      currentEmployer: data?.currentEmployer || null,
+      previousEmployers: data?.previousEmployers || null,
+      legallyAuthorizedToWork: data?.legallyAuthorizedToWork ?? null,
+      convictedOfFelony: data?.convictedOfFelony ?? null,
+      felonyDetails: data?.felonyDetails || null,
+      unableToPerformFunctions: data?.unableToPerformFunctions ?? null,
+      adaDetails: data?.adaDetails || null,
+      straightTruck: data?.straightTruck || null,
+      tractorSemiTrailer: data?.tractorSemiTrailer || null,
+      tractorTwoTrailers: data?.tractorTwoTrailers || null,
+      motorcoachSchoolBus: data?.motorcoachSchoolBus || null,
+      motorcoachSchoolBusMore15: data?.motorcoachSchoolBusMore15 || null,
+      otherEquipment: data?.otherEquipment || null,
+      statesOperatedIn: data?.statesOperatedIn || null,
+      violatedSubstanceProhibitions: data?.violatedSubstanceProhibitions ?? null,
+      failedRehabProgram: data?.failedRehabProgram ?? null,
+      alcoholTestResult04OrHigher: data?.alcoholTestResult04OrHigher ?? null,
+      positiveControlledSubstancesTest: data?.positiveControlledSubstancesTest ?? null,
+      refusedRequiredTest: data?.refusedRequiredTest ?? null,
+      otherDOTViolation: data?.otherDOTViolation ?? null,
+      hasAccidents: data?.hasAccidents ?? null,
+      hasViolations: data?.hasViolations ?? null,
+      // FN-216: audit trail
+      auditTrail
     },
-    residencies: data?.residencies || [],
+    // FN-216: structured objects for employment-application.service
+    workAuthorization,
+    drugAlcohol,
+    hasAccidents: data?.hasAccidents ?? null,
+    hasViolations: data?.hasViolations ?? null,
+    residencies,
     licenses: data?.licenses || [],
-    drivingExperience: data?.drivingExperience || [],
+    drivingExperience,
     accidents: data?.accidents || [],
+    violations: data?.violations || [],
     convictions: data?.convictions || [],
-    employers: data?.employers || [],
-    education: data?.education || []
+    employers,
+    education: data?.education || [],
+    // FN-215: disqualification and certification fields
+    disqualifications: data?.disqualifications || [],
+    has_been_disqualified: data?.has_been_disqualified ?? null,
+    certification_text_version: data?.certification_text_version || null,
+    signed_certification_at: data?.signed_certification_at || null
   };
 
   const apps = await employmentAppService.getByDriverId(packet.driver_id);
-  let target = apps.find((a) => a.status === 'draft') || null;
-  if (!target) {
-    target = await employmentAppService.createDraft(packet.driver_id, payload, null, null);
+
+  // FN-216: For submission, handle resubmission by creating a new draft instead of reusing a submitted one
+  let target;
+  if (submit) {
+    // If a draft exists, reuse it; otherwise create a new one (even if a submitted app exists)
+    target = apps.find((a) => a.status === 'draft') || null;
+    if (!target) {
+      target = await employmentAppService.createDraft(packet.driver_id, payload, null, null);
+    } else {
+      await employmentAppService.updateDraft(target.id, payload, null, null);
+    }
   } else {
-    await employmentAppService.updateDraft(target.id, payload, null, null);
+    target = apps.find((a) => a.status === 'draft') || null;
+    if (!target) {
+      target = await employmentAppService.createDraft(packet.driver_id, payload, null, null);
+    } else {
+      await employmentAppService.updateDraft(target.id, payload, null, null);
+    }
   }
 
+  // FN-215: validate completeness before submission
   if (submit) {
+    const fullApp = await employmentAppService.getById(target.id);
+    const { valid, errors } = employmentAppService.validateCompleteness(fullApp);
+    if (!valid) {
+      dtLogger.warn('employment_application_completeness_check_failed', {
+        applicationId: target.id,
+        driverId: packet.driver_id,
+        errors
+      });
+      // Proceed with submission anyway — validation is advisory for onboarding flow,
+      // but log so compliance teams can follow up.
+    }
     await employmentAppService.submitApplication(target.id, {}, null, null);
   }
 }
@@ -165,11 +354,12 @@ async function loadPacketWithToken(packetId, token, forUpdate = false) {
 
 async function maybeGenerateOnboardingPdfs(packetId) {
   // Check if we already have PDFs for this packet
+  // FN-235: Also check for 'employment_application_signed' doc type
   const existingDocsRes = await query(
     `SELECT doc_type
      FROM driver_documents
      WHERE packet_id = $1
-       AND doc_type IN ('employment_application_pdf', 'mvr_authorization_pdf')`,
+       AND doc_type IN ('employment_application_pdf', 'employment_application_signed', 'mvr_authorization_pdf')`,
     [packetId]
   );
   const existingTypes = new Set(existingDocsRes.rows.map((r) => r.doc_type));
@@ -201,6 +391,22 @@ async function maybeGenerateOnboardingPdfs(packetId) {
   const driver = driverRes.rows[0];
   if (!driver) return;
 
+  // FN-216: Look up operating entity for PDF header
+  let operatingEntity = null;
+  try {
+    const oeId = packet.operating_entity_id || driver.operating_entity_id || null;
+    if (oeId) {
+      const oeRes = await query(
+        'SELECT id, name, address, phone, email FROM operating_entities WHERE id = $1',
+        [oeId]
+      );
+      operatingEntity = oeRes.rows[0] || null;
+    }
+  } catch (oeErr) {
+    // Tolerate missing operating_entities table
+    dtLogger.warn('operating_entity_lookup_fallback', { error: oeErr?.message });
+  }
+
   const esignRes = await query(
     `SELECT section_key, signer_name, signed_at
      FROM driver_esignatures
@@ -216,9 +422,11 @@ async function maybeGenerateOnboardingPdfs(packetId) {
   });
 
   // Employment application PDF
+  // FN-235: Use 'employment_application_signed' docType for pre-hire documents visibility
   if (
     sections.employment_application &&
     sections.employment_application.status === 'completed' &&
+    !existingTypes.has('employment_application_signed') &&
     !existingTypes.has('employment_application_pdf')
   ) {
     const applicationData = sections.employment_application.data || {};
@@ -226,17 +434,38 @@ async function maybeGenerateOnboardingPdfs(packetId) {
     const buffer = await buildEmploymentApplicationPdf({
       driver,
       application: applicationData,
-      signature
+      signature,
+      operatingEntity
     });
-    await createDriverDocument({
+    // FN-216: use "{FirstName} {LastName} - Employment Application.pdf" filename
+    const firstName = (driver.first_name || '').trim();
+    const lastName = (driver.last_name || '').trim();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const pdfFileName = firstName || lastName
+      ? `employment_application_${firstName}_${lastName}_${dateStr}.pdf`.replace(/\s+/g, '_')
+      : `employment_application_${driver.id}_${dateStr}.pdf`;
+    const empDoc = await createDriverDocument({
       driverId: driver.id,
       packetId: packet.id,
-      docType: 'employment_application_pdf',
-      fileName: `employment_application_${driver.last_name || 'driver'}.pdf`,
+      docType: 'employment_application_signed',
+      fileName: pdfFileName,
       mimeType: 'application/pdf',
-      bytes: buffer
+      bytes: buffer,
+      folder: 'employment-application'
     });
-    dtLogger.info('driver_employment_application_pdf_created', { packetId, driverId: driver.id });
+    dtLogger.info('driver_employment_application_pdf_created', { packetId, driverId: driver.id, documentId: empDoc.id });
+
+    // FN-235: Mark DQF requirement 'employment_application_submitted' complete with evidence
+    try {
+      await upsertRequirementStatus(driver.id, 'employment_application_submitted', 'complete', empDoc.id);
+      await computeAndUpdateDqfCompleteness(driver.id);
+    } catch (dqfErr) {
+      // Non-blocking: DQF update failure should not break PDF generation
+      dtLogger.warn('employment_app_dqf_update_failed', {
+        driverId: driver.id,
+        error: dqfErr?.message || String(dqfErr)
+      });
+    }
   }
 
   // MVR authorization PDF
@@ -258,7 +487,8 @@ async function maybeGenerateOnboardingPdfs(packetId) {
       docType: 'mvr_authorization_pdf',
       fileName: `mvr_authorization_${driver.last_name || 'driver'}.pdf`,
       mimeType: 'application/pdf',
-      bytes: buffer
+      bytes: buffer,
+      folder: 'consents'
     });
     dtLogger.info('driver_mvr_authorization_pdf_created', { packetId, driverId: driver.id });
   }
@@ -490,7 +720,10 @@ router.post('/:packetId/sections/:sectionKey', rateLimited, async (req, res) => 
       if (sectionKey === 'employment_application') {
         // mirror into normalized employment application tables and perform final submission orchestration
         try {
-          await upsertEmploymentApplicationFromPacket(packet, data, true);
+          await upsertEmploymentApplicationFromPacket(packet, data, true, {
+            ipAddress: req.ip || '',
+            userAgent: req.headers['user-agent'] || ''
+          });
         } catch (syncError) {
           // Do not fail onboarding section save if normalized employment tables are not yet fully migrated.
           dtLogger.warn('employment_application_sync_failed_nonblocking', {
@@ -503,7 +736,10 @@ router.post('/:packetId/sections/:sectionKey', rateLimited, async (req, res) => 
     } else if (sectionKey === 'employment_application') {
       // keep draft in normalized employment application storage
       try {
-        await upsertEmploymentApplicationFromPacket(packet, data, false);
+        await upsertEmploymentApplicationFromPacket(packet, data, false, {
+          ipAddress: req.ip || '',
+          userAgent: req.headers['user-agent'] || ''
+        });
       } catch (syncError) {
         // Non-blocking for legacy schemas.
         dtLogger.warn('employment_application_draft_sync_failed_nonblocking', {
@@ -636,6 +872,217 @@ router.post('/:packetId/esignatures', rateLimited, async (req, res) => {
     return res.status(500).json({ message: 'Failed to capture e-signature' });
   } finally {
     client.release();
+  }
+});
+
+// FN-250: POST /public/onboarding/:packetId/upload-document?token=...
+// Upload a driver document (CDL, medical cert, etc.) during onboarding
+router.post(
+  '/:packetId/upload-document',
+  rateLimited,
+  onboardingUpload.single('file'),
+  async (req, res) => {
+    const start = Date.now();
+    try {
+      const { packetId } = req.params;
+      const { token } = req.query;
+      const docType = req.body.docType || req.body.documentType;
+
+      if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
+      if (!docType || !ALLOWED_ONBOARDING_DOC_TYPES.has(docType)) {
+        return res.status(400).json({
+          message: `Invalid docType. Allowed values: ${[...ALLOWED_ONBOARDING_DOC_TYPES].join(', ')}`
+        });
+      }
+
+      const { packet, error, status } = await loadPacketWithToken(packetId, token);
+      if (error) {
+        return res.status(status || 400).json({ message: error });
+      }
+
+      const driverId = packet.driver_id;
+
+      // Upload to R2
+      const fileExt = path.extname(req.file.originalname || '').toLowerCase();
+      const safeName = req.file.originalname
+        ? req.file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '_')
+        : `onboarding-${docType}${fileExt}`;
+      const { key: storageKey } = await uploadBuffer({
+        buffer: req.file.buffer,
+        contentType: req.file.mimetype,
+        prefix: `drivers/${driverId}/onboarding-documents`,
+        fileName: safeName
+      });
+
+      // Store in driver_documents with prefixed doc_type for onboarding namespace
+      const onboardingDocType = `onboarding_${docType}`;
+      const result = await query(
+        `INSERT INTO driver_documents (
+          driver_id,
+          packet_id,
+          doc_type,
+          file_name,
+          mime_type,
+          size_bytes,
+          storage_mode,
+          storage_key
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'r2', $7)
+        RETURNING id, doc_type, file_name, mime_type, created_at`,
+        [
+          driverId,
+          packet.id,
+          onboardingDocType,
+          req.file.originalname || safeName,
+          req.file.mimetype,
+          req.file.size,
+          storageKey
+        ]
+      );
+
+      const doc = result.rows[0];
+
+      // Auto-mark DQF requirement if applicable
+      const dqfKey = DOC_TYPE_TO_DQF_REQUIREMENT[docType];
+      if (dqfKey) {
+        try {
+          await upsertRequirementStatus(driverId, dqfKey, 'complete', doc.id);
+          await computeAndUpdateDqfCompleteness(driverId);
+        } catch (dqfErr) {
+          // Non-blocking: DQF auto-mark should not fail the upload
+          dtLogger.warn('onboarding_doc_dqf_auto_mark_failed', {
+            driverId,
+            docType,
+            dqfKey,
+            error: dqfErr?.message || String(dqfErr)
+          });
+        }
+      }
+
+      const duration = Date.now() - start;
+      dtLogger.trackRequest('POST', `/public/onboarding/${packetId}/upload-document`, 201, duration, {
+        driverId,
+        docType: onboardingDocType
+      });
+
+      return res.status(201).json({
+        success: true,
+        documentId: doc.id,
+        fileName: doc.file_name,
+        docType: onboardingDocType
+      });
+    } catch (error) {
+      // Handle multer file-size / filter errors
+      if (error?.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'File size exceeds 10 MB limit' });
+      }
+      if (error?.message?.includes('Only PDF and image files')) {
+        return res.status(400).json({ message: error.message });
+      }
+      const duration = Date.now() - start;
+      dtLogger.error('public_onboarding_upload_document_failed', error, { params: req.params });
+      dtLogger.trackRequest('POST', `/public/onboarding/${req.params.packetId}/upload-document`, 500, duration);
+      console.error('Error in public onboarding upload-document:', error);
+      return res.status(500).json({ message: 'Failed to upload document' });
+    }
+  }
+);
+
+// FN-250: GET /public/onboarding/:packetId/documents?token=...
+// List all onboarding documents for this packet's driver
+router.get('/:packetId/documents', rateLimited, async (req, res) => {
+  const start = Date.now();
+  try {
+    const { packetId } = req.params;
+    const { token } = req.query;
+
+    const { packet, error, status } = await loadPacketWithToken(packetId, token);
+    if (error) {
+      return res.status(status || 400).json({ message: error });
+    }
+
+    const docs = await query(
+      `SELECT id, doc_type, file_name, mime_type, created_at
+       FROM driver_documents
+       WHERE driver_id = $1
+         AND packet_id = $2
+         AND doc_type LIKE 'onboarding_%'
+         AND deleted_at IS NULL
+       ORDER BY created_at DESC`,
+      [packet.driver_id, packet.id]
+    );
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('GET', `/public/onboarding/${packetId}/documents`, 200, duration, {
+      driverId: packet.driver_id,
+      count: docs.rows.length
+    });
+
+    return res.json(docs.rows);
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('public_onboarding_list_documents_failed', error, { params: req.params });
+    dtLogger.trackRequest('GET', `/public/onboarding/${req.params.packetId}/documents`, 500, duration);
+    console.error('Error in public onboarding list documents:', error);
+    return res.status(500).json({ message: 'Failed to list documents' });
+  }
+});
+
+// FN-250: DELETE /public/onboarding/:packetId/documents/:documentId?token=...
+// Soft-delete an onboarding document
+router.delete('/:packetId/documents/:documentId', rateLimited, async (req, res) => {
+  const start = Date.now();
+  try {
+    const { packetId, documentId } = req.params;
+    const { token } = req.query;
+
+    const { packet, error, status } = await loadPacketWithToken(packetId, token);
+    if (error) {
+      return res.status(status || 400).json({ message: error });
+    }
+
+    // Verify document belongs to this packet's driver and is an onboarding doc
+    const docRes = await query(
+      `SELECT id, doc_type
+       FROM driver_documents
+       WHERE id = $1
+         AND driver_id = $2
+         AND packet_id = $3
+         AND doc_type LIKE 'onboarding_%'
+         AND deleted_at IS NULL`,
+      [documentId, packet.driver_id, packet.id]
+    );
+
+    if (docRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    // Soft delete
+    await query(
+      'UPDATE driver_documents SET deleted_at = NOW() WHERE id = $1',
+      [documentId]
+    );
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('DELETE', `/public/onboarding/${packetId}/documents/${documentId}`, 200, duration, {
+      driverId: packet.driver_id,
+      documentId
+    });
+
+    return res.json({ success: true, message: 'Document deleted' });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('public_onboarding_delete_document_failed', error, { params: req.params });
+    dtLogger.trackRequest(
+      'DELETE',
+      `/public/onboarding/${req.params.packetId}/documents/${req.params.documentId}`,
+      500,
+      duration
+    );
+    console.error('Error in public onboarding delete document:', error);
+    return res.status(500).json({ message: 'Failed to delete document' });
   }
 });
 

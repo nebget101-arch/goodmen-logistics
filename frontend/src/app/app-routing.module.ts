@@ -27,6 +27,7 @@ import { InventoryTransfersComponent } from './components/inventory-transfers/in
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
 import { OnboardingPacketComponent } from './components/onboarding-packet/onboarding-packet.component';
+import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
 import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-policy.component';
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
@@ -133,6 +134,8 @@ const routes: Routes = [
   { path: 'inventory-transfers', component: InventoryTransfersComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-transfers' } },
   { path: 'direct-sales', component: DirectSalesComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/direct-sales' } },
   { path: 'inventory-reports', component: InventoryReportsComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-reports' } },
+  // Employment application standalone route
+  { path: 'employment-application', component: EmploymentApplicationComponent },
   // Public driver onboarding packet link (no AuthGuard)
   { path: 'onboard/:packetId', component: OnboardingPacketComponent },
   { path: 'roadside/:callId', component: PublicRoadsideComponent },

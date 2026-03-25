@@ -1,76 +1,89 @@
 <div class="inline-date-filter" (click)="$event.stopPropagation()">
+
+  <!-- Trigger button -->
   <button type="button" class="inline-date-filter__trigger" (click)="toggle($event)">
     <span class="inline-date-filter__icon material-symbols-outlined">calendar_month</span>
-    <span class="inline-date-filter__label">{{ displayLabel }}</span>
+    <span class="inline-date-filter__label" [class.has-value]="!!value">{{ displayLabel }}</span>
+    <span *ngIf="value" class="inline-date-filter__clear material-symbols-outlined" (click)="clearDate($event)" title="Clear">close</span>
   </button>
 
   <div class="inline-date-filter__panel" *ngIf="open">
-    <header class="inline-date-filter__header">
-      <button
-        type="button"
-        class="nav-btn"
-        *ngIf="view !== 'year'"
-        (click)="goUp($event)"
-      >
-        <span class="material-symbols-outlined">arrow_back</span>
-      </button>
 
-      <span class="range-label" [ngSwitch]="view">
-        <span *ngSwitchCase="'year'">{{ baseYear }} - {{ baseYear + 9 }}</span>
-        <span *ngSwitchCase="'month'">{{ selectedYear || 'Select year' }}</span>
-        <span *ngSwitchCase="'day'">
-          {{ selectedYear }} •
-          {{
-            selectedMonth !== null
-              ? months()[selectedMonth].label
-              : ''
-          }}
-        </span>
-      </span>
-
-      <div class="year-nav" *ngIf="view === 'year'">
-        <button type="button" class="nav-btn" (click)="prevRange($event)">&lt;</button>
-        <button type="button" class="nav-btn" (click)="nextRange($event)">&gt;</button>
+    <!-- YEAR DRILL-DOWN VIEW -->
+    <ng-container *ngIf="view === 'year'">
+      <header class="inline-date-filter__header">
+        <span class="range-label">{{ baseYear }} – {{ baseYear + 9 }}</span>
+        <div class="nav-group">
+          <button type="button" class="nav-btn" (click)="prevRange($event)">&#8249;</button>
+          <button type="button" class="nav-btn" (click)="nextRange($event)">&#8250;</button>
+        </div>
+      </header>
+      <div class="drill-grid drill-grid--year">
+        <button
+          type="button"
+          class="drill-cell"
+          *ngFor="let y of years()"
+          (click)="selectYear(y, $event)"
+          [class.drill-cell--active]="displayYear === y"
+        >{{ y }}</button>
       </div>
-    </header>
+    </ng-container>
 
-    <!-- Year grid -->
-    <div class="inline-date-filter__grid" *ngIf="view === 'year'">
-      <button
-        type="button"
-        class="year-cell"
-        *ngFor="let y of years()"
-        (click)="selectYear(y, $event)"
-        [class.year-cell--active]="selectedYear === y"
-      >
-        {{ y }}
-      </button>
-    </div>
+    <!-- MONTH DRILL-DOWN VIEW -->
+    <ng-container *ngIf="view === 'month'">
+      <header class="inline-date-filter__header">
+        <button type="button" class="nav-btn" (click)="goUp($event)">
+          <span class="material-symbols-outlined">arrow_back</span>
+        </button>
+        <span class="range-label">{{ displayYear }}</span>
+        <div style="width:28px"></div>
+      </header>
+      <div class="drill-grid drill-grid--month">
+        <button
+          type="button"
+          class="drill-cell"
+          *ngFor="let m of months()"
+          (click)="selectMonth(m.index, $event)"
+          [class.drill-cell--active]="displayMonth === m.index"
+        >{{ m.label }}</button>
+      </div>
+    </ng-container>
 
-    <!-- Month grid -->
-    <div class="inline-date-filter__grid" *ngIf="view === 'month'">
-      <button
-        type="button"
-        class="month-cell"
-        *ngFor="let m of months()"
-        (click)="selectMonth(m.index, $event)"
-        [class.month-cell--active]="selectedMonth === m.index"
-      >
-        {{ m.label }}
-      </button>
-    </div>
+    <!-- DAY CALENDAR VIEW (default) -->
+    <ng-container *ngIf="view === 'day'">
+      <!-- Month/Year header with navigation -->
+      <header class="inline-date-filter__header">
+        <button type="button" class="nav-btn" (click)="prevMonth($event)" title="Previous month">&#8249;</button>
+        <button type="button" class="month-label-btn" (click)="goToYearView($event)" title="Select year/month">
+          {{ displayMonthLabel }}
+        </button>
+        <button type="button" class="nav-btn" (click)="nextMonth($event)" title="Next month">&#8250;</button>
+      </header>
 
-    <!-- Day grid -->
-    <div class="inline-date-filter__grid inline-date-filter__grid--days" *ngIf="view === 'day'">
-      <button
-        type="button"
-        class="day-cell"
-        *ngFor="let d of days()"
-        (click)="selectDay(d, $event)"
-      >
-        {{ d }}
-      </button>
-    </div>
+      <!-- Weekday headers -->
+      <div class="calendar-grid">
+        <span class="weekday-header" *ngFor="let d of weekdays()">{{ d }}</span>
+
+        <!-- Blank offset cells -->
+        <span class="day-spacer" *ngFor="let _ of [].constructor(dayOffset())"></span>
+
+        <!-- Day cells -->
+        <button
+          type="button"
+          class="day-cell"
+          *ngFor="let d of days()"
+          (click)="selectDay(d, $event)"
+          [class.day-cell--selected]="isSelectedDay(d)"
+          [class.day-cell--today]="isToday(d)"
+        >{{ d }}</button>
+      </div>
+
+      <!-- Footer actions -->
+      <div class="calendar-footer">
+        <button type="button" class="footer-btn footer-btn--today" (click)="selectToday($event)">Today</button>
+        <button type="button" class="footer-btn footer-btn--clear" *ngIf="value" (click)="clearDate($event)">Clear</button>
+      </div>
+    </ng-container>
+
   </div>
 </div>
-

@@ -4,22 +4,30 @@
   width: 100%;
 }
 
+/* Trigger button */
 .inline-date-filter__trigger {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
+  padding: 5px 8px;
+  font-size: 12px;
   border-radius: 6px;
   border: 1px solid var(--border-color);
   background: rgba(15, 23, 42, 0.96);
   color: var(--text-dark);
   cursor: pointer;
+  transition: border-color 150ms ease;
+}
+
+.inline-date-filter__trigger:hover {
+  border-color: rgba(56, 189, 248, 0.6);
 }
 
 .inline-date-filter__icon {
   font-size: 14px;
+  color: #64748b;
+  flex-shrink: 0;
 }
 
 .inline-date-filter__label {
@@ -28,99 +36,233 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #64748b;
 }
 
+.inline-date-filter__label.has-value {
+  color: #e2e8f0;
+}
+
+.inline-date-filter__clear {
+  font-size: 13px;
+  color: #64748b;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  padding: 1px;
+}
+
+.inline-date-filter__clear:hover {
+  color: #f87171;
+}
+
+/* Panel */
 .inline-date-filter__panel {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 4px);
   left: 0;
-  margin-top: 4px;
-  background: rgba(15, 23, 42, 0.98);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 8px;
+  background: rgba(10, 16, 35, 0.99);
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  border-radius: 12px;
+  padding: 12px;
   box-shadow:
-    0 18px 40px rgba(15, 23, 42, 0.9),
+    0 20px 40px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(15, 23, 42, 1);
-  z-index: 40;
-  min-width: 180px;
+  z-index: 200;
+  min-width: 220px;
 }
 
+/* Header */
 .inline-date-filter__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
-  font-size: 11px;
-  color: var(--text-dark);
+  margin-bottom: 10px;
 }
 
-.inline-date-filter__header .nav-btn {
+.nav-btn {
   border: none;
   background: transparent;
-  color: var(--text-dark);
+  color: #94a3b8;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 3px 6px;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 6px;
+  transition: color 150ms, background 150ms;
 }
 
-.inline-date-filter__header .material-symbols-outlined {
-  font-size: 14px;
+.nav-btn:hover {
+  color: #67e8f9;
+  background: rgba(56, 189, 248, 0.1);
 }
 
-.year-nav {
+.nav-btn .material-symbols-outlined {
+  font-size: 15px;
+  vertical-align: middle;
+}
+
+.nav-group {
   display: flex;
   gap: 2px;
 }
 
-.inline-date-filter__grid {
+.month-label-btn {
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 6px;
+  transition: color 150ms, background 150ms;
+}
+
+.month-label-btn:hover {
+  color: #67e8f9;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.range-label {
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Calendar grid (day view) */
+.calendar-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.weekday-header {
+  text-align: center;
+  font-size: 10px;
+  color: #475569;
+  font-weight: 600;
+  padding: 2px 0 5px;
+  letter-spacing: 0.03em;
+}
+
+.day-spacer {
+  /* empty offset cell */
+}
+
+.day-cell {
+  border: none;
+  border-radius: 6px;
+  padding: 5px 0;
+  font-size: 11px;
+  text-align: center;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.day-cell:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #67e8f9;
+}
+
+.day-cell--today {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.day-cell--today:not(.day-cell--selected)::after {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #38bdf8;
+  margin: 1px auto 0;
+}
+
+.day-cell--selected {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.4), rgba(14, 165, 233, 0.6));
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Calendar footer */
+.calendar-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(51, 65, 85, 0.6);
+  gap: 6px;
+}
+
+.footer-btn {
+  flex: 1;
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms;
+  background: transparent;
+}
+
+.footer-btn--today {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.footer-btn--today:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.6);
+}
+
+.footer-btn--clear {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.footer-btn--clear:hover {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.6);
+}
+
+/* Drill-down grids (year/month views) */
+.drill-grid {
+  display: grid;
   gap: 4px;
 }
 
-.year-cell {
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  border-radius: 999px;
-  padding: 4px 0;
+.drill-grid--year {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.drill-grid--month {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.drill-cell {
+  border: 1px solid rgba(51, 65, 85, 0.7);
+  border-radius: 6px;
+  padding: 6px 0;
   font-size: 11px;
-  background: rgba(15, 23, 42, 0.96);
-  color: var(--text-dark);
+  background: transparent;
+  color: #94a3b8;
   cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
 }
 
-.year-cell:hover {
-  border-color: rgba(34, 197, 94, 0.9);
+.drill-cell:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #67e8f9;
+  background: rgba(56, 189, 248, 0.08);
 }
 
-.year-cell--active {
-  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.3), rgba(14, 165, 233, 0.9));
-  border-color: rgba(34, 197, 94, 0.9);
+.drill-cell--active {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(14, 165, 233, 0.5));
+  border-color: rgba(34, 197, 94, 0.6);
   color: #e5f9ff;
+  font-weight: 600;
 }
-
-.month-cell,
-.day-cell {
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  border-radius: 999px;
-  padding: 4px 0;
-  font-size: 11px;
-  background: rgba(15, 23, 42, 0.96);
-  color: var(--text-dark);
-  cursor: pointer;
-}
-
-.month-cell:hover,
-.day-cell:hover {
-  border-color: rgba(34, 197, 94, 0.9);
-}
-
-.month-cell--active {
-  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.3), rgba(14, 165, 233, 0.9));
-  border-color: rgba(34, 197, 94, 0.9);
-  color: #e5f9ff;
-}
-
-.inline-date-filter__grid--days {
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-}
-

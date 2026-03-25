@@ -326,7 +326,7 @@
               ></app-ai-date-picker>
             </div>
             <div class="dqf-field">
-              <label for="medExpiry">Medical Cert Expiry</label>
+              <label for="medExpiry">Med Cert Expiry</label>
               <app-ai-date-picker
                 inputId="medExpiry"
                 [label]="''"
@@ -362,6 +362,7 @@
       <div class="dqf-modal-body">
         <div class="dqf-grid-2">
           <div>
+            <h4 class="dqf-section-title">Identity & Contact</h4>
             <div class="dqf-field">
               <label for="editFirstName">First Name *</label>
               <input id="editFirstName" type="text" [(ngModel)]="editingDriver.firstName" class="form-input" />
@@ -371,8 +372,57 @@
               <input id="editEmail" type="email" [(ngModel)]="editingDriver.email" class="form-input" />
             </div>
             <div class="dqf-field">
+              <label for="editAddress">Address</label>
+              <input id="editAddress" type="text" [(ngModel)]="editingDriver.address" class="form-input" placeholder="123 Main St, City, ST 12345" />
+            </div>
+            <div class="dqf-field">
+              <label for="editDob">Date of Birth</label>
+              <app-ai-date-picker
+                inputId="editDob"
+                [label]="''"
+                ariaLabel="Date of Birth"
+                [(ngModel)]="editingDriver.dateOfBirth"
+                name="editDriverDob"
+                placeholder="MM/DD/YYYY"
+              ></app-ai-date-picker>
+            </div>
+            <div class="dqf-field">
+              <label for="editHireDate">Hire Date</label>
+              <app-ai-date-picker
+                inputId="editHireDate"
+                [label]="''"
+                ariaLabel="Hire Date"
+                [(ngModel)]="editingDriver.hireDate"
+                name="editDriverHireDate"
+                placeholder="MM/DD/YYYY"
+              ></app-ai-date-picker>
+            </div>
+          </div>
+          <div>
+            <h4 class="dqf-section-title">License & Medical</h4>
+            <div class="dqf-field">
+              <label for="editLastName">Last Name *</label>
+              <input id="editLastName" type="text" [(ngModel)]="editingDriver.lastName" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editPhone">Phone</label>
+              <input id="editPhone" type="tel" [(ngModel)]="editingDriver.phone" class="form-input" />
+            </div>
+            <div class="dqf-field">
               <label for="editCdlNumber">CDL Number *</label>
               <input id="editCdlNumber" type="text" [(ngModel)]="editingDriver.cdlNumber" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editCdlState">CDL State *</label>
+              <input id="editCdlState" type="text" [(ngModel)]="editingDriver.cdlState" maxlength="2" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editCdlClass">CDL Class *</label>
+              <select id="editCdlClass" [(ngModel)]="editingDriver.cdlClass" class="form-input">
+                <option value="A">Class A</option>
+                <option value="B">Class B</option>
+                <option value="C">Class C</option>
+              </select>
             </div>
             <div class="dqf-field">
               <label for="editCdlExpiry">CDL Expiry</label>
@@ -385,8 +435,6 @@
                 placeholder="MM/DD/YYYY"
               ></app-ai-date-picker>
             </div>
-          </div>
-          <div>
             <div class="dqf-field">
               <label for="editLastName">Last Name *</label>
               <input id="editLastName" type="text" [(ngModel)]="editingDriver.lastName" class="form-input" />
@@ -407,7 +455,7 @@
               ></app-ai-select>
             </div>
             <div class="dqf-field">
-              <label for="editMedExpiry">Medical Cert Expiry</label>
+              <label for="editMedExpiry">Med Cert Expiry</label>
               <app-ai-date-picker
                 inputId="editMedExpiry"
                 [label]="''"
@@ -434,6 +482,11 @@
   <!-- DQF Checklist Modal -->
   <div class="modal-backdrop dqf-modal-backdrop" *ngIf="showDQFForm && selectedDriver" (click)="closeDQFForm()">
     <div class="modal dqf-modal dqf-modal-wide" (click)="$event.stopPropagation()">
+      <!-- Close button positioned top-right outside header -->
+      <button class="dqf-close-btn-ai" type="button" (click)="closeDQFForm()" [disabled]="saving" title="Close DQF Checklist">
+        <span class="dqf-close-btn-glow"></span>
+        <span class="material-symbols-outlined">close</span>
+      </button>
       <div class="modal-header dqf-modal-header">
         <div>
           <h3>
@@ -442,9 +495,201 @@
           </h3>
           <p class="dqf-modal-subtitle">49 CFR 391.51 - Required Documents for Driver Qualification File</p>
         </div>
-        <button class="dqf-close-btn" type="button" (click)="closeDQFForm()" [disabled]="saving">✕</button>
       </div>
       <div class="dqf-modal-body">
+        <!-- Pre-Employment Clearance Gate (FN-214) -->
+        <app-pre-employment-gate
+          *ngIf="selectedDriver"
+          [driverId]="selectedDriver.id"
+        ></app-pre-employment-gate>
+
+        <!-- Drug & Alcohol Test Management (FN-214) -->
+        <section class="da-section">
+          <div class="da-section-header">
+            <h4>
+              <span class="material-symbols-outlined">science</span>
+              Drug & Alcohol Tests (49 CFR 382)
+            </h4>
+            <button *ngIf="canManageDrivers" class="da-add-btn" type="button" (click)="openAddDrugTest()">
+              <span class="material-symbols-outlined" style="font-size:16px;">add_circle</span>
+              New Test
+            </button>
+          </div>
+
+          <!-- Filters -->
+          <div class="da-filters">
+            <select [(ngModel)]="drugTestTypeFilter" class="da-filter-select">
+              <option value="">All Test Types</option>
+              <option *ngFor="let tt of drugTestTypes" [value]="tt">{{ drugTestTypeLabels[tt] }}</option>
+            </select>
+            <label class="da-filter-check">
+              <input type="checkbox" [ngModel]="drugTestClearinghouseFilter === 'pending'"
+                     (ngModelChange)="drugTestClearinghouseFilter = $event ? 'pending' : ''">
+              Pending Clearinghouse
+            </label>
+          </div>
+
+          <!-- Loading -->
+          <div *ngIf="drugAlcoholTestsLoading" class="dqf-loading">
+            <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
+            Loading tests...
+          </div>
+
+          <!-- Test List -->
+          <div *ngIf="!drugAlcoholTestsLoading && filteredDrugTests.length > 0" class="da-test-list">
+            <div *ngFor="let test of filteredDrugTests" class="da-test-row">
+              <div class="da-test-main">
+                <span class="da-type-badge" [ngClass]="getTestTypeBadgeClass(test.test_type)">
+                  {{ drugTestTypeLabels[test.test_type] || test.test_type }}
+                </span>
+                <span class="da-substance-label">{{ substanceTypeLabels[test.substance_type] || test.substance_type }}</span>
+                <span *ngIf="test.result" class="badge" [ngClass]="getResultBadgeClass(test.result)">
+                  {{ drugTestResultLabels[test.result!] || test.result }}
+                </span>
+                <span class="da-clearinghouse-icon"
+                      [class.da-reported]="test.clearinghouse_reported === 'reported'"
+                      [class.da-not-reported]="test.clearinghouse_reported !== 'reported'"
+                      [title]="test.clearinghouse_reported === 'reported' ? 'Reported to Clearinghouse' : 'Not Reported'">
+                  <span class="material-symbols-outlined" style="font-size:16px;">
+                    {{ test.clearinghouse_reported === 'reported' ? 'verified' : 'pending' }}
+                  </span>
+                </span>
+              </div>
+              <div class="da-test-meta">
+                <span *ngIf="test.collection_date">{{ test.collection_date | date:'shortDate' }}</span>
+                <span *ngIf="test.result_received_date">Result Received: {{ test.result_received_date | date:'shortDate' }}</span>
+                <span *ngIf="test.ccf_number">CCF: {{ test.ccf_number }}</span>
+                <span *ngIf="test.mro_verified" class="da-mro-verified">MRO Verified</span>
+              </div>
+              <div class="da-test-actions">
+                <button *ngIf="canManageDrivers" type="button" class="da-edit-btn" (click)="openEditDrugTest(test)">
+                  <span class="material-symbols-outlined" style="font-size:14px;">edit</span> Edit
+                </button>
+                <button *ngIf="canManageDrivers && test.clearinghouse_reported !== 'reported'" type="button"
+                        class="da-report-btn" (click)="markClearinghouseReported(test)">
+                  <span class="material-symbols-outlined" style="font-size:14px;">fact_check</span> Mark Reported
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty state -->
+          <div *ngIf="!drugAlcoholTestsLoading && filteredDrugTests.length === 0" class="da-empty">
+            No drug/alcohol tests on record.
+          </div>
+
+          <!-- Add/Edit Drug Test Form (inline) -->
+          <div *ngIf="showDrugTestForm" class="da-form-panel">
+            <h5 class="da-form-title">{{ editingDrugTest ? 'Edit Test Record' : 'New Drug & Alcohol Test' }}</h5>
+            <div class="dqf-grid-2">
+              <div>
+                <div class="dqf-field">
+                  <label>Test Type *</label>
+                  <select [(ngModel)]="activeDrugTestForm.test_type" class="form-input" required>
+                    <option *ngFor="let tt of drugTestTypes" [value]="tt">{{ drugTestTypeLabels[tt] }}</option>
+                  </select>
+                </div>
+                <div class="dqf-field">
+                  <label>Substance Type *</label>
+                  <select [(ngModel)]="activeDrugTestForm.substance_type" class="form-input" required>
+                    <option *ngFor="let st of substanceTypes" [value]="st">{{ substanceTypeLabels[st] }}</option>
+                  </select>
+                </div>
+                <div class="dqf-field" *ngIf="showPanelDetails()">
+                  <label>Panel Details (5-Panel)</label>
+                  <div class="da-panel-checkboxes">
+                    <label class="da-panel-cb"><input type="checkbox" [(ngModel)]="activeDrugTestForm.panel_details!.marijuana"> Marijuana</label>
+                    <label class="da-panel-cb"><input type="checkbox" [(ngModel)]="activeDrugTestForm.panel_details!.cocaine"> Cocaine</label>
+                    <label class="da-panel-cb"><input type="checkbox" [(ngModel)]="activeDrugTestForm.panel_details!.opiates"> Opiates</label>
+                    <label class="da-panel-cb"><input type="checkbox" [(ngModel)]="activeDrugTestForm.panel_details!.amphetamines"> Amphetamines</label>
+                    <label class="da-panel-cb"><input type="checkbox" [(ngModel)]="activeDrugTestForm.panel_details!.pcp"> PCP</label>
+                  </div>
+                </div>
+                <div class="dqf-field">
+                  <label>Result</label>
+                  <select [(ngModel)]="activeDrugTestForm.result" class="form-input">
+                    <option [ngValue]="undefined">-- Select --</option>
+                    <option *ngFor="let r of drugTestResults" [value]="r">{{ drugTestResultLabels[r] }}</option>
+                  </select>
+                </div>
+                <div class="dqf-field">
+                  <label>CCF Number</label>
+                  <input type="text" [(ngModel)]="activeDrugTestForm.ccf_number" class="form-input" placeholder="Custody and Control Form #" />
+                </div>
+              </div>
+              <div>
+                <div class="dqf-field">
+                  <label>Collection Site</label>
+                  <input type="text" [(ngModel)]="activeDrugTestForm.collection_site" class="form-input" placeholder="Collection facility name" />
+                </div>
+                <div class="dqf-field">
+                  <label>Collection Date</label>
+                  <app-ai-date-picker
+                    [label]="''"
+                    ariaLabel="Collection Date"
+                    [(ngModel)]="activeDrugTestForm.collection_date"
+                    name="daCollectionDate"
+                    placeholder="MM/DD/YYYY"
+                  ></app-ai-date-picker>
+                </div>
+                <div class="dqf-field">
+                  <label>Lab Name</label>
+                  <input type="text" [(ngModel)]="activeDrugTestForm.lab_name" class="form-input" placeholder="Laboratory name" />
+                </div>
+                <div class="dqf-field">
+                  <label>MRO Name</label>
+                  <input type="text" [(ngModel)]="activeDrugTestForm.mro_name" class="form-input" placeholder="Medical Review Officer" />
+                </div>
+                <div class="dqf-field">
+                  <label class="da-toggle-label">
+                    MRO Verified
+                    <input type="checkbox" [(ngModel)]="activeDrugTestForm.mro_verified" class="da-toggle-input">
+                    <span class="da-toggle-track">
+                      <span class="da-toggle-thumb"></span>
+                    </span>
+                  </label>
+                </div>
+                <div class="dqf-field">
+                  <label>Result Received Date</label>
+                  <app-ai-date-picker
+                    [label]="''"
+                    ariaLabel="Result Received Date"
+                    [(ngModel)]="activeDrugTestForm.result_received_date"
+                    name="daResultReceivedDate"
+                    placeholder="MM/DD/YYYY"
+                  ></app-ai-date-picker>
+                </div>
+              </div>
+            </div>
+            <div class="dqf-field">
+              <label>Notes</label>
+              <textarea [(ngModel)]="activeDrugTestForm.notes" class="form-input" rows="2" placeholder="Additional notes..."></textarea>
+            </div>
+            <!-- FN-225: Result document upload -->
+            <div class="dqf-field" *ngIf="activeDrugTestForm.result">
+              <label>Test Result Document *</label>
+              <div class="da-file-upload-row">
+                <label class="da-file-upload-btn">
+                  <span class="material-symbols-outlined" style="font-size:16px;">upload_file</span>
+                  {{ drugTestResultFile ? drugTestResultFile.name : 'Choose file...' }}
+                  <input type="file" (change)="onDrugTestResultFileSelected($event)" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" />
+                </label>
+                <span *ngIf="drugTestResultFileName" class="da-file-name">{{ drugTestResultFileName }}</span>
+              </div>
+              <div *ngIf="drugTestResultError" class="da-validation-error">
+                <span class="material-symbols-outlined" style="font-size:14px;">error</span>
+                {{ drugTestResultError }}
+              </div>
+            </div>
+            <div class="da-form-actions">
+              <button class="btn" type="button" (click)="cancelDrugTestForm()" [disabled]="savingDrugTest">Cancel</button>
+              <button class="btn btn-primary" type="button" (click)="saveDrugTest()" [disabled]="savingDrugTest">
+                {{ savingDrugTest ? 'Saving...' : (editingDrugTest ? 'Update Test' : 'Save Test') }}
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section class="safety-history-widget">
           <div class="safety-history-header">
             <h4>
@@ -497,225 +742,365 @@
 
         <div class="dqf-checklist">
 
-        <!-- Dynamic requirements from API -->
+        <!-- Loading state -->
         <div *ngIf="dqfRequirementsLoading" class="dqf-loading">
           <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
-          Loading requirements…
+          Loading requirements...
         </div>
 
-        <!-- DQF Completeness bar when loaded -->
-        <div *ngIf="!dqfRequirementsLoading && dqfRequirements.length > 0" class="dqf-completeness-bar-wrapper">
+        <ng-container *ngIf="!dqfRequirementsLoading">
+
+        <!-- Pre-Drive Gate Banner -->
+        <div *ngIf="!clearanceLoading && clearanceStatus" class="dqf-gate-banner"
+             [ngClass]="clearanceStatus?.cleared ? 'dqf-gate-cleared' : 'dqf-gate-blocked'">
+          <div class="dqf-gate-icon">
+            <span class="material-symbols-outlined">
+              {{ clearanceStatus?.cleared ? 'verified' : 'gpp_bad' }}
+            </span>
+          </div>
+          <div class="dqf-gate-text">
+            <strong>{{ clearanceStatus?.cleared ? 'CLEARED TO DRIVE' : 'NOT CLEARED TO DRIVE' }}</strong>
+            <span *ngIf="!clearanceStatus?.cleared && clearanceStatus?.missingItems?.length" class="dqf-gate-missing">
+              Missing: {{ clearanceStatus.missingItems.join(', ') }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Print Button -->
+        <div class="dqf-print-bar">
+          <button class="dqf-print-btn" type="button" (click)="printDqfReport()">
+            <span class="material-symbols-outlined">print</span> Print DQF Report
+          </button>
+        </div>
+
+        <!-- Overall Completeness Bar -->
+        <div *ngIf="dqfRequirements.length > 0" class="dqf-completeness-bar-wrapper">
           <div class="dqf-completeness-header">
-            <span>DQF Completeness</span>
+            <span>Overall DQF Completeness</span>
             <span class="dqf-completeness-pct">{{ dqfCompleteness }}%</span>
           </div>
           <div class="dqf-completeness-bar-track">
             <div class="dqf-completeness-bar-fill" [style.width.%]="dqfCompleteness"></div>
           </div>
+          <!-- Per-category breakdown -->
+          <div class="dqf-category-breakdown" *ngIf="dqfCategories.length > 0">
+            <div *ngFor="let cat of dqfCategories" class="dqf-category-mini">
+              <span class="dqf-category-mini-label">{{ cat.label }}</span>
+              <span class="dqf-category-mini-pct">{{ getCategoryCompletionPct(cat) }}%</span>
+              <div class="dqf-category-mini-track">
+                <div class="dqf-category-mini-fill" [style.width.%]="getCategoryCompletionPct(cat)"></div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Dynamic requirement rows -->
-        <ng-container *ngIf="!dqfRequirementsLoading && dqfRequirements.length > 0">
-          <div *ngFor="let req of dqfRequirements" class="dqf-req-row" [ngClass]="'dqf-status-' + req.status">
-            <div class="dqf-req-main">
-              <span class="material-symbols-outlined dqf-req-icon"
-                [style.color]="req.status === 'complete' ? '#22c55e' :
-                               req.status === 'received' ? '#3b82f6' :
-                               req.status === 'sent' ? '#f59e0b' : '#ef4444'">
-                {{ req.status === 'complete' ? 'task_alt' :
-                   req.status === 'received' ? 'download_done' :
-                   req.status === 'sent' ? 'send' : 'cancel' }}
-              </span>
-              <div class="dqf-req-info">
-                <span class="dqf-req-label">{{ req.label }}</span>
-                <span class="dqf-req-meta" *ngIf="req.last_updated_at">
-                  Updated {{ req.last_updated_at | date:'shortDate' }}
+        <!-- FN-258: Tab Navigation Bar -->
+        <div class="dqf-tab-bar">
+          <button *ngFor="let cat of dqfCategories"
+                  type="button"
+                  class="dqf-tab-btn"
+                  [class.active]="activeDqfTab === cat.key"
+                  (click)="setActiveDqfTab(cat.key)">
+            <span class="dqf-tab-label">{{ cat.label }}</span>
+            <span class="dqf-tab-badge"
+                  [ngClass]="getCategoryCompletionPct(cat) === 100 ? 'badge-complete' : 'badge-incomplete'">
+              {{ getCategoryCompletionCount(cat) }}
+            </span>
+          </button>
+        </div>
+
+        <!-- FN-258: Tab Content Panels -->
+        <div *ngFor="let cat of dqfCategories" class="dqf-tab-panel" [class.active]="activeDqfTab === cat.key">
+            <div *ngFor="let req of cat.requirements" class="dqf-req-row" [ngClass]="'dqf-status-' + req.status">
+              <div class="dqf-req-main">
+                <!-- Status chip -->
+                <span class="dqf-status-chip" [ngClass]="getStatusChipClass(req.status)">
+                  {{ getStatusChipLabel(req.status) }}
                 </span>
+                <!-- Requirement info -->
+                <div class="dqf-req-info">
+                  <span class="dqf-req-label">{{ getDqfReqLabel(req) }}</span>
+                  <span class="dqf-req-cfr" *ngIf="getCfrReference(req.key)">{{ getCfrReference(req.key) }}</span>
+                  <span class="dqf-req-meta" *ngIf="req.completion_date">
+                    Completed {{ req.completion_date | date:'shortDate' }}
+                  </span>
+                  <span class="dqf-req-meta" *ngIf="!req.completion_date && req.last_updated_at">
+                    Updated {{ req.last_updated_at | date:'shortDate' }}
+                  </span>
+                </div>
+                <!-- Actions -->
+                <div class="dqf-req-actions">
+                  <!-- Upload button for document-based requirements -->
+                  <ng-container *ngIf="isDqfDocumentReq(req.key)">
+                    <label class="dqf-upload-btn" [class.uploading]="uploadingDocuments[req.key]">
+                      <span class="material-symbols-outlined" style="font-size:15px;">upload_file</span>
+                      {{ uploadingDocuments[req.key] ? 'Uploading...' : 'Upload' }}
+                      <input type="file" (change)="onDQFFileSelectedForKey($event, req.key)"
+                             accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
+                    </label>
+                  </ng-container>
+                  <!-- FN-240: Upload + Pull from App for employment_application_submitted -->
+                  <ng-container *ngIf="req.key === 'employment_application_submitted' && req.status !== 'complete'">
+                    <label class="dqf-upload-btn" [class.uploading]="uploadingDocuments[req.key]">
+                      <span class="material-symbols-outlined" style="font-size:15px;">upload_file</span>
+                      {{ uploadingDocuments[req.key] ? 'Uploading...' : 'Upload' }}
+                      <input type="file" (change)="onDQFFileSelectedForKey($event, req.key)"
+                             accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
+                    </label>
+                    <button class="dqf-pull-btn"
+                            [class.pulling]="autoPullingEmpApp"
+                            [disabled]="autoPullingEmpApp"
+                            (click)="autoPullEmploymentApp()">
+                      <span class="material-symbols-outlined" style="font-size:15px;"
+                            [class.dqf-spin]="autoPullingEmpApp">sync</span>
+                      {{ autoPullingEmpApp ? 'Pulling...' : 'Pull from App' }}
+                    </button>
+                    <span class="dqf-pull-error" *ngIf="autoPullEmpAppError">{{ autoPullEmpAppError }}</span>
+                  </ng-container>
+                  <!-- Status buttons for manual status requirements -->
+                  <ng-container *ngIf="!isDqfDocumentReq(req.key) && req.key !== 'employment_application_submitted'">
+                    <!-- FN-223: Inline date picker for clearinghouse items -->
+                    <ng-container *ngIf="requiresDateCapture(req.key) && req.status !== 'complete'">
+                      <input type="date" class="dqf-date-input" [(ngModel)]="dqfDateInputs[req.key]" [name]="'dqfDate_'+req.key" />
+                      <button class="dqf-status-btn"
+                              [class.active]="updateingRequirementKey === req.key"
+                              [disabled]="!dqfDateInputs[req.key]"
+                              (click)="updateRequirementStatusWithDate(req, 'complete')">
+                        <span class="material-symbols-outlined" style="font-size:14px;">check_circle</span> Mark Done
+                      </button>
+                    </ng-container>
+                    <!-- Standard mark done (no date) -->
+                    <ng-container *ngIf="!requiresDateCapture(req.key) && req.status !== 'complete' && req.status !== 'review_required'">
+                      <button class="dqf-status-btn"
+                              [class.active]="updateingRequirementKey === req.key"
+                              (click)="updateRequirementStatus(req, 'complete')">
+                        <span class="material-symbols-outlined" style="font-size:14px;">check_circle</span> Mark Done
+                      </button>
+                    </ng-container>
+                    <!-- Review required badge (FN-223: non-negative drug test) -->
+                    <span class="dqf-review-badge" *ngIf="req.status === 'review_required'">
+                      <span class="material-symbols-outlined" style="font-size:14px;">warning</span> Review Required
+                    </span>
+                    <!-- Undo button -->
+                    <button class="dqf-status-btn dqf-status-btn-gray"
+                            *ngIf="req.status === 'complete' || req.status === 'review_required'"
+                            (click)="updateRequirementStatus(req, 'missing')">
+                      <span class="material-symbols-outlined" style="font-size:14px;">undo</span> Undo
+                    </button>
+                  </ng-container>
+                  <!-- Evidence link if document attached (FN-230/231: hide download on checklist sections) -->
+                  <a *ngIf="req.evidence_document_id && cat.key !== 'pre_hire_checklist'"
+                     class="dqf-evidence-link"
+                     href="#" (click)="downloadEvidenceDoc(req.evidence_document_id); $event.preventDefault()">
+                    <span class="material-symbols-outlined" style="font-size:14px;">download</span>
+                  </a>
+                  <!-- Audit trail toggle -->
+                  <button class="dqf-audit-btn" type="button" (click)="toggleAuditTrail(req)"
+                          [attr.aria-label]="'Show audit trail for ' + req.label">
+                    <span class="material-symbols-outlined" style="font-size:14px;">history</span>
+                  </button>
+                </div>
               </div>
-              <div class="dqf-req-actions">
-                <!-- Upload button for document-based requirements -->
-                <ng-container *ngIf="isDqfDocumentReq(req.key)">
-                  <label class="dqf-upload-btn" [class.uploading]="uploadingDocuments[req.key]">
-                    <span class="material-symbols-outlined" style="font-size:15px;">upload_file</span>
-                    {{ uploadingDocuments[req.key] ? 'Uploading…' : 'Upload' }}
-                    <input type="file" (change)="onDQFFileSelectedForKey($event, req.key)"
-                           accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
-                  </label>
-                </ng-container>
-                <!-- Status buttons for manual status requirements -->
-                <ng-container *ngIf="!isDqfDocumentReq(req.key)">
-                  <button class="dqf-status-btn"
-                          *ngIf="req.status !== 'complete'"
-                          [class.active]="updateingRequirementKey === req.key"
-                          (click)="updateRequirementStatus(req, 'complete')">
-                    <span class="material-symbols-outlined" style="font-size:14px;">check_circle</span> Mark Done
-                  </button>
-                  <button class="dqf-status-btn dqf-status-btn-gray"
-                          *ngIf="req.status === 'complete'"
-                          (click)="updateRequirementStatus(req, 'missing')">
-                    <span class="material-symbols-outlined" style="font-size:14px;">undo</span> Undo
-                  </button>
-                </ng-container>
-                <!-- Evidence link if document attached -->
-                <a *ngIf="req.evidence_document_id"
-                   class="dqf-evidence-link"
-                   href="#" (click)="downloadEvidenceDoc(req.evidence_document_id); $event.preventDefault()">
-                  <span class="material-symbols-outlined" style="font-size:14px;">attach_file</span> Evidence
+              <!-- Expandable audit trail -->
+              <div class="dqf-audit-trail" *ngIf="auditTrailOpen[req.key]">
+                <div *ngIf="auditTrailLoading[req.key]" class="dqf-audit-loading">Loading history...</div>
+                <div *ngIf="!auditTrailLoading[req.key] && (!auditTrailData[req.key] || auditTrailData[req.key].length === 0)"
+                     class="dqf-audit-empty">No status changes recorded.</div>
+                <div *ngFor="let entry of auditTrailData[req.key]" class="dqf-audit-entry">
+                  <span class="dqf-audit-date">{{ entry.changed_at | date:'short' }}</span>
+                  <span class="dqf-status-chip dqf-chip-mini" [ngClass]="getStatusChipClass(entry.new_status)">
+                    {{ entry.new_status }}
+                  </span>
+                  <span class="dqf-audit-note" *ngIf="entry.note">{{ entry.note }}</span>
+                </div>
+              </div>
+            </div>
+        </div><!-- /dqf-tab-panel (FN-258) -->
+
+        <!-- Pre-Hire Documents (FN-237) -->
+        <section class="prehire-docs-section">
+          <div class="prehire-docs-header">
+            <h4>
+              <span class="material-symbols-outlined">folder_open</span>
+              Pre-Hire Documents
+            </h4>
+          </div>
+
+          <div *ngIf="prehireDocumentsLoading" class="dqf-loading">
+            <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
+            Loading pre-hire documents...
+          </div>
+
+          <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length > 0" class="prehire-docs-list">
+            <div *ngFor="let doc of prehireDocuments" class="prehire-doc-row">
+              <div class="prehire-doc-status">
+                <span class="material-symbols-outlined prehire-doc-check">check_circle</span>
+              </div>
+              <div class="prehire-doc-info">
+                <span class="prehire-doc-name">{{ getPrehireDocLabel(doc.doc_type) }}</span>
+                <span class="prehire-doc-date" *ngIf="doc.created_at">Signed {{ doc.created_at | date:'mediumDate' }}</span>
+              </div>
+              <div class="prehire-doc-actions">
+                <a class="prehire-download-btn" [href]="getPrehireDocDownloadUrl(doc)" target="_blank" rel="noopener">
+                  <span class="material-symbols-outlined" style="font-size:15px;">download</span>
+                  Download
                 </a>
+              </div>
+            </div>
+          </div>
+
+          <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length === 0" class="prehire-docs-empty">
+            No pre-hire documents on file. Documents appear here once the driver signs their onboarding packet.
+          </div>
+        </section>
+
+        <!-- Legacy Checklist (shown only if no dynamic requirements) -->
+        <ng-container *ngIf="dqfRequirements.length === 0">
+          <div class="dqf-section-divider">
+            <span>Legacy Checklist Items</span>
+          </div>
+
+          <div class="dqf-checklist-item">
+            <label>
+              <input type="checkbox" [(ngModel)]="dqfForm.applicationComplete">
+              <span>Application for Employment (49 CFR 391.21)</span>
+            </label>
+            <div>
+              <label class="dqf-upload-btn">
+                <span class="material-symbols-outlined" style="font-size:16px;">upload_file</span> Upload
+                <input type="file" (change)="onDQFFileSelected($event, 'application')"
+                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none;">
+              </label>
+              <span *ngIf="uploadingDocuments['application']" class="dqf-req-meta">Uploading...</span>
+              <div *ngFor="let doc of getDocumentsByType('application')" class="dqf-legacy-doc">
+                <a href="#" (click)="downloadDoc(doc); $event.preventDefault()">{{ doc.file_name }}</a>
+                <button *ngIf="!doc.source || doc.source !== 'generated'"
+                        (click)="deleteDocument(doc.id, 'application')">x</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dqf-checklist-item">
+            <label>
+              <input type="checkbox" [(ngModel)]="dqfForm.mvrComplete">
+              <span>Motor Vehicle Record - Past 3 Years (49 CFR 391.23)</span>
+            </label>
+            <div>
+              <label class="dqf-upload-btn">
+                <span class="material-symbols-outlined" style="font-size:16px;">upload_file</span> Upload
+                <input type="file" (change)="onDQFFileSelected($event, 'mvr')"
+                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none;">
+              </label>
+              <span *ngIf="uploadingDocuments['mvr']" class="dqf-req-meta">Uploading...</span>
+              <div *ngFor="let doc of getDocumentsByType('mvr')" class="dqf-legacy-doc">
+                <a href="#" (click)="downloadDoc(doc); $event.preventDefault()">{{ doc.file_name }}</a>
+                <button *ngIf="!doc.source || doc.source !== 'generated'"
+                        (click)="deleteDocument(doc.id, 'mvr')">x</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dqf-checklist-item">
+            <label>
+              <input type="checkbox" [(ngModel)]="dqfForm.roadTestComplete">
+              <span>Road Test Certificate (49 CFR 391.31)</span>
+            </label>
+            <div>
+              <label class="dqf-upload-btn">
+                <span class="material-symbols-outlined" style="font-size:16px;">upload_file</span> Upload
+                <input type="file" (change)="onDQFFileSelected($event, 'road_test')"
+                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none;">
+              </label>
+              <span *ngIf="uploadingDocuments['road_test']" class="dqf-req-meta">Uploading...</span>
+              <div *ngFor="let doc of getDocumentsByType('road_test')" class="dqf-legacy-doc">
+                <a href="#" (click)="downloadDoc(doc); $event.preventDefault()">{{ doc.file_name }}</a>
+                <button (click)="deleteDocument(doc.id, 'road_test')">x</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dqf-checklist-item">
+            <label>
+              <input type="checkbox" [(ngModel)]="dqfForm.medicalCertComplete">
+              <span>Medical Examiner's Certificate (49 CFR 391.43)</span>
+            </label>
+            <div>
+              <label class="dqf-upload-btn">
+                <span class="material-symbols-outlined" style="font-size:16px;">upload_file</span> Upload
+                <input type="file" (change)="onDQFFileSelected($event, 'medical_cert')"
+                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none;">
+              </label>
+              <span *ngIf="uploadingDocuments['medical_cert']" class="dqf-req-meta">Uploading...</span>
+              <div *ngFor="let doc of getDocumentsByType('medical_cert')" class="dqf-legacy-doc">
+                <a href="#" (click)="downloadDoc(doc); $event.preventDefault()">{{ doc.file_name }}</a>
+                <button (click)="deleteDocument(doc.id, 'medical_cert')">x</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dqf-checklist-item">
+            <label>
+              <input type="checkbox" [(ngModel)]="dqfForm.annualReviewComplete">
+              <span>Annual Review of Driving Record (49 CFR 391.25)</span>
+            </label>
+            <div>
+              <label class="dqf-upload-btn">
+                <span class="material-symbols-outlined" style="font-size:16px;">upload_file</span> Upload
+                <input type="file" (change)="onDQFFileSelected($event, 'annual_review')"
+                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none;">
+              </label>
+              <span *ngIf="uploadingDocuments['annual_review']" class="dqf-req-meta">Uploading...</span>
+              <div *ngFor="let doc of getDocumentsByType('annual_review')" class="dqf-legacy-doc">
+                <a href="#" (click)="downloadDoc(doc); $event.preventDefault()">{{ doc.file_name }}</a>
+                <button (click)="deleteDocument(doc.id, 'annual_review')">x</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dqf-checklist-item">
+            <label>
+              <input type="checkbox" [(ngModel)]="dqfForm.clearinghouseConsentComplete">
+              <span>FMCSA Clearinghouse Consent (49 CFR 382.701)</span>
+            </label>
+            <div>
+              <label class="dqf-upload-btn">
+                <span class="material-symbols-outlined" style="font-size:16px;">upload_file</span> Upload
+                <input type="file" (change)="onDQFFileSelected($event, 'clearinghouse_consent')"
+                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display:none;">
+              </label>
+              <span *ngIf="uploadingDocuments['clearinghouse_consent']" class="dqf-req-meta">Uploading...</span>
+              <div *ngFor="let doc of getDocumentsByType('clearinghouse_consent')" class="dqf-legacy-doc">
+                <a href="#" (click)="downloadDoc(doc); $event.preventDefault()">{{ doc.file_name }}</a>
+                <button (click)="deleteDocument(doc.id, 'clearinghouse_consent')">x</button>
               </div>
             </div>
           </div>
         </ng-container>
 
-        <div class="dqf-section-divider" *ngIf="dqfRequirements.length > 0">
-          <span>Legacy Checklist Items</span>
-        </div>
+        </ng-container><!-- end !dqfRequirementsLoading -->
 
-        <!-- Application for Employment -->
-        <div class="dqf-checklist-item">
-          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
-            <input type="checkbox" [(ngModel)]="dqfForm.applicationComplete" style="margin-right: 10px; width: 18px; height: 18px;">
-            <span style="font-weight: 500;">Application for Employment (§391.21)</span>
-          </label>
-          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
-              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
-              Upload
-              <input type="file" (change)="onDQFFileSelected($event, 'application')" 
-                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
-            </label>
-            <span *ngIf="uploadingDocuments['application']" style="font-size: 12px; color: #666;">Uploading...</span>
-            <div *ngFor="let doc of getDocumentsByType('application')" 
-                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
-              <a href="#" (click)="downloadDoc(doc); $event.preventDefault()" style="color: #0066cc; text-decoration: none;">
-                {{doc.file_name}}
-              </a>
-              <button *ngIf="!doc.source || doc.source !== 'generated'"
-                      (click)="deleteDocument(doc.id, 'application')" 
-                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
-            </div>
-          </div>
-        </div>
+        <!-- Employer Investigation Tracking (49 CFR 391.23) -->
+        <section class="dqf-section-divider" style="margin-top: 20px;">
+          <span>Employer Investigation Tracking</span>
+        </section>
+        <app-investigation-panel
+          [driverId]="selectedDriver.id"
+          (historyUpdated)="onInvestigationHistoryUpdated()"
+        ></app-investigation-panel>
 
-        <!-- Motor Vehicle Record -->
-        <div class="dqf-checklist-item">
-          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
-            <input type="checkbox" [(ngModel)]="dqfForm.mvrComplete" style="margin-right: 10px; width: 18px; height: 18px;">
-            <span style="font-weight: 500;">Motor Vehicle Record (MVR) - Past 3 Years</span>
-          </label>
-          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
-              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
-              Upload
-              <input type="file" (change)="onDQFFileSelected($event, 'mvr')" 
-                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
-            </label>
-            <span *ngIf="uploadingDocuments['mvr']" style="font-size: 12px; color: #666;">Uploading...</span>
-            <div *ngFor="let doc of getDocumentsByType('mvr')" 
-                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
-              <a href="#" (click)="downloadDoc(doc); $event.preventDefault()" style="color: #0066cc; text-decoration: none;">
-                {{doc.file_name}}
-              </a>
-              <button *ngIf="!doc.source || doc.source !== 'generated'"
-                      (click)="deleteDocument(doc.id, 'mvr')" 
-                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
-            </div>
-          </div>
-        </div>
+        <!-- Investigation History File -->
+        <section class="dqf-section-divider" style="margin-top: 20px;">
+          <span>Investigation History File</span>
+        </section>
+        <app-investigation-history
+          #investigationHistory
+          [driverId]="selectedDriver.id"
+        ></app-investigation-history>
 
-        <!-- Road Test Certificate -->
-        <div class="dqf-checklist-item">
-          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
-            <input type="checkbox" [(ngModel)]="dqfForm.roadTestComplete" style="margin-right: 10px; width: 18px; height: 18px;">
-            <span style="font-weight: 500;">Road Test Certificate or Equivalent (§391.31)</span>
-          </label>
-          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
-              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
-              Upload
-              <input type="file" (change)="onDQFFileSelected($event, 'road_test')" 
-                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
-            </label>
-            <span *ngIf="uploadingDocuments['road_test']" style="font-size: 12px; color: #666;">Uploading...</span>
-            <div *ngFor="let doc of getDocumentsByType('road_test')" 
-                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
-              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-              <button (click)="deleteDocument(doc.id, 'road_test')" 
-                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Medical Certificate -->
-        <div class="dqf-checklist-item">
-          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
-            <input type="checkbox" [(ngModel)]="dqfForm.medicalCertComplete" style="margin-right: 10px; width: 18px; height: 18px;">
-            <span style="font-weight: 500;">Medical Examiner's Certificate (§391.43)</span>
-          </label>
-          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
-              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
-              Upload
-              <input type="file" (change)="onDQFFileSelected($event, 'medical_cert')" 
-                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
-            </label>
-            <span *ngIf="uploadingDocuments['medical_cert']" style="font-size: 12px; color: #666;">Uploading...</span>
-            <div *ngFor="let doc of getDocumentsByType('medical_cert')" 
-                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
-              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-              <button (click)="deleteDocument(doc.id, 'medical_cert')" 
-                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Annual Review -->
-        <div class="dqf-checklist-item">
-          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
-            <input type="checkbox" [(ngModel)]="dqfForm.annualReviewComplete" style="margin-right: 10px; width: 18px; height: 18px;">
-            <span style="font-weight: 500;">Annual Review of Driving Record (§391.25)</span>
-          </label>
-          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
-              <span class="material-symbols-outlined" style="font-size: 16px;">upload_file</span>
-              Upload
-              <input type="file" (change)="onDQFFileSelected($event, 'annual_review')" 
-                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
-            </label>
-            <span *ngIf="uploadingDocuments['annual_review']" style="font-size: 12px; color: #666;">Uploading...</span>
-            <div *ngFor="let doc of getDocumentsByType('annual_review')" 
-                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
-              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-              <button (click)="deleteDocument(doc.id, 'annual_review')" 
-                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Clearinghouse Consent -->
-        <div class="dqf-checklist-item">
-          <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 10px;">
-            <input type="checkbox" [(ngModel)]="dqfForm.clearinghouseConsentComplete" style="margin-right: 10px; width: 18px; height: 18px;">
-            <span style="font-weight: 500;">FMCSA Clearinghouse Consent (§382.701)</span>
-          </label>
-          <div style="display: flex; gap: 10px; align-items: center; margin-left: 28px; flex-wrap: wrap;">
-            <label style="padding: 6px 12px; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">
-              📤 Upload
-              <input type="file" (change)="onDQFFileSelected($event, 'clearinghouse_consent')" 
-                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
-            </label>
-            <span *ngIf="uploadingDocuments['clearinghouse_consent']" style="font-size: 12px; color: #666;">Uploading...</span>
-            <div *ngFor="let doc of getDocumentsByType('clearinghouse_consent')" 
-                 style="font-size: 12px; background: #e7f3ff; padding: 4px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px;">
-              <a [href]="getDownloadUrl(doc.id)" target="_blank" style="color: #0066cc; text-decoration: none;">{{doc.file_name}}</a>
-              <button (click)="deleteDocument(doc.id, 'clearinghouse_consent')" 
-                      style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0; font-size: 14px;">✕</button>
-            </div>
-          </div>
-        </div>
-        <div>
-          <label for="dqfNotes" style="display: block; margin-bottom: 5px; font-weight: 500;">Notes</label>
-          <textarea id="dqfNotes" [(ngModel)]="dqfForm.notes" class="form-input" rows="3" 
+        <!-- Notes -->
+        <div class="dqf-notes-section">
+          <label for="dqfNotes">Notes</label>
+          <textarea id="dqfNotes" [(ngModel)]="dqfForm.notes" class="form-input" rows="3"
                     placeholder="Additional notes about DQF status..."></textarea>
         </div>
       </div>

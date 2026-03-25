@@ -330,8 +330,8 @@
     rgba(15, 23, 42, 0.98);
   border: 1px solid rgba(59, 130, 246, 0.5);
   border-radius: 16px;
-  max-width: 560px;
-  width: 100%;
+  max-width: 1400px;
+  width: 96%;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -339,7 +339,8 @@
 }
 
 .drivers-dashboard .modal.dqf-modal-wide {
-  max-width: 720px;
+  max-width: 1400px;
+  width: 92vw;
 }
 
 .drivers-dashboard .modal-header.dqf-modal-header {
@@ -382,6 +383,82 @@
 
 .drivers-dashboard .dqf-close-btn:hover {
   color: #f1f5f9;
+}
+
+.drivers-dashboard .dqf-close-btn-ai {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
+  color: #38bdf8;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.15), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.drivers-dashboard .dqf-close-btn-ai .material-symbols-outlined {
+  font-size: 24px;
+  font-weight: 600;
+  position: relative;
+  z-index: 2;
+  transition: transform 0.3s ease, color 0.3s ease;
+}
+
+.drivers-dashboard .dqf-close-btn-glow {
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(56, 189, 248, 0.4),
+    rgba(139, 92, 246, 0.3),
+    rgba(34, 211, 238, 0.4),
+    rgba(56, 189, 248, 0.4)
+  );
+  opacity: 0;
+  z-index: 0;
+  transition: opacity 0.3s ease;
+  animation: dqf-close-glow-spin 4s linear infinite;
+}
+
+@keyframes dqf-close-glow-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.drivers-dashboard .dqf-close-btn-ai:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(51, 65, 85, 0.9));
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.2), 0 0 40px rgba(139, 92, 246, 0.1);
+  transform: scale(1.05);
+}
+
+.drivers-dashboard .dqf-close-btn-ai:hover .dqf-close-btn-glow {
+  opacity: 1;
+}
+
+.drivers-dashboard .dqf-close-btn-ai:hover .material-symbols-outlined {
+  color: #e0f2fe;
+  transform: rotate(90deg);
+}
+
+.drivers-dashboard .dqf-close-btn-ai:active {
+  transform: scale(0.95);
+}
+
+.drivers-dashboard .dqf-close-btn-ai:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .drivers-dashboard .dqf-modal-body {
@@ -732,6 +809,115 @@
   background: rgba(100, 116, 139, 0.3);
 }
 
+/* FN-240: Pull from App button for employment application */
+.drivers-dashboard .dqf-pull-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  transition: background 0.15s;
+}
+
+.drivers-dashboard .dqf-pull-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.3);
+  border-color: rgba(56, 189, 248, 0.9);
+}
+
+.drivers-dashboard .dqf-pull-btn:disabled,
+.drivers-dashboard .dqf-pull-btn.pulling {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.drivers-dashboard .dqf-pull-error {
+  font-size: 11px;
+  color: #ef4444;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes dqf-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.drivers-dashboard .dqf-spin {
+  animation: dqf-spin 1s linear infinite;
+}
+
+/* FN-223: Inline date input for clearinghouse items */
+.drivers-dashboard .dqf-date-input {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(2, 6, 23, 0.6);
+  color: #e2e8f0;
+  font-size: 12px;
+  max-width: 140px;
+}
+
+/* FN-223: Review required badge for non-negative drug test results */
+.drivers-dashboard .dqf-review-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+/* FN-225: Drug test file upload */
+.drivers-dashboard .da-file-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drivers-dashboard .da-file-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  background: rgba(2, 6, 23, 0.5);
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.drivers-dashboard .da-file-upload-btn:hover {
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #e2e8f0;
+}
+
+.drivers-dashboard .da-file-name {
+  font-size: 12px;
+  color: #2dd4bf;
+}
+
+.drivers-dashboard .da-validation-error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #ef4444;
+}
+
 .drivers-dashboard .dqf-evidence-link {
   display: inline-flex;
   align-items: center;
@@ -893,6 +1079,788 @@
   color: #fca5a5;
 }
 
+/* ── Pre-Drive Gate Banner ─────────────────────────────────── */
+.drivers-dashboard .dqf-gate-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+
+.drivers-dashboard .dqf-gate-cleared {
+  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.2), transparent 55%),
+    rgba(22, 101, 52, 0.25);
+  border: 1px solid rgba(34, 197, 94, 0.6);
+}
+
+.drivers-dashboard .dqf-gate-blocked {
+  background: radial-gradient(circle at 0 0, rgba(239, 68, 68, 0.2), transparent 55%),
+    rgba(127, 29, 29, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+}
+
+.drivers-dashboard .dqf-gate-icon .material-symbols-outlined {
+  font-size: 28px;
+}
+
+.drivers-dashboard .dqf-gate-cleared .dqf-gate-icon .material-symbols-outlined {
+  color: #22c55e;
+}
+
+.drivers-dashboard .dqf-gate-blocked .dqf-gate-icon .material-symbols-outlined {
+  color: #ef4444;
+}
+
+.drivers-dashboard .dqf-gate-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.drivers-dashboard .dqf-gate-text strong {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+.drivers-dashboard .dqf-gate-cleared .dqf-gate-text strong {
+  color: #86efac;
+}
+
+.drivers-dashboard .dqf-gate-blocked .dqf-gate-text strong {
+  color: #fca5a5;
+}
+
+.drivers-dashboard .dqf-gate-missing {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+/* ── Print button ─────────────────────────────────────────── */
+.drivers-dashboard .dqf-print-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.drivers-dashboard .dqf-print-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #94a3b8;
+  transition: background 0.15s, color 0.15s;
+}
+
+.drivers-dashboard .dqf-print-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #e2e8f0;
+}
+
+.drivers-dashboard .dqf-print-btn .material-symbols-outlined {
+  font-size: 16px;
+}
+
+/* ── Category Breakdown (mini bars) ───────────────────────── */
+.drivers-dashboard .dqf-category-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.drivers-dashboard .dqf-category-mini {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.drivers-dashboard .dqf-category-mini-label {
+  font-size: 11px;
+  color: #94a3b8;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drivers-dashboard .dqf-category-mini-pct {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.drivers-dashboard .dqf-category-mini-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(30, 41, 59, 0.8);
+  overflow: hidden;
+}
+
+.drivers-dashboard .dqf-category-mini-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #22c55e);
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+/* ── Category Accordion ───────────────────────────────────── */
+.drivers-dashboard .dqf-category-accordion {
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.drivers-dashboard .dqf-category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(30, 41, 59, 0.6);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.drivers-dashboard .dqf-category-header:hover {
+  background: rgba(30, 41, 59, 0.85);
+}
+
+.drivers-dashboard .dqf-category-chevron {
+  font-size: 18px;
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+}
+
+.drivers-dashboard .dqf-chevron-open {
+  transform: rotate(90deg);
+}
+
+.drivers-dashboard .dqf-category-title {
+  flex: 1;
+}
+
+.drivers-dashboard .dqf-category-count {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.drivers-dashboard .dqf-count-complete {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.drivers-dashboard .dqf-count-incomplete {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.drivers-dashboard .dqf-category-body {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── DQF Tab Navigation (FN-258) ─────────────────────────── */
+.drivers-dashboard .dqf-tab-bar {
+  display: flex;
+  gap: 2px;
+  border-bottom: 2px solid rgba(148, 163, 184, 0.15);
+  margin-bottom: 16px;
+  overflow-x: auto;
+  padding: 0 4px;
+}
+
+.drivers-dashboard .dqf-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -2px;
+}
+
+.drivers-dashboard .dqf-tab-btn:hover {
+  color: #e2e8f0;
+}
+
+.drivers-dashboard .dqf-tab-btn.active {
+  color: #2dd4bf;
+  border-bottom-color: #2dd4bf;
+}
+
+.drivers-dashboard .dqf-tab-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.drivers-dashboard .dqf-tab-badge.badge-complete {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.drivers-dashboard .dqf-tab-badge.badge-incomplete {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+.drivers-dashboard .dqf-tab-panel {
+  display: none;
+}
+
+.drivers-dashboard .dqf-tab-panel.active {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Status Chips ─────────────────────────────────────────── */
+.drivers-dashboard .dqf-status-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.drivers-dashboard .dqf-chip-complete {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  color: #86efac;
+}
+
+.drivers-dashboard .dqf-chip-in-progress {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fcd34d;
+}
+
+.drivers-dashboard .dqf-chip-missing {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.drivers-dashboard .dqf-chip-review {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+}
+
+.drivers-dashboard .dqf-chip-na {
+  background: rgba(100, 116, 139, 0.2);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  color: #94a3b8;
+}
+
+.drivers-dashboard .dqf-chip-mini {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+/* ── CFR Reference ────────────────────────────────────────── */
+.drivers-dashboard .dqf-req-cfr {
+  display: block;
+  font-size: 10px;
+  color: #64748b;
+  font-style: italic;
+  margin-top: 1px;
+}
+
+/* ── Audit trail toggle button ────────────────────────────── */
+.drivers-dashboard .dqf-audit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  padding: 0;
+}
+
+.drivers-dashboard .dqf-audit-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: #94a3b8;
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* ── Audit Trail ──────────────────────────────────────────── */
+.drivers-dashboard .dqf-audit-trail {
+  margin-top: 8px;
+  padding: 8px 10px 8px 36px;
+  border-top: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.drivers-dashboard .dqf-audit-loading,
+.drivers-dashboard .dqf-audit-empty {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.drivers-dashboard .dqf-audit-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 3px 0;
+  flex-wrap: wrap;
+}
+
+.drivers-dashboard .dqf-audit-date {
+  color: #64748b;
+  min-width: 70px;
+}
+
+.drivers-dashboard .dqf-audit-note {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* ── Legacy doc items ─────────────────────────────────────── */
+.drivers-dashboard .dqf-legacy-doc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  background: rgba(30, 41, 59, 0.8);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.drivers-dashboard .dqf-legacy-doc a {
+  color: #60a5fa;
+  text-decoration: none;
+}
+
+.drivers-dashboard .dqf-legacy-doc a:hover {
+  text-decoration: underline;
+}
+
+.drivers-dashboard .dqf-legacy-doc button {
+  background: none;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+}
+
+/* ── Notes section ────────────────────────────────────────── */
+.drivers-dashboard .dqf-notes-section {
+  margin-top: 14px;
+}
+
+.drivers-dashboard .dqf-notes-section label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+/* ═══ Drug & Alcohol Test Management (FN-214) ═══════════════ */
+.drivers-dashboard .da-section {
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 12px;
+  background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.08), transparent 55%),
+    rgba(15, 23, 42, 0.9);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.drivers-dashboard .da-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.drivers-dashboard .da-section-header h4 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: #f1f5f9;
+}
+
+.drivers-dashboard .da-section-header h4 .material-symbols-outlined {
+  color: #38bdf8;
+}
+
+.drivers-dashboard .da-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.35), transparent 55%),
+    rgba(12, 74, 110, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #e0f2fe;
+  transition: background 0.15s;
+}
+
+.drivers-dashboard .da-add-btn:hover {
+  background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.5), transparent 55%),
+    rgba(12, 74, 110, 0.7);
+  border-color: rgba(56, 189, 248, 0.8);
+}
+
+/* Filters */
+.drivers-dashboard .da-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.drivers-dashboard .da-filter-select {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.98);
+  color: var(--text-dark);
+}
+
+.drivers-dashboard .da-filter-select:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.9);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5);
+}
+
+.drivers-dashboard .da-filter-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.drivers-dashboard .da-filter-check input[type="checkbox"] {
+  accent-color: #38bdf8;
+}
+
+/* Test list */
+.drivers-dashboard .da-test-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drivers-dashboard .da-test-row {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  transition: border-color 0.15s;
+}
+
+.drivers-dashboard .da-test-row:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.drivers-dashboard .da-test-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.drivers-dashboard .da-test-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.drivers-dashboard .da-test-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Type badges */
+.drivers-dashboard .da-type-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.drivers-dashboard .da-badge-blue {
+  background: rgba(59, 130, 246, 0.25);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  color: #93c5fd;
+}
+
+.drivers-dashboard .da-badge-cyan {
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #67e8f9;
+}
+
+.drivers-dashboard .da-badge-amber {
+  background: rgba(245, 158, 11, 0.25);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fcd34d;
+}
+
+.drivers-dashboard .da-badge-red {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.drivers-dashboard .da-badge-purple {
+  background: rgba(139, 92, 246, 0.25);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+}
+
+.drivers-dashboard .da-badge-slate {
+  background: rgba(100, 116, 139, 0.2);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  color: #94a3b8;
+}
+
+.drivers-dashboard .da-substance-label {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.drivers-dashboard .da-clearinghouse-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.drivers-dashboard .da-reported {
+  color: #22c55e;
+}
+
+.drivers-dashboard .da-not-reported {
+  color: #f59e0b;
+}
+
+.drivers-dashboard .da-mro-verified {
+  color: #22c55e;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.drivers-dashboard .da-edit-btn,
+.drivers-dashboard .da-report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: transparent;
+  color: #94a3b8;
+  transition: background 0.15s, color 0.15s;
+}
+
+.drivers-dashboard .da-edit-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #e2e8f0;
+}
+
+.drivers-dashboard .da-report-btn {
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fcd34d;
+}
+
+.drivers-dashboard .da-report-btn:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.7);
+}
+
+.drivers-dashboard .da-empty {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* Drug test form panel */
+.drivers-dashboard .da-form-panel {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.drivers-dashboard .da-form-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.drivers-dashboard .da-panel-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.drivers-dashboard .da-panel-cb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.drivers-dashboard .da-panel-cb input[type="checkbox"] {
+  accent-color: #38bdf8;
+  width: 14px;
+  height: 14px;
+}
+
+/* MRO toggle */
+.drivers-dashboard .da-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.drivers-dashboard .da-toggle-input {
+  display: none;
+}
+
+.drivers-dashboard .da-toggle-track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: rgba(100, 116, 139, 0.5);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.drivers-dashboard .da-toggle-input:checked + .da-toggle-track {
+  background: rgba(34, 197, 94, 0.7);
+}
+
+.drivers-dashboard .da-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  transition: transform 0.2s;
+}
+
+.drivers-dashboard .da-toggle-input:checked + .da-toggle-track .da-toggle-thumb {
+  transform: translateX(16px);
+}
+
+.drivers-dashboard .da-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.drivers-dashboard .da-form-actions .btn {
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: transparent;
+  color: var(--text-dark);
+  cursor: pointer;
+}
+
+.drivers-dashboard .da-form-actions .btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.7);
+}
+
+.drivers-dashboard .da-form-actions .btn-primary {
+  background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.4), transparent 55%),
+    rgba(12, 74, 110, 0.7);
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #fff;
+}
+
+.drivers-dashboard .da-form-actions .btn-primary:hover {
+  background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.5), transparent 55%),
+    rgba(12, 74, 110, 0.85);
+  border-color: rgba(56, 189, 248, 0.9);
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 768px) {
   .drivers-dashboard .dqf-grid-2 {
     grid-template-columns: 1fr;
@@ -902,4 +1870,323 @@
     grid-template-columns: 1fr;
     gap: 4px;
   }
+
+  .drivers-dashboard .dqf-category-breakdown {
+    grid-template-columns: 1fr;
+  }
+
+  .drivers-dashboard .dqf-req-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .drivers-dashboard .dqf-req-actions {
+    margin-top: 6px;
+  }
+
+  .drivers-dashboard .dqf-gate-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .drivers-dashboard .da-filters {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .drivers-dashboard .da-test-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ── Print Styles ─────────────────────────────────────────── */
+@media print {
+  /* Hide everything except the DQF modal */
+  body * {
+    visibility: hidden;
+  }
+
+  .drivers-dashboard .modal-backdrop.dqf-modal-backdrop,
+  .drivers-dashboard .modal-backdrop.dqf-modal-backdrop * {
+    visibility: visible;
+  }
+
+  .drivers-dashboard .modal-backdrop.dqf-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: white;
+    backdrop-filter: none;
+  }
+
+  .drivers-dashboard .modal.dqf-modal {
+    position: relative;
+    max-width: 100%;
+    max-height: none;
+    box-shadow: none;
+    border: none;
+    background: white;
+    color: #1e293b;
+    border-radius: 0;
+  }
+
+  .drivers-dashboard .modal-header.dqf-modal-header {
+    background: none;
+    border-bottom: 2px solid #334155;
+  }
+
+  .drivers-dashboard .modal-header.dqf-modal-header h3 {
+    color: #0f172a;
+  }
+
+  .drivers-dashboard .dqf-modal-subtitle {
+    color: #475569;
+  }
+
+  /* Hide interactive elements */
+  .drivers-dashboard .dqf-close-btn,
+  .drivers-dashboard .dqf-modal-footer,
+  .drivers-dashboard .dqf-print-bar,
+  .drivers-dashboard .dqf-upload-btn,
+  .drivers-dashboard .dqf-pull-btn,
+  .drivers-dashboard .dqf-pull-error,
+  .drivers-dashboard .dqf-status-btn,
+  .drivers-dashboard .dqf-audit-btn,
+  .drivers-dashboard .safety-history-widget {
+    display: none !important;
+  }
+
+  /* Light theme overrides for print */
+  .drivers-dashboard .dqf-gate-banner {
+    border: 2px solid;
+    page-break-inside: avoid;
+  }
+
+  .drivers-dashboard .dqf-gate-cleared {
+    background: #f0fdf4;
+    border-color: #22c55e;
+  }
+
+  .drivers-dashboard .dqf-gate-cleared .dqf-gate-text strong {
+    color: #166534;
+  }
+
+  .drivers-dashboard .dqf-gate-blocked {
+    background: #fef2f2;
+    border-color: #ef4444;
+  }
+
+  .drivers-dashboard .dqf-gate-blocked .dqf-gate-text strong {
+    color: #991b1b;
+  }
+
+  .drivers-dashboard .dqf-gate-missing {
+    color: #475569;
+  }
+
+  .drivers-dashboard .dqf-completeness-bar-wrapper {
+    page-break-inside: avoid;
+  }
+
+  .drivers-dashboard .dqf-completeness-header,
+  .drivers-dashboard .dqf-category-mini-label {
+    color: #475569;
+  }
+
+  .drivers-dashboard .dqf-completeness-pct,
+  .drivers-dashboard .dqf-category-mini-pct {
+    color: #0f172a;
+  }
+
+  .drivers-dashboard .dqf-completeness-bar-track,
+  .drivers-dashboard .dqf-category-mini-track {
+    background: #e2e8f0;
+  }
+
+  .drivers-dashboard .dqf-category-accordion {
+    border: 1px solid #cbd5e1;
+    page-break-inside: avoid;
+  }
+
+  .drivers-dashboard .dqf-category-header {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+
+  .drivers-dashboard .dqf-category-chevron {
+    display: none;
+  }
+
+  /* Force all categories open for print */
+  .drivers-dashboard .dqf-category-body {
+    display: flex !important;
+  }
+
+  .drivers-dashboard .dqf-req-row {
+    background: white;
+    border-left: 3px solid;
+    page-break-inside: avoid;
+  }
+
+  .drivers-dashboard .dqf-req-label {
+    color: #0f172a;
+  }
+
+  .drivers-dashboard .dqf-req-cfr,
+  .drivers-dashboard .dqf-req-meta {
+    color: #475569;
+  }
+
+  .drivers-dashboard .dqf-status-chip {
+    border: 1px solid;
+  }
+
+  .drivers-dashboard .dqf-chip-complete {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #22c55e;
+  }
+
+  .drivers-dashboard .dqf-chip-in-progress {
+    background: #fef9c3;
+    color: #854d0e;
+    border-color: #f59e0b;
+  }
+
+  .drivers-dashboard .dqf-chip-missing {
+    background: #fef2f2;
+    color: #991b1b;
+    border-color: #ef4444;
+  }
+
+  .drivers-dashboard .dqf-chip-na {
+    background: #f1f5f9;
+    color: #475569;
+    border-color: #94a3b8;
+  }
+
+  .drivers-dashboard .dqf-modal-body {
+    padding: 12px;
+  }
+
+  .drivers-dashboard .dqf-notes-section label,
+  .drivers-dashboard .dqf-notes-section textarea {
+    color: #0f172a;
+  }
+}
+
+/* =============================================
+   Pre-Hire Documents Section (FN-237)
+   ============================================= */
+.prehire-docs-section {
+  margin-top: 20px;
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+  overflow: hidden;
+}
+
+.prehire-docs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: rgba(30, 41, 59, 0.6);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+}
+
+.prehire-docs-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prehire-docs-header h4 .material-symbols-outlined {
+  font-size: 18px;
+  color: #38bdf8;
+}
+
+.prehire-docs-list {
+  padding: 4px 0;
+}
+
+.prehire-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+  transition: background 0.15s ease;
+}
+
+.prehire-doc-row:last-child {
+  border-bottom: none;
+}
+
+.prehire-doc-row:hover {
+  background: rgba(56, 189, 248, 0.04);
+}
+
+.prehire-doc-status {
+  flex-shrink: 0;
+}
+
+.prehire-doc-check {
+  font-size: 18px;
+  color: #22c55e;
+}
+
+.prehire-doc-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prehire-doc-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.prehire-doc-date {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.prehire-doc-actions {
+  flex-shrink: 0;
+}
+
+.prehire-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.prehire-download-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.prehire-docs-empty {
+  padding: 20px 18px;
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
 }

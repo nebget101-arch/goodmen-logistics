@@ -1,0 +1,77 @@
+<div class="modal-backdrop rrm-backdrop" (click)="close()">
+  <div class="modal rrm-modal" (click)="$event.stopPropagation()">
+    <div class="rrm-header">
+      <div>
+        <h3>
+          <span class="material-symbols-outlined">description</span>
+          Record Response
+        </h3>
+        <p class="rrm-subtitle">{{ employerName }}</p>
+      </div>
+      <button class="rrm-close-btn" type="button" (click)="close()" [disabled]="saving">
+        &#10005;
+      </button>
+    </div>
+
+    <div class="rrm-body">
+      <div class="rrm-field">
+        <label for="responseType">Response Type *</label>
+        <select id="responseType" [(ngModel)]="responseType" class="rrm-input">
+          <option value="" disabled>Select response type</option>
+          <option *ngFor="let type of responseTypes" [value]="type">{{ type }}</option>
+        </select>
+      </div>
+
+      <div class="rrm-field">
+        <label for="receivedVia">Received Via *</label>
+        <select id="receivedVia" [(ngModel)]="receivedVia" class="rrm-input">
+          <option value="" disabled>Select how received</option>
+          <option *ngFor="let via of receivedViaOptions" [value]="via">{{ via }}</option>
+        </select>
+      </div>
+
+      <div class="rrm-field">
+        <label for="rrm-notes">Notes</label>
+        <textarea
+          id="rrm-notes"
+          [(ngModel)]="notes"
+          class="rrm-input rrm-textarea"
+          rows="4"
+          placeholder="Additional notes about the response..."
+        ></textarea>
+      </div>
+
+      <div class="rrm-field">
+        <label>Document Upload</label>
+        <div class="rrm-upload-row">
+          <label class="rrm-upload-btn">
+            <span class="material-symbols-outlined">upload_file</span>
+            Choose File
+            <input type="file" (change)="onFileSelected($event)" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" hidden>
+          </label>
+          <span *ngIf="selectedFile" class="rrm-file-name">{{ selectedFile.name }}</span>
+          <button
+            *ngIf="selectedFile && !uploadedDocumentId"
+            class="rrm-upload-action"
+            (click)="uploadFile()"
+            [disabled]="uploading"
+          >
+            {{ uploading ? 'Uploading...' : 'Upload' }}
+          </button>
+          <span *ngIf="uploadedDocumentId" class="rrm-upload-success">
+            <span class="material-symbols-outlined">check_circle</span> Uploaded
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rrm-footer">
+      <button class="rrm-btn" type="button" (click)="close()" [disabled]="saving">
+        Cancel
+      </button>
+      <button class="rrm-btn rrm-btn-primary" type="button" (click)="save()" [disabled]="saving">
+        {{ saving ? 'Saving...' : 'Save Response' }}
+      </button>
+    </div>
+  </div>
+</div>

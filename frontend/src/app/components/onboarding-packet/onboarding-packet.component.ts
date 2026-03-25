@@ -1,8 +1,67 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
+import { ConsentService } from '../../services/consent.service';
 import { SeoService } from '../../services/seo.service';
 import { SEO_PUBLIC } from '../../services/seo-public-presets';
+import { EmployerHistoryData } from './employer-history-tiered/employer-history-tiered.component';
+import { DisqualificationData } from './disqualification-history/disqualification-history.component';
+
+export interface PreviousAddress {
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  yearsAtAddress?: string;
+}
+
+export interface EmployerEntry {
+  employerName?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  positionHeld?: string;
+  fromDate?: string;
+  toDate?: string;
+  contactPerson?: string;
+  phoneNumber?: string;
+  employerEmail?: string;
+  salaryWage?: string;
+  reasonForLeaving?: string;
+  wasCMV?: boolean;
+}
+
+export interface AccidentEntry {
+  date?: string;
+  natureOfAccident?: string;
+  fatalities?: string;
+  injuries?: string;
+  hazardousMaterialSpill?: boolean;
+}
+
+export interface ViolationEntry {
+  location?: string;
+  date?: string;
+  charge?: string;
+  penalty?: string;
+}
+
+export interface LicenseEntry {
+  state?: string;
+  licenseNumber?: string;
+  type?: string;
+  expirationDate?: string;
+}
+
+export interface DrivingExpEntry {
+  hasExperience?: boolean;
+  typeOfEquipment?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  approxMiles?: string;
+  description?: string;
+}
 
 export interface EmploymentForm {
   firstName?: string;
@@ -11,36 +70,88 @@ export interface EmploymentForm {
   phone?: string;
   email?: string;
   dateOfBirth?: string;
-  ssnLast4?: string;
+  ssn?: string;
+  ssnDisplay?: string;
   dateOfApplication?: string;
   positionAppliedFor?: string;
-  dateAvailable?: string;
-  canWorkInUs?: boolean | null;
+
+  // Current address
   addressStreet?: string;
   addressCity?: string;
   addressState?: string;
   addressZip?: string;
   yearsAtAddress?: string;
+  previousAddresses?: PreviousAddress[];
+
+  // Work authorization & background
+  legallyAuthorizedToWork?: string;
+  convictedOfFelony?: string;
+  felonyDetails?: string;
+  unableToPerformFunctions?: string;
+  adaDetails?: string;
+
+  // Employment history
+  currentEmployer?: EmployerEntry;
+  previousEmployers?: EmployerEntry[];
+
+  // Accident record
+  hasAccidents?: string;
+  accidents?: AccidentEntry[];
+
+  // Traffic violations
+  hasViolations?: string;
+  violations?: ViolationEntry[];
+
+  // License history
+  licenses?: LicenseEntry[];
+
+  // Driving experience (questionnaire)
+  straightTruck?: DrivingExpEntry;
+  tractorSemiTrailer?: DrivingExpEntry;
+  tractorTwoTrailers?: DrivingExpEntry;
+  motorcoachSchoolBus?: DrivingExpEntry;
+  motorcoachSchoolBusMore15?: DrivingExpEntry;
+  otherEquipment?: DrivingExpEntry;
+  statesOperatedIn?: string;
+
+  // Drug and alcohol
+  violatedSubstanceProhibitions?: string;
+  failedRehabProgram?: string;
+  alcoholTestResult04OrHigher?: string;
+  positiveControlledSubstancesTest?: string;
+  refusedRequiredTest?: string;
+  otherDOTViolation?: string;
+
+  // Legacy fields (kept for backward compat)
+  educationSummary?: string;
+  otherQualifications?: string;
+  applicationSignatureName?: string;
+  applicationSignatureDate?: string;
+  employerHistory?: EmployerHistoryData;
+  disqualificationHistory?: DisqualificationData;
+
+  // Certification fields (FN-233)
+  certificationFields?: {
+    fullName?: string;
+    dateOfBirth?: string;
+    ssnLast4?: string;
+    driversLicenseNumber?: string;
+    stateOfIssue?: string;
+    certifyTrueAndAccurate?: boolean;
+    typedSignature?: string;
+    signatureDate?: string;
+  };
+
+  // Legacy (mapped)
+  ssnLast4?: string;
+  canWorkInUs?: boolean | null;
+  dateAvailable?: string;
   licenseState?: string;
   licenseNumber?: string;
   licenseClass?: string;
   licenseEndorsements?: string;
   licenseExpiry?: string;
   drivingExperienceSummary?: string;
-  currentEmployerName?: string;
-  currentEmployerPhone?: string;
-  currentEmployerFrom?: string;
-  currentEmployerTo?: string;
-  currentEmployerReasonForLeaving?: string;
-  previousEmployerName?: string;
-  previousEmployerPhone?: string;
-  previousEmployerFrom?: string;
-  previousEmployerTo?: string;
-  previousEmployerReasonForLeaving?: string;
-  educationSummary?: string;
-  otherQualifications?: string;
-  applicationSignatureName?: string;
-  applicationSignatureDate?: string;
 }
 
 export interface MvrForm {
@@ -57,6 +168,35 @@ export interface MvrForm {
   mvrSignatureDate?: string;
 }
 
+export interface DocumentTypeConfig {
+  key: string;
+  label: string;
+  description: string;
+  icon: string;
+  required: boolean;
+}
+
+export interface UploadedDocument {
+  id: string;
+  document_type: string;
+  file_name: string;
+  uploaded_at: string;
+}
+
+export type PacketStep =
+  | 'employment_application'
+  | 'consent_forms'
+  | 'document_uploads'
+  | 'review_submit';
+
+export interface ConsentKeyConfig {
+  key: string;
+  label: string;
+  icon: string;
+  requiresSignature: boolean;
+  captureFields: string[];
+}
+
 @Component({
   selector: 'app-onboarding-packet',
   templateUrl: './onboarding-packet.component.html',
@@ -70,18 +210,94 @@ export class OnboardingPacketComponent implements OnInit {
   errorMessage: string | null = null;
   driver: any = null;
   sections: { section_key: string; status: string; completed_at?: string }[] = [];
-  currentStep: 'employment_application' | 'mvr_authorization' = 'employment_application';
+  currentStep: PacketStep = 'employment_application';
   saving = false;
   reviewMode = false;
   submittedEmployment = false;
   saveSuccess: string | null = null;
 
-  employment: EmploymentForm = {};
+  employment: EmploymentForm = {
+    previousAddresses: [],
+    currentEmployer: {},
+    previousEmployers: [],
+    accidents: [],
+    violations: [],
+    licenses: [{}],
+    straightTruck: {},
+    tractorSemiTrailer: {},
+    tractorTwoTrailers: {},
+    motorcoachSchoolBus: {},
+    motorcoachSchoolBusMore15: {},
+    otherEquipment: {},
+    certificationFields: {
+      certifyTrueAndAccurate: false,
+      signatureDate: new Date().toISOString().slice(0, 10)
+    }
+  };
   mvr: MvrForm = {};
+
+  usStates = [
+    'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS',
+    'KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY',
+    'NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'
+  ];
+
+  ssnRaw = '';
+  ssnMasked = true;
+  totalResidencyYears = 0;
+  needMoreAddresses = false;
+  totalEmployerYears = 0;
+  needMoreEmployers = false;
+
+  consentKeys: ConsentKeyConfig[] = [
+    { key: 'fcra_disclosure', label: 'FCRA Disclosure', icon: 'policy', requiresSignature: true, captureFields: ['fullName'] },
+    { key: 'fcra_authorization', label: 'FCRA Authorization', icon: 'verified_user', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'ssnLast4', 'driversLicenseNumber', 'stateOfIssue'] },
+    { key: 'release_of_information', label: 'Release of Information Authorization (DQ & Safety)', icon: 'share', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] },
+    { key: 'drug_alcohol_release', label: 'Release of Information Authorization (Drug & Alcohol)', icon: 'local_pharmacy', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] },
+    { key: 'mvr_disclosure', label: 'MVR Disclosure', icon: 'description', requiresSignature: true, captureFields: ['fullName'] },
+    { key: 'mvr_authorization', label: 'MVR Authorization', icon: 'how_to_reg', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] },
+    { key: 'mvr_release_of_liability', label: 'MVR Release of Liability', icon: 'gavel', requiresSignature: true, captureFields: [] }
+  ];
+
+  signedConsents: Set<string> = new Set();
+  expandedConsent: string | null = null;
+
+  steps: { key: PacketStep; label: string; icon: string; sectionKey?: string }[] = [
+    { key: 'employment_application', label: 'Employment Application', icon: 'description', sectionKey: 'employment_application' },
+    { key: 'consent_forms', label: 'Consent Forms', icon: 'verified_user', sectionKey: 'consent_forms' },
+    { key: 'document_uploads', label: 'Document Uploads', icon: 'upload_file', sectionKey: 'document_uploads' },
+    { key: 'review_submit', label: 'Review & Submit', icon: 'fact_check' }
+  ];
+
+  // Document upload state (FN-250)
+  documentTypes: DocumentTypeConfig[] = [
+    { key: 'cdl_front', label: 'CDL - Front', description: 'Front of your Commercial Driver\'s License', icon: 'badge', required: true },
+    { key: 'cdl_back', label: 'CDL - Back', description: 'Back of your Commercial Driver\'s License', icon: 'badge', required: true },
+    { key: 'medical_certificate', label: 'Medical Examiner\'s Certificate', description: 'DOT Medical Card (Form MCSA-5876)', icon: 'medical_information', required: true },
+    { key: 'social_security_card', label: 'Social Security Card', description: 'Copy of your Social Security Card', icon: 'credit_card', required: false },
+    { key: 'other_certification', label: 'Other Certification', description: 'Any additional certifications or endorsements', icon: 'workspace_premium', required: false }
+  ];
+  uploadedDocuments: Map<string, UploadedDocument> = new Map();
+  uploadingDocType: string | null = null;
+  deletingDocType: string | null = null;
+  uploadError: string | null = null;
+
+  get requiredDocsCount(): number {
+    return this.documentTypes.filter(d => d.required).length;
+  }
+
+  get uploadedDocsCount(): number {
+    return this.documentTypes.filter(d => d.required && this.uploadedDocuments.has(d.key)).length;
+  }
+
+  get requiredDocsComplete(): boolean {
+    return this.documentTypes.filter(d => d.required).every(d => this.uploadedDocuments.has(d.key));
+  }
 
   constructor(
     private route: ActivatedRoute,
     private apiService: ApiService,
+    private consentService: ConsentService,
     private seo: SeoService
   ) {
     this.packetId = this.route.snapshot.paramMap.get('packetId');
@@ -106,6 +322,7 @@ export class OnboardingPacketComponent implements OnInit {
         this.driver = res.driver || null;
         this.sections = res.sections || [];
         this.hydrateFromSections();
+        this.loadConsentStatuses();
       },
       error: (err) => {
         this.loading = false;
@@ -120,21 +337,139 @@ export class OnboardingPacketComponent implements OnInit {
     if (eaData) {
       this.employment = { ...this.employment, ...eaData };
     }
+    // Pre-fill certification fields from application data (FN-233)
+    this.prefillCertificationFields();
     const mvrSection = this.sections.find((s) => s.section_key === 'mvr_authorization');
     const mvrData = (mvrSection as unknown as { data?: MvrForm })?.data;
     if (mvrData) {
       this.mvr = { ...mvrData };
     }
+    const consentSection = this.sections.find((s) => s.section_key === 'consent_forms');
+    const consentData = (consentSection as unknown as { data?: { signedConsents?: string[] } })?.data;
+    if (consentData?.signedConsents) {
+      consentData.signedConsents.forEach((key) => this.signedConsents.add(key));
+    }
   }
 
-  setStep(step: 'employment_application' | 'mvr_authorization'): void {
+  /** FN-252: Load signed consent statuses from API to rehydrate after page refresh */
+  private loadConsentStatuses(): void {
+    if (!this.packetId || !this.token) return;
+    this.consentService.getConsentStatuses(this.packetId, this.token).subscribe({
+      next: (res) => {
+        for (const c of (res.consents || [])) {
+          if (c.status === 'signed') {
+            this.signedConsents.add(c.consent_key);
+          }
+        }
+        // Trigger change detection by replacing the Set reference
+        this.signedConsents = new Set(this.signedConsents);
+      },
+      error: () => {
+        // Silently fail — consent statuses will show as pending
+      }
+    });
+  }
+
+  /** Pre-fill certification fields from the employment application data (FN-233) */
+  private prefillCertificationFields(): void {
+    const cert = this.employment.certificationFields || {};
+    const emp = this.employment;
+    if (!cert.fullName && (emp.firstName || emp.lastName)) {
+      cert.fullName = [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(' ');
+    }
+    if (!cert.dateOfBirth && emp.dateOfBirth) {
+      cert.dateOfBirth = emp.dateOfBirth;
+    }
+    if (!cert.signatureDate) {
+      cert.signatureDate = new Date().toISOString().slice(0, 10);
+    }
+    this.employment.certificationFields = cert;
+  }
+
+  setStep(step: PacketStep): void {
     this.currentStep = step;
     this.reviewMode = false;
     this.saveSuccess = null;
+    this.uploadError = null;
+    if (step === 'document_uploads') {
+      this.loadUploadedDocuments();
+    }
   }
 
   isSectionCompleted(sectionKey: string): boolean {
+    if (sectionKey === 'consent_forms') {
+      return this.consentKeys.every((c) => this.signedConsents.has(c.key));
+    }
+    if (sectionKey === 'document_uploads') {
+      return this.requiredDocsComplete;
+    }
     return this.sections.some((s) => s.section_key === sectionKey && s.status === 'completed');
+  }
+
+  getSectionStatus(sectionKey: string): string {
+    if (sectionKey === 'consent_forms') {
+      const signed = this.consentKeys.filter((c) => this.signedConsents.has(c.key)).length;
+      if (signed === this.consentKeys.length) return 'Completed';
+      if (signed > 0) return `${signed}/${this.consentKeys.length} signed`;
+      return 'Not started';
+    }
+    if (sectionKey === 'document_uploads') {
+      const uploaded = this.uploadedDocsCount;
+      if (uploaded === this.requiredDocsCount) return 'Completed';
+      if (uploaded > 0) return `${uploaded}/${this.requiredDocsCount} uploaded`;
+      return 'Not started';
+    }
+    const section = this.sections.find((s) => s.section_key === sectionKey);
+    if (!section) return 'Not started';
+    if (section.status === 'completed') return 'Completed';
+    if (section.status === 'in_progress') return 'In progress';
+    return 'Not started';
+  }
+
+  onConsentSigned(consentKey: string): void {
+    this.signedConsents = new Set(this.signedConsents).add(consentKey);
+    this.expandedConsent = null;
+  }
+
+  isConsentSigned(consentKey: string): boolean {
+    return this.signedConsents.has(consentKey);
+  }
+
+  toggleConsent(consentKey: string): void {
+    this.expandedConsent = this.expandedConsent === consentKey ? null : consentKey;
+  }
+
+  isConsentExpanded(consentKey: string): boolean {
+    return this.expandedConsent === consentKey;
+  }
+
+  getConsentStatusLabel(config: ConsentKeyConfig): string {
+    if (this.signedConsents.has(config.key)) return 'Completed';
+    return 'Pending';
+  }
+
+  get completedConsentsCount(): number {
+    return this.consentKeys.filter((c) => this.signedConsents.has(c.key)).length;
+  }
+
+  get allConsentsSigned(): boolean {
+    return this.consentKeys.every((c) => this.signedConsents.has(c.key));
+  }
+
+  get packetReady(): boolean {
+    return (
+      this.isSectionCompleted('employment_application') &&
+      this.allConsentsSigned &&
+      this.requiredDocsComplete
+    );
+  }
+
+  onEmployerHistoryChange(data: EmployerHistoryData): void {
+    this.employment = { ...this.employment, employerHistory: data };
+  }
+
+  onDisqualificationChange(data: DisqualificationData): void {
+    this.employment = { ...this.employment, disqualificationHistory: data };
   }
 
   saveEmploymentDraft(): void {
@@ -143,13 +478,7 @@ export class OnboardingPacketComponent implements OnInit {
     this.saveSuccess = null;
     this.errorMessage = null;
     this.apiService
-      .saveOnboardingSection(
-        this.packetId,
-        'employment_application',
-        this.employment,
-        'in_progress',
-        this.token
-      )
+      .saveOnboardingSection(this.packetId, 'employment_application', this.employment, 'in_progress', this.token)
       .subscribe({
         next: () => {
           this.saving = false;
@@ -177,13 +506,7 @@ export class OnboardingPacketComponent implements OnInit {
     this.saveSuccess = null;
     this.errorMessage = null;
     this.apiService
-      .saveOnboardingSection(
-        this.packetId,
-        'employment_application',
-        this.employment,
-        'completed',
-        this.token
-      )
+      .saveOnboardingSection(this.packetId, 'employment_application', this.employment, 'completed', this.token)
       .subscribe({
         next: () => {
           this.saving = false;
@@ -206,7 +529,215 @@ export class OnboardingPacketComponent implements OnInit {
       });
   }
 
-  submitMvrAuthorization(): void {
-    this.saveSuccess = 'MVR Authorization is not part of this phase yet. Placeholder only.';
+  submitFinalPacket(): void {
+    this.saveSuccess = 'Final packet review submission is not yet implemented. All sections are tracked individually.';
   }
+
+  // === Document Uploads (FN-250) ===
+  loadUploadedDocuments(): void {
+    if (!this.packetId || !this.token) return;
+    this.apiService.getOnboardingDocuments(this.packetId, this.token).subscribe({
+      next: (res) => {
+        this.uploadedDocuments = new Map();
+        for (const doc of (res.documents || [])) {
+          this.uploadedDocuments.set(doc.document_type, doc);
+        }
+      },
+      error: () => {
+        // Silently fail — documents list may not exist yet
+      }
+    });
+  }
+
+  onDocumentFileSelected(event: Event, docType: string): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !this.packetId || !this.token) return;
+
+    // Validate file size (10 MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      this.uploadError = 'File is too large. Maximum size is 10 MB.';
+      input.value = '';
+      return;
+    }
+
+    this.uploadError = null;
+    this.uploadingDocType = docType;
+    this.apiService.uploadOnboardingDocument(this.packetId, docType, file, this.token).subscribe({
+      next: (res) => {
+        this.uploadingDocType = null;
+        if (res.document) {
+          this.uploadedDocuments = new Map(this.uploadedDocuments);
+          this.uploadedDocuments.set(docType, res.document);
+        }
+        input.value = '';
+      },
+      error: (err) => {
+        this.uploadingDocType = null;
+        this.uploadError = err?.error?.message || 'Failed to upload document. Please try again.';
+        input.value = '';
+      }
+    });
+  }
+
+  deleteUploadedDocument(docType: string, documentId: string): void {
+    if (!this.packetId || !this.token) return;
+    this.deletingDocType = docType;
+    this.uploadError = null;
+    this.apiService.deleteOnboardingDocument(this.packetId, documentId, this.token).subscribe({
+      next: () => {
+        this.deletingDocType = null;
+        this.uploadedDocuments = new Map(this.uploadedDocuments);
+        this.uploadedDocuments.delete(docType);
+      },
+      error: (err) => {
+        this.deletingDocType = null;
+        this.uploadError = err?.error?.message || 'Failed to delete document. Please try again.';
+      }
+    });
+  }
+
+  // === SSN Masking ===
+  onSsnInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const digits = input.value.replace(/\D/g, '').slice(0, 9);
+    this.ssnRaw = digits;
+    this.employment.ssn = digits;
+
+    // Auto-format with dashes and restore cursor position
+    const formatted = this.formatSsnWithDashes(digits);
+    const cursorPos = input.selectionStart || 0;
+    const prevLen = input.value.length;
+    input.value = this.ssnMasked ? this.getMaskedSsn(digits) : formatted;
+    const newLen = input.value.length;
+    const adjustedPos = cursorPos + (newLen - prevLen);
+    input.setSelectionRange(adjustedPos, adjustedPos);
+  }
+
+  toggleSsnVisibility(): void {
+    this.ssnMasked = !this.ssnMasked;
+  }
+
+  getSsnDisplay(): string {
+    if (!this.ssnRaw) return '';
+    return this.ssnMasked
+      ? this.getMaskedSsn(this.ssnRaw)
+      : this.formatSsnWithDashes(this.ssnRaw);
+  }
+
+  private formatSsnWithDashes(digits: string): string {
+    if (!digits) return '';
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+  }
+
+  private getMaskedSsn(digits: string): string {
+    if (!digits) return '';
+    if (digits.length <= 3) return '\u2022'.repeat(digits.length);
+    if (digits.length <= 5) return `\u2022\u2022\u2022-${'\u2022'.repeat(digits.length - 3)}`;
+    return `\u2022\u2022\u2022-\u2022\u2022-${digits.slice(5)}`;
+  }
+
+  // === Dynamic Address Logic ===
+  recalcResidencyYears(): void {
+    let total = parseFloat(this.employment.yearsAtAddress || '0') || 0;
+    for (const addr of (this.employment.previousAddresses || [])) {
+      total += parseFloat(addr.yearsAtAddress || '0') || 0;
+    }
+    this.totalResidencyYears = total;
+    this.needMoreAddresses = total < 3 && total > 0;
+    if (this.needMoreAddresses && (!this.employment.previousAddresses || this.employment.previousAddresses.length === 0)) {
+      this.addPreviousAddress();
+    }
+  }
+
+  addPreviousAddress(): void {
+    if (!this.employment.previousAddresses) this.employment.previousAddresses = [];
+    this.employment.previousAddresses.push({});
+  }
+
+  removePreviousAddress(i: number): void {
+    this.employment.previousAddresses?.splice(i, 1);
+    this.recalcResidencyYears();
+  }
+
+  // === Dynamic Employer Logic ===
+  recalcEmployerYears(): void {
+    let total = 0;
+    const cur = this.employment.currentEmployer;
+    if (cur?.fromDate) {
+      const parts = cur.fromDate.split('/');
+      if (parts.length === 2) {
+        const start = new Date(parseInt(parts[1]), parseInt(parts[0]) - 1);
+        total += (Date.now() - start.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+      }
+    }
+    for (const emp of (this.employment.previousEmployers || [])) {
+      if (emp.fromDate && emp.toDate) {
+        const fp = emp.fromDate.split('/');
+        const tp = emp.toDate.split('/');
+        if (fp.length === 2 && tp.length === 2) {
+          const s = new Date(parseInt(fp[1]), parseInt(fp[0]) - 1);
+          const e = new Date(parseInt(tp[1]), parseInt(tp[0]) - 1);
+          total += (e.getTime() - s.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+        }
+      }
+    }
+    this.totalEmployerYears = total;
+    this.needMoreEmployers = total < 3 && total > 0;
+    if (this.needMoreEmployers && (!this.employment.previousEmployers || this.employment.previousEmployers.length === 0)) {
+      this.addPreviousEmployer();
+    }
+  }
+
+  addPreviousEmployer(): void {
+    if (!this.employment.previousEmployers) this.employment.previousEmployers = [];
+    this.employment.previousEmployers.push({});
+  }
+
+  removePreviousEmployer(i: number): void {
+    this.employment.previousEmployers?.splice(i, 1);
+    this.recalcEmployerYears();
+  }
+
+  // === Accident Records ===
+  onHasAccidentsChange(val: string): void {
+    this.employment.hasAccidents = val;
+    if (val === 'yes' && (!this.employment.accidents || this.employment.accidents.length === 0)) {
+      this.addAccident();
+    }
+    if (val === 'no') this.employment.accidents = [];
+  }
+
+  addAccident(): void {
+    if (!this.employment.accidents) this.employment.accidents = [];
+    this.employment.accidents.push({});
+  }
+
+  removeAccident(i: number): void { this.employment.accidents?.splice(i, 1); }
+
+  // === Traffic Violations ===
+  onHasViolationsChange(val: string): void {
+    this.employment.hasViolations = val;
+    if (val === 'yes' && (!this.employment.violations || this.employment.violations.length === 0)) {
+      this.addViolation();
+    }
+    if (val === 'no') this.employment.violations = [];
+  }
+
+  addViolation(): void {
+    if (!this.employment.violations) this.employment.violations = [];
+    this.employment.violations.push({});
+  }
+
+  removeViolation(i: number): void { this.employment.violations?.splice(i, 1); }
+
+  // === License History ===
+  addLicense(): void {
+    if (!this.employment.licenses) this.employment.licenses = [];
+    this.employment.licenses.push({});
+  }
+
+  removeLicense(i: number): void { this.employment.licenses?.splice(i, 1); }
 }

@@ -1,0 +1,196 @@
+/* ═══ Section Container ═══ */
+.compliance-section {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(148,163,184,.1);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.section-title-row h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-icon { font-size: 22px; color: #38bdf8; }
+
+.year-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #94a3b8;
+  font-size: .88rem;
+}
+
+.year-selector select {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(148,163,184,.2);
+  border-radius: 6px;
+  color: #e2e8f0;
+  padding: 6px 10px;
+  font-size: .88rem;
+  cursor: pointer;
+}
+
+.year-selector select:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+
+/* ═══ States ═══ */
+.loading-state { color: #94a3b8; padding: 16px 0; font-size: .88rem; }
+.alert-error {
+  background: rgba(239,68,68,.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239,68,68,.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: .88rem;
+}
+.empty-state { color: #64748b; font-size: .88rem; padding: 16px 0; }
+
+/* ═══ Items List ═══ */
+.items-list { display: flex; flex-direction: column; gap: 12px; }
+
+.compliance-item {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(148,163,184,.1);
+  border-radius: 10px;
+  padding: 16px;
+  transition: border-color .2s;
+}
+
+.compliance-item.item-complete { border-left: 3px solid #22c55e; }
+.compliance-item.item-overdue { border-left: 3px solid #ef4444; }
+.compliance-item.item-due-soon { border-left: 3px solid #facc15; }
+
+.item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.item-type {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.item-icon { font-size: 20px; color: #67e8f9; }
+.item-type-label { font-weight: 600; font-size: .92rem; color: #e2e8f0; }
+
+/* ═══ Status Chips ═══ */
+.status-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.chip-complete { background: rgba(34,197,94,.15); color: #4ade80; }
+.chip-due_soon { background: rgba(250,204,21,.15); color: #facc15; }
+.chip-overdue { background: rgba(239,68,68,.15); color: #f87171; }
+.chip-pending { background: rgba(148,163,184,.12); color: #94a3b8; }
+
+/* ═══ Item Details ═══ */
+.item-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.detail-label { font-size: .72rem; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+.detail-value { font-size: .88rem; color: #cbd5e1; }
+.detail-value.determination { text-transform: capitalize; }
+
+/* ═══ Actions ═══ */
+.item-actions { margin-top: 8px; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.btn:hover { opacity: .85; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn .material-symbols-outlined { font-size: 16px; }
+
+.btn-sm { padding: 6px 12px; font-size: .82rem; }
+.btn-primary { background: #38bdf8; color: #0f172a; }
+.btn-secondary { background: rgba(148,163,184,.15); color: #cbd5e1; }
+
+/* ═══ Inline Completion Form ═══ */
+.complete-form {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148,163,184,.1);
+}
+
+.form-row {
+  margin-bottom: 10px;
+}
+
+.form-row label {
+  display: block;
+  font-size: .78rem;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.form-input {
+  width: 100%;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(148,163,184,.2);
+  border-radius: 6px;
+  color: #e2e8f0;
+  padding: 8px 10px;
+  font-size: .88rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+
+textarea.form-input { resize: vertical; }
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}

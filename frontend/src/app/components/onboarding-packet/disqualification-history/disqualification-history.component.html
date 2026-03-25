@@ -1,0 +1,78 @@
+<section class="onboard-panel onboard-panel-full">
+  <div class="onboard-panel-header">
+    <span class="material-symbols-outlined">gavel</span>
+    <div>
+      <h3 class="onboard-section-title">Disqualification / License History</h3>
+      <p>Have you ever been denied a license, permit, or privilege to operate a motor vehicle, or had one suspended, revoked, or been disqualified from operating a CMV?</p>
+    </div>
+  </div>
+
+  <div class="disq-toggle">
+    <label class="onboard-choice">
+      <input type="radio" name="hasDisqualifications" [value]="true" [(ngModel)]="hasDisqualifications" (ngModelChange)="onToggleChange()" />
+      <span>Yes</span>
+    </label>
+    <label class="onboard-choice">
+      <input type="radio" name="hasDisqualifications" [value]="false" [(ngModel)]="hasDisqualifications" (ngModelChange)="onToggleChange()" />
+      <span>No</span>
+    </label>
+  </div>
+
+  <ng-container *ngIf="hasDisqualifications === true">
+    <div class="disq-entries">
+      <div *ngFor="let entry of entries; let i = index; trackBy: trackByIndex" class="disq-entry-card">
+        <div class="disq-entry-header">
+          <span class="disq-entry-number">Entry {{ i + 1 }}</span>
+          <button
+            *ngIf="entries.length > 1"
+            type="button"
+            class="tier-remove-btn"
+            (click)="removeEntry(i)"
+            aria-label="Remove disqualification entry"
+          >
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div class="onboard-grid-2">
+          <div class="onboard-field">
+            <label>Type *</label>
+            <select class="form-input" [(ngModel)]="entry.type" (ngModelChange)="emitChange()">
+              <option value="" disabled>Select type</option>
+              <option *ngFor="let t of disqualificationTypes" [value]="t">{{ t }}</option>
+            </select>
+          </div>
+          <div class="onboard-field">
+            <label>State</label>
+            <input class="form-input" maxlength="2" [(ngModel)]="entry.state" (ngModelChange)="emitChange()" placeholder="OH" />
+          </div>
+          <div class="onboard-field">
+            <label>Date</label>
+            <input class="form-input" [(ngModel)]="entry.date" (ngModelChange)="emitChange()" placeholder="MM/DD/YYYY" />
+          </div>
+          <div class="onboard-field onboard-field-full">
+            <label>Reason / Details</label>
+            <input class="form-input" [(ngModel)]="entry.reason" (ngModelChange)="emitChange()" placeholder="Describe the circumstances" />
+          </div>
+          <div class="onboard-field">
+            <div class="onboard-field-label">Reinstated?</div>
+            <div class="onboard-radio-group">
+              <label class="onboard-choice"><input type="radio" [name]="'reinstated-' + i" [value]="true" [(ngModel)]="entry.reinstated" (ngModelChange)="emitChange()" /><span>Yes</span></label>
+              <label class="onboard-choice"><input type="radio" [name]="'reinstated-' + i" [value]="false" [(ngModel)]="entry.reinstated" (ngModelChange)="emitChange()" /><span>No</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="tier-add-btn" (click)="addEntry()">
+        <span class="material-symbols-outlined">add_circle</span>
+        Add Another Entry
+      </button>
+    </div>
+  </ng-container>
+
+  <div *ngIf="hasDisqualifications === false" class="disq-none-msg">
+    <span class="material-symbols-outlined">check_circle</span>
+    <span>No disqualification history reported.</span>
+  </div>
+</section>

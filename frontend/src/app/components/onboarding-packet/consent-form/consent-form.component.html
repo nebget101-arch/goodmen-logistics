@@ -1,0 +1,199 @@
+<div class="consent-form-wrapper">
+  <!-- Loading state -->
+  <div *ngIf="loading" class="consent-loading">
+    <span class="material-symbols-outlined consent-spin">progress_activity</span>
+    <span>Loading consent form...</span>
+  </div>
+
+  <!-- Error state -->
+  <div *ngIf="!loading && errorMessage" class="consent-error">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ errorMessage }}</span>
+  </div>
+
+  <!-- Signed success state -->
+  <div *ngIf="signedSuccess" class="consent-signed">
+    <span class="material-symbols-outlined">verified</span>
+    <div>
+      <strong>{{ requiresSignature ? 'Signed successfully' : 'Acknowledged' }}</strong>
+      <p>
+        {{ requiresSignature
+          ? 'You have signed the ' + (consent?.title || consentKey) + ' consent form.'
+          : 'You have acknowledged the ' + (consent?.title || consentKey) + '.' }}
+      </p>
+      <p class="consent-signed-date" *ngIf="signedDate">Completed on {{ signedDate }}</p>
+    </div>
+  </div>
+
+  <!-- Consent content -->
+  <ng-container *ngIf="!loading && !errorMessage && consent && !signedSuccess">
+    <div class="consent-header">
+      <h3 class="consent-title">{{ consent.title }}</h3>
+      <div class="consent-meta">
+        <span class="consent-meta-item">
+          <span class="material-symbols-outlined">info</span>
+          Version {{ consent.version }}
+        </span>
+        <span class="consent-meta-item">
+          <span class="material-symbols-outlined">calendar_today</span>
+          Effective {{ consent.effectiveDate }}
+        </span>
+      </div>
+    </div>
+
+    <div class="consent-body" [innerHTML]="consent.htmlContent"></div>
+
+    <!-- ACKNOWLEDGE-ONLY mode (no signature required) -->
+    <div class="consent-acknowledge" *ngIf="!requiresSignature">
+      <button
+        class="btn btn-primary consent-acknowledge-btn"
+        type="button"
+        (click)="submitSignature()"
+        [disabled]="signing"
+      >
+        <span class="material-symbols-outlined">{{ signing ? 'progress_activity' : 'check_circle' }}</span>
+        {{ signing ? 'Processing...' : 'I Acknowledge' }}
+      </button>
+      <p class="consent-acknowledge-hint">By clicking, you confirm you have read and understand this disclosure.</p>
+    </div>
+
+    <!-- SIGNATURE mode -->
+    <ng-container *ngIf="requiresSignature">
+      <!-- Capture fields section -->
+      <div class="consent-capture-section" *ngIf="hasCaptureFields">
+        <div class="consent-capture-header">
+          <span class="material-symbols-outlined">person</span>
+          <div>
+            <h4>Your Information</h4>
+            <p>Please provide the following information as required by this authorization.</p>
+          </div>
+        </div>
+
+        <div class="consent-capture-grid">
+          <!-- Full Name -->
+          <div class="consent-field" *ngIf="hasCaptureField('fullName')">
+            <label for="capture-fullName-{{ consentKey }}">Full Legal Name *</label>
+            <input
+              id="capture-fullName-{{ consentKey }}"
+              class="form-input"
+              [(ngModel)]="capturedFullName"
+              placeholder="First Middle Last"
+              [disabled]="signing"
+              autocomplete="name"
+            />
+          </div>
+
+          <!-- Date of Birth -->
+          <div class="consent-field" *ngIf="hasCaptureField('dateOfBirth')">
+            <label for="capture-dob-{{ consentKey }}">Date of Birth *</label>
+            <input
+              id="capture-dob-{{ consentKey }}"
+              class="form-input"
+              type="date"
+              [(ngModel)]="capturedDateOfBirth"
+              [disabled]="signing"
+              autocomplete="bday"
+            />
+          </div>
+
+          <!-- SSN Last 4 -->
+          <div class="consent-field" *ngIf="hasCaptureField('ssnLast4')">
+            <label for="capture-ssn4-{{ consentKey }}">Last 4 of SSN *</label>
+            <input
+              id="capture-ssn4-{{ consentKey }}"
+              class="form-input"
+              type="text"
+              inputmode="numeric"
+              maxlength="4"
+              [value]="capturedSsnLast4"
+              (input)="onSsnLast4Input($event)"
+              placeholder="****"
+              [disabled]="signing"
+              autocomplete="off"
+            />
+          </div>
+
+          <!-- Driver's License Number -->
+          <div class="consent-field" *ngIf="hasCaptureField('driversLicenseNumber')">
+            <label for="capture-dl-{{ consentKey }}">Driver's License Number *</label>
+            <input
+              id="capture-dl-{{ consentKey }}"
+              class="form-input"
+              [(ngModel)]="capturedDriversLicenseNumber"
+              placeholder="Enter license number"
+              [disabled]="signing"
+              autocomplete="off"
+            />
+          </div>
+
+          <!-- State of Issue -->
+          <div class="consent-field" *ngIf="hasCaptureField('stateOfIssue')">
+            <label for="capture-state-{{ consentKey }}">State of Issue *</label>
+            <select
+              id="capture-state-{{ consentKey }}"
+              class="form-input"
+              [(ngModel)]="capturedStateOfIssue"
+              [disabled]="signing"
+            >
+              <option value="" disabled>Select state</option>
+              <option *ngFor="let st of usStates" [value]="st.code">{{ st.name }}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signature section -->
+      <div class="consent-signature">
+        <div class="consent-signature-header">
+          <span class="material-symbols-outlined">draw</span>
+          <div>
+            <h4>E-Signature</h4>
+            <p>Type your full legal name and confirm your agreement below.</p>
+          </div>
+        </div>
+
+        <div class="consent-signature-fields">
+          <div class="consent-field">
+            <label for="signerName-{{ consentKey }}">Full Legal Name *</label>
+            <input
+              id="signerName-{{ consentKey }}"
+              class="form-input"
+              [(ngModel)]="signerName"
+              placeholder="Type your full legal name"
+              [disabled]="signing"
+              aria-label="Full legal name for e-signature"
+            />
+          </div>
+
+          <label class="consent-agree-card">
+            <input
+              type="checkbox"
+              [(ngModel)]="agreed"
+              [disabled]="signing"
+              aria-label="I agree to the terms"
+            />
+            <div>
+              <strong>I agree</strong>
+              <small>I have read and understand the above disclosure/authorization and voluntarily consent to its terms.</small>
+            </div>
+          </label>
+
+          <div class="consent-signature-date">
+            <span class="material-symbols-outlined">calendar_today</span>
+            <span>Date: {{ todayDisplay }}</span>
+          </div>
+
+          <button
+            class="btn btn-primary consent-sign-btn"
+            type="button"
+            (click)="submitSignature()"
+            [disabled]="!canSign"
+          >
+            <span class="material-symbols-outlined">{{ signing ? 'progress_activity' : 'verified' }}</span>
+            {{ signing ? 'Signing...' : 'Sign & Submit' }}
+          </button>
+        </div>
+      </div>
+    </ng-container>
+  </ng-container>
+</div>

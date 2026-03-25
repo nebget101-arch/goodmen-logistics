@@ -1,0 +1,68 @@
+<div class="investigation-history" id="investigation-history-print">
+  <!-- Loading -->
+  <div *ngIf="loading" class="ih-loading">
+    <div class="ih-spinner"></div>
+    <span>Loading investigation history...</span>
+  </div>
+
+  <!-- Error -->
+  <div *ngIf="error && !loading" class="ih-error">
+    <span class="material-symbols-outlined">error</span>
+    {{ error }}
+    <button class="ih-retry-btn" (click)="loadHistory()">Retry</button>
+  </div>
+
+  <!-- Content -->
+  <ng-container *ngIf="!loading && !error">
+    <div class="ih-header">
+      <div class="ih-header-info">
+        <h4 class="ih-title">
+          <span class="material-symbols-outlined">history</span>
+          Driver Investigation History File
+        </h4>
+        <p class="ih-subtitle">Chronological record of all employer investigation activity</p>
+      </div>
+      <button class="ih-print-btn" (click)="printHistory()" aria-label="Print investigation history">
+        <span class="material-symbols-outlined">print</span>
+        Print
+      </button>
+    </div>
+
+    <!-- Empty state -->
+    <div *ngIf="entries.length === 0" class="ih-empty">
+      <span class="material-symbols-outlined">info</span>
+      No investigation history entries yet.
+    </div>
+
+    <!-- Timeline -->
+    <div class="ih-timeline" *ngIf="entries.length > 0">
+      <div *ngFor="let entry of entries" class="ih-entry">
+        <div class="ih-entry-dot" [ngClass]="getEntryTypeClass(entry.entryType)">
+          <span class="material-symbols-outlined">{{ entryTypeIcons[entry.entryType] || 'circle' }}</span>
+        </div>
+        <div class="ih-entry-content">
+          <div class="ih-entry-header">
+            <span class="ih-entry-badge" [ngClass]="getEntryTypeClass(entry.entryType)">
+              {{ entryTypeLabels[entry.entryType] || entry.entryType }}
+            </span>
+            <span class="ih-entry-date">{{ entry.createdAt | date:'MMM d, y h:mm a' }}</span>
+          </div>
+          <div class="ih-entry-employer">{{ entry.employerName }}</div>
+          <div class="ih-entry-summary">{{ entry.summary }}</div>
+          <div class="ih-entry-meta">
+            <span *ngIf="entry.createdBy" class="ih-entry-user">
+              <span class="material-symbols-outlined">person</span>
+              {{ entry.createdBy }}
+            </span>
+            <a *ngIf="entry.documentId" href="#"
+               class="ih-entry-doc"
+               (click)="downloadDocument(entry.documentId); $event.preventDefault()">
+              <span class="material-symbols-outlined">attach_file</span>
+              View Document
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+</div>
