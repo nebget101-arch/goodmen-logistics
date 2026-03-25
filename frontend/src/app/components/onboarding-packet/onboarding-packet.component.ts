@@ -166,6 +166,8 @@ export interface ConsentKeyConfig {
   key: string;
   label: string;
   icon: string;
+  requiresSignature: boolean;
+  captureFields: string[];
 }
 
 @Component({
@@ -217,14 +219,14 @@ export class OnboardingPacketComponent implements OnInit {
   needMoreEmployers = false;
 
   consentKeys: ConsentKeyConfig[] = [
-    { key: 'fcra_disclosure', label: 'FCRA Disclosure', icon: 'policy' },
-    { key: 'fcra_authorization', label: 'FCRA Authorization', icon: 'verified_user' },
-    { key: 'previous_employer_inquiry', label: 'Previous Employer Inquiry', icon: 'contact_phone' },
-    { key: 'clearinghouse_full', label: 'Clearinghouse Full Query', icon: 'search' },
-    { key: 'release_of_information', label: 'Release of Information', icon: 'share' }
+    { key: 'fcra_disclosure', label: 'FCRA Disclosure', icon: 'policy', requiresSignature: false, captureFields: [] },
+    { key: 'fcra_authorization', label: 'FCRA Authorization', icon: 'verified_user', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'ssnLast4', 'driversLicenseNumber', 'stateOfIssue'] },
+    { key: 'release_of_information', label: 'Release of Information Authorization (DQ & Safety)', icon: 'share', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] },
+    { key: 'drug_alcohol_release', label: 'Release of Information Authorization (Drug & Alcohol)', icon: 'local_pharmacy', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] }
   ];
 
   signedConsents: Set<string> = new Set();
+  expandedConsent: string | null = null;
 
   steps: { key: PacketStep; label: string; icon: string; sectionKey?: string }[] = [
     { key: 'employment_application', label: 'Employment Application', icon: 'description', sectionKey: 'employment_application' },
@@ -316,10 +318,28 @@ export class OnboardingPacketComponent implements OnInit {
 
   onConsentSigned(consentKey: string): void {
     this.signedConsents = new Set(this.signedConsents).add(consentKey);
+    this.expandedConsent = null;
   }
 
   isConsentSigned(consentKey: string): boolean {
     return this.signedConsents.has(consentKey);
+  }
+
+  toggleConsent(consentKey: string): void {
+    this.expandedConsent = this.expandedConsent === consentKey ? null : consentKey;
+  }
+
+  isConsentExpanded(consentKey: string): boolean {
+    return this.expandedConsent === consentKey;
+  }
+
+  getConsentStatusLabel(config: ConsentKeyConfig): string {
+    if (this.signedConsents.has(config.key)) return 'Completed';
+    return 'Pending';
+  }
+
+  get completedConsentsCount(): number {
+    return this.consentKeys.filter((c) => this.signedConsents.has(c.key)).length;
   }
 
   get allConsentsSigned(): boolean {

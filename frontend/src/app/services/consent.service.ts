@@ -12,10 +12,19 @@ export interface ConsentTemplate {
   requiresSignature: boolean;
 }
 
+export interface ConsentCapturedFields {
+  fullName?: string;
+  dateOfBirth?: string;
+  ssnLast4?: string;
+  driversLicenseNumber?: string;
+  stateOfIssue?: string;
+}
+
 export interface ConsentSignaturePayload {
   signerName: string;
   agreed: boolean;
   signedAt: string;
+  capturedFields?: ConsentCapturedFields;
 }
 
 export interface ConsentStatus {

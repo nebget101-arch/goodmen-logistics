@@ -582,20 +582,57 @@
               </div>
               <div class="onboard-form-badge onboard-form-badge-alt">
                 <span class="material-symbols-outlined">verified_user</span>
-                <span>{{ signedConsents.size }}/{{ consentKeys.length }} signed</span>
+                <span>{{ completedConsentsCount }} of {{ consentKeys.length }} completed</span>
               </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="consent-progress-bar">
+              <div class="consent-progress-fill" [style.width.%]="(completedConsentsCount / consentKeys.length) * 100"></div>
             </div>
 
             <div *ngIf="allConsentsSigned" class="onboard-state-card onboard-success" style="margin-bottom: 18px;">
               <span class="material-symbols-outlined">check_circle</span>
               <div>
-                <h2>All consents signed</h2>
+                <h2>All consents completed</h2>
                 <p>You have completed all required consent forms. You may proceed to the next step.</p>
               </div>
             </div>
 
-            <div class="consent-list">
-              <app-consent-form *ngFor="let c of consentKeys" [consentKey]="c.key" [packetId]="packetId || ''" [token]="token || ''" (signed)="onConsentSigned($any($event))"></app-consent-form>
+            <div class="consent-card-list">
+              <div *ngFor="let c of consentKeys; let i = index" class="consent-card" [class.consent-card-completed]="isConsentSigned(c.key)">
+                <button type="button" class="consent-card-header" (click)="toggleConsent(c.key)" [attr.aria-expanded]="isConsentExpanded(c.key)">
+                  <div class="consent-card-icon">
+                    <span class="material-symbols-outlined">{{ c.icon }}</span>
+                  </div>
+                  <div class="consent-card-info">
+                    <div class="consent-card-title">{{ c.label }}</div>
+                    <div class="consent-card-subtitle">
+                      <span *ngIf="!c.requiresSignature">Disclosure &mdash; acknowledgment only</span>
+                      <span *ngIf="c.requiresSignature">Authorization &mdash; signature required</span>
+                    </div>
+                  </div>
+                  <span class="consent-card-badge"
+                    [class.consent-badge-completed]="isConsentSigned(c.key)"
+                    [class.consent-badge-pending]="!isConsentSigned(c.key)">
+                    {{ getConsentStatusLabel(c) }}
+                  </span>
+                  <span class="material-symbols-outlined consent-card-chevron" [class.consent-card-chevron-open]="isConsentExpanded(c.key)">
+                    expand_more
+                  </span>
+                </button>
+
+                <div class="consent-card-body" *ngIf="isConsentExpanded(c.key)">
+                  <app-consent-form
+                    [consentKey]="c.key"
+                    [packetId]="packetId || ''"
+                    [token]="token || ''"
+                    [requiresSignature]="c.requiresSignature"
+                    [captureFields]="c.captureFields"
+                    (signed)="onConsentSigned($any($event))"
+                  ></app-consent-form>
+                </div>
+              </div>
             </div>
 
             <div class="onboard-actions">
