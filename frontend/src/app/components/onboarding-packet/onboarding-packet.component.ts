@@ -238,7 +238,10 @@ export class OnboardingPacketComponent implements OnInit {
     { key: 'fcra_disclosure', label: 'FCRA Disclosure', icon: 'policy', requiresSignature: false, captureFields: [] },
     { key: 'fcra_authorization', label: 'FCRA Authorization', icon: 'verified_user', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'ssnLast4', 'driversLicenseNumber', 'stateOfIssue'] },
     { key: 'release_of_information', label: 'Release of Information Authorization (DQ & Safety)', icon: 'share', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] },
-    { key: 'drug_alcohol_release', label: 'Release of Information Authorization (Drug & Alcohol)', icon: 'local_pharmacy', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] }
+    { key: 'drug_alcohol_release', label: 'Release of Information Authorization (Drug & Alcohol)', icon: 'local_pharmacy', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] },
+    { key: 'mvr_disclosure', label: 'MVR Disclosure', icon: 'description', requiresSignature: true, captureFields: ['fullName'] },
+    { key: 'mvr_authorization', label: 'MVR Authorization', icon: 'how_to_reg', requiresSignature: true, captureFields: ['fullName', 'dateOfBirth', 'driversLicenseNumber', 'stateOfIssue'] },
+    { key: 'mvr_release_of_liability', label: 'MVR Release of Liability', icon: 'gavel', requiresSignature: true, captureFields: [] }
   ];
 
   signedConsents: Set<string> = new Set();

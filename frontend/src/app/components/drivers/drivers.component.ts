@@ -71,7 +71,10 @@ export class DriversComponent implements OnInit, OnDestroy {
     consent_fcra_disclosure_signed: 'FCRA Disclosure',
     consent_fcra_authorization_signed: 'FCRA Authorization',
     consent_release_of_information_signed: 'Release of Info / DQ & Safety',
-    consent_drug_alcohol_release_signed: 'Release of Info / Drug & Alcohol'
+    consent_drug_alcohol_release_signed: 'Release of Info / Drug & Alcohol',
+    consent_mvr_disclosure_signed: 'MVR Disclosure',
+    consent_mvr_authorization_signed: 'MVR Authorization',
+    consent_mvr_release_of_liability_signed: 'MVR Release of Liability'
   };
 
   saving = false;
@@ -825,7 +828,10 @@ export class DriversComponent implements OnInit, OnDestroy {
         'release_of_info_dq_safety_signed',
         'drug_alcohol_release_signed',
         'consent_forms_signed',
-        'release_of_info_signed'
+        'release_of_info_signed',
+        'mvr_disclosure_signed',
+        'mvr_authorization_signed',
+        'mvr_release_of_liability_signed'
       ],
       pre_hire_checklist: [
         'employment_application_completed',
@@ -903,6 +909,8 @@ export class DriversComponent implements OnInit, OnDestroy {
       fcra_authorization_signed: '15 U.S.C. \u00A7 1681b',
       release_of_info_dq_safety_signed: '49 CFR \u00A7391.23',
       drug_alcohol_release_signed: '49 CFR Part 40',
+      mvr_disclosure_signed: '15 U.S.C. \u00A71681b(b)(2)',
+      mvr_release_of_liability_signed: '15 U.S.C. \u00A71681b(b)(2)',
       employment_application_submitted: '49 CFR 391.21'
     };
     return refs[key] || '';
