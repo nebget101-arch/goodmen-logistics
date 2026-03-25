@@ -1174,6 +1174,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       mro_verified: false,
       ccf_number: '',
       result: undefined,
+      result_received_date: '',
       clearinghouse_reported: 'not_reported',
       notes: ''
     };
