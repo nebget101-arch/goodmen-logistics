@@ -196,10 +196,15 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
   try {
     const { packetId, consentKey } = req.params;
     const { token } = req.query;
-    const { signerName, signatureType, signatureValue, captureData } = req.body || {};
+    const body = req.body || {};
+    const signerName = body.signerName || '';
+    const signatureType = body.signatureType || 'typed_name';
+    // FN-242: Frontend sends signerName as the e-signature (typed name IS the signature)
+    const signatureValue = body.signatureValue || body.signerName || '';
+    const captureData = body.captureData || body.capturedFields || null;
 
-    if (!signerName || !signatureValue) {
-      return res.status(400).json({ message: 'signerName and signatureValue are required' });
+    if (!signerName) {
+      return res.status(400).json({ message: 'signerName is required' });
     }
 
     const { packet, error, status } = await loadPacketWithToken(packetId, token);
