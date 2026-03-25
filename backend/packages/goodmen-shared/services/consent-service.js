@@ -1,15 +1,20 @@
 const { query, getClient } = require('../internal/db');
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('./dqf-service');
+const { generateConsentPdf } = require('./driver-onboarding-pdf');
+const { createDriverDocument } = require('./driver-storage-service');
+const dtLogger = require('../utils/logger');
 
 /**
- * Mapping from consent_key to dqf requirement_key.
+ * FN-236: Mapping from consent_key to dqf requirement_key.
  * When a consent is signed, the corresponding DQF requirement is marked complete.
  */
 const CONSENT_DQF_MAP = {
   clearinghouse_full: 'clearinghouse_consent_received',
-  release_of_information: 'release_of_info_signed',
-  fcra_authorization: 'fcra_authorization',
   psp_consent: 'psp_consent',
+  // FN-236: consent form DQF mappings
+  fcra_disclosure: 'fcra_disclosure_signed',
+  fcra_authorization: 'fcra_authorization_signed',
+  release_of_information: 'release_of_info_dq_safety_signed',
   drug_alcohol_release: 'drug_alcohol_release_signed'
 };
 
@@ -156,20 +161,86 @@ async function signConsent(consentId, { signerName, signatureType, signatureValu
 
     await client.query('COMMIT');
 
+    const signedConsent = updatedRes.rows[0];
+
+    // FN-234: Generate consent PDF with audit trail and store as a driver document
+    let consentDocId = null;
+    try {
+      // Look up driver for PDF header
+      const driverRes = await query(
+        'SELECT id, first_name, last_name FROM drivers WHERE id = $1',
+        [consent.driver_id]
+      );
+      const driver = driverRes.rows[0] || null;
+
+      // Look up operating entity for company info
+      let company = null;
+      try {
+        const oeRes = await query(
+          `SELECT oe.name, oe.address FROM operating_entities oe
+           JOIN drivers d ON d.operating_entity_id = oe.id
+           WHERE d.id = $1`,
+          [consent.driver_id]
+        );
+        company = oeRes.rows[0] || null;
+      } catch (_oeErr) {
+        // Tolerate missing operating_entities table
+      }
+
+      const pdfBuffer = await generateConsentPdf({
+        template,
+        consent: signedConsent,
+        company,
+        driver
+      });
+
+      const docType = `consent_${consent.consent_key}_signed`;
+      const driverName = driver
+        ? `${driver.first_name || ''} ${driver.last_name || ''}`.trim()
+        : 'driver';
+      const fileName = `${docType}_${driverName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+      const doc = await createDriverDocument({
+        driverId: consent.driver_id,
+        packetId: consent.packet_id || null,
+        docType,
+        fileName,
+        mimeType: 'application/pdf',
+        bytes: pdfBuffer
+      });
+      consentDocId = doc.id;
+
+      dtLogger.info('consent_pdf_generated', {
+        consentId: consent.id,
+        driverId: consent.driver_id,
+        docType,
+        documentId: doc.id
+      });
+    } catch (pdfError) {
+      // Non-blocking: PDF generation failure should not break consent signing
+      dtLogger.warn('consent_pdf_generation_failed', {
+        consentId: consent.id,
+        error: pdfError?.message || String(pdfError)
+      });
+    }
+
     // Auto-update DQF requirement if a mapping exists
     const dqfKey = CONSENT_DQF_MAP[consent.consent_key];
     if (dqfKey) {
       try {
-        await upsertRequirementStatus(consent.driver_id, dqfKey, 'complete', null);
+        await upsertRequirementStatus(consent.driver_id, dqfKey, 'complete', consentDocId);
         await computeAndUpdateDqfCompleteness(consent.driver_id);
       } catch (dqfError) {
         // Non-blocking: DQF update failure should not break consent signing
-        // eslint-disable-next-line no-console
-        console.error('consent_dqf_update_failed', dqfError);
+        dtLogger.warn('consent_dqf_update_failed', {
+          consentId: consent.id,
+          dqfKey,
+          error: dqfError?.message || String(dqfError)
+        });
       }
     }
 
-    return updatedRes.rows[0];
+    return signedConsent;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
