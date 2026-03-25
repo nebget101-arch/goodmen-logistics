@@ -6,6 +6,61 @@ import { SEO_PUBLIC } from '../../services/seo-public-presets';
 import { EmployerHistoryData } from './employer-history-tiered/employer-history-tiered.component';
 import { DisqualificationData } from './disqualification-history/disqualification-history.component';
 
+export interface PreviousAddress {
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  yearsAtAddress?: string;
+}
+
+export interface EmployerEntry {
+  employerName?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  positionHeld?: string;
+  fromDate?: string;
+  toDate?: string;
+  contactPerson?: string;
+  phoneNumber?: string;
+  salaryWage?: string;
+  reasonForLeaving?: string;
+  wasCMV?: boolean;
+}
+
+export interface AccidentEntry {
+  date?: string;
+  natureOfAccident?: string;
+  fatalities?: string;
+  injuries?: string;
+  hazardousMaterialSpill?: boolean;
+}
+
+export interface ViolationEntry {
+  location?: string;
+  date?: string;
+  charge?: string;
+  penalty?: string;
+}
+
+export interface LicenseEntry {
+  state?: string;
+  licenseNumber?: string;
+  type?: string;
+  expirationDate?: string;
+}
+
+export interface DrivingExpEntry {
+  hasExperience?: boolean;
+  typeOfEquipment?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  approxMiles?: string;
+  description?: string;
+}
+
 export interface EmploymentForm {
   firstName?: string;
   middleName?: string;
@@ -13,38 +68,76 @@ export interface EmploymentForm {
   phone?: string;
   email?: string;
   dateOfBirth?: string;
-  ssnLast4?: string;
+  ssn?: string;
+  ssnDisplay?: string;
   dateOfApplication?: string;
   positionAppliedFor?: string;
-  dateAvailable?: string;
-  canWorkInUs?: boolean | null;
+
+  // Current address
   addressStreet?: string;
   addressCity?: string;
   addressState?: string;
   addressZip?: string;
   yearsAtAddress?: string;
-  licenseState?: string;
-  licenseNumber?: string;
-  licenseClass?: string;
-  licenseEndorsements?: string;
-  licenseExpiry?: string;
-  drivingExperienceSummary?: string;
-  currentEmployerName?: string;
-  currentEmployerPhone?: string;
-  currentEmployerFrom?: string;
-  currentEmployerTo?: string;
-  currentEmployerReasonForLeaving?: string;
-  previousEmployerName?: string;
-  previousEmployerPhone?: string;
-  previousEmployerFrom?: string;
-  previousEmployerTo?: string;
-  previousEmployerReasonForLeaving?: string;
+  previousAddresses?: PreviousAddress[];
+
+  // Work authorization & background
+  legallyAuthorizedToWork?: string;
+  convictedOfFelony?: string;
+  felonyDetails?: string;
+  unableToPerformFunctions?: string;
+  adaDetails?: string;
+
+  // Employment history
+  currentEmployer?: EmployerEntry;
+  previousEmployers?: EmployerEntry[];
+
+  // Accident record
+  hasAccidents?: string;
+  accidents?: AccidentEntry[];
+
+  // Traffic violations
+  hasViolations?: string;
+  violations?: ViolationEntry[];
+
+  // License history
+  licenses?: LicenseEntry[];
+
+  // Driving experience (questionnaire)
+  straightTruck?: DrivingExpEntry;
+  tractorSemiTrailer?: DrivingExpEntry;
+  tractorTwoTrailers?: DrivingExpEntry;
+  motorcoachSchoolBus?: DrivingExpEntry;
+  motorcoachSchoolBusMore15?: DrivingExpEntry;
+  otherEquipment?: DrivingExpEntry;
+  statesOperatedIn?: string;
+
+  // Drug and alcohol
+  violatedSubstanceProhibitions?: string;
+  failedRehabProgram?: string;
+  alcoholTestResult04OrHigher?: string;
+  positiveControlledSubstancesTest?: string;
+  refusedRequiredTest?: string;
+  otherDOTViolation?: string;
+
+  // Legacy fields (kept for backward compat)
   educationSummary?: string;
   otherQualifications?: string;
   applicationSignatureName?: string;
   applicationSignatureDate?: string;
   employerHistory?: EmployerHistoryData;
   disqualificationHistory?: DisqualificationData;
+
+  // Legacy (mapped)
+  ssnLast4?: string;
+  canWorkInUs?: boolean | null;
+  dateAvailable?: string;
+  licenseState?: string;
+  licenseNumber?: string;
+  licenseClass?: string;
+  licenseEndorsements?: string;
+  licenseExpiry?: string;
+  drivingExperienceSummary?: string;
 }
 
 export interface MvrForm {
@@ -93,8 +186,33 @@ export class OnboardingPacketComponent implements OnInit {
   submittedEmployment = false;
   saveSuccess: string | null = null;
 
-  employment: EmploymentForm = {};
+  employment: EmploymentForm = {
+    previousAddresses: [],
+    currentEmployer: {},
+    previousEmployers: [],
+    accidents: [],
+    violations: [],
+    licenses: [{}],
+    straightTruck: {},
+    tractorSemiTrailer: {},
+    tractorTwoTrailers: {},
+    motorcoachSchoolBus: {},
+    motorcoachSchoolBusMore15: {},
+    otherEquipment: {}
+  };
   mvr: MvrForm = {};
+
+  usStates = [
+    'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS',
+    'KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY',
+    'NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'
+  ];
+
+  ssnRaw = '';
+  totalResidencyYears = 0;
+  needMoreAddresses = false;
+  totalEmployerYears = 0;
+  needMoreEmployers = false;
 
   consentKeys: ConsentKeyConfig[] = [
     { key: 'fcra_disclosure', label: 'FCRA Disclosure', icon: 'policy' },
@@ -285,4 +403,123 @@ export class OnboardingPacketComponent implements OnInit {
   submitFinalPacket(): void {
     this.saveSuccess = 'Final packet review submission is not yet implemented. All sections are tracked individually.';
   }
+
+  // === SSN Masking ===
+  onSsnInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const digits = input.value.replace(/\D/g, '').slice(0, 9);
+    this.ssnRaw = digits;
+    this.employment.ssn = digits;
+    this.employment.ssnDisplay = this.getSsnDisplay();
+  }
+
+  getSsnDisplay(): string {
+    if (!this.ssnRaw) return '';
+    const d = this.ssnRaw;
+    if (d.length <= 3) return '*'.repeat(d.length);
+    if (d.length <= 5) return `***-${'*'.repeat(d.length - 3)}`;
+    return `***-**-${d.slice(5)}`;
+  }
+
+  // === Dynamic Address Logic ===
+  recalcResidencyYears(): void {
+    let total = parseFloat(this.employment.yearsAtAddress || '0') || 0;
+    for (const addr of (this.employment.previousAddresses || [])) {
+      total += parseFloat(addr.yearsAtAddress || '0') || 0;
+    }
+    this.totalResidencyYears = total;
+    this.needMoreAddresses = total < 3 && total > 0;
+    if (this.needMoreAddresses && (!this.employment.previousAddresses || this.employment.previousAddresses.length === 0)) {
+      this.addPreviousAddress();
+    }
+  }
+
+  addPreviousAddress(): void {
+    if (!this.employment.previousAddresses) this.employment.previousAddresses = [];
+    this.employment.previousAddresses.push({});
+  }
+
+  removePreviousAddress(i: number): void {
+    this.employment.previousAddresses?.splice(i, 1);
+    this.recalcResidencyYears();
+  }
+
+  // === Dynamic Employer Logic ===
+  recalcEmployerYears(): void {
+    let total = 0;
+    const cur = this.employment.currentEmployer;
+    if (cur?.fromDate) {
+      const parts = cur.fromDate.split('/');
+      if (parts.length === 2) {
+        const start = new Date(parseInt(parts[1]), parseInt(parts[0]) - 1);
+        total += (Date.now() - start.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+      }
+    }
+    for (const emp of (this.employment.previousEmployers || [])) {
+      if (emp.fromDate && emp.toDate) {
+        const fp = emp.fromDate.split('/');
+        const tp = emp.toDate.split('/');
+        if (fp.length === 2 && tp.length === 2) {
+          const s = new Date(parseInt(fp[1]), parseInt(fp[0]) - 1);
+          const e = new Date(parseInt(tp[1]), parseInt(tp[0]) - 1);
+          total += (e.getTime() - s.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+        }
+      }
+    }
+    this.totalEmployerYears = total;
+    this.needMoreEmployers = total < 3 && total > 0;
+    if (this.needMoreEmployers && (!this.employment.previousEmployers || this.employment.previousEmployers.length === 0)) {
+      this.addPreviousEmployer();
+    }
+  }
+
+  addPreviousEmployer(): void {
+    if (!this.employment.previousEmployers) this.employment.previousEmployers = [];
+    this.employment.previousEmployers.push({});
+  }
+
+  removePreviousEmployer(i: number): void {
+    this.employment.previousEmployers?.splice(i, 1);
+    this.recalcEmployerYears();
+  }
+
+  // === Accident Records ===
+  onHasAccidentsChange(val: string): void {
+    this.employment.hasAccidents = val;
+    if (val === 'yes' && (!this.employment.accidents || this.employment.accidents.length === 0)) {
+      this.addAccident();
+    }
+    if (val === 'no') this.employment.accidents = [];
+  }
+
+  addAccident(): void {
+    if (!this.employment.accidents) this.employment.accidents = [];
+    this.employment.accidents.push({});
+  }
+
+  removeAccident(i: number): void { this.employment.accidents?.splice(i, 1); }
+
+  // === Traffic Violations ===
+  onHasViolationsChange(val: string): void {
+    this.employment.hasViolations = val;
+    if (val === 'yes' && (!this.employment.violations || this.employment.violations.length === 0)) {
+      this.addViolation();
+    }
+    if (val === 'no') this.employment.violations = [];
+  }
+
+  addViolation(): void {
+    if (!this.employment.violations) this.employment.violations = [];
+    this.employment.violations.push({});
+  }
+
+  removeViolation(i: number): void { this.employment.violations?.splice(i, 1); }
+
+  // === License History ===
+  addLicense(): void {
+    if (!this.employment.licenses) this.employment.licenses = [];
+    this.employment.licenses.push({});
+  }
+
+  removeLicense(i: number): void { this.employment.licenses?.splice(i, 1); }
 }

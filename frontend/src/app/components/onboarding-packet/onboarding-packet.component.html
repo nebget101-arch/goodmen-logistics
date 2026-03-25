@@ -117,7 +117,17 @@
               </div>
             </div>
 
+            <!-- 49 CFR Notice -->
+            <div class="onboard-notice">
+              <h4 class="onboard-notice-title">PLEASE READ COMPLETELY</h4>
+              <p>The information requested on this form is required by federal law (49 CFR) to be provided by any driver applying for a commercial driver position as defined in 49 CFR 390.5. Failure to complete required areas can place both the applicant and carrier in violation of federal law. Information provided will be verified by carrier as required under various parts of 49 CFR, including Part 382 and Part 391.</p>
+              <p>If unsure of question or require help with completing form please ask carrier representative.</p>
+              <p><strong>PLEASE PRINT CLEARLY AND SIGN YOUR FULL LEGAL NAME AT THE END WHERE REQUIRED.</strong></p>
+              <p><strong>FALSE STATEMENTS MAY RESULT IN REFUSAL TO HIRE OR IMMEDIATE TERMINATION.</strong></p>
+            </div>
+
             <div class="onboard-form-panel-grid">
+              <!-- APPLICANT INFORMATION -->
               <section class="onboard-panel">
                 <div class="onboard-panel-header">
                   <span class="material-symbols-outlined">person</span>
@@ -127,19 +137,19 @@
                   </div>
                 </div>
                 <div class="onboard-grid-2">
-                  <div class="onboard-field"><label for="eaFirstName">First Name *</label><input id="eaFirstName" class="form-input" [(ngModel)]="employment.firstName" name="eaFirstName" placeholder="Enter first name" /></div>
-                  <div class="onboard-field"><label for="eaMiddleName">Middle Name</label><input id="eaMiddleName" class="form-input" [(ngModel)]="employment.middleName" name="eaMiddleName" placeholder="Optional middle name" /></div>
-                  <div class="onboard-field"><label for="eaLastName">Last Name *</label><input id="eaLastName" class="form-input" [(ngModel)]="employment.lastName" name="eaLastName" placeholder="Enter last name" /></div>
-                  <div class="onboard-field"><label for="eaPhone">Phone</label><input id="eaPhone" class="form-input" [(ngModel)]="employment.phone" name="eaPhone" placeholder="(555) 555-5555" /></div>
-                  <div class="onboard-field"><label for="eaEmail">Email</label><input id="eaEmail" type="email" class="form-input" [(ngModel)]="employment.email" name="eaEmail" placeholder="name@example.com" /></div>
-                  <div class="onboard-field"><app-ai-date-picker inputId="eaDob" label="Date of Birth" [(ngModel)]="employment.dateOfBirth" name="eaDob" placeholder="MM/DD/YYYY"></app-ai-date-picker></div>
-                  <div class="onboard-field"><label for="eaSsnLast4">SSN (last 4)</label><input id="eaSsnLast4" maxlength="4" class="form-input" [(ngModel)]="employment.ssnLast4" name="eaSsnLast4" placeholder="1234" /></div>
-                  <div class="onboard-field"><label for="eaPosition">Position applied for</label><input id="eaPosition" class="form-input" [(ngModel)]="employment.positionAppliedFor" name="eaPosition" placeholder="Company Driver / Owner Operator" /></div>
-                  <div class="onboard-field"><app-ai-date-picker inputId="eaAvailable" label="Date available for work" [(ngModel)]="employment.dateAvailable" name="eaAvailable" placeholder="MM/DD/YYYY"></app-ai-date-picker></div>
-                  <div class="onboard-field onboard-field-full"><div class="onboard-field-label">Legal right to work in the U.S.?</div><div class="onboard-radio-group"><label class="onboard-choice"><input type="radio" name="eaCanWork" [value]="true" [(ngModel)]="employment.canWorkInUs" /><span>Yes</span></label><label class="onboard-choice"><input type="radio" name="eaCanWork" [value]="false" [(ngModel)]="employment.canWorkInUs" /><span>No</span></label></div></div>
+                  <div class="onboard-field"><label>First Name *</label><input class="form-input" [(ngModel)]="employment.firstName" name="eaFirstName" placeholder="First name" required /></div>
+                  <div class="onboard-field"><label>Middle Name</label><input class="form-input" [(ngModel)]="employment.middleName" name="eaMiddleName" placeholder="Optional middle name" /></div>
+                  <div class="onboard-field"><label>Last Name *</label><input class="form-input" [(ngModel)]="employment.lastName" name="eaLastName" placeholder="Last name" required /></div>
+                  <div class="onboard-field"><label>Phone *</label><input class="form-input" [(ngModel)]="employment.phone" name="eaPhone" placeholder="(555) 555-5555" required /></div>
+                  <div class="onboard-field"><label>Email *</label><input type="email" class="form-input" [(ngModel)]="employment.email" name="eaEmail" placeholder="name@example.com" required /></div>
+                  <div class="onboard-field"><label>Date of Birth *</label><input type="date" class="form-input" [(ngModel)]="employment.dateOfBirth" name="eaDob" required /></div>
+                  <div class="onboard-field"><label>Social Security Number *</label><input class="form-input" [value]="getSsnDisplay()" (input)="onSsnInput($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" /></div>
+                  <div class="onboard-field"><label>Position Applied For *</label><input class="form-input" [(ngModel)]="employment.positionAppliedFor" name="eaPosition" placeholder="e.g. Company Driver" required /></div>
+                  <div class="onboard-field"><label>Date of Application</label><input type="date" class="form-input" [(ngModel)]="employment.dateOfApplication" name="eaAppDate" /></div>
                 </div>
               </section>
 
+              <!-- CURRENT ADDRESS -->
               <section class="onboard-panel">
                 <div class="onboard-panel-header">
                   <span class="material-symbols-outlined">home_pin</span>
@@ -149,88 +159,362 @@
                   </div>
                 </div>
                 <div class="onboard-grid-2">
-                  <div class="onboard-field onboard-field-full"><label for="eaStreet">Street</label><input id="eaStreet" class="form-input" [(ngModel)]="employment.addressStreet" name="eaStreet" placeholder="Street address" /></div>
-                  <div class="onboard-field"><label for="eaCity">City</label><input id="eaCity" class="form-input" [(ngModel)]="employment.addressCity" name="eaCity" placeholder="City" /></div>
-                  <div class="onboard-field"><label for="eaState">State</label><input id="eaState" maxlength="2" class="form-input" [(ngModel)]="employment.addressState" name="eaState" placeholder="OH" /></div>
-                  <div class="onboard-field"><label for="eaZip">ZIP</label><input id="eaZip" class="form-input" [(ngModel)]="employment.addressZip" name="eaZip" placeholder="ZIP code" /></div>
-                  <div class="onboard-field"><label for="eaYearsAt">Years at address</label><input id="eaYearsAt" class="form-input" [(ngModel)]="employment.yearsAtAddress" name="eaYearsAt" placeholder="e.g. 3 years" /></div>
+                  <div class="onboard-field onboard-field-full"><label>Street *</label><input class="form-input" [(ngModel)]="employment.addressStreet" name="eaStreet" placeholder="Street address" required /></div>
+                  <div class="onboard-field"><label>City *</label><input class="form-input" [(ngModel)]="employment.addressCity" name="eaCity" placeholder="City" required /></div>
+                  <div class="onboard-field"><label>State *</label>
+                    <select class="form-input" [(ngModel)]="employment.addressState" name="eaState" required>
+                      <option value="">Select state</option>
+                      <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+                    </select>
+                  </div>
+                  <div class="onboard-field"><label>ZIP *</label><input class="form-input" [(ngModel)]="employment.addressZip" name="eaZip" placeholder="ZIP code" maxlength="10" required /></div>
+                  <div class="onboard-field"><label>Years at Address *</label><input type="number" class="form-input" [(ngModel)]="employment.yearsAtAddress" name="eaYearsAt" placeholder="Years" min="0" step="0.5" (ngModelChange)="recalcResidencyYears()" required /></div>
                 </div>
               </section>
 
-              <section class="onboard-panel">
+              <!-- DYNAMIC PREVIOUS ADDRESSES -->
+              <section class="onboard-panel" *ngIf="needMoreAddresses">
+                <div class="onboard-info-banner">
+                  <span class="material-symbols-outlined">info</span>
+                  <span>You have {{ totalResidencyYears | number:'1.1-1' }} of 3 required years of address history. Please add previous addresses.</span>
+                </div>
+                <div *ngFor="let addr of employment.previousAddresses; let i = index" class="onboard-sub-block">
+                  <div class="onboard-sub-header">
+                    <h4>Previous Address {{ i + 1 }}</h4>
+                    <button type="button" class="btn-icon-remove" (click)="removePreviousAddress(i)"><span class="material-symbols-outlined">close</span></button>
+                  </div>
+                  <div class="onboard-grid-2">
+                    <div class="onboard-field onboard-field-full"><label>Street *</label><input class="form-input" [(ngModel)]="addr.street" [name]="'prevStreet'+i" placeholder="Street address" /></div>
+                    <div class="onboard-field"><label>City *</label><input class="form-input" [(ngModel)]="addr.city" [name]="'prevCity'+i" placeholder="City" /></div>
+                    <div class="onboard-field"><label>State *</label>
+                      <select class="form-input" [(ngModel)]="addr.state" [name]="'prevState'+i">
+                        <option value="">Select</option>
+                        <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+                      </select>
+                    </div>
+                    <div class="onboard-field"><label>ZIP *</label><input class="form-input" [(ngModel)]="addr.zip" [name]="'prevZip'+i" placeholder="ZIP" /></div>
+                    <div class="onboard-field"><label>Years *</label><input type="number" class="form-input" [(ngModel)]="addr.yearsAtAddress" [name]="'prevYears'+i" placeholder="Years" min="0" step="0.5" (ngModelChange)="recalcResidencyYears()" /></div>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-add" (click)="addPreviousAddress()"><span class="material-symbols-outlined">add</span> Add Previous Address</button>
+              </section>
+
+              <!-- WORK AUTHORIZATION & CRIMINAL BACKGROUND -->
+              <section class="onboard-panel onboard-panel-full">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">verified_user</span>
+                  <div>
+                    <h3 class="onboard-section-title">Work Authorization &amp; Background</h3>
+                    <p>Federal compliance and background information.</p>
+                  </div>
+                </div>
+                <div class="onboard-question">
+                  <label>Are you legally authorized to work in the United States as a commercial driver under 49 CFR? *</label>
+                  <div class="onboard-radio-group">
+                    <label class="onboard-choice"><input type="radio" name="eaAuth" value="yes" [(ngModel)]="employment.legallyAuthorizedToWork" /><span>Yes</span></label>
+                    <label class="onboard-choice"><input type="radio" name="eaAuth" value="no" [(ngModel)]="employment.legallyAuthorizedToWork" /><span>No</span></label>
+                  </div>
+                </div>
+                <div class="onboard-question">
+                  <label>Have you ever been convicted of a felony? *</label>
+                  <p class="onboard-small">If yes, please explain fully. Conviction of a crime is not an automatic bar to employment &mdash; all circumstances will be considered.</p>
+                  <div class="onboard-radio-group">
+                    <label class="onboard-choice"><input type="radio" name="eaFelony" value="yes" [(ngModel)]="employment.convictedOfFelony" /><span>Yes</span></label>
+                    <label class="onboard-choice"><input type="radio" name="eaFelony" value="no" [(ngModel)]="employment.convictedOfFelony" /><span>No</span></label>
+                  </div>
+                  <div *ngIf="employment.convictedOfFelony === 'yes'" style="margin-top:10px;">
+                    <label>Please provide details:</label>
+                    <textarea class="form-input" rows="3" [(ngModel)]="employment.felonyDetails" name="eaFelonyDetails" placeholder="Explain the circumstances..."></textarea>
+                  </div>
+                </div>
+                <div class="onboard-question">
+                  <label>Is there any reason you might be unable to perform the functions of the job? Are you applying for ADA consideration? *</label>
+                  <p class="onboard-small">If yes, explain if you wish.</p>
+                  <div class="onboard-radio-group">
+                    <label class="onboard-choice"><input type="radio" name="eaAda" value="yes" [(ngModel)]="employment.unableToPerformFunctions" /><span>Yes</span></label>
+                    <label class="onboard-choice"><input type="radio" name="eaAda" value="no" [(ngModel)]="employment.unableToPerformFunctions" /><span>No</span></label>
+                  </div>
+                  <div *ngIf="employment.unableToPerformFunctions === 'yes'" style="margin-top:10px;">
+                    <label>Please provide details:</label>
+                    <textarea class="form-input" rows="3" [(ngModel)]="employment.adaDetails" name="eaAdaDetails" placeholder="Explain if you wish..."></textarea>
+                  </div>
+                </div>
+              </section>
+
+              <!-- EMPLOYMENT HISTORY -->
+              <section class="onboard-panel onboard-panel-full">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">work</span>
+                  <div>
+                    <h3 class="onboard-section-title">Employment History</h3>
+                    <p>Employment record for the preceding 3 years minimum.</p>
+                  </div>
+                </div>
+                <div class="onboard-info-banner" style="margin-bottom:16px;">
+                  <span class="material-symbols-outlined">info</span>
+                  <span>All applicants must provide information for any previous employer during the preceding 3 years. Applicants shall also provide an additional 7 years of information for employers for whom the applicant operated a CMV.</span>
+                </div>
+
+                <h4 class="onboard-sub-title">Current / Most Recent Employer</h4>
+                <div class="onboard-grid-2">
+                  <div class="onboard-field onboard-field-full"><label>Employer Name *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.employerName" name="ceEmpName" placeholder="Company name" required /></div>
+                  <div class="onboard-field onboard-field-full"><label>Street Address *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.streetAddress" name="ceStreet" placeholder="Street address" required /></div>
+                  <div class="onboard-field"><label>City *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.city" name="ceCity" placeholder="City" required /></div>
+                  <div class="onboard-field"><label>State *</label>
+                    <select class="form-input" [(ngModel)]="employment.currentEmployer!.state" name="ceState" required>
+                      <option value="">Select</option>
+                      <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+                    </select>
+                  </div>
+                  <div class="onboard-field"><label>ZIP Code *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.zipCode" name="ceZip" placeholder="ZIP" required /></div>
+                  <div class="onboard-field"><label>Position Held *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.positionHeld" name="cePos" placeholder="Position held" required /></div>
+                  <div class="onboard-field"><label>From (MM/YYYY) *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.fromDate" name="ceFrom" placeholder="MM/YYYY" maxlength="7" (ngModelChange)="recalcEmployerYears()" required /></div>
+                  <div class="onboard-field"><label>To (MM/YYYY)</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.toDate" name="ceTo" placeholder="MM/YYYY or Present" maxlength="7" /></div>
+                  <div class="onboard-field"><label>Contact Person *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.contactPerson" name="ceContact" placeholder="Contact person" required /></div>
+                  <div class="onboard-field"><label>Phone Number *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.phoneNumber" name="cePhone" placeholder="(555) 555-5555" required /></div>
+                  <div class="onboard-field"><label>Salary/Wage</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.salaryWage" name="ceSalary" placeholder="Optional" /></div>
+                  <div class="onboard-field"><label>Reason for Leaving *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.reasonForLeaving" name="ceReason" placeholder="Reason" required /></div>
+                </div>
+
+                <div *ngIf="needMoreEmployers && totalEmployerYears > 0" class="onboard-info-banner" style="margin-top:16px;">
+                  <span class="material-symbols-outlined">info</span>
+                  <span>You have {{ totalEmployerYears | number:'1.1-1' }} of 3 required years of employment history. Please add previous employers.</span>
+                </div>
+
+                <div *ngFor="let emp of employment.previousEmployers; let i = index" class="onboard-sub-block" style="margin-top:16px;">
+                  <div class="onboard-sub-header">
+                    <h4>Previous Employer {{ i + 1 }}</h4>
+                    <button type="button" class="btn-icon-remove" (click)="removePreviousEmployer(i)"><span class="material-symbols-outlined">close</span></button>
+                  </div>
+                  <div class="onboard-grid-2">
+                    <div class="onboard-field onboard-field-full"><label>Employer Name *</label><input class="form-input" [(ngModel)]="emp.employerName" [name]="'peEmpName'+i" placeholder="Company name" /></div>
+                    <div class="onboard-field onboard-field-full"><label>Street Address *</label><input class="form-input" [(ngModel)]="emp.streetAddress" [name]="'peStreet'+i" placeholder="Street address" /></div>
+                    <div class="onboard-field"><label>City *</label><input class="form-input" [(ngModel)]="emp.city" [name]="'peCity'+i" placeholder="City" /></div>
+                    <div class="onboard-field"><label>State *</label>
+                      <select class="form-input" [(ngModel)]="emp.state" [name]="'peState'+i">
+                        <option value="">Select</option>
+                        <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+                      </select>
+                    </div>
+                    <div class="onboard-field"><label>ZIP *</label><input class="form-input" [(ngModel)]="emp.zipCode" [name]="'peZip'+i" placeholder="ZIP" /></div>
+                    <div class="onboard-field"><label>Position Held *</label><input class="form-input" [(ngModel)]="emp.positionHeld" [name]="'pePos'+i" placeholder="Position" /></div>
+                    <div class="onboard-field"><label>From (MM/YYYY) *</label><input class="form-input" [(ngModel)]="emp.fromDate" [name]="'peFrom'+i" placeholder="MM/YYYY" maxlength="7" (ngModelChange)="recalcEmployerYears()" /></div>
+                    <div class="onboard-field"><label>To (MM/YYYY) *</label><input class="form-input" [(ngModel)]="emp.toDate" [name]="'peTo'+i" placeholder="MM/YYYY" maxlength="7" (ngModelChange)="recalcEmployerYears()" /></div>
+                    <div class="onboard-field"><label>Contact Person *</label><input class="form-input" [(ngModel)]="emp.contactPerson" [name]="'peContact'+i" placeholder="Contact" /></div>
+                    <div class="onboard-field"><label>Phone *</label><input class="form-input" [(ngModel)]="emp.phoneNumber" [name]="'pePhone'+i" placeholder="Phone" /></div>
+                    <div class="onboard-field"><label>Salary/Wage</label><input class="form-input" [(ngModel)]="emp.salaryWage" [name]="'peSalary'+i" placeholder="Optional" /></div>
+                    <div class="onboard-field"><label>Reason for Leaving *</label><input class="form-input" [(ngModel)]="emp.reasonForLeaving" [name]="'peReason'+i" placeholder="Reason" /></div>
+                    <div class="onboard-field onboard-field-full"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="emp.wasCMV" [name]="'peCMV'+i" /><span>This employer involved operating a CMV</span></label></div>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-add" style="margin-top:12px;" (click)="addPreviousEmployer()"><span class="material-symbols-outlined">add</span> Add Previous Employer</button>
+              </section>
+
+              <!-- ACCIDENT RECORD -->
+              <section class="onboard-panel onboard-panel-full">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">car_crash</span>
+                  <div>
+                    <h3 class="onboard-section-title">Accident Record</h3>
+                    <p>Provide information for any accident you were involved in during the preceding 5 years.</p>
+                  </div>
+                </div>
+                <div class="onboard-question">
+                  <label>Have you been involved in any accidents in the past 5 years?</label>
+                  <div class="onboard-radio-group">
+                    <label class="onboard-choice"><input type="radio" name="eaHasAccidents" value="yes" [checked]="employment.hasAccidents === 'yes'" (change)="onHasAccidentsChange('yes')" /><span>Yes</span></label>
+                    <label class="onboard-choice"><input type="radio" name="eaHasAccidents" value="no" [checked]="employment.hasAccidents === 'no'" (change)="onHasAccidentsChange('no')" /><span>No</span></label>
+                  </div>
+                </div>
+                <div *ngIf="employment.hasAccidents === 'yes'">
+                  <div *ngFor="let acc of employment.accidents; let i = index" class="onboard-sub-block">
+                    <div class="onboard-sub-header"><h4>Accident {{ i + 1 }}</h4><button type="button" class="btn-icon-remove" (click)="removeAccident(i)"><span class="material-symbols-outlined">close</span></button></div>
+                    <div class="onboard-grid-2">
+                      <div class="onboard-field"><label>Date *</label><input type="date" class="form-input" [(ngModel)]="acc.date" [name]="'accDate'+i" /></div>
+                      <div class="onboard-field"><label>Nature of Accident *</label>
+                        <select class="form-input" [(ngModel)]="acc.natureOfAccident" [name]="'accNature'+i">
+                          <option value="">Select</option><option value="Head-On">Head-On</option><option value="Rear-End">Rear-End</option><option value="Overturn">Overturn</option><option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <div class="onboard-field"><label>Fatalities</label><input type="number" class="form-input" [(ngModel)]="acc.fatalities" [name]="'accFatal'+i" min="0" /></div>
+                      <div class="onboard-field"><label>Injuries</label><input type="number" class="form-input" [(ngModel)]="acc.injuries" [name]="'accInj'+i" min="0" /></div>
+                      <div class="onboard-field onboard-field-full"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="acc.hazardousMaterialSpill" [name]="'accHaz'+i" /><span>Hazardous Material Spill</span></label></div>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-add" (click)="addAccident()"><span class="material-symbols-outlined">add</span> Add Another Accident</button>
+                </div>
+              </section>
+
+              <!-- TRAFFIC CONVICTIONS -->
+              <section class="onboard-panel onboard-panel-full">
+                <div class="onboard-panel-header">
+                  <span class="material-symbols-outlined">gavel</span>
+                  <div>
+                    <h3 class="onboard-section-title">Traffic Convictions</h3>
+                    <p>Motor vehicle violations for which you were convicted or pled guilty in the preceding 5 years (excluding parking).</p>
+                  </div>
+                </div>
+                <div class="onboard-question">
+                  <label>Have you had any motor vehicle violations in the past 5 years?</label>
+                  <div class="onboard-radio-group">
+                    <label class="onboard-choice"><input type="radio" name="eaHasViolations" value="yes" [checked]="employment.hasViolations === 'yes'" (change)="onHasViolationsChange('yes')" /><span>Yes</span></label>
+                    <label class="onboard-choice"><input type="radio" name="eaHasViolations" value="no" [checked]="employment.hasViolations === 'no'" (change)="onHasViolationsChange('no')" /><span>No</span></label>
+                  </div>
+                </div>
+                <div *ngIf="employment.hasViolations === 'yes'">
+                  <div *ngFor="let viol of employment.violations; let i = index" class="onboard-sub-block">
+                    <div class="onboard-sub-header"><h4>Violation {{ i + 1 }}</h4><button type="button" class="btn-icon-remove" (click)="removeViolation(i)"><span class="material-symbols-outlined">close</span></button></div>
+                    <div class="onboard-grid-2">
+                      <div class="onboard-field"><label>Location *</label><input class="form-input" [(ngModel)]="viol.location" [name]="'violLoc'+i" placeholder="City, State" /></div>
+                      <div class="onboard-field"><label>Date *</label><input type="date" class="form-input" [(ngModel)]="viol.date" [name]="'violDate'+i" /></div>
+                      <div class="onboard-field"><label>Charge *</label><input class="form-input" [(ngModel)]="viol.charge" [name]="'violCharge'+i" placeholder="Charge" /></div>
+                      <div class="onboard-field"><label>Penalty *</label><input class="form-input" [(ngModel)]="viol.penalty" [name]="'violPenalty'+i" placeholder="Penalty" /></div>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-add" (click)="addViolation()"><span class="material-symbols-outlined">add</span> Add Another Violation</button>
+                </div>
+              </section>
+
+              <!-- LICENSE HISTORY -->
+              <section class="onboard-panel onboard-panel-full">
                 <div class="onboard-panel-header">
                   <span class="material-symbols-outlined">badge</span>
                   <div>
-                    <h3 class="onboard-section-title">License Information</h3>
-                    <p>CDL information required for qualification review and compliance tracking.</p>
+                    <h3 class="onboard-section-title">Disqualifications / License History</h3>
+                    <p>List all driver licenses or permits held in the past 3 years.</p>
                   </div>
                 </div>
-                <div class="onboard-grid-2">
-                  <div class="onboard-field"><label for="eaLicState">CDL State</label><input id="eaLicState" maxlength="2" class="form-input" [(ngModel)]="employment.licenseState" name="eaLicState" placeholder="State" /></div>
-                  <div class="onboard-field"><label for="eaLicNumber">CDL Number</label><input id="eaLicNumber" class="form-input" [(ngModel)]="employment.licenseNumber" name="eaLicNumber" placeholder="License number" /></div>
-                  <div class="onboard-field"><label for="eaLicClass">CDL Class</label><input id="eaLicClass" class="form-input" [(ngModel)]="employment.licenseClass" name="eaLicClass" placeholder="Class A / B / C" /></div>
-                  <div class="onboard-field"><label for="eaLicEndorse">Endorsements</label><input id="eaLicEndorse" class="form-input" [(ngModel)]="employment.licenseEndorsements" name="eaLicEndorse" placeholder="Hazmat, Tanker, etc." /></div>
-                  <div class="onboard-field"><app-ai-date-picker inputId="eaLicExp" label="CDL Expiration" [(ngModel)]="employment.licenseExpiry" name="eaLicExp" placeholder="MM/DD/YYYY"></app-ai-date-picker></div>
+                <div *ngFor="let lic of employment.licenses; let i = index" class="onboard-sub-block">
+                  <div class="onboard-sub-header"><h4>License {{ i + 1 }}</h4><button type="button" class="btn-icon-remove" *ngIf="(employment.licenses?.length || 0) > 1" (click)="removeLicense(i)"><span class="material-symbols-outlined">close</span></button></div>
+                  <div class="onboard-grid-2">
+                    <div class="onboard-field"><label>State *</label>
+                      <select class="form-input" [(ngModel)]="lic.state" [name]="'licState'+i">
+                        <option value="">Select</option>
+                        <option *ngFor="let s of usStates" [value]="s">{{ s }}</option>
+                      </select>
+                    </div>
+                    <div class="onboard-field"><label>License No. *</label><input class="form-input" [(ngModel)]="lic.licenseNumber" [name]="'licNum'+i" placeholder="License number" /></div>
+                    <div class="onboard-field"><label>Type *</label>
+                      <select class="form-input" [(ngModel)]="lic.type" [name]="'licType'+i">
+                        <option value="">Select</option><option value="CDL-A">CDL Class A</option><option value="CDL-B">CDL Class B</option><option value="CDL-C">CDL Class C</option><option value="Non-CDL">Non-CDL</option><option value="Learner Permit">Learner Permit</option>
+                      </select>
+                    </div>
+                    <div class="onboard-field"><label>Expiration Date *</label><input type="date" class="form-input" [(ngModel)]="lic.expirationDate" [name]="'licExp'+i" /></div>
+                  </div>
                 </div>
+                <button type="button" class="btn btn-add" (click)="addLicense()"><span class="material-symbols-outlined">add</span> Add Another License</button>
               </section>
 
+              <!-- DRIVING EXPERIENCE (Questionnaire) -->
               <section class="onboard-panel onboard-panel-full">
                 <div class="onboard-panel-header">
                   <span class="material-symbols-outlined">local_shipping</span>
                   <div>
-                    <h3 class="onboard-section-title">Driving Experience Summary</h3>
-                    <p>Tell us what equipment you've handled, approximate miles, and the period of experience.</p>
+                    <h3 class="onboard-section-title">Driving Experience</h3>
+                    <p>Check YES or NO for each class of equipment. If YES, provide details.</p>
                   </div>
                 </div>
-                <div class="onboard-field">
-                  <textarea class="form-input" rows="4" [(ngModel)]="employment.drivingExperienceSummary" name="eaDrivingExperience" placeholder="List tractors, trailers, route types, mileage, and time periods."></textarea>
+                <div class="onboard-exp-row"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="employment.straightTruck!.hasExperience" name="expStraight" /><span>Straight Truck</span></label>
+                  <div *ngIf="employment.straightTruck?.hasExperience" class="onboard-grid-4">
+                    <div class="onboard-field"><label>Type</label><input class="form-input form-input-sm" [(ngModel)]="employment.straightTruck!.typeOfEquipment" name="expStraightType" placeholder="Van, Tank, Flat" /></div>
+                    <div class="onboard-field"><label>From</label><input class="form-input form-input-sm" [(ngModel)]="employment.straightTruck!.dateFrom" name="expStraightFrom" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>To</label><input class="form-input form-input-sm" [(ngModel)]="employment.straightTruck!.dateTo" name="expStraightTo" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>Miles</label><input class="form-input form-input-sm" [(ngModel)]="employment.straightTruck!.approxMiles" name="expStraightMiles" placeholder="Total" /></div>
+                  </div>
                 </div>
+                <div class="onboard-exp-row"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="employment.tractorSemiTrailer!.hasExperience" name="expTractor" /><span>Tractor and Semi-Trailer</span></label>
+                  <div *ngIf="employment.tractorSemiTrailer?.hasExperience" class="onboard-grid-4">
+                    <div class="onboard-field"><label>Type</label><input class="form-input form-input-sm" [(ngModel)]="employment.tractorSemiTrailer!.typeOfEquipment" name="expTractorType" placeholder="Van, Tank, Flat" /></div>
+                    <div class="onboard-field"><label>From</label><input class="form-input form-input-sm" [(ngModel)]="employment.tractorSemiTrailer!.dateFrom" name="expTractorFrom" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>To</label><input class="form-input form-input-sm" [(ngModel)]="employment.tractorSemiTrailer!.dateTo" name="expTractorTo" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>Miles</label><input class="form-input form-input-sm" [(ngModel)]="employment.tractorSemiTrailer!.approxMiles" name="expTractorMiles" placeholder="Total" /></div>
+                  </div>
+                </div>
+                <div class="onboard-exp-row"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="employment.tractorTwoTrailers!.hasExperience" name="expTwo" /><span>Tractor Two Trailers</span></label>
+                  <div *ngIf="employment.tractorTwoTrailers?.hasExperience" class="onboard-grid-4">
+                    <div class="onboard-field"><label>Type</label><input class="form-input form-input-sm" [(ngModel)]="employment.tractorTwoTrailers!.typeOfEquipment" name="expTwoType" placeholder="Van, Tank, Flat" /></div>
+                    <div class="onboard-field"><label>From</label><input class="form-input form-input-sm" [(ngModel)]="employment.tractorTwoTrailers!.dateFrom" name="expTwoFrom" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>To</label><input class="form-input form-input-sm" [(ngModel)]="employment.tractorTwoTrailers!.dateTo" name="expTwoTo" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>Miles</label><input class="form-input form-input-sm" [(ngModel)]="employment.tractorTwoTrailers!.approxMiles" name="expTwoMiles" placeholder="Total" /></div>
+                  </div>
+                </div>
+                <div class="onboard-exp-row"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="employment.motorcoachSchoolBus!.hasExperience" name="expBus8" /><span>Motorcoach / School Bus (8+ Passengers)</span></label>
+                  <div *ngIf="employment.motorcoachSchoolBus?.hasExperience" class="onboard-grid-4">
+                    <div class="onboard-field"><label>Type</label><input class="form-input form-input-sm" [(ngModel)]="employment.motorcoachSchoolBus!.typeOfEquipment" name="expBus8Type" /></div>
+                    <div class="onboard-field"><label>From</label><input class="form-input form-input-sm" [(ngModel)]="employment.motorcoachSchoolBus!.dateFrom" name="expBus8From" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>To</label><input class="form-input form-input-sm" [(ngModel)]="employment.motorcoachSchoolBus!.dateTo" name="expBus8To" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>Miles</label><input class="form-input form-input-sm" [(ngModel)]="employment.motorcoachSchoolBus!.approxMiles" name="expBus8Miles" /></div>
+                  </div>
+                </div>
+                <div class="onboard-exp-row"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="employment.motorcoachSchoolBusMore15!.hasExperience" name="expBus15" /><span>Motorcoach / School Bus (15+ Passengers)</span></label>
+                  <div *ngIf="employment.motorcoachSchoolBusMore15?.hasExperience" class="onboard-grid-4">
+                    <div class="onboard-field"><label>Type</label><input class="form-input form-input-sm" [(ngModel)]="employment.motorcoachSchoolBusMore15!.typeOfEquipment" name="expBus15Type" /></div>
+                    <div class="onboard-field"><label>From</label><input class="form-input form-input-sm" [(ngModel)]="employment.motorcoachSchoolBusMore15!.dateFrom" name="expBus15From" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>To</label><input class="form-input form-input-sm" [(ngModel)]="employment.motorcoachSchoolBusMore15!.dateTo" name="expBus15To" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>Miles</label><input class="form-input form-input-sm" [(ngModel)]="employment.motorcoachSchoolBusMore15!.approxMiles" name="expBus15Miles" /></div>
+                  </div>
+                </div>
+                <div class="onboard-exp-row"><label class="onboard-choice"><input type="checkbox" [(ngModel)]="employment.otherEquipment!.hasExperience" name="expOther" /><span>Other</span></label>
+                  <div *ngIf="employment.otherEquipment?.hasExperience" class="onboard-grid-4">
+                    <div class="onboard-field onboard-field-full"><label>Description</label><input class="form-input form-input-sm" [(ngModel)]="employment.otherEquipment!.description" name="expOtherDesc" placeholder="Describe equipment" /></div>
+                    <div class="onboard-field"><label>Type</label><input class="form-input form-input-sm" [(ngModel)]="employment.otherEquipment!.typeOfEquipment" name="expOtherType" /></div>
+                    <div class="onboard-field"><label>From</label><input class="form-input form-input-sm" [(ngModel)]="employment.otherEquipment!.dateFrom" name="expOtherFrom" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>To</label><input class="form-input form-input-sm" [(ngModel)]="employment.otherEquipment!.dateTo" name="expOtherTo" placeholder="MM/YYYY" /></div>
+                    <div class="onboard-field"><label>Miles</label><input class="form-input form-input-sm" [(ngModel)]="employment.otherEquipment!.approxMiles" name="expOtherMiles" /></div>
+                  </div>
+                </div>
+                <div class="onboard-field" style="margin-top:16px;"><label>List states operated in for the last five years:</label><input class="form-input" [(ngModel)]="employment.statesOperatedIn" name="eaStatesOperated" placeholder="e.g. TX, CA, NY, FL" /></div>
               </section>
 
-              <!-- 10-Year Tiered Employment History -->
-              <div class="onboard-panel-full">
-                <app-employer-history-tiered [data]="employment.employerHistory || null" (dataChange)="onEmployerHistoryChange($event)"></app-employer-history-tiered>
-              </div>
-
-              <!-- Disqualification History -->
-              <div class="onboard-panel-full">
-                <app-disqualification-history [data]="employment.disqualificationHistory || null" (dataChange)="onDisqualificationChange($event)"></app-disqualification-history>
-              </div>
-
-              <section class="onboard-panel">
+              <!-- DRUG AND ALCOHOL INFORMATION -->
+              <section class="onboard-panel onboard-panel-full">
                 <div class="onboard-panel-header">
-                  <span class="material-symbols-outlined">school</span>
+                  <span class="material-symbols-outlined">science</span>
                   <div>
-                    <h3 class="onboard-section-title">Education</h3>
-                    <p>Summarize formal education, training, and certifications relevant to the role.</p>
+                    <h3 class="onboard-section-title">Drug &amp; Alcohol Information</h3>
+                    <p>In the previous three (3) years have you:</p>
                   </div>
                 </div>
-                <div class="onboard-field"><label for="eaEdu">Education summary</label><textarea id="eaEdu" class="form-input" rows="4" [(ngModel)]="employment.educationSummary" name="eaEdu"></textarea></div>
-              </section>
-
-              <section class="onboard-panel">
-                <div class="onboard-panel-header">
-                  <span class="material-symbols-outlined">workspace_premium</span>
-                  <div>
-                    <h3 class="onboard-section-title">Other Qualifications</h3>
-                    <p>Add specialized training, safety achievements, or other relevant qualifications.</p>
-                  </div>
+                <div class="onboard-question"><label>1. Violated the Alcohol and Controlled Substance prohibitions under subpart B of 49CFR Part 382 or 49CFR Part 40? *</label>
+                  <div class="onboard-radio-group"><label class="onboard-choice"><input type="radio" name="da1" value="yes" [(ngModel)]="employment.violatedSubstanceProhibitions" /><span>Yes</span></label><label class="onboard-choice"><input type="radio" name="da1" value="no" [(ngModel)]="employment.violatedSubstanceProhibitions" /><span>No</span></label></div>
                 </div>
-                <div class="onboard-field"><label for="eaOther">Other qualifications</label><textarea id="eaOther" class="form-input" rows="4" [(ngModel)]="employment.otherQualifications" name="eaOther"></textarea></div>
+                <div class="onboard-question"><label>2. Failed to undertake or complete a rehabilitation program prescribed by a SAP pursuant to 49CFR 382.605? *</label>
+                  <div class="onboard-radio-group"><label class="onboard-choice"><input type="radio" name="da2" value="yes" [(ngModel)]="employment.failedRehabProgram" /><span>Yes</span></label><label class="onboard-choice"><input type="radio" name="da2" value="no" [(ngModel)]="employment.failedRehabProgram" /><span>No</span></label></div>
+                </div>
+                <div class="onboard-question"><label>3. Had an alcohol test result of 0.04 or higher? *</label>
+                  <div class="onboard-radio-group"><label class="onboard-choice"><input type="radio" name="da3" value="yes" [(ngModel)]="employment.alcoholTestResult04OrHigher" /><span>Yes</span></label><label class="onboard-choice"><input type="radio" name="da3" value="no" [(ngModel)]="employment.alcoholTestResult04OrHigher" /><span>No</span></label></div>
+                </div>
+                <div class="onboard-question"><label>4. Tested positive for controlled substances? *</label>
+                  <div class="onboard-radio-group"><label class="onboard-choice"><input type="radio" name="da4" value="yes" [(ngModel)]="employment.positiveControlledSubstancesTest" /><span>Yes</span></label><label class="onboard-choice"><input type="radio" name="da4" value="no" [(ngModel)]="employment.positiveControlledSubstancesTest" /><span>No</span></label></div>
+                </div>
+                <div class="onboard-question"><label>5. Refused to submit to a required alcohol or controlled substances test? *</label>
+                  <div class="onboard-radio-group"><label class="onboard-choice"><input type="radio" name="da5" value="yes" [(ngModel)]="employment.refusedRequiredTest" /><span>Yes</span></label><label class="onboard-choice"><input type="radio" name="da5" value="no" [(ngModel)]="employment.refusedRequiredTest" /><span>No</span></label></div>
+                </div>
+                <div class="onboard-question"><label>6. Had any other violation of DOT agency drug and alcohol testing regulations? *</label>
+                  <div class="onboard-radio-group"><label class="onboard-choice"><input type="radio" name="da6" value="yes" [(ngModel)]="employment.otherDOTViolation" /><span>Yes</span></label><label class="onboard-choice"><input type="radio" name="da6" value="no" [(ngModel)]="employment.otherDOTViolation" /><span>No</span></label></div>
+                </div>
               </section>
 
+              <!-- CERTIFICATION -->
               <section class="onboard-panel onboard-panel-full onboard-panel-signature">
                 <div class="onboard-panel-header">
                   <span class="material-symbols-outlined">draw</span>
                   <div>
-                    <h3 class="onboard-section-title">Acknowledgment &amp; Signature</h3>
-                    <p>Certify that your information is complete and authorize the verification steps required for driver onboarding.</p>
+                    <h3 class="onboard-section-title">Applicant Certification</h3>
+                    <p>To be read and signed by applicant.</p>
                   </div>
                 </div>
-                <p class="onboard-small">By signing below, you certify that the information provided is true and complete to the best of your knowledge and authorize FleetNeuron AI to verify your employment and safety performance history as required by 49 CFR 391.21 and 391.23.</p>
-                <div class="onboard-grid-2">
-                  <div class="onboard-field"><label for="eaSigName">Applicant signature (type full name) *</label><input id="eaSigName" class="form-input" [(ngModel)]="employment.applicationSignatureName" name="eaSigName" placeholder="Type your full legal name" /></div>
-                  <div class="onboard-field"><app-ai-date-picker inputId="eaSigDate" label="Date" [(ngModel)]="employment.applicationSignatureDate" name="eaSigDate" placeholder="MM/DD/YYYY"></app-ai-date-picker></div>
+                <div class="onboard-cert-text">
+                  <p>I authorize investigations into my personal, employment, financial and related history as necessary for employment decisions.</p>
+                  <p>I understand that false or misleading information may result in discharge.</p>
+                  <p>I understand prior employers may be contacted for safety performance history as required by 49 CFR 391.23.</p>
+                  <p>I have the right to review, correct, and rebut information provided by previous employers.</p>
+                  <p>I certify this application is true and complete to the best of my knowledge.</p>
+                </div>
+                <div class="onboard-grid-2" style="margin-top:16px;">
+                  <div class="onboard-field"><label>Applicant Printed Name *</label><input class="form-input" [(ngModel)]="employment.applicationSignatureName" name="eaSigName" placeholder="Full legal name" required /></div>
+                  <div class="onboard-field"><label>Signature *</label><input class="form-input form-input-signature" [(ngModel)]="employment.applicationSignatureName" name="eaSig" placeholder="Type your full legal name as signature" required /></div>
+                  <div class="onboard-field"><label>Date *</label><input type="date" class="form-input" [(ngModel)]="employment.applicationSignatureDate" name="eaSigDate" required /></div>
                 </div>
               </section>
             </div>

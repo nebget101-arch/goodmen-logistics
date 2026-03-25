@@ -658,3 +658,204 @@ input[type='date'].form-input {
   }
 }
 
+/* === 49 CFR Notice === */
+.onboard-notice {
+  margin: 16px 0 20px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  background: rgba(234, 179, 8, 0.06);
+}
+
+.onboard-notice-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.onboard-notice p {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #cbd5e1;
+}
+
+/* === Info Banner === */
+.onboard-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  font-size: 13px;
+  color: #93c5fd;
+  margin-bottom: 12px;
+}
+
+.onboard-info-banner .material-symbols-outlined {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* === Question Blocks === */
+.onboard-question {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.25);
+}
+
+.onboard-question:last-of-type {
+  border-bottom: none;
+}
+
+.onboard-question > label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #e2e8f0;
+  line-height: 1.45;
+}
+
+/* === Sub Blocks (dynamic entries) === */
+.onboard-sub-block {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.25);
+}
+
+.onboard-sub-block:last-of-type {
+  border-bottom: none;
+}
+
+.onboard-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.onboard-sub-header h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.onboard-sub-title {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #a5b4fc;
+}
+
+/* === Remove Button === */
+.btn-icon-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.08);
+  color: #f87171;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-icon-remove:hover {
+  background: rgba(248, 113, 113, 0.18);
+}
+
+.btn-icon-remove .material-symbols-outlined {
+  font-size: 16px;
+}
+
+/* === Add Button === */
+.btn-add {
+  background: rgba(45, 212, 191, 0.1);
+  color: #2dd4bf;
+  border: 1px dashed rgba(45, 212, 191, 0.3);
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 8px;
+  margin-top: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.btn-add:hover {
+  background: rgba(45, 212, 191, 0.16);
+}
+
+/* === 4-column grid for driving experience === */
+.onboard-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 10px;
+}
+
+@media (max-width: 767px) {
+  .onboard-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .onboard-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* === Driving Experience Rows === */
+.onboard-exp-row {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.25);
+}
+
+.onboard-exp-row:last-of-type {
+  border-bottom: none;
+}
+
+/* === Certification Text === */
+.onboard-cert-text {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.3);
+  border: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.onboard-cert-text p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+
+.onboard-cert-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* === Signature Input === */
+.form-input-signature {
+  font-family: 'Brush Script MT', 'Segoe Script', cursive, serif;
+  font-size: 18px;
+  color: #60a5fa;
+}
+
+/* === Small Input === */
+.form-input-sm {
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
