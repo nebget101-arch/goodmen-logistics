@@ -179,27 +179,12 @@ function createScrapeQueue(knex, redisUrl) {
     }
 
     try {
+      // result from scrapeAll() already uses DB column names
       await knex('fmcsa_safety_snapshots').insert({
         monitored_carrier_id: carrier.id,
         scraped_at: new Date(),
-        source: 'safer_scrape',
-        basic_overall_score: result.basic_overall_score || null,
-        unsafe_driving_score: result.unsafe_driving_score || null,
-        crash_indicator_score: result.crash_indicator_score || null,
-        hos_compliance_score: result.hos_compliance_score || null,
-        vehicle_maintenance_score: result.vehicle_maintenance_score || null,
-        controlled_substance_score: result.controlled_substance_score || null,
-        driver_fitness_score: result.driver_fitness_score || null,
-        hazmat_compliance_score: result.hazmat_compliance_score || null,
-        operating_status: result.operating_status || null,
-        out_of_service_date: result.out_of_service_date || null,
-        mc_number: result.mc_number || null,
-        power_units: result.power_units || null,
-        drivers: result.drivers || null,
-        insurance_bipd_on_file: result.insurance_bipd_on_file || null,
-        insurance_cargo_on_file: result.insurance_cargo_on_file || null,
-        insurance_bond_on_file: result.insurance_bond_on_file || null,
-        raw_json: JSON.stringify(result),
+        ...result,
+        raw_json: result.raw_json ? JSON.stringify(result.raw_json) : null,
       });
 
       // Update legal_name on the carrier if the scraper returned one
@@ -340,7 +325,10 @@ function createScrapeQueue(knex, redisUrl) {
         if (resolved) return;
         try {
           const states = await Promise.all(
-            jobIds.map((id) => queue.getJobState(id))
+            jobIds.map(async (id) => {
+              const job = await queue.getJob(id);
+              return job ? job.getState() : 'completed';
+            })
           );
           const allDone = states.every(
             (s) => s === 'completed' || s === 'failed'
