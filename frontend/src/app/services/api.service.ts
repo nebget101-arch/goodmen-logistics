@@ -806,6 +806,14 @@ export class ApiService {
     );
   }
 
+  // ── FN-240: Auto-pull employment application document ──
+  autoPullEmploymentApp(driverId: string): Observable<any> {
+    return this.http.post<any>(
+      `${this.baseUrl}/api/dqf/driver/${driverId}/auto-pull-emp-app`,
+      {}
+    );
+  }
+
   // ── Drug & Alcohol Test Management (FN-214) ──
   getDrugAlcoholTests(driverId: string): Observable<any[]> {
     return this.http.get<any[]>(

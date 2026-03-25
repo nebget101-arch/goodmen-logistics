@@ -67,7 +67,7 @@ export class DriversComponent implements OnInit, OnDestroy {
 
   /** Human-readable labels for pre-hire document types */
   prehireDocTypeLabels: Record<string, string> = {
-    employment_application_signed: 'Employment Application',
+    employment_application_signed: 'Employment Application Document',
     consent_fcra_disclosure_signed: 'FCRA Disclosure',
     consent_fcra_authorization_signed: 'FCRA Authorization',
     consent_release_of_information_signed: 'Release of Info / DQ & Safety',
@@ -122,6 +122,15 @@ export class DriversComponent implements OnInit, OnDestroy {
     lastIncidentDate: null,
     recentIncidents: []
   };
+
+  // FN-240: Label overrides for DQF requirement display names
+  dqfLabelOverrides: Record<string, string> = {
+    employment_application_submitted: 'Employment Application Document'
+  };
+
+  // FN-240: Auto-pull state
+  autoPullingEmpApp = false;
+  autoPullEmpAppError = '';
 
   // Dynamic DQF requirements
   dqfRequirements: any[] = [];
@@ -1113,6 +1122,31 @@ export class DriversComponent implements OnInit, OnDestroy {
     return docKeys.includes(key);
   }
 
+  /** FN-240: Get display label for a DQF requirement, applying frontend overrides */
+  getDqfReqLabel(req: { key: string; label: string }): string {
+    return this.dqfLabelOverrides[req.key] || req.label;
+  }
+
+  /** FN-240: Auto-pull employment application document from onboarding packet */
+  autoPullEmploymentApp(): void {
+    if (!this.selectedDriver) return;
+    this.autoPullingEmpApp = true;
+    this.autoPullEmpAppError = '';
+    this.apiService.autoPullEmploymentApp(this.selectedDriver.id).subscribe({
+      next: () => {
+        this.autoPullingEmpApp = false;
+        // Reload DQF status and pre-hire documents to reflect the completed requirement
+        this.loadDQFStatus(this.selectedDriver);
+        this.loadPrehireDocuments(this.selectedDriver.id);
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.autoPullingEmpApp = false;
+        this.autoPullEmpAppError = err?.error?.message || 'Failed to pull employment application. Please try again.';
+        console.error('Failed to pull employment application:', err);
+      }
+    });
+  }
+
   onDQFFileSelectedForKey(event: any, requirementKey: string): void {
     if (!this.canManageDrivers) return;
 
@@ -1126,7 +1160,8 @@ export class DriversComponent implements OnInit, OnDestroy {
       medical_card_back_on_file: 'medical_card_back',
       green_card_on_file: 'green_card',
       pre_employment_drug_test_completed: 'drug_test_result',
-      release_of_info_signed: 'release_of_info'
+      release_of_info_signed: 'release_of_info',
+      employment_application_submitted: 'employment_application'
     };
 
     const docType = docTypeMap[requirementKey] || requirementKey;

@@ -711,7 +711,7 @@
                 </span>
                 <!-- Requirement info -->
                 <div class="dqf-req-info">
-                  <span class="dqf-req-label">{{ req.label }}</span>
+                  <span class="dqf-req-label">{{ getDqfReqLabel(req) }}</span>
                   <span class="dqf-req-cfr" *ngIf="getCfrReference(req.key)">{{ getCfrReference(req.key) }}</span>
                   <span class="dqf-req-meta" *ngIf="req.completion_date">
                     Completed {{ req.completion_date | date:'shortDate' }}
@@ -731,8 +731,26 @@
                              accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
                     </label>
                   </ng-container>
+                  <!-- FN-240: Upload + Pull from App for employment_application_submitted -->
+                  <ng-container *ngIf="req.key === 'employment_application_submitted' && req.status !== 'complete'">
+                    <label class="dqf-upload-btn" [class.uploading]="uploadingDocuments[req.key]">
+                      <span class="material-symbols-outlined" style="font-size:15px;">upload_file</span>
+                      {{ uploadingDocuments[req.key] ? 'Uploading...' : 'Upload' }}
+                      <input type="file" (change)="onDQFFileSelectedForKey($event, req.key)"
+                             accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
+                    </label>
+                    <button class="dqf-pull-btn"
+                            [class.pulling]="autoPullingEmpApp"
+                            [disabled]="autoPullingEmpApp"
+                            (click)="autoPullEmploymentApp()">
+                      <span class="material-symbols-outlined" style="font-size:15px;"
+                            [class.dqf-spin]="autoPullingEmpApp">sync</span>
+                      {{ autoPullingEmpApp ? 'Pulling...' : 'Pull from App' }}
+                    </button>
+                    <span class="dqf-pull-error" *ngIf="autoPullEmpAppError">{{ autoPullEmpAppError }}</span>
+                  </ng-container>
                   <!-- Status buttons for manual status requirements -->
-                  <ng-container *ngIf="!isDqfDocumentReq(req.key)">
+                  <ng-container *ngIf="!isDqfDocumentReq(req.key) && req.key !== 'employment_application_submitted'">
                     <!-- FN-223: Inline date picker for clearinghouse items -->
                     <ng-container *ngIf="requiresDateCapture(req.key) && req.status !== 'complete'">
                       <input type="date" class="dqf-date-input" [(ngModel)]="dqfDateInputs[req.key]" [name]="'dqfDate_'+req.key" />
