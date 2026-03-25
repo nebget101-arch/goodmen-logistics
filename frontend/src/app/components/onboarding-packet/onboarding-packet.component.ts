@@ -210,6 +210,7 @@ export class OnboardingPacketComponent implements OnInit {
   ];
 
   ssnRaw = '';
+  ssnMasked = true;
   totalResidencyYears = 0;
   needMoreAddresses = false;
   totalEmployerYears = 0;
@@ -411,15 +412,40 @@ export class OnboardingPacketComponent implements OnInit {
     const digits = input.value.replace(/\D/g, '').slice(0, 9);
     this.ssnRaw = digits;
     this.employment.ssn = digits;
-    this.employment.ssnDisplay = this.getSsnDisplay();
+
+    // Auto-format with dashes and restore cursor position
+    const formatted = this.formatSsnWithDashes(digits);
+    const cursorPos = input.selectionStart || 0;
+    const prevLen = input.value.length;
+    input.value = this.ssnMasked ? this.getMaskedSsn(digits) : formatted;
+    const newLen = input.value.length;
+    const adjustedPos = cursorPos + (newLen - prevLen);
+    input.setSelectionRange(adjustedPos, adjustedPos);
+  }
+
+  toggleSsnVisibility(): void {
+    this.ssnMasked = !this.ssnMasked;
   }
 
   getSsnDisplay(): string {
     if (!this.ssnRaw) return '';
-    const d = this.ssnRaw;
-    if (d.length <= 3) return '*'.repeat(d.length);
-    if (d.length <= 5) return `***-${'*'.repeat(d.length - 3)}`;
-    return `***-**-${d.slice(5)}`;
+    return this.ssnMasked
+      ? this.getMaskedSsn(this.ssnRaw)
+      : this.formatSsnWithDashes(this.ssnRaw);
+  }
+
+  private formatSsnWithDashes(digits: string): string {
+    if (!digits) return '';
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+  }
+
+  private getMaskedSsn(digits: string): string {
+    if (!digits) return '';
+    if (digits.length <= 3) return '\u2022'.repeat(digits.length);
+    if (digits.length <= 5) return `\u2022\u2022\u2022-${'\u2022'.repeat(digits.length - 3)}`;
+    return `\u2022\u2022\u2022-\u2022\u2022-${digits.slice(5)}`;
   }
 
   // === Dynamic Address Logic ===

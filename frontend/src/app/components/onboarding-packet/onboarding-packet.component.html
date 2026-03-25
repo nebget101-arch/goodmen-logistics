@@ -143,7 +143,15 @@
                   <div class="onboard-field"><label>Phone *</label><input class="form-input" [(ngModel)]="employment.phone" name="eaPhone" placeholder="(555) 555-5555" required /></div>
                   <div class="onboard-field"><label>Email *</label><input type="email" class="form-input" [(ngModel)]="employment.email" name="eaEmail" placeholder="name@example.com" required /></div>
                   <div class="onboard-field"><label>Date of Birth *</label><input type="date" class="form-input" [(ngModel)]="employment.dateOfBirth" name="eaDob" required /></div>
-                  <div class="onboard-field"><label>Social Security Number *</label><input class="form-input" [value]="getSsnDisplay()" (input)="onSsnInput($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" /></div>
+                  <div class="onboard-field">
+                    <label>Social Security Number *</label>
+                    <div class="ssn-input-wrapper">
+                      <input class="form-input ssn-input" [value]="getSsnDisplay()" (input)="onSsnInput($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" inputmode="numeric" />
+                      <button type="button" class="ssn-toggle-btn" (click)="toggleSsnVisibility()" [attr.aria-label]="ssnMasked ? 'Show SSN' : 'Hide SSN'">
+                        <span class="material-symbols-outlined">{{ ssnMasked ? 'visibility' : 'visibility_off' }}</span>
+                      </button>
+                    </div>
+                  </div>
                   <div class="onboard-field"><label>Position Applied For *</label><input class="form-input" [(ngModel)]="employment.positionAppliedFor" name="eaPosition" placeholder="e.g. Company Driver" required /></div>
                   <div class="onboard-field"><label>Date of Application</label><input type="date" class="form-input" [(ngModel)]="employment.dateOfApplication" name="eaAppDate" /></div>
                 </div>
