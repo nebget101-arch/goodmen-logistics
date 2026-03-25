@@ -814,6 +814,22 @@ export class ApiService {
     );
   }
 
+  // ── FN-264: MVR report upload and data retrieval ──
+  uploadMvrReport(driverId: string, file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post(
+      `${this.baseUrl}/dqf/driver/${driverId}/mvr-upload`,
+      formData
+    );
+  }
+
+  getMvrData(driverId: string): Observable<any> {
+    return this.http.get(
+      `${this.baseUrl}/dqf/driver/${driverId}/mvr-data`
+    );
+  }
+
   // ── Drug & Alcohol Test Management (FN-214) ──
   getDrugAlcoholTests(driverId: string): Observable<any[]> {
     return this.http.get<any[]>(

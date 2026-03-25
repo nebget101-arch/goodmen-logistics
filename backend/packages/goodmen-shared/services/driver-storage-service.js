@@ -28,6 +28,7 @@ const STANDARD_FOLDERS = new Set([
   'drug-tests',
   'dqf-documents',
   'onboarding-documents',
+  'mvr-reports',
   'documents'
 ]);
 
