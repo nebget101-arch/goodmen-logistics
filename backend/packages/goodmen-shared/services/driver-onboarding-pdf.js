@@ -9,6 +9,20 @@ function safeDate(value) {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Mask a Social Security Number to show only the last 4 digits.
+ * Accepts formats like "123456789", "123-45-6789", or partial values.
+ * @param {string|number|null|undefined} ssn
+ * @returns {string} e.g. "XXX-XX-6789" or "N/A"
+ */
+function maskSSN(ssn) {
+  if (ssn === null || ssn === undefined || String(ssn).trim() === '') return 'N/A';
+  const digits = String(ssn).replace(/\D/g, '');
+  if (digits.length < 4) return 'N/A';
+  const last4 = digits.slice(-4);
+  return `XXX-XX-${last4}`;
+}
+
 const employmentTemplatePath =
   process.env.EMPLOYMENT_APPLICATION_TEMPLATE_PATH ||
   path.join(__dirname, '../assets/templates/Drivers_Employment_Application_508.pdf');
@@ -56,7 +70,7 @@ async function buildEmploymentApplicationPdf({ driver, application, signature })
   await drawText(page, application.phone || driver?.phone || '', 110, 664);
   await drawText(page, application.email || driver?.email || '', 110, 648);
   await drawText(page, safeDate(application.dateOfBirth), 420, 648);
-  await drawText(page, application.ssnLast4 || '', 420, 664);
+  await drawText(page, maskSSN(application.ssnLast4 || application.ssn), 420, 664);
   await drawText(page, application.positionAppliedFor || '', 180, 632);
   await drawText(page, safeDate(application.dateAvailable), 430, 632);
 
