@@ -167,6 +167,21 @@ export interface MvrForm {
   mvrSignatureDate?: string;
 }
 
+export interface DocumentTypeConfig {
+  key: string;
+  label: string;
+  description: string;
+  icon: string;
+  required: boolean;
+}
+
+export interface UploadedDocument {
+  id: string;
+  document_type: string;
+  file_name: string;
+  uploaded_at: string;
+}
+
 export type PacketStep =
   | 'employment_application'
   | 'consent_forms'
@@ -253,6 +268,32 @@ export class OnboardingPacketComponent implements OnInit {
     { key: 'review_submit', label: 'Review & Submit', icon: 'fact_check' }
   ];
 
+  // Document upload state (FN-250)
+  documentTypes: DocumentTypeConfig[] = [
+    { key: 'cdl_front', label: 'CDL - Front', description: 'Front of your Commercial Driver\'s License', icon: 'badge', required: true },
+    { key: 'cdl_back', label: 'CDL - Back', description: 'Back of your Commercial Driver\'s License', icon: 'badge', required: true },
+    { key: 'medical_certificate', label: 'Medical Examiner\'s Certificate', description: 'DOT Medical Card (Form MCSA-5876)', icon: 'medical_information', required: true },
+    { key: 'social_security_card', label: 'Social Security Card', description: 'Copy of your Social Security Card', icon: 'credit_card', required: true },
+    { key: 'proof_of_address', label: 'Proof of Address', description: 'Utility bill, bank statement, or lease agreement', icon: 'home', required: true },
+    { key: 'other_certification', label: 'Other Certification', description: 'Any additional certifications or endorsements', icon: 'workspace_premium', required: false }
+  ];
+  uploadedDocuments: Map<string, UploadedDocument> = new Map();
+  uploadingDocType: string | null = null;
+  deletingDocType: string | null = null;
+  uploadError: string | null = null;
+
+  get requiredDocsCount(): number {
+    return this.documentTypes.filter(d => d.required).length;
+  }
+
+  get uploadedDocsCount(): number {
+    return this.documentTypes.filter(d => d.required && this.uploadedDocuments.has(d.key)).length;
+  }
+
+  get requiredDocsComplete(): boolean {
+    return this.documentTypes.filter(d => d.required).every(d => this.uploadedDocuments.has(d.key));
+  }
+
   constructor(
     private route: ActivatedRoute,
     private apiService: ApiService,
@@ -328,11 +369,18 @@ export class OnboardingPacketComponent implements OnInit {
     this.currentStep = step;
     this.reviewMode = false;
     this.saveSuccess = null;
+    this.uploadError = null;
+    if (step === 'document_uploads') {
+      this.loadUploadedDocuments();
+    }
   }
 
   isSectionCompleted(sectionKey: string): boolean {
     if (sectionKey === 'consent_forms') {
       return this.consentKeys.every((c) => this.signedConsents.has(c.key));
+    }
+    if (sectionKey === 'document_uploads') {
+      return this.requiredDocsComplete;
     }
     return this.sections.some((s) => s.section_key === sectionKey && s.status === 'completed');
   }
@@ -342,6 +390,12 @@ export class OnboardingPacketComponent implements OnInit {
       const signed = this.consentKeys.filter((c) => this.signedConsents.has(c.key)).length;
       if (signed === this.consentKeys.length) return 'Completed';
       if (signed > 0) return `${signed}/${this.consentKeys.length} signed`;
+      return 'Not started';
+    }
+    if (sectionKey === 'document_uploads') {
+      const uploaded = this.uploadedDocsCount;
+      if (uploaded === this.requiredDocsCount) return 'Completed';
+      if (uploaded > 0) return `${uploaded}/${this.requiredDocsCount} uploaded`;
       return 'Not started';
     }
     const section = this.sections.find((s) => s.section_key === sectionKey);
@@ -384,7 +438,8 @@ export class OnboardingPacketComponent implements OnInit {
   get packetReady(): boolean {
     return (
       this.isSectionCompleted('employment_application') &&
-      this.allConsentsSigned
+      this.allConsentsSigned &&
+      this.requiredDocsComplete
     );
   }
 
@@ -455,6 +510,70 @@ export class OnboardingPacketComponent implements OnInit {
 
   submitFinalPacket(): void {
     this.saveSuccess = 'Final packet review submission is not yet implemented. All sections are tracked individually.';
+  }
+
+  // === Document Uploads (FN-250) ===
+  loadUploadedDocuments(): void {
+    if (!this.packetId || !this.token) return;
+    this.apiService.getOnboardingDocuments(this.packetId, this.token).subscribe({
+      next: (res) => {
+        this.uploadedDocuments = new Map();
+        for (const doc of (res.documents || [])) {
+          this.uploadedDocuments.set(doc.document_type, doc);
+        }
+      },
+      error: () => {
+        // Silently fail — documents list may not exist yet
+      }
+    });
+  }
+
+  onDocumentFileSelected(event: Event, docType: string): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !this.packetId || !this.token) return;
+
+    // Validate file size (10 MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      this.uploadError = 'File is too large. Maximum size is 10 MB.';
+      input.value = '';
+      return;
+    }
+
+    this.uploadError = null;
+    this.uploadingDocType = docType;
+    this.apiService.uploadOnboardingDocument(this.packetId, docType, file, this.token).subscribe({
+      next: (res) => {
+        this.uploadingDocType = null;
+        if (res.document) {
+          this.uploadedDocuments = new Map(this.uploadedDocuments);
+          this.uploadedDocuments.set(docType, res.document);
+        }
+        input.value = '';
+      },
+      error: (err) => {
+        this.uploadingDocType = null;
+        this.uploadError = err?.error?.message || 'Failed to upload document. Please try again.';
+        input.value = '';
+      }
+    });
+  }
+
+  deleteUploadedDocument(docType: string, documentId: string): void {
+    if (!this.packetId || !this.token) return;
+    this.deletingDocType = docType;
+    this.uploadError = null;
+    this.apiService.deleteOnboardingDocument(this.packetId, documentId, this.token).subscribe({
+      next: () => {
+        this.deletingDocType = null;
+        this.uploadedDocuments = new Map(this.uploadedDocuments);
+        this.uploadedDocuments.delete(docType);
+      },
+      error: (err) => {
+        this.deletingDocType = null;
+        this.uploadError = err?.error?.message || 'Failed to delete document. Please try again.';
+      }
+    });
   }
 
   // === SSN Masking ===

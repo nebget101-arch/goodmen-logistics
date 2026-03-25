@@ -695,31 +695,104 @@
             </div>
           </div>
 
-          <!-- STEP 3: DOCUMENT UPLOADS -->
+          <!-- STEP 3: DOCUMENT UPLOADS (FN-250) -->
           <div *ngIf="currentStep === 'document_uploads'">
             <div class="onboard-form-header">
               <div>
                 <div class="onboard-form-kicker">Step 3</div>
                 <h2>Document Uploads</h2>
-                <p class="onboard-subtitle">Upload any required documents such as CDL copies, medical cards, or other certifications.</p>
+                <p class="onboard-subtitle">Upload photos or scans of required documents. You can use your phone camera to capture them directly.</p>
               </div>
-              <div class="onboard-form-badge">
-                <span class="material-symbols-outlined">upload_file</span>
-                <span>Documents</span>
+              <div class="onboard-form-badge" [class.onboard-form-badge-alt]="!requiredDocsComplete">
+                <span class="material-symbols-outlined">{{ requiredDocsComplete ? 'check_circle' : 'upload_file' }}</span>
+                <span>{{ uploadedDocsCount }} of {{ requiredDocsCount }} required</span>
               </div>
             </div>
 
-            <div class="onboard-form-panel-grid">
-              <section class="onboard-panel onboard-panel-full">
-                <div class="onboard-panel-header">
-                  <span class="material-symbols-outlined">construction</span>
-                  <div>
-                    <h3 class="onboard-section-title">Coming Soon</h3>
-                    <p>Document upload functionality will be available in a future update.</p>
+            <!-- Upload progress bar -->
+            <div class="doc-upload-progress">
+              <div class="doc-upload-progress-bar">
+                <div class="doc-upload-progress-fill"
+                     [style.width.%]="requiredDocsCount > 0 ? (uploadedDocsCount / requiredDocsCount) * 100 : 0">
+                </div>
+              </div>
+              <span class="doc-upload-progress-label">{{ uploadedDocsCount }} of {{ requiredDocsCount }} required documents uploaded</span>
+            </div>
+
+            <!-- Upload error message -->
+            <div *ngIf="uploadError" class="doc-upload-error">
+              <span class="material-symbols-outlined">error</span>
+              <span>{{ uploadError }}</span>
+              <button class="doc-upload-error-dismiss" type="button" (click)="uploadError = null">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <!-- Document cards grid -->
+            <div class="doc-upload-grid">
+              <div *ngFor="let docType of documentTypes"
+                   class="doc-upload-card"
+                   [class.doc-upload-card-uploaded]="uploadedDocuments.has(docType.key)"
+                   [class.doc-upload-card-uploading]="uploadingDocType === docType.key">
+
+                <!-- Card header -->
+                <div class="doc-upload-card-header">
+                  <span class="material-symbols-outlined doc-upload-card-icon"
+                        [class.doc-upload-card-icon-uploaded]="uploadedDocuments.has(docType.key)">
+                    {{ docType.icon }}
+                  </span>
+                  <div class="doc-upload-card-info">
+                    <h4 class="doc-upload-card-label">{{ docType.label }}</h4>
+                    <p class="doc-upload-card-desc">{{ docType.description }}</p>
+                  </div>
+                  <span *ngIf="docType.required && !uploadedDocuments.has(docType.key)"
+                        class="doc-upload-badge doc-upload-badge-required">Required</span>
+                  <span *ngIf="!docType.required && !uploadedDocuments.has(docType.key)"
+                        class="doc-upload-badge doc-upload-badge-optional">Optional</span>
+                  <span *ngIf="uploadedDocuments.has(docType.key)"
+                        class="doc-upload-badge doc-upload-badge-uploaded">
+                    <span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span>
+                    Uploaded
+                  </span>
+                </div>
+
+                <!-- Upload area (not yet uploaded) -->
+                <div *ngIf="!uploadedDocuments.has(docType.key)" class="doc-upload-card-body">
+                  <label class="doc-upload-btn"
+                         [class.doc-upload-btn-disabled]="uploadingDocType !== null">
+                    <span class="material-symbols-outlined">photo_camera</span>
+                    <span>{{ uploadingDocType === docType.key ? 'Uploading...' : 'Take Photo or Choose File' }}</span>
+                    <input type="file"
+                           accept="image/*,application/pdf"
+                           capture="environment"
+                           class="doc-upload-input"
+                           [disabled]="uploadingDocType !== null"
+                           (change)="onDocumentFileSelected($event, docType.key)" />
+                  </label>
+                  <span class="doc-upload-hint">JPG, PNG, or PDF up to 10 MB</span>
+                  <!-- Spinner overlay while uploading this specific doc -->
+                  <div *ngIf="uploadingDocType === docType.key" class="doc-upload-spinner">
+                    <div class="doc-upload-spinner-ring"></div>
                   </div>
                 </div>
-                <p class="onboard-small">This step will allow you to upload CDL copies, medical examiner certificates, and other supporting documentation required for your driver qualification file.</p>
-              </section>
+
+                <!-- Uploaded state -->
+                <div *ngIf="uploadedDocuments.has(docType.key)" class="doc-upload-card-body doc-upload-card-body-uploaded">
+                  <div class="doc-upload-file-info">
+                    <span class="material-symbols-outlined" style="color: #4ade80; font-size: 20px;">description</span>
+                    <div class="doc-upload-file-details">
+                      <span class="doc-upload-file-name">{{ uploadedDocuments.get(docType.key)?.file_name }}</span>
+                      <span class="doc-upload-file-date">Uploaded {{ uploadedDocuments.get(docType.key)?.uploaded_at | date:'short' }}</span>
+                    </div>
+                  </div>
+                  <button class="doc-upload-delete-btn"
+                          type="button"
+                          [disabled]="deletingDocType === docType.key"
+                          (click)="deleteUploadedDocument(docType.key, uploadedDocuments.get(docType.key)?.id || '')">
+                    <span class="material-symbols-outlined">{{ deletingDocType === docType.key ? 'hourglass_top' : 'close' }}</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div class="onboard-actions onboard-actions-split">
@@ -727,7 +800,9 @@
                 <span class="material-symbols-outlined">arrow_back</span>
                 Back to Consent Forms
               </button>
-              <button class="btn btn-primary" type="button" (click)="setStep('review_submit')">
+              <button class="btn btn-primary" type="button"
+                      [disabled]="!requiredDocsComplete"
+                      (click)="setStep('review_submit')">
                 <span class="material-symbols-outlined">arrow_forward</span>
                 Continue to Review
               </button>
@@ -793,9 +868,23 @@
                   <span class="material-symbols-outlined">upload_file</span>
                   <div>
                     <h3 class="onboard-section-title">Document Uploads</h3>
-                    <p>{{ isSectionCompleted('document_uploads') ? 'Completed' : 'Coming soon' }}</p>
+                    <p>{{ getSectionStatus('document_uploads') }}</p>
                   </div>
                 </div>
+                <div class="review-consent-list">
+                  <div *ngFor="let d of documentTypes" class="review-consent-item">
+                    <span class="material-symbols-outlined"
+                          [class.review-check]="uploadedDocuments.has(d.key)"
+                          [class.review-pending]="!uploadedDocuments.has(d.key)">
+                      {{ uploadedDocuments.has(d.key) ? 'check_circle' : 'radio_button_unchecked' }}
+                    </span>
+                    <span>{{ d.label }}{{ d.required ? '' : ' (optional)' }}</span>
+                  </div>
+                </div>
+                <button class="btn btn-secondary review-edit-btn" type="button"
+                        (click)="setStep('document_uploads')" *ngIf="!requiredDocsComplete">
+                  <span class="material-symbols-outlined">edit</span> Upload Documents
+                </button>
               </section>
             </div>
 

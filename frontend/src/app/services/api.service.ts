@@ -911,6 +911,47 @@ export class ApiService {
     );
   }
 
+  // Public onboarding document upload (FN-250)
+  uploadOnboardingDocument(
+    packetId: string,
+    docType: string,
+    file: File,
+    token: string
+  ): Observable<{ document: { id: string; document_type: string; file_name: string; uploaded_at: string } }> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('documentType', docType);
+    return this.http.post<{ document: { id: string; document_type: string; file_name: string; uploaded_at: string } }>(
+      `${publicBase}/${encodeURIComponent(packetId)}/upload-document`,
+      formData,
+      { params: { token } }
+    );
+  }
+
+  getOnboardingDocuments(
+    packetId: string,
+    token: string
+  ): Observable<{ documents: { id: string; document_type: string; file_name: string; uploaded_at: string }[] }> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    return this.http.get<{ documents: { id: string; document_type: string; file_name: string; uploaded_at: string }[] }>(
+      `${publicBase}/${encodeURIComponent(packetId)}/documents`,
+      { params: { token } }
+    );
+  }
+
+  deleteOnboardingDocument(
+    packetId: string,
+    documentId: string,
+    token: string
+  ): Observable<{ success: boolean }> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    return this.http.delete<{ success: boolean }>(
+      `${publicBase}/${encodeURIComponent(packetId)}/documents/${encodeURIComponent(documentId)}`,
+      { params: { token } }
+    );
+  }
+
   updateCommunicationPreferences(payload: {
     email?: string;
     phone?: string;
