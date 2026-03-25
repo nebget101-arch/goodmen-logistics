@@ -4,7 +4,7 @@ const multer = require('multer');
 const auth = require('./auth-middleware');
 const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
-const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange } = require('../services/dqf-service');
+const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange, computeWarningItems } = require('../services/dqf-service');
 const { createDriverDocument } = require('../services/driver-storage-service');
 const { generateEmploymentApplicationPdf } = require('../services/pdf.service');
 
@@ -69,6 +69,69 @@ router.get('/', async (req, res) => {
   }
 });
 
+// FN-261: GET /api/dqf/driver/:driverId/status
+// Returns DQF completeness with category-aware breakdown and warning items.
+router.get('/driver/:driverId/status', async (req, res) => {
+  const start = Date.now();
+  try {
+    const { driverId } = req.params;
+
+    const driverRes = await query(
+      `SELECT id, operating_entity_id, hire_date, dqf_completeness
+       FROM drivers WHERE id = $1`,
+      [driverId]
+    );
+    if (driverRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    const driver = driverRes.rows[0];
+    if (req.context?.operatingEntityId && driver.operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // Fetch all requirements with their category and exclude flag
+    const reqRes = await query(
+      `SELECT
+         r.key,
+         r.label,
+         r.weight,
+         r.category,
+         r.exclude_from_dqf,
+         COALESCE(s.status, 'missing') AS status,
+         s.evidence_document_id,
+         s.completion_date,
+         s.last_updated_at
+       FROM dqf_requirements r
+       LEFT JOIN dqf_driver_status s
+         ON s.requirement_key = r.key
+        AND s.driver_id = $1
+       ORDER BY r.category, r.key`,
+      [driverId]
+    );
+
+    // Compute warning items
+    const warningItems = await computeWarningItems(driverId);
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('GET', `/api/dqf/driver/${driverId}/status`, 200, duration);
+
+    return res.json({
+      driverId,
+      hire_date: driver.hire_date,
+      completeness: driver.dqf_completeness,
+      requirements: reqRes.rows,
+      warning_items: warningItems
+    });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('dqf_driver_status_failed', error, { driverId: req.params.driverId });
+    dtLogger.trackRequest('GET', `/api/dqf/driver/${req.params.driverId}/status`, 500, duration);
+    // eslint-disable-next-line no-console
+    console.error('Error in GET /api/dqf/driver/:driverId/status', error);
+    return res.status(500).json({ message: 'Failed to load DQF status' });
+  }
+});
+
 // GET /api/dqf/drivers/:driverId
 router.get('/drivers/:driverId', async (req, res) => {
   const start = Date.now();
@@ -109,6 +172,8 @@ router.get('/drivers/:driverId', async (req, res) => {
          r.key,
          r.label,
          r.weight,
+         r.category,
+         r.exclude_from_dqf,
          COALESCE(s.status, 'missing') AS status,
          s.evidence_document_id,
          s.completion_date,
@@ -117,7 +182,7 @@ router.get('/drivers/:driverId', async (req, res) => {
        LEFT JOIN dqf_driver_status s
          ON s.requirement_key = r.key
         AND s.driver_id = $1
-       ORDER BY r.key`,
+       ORDER BY r.category, r.key`,
       [driverId]
     );
 
