@@ -1,4 +1,6 @@
 const { query } = require('../internal/db');
+const r2 = require('../storage/r2-storage');
+const dtLogger = require('../utils/logger');
 
 async function storeDocumentBytes(buffer) {
   const result = await query(
@@ -50,6 +52,21 @@ async function createDriverDocument({
   const blobId = await storeDocumentBytes(bytes);
   const storageKey = buildStorageKey(driverId, folder, fileName);
 
+  // FN-260: Upload to R2 for cloud storage alongside DB blob
+  let storageMode = 'db';
+  try {
+    await r2.uploadBuffer({
+      buffer: bytes,
+      contentType: mimeType,
+      key: storageKey
+    });
+    storageMode = 'r2';
+    dtLogger.info('r2_document_uploaded', { driverId, docType, storageKey, size: Buffer.byteLength(bytes) });
+  } catch (r2Err) {
+    // Non-fatal: fall back to DB-only storage if R2 is unavailable
+    dtLogger.warn('r2_upload_fallback_to_db', { driverId, docType, error: r2Err?.message });
+  }
+
   const result = await query(
     `INSERT INTO driver_documents (
       driver_id,
@@ -62,7 +79,7 @@ async function createDriverDocument({
       storage_key,
       blob_id
     )
-    VALUES ($1, $2, $3, $4, $5, $6, 'db', $7, $8)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING *`,
     [
       driverId,
@@ -71,6 +88,7 @@ async function createDriverDocument({
       fileName,
       mimeType,
       Buffer.byteLength(bytes),
+      storageMode,
       storageKey,
       blobId
     ]
