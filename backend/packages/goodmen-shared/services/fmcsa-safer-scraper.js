@@ -87,9 +87,251 @@ function parseDate(text) {
   }
 }
 
+/**
+ * Parse a percentage string like "23%" or "23 %" into a number.
+ * Returns null on failure.
+ */
+function parsePercent(text) {
+  if (!text) return null;
+  const match = text.match(/([\d.]+)\s*%/);
+  if (match) {
+    const n = parseFloat(match[1]);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // scrapeCompanySnapshot
 // ---------------------------------------------------------------------------
+
+/**
+ * Build a label->value map from a SAFER-style HTML page.
+ *
+ * The SAFER snapshot uses nested tables where labels are inside <a> tags
+ * (linking to saferhelp.aspx) within <td> cells. The value is in the
+ * adjacent <td>. We normalise label text to lowercase, strip colons and
+ * extra whitespace, so lookups are case-insensitive.
+ */
+function buildLabelMap($) {
+  const labelMap = {};
+
+  $('tr').each((_i, row) => {
+    const cells = $(row).children('td, th');
+    if (cells.length < 2) return;
+
+    for (let c = 0; c < cells.length - 1; c++) {
+      const rawLabel = clean($(cells[c]).text());
+      if (!rawLabel) continue;
+
+      // Normalise: lowercase, strip trailing colon, collapse whitespace
+      const key = rawLabel
+        .toLowerCase()
+        .replace(/:+$/, '')
+        .replace(/[^a-z0-9 /()-]/g, '')
+        .trim();
+
+      if (!key) continue;
+
+      const valueText = clean($(cells[c + 1]).text());
+      // Only store the first occurrence of each label
+      if (valueText && !labelMap[key]) {
+        labelMap[key] = valueText;
+      }
+    }
+  });
+
+  return labelMap;
+}
+
+/**
+ * Look up a value by one or more label fragments (case-insensitive, partial match).
+ */
+function findInMap(labelMap, ...fragments) {
+  for (const frag of fragments) {
+    const lower = frag.toLowerCase().replace(/:+$/, '').trim();
+    for (const [key, val] of Object.entries(labelMap)) {
+      if (key.includes(lower)) return val;
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse the inspection table from the SAFER snapshot page.
+ *
+ * Table structure:
+ *   Header row: "Inspection Type" | "Vehicle" | "Driver" | "Hazmat" | "IEP"
+ *   Row "Inspections": count values
+ *   Row "Out of Service": count values
+ *   Row "Out of Service %": percentage values
+ *   Row "Nat'l Average %": percentage values
+ *
+ * We locate the table by finding a header cell containing "Inspection Type",
+ * then parse subsequent rows by their first-cell text.
+ */
+function parseInspectionTable($) {
+  const result = {
+    vehicle_inspections: null,
+    driver_inspections: null,
+    hazmat_inspections: null,
+    iep_inspections: null,
+    vehicle_oos: null,
+    driver_oos: null,
+    hazmat_oos: null,
+    vehicle_oos_rate: null,
+    driver_oos_rate: null,
+    hazmat_oos_rate: null,
+    vehicle_oos_national_avg: null,
+    driver_oos_national_avg: null,
+    hazmat_oos_national_avg: null,
+  };
+
+  // Find the header row containing "Inspection Type"
+  let headerRow = null;
+  $('tr').each((_i, row) => {
+    if (headerRow) return;
+    const text = $(row).text().toLowerCase();
+    if (text.includes('inspection type')) {
+      headerRow = row;
+    }
+  });
+
+  if (!headerRow) return result;
+
+  // Determine column indices from the header row
+  // Expected: "Inspection Type" | "Vehicle" | "Driver" | "Hazmat" | "IEP"
+  const headerCells = $(headerRow).find('td, th');
+  const colIndex = { vehicle: -1, driver: -1, hazmat: -1, iep: -1 };
+  headerCells.each((i, cell) => {
+    const t = clean($(cell).text());
+    if (!t) return;
+    const lower = t.toLowerCase();
+    if (lower.includes('vehicle')) colIndex.vehicle = i;
+    else if (lower.includes('driver')) colIndex.driver = i;
+    else if (lower.includes('hazmat')) colIndex.hazmat = i;
+    else if (lower.includes('iep')) colIndex.iep = i;
+  });
+
+  // Walk sibling rows after the header
+  const allRows = $(headerRow).parent().children('tr');
+  let headerFound = false;
+  allRows.each((_i, row) => {
+    if (row === headerRow) {
+      headerFound = true;
+      return;
+    }
+    if (!headerFound) return;
+
+    const cells = $(row).find('td, th');
+    if (cells.length < 2) return;
+
+    const rowLabel = (clean($(cells[0]).text()) || '').toLowerCase();
+
+    const cellVal = (idx) => {
+      if (idx < 0 || idx >= cells.length) return null;
+      return clean($(cells[idx]).text());
+    };
+
+    if (rowLabel.includes('out of service') && rowLabel.includes('%')) {
+      // "Out of Service %" row
+      result.vehicle_oos_rate = parsePercent(cellVal(colIndex.vehicle));
+      result.driver_oos_rate = parsePercent(cellVal(colIndex.driver));
+      result.hazmat_oos_rate = parsePercent(cellVal(colIndex.hazmat));
+    } else if (rowLabel.includes('nat') && rowLabel.includes('average')) {
+      // "Nat'l Average %" row
+      result.vehicle_oos_national_avg = parsePercent(cellVal(colIndex.vehicle));
+      result.driver_oos_national_avg = parsePercent(cellVal(colIndex.driver));
+      result.hazmat_oos_national_avg = parsePercent(cellVal(colIndex.hazmat));
+    } else if (rowLabel.includes('out of service')) {
+      // "Out of Service" count row (must check AFTER the % variant)
+      result.vehicle_oos = parseNum(cellVal(colIndex.vehicle));
+      result.driver_oos = parseNum(cellVal(colIndex.driver));
+      result.hazmat_oos = parseNum(cellVal(colIndex.hazmat));
+    } else if (
+      rowLabel.includes('inspection') &&
+      !rowLabel.includes('type')
+    ) {
+      // "Inspections" count row
+      result.vehicle_inspections = parseNum(cellVal(colIndex.vehicle));
+      result.driver_inspections = parseNum(cellVal(colIndex.driver));
+      result.hazmat_inspections = parseNum(cellVal(colIndex.hazmat));
+      result.iep_inspections = parseNum(cellVal(colIndex.iep));
+    }
+  });
+
+  return result;
+}
+
+/**
+ * Parse the crash table from the SAFER snapshot page.
+ *
+ * Table structure:
+ *   Header row: "Type" | "Fatal" | "Injury" | "Tow" | "Total"
+ *   Row "Crashes": count values
+ */
+function parseCrashTable($) {
+  const result = {
+    crashes_fatal: null,
+    crashes_injury: null,
+    crashes_tow: null,
+    crashes_total: null,
+  };
+
+  // Find header row with "Fatal" column (the crash table header)
+  let headerRow = null;
+  $('tr').each((_i, row) => {
+    if (headerRow) return;
+    const text = $(row).text().toLowerCase();
+    // Crash table header has "Fatal" and "Injury" and "Tow"
+    if (text.includes('fatal') && text.includes('injury') && text.includes('tow')) {
+      headerRow = row;
+    }
+  });
+
+  if (!headerRow) return result;
+
+  // Determine column indices
+  const headerCells = $(headerRow).find('td, th');
+  const colIndex = { fatal: -1, injury: -1, tow: -1, total: -1 };
+  headerCells.each((i, cell) => {
+    const t = (clean($(cell).text()) || '').toLowerCase();
+    if (t.includes('fatal')) colIndex.fatal = i;
+    else if (t.includes('injury')) colIndex.injury = i;
+    else if (t.includes('tow')) colIndex.tow = i;
+    else if (t.includes('total')) colIndex.total = i;
+  });
+
+  // Walk sibling rows after the header
+  const allRows = $(headerRow).parent().children('tr');
+  let headerFound = false;
+  allRows.each((_i, row) => {
+    if (row === headerRow) {
+      headerFound = true;
+      return;
+    }
+    if (!headerFound) return;
+
+    const cells = $(row).find('td, th');
+    if (cells.length < 2) return;
+
+    const rowLabel = (clean($(cells[0]).text()) || '').toLowerCase();
+
+    const cellVal = (idx) => {
+      if (idx < 0 || idx >= cells.length) return null;
+      return clean($(cells[idx]).text());
+    };
+
+    if (rowLabel.includes('crash')) {
+      result.crashes_fatal = parseNum(cellVal(colIndex.fatal));
+      result.crashes_injury = parseNum(cellVal(colIndex.injury));
+      result.crashes_tow = parseNum(cellVal(colIndex.tow));
+      result.crashes_total = parseNum(cellVal(colIndex.total));
+    }
+  });
+
+  return result;
+}
 
 /**
  * Scrape the FMCSA SAFER Company Snapshot page for the given DOT number.
@@ -113,154 +355,140 @@ async function scrapeCompanySnapshot(dotNumber) {
     bodyText.includes('Record not found')
   ) {
     // Log first 300 chars for debugging
-    console.error(`${LOG_PREFIX} No carrier found for DOT ${dotNumber} — page snippet: ${bodyText.substring(0, 300).replace(/\s+/g, ' ')}`);
+    console.error(
+      `${LOG_PREFIX} No carrier found for DOT ${dotNumber} — page snippet: ${bodyText.substring(0, 300).replace(/\s+/g, ' ')}`
+    );
     return null;
   }
 
   // If we got HTML but can't find any table data, log for debugging
   const tableCount = $('tr').length;
   if (tableCount < 3) {
-    console.warn(`${LOG_PREFIX} DOT ${dotNumber}: page loaded but only ${tableCount} table rows found — possible CAPTCHA or block. Snippet: ${bodyText.substring(0, 200).replace(/\s+/g, ' ')}`);
+    console.warn(
+      `${LOG_PREFIX} DOT ${dotNumber}: page loaded but only ${tableCount} table rows found — possible CAPTCHA or block. Snippet: ${bodyText.substring(0, 200).replace(/\s+/g, ' ')}`
+    );
   }
 
-  // Build a label -> value map from all table cells.
-  // The SAFER snapshot page uses <th> or <td> for labels and the next <td>
-  // for values.  We walk every <tr> and pair up cells.
-  const labelMap = {};
-
-  $('tr').each((_i, row) => {
-    const cells = $(row).children('td, th');
-    if (cells.length < 2) return;
-
-    // Iterate through cell pairs
-    for (let c = 0; c < cells.length - 1; c++) {
-      const labelText = clean($(cells[c]).text());
-      if (!labelText) continue;
-
-      // Normalise the label for lookup
-      const key = labelText
-        .toUpperCase()
-        .replace(/[^A-Z0-9 ]/g, '')
-        .trim();
-
-      const valueText = clean($(cells[c + 1]).text());
-      if (key && valueText && !labelMap[key]) {
-        labelMap[key] = valueText;
-      }
-    }
-  });
-
-  // Helper to look up a value by a set of possible label fragments
-  function find(...fragments) {
-    for (const frag of fragments) {
-      const upper = frag.toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim();
-      for (const [key, val] of Object.entries(labelMap)) {
-        if (key.includes(upper)) return val;
-      }
-    }
-    return null;
-  }
+  // Build normalised label->value map
+  const labelMap = buildLabelMap($);
+  const find = (...frags) => findInMap(labelMap, ...frags);
 
   // --- Extract fields ---
   const data = {
-    entity_type: find('ENTITY TYPE'),
-    operating_status: find('OPERATING STATUS'),
-    legal_name: find('LEGAL NAME'),
-    dba_name: find('DBA NAME', 'DOING BUSINESS AS'),
-    physical_address: find('PHYSICAL ADDRESS'),
-    phone: find('PHONE'),
-    dot_number: find('DOT NUMBER', 'USDOT NUMBER', 'US DOT'),
-    mc_mx_ff_numbers: find('MC/MX/FF', 'MCMXFF', 'MC MX FF'),
-    total_power_units: parseNum(find('POWER UNITS')),
-    total_drivers: parseNum(find('TOTAL DRIVERS', 'DRIVERS')),
-    mcs150_mileage_raw: find('MCS150 MILEAGE', 'MCS-150 MILEAGE'),
-    safety_rating: find('SAFETY RATING', 'SAFETY RATING'),
-    safety_rating_date: parseDate(find('SAFETY RATING DATE', 'RATING DATE')),
-    out_of_service_date: parseDate(find('OUT OF SERVICE DATE', 'OOS DATE')),
+    entity_type: find('entity type'),
+    usdot_status: find('usdot status'),
+    operating_status: find('operating authority status'),
+    legal_name: find('legal name'),
+    dba_name: find('dba name'),
+    physical_address: find('physical address'),
+    phone: find('phone'),
+    dot_number: find('usdot number'),
+    mc_mx_ff_numbers: find('mc/mx/ff number'),
+    total_power_units: parseNum(find('power units')),
+    total_drivers: parseNum(find('drivers')),
+    out_of_service_date: parseDate(find('out of service date')),
+    safety_rating: find('safety rating'),
+    safety_rating_date: parseDate(find('safety rating date', 'rating date')),
   };
 
-  // MCS-150 mileage field often looks like "1,234,567 (Year: 2023)"
+  // MCS-150 mileage field: "418,586 (2023)"
+  const mileageRaw = find('mcs-150 mileage', 'mcs150 mileage');
   data.mcs150_mileage = null;
   data.mcs150_mileage_year = null;
-  if (data.mcs150_mileage_raw) {
-    const mileageMatch = data.mcs150_mileage_raw.match(
-      /([0-9][0-9,]*)\s*\(?\s*(?:Year)?:?\s*(\d{4})?\s*\)?/i
+  if (mileageRaw) {
+    const mileageMatch = mileageRaw.match(
+      /([0-9][0-9,]*)\s*\(?\s*(\d{4})\s*\)?/
     );
     if (mileageMatch) {
       data.mcs150_mileage = parseNum(mileageMatch[1]);
-      data.mcs150_mileage_year = mileageMatch[2]
-        ? Number(mileageMatch[2])
-        : null;
+      data.mcs150_mileage_year = Number(mileageMatch[2]) || null;
     }
   }
 
-  // --- Authority types ---
-  // The SAFER page shows authority rows with type and status columns.
-  // We look for rows containing Common, Contract, Broker keywords.
-  data.authority_common = null;
-  data.authority_contract = null;
-  data.authority_broker = null;
+  // --- Inspection table ---
+  const inspections = parseInspectionTable($);
+  Object.assign(data, inspections);
 
+  // --- Crash table ---
+  const crashes = parseCrashTable($);
+  Object.assign(data, crashes);
+
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// scrapeLicensingInsurance
+// ---------------------------------------------------------------------------
+
+/**
+ * Scrape the FMCSA Licensing & Insurance (LI) page for authority and
+ * insurance information. This is a SEPARATE page from the SAFER snapshot.
+ */
+async function scrapeLicensingInsurance(dotNumber) {
+  const url = `https://li-public.fmcsa.dot.gov/LIVIEW/pkg_carrquery.prc_carrlist?n_dotno=${encodeURIComponent(dotNumber)}`;
+
+  const html = await fetchWithRetry(url);
+  if (!html) return null;
+
+  const $ = cheerio.load(html);
+
+  const result = {
+    authority_common: null,
+    authority_contract: null,
+    authority_broker: null,
+    bipd_insurance_required: null,
+    bipd_insurance_on_file: null,
+    cargo_insurance_required: null,
+    cargo_insurance_on_file: null,
+    bond_insurance_required: null,
+    bond_insurance_on_file: null,
+  };
+
+  // --- Authority types ---
+  // The LI page shows authority rows with type and status columns.
   $('tr').each((_i, row) => {
-    const rowText = $(row).text();
     const cells = $(row).children('td, th');
     if (cells.length < 2) return;
 
-    const firstCell = clean($(cells[0]).text()) || '';
+    const firstCell = (clean($(cells[0]).text()) || '').toLowerCase();
     const secondCell = clean($(cells[1]).text()) || '';
-    const upper = firstCell.toUpperCase();
 
-    if (upper.includes('COMMON')) {
-      data.authority_common = secondCell || find('COMMON AUTHORITY');
-    } else if (upper.includes('CONTRACT')) {
-      data.authority_contract = secondCell || find('CONTRACT AUTHORITY');
-    } else if (upper.includes('BROKER')) {
-      data.authority_broker = secondCell || find('BROKER AUTHORITY');
+    if (firstCell.includes('common')) {
+      result.authority_common = secondCell;
+    } else if (firstCell.includes('contract')) {
+      result.authority_contract = secondCell;
+    } else if (firstCell.includes('broker')) {
+      result.authority_broker = secondCell;
     }
   });
 
-  // Fallback: try label map if authority fields are still null
-  if (!data.authority_common)
-    data.authority_common = find('COMMON AUTHORITY', 'COMMON');
-  if (!data.authority_contract)
-    data.authority_contract = find('CONTRACT AUTHORITY', 'CONTRACT');
-  if (!data.authority_broker)
-    data.authority_broker = find('BROKER AUTHORITY', 'BROKER');
-
   // --- Insurance data ---
   // Insurance section has rows: Type | Required | On File
-  data.bipd_insurance_required = null;
-  data.bipd_insurance_on_file = null;
-  data.cargo_insurance_required = null;
-  data.cargo_insurance_on_file = null;
-  data.bond_insurance_required = null;
-  data.bond_insurance_on_file = null;
-
   $('tr').each((_i, row) => {
     const cells = $(row).children('td, th');
     if (cells.length < 3) return;
 
-    const label = (clean($(cells[0]).text()) || '').toUpperCase();
+    const label = (clean($(cells[0]).text()) || '').toLowerCase();
     const required = clean($(cells[1]).text());
     const onFile = clean($(cells[2]).text());
 
-    if (label.includes('BIPD') || label.includes('BODILY INJURY')) {
-      data.bipd_insurance_required = required;
-      data.bipd_insurance_on_file = onFile;
-    } else if (label.includes('CARGO')) {
-      data.cargo_insurance_required = required;
-      data.cargo_insurance_on_file = onFile;
+    if (label.includes('bipd') || label.includes('bodily injury')) {
+      result.bipd_insurance_required = required;
+      result.bipd_insurance_on_file = onFile;
+    } else if (label.includes('cargo')) {
+      result.cargo_insurance_required = required;
+      result.cargo_insurance_on_file = onFile;
     } else if (
-      label.includes('BOND') ||
-      label.includes('SURETY') ||
-      label.includes('TRUST')
+      label.includes('bond') ||
+      label.includes('surety') ||
+      label.includes('trust')
     ) {
-      data.bond_insurance_required = required;
-      data.bond_insurance_on_file = onFile;
+      result.bond_insurance_required = required;
+      result.bond_insurance_on_file = onFile;
     }
   });
 
-  return data;
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -268,37 +496,44 @@ async function scrapeCompanySnapshot(dotNumber) {
 // ---------------------------------------------------------------------------
 
 /**
- * Scrape the FMCSA SMS Overview page for BASIC percentile scores.
- * Returns an object with score keys, or null if the page could not be fetched
- * or the carrier was not found.
+ * Scrape the FMCSA SMS pages for BASIC percentile scores.
+ *
+ * Tries the Complete SMS Profile page first (which has numeric percentiles),
+ * then falls back to the Overview page. Scores marked "Not Public" return null.
+ *
+ * Returns an object with score keys, or null if the carrier was not found.
  */
 async function scrapeSmsScores(dotNumber) {
-  const url = `https://ai.fmcsa.dot.gov/SMS/Carrier/${encodeURIComponent(dotNumber)}/Overview.aspx`;
+  const encodedDot = encodeURIComponent(dotNumber);
 
-  const html = await fetchWithRetry(url);
-  if (!html) return null;
-
-  const $ = cheerio.load(html);
-
-  const bodyText = $('body').text();
-  if (
-    bodyText.includes('No carrier found') ||
-    bodyText.includes('Invalid DOT') ||
-    bodyText.includes('does not have enough') ||
-    bodyText.includes('No records matching')
-  ) {
-    console.error(
-      `${LOG_PREFIX} No SMS data found for DOT ${dotNumber}`
-    );
-    return null;
-  }
-
-  // The SMS Overview page presents BASIC scores in various HTML patterns.
-  // Common patterns:
-  //  1. Elements with data-basic-name or specific IDs
-  //  2. Gauge/bar elements with percentile values
-  //  3. Text labels followed by percentage values
-  //  4. Structured divs with class names referencing BASIC categories
+  // Map of keywords to score keys
+  const basicMapping = [
+    { key: 'unsafe_driving', patterns: ['unsafe driving'] },
+    {
+      key: 'hos_compliance',
+      patterns: ['hours-of-service', 'hours of service', 'hos compliance'],
+    },
+    {
+      key: 'vehicle_maintenance',
+      patterns: ['vehicle maintenance'],
+    },
+    {
+      key: 'controlled_substances',
+      patterns: ['controlled substances', 'controlled sub'],
+    },
+    {
+      key: 'driver_fitness',
+      patterns: ['driver fitness'],
+    },
+    {
+      key: 'crash_indicator',
+      patterns: ['crash indicator'],
+    },
+    {
+      key: 'hazmat',
+      patterns: ['hazardous materials', 'hazmat', 'hm compliance'],
+    },
+  ];
 
   const scores = {
     unsafe_driving: null,
@@ -310,52 +545,18 @@ async function scrapeSmsScores(dotNumber) {
     hazmat: null,
   };
 
-  // Map of keywords to score keys
-  const basicMapping = [
-    { key: 'unsafe_driving', patterns: ['unsafe driving', 'unsafe driv'] },
-    {
-      key: 'hos_compliance',
-      patterns: [
-        'hours-of-service',
-        'hours of service',
-        'hos compliance',
-        'hos',
-      ],
-    },
-    {
-      key: 'vehicle_maintenance',
-      patterns: ['vehicle maintenance', 'vehicle maint'],
-    },
-    {
-      key: 'controlled_substances',
-      patterns: [
-        'controlled substances',
-        'controlled sub',
-        'drug',
-        'alcohol',
-      ],
-    },
-    {
-      key: 'driver_fitness',
-      patterns: ['driver fitness', 'driver fit'],
-    },
-    {
-      key: 'crash_indicator',
-      patterns: ['crash indicator', 'crash'],
-    },
-    {
-      key: 'hazmat',
-      patterns: [
-        'hazardous materials',
-        'hazmat',
-        'hm compliance',
-      ],
-    },
-  ];
+  /**
+   * Try to extract BASIC scores from an HTML page.
+   * Returns true if at least one score was found.
+   */
+  function extractScoresFromHtml(html) {
+    const $ = cheerio.load(html);
+    let foundAny = false;
 
-  // Strategy 1: Look for elements with data attributes or IDs containing BASIC names
-  $('[data-basic-name], [id*="Basic"], [id*="basic"], [class*="basic"], [class*="Basic"]').each(
-    (_i, el) => {
+    // Strategy 1: Look for elements with data attributes or IDs referencing BASICs
+    $(
+      '[data-basic-name], [id*="Basic"], [id*="basic"], [class*="basic"], [class*="Basic"]'
+    ).each((_i, el) => {
       const elText = $(el).text();
       const attrValue =
         $(el).attr('data-basic-name') ||
@@ -368,89 +569,144 @@ async function scrapeSmsScores(dotNumber) {
         if (scores[mapping.key] !== null) continue;
         for (const pattern of mapping.patterns) {
           if (combined.includes(pattern)) {
-            // Try to extract a number from this element or adjacent elements
+            // Check for "Not Public" first
+            if (combined.includes('not public')) break;
             const numMatch = elText.match(/(\d{1,3})(?:\s*%)?/);
             if (numMatch) {
               const val = parseInt(numMatch[1], 10);
               if (val >= 0 && val <= 100) {
                 scores[mapping.key] = val;
+                foundAny = true;
               }
             }
             break;
           }
         }
       }
-    }
-  );
+    });
 
-  // Strategy 2: Walk all text nodes looking for BASIC label + nearby percentage
-  $('td, div, span, p, li, a').each((_i, el) => {
-    const text = ($(el).text() || '').toLowerCase();
-    for (const mapping of basicMapping) {
-      if (scores[mapping.key] !== null) continue;
-      for (const pattern of mapping.patterns) {
-        if (!text.includes(pattern)) continue;
-        // Look for a percentage number in this element's text
-        const numMatch = text.match(/(\d{1,3})\s*%/);
-        if (numMatch) {
-          const val = parseInt(numMatch[1], 10);
-          if (val >= 0 && val <= 100) {
-            scores[mapping.key] = val;
-          }
-        }
-        // Also check next sibling or parent for the score
-        if (scores[mapping.key] === null) {
-          const nextText = $(el).next().text() || '';
-          const nextMatch = nextText.match(/(\d{1,3})\s*%?/);
-          if (nextMatch) {
-            const val = parseInt(nextMatch[1], 10);
+    // Strategy 2: Walk text elements looking for BASIC label + nearby percentage
+    $('td, div, span, p, li, a, th').each((_i, el) => {
+      const text = ($(el).text() || '').toLowerCase();
+      for (const mapping of basicMapping) {
+        if (scores[mapping.key] !== null) continue;
+        for (const pattern of mapping.patterns) {
+          if (!text.includes(pattern)) continue;
+
+          // If "Not Public" appears with this BASIC name, skip it
+          if (text.includes('not public')) break;
+
+          // Look for a percentage number in this element's text
+          const numMatch = text.match(/(\d{1,3})\s*%/);
+          if (numMatch) {
+            const val = parseInt(numMatch[1], 10);
             if (val >= 0 && val <= 100) {
               scores[mapping.key] = val;
+              foundAny = true;
             }
           }
-        }
-        break;
-      }
-    }
-  });
 
-  // Strategy 3: Look for gauge/chart elements that encode the score as a style width
-  // or as a data attribute
-  $(
-    '[class*="gauge"], [class*="Gauge"], [class*="score"], [class*="Score"], [class*="percent"], [class*="Percent"]'
-  ).each((_i, el) => {
-    const style = $(el).attr('style') || '';
-    const widthMatch = style.match(/width:\s*(\d{1,3})%/);
-    const dataScore =
-      $(el).attr('data-score') ||
-      $(el).attr('data-value') ||
-      $(el).attr('data-percent');
-
-    const scoreVal = dataScore
-      ? parseNum(dataScore)
-      : widthMatch
-        ? parseInt(widthMatch[1], 10)
-        : null;
-
-    if (scoreVal === null || scoreVal < 0 || scoreVal > 100) return;
-
-    // Try to associate with a BASIC category via parent or sibling text
-    const context = (
-      $(el).parent().text() +
-      ' ' +
-      $(el).closest('tr, div, section').text()
-    ).toLowerCase();
-
-    for (const mapping of basicMapping) {
-      if (scores[mapping.key] !== null) continue;
-      for (const pattern of mapping.patterns) {
-        if (context.includes(pattern)) {
-          scores[mapping.key] = scoreVal;
+          // Also check next sibling for the score
+          if (scores[mapping.key] === null) {
+            const nextText = $(el).next().text() || '';
+            if (nextText.toLowerCase().includes('not public')) break;
+            const nextMatch = nextText.match(/(\d{1,3})\s*%?/);
+            if (nextMatch) {
+              const val = parseInt(nextMatch[1], 10);
+              if (val >= 0 && val <= 100) {
+                scores[mapping.key] = val;
+                foundAny = true;
+              }
+            }
+          }
           break;
         }
       }
+    });
+
+    // Strategy 3: Look for gauge/chart elements with score as style width or data attr
+    $(
+      '[class*="gauge"], [class*="Gauge"], [class*="score"], [class*="Score"], [class*="percent"], [class*="Percent"]'
+    ).each((_i, el) => {
+      const style = $(el).attr('style') || '';
+      const widthMatch = style.match(/width:\s*(\d{1,3})%/);
+      const dataScore =
+        $(el).attr('data-score') ||
+        $(el).attr('data-value') ||
+        $(el).attr('data-percent');
+
+      const scoreVal = dataScore
+        ? parseNum(dataScore)
+        : widthMatch
+          ? parseInt(widthMatch[1], 10)
+          : null;
+
+      if (scoreVal === null || scoreVal < 0 || scoreVal > 100) return;
+
+      const context = (
+        $(el).parent().text() +
+        ' ' +
+        $(el).closest('tr, div, section').text()
+      ).toLowerCase();
+
+      for (const mapping of basicMapping) {
+        if (scores[mapping.key] !== null) continue;
+        for (const pattern of mapping.patterns) {
+          if (context.includes(pattern)) {
+            scores[mapping.key] = scoreVal;
+            foundAny = true;
+            break;
+          }
+        }
+      }
+    });
+
+    return foundAny;
+  }
+
+  // --- Try Complete Profile page first (has numeric percentiles) ---
+  const completeProfileUrl = `https://ai.fmcsa.dot.gov/SMS/Carrier/${encodedDot}/CompleteProfile.aspx`;
+  const completeHtml = await fetchWithRetry(completeProfileUrl);
+
+  if (completeHtml) {
+    const bodyText = cheerio.load(completeHtml)('body').text();
+    if (
+      bodyText.includes('No carrier found') ||
+      bodyText.includes('Invalid DOT') ||
+      bodyText.includes('No records matching')
+    ) {
+      console.error(
+        `${LOG_PREFIX} No SMS data found for DOT ${dotNumber}`
+      );
+      return null;
     }
-  });
+
+    extractScoresFromHtml(completeHtml);
+  }
+
+  // --- Fall back to Overview page if any scores are still null ---
+  const hasAllScores = Object.values(scores).every((v) => v !== null);
+  if (!hasAllScores) {
+    const overviewUrl = `https://ai.fmcsa.dot.gov/SMS/Carrier/${encodedDot}/Overview.aspx`;
+    const overviewHtml = await fetchWithRetry(overviewUrl);
+
+    if (overviewHtml) {
+      const bodyText = cheerio.load(overviewHtml)('body').text();
+      if (
+        !bodyText.includes('No carrier found') &&
+        !bodyText.includes('Invalid DOT') &&
+        !bodyText.includes('No records matching')
+      ) {
+        extractScoresFromHtml(overviewHtml);
+      } else if (!completeHtml) {
+        // Both pages failed to find the carrier
+        console.error(
+          `${LOG_PREFIX} No SMS data found for DOT ${dotNumber}`
+        );
+        return null;
+      }
+    }
+  }
 
   return scores;
 }
@@ -460,22 +716,25 @@ async function scrapeSmsScores(dotNumber) {
 // ---------------------------------------------------------------------------
 
 /**
- * Scrape both SAFER snapshot and SMS scores, then merge them into a single
- * object matching the `fmcsa_safety_snapshots` database schema.
+ * Scrape SAFER snapshot, Licensing & Insurance, and SMS scores, then merge
+ * them into a single object matching the `fmcsa_safety_snapshots` database
+ * schema.
  */
 async function scrapeAll(dotNumber) {
-  const [snapshot, smsScores] = await Promise.all([
+  const [snapshot, licensing, smsScores] = await Promise.all([
     scrapeCompanySnapshot(dotNumber),
+    scrapeLicensingInsurance(dotNumber),
     scrapeSmsScores(dotNumber),
   ]);
 
   const raw = {
     snapshot: snapshot || null,
+    licensing: licensing || null,
     sms_scores: smsScores || null,
   };
 
   return {
-    // SMS Scores
+    // SMS Scores (null if "Not Public" or unavailable)
     unsafe_driving_score: smsScores?.unsafe_driving ?? null,
     hos_compliance_score: smsScores?.hos_compliance ?? null,
     vehicle_maintenance_score: smsScores?.vehicle_maintenance ?? null,
@@ -484,21 +743,22 @@ async function scrapeAll(dotNumber) {
     crash_indicator_score: smsScores?.crash_indicator ?? null,
     hazmat_score: smsScores?.hazmat ?? null,
 
-    // Licensing
+    // Licensing (from snapshot for operating/usdot status, LI page for authority)
     operating_status: snapshot?.operating_status ?? null,
-    authority_common: snapshot?.authority_common ?? null,
-    authority_contract: snapshot?.authority_contract ?? null,
-    authority_broker: snapshot?.authority_broker ?? null,
+    usdot_status: snapshot?.usdot_status ?? null,
+    authority_common: licensing?.authority_common ?? null,
+    authority_contract: licensing?.authority_contract ?? null,
+    authority_broker: licensing?.authority_broker ?? null,
 
-    // Insurance
-    bipd_insurance_required: snapshot?.bipd_insurance_required ?? null,
-    bipd_insurance_on_file: snapshot?.bipd_insurance_on_file ?? null,
-    cargo_insurance_required: snapshot?.cargo_insurance_required ?? null,
-    cargo_insurance_on_file: snapshot?.cargo_insurance_on_file ?? null,
-    bond_insurance_required: snapshot?.bond_insurance_required ?? null,
-    bond_insurance_on_file: snapshot?.bond_insurance_on_file ?? null,
+    // Insurance (from LI page)
+    bipd_insurance_required: licensing?.bipd_insurance_required ?? null,
+    bipd_insurance_on_file: licensing?.bipd_insurance_on_file ?? null,
+    cargo_insurance_required: licensing?.cargo_insurance_required ?? null,
+    cargo_insurance_on_file: licensing?.cargo_insurance_on_file ?? null,
+    bond_insurance_required: licensing?.bond_insurance_required ?? null,
+    bond_insurance_on_file: licensing?.bond_insurance_on_file ?? null,
 
-    // Carrier Info
+    // Carrier Info (from snapshot)
     safety_rating: snapshot?.safety_rating ?? null,
     safety_rating_date: snapshot?.safety_rating_date ?? null,
     total_drivers: snapshot?.total_drivers ?? null,
@@ -506,6 +766,27 @@ async function scrapeAll(dotNumber) {
     mcs150_mileage: snapshot?.mcs150_mileage ?? null,
     mcs150_mileage_year: snapshot?.mcs150_mileage_year ?? null,
     out_of_service_date: snapshot?.out_of_service_date ?? null,
+
+    // Inspection data (from snapshot)
+    vehicle_inspections: snapshot?.vehicle_inspections ?? null,
+    driver_inspections: snapshot?.driver_inspections ?? null,
+    hazmat_inspections: snapshot?.hazmat_inspections ?? null,
+    iep_inspections: snapshot?.iep_inspections ?? null,
+    vehicle_oos: snapshot?.vehicle_oos ?? null,
+    driver_oos: snapshot?.driver_oos ?? null,
+    hazmat_oos: snapshot?.hazmat_oos ?? null,
+    vehicle_oos_rate: snapshot?.vehicle_oos_rate ?? null,
+    driver_oos_rate: snapshot?.driver_oos_rate ?? null,
+    hazmat_oos_rate: snapshot?.hazmat_oos_rate ?? null,
+    vehicle_oos_national_avg: snapshot?.vehicle_oos_national_avg ?? null,
+    driver_oos_national_avg: snapshot?.driver_oos_national_avg ?? null,
+    hazmat_oos_national_avg: snapshot?.hazmat_oos_national_avg ?? null,
+
+    // Crash data (from snapshot)
+    crashes_fatal: snapshot?.crashes_fatal ?? null,
+    crashes_injury: snapshot?.crashes_injury ?? null,
+    crashes_tow: snapshot?.crashes_tow ?? null,
+    crashes_total: snapshot?.crashes_total ?? null,
 
     // Raw
     raw_json: raw,
