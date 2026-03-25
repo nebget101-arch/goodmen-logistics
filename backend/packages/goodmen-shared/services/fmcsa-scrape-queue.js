@@ -18,6 +18,15 @@ function createScrapeQueue(knex, redisUrl) {
 
   // ── Queue instance ────────────────────────────────────────────────
   const queue = new Queue('fmcsa-scrape', redisUrl, {
+    redis: {
+      maxRetriesPerRequest: null,   // prevent crash on connection loss
+      enableReadyCheck: false,       // don't block on READY check
+      retryStrategy(times) {
+        // Retry every 30s, give up after 5 minutes
+        if (times > 10) return null;
+        return Math.min(times * 3000, 30000);
+      },
+    },
     limiter: { max: 1, duration: 3000 },
     defaultJobOptions: {
       attempts: 3,
@@ -28,8 +37,19 @@ function createScrapeQueue(knex, redisUrl) {
     },
   });
 
+  let redisConnected = false;
   queue.on('error', (err) => {
-    console.error(`${LOG_PREFIX} Queue error:`, err.message);
+    if (!redisConnected) {
+      // Only log once during initial connection attempts
+      console.warn(`${LOG_PREFIX} Queue error (Redis may be unavailable):`, err.message);
+    } else {
+      console.error(`${LOG_PREFIX} Queue error:`, err.message);
+    }
+  });
+
+  queue.client.on('ready', () => {
+    redisConnected = true;
+    console.log(`${LOG_PREFIX} Redis connected`);
   });
 
   queue.on('failed', (job, err) => {
