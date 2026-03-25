@@ -16,16 +16,26 @@ function createScrapeQueue(knex, redisUrl) {
   if (!knex) throw new Error(`${LOG_PREFIX} knex instance is required`);
   if (!redisUrl) throw new Error(`${LOG_PREFIX} redisUrl is required`);
 
+  // ── Parse Redis URL and build options ─────────────────────────────
+  const useTls = redisUrl.startsWith('rediss://');
+  const redisOpts = {
+    maxRetriesPerRequest: null,   // prevent crash on connection loss
+    enableReadyCheck: false,       // don't block on READY check
+    retryStrategy(times) {
+      if (times > 10) return null;
+      return Math.min(times * 3000, 30000);
+    },
+    ...(useTls ? { tls: { rejectUnauthorized: false } } : {}),
+  };
+
   // ── Queue instance ────────────────────────────────────────────────
-  const queue = new Queue('fmcsa-scrape', redisUrl, {
-    redis: {
-      maxRetriesPerRequest: null,   // prevent crash on connection loss
-      enableReadyCheck: false,       // don't block on READY check
-      retryStrategy(times) {
-        // Retry every 30s, give up after 5 minutes
-        if (times > 10) return null;
-        return Math.min(times * 3000, 30000);
-      },
+  const queue = new Queue('fmcsa-scrape', {
+    redis: redisUrl,
+    prefix: 'fmcsa',
+    createClient(type) {
+      // Bull creates 3 Redis clients; each needs the same options
+      const Redis = require('ioredis');
+      return new Redis(redisUrl, redisOpts);
     },
     limiter: { max: 1, duration: 3000 },
     defaultJobOptions: {
