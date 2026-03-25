@@ -316,6 +316,7 @@
       <div class="dqf-modal-body">
         <div class="dqf-grid-2">
           <div>
+            <h4 class="dqf-section-title">Identity & Contact</h4>
             <div class="dqf-field">
               <label for="editFirstName">First Name *</label>
               <input id="editFirstName" type="text" [(ngModel)]="editingDriver.firstName" class="form-input" />
@@ -325,8 +326,57 @@
               <input id="editEmail" type="email" [(ngModel)]="editingDriver.email" class="form-input" />
             </div>
             <div class="dqf-field">
+              <label for="editAddress">Address</label>
+              <input id="editAddress" type="text" [(ngModel)]="editingDriver.address" class="form-input" placeholder="123 Main St, City, ST 12345" />
+            </div>
+            <div class="dqf-field">
+              <label for="editDob">Date of Birth</label>
+              <app-ai-date-picker
+                inputId="editDob"
+                [label]="''"
+                ariaLabel="Date of Birth"
+                [(ngModel)]="editingDriver.dateOfBirth"
+                name="editDriverDob"
+                placeholder="MM/DD/YYYY"
+              ></app-ai-date-picker>
+            </div>
+            <div class="dqf-field">
+              <label for="editHireDate">Hire Date</label>
+              <app-ai-date-picker
+                inputId="editHireDate"
+                [label]="''"
+                ariaLabel="Hire Date"
+                [(ngModel)]="editingDriver.hireDate"
+                name="editDriverHireDate"
+                placeholder="MM/DD/YYYY"
+              ></app-ai-date-picker>
+            </div>
+          </div>
+          <div>
+            <h4 class="dqf-section-title">License & Medical</h4>
+            <div class="dqf-field">
+              <label for="editLastName">Last Name *</label>
+              <input id="editLastName" type="text" [(ngModel)]="editingDriver.lastName" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editPhone">Phone</label>
+              <input id="editPhone" type="tel" [(ngModel)]="editingDriver.phone" class="form-input" />
+            </div>
+            <div class="dqf-field">
               <label for="editCdlNumber">CDL Number *</label>
               <input id="editCdlNumber" type="text" [(ngModel)]="editingDriver.cdlNumber" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editCdlState">CDL State *</label>
+              <input id="editCdlState" type="text" [(ngModel)]="editingDriver.cdlState" maxlength="2" class="form-input" />
+            </div>
+            <div class="dqf-field">
+              <label for="editCdlClass">CDL Class *</label>
+              <select id="editCdlClass" [(ngModel)]="editingDriver.cdlClass" class="form-input">
+                <option value="A">Class A</option>
+                <option value="B">Class B</option>
+                <option value="C">Class C</option>
+              </select>
             </div>
             <div class="dqf-field">
               <label for="editCdlExpiry">CDL Expiry</label>
@@ -338,20 +388,6 @@
                 name="editDriverCdlExpiry"
                 placeholder="MM/DD/YYYY"
               ></app-ai-date-picker>
-            </div>
-          </div>
-          <div>
-            <div class="dqf-field">
-              <label for="editLastName">Last Name *</label>
-              <input id="editLastName" type="text" [(ngModel)]="editingDriver.lastName" class="form-input" />
-            </div>
-            <div class="dqf-field">
-              <label for="editPhone">Phone</label>
-              <input id="editPhone" type="tel" [(ngModel)]="editingDriver.phone" class="form-input" />
-            </div>
-            <div class="dqf-field">
-              <label for="editCdlState">CDL State *</label>
-              <input id="editCdlState" type="text" [(ngModel)]="editingDriver.cdlState" maxlength="2" class="form-input" />
             </div>
             <div class="dqf-field">
               <label for="editMedExpiry">Med Cert Expiry</label>
