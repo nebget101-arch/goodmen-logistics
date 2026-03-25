@@ -25,6 +25,7 @@ const STANDARD_FOLDERS = new Set([
   'consents',
   'drug-tests',
   'dqf-documents',
+  'onboarding-documents',
   'documents'
 ]);
 

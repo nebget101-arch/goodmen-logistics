@@ -1108,3 +1108,327 @@ input[type='date'].form-input {
   }
 }
 
+/* === Document Upload Cards (FN-250) === */
+.doc-upload-progress {
+  margin-bottom: 20px;
+}
+
+.doc-upload-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.14);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.doc-upload-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #22c55e, #0ea5e9);
+  transition: width 0.4s ease;
+}
+
+.doc-upload-progress-label {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.doc-upload-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(127, 29, 29, 0.18);
+  color: #fca5a5;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+.doc-upload-error .material-symbols-outlined {
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.doc-upload-error-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.doc-upload-error-dismiss:hover {
+  color: #e2e8f0;
+}
+
+.doc-upload-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.doc-upload-card {
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.85), rgba(2, 6, 23, 0.72));
+  transition: border-color 0.2s ease;
+}
+
+.doc-upload-card-uploaded {
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.doc-upload-card-uploading {
+  opacity: 0.85;
+}
+
+.doc-upload-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 16px 0;
+}
+
+.doc-upload-card-icon {
+  color: #94a3b8;
+  font-size: 28px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.doc-upload-card-icon-uploaded {
+  color: #4ade80;
+}
+
+.doc-upload-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-upload-card-label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.doc-upload-card-desc {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.doc-upload-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.doc-upload-badge-required {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.doc-upload-badge-optional {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.doc-upload-badge-uploaded {
+  background: rgba(34, 197, 94, 0.14);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.doc-upload-card-body {
+  padding: 12px 16px 16px;
+  position: relative;
+}
+
+.doc-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 2px dashed rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.06);
+  color: #67e8f9;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.doc-upload-btn:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.doc-upload-btn:active {
+  background: rgba(56, 189, 248, 0.18);
+}
+
+.doc-upload-btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.doc-upload-btn .material-symbols-outlined {
+  font-size: 22px;
+}
+
+.doc-upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.doc-upload-hint {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.doc-upload-spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.5);
+  border-radius: 0 0 18px 18px;
+}
+
+.doc-upload-spinner-ring {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(56, 189, 248, 0.2);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: doc-spin 0.7s linear infinite;
+}
+
+@keyframes doc-spin {
+  to { transform: rotate(360deg); }
+}
+
+.doc-upload-card-body-uploaded {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.doc-upload-file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.doc-upload-file-details {
+  min-width: 0;
+}
+
+.doc-upload-file-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-upload-file-date {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.doc-upload-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(127, 29, 29, 0.14);
+  color: #f87171;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.doc-upload-delete-btn:hover:not(:disabled) {
+  background: rgba(127, 29, 29, 0.3);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.doc-upload-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.doc-upload-delete-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Tablet breakpoint: 2 columns */
+@media (min-width: 641px) {
+  .doc-upload-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Mobile adjustments */
+@media (max-width: 640px) {
+  .doc-upload-card-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 14px 0;
+  }
+
+  .doc-upload-badge {
+    order: 4;
+    margin-left: 40px;
+  }
+
+  .doc-upload-card-body {
+    padding: 10px 14px 14px;
+  }
+
+  .doc-upload-btn {
+    min-height: 56px;
+    font-size: 15px;
+  }
+}
+
