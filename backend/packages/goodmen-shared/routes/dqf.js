@@ -350,7 +350,10 @@ router.get('/driver/:driverId/prehire-documents', async (req, res) => {
            'consent_release_of_information_signed',
            'consent_drug_alcohol_release_signed',
            'consent_clearinghouse_full_signed',
-           'consent_psp_consent_signed'
+           'consent_psp_consent_signed',
+           'consent_mvr_disclosure_signed',
+           'consent_mvr_authorization_signed',
+           'consent_mvr_release_of_liability_signed'
          )
        ORDER BY created_at DESC`,
       [driverId]

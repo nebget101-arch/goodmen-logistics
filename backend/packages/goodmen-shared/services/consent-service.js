@@ -15,7 +15,11 @@ const CONSENT_DQF_MAP = {
   fcra_disclosure: 'fcra_disclosure_signed',
   fcra_authorization: 'fcra_authorization_signed',
   release_of_information: 'release_of_info_dq_safety_signed',
-  drug_alcohol_release: 'drug_alcohol_release_signed'
+  drug_alcohol_release: 'drug_alcohol_release_signed',
+  // FN-238: MVR consent form DQF mappings
+  mvr_disclosure: 'mvr_disclosure_signed',
+  mvr_authorization: 'mvr_authorization_signed',
+  mvr_release_of_liability: 'mvr_release_of_liability_signed'
 };
 
 async function getActiveTemplates() {
