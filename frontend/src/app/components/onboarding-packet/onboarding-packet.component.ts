@@ -129,6 +129,18 @@ export interface EmploymentForm {
   employerHistory?: EmployerHistoryData;
   disqualificationHistory?: DisqualificationData;
 
+  // Certification fields (FN-233)
+  certificationFields?: {
+    fullName?: string;
+    dateOfBirth?: string;
+    ssnLast4?: string;
+    driversLicenseNumber?: string;
+    stateOfIssue?: string;
+    certifyTrueAndAccurate?: boolean;
+    typedSignature?: string;
+    signatureDate?: string;
+  };
+
   // Legacy (mapped)
   ssnLast4?: string;
   canWorkInUs?: boolean | null;
@@ -201,7 +213,11 @@ export class OnboardingPacketComponent implements OnInit {
     tractorTwoTrailers: {},
     motorcoachSchoolBus: {},
     motorcoachSchoolBusMore15: {},
-    otherEquipment: {}
+    otherEquipment: {},
+    certificationFields: {
+      certifyTrueAndAccurate: false,
+      signatureDate: new Date().toISOString().slice(0, 10)
+    }
   };
   mvr: MvrForm = {};
 
@@ -277,6 +293,8 @@ export class OnboardingPacketComponent implements OnInit {
     if (eaData) {
       this.employment = { ...this.employment, ...eaData };
     }
+    // Pre-fill certification fields from application data (FN-233)
+    this.prefillCertificationFields();
     const mvrSection = this.sections.find((s) => s.section_key === 'mvr_authorization');
     const mvrData = (mvrSection as unknown as { data?: MvrForm })?.data;
     if (mvrData) {
@@ -287,6 +305,22 @@ export class OnboardingPacketComponent implements OnInit {
     if (consentData?.signedConsents) {
       consentData.signedConsents.forEach((key) => this.signedConsents.add(key));
     }
+  }
+
+  /** Pre-fill certification fields from the employment application data (FN-233) */
+  private prefillCertificationFields(): void {
+    const cert = this.employment.certificationFields || {};
+    const emp = this.employment;
+    if (!cert.fullName && (emp.firstName || emp.lastName)) {
+      cert.fullName = [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(' ');
+    }
+    if (!cert.dateOfBirth && emp.dateOfBirth) {
+      cert.dateOfBirth = emp.dateOfBirth;
+    }
+    if (!cert.signatureDate) {
+      cert.signatureDate = new Date().toISOString().slice(0, 10);
+    }
+    this.employment.certificationFields = cert;
   }
 
   setStep(step: PacketStep): void {

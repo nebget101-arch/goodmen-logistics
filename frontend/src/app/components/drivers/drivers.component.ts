@@ -60,7 +60,20 @@ export class DriversComponent implements OnInit, OnDestroy {
   
   driverDocuments: any[] = [];
   uploadingDocuments: { [key: string]: boolean } = {};
-  
+
+  // Pre-Hire Documents (FN-237)
+  prehireDocuments: any[] = [];
+  prehireDocumentsLoading = false;
+
+  /** Human-readable labels for pre-hire document types */
+  prehireDocTypeLabels: Record<string, string> = {
+    employment_application_signed: 'Employment Application',
+    consent_fcra_disclosure_signed: 'FCRA Disclosure',
+    consent_fcra_authorization_signed: 'FCRA Authorization',
+    consent_release_of_information_signed: 'Release of Info / DQ & Safety',
+    consent_drug_alcohol_release_signed: 'Release of Info / Drug & Alcohol'
+  };
+
   saving = false;
   canManageDrivers = false;
   canAccessDqf = false;
@@ -509,6 +522,33 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.loadDriverDocuments(driver.id);
     this.loadDriverSafetySummary(driver.id);
     this.loadDrugAlcoholTests(driver.id);
+    this.loadPrehireDocuments(driver.id);
+  }
+
+  /** Load pre-hire documents for a driver (FN-237) */
+  loadPrehireDocuments(driverId: string): void {
+    this.prehireDocumentsLoading = true;
+    this.prehireDocuments = [];
+    this.apiService.getDriverPrehireDocuments(driverId).subscribe({
+      next: (docs) => {
+        this.prehireDocuments = docs || [];
+        this.prehireDocumentsLoading = false;
+      },
+      error: () => {
+        this.prehireDocuments = [];
+        this.prehireDocumentsLoading = false;
+      }
+    });
+  }
+
+  /** Get human-readable label for a pre-hire document type */
+  getPrehireDocLabel(docType: string): string {
+    return this.prehireDocTypeLabels[docType] || docType;
+  }
+
+  /** Get the download URL for a pre-hire document */
+  getPrehireDocDownloadUrl(doc: any): string {
+    return `${this.apiService.getBaseUrl()}/api/dqf/documents/${doc.id}/download`;
   }
 
   loadDriverDocuments(driverId: string): void {
@@ -773,12 +813,17 @@ export class DriversComponent implements OnInit, OnDestroy {
     return {
       pre_hire: [
         'employment_application',
+        'employment_application_submitted',
         'pre_employment_drug_test_completed',
         'clearinghouse_full_query_consent',
         'road_test_certificate',
         'medical_examiners_certificate',
         'nrcme_verification',
         'fcra_authorization',
+        'fcra_disclosure_signed',
+        'fcra_authorization_signed',
+        'release_of_info_dq_safety_signed',
+        'drug_alcohol_release_signed',
         'consent_forms_signed',
         'release_of_info_signed'
       ],
@@ -852,7 +897,13 @@ export class DriversComponent implements OnInit, OnDestroy {
       mvr_authorization_signed: '49 CFR 391.23(a)',
       pre_employment_drug_test_submitted: '49 CFR 382.301',
       pre_employment_drug_test_result_received: '49 CFR 382.301',
-      psp_consent: '49 CFR 391.23(i)'
+      psp_consent: '49 CFR 391.23(i)',
+      // FN-236: Pre-hire consent form CFR references
+      fcra_disclosure_signed: '15 U.S.C. \u00A7 1681',
+      fcra_authorization_signed: '15 U.S.C. \u00A7 1681b',
+      release_of_info_dq_safety_signed: '49 CFR \u00A7391.23',
+      drug_alcohol_release_signed: '49 CFR Part 40',
+      employment_application_submitted: '49 CFR 391.21'
     };
     return refs[key] || '';
   }

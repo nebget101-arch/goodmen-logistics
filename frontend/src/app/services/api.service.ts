@@ -799,6 +799,13 @@ export class ApiService {
     );
   }
 
+  // ── Pre-Hire Documents (FN-237) ──
+  getDriverPrehireDocuments(driverId: string): Observable<any[]> {
+    return this.http.get<any[]>(
+      `${this.baseUrl}/api/dqf/driver/${driverId}/prehire-documents`
+    );
+  }
+
   // ── Drug & Alcohol Test Management (FN-214) ──
   getDrugAlcoholTests(driverId: string): Observable<any[]> {
     return this.http.get<any[]>(
