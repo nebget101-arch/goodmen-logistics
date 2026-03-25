@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
 const { query, getClient } = require('../internal/db');
 const { hashToken } = require('../services/token-service');
 const dtLogger = require('../utils/logger');
 const { createDriverDocument } = require('../services/driver-storage-service');
+const { uploadBuffer } = require('../storage/r2-storage');
 const {
   buildEmploymentApplicationPdf,
   buildMvrAuthorizationPdf
@@ -11,6 +14,42 @@ const {
 const employmentAppService = require('../services/employment-application.service');
 // FN-235: DQF integration for employment application submission
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('../services/dqf-service');
+
+// FN-250: Multer config for onboarding document uploads (memory storage for R2)
+const onboardingUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    const allowedMimes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp'
+    ];
+    if (allowedMimes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+    cb(new Error('Only PDF and image files (JPEG, PNG, GIF, WebP) are allowed'));
+  }
+});
+
+// FN-250: Allowed onboarding document types
+const ALLOWED_ONBOARDING_DOC_TYPES = new Set([
+  'cdl_front',
+  'cdl_back',
+  'medical_certificate',
+  'social_security_card',
+  'proof_of_address',
+  'other_certification'
+]);
+
+// FN-250: Map onboarding doc types to DQF requirement keys for auto-completion
+const DOC_TYPE_TO_DQF_REQUIREMENT = {
+  cdl_front: 'cdl_on_file',
+  cdl_back: 'cdl_on_file',
+  medical_certificate: 'medical_cert_on_file'
+};
 
 function hasMeaningfulData(data) {
   if (!data || typeof data !== 'object') return false;
@@ -832,6 +871,217 @@ router.post('/:packetId/esignatures', rateLimited, async (req, res) => {
     return res.status(500).json({ message: 'Failed to capture e-signature' });
   } finally {
     client.release();
+  }
+});
+
+// FN-250: POST /public/onboarding/:packetId/upload-document?token=...
+// Upload a driver document (CDL, medical cert, etc.) during onboarding
+router.post(
+  '/:packetId/upload-document',
+  rateLimited,
+  onboardingUpload.single('file'),
+  async (req, res) => {
+    const start = Date.now();
+    try {
+      const { packetId } = req.params;
+      const { token } = req.query;
+      const { docType } = req.body;
+
+      if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
+      if (!docType || !ALLOWED_ONBOARDING_DOC_TYPES.has(docType)) {
+        return res.status(400).json({
+          message: `Invalid docType. Allowed values: ${[...ALLOWED_ONBOARDING_DOC_TYPES].join(', ')}`
+        });
+      }
+
+      const { packet, error, status } = await loadPacketWithToken(packetId, token);
+      if (error) {
+        return res.status(status || 400).json({ message: error });
+      }
+
+      const driverId = packet.driver_id;
+
+      // Upload to R2
+      const fileExt = path.extname(req.file.originalname || '').toLowerCase();
+      const safeName = req.file.originalname
+        ? req.file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '_')
+        : `onboarding-${docType}${fileExt}`;
+      const { key: storageKey } = await uploadBuffer({
+        buffer: req.file.buffer,
+        contentType: req.file.mimetype,
+        prefix: `drivers/${driverId}/onboarding-documents`,
+        fileName: safeName
+      });
+
+      // Store in driver_documents with prefixed doc_type for onboarding namespace
+      const onboardingDocType = `onboarding_${docType}`;
+      const result = await query(
+        `INSERT INTO driver_documents (
+          driver_id,
+          packet_id,
+          doc_type,
+          file_name,
+          mime_type,
+          size_bytes,
+          storage_mode,
+          storage_key
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'r2', $7)
+        RETURNING id, doc_type, file_name, mime_type, created_at`,
+        [
+          driverId,
+          packet.id,
+          onboardingDocType,
+          req.file.originalname || safeName,
+          req.file.mimetype,
+          req.file.size,
+          storageKey
+        ]
+      );
+
+      const doc = result.rows[0];
+
+      // Auto-mark DQF requirement if applicable
+      const dqfKey = DOC_TYPE_TO_DQF_REQUIREMENT[docType];
+      if (dqfKey) {
+        try {
+          await upsertRequirementStatus(driverId, dqfKey, 'complete', doc.id);
+          await computeAndUpdateDqfCompleteness(driverId);
+        } catch (dqfErr) {
+          // Non-blocking: DQF auto-mark should not fail the upload
+          dtLogger.warn('onboarding_doc_dqf_auto_mark_failed', {
+            driverId,
+            docType,
+            dqfKey,
+            error: dqfErr?.message || String(dqfErr)
+          });
+        }
+      }
+
+      const duration = Date.now() - start;
+      dtLogger.trackRequest('POST', `/public/onboarding/${packetId}/upload-document`, 201, duration, {
+        driverId,
+        docType: onboardingDocType
+      });
+
+      return res.status(201).json({
+        success: true,
+        documentId: doc.id,
+        fileName: doc.file_name,
+        docType: onboardingDocType
+      });
+    } catch (error) {
+      // Handle multer file-size / filter errors
+      if (error?.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'File size exceeds 10 MB limit' });
+      }
+      if (error?.message?.includes('Only PDF and image files')) {
+        return res.status(400).json({ message: error.message });
+      }
+      const duration = Date.now() - start;
+      dtLogger.error('public_onboarding_upload_document_failed', error, { params: req.params });
+      dtLogger.trackRequest('POST', `/public/onboarding/${req.params.packetId}/upload-document`, 500, duration);
+      console.error('Error in public onboarding upload-document:', error);
+      return res.status(500).json({ message: 'Failed to upload document' });
+    }
+  }
+);
+
+// FN-250: GET /public/onboarding/:packetId/documents?token=...
+// List all onboarding documents for this packet's driver
+router.get('/:packetId/documents', rateLimited, async (req, res) => {
+  const start = Date.now();
+  try {
+    const { packetId } = req.params;
+    const { token } = req.query;
+
+    const { packet, error, status } = await loadPacketWithToken(packetId, token);
+    if (error) {
+      return res.status(status || 400).json({ message: error });
+    }
+
+    const docs = await query(
+      `SELECT id, doc_type, file_name, mime_type, created_at
+       FROM driver_documents
+       WHERE driver_id = $1
+         AND packet_id = $2
+         AND doc_type LIKE 'onboarding_%'
+         AND deleted_at IS NULL
+       ORDER BY created_at DESC`,
+      [packet.driver_id, packet.id]
+    );
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('GET', `/public/onboarding/${packetId}/documents`, 200, duration, {
+      driverId: packet.driver_id,
+      count: docs.rows.length
+    });
+
+    return res.json(docs.rows);
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('public_onboarding_list_documents_failed', error, { params: req.params });
+    dtLogger.trackRequest('GET', `/public/onboarding/${req.params.packetId}/documents`, 500, duration);
+    console.error('Error in public onboarding list documents:', error);
+    return res.status(500).json({ message: 'Failed to list documents' });
+  }
+});
+
+// FN-250: DELETE /public/onboarding/:packetId/documents/:documentId?token=...
+// Soft-delete an onboarding document
+router.delete('/:packetId/documents/:documentId', rateLimited, async (req, res) => {
+  const start = Date.now();
+  try {
+    const { packetId, documentId } = req.params;
+    const { token } = req.query;
+
+    const { packet, error, status } = await loadPacketWithToken(packetId, token);
+    if (error) {
+      return res.status(status || 400).json({ message: error });
+    }
+
+    // Verify document belongs to this packet's driver and is an onboarding doc
+    const docRes = await query(
+      `SELECT id, doc_type
+       FROM driver_documents
+       WHERE id = $1
+         AND driver_id = $2
+         AND packet_id = $3
+         AND doc_type LIKE 'onboarding_%'
+         AND deleted_at IS NULL`,
+      [documentId, packet.driver_id, packet.id]
+    );
+
+    if (docRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    // Soft delete
+    await query(
+      'UPDATE driver_documents SET deleted_at = NOW() WHERE id = $1',
+      [documentId]
+    );
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('DELETE', `/public/onboarding/${packetId}/documents/${documentId}`, 200, duration, {
+      driverId: packet.driver_id,
+      documentId
+    });
+
+    return res.json({ success: true, message: 'Document deleted' });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('public_onboarding_delete_document_failed', error, { params: req.params });
+    dtLogger.trackRequest(
+      'DELETE',
+      `/public/onboarding/${req.params.packetId}/documents/${req.params.documentId}`,
+      500,
+      duration
+    );
+    console.error('Error in public onboarding delete document:', error);
+    return res.status(500).json({ message: 'Failed to delete document' });
   }
 });
 

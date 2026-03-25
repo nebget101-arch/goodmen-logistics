@@ -375,8 +375,15 @@ router.get('/driver/:driverId/prehire-documents', async (req, res) => {
            'consent_psp_consent_signed',
            'consent_mvr_disclosure_signed',
            'consent_mvr_authorization_signed',
-           'consent_mvr_release_of_liability_signed'
+           'consent_mvr_release_of_liability_signed',
+           'onboarding_cdl_front',
+           'onboarding_cdl_back',
+           'onboarding_medical_certificate',
+           'onboarding_social_security_card',
+           'onboarding_proof_of_address',
+           'onboarding_other_certification'
          )
+         AND (deleted_at IS NULL)
        ORDER BY created_at DESC`,
       [driverId]
     );
