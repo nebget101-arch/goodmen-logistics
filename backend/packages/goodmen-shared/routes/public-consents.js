@@ -62,7 +62,7 @@ async function loadPacketWithToken(packetId, token) {
 /**
  * Load driver and operating entity details for template placeholder replacement.
  */
-async function loadDriverAndEntity(driverId) {
+async function loadDriverAndEntity(driverId, packetOperatingEntityId) {
   const driverRes = await query(
     'SELECT id, first_name, last_name, operating_entity_id FROM drivers WHERE id = $1',
     [driverId]
@@ -70,10 +70,12 @@ async function loadDriverAndEntity(driverId) {
   const driver = driverRes.rows[0] || null;
   let operatingEntity = null;
 
-  if (driver && driver.operating_entity_id) {
+  // Try driver's OE first, then packet's OE as fallback
+  const oeId = (driver && driver.operating_entity_id) || packetOperatingEntityId || null;
+  if (oeId) {
     const oeRes = await query(
       'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1',
-      [driver.operating_entity_id]
+      [oeId]
     );
     operatingEntity = oeRes.rows[0] || null;
   }
@@ -165,7 +167,7 @@ router.get('/:packetId/:consentKey', rateLimited, async (req, res) => {
     }
 
     // Load driver and operating entity for placeholder replacement
-    const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id);
+    const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id, packet.operating_entity_id);
 
     // Replace placeholders in template body text
     const renderedBodyText = replaceTemplatePlaceholders(template.body_text, { driver, operatingEntity });
@@ -284,7 +286,7 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
     let documentId = null;
     try {
       const template = await getTemplateByKey(consentKey);
-      const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id);
+      const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id, packet.operating_entity_id);
 
       const companyName = operatingEntity?.name || operatingEntity?.legal_name || 'Company Name';
       const companyAddress = operatingEntity
