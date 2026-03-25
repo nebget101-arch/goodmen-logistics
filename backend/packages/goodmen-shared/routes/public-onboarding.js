@@ -25,7 +25,9 @@ const onboardingUpload = multer({
       'image/jpeg',
       'image/png',
       'image/gif',
-      'image/webp'
+      'image/webp',
+      'image/heic',
+      'image/heif'
     ];
     if (allowedMimes.includes(file.mimetype)) {
       return cb(null, true);
