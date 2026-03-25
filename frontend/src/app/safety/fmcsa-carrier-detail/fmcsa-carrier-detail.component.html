@@ -1,0 +1,193 @@
+<div *ngIf="loading" class="loading-state">Loading carrier details...</div>
+<div *ngIf="error" class="alert-error">{{ error }}</div>
+
+<ng-container *ngIf="!loading && carrier">
+  <div class="detail-container">
+
+    <!-- ─── Header ──────────────────────────────────────────────────────────── -->
+    <div class="detail-header">
+      <button type="button" class="back-btn" (click)="goBack()">
+        <span class="material-symbols-outlined">arrow_back</span> FMCSA
+      </button>
+      <div class="header-title-area">
+        <h2>{{ carrier.legal_name }}</h2>
+        <span class="dot-badge">DOT {{ carrier.dot_number }}</span>
+        <span
+          *ngIf="carrier.safety_rating"
+          class="safety-rating-badge"
+          [ngClass]="getSafetyRatingClass(carrier.safety_rating)">
+          {{ carrier.safety_rating }}
+        </span>
+      </div>
+    </div>
+
+    <!-- ─── Carrier Info Card ───────────────────────────────────────────────── -->
+    <div class="section-card">
+      <h3 class="section-title">Carrier Information</h3>
+      <div class="info-grid">
+        <div class="info-col">
+          <div class="info-row">
+            <span class="info-label">DOT Number</span>
+            <span class="info-value">{{ carrier.dot_number }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">MC Number</span>
+            <span class="info-value">{{ carrier.mc_number || 'N/A' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Operating Status</span>
+            <span class="info-value">
+              <span class="status-indicator" [ngClass]="carrier.operating_status?.toLowerCase() === 'active' ? 'status-active' : 'status-inactive'">
+                {{ carrier.operating_status || 'N/A' }}
+              </span>
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Safety Rating</span>
+            <span class="info-value">{{ carrier.safety_rating || 'Not Rated' }}</span>
+          </div>
+        </div>
+        <div class="info-col">
+          <div class="info-row">
+            <span class="info-label">Total Drivers</span>
+            <span class="info-value">{{ carrier.total_drivers !== null ? carrier.total_drivers : 'N/A' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Total Power Units</span>
+            <span class="info-value">{{ carrier.total_power_units !== null ? carrier.total_power_units : 'N/A' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">DBA Name</span>
+            <span class="info-value">{{ carrier.dba_name || 'N/A' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Last Scraped</span>
+            <span class="info-value">{{ formatDate(carrier.scraped_at) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── SMS Score Trend Chart ───────────────────────────────────────────── -->
+    <div class="section-card">
+      <h3 class="section-title">SMS Score Trends</h3>
+      <div *ngIf="history.length > 0" class="chart-container">
+        <canvas #smsChart></canvas>
+      </div>
+      <div *ngIf="history.length === 0" class="empty-hint">
+        <span class="material-symbols-outlined">show_chart</span>
+        No historical data available
+      </div>
+    </div>
+
+    <!-- ─── Licensing Section ───────────────────────────────────────────────── -->
+    <div class="section-card">
+      <h3 class="section-title">Licensing &amp; Authority</h3>
+      <div class="licensing-grid">
+        <div class="license-item">
+          <span class="info-label">Authority Common</span>
+          <span class="authority-badge" [ngClass]="getAuthorityClass(carrier.authority_common)">
+            {{ getAuthorityStatus(carrier.authority_common) }}
+          </span>
+        </div>
+        <div class="license-item">
+          <span class="info-label">Authority Contract</span>
+          <span class="authority-badge" [ngClass]="getAuthorityClass(carrier.authority_contract)">
+            {{ getAuthorityStatus(carrier.authority_contract) }}
+          </span>
+        </div>
+        <div class="license-item">
+          <span class="info-label">Authority Broker</span>
+          <span class="authority-badge" [ngClass]="getAuthorityClass(carrier.authority_broker)">
+            {{ getAuthorityStatus(carrier.authority_broker) }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Insurance Section ───────────────────────────────────────────────── -->
+    <div class="section-card">
+      <h3 class="section-title">Insurance</h3>
+      <div class="insurance-grid">
+        <div class="insurance-item">
+          <span class="insurance-type">BIPD Insurance</span>
+          <div class="insurance-detail">
+            <span class="insurance-status" [ngClass]="getInsuranceStatus(carrier.bipd_insurance_on_file) === 'filed' ? 'ins-filed' : 'ins-none'">
+              <span class="material-symbols-outlined">
+                {{ getInsuranceStatus(carrier.bipd_insurance_on_file) === 'filed' ? 'check_circle' : 'cancel' }}
+              </span>
+              {{ carrier.bipd_insurance_on_file || 'None on file' }}
+            </span>
+          </div>
+        </div>
+        <div class="insurance-item">
+          <span class="insurance-type">Cargo Insurance</span>
+          <div class="insurance-detail">
+            <span class="insurance-status" [ngClass]="getInsuranceStatus(carrier.cargo_insurance_on_file) === 'filed' ? 'ins-filed' : 'ins-none'">
+              <span class="material-symbols-outlined">
+                {{ getInsuranceStatus(carrier.cargo_insurance_on_file) === 'filed' ? 'check_circle' : 'cancel' }}
+              </span>
+              {{ carrier.cargo_insurance_on_file || 'None on file' }}
+            </span>
+          </div>
+        </div>
+        <div class="insurance-item">
+          <span class="insurance-type">Bond Insurance</span>
+          <div class="insurance-detail">
+            <span class="insurance-status" [ngClass]="getInsuranceStatus(carrier.bond_insurance_on_file) === 'filed' ? 'ins-filed' : 'ins-none'">
+              <span class="material-symbols-outlined">
+                {{ getInsuranceStatus(carrier.bond_insurance_on_file) === 'filed' ? 'check_circle' : 'cancel' }}
+              </span>
+              {{ carrier.bond_insurance_on_file || 'None on file' }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Snapshot History Table ──────────────────────────────────────────── -->
+    <div class="section-card" *ngIf="history.length > 0">
+      <h3 class="section-title">Snapshot History</h3>
+      <div class="table-wrapper">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Unsafe Driving</th>
+              <th>HOS</th>
+              <th>Vehicle Maint.</th>
+              <th>Ctrl Substances</th>
+              <th>Driver Fitness</th>
+              <th>Crash</th>
+              <th>Hazmat</th>
+              <th>Safety Rating</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let snap of pagedHistory">
+              <td class="date-cell">{{ formatDate(snap.scraped_at) }}</td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.unsafe_driving_score)">{{ formatScore(snap.unsafe_driving_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.hos_compliance_score)">{{ formatScore(snap.hos_compliance_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.vehicle_maintenance_score)">{{ formatScore(snap.vehicle_maintenance_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.controlled_substances_score)">{{ formatScore(snap.controlled_substances_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.driver_fitness_score)">{{ formatScore(snap.driver_fitness_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.crash_indicator_score)">{{ formatScore(snap.crash_indicator_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.hazmat_score)">{{ formatScore(snap.hazmat_score) }}</span></td>
+              <td>{{ snap.safety_rating || 'N/A' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" *ngIf="totalHistoryPages > 1">
+        <button type="button" class="btn btn-sm btn-secondary" [disabled]="historyPage === 0" (click)="prevPage()">
+          <span class="material-symbols-outlined">chevron_left</span> Prev
+        </button>
+        <span class="page-info">Page {{ historyPage + 1 }} of {{ totalHistoryPages }}</span>
+        <button type="button" class="btn btn-sm btn-secondary" [disabled]="historyPage >= totalHistoryPages - 1" (click)="nextPage()">
+          Next <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</ng-container>
