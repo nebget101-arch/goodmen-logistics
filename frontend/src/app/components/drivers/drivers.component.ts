@@ -1280,10 +1280,31 @@ export class DriversComponent implements OnInit, OnDestroy {
     if (!this.selectedDriver) return;
     this.newDrugTest = this.getEmptyDrugTest(this.selectedDriver.id);
     this.editingDrugTest = null;
+    this.drugTestResultFile = null;
+    this.drugTestResultFileName = '';
+    this.drugTestResultError = '';
     this.showDrugTestForm = true;
   }
 
+  // FN-225: Drug test result attachment
+  drugTestResultFile: File | null = null;
+  drugTestResultFileName: string = '';
+  drugTestResultError: string = '';
+  uploadingDrugTestDoc: boolean = false;
+
+  onDrugTestResultFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.drugTestResultFile = input.files[0];
+      this.drugTestResultFileName = input.files[0].name;
+      this.drugTestResultError = '';
+    }
+  }
+
   openEditDrugTest(test: DrugAlcoholTest): void {
+    this.drugTestResultFile = null;
+    this.drugTestResultFileName = test.result_document_id ? 'Previously uploaded' : '';
+    this.drugTestResultError = '';
     this.editingDrugTest = { ...test };
     if (!this.editingDrugTest.panel_details) {
       this.editingDrugTest.panel_details = {
@@ -1317,7 +1338,16 @@ export class DriversComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // FN-225: Validate attachment required when result is selected
+    const hasExistingDoc = this.editingDrugTest?.result_document_id;
+    if (form.result && !this.drugTestResultFile && !hasExistingDoc) {
+      this.drugTestResultError = 'Please upload the drug test result document before saving.';
+      return;
+    }
+    this.drugTestResultError = '';
+
     this.savingDrugTest = true;
+    const driverId = this.selectedDriver.id;
 
     if (this.editingDrugTest && this.editingDrugTest.id) {
       this.apiService.updateDrugAlcoholTest(this.editingDrugTest.id, form).pipe(
@@ -1328,26 +1358,68 @@ export class DriversComponent implements OnInit, OnDestroy {
           if (idx >= 0) {
             this.drugAlcoholTests[idx] = updated;
           }
+          // FN-225: Upload result doc if a new file was selected
+          if (this.drugTestResultFile && updated.id) {
+            this.uploadResultDocument(driverId, updated.id);
+          }
           this.showDrugTestForm = false;
           this.editingDrugTest = null;
+          this.drugTestResultFile = null;
+          this.drugTestResultFileName = '';
         },
         error: () => {
           alert('Failed to update drug/alcohol test. Please try again.');
         }
       });
     } else {
-      this.apiService.createDrugAlcoholTest(this.selectedDriver.id, form).pipe(
+      this.apiService.createDrugAlcoholTest(driverId, form).pipe(
         finalize(() => (this.savingDrugTest = false))
       ).subscribe({
         next: (created) => {
           this.drugAlcoholTests.unshift(created);
+          // FN-225: Upload result doc after creating the test
+          if (this.drugTestResultFile && created.id) {
+            this.uploadResultDocument(driverId, created.id);
+          }
           this.showDrugTestForm = false;
+          this.drugTestResultFile = null;
+          this.drugTestResultFileName = '';
         },
         error: () => {
           alert('Failed to create drug/alcohol test. Please try again.');
         }
       });
     }
+  }
+
+  /** FN-225: Upload the result document after test create/update */
+  private uploadResultDocument(driverId: string, testId: string): void {
+    if (!this.drugTestResultFile) return;
+    this.apiService.uploadDrugTestResultDocument(driverId, testId, this.drugTestResultFile).subscribe({
+      next: (doc) => {
+        // Update the test in the list with the new document ID
+        const idx = this.drugAlcoholTests.findIndex(t => t.id === testId);
+        if (idx >= 0) {
+          this.drugAlcoholTests[idx].result_document_id = doc.id;
+        }
+        // Reload DQF to reflect auto-completed requirements
+        if (this.selectedDriver) {
+          this.apiService.getDqfDriver(this.selectedDriver.id).subscribe({
+            next: (resp) => {
+              const dqf = resp?.dqf || {};
+              this.dqfRequirements = dqf.requirements || [];
+              this.dqfCompleteness = dqf.completeness || 0;
+              this.buildDqfCategories();
+              this.clearanceStatus = this.deriveClearanceFromRequirements();
+            }
+          });
+        }
+      },
+      error: (err) => {
+        console.error('Failed to upload drug test result document:', err);
+        alert('Test saved but failed to upload result document. Please try again via Edit.');
+      }
+    });
   }
 
   markClearinghouseReported(test: DrugAlcoholTest): void {

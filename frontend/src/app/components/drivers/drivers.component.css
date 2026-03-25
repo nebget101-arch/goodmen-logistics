@@ -757,6 +757,46 @@
   font-weight: 500;
 }
 
+/* FN-225: Drug test file upload */
+.drivers-dashboard .da-file-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drivers-dashboard .da-file-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  background: rgba(2, 6, 23, 0.5);
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.drivers-dashboard .da-file-upload-btn:hover {
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #e2e8f0;
+}
+
+.drivers-dashboard .da-file-name {
+  font-size: 12px;
+  color: #2dd4bf;
+}
+
+.drivers-dashboard .da-validation-error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #ef4444;
+}
+
 .drivers-dashboard .dqf-evidence-link {
   display: inline-flex;
   align-items: center;
