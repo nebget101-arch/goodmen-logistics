@@ -32,8 +32,17 @@ const mvrTemplatePath =
   path.join(__dirname, '../assets/templates/MVR_-_Employee_Authorization_Form.pdf');
 
 async function loadTemplate(templatePath) {
-  const bytes = await fs.promises.readFile(templatePath);
-  return PDFDocument.load(bytes);
+  // FN-247: Gracefully handle missing template files — create blank PDF instead of crashing
+  try {
+    await fs.promises.access(templatePath, fs.constants.R_OK);
+    const bytes = await fs.promises.readFile(templatePath);
+    return PDFDocument.load(bytes);
+  } catch (err) {
+    // Template file not found — create a blank PDF document
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.addPage([612, 792]); // Letter size
+    return pdfDoc;
+  }
 }
 
 async function drawText(page, font, text, x, y, options = {}) {
