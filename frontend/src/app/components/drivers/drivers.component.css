@@ -386,21 +386,23 @@
 }
 
 .drivers-dashboard .dqf-close-btn-ai {
-  position: relative;
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8));
+  border-radius: 50%;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
   color: #38bdf8;
   cursor: pointer;
-  flex-shrink: 0;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.15), 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .drivers-dashboard .dqf-close-btn-ai .material-symbols-outlined {
@@ -414,7 +416,7 @@
 .drivers-dashboard .dqf-close-btn-glow {
   position: absolute;
   inset: -2px;
-  border-radius: 14px;
+  border-radius: 50%;
   background: conic-gradient(
     from 0deg,
     rgba(56, 189, 248, 0.4),

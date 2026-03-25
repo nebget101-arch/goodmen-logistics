@@ -381,6 +381,11 @@
   <!-- DQF Checklist Modal -->
   <div class="modal-backdrop dqf-modal-backdrop" *ngIf="showDQFForm && selectedDriver" (click)="closeDQFForm()">
     <div class="modal dqf-modal dqf-modal-wide" (click)="$event.stopPropagation()">
+      <!-- Close button positioned top-right outside header -->
+      <button class="dqf-close-btn-ai" type="button" (click)="closeDQFForm()" [disabled]="saving" title="Close DQF Checklist">
+        <span class="dqf-close-btn-glow"></span>
+        <span class="material-symbols-outlined">close</span>
+      </button>
       <div class="modal-header dqf-modal-header">
         <div>
           <h3>
@@ -389,10 +394,6 @@
           </h3>
           <p class="dqf-modal-subtitle">49 CFR 391.51 - Required Documents for Driver Qualification File</p>
         </div>
-        <button class="dqf-close-btn-ai" type="button" (click)="closeDQFForm()" [disabled]="saving" title="Close DQF Checklist">
-          <span class="dqf-close-btn-glow"></span>
-          <span class="material-symbols-outlined">close</span>
-        </button>
       </div>
       <div class="dqf-modal-body">
         <!-- Pre-Employment Clearance Gate (FN-214) -->
