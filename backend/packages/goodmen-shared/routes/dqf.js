@@ -380,7 +380,6 @@ router.get('/driver/:driverId/prehire-documents', async (req, res) => {
            'onboarding_cdl_back',
            'onboarding_medical_certificate',
            'onboarding_social_security_card',
-           'onboarding_proof_of_address',
            'onboarding_other_certification'
          )
          AND (deleted_at IS NULL)

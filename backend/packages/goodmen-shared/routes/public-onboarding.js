@@ -40,7 +40,6 @@ const ALLOWED_ONBOARDING_DOC_TYPES = new Set([
   'cdl_back',
   'medical_certificate',
   'social_security_card',
-  'proof_of_address',
   'other_certification'
 ]);
 
@@ -885,7 +884,7 @@ router.post(
     try {
       const { packetId } = req.params;
       const { token } = req.query;
-      const { docType } = req.body;
+      const docType = req.body.docType || req.body.documentType;
 
       if (!req.file) {
         return res.status(400).json({ message: 'No file uploaded' });
