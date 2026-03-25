@@ -338,10 +338,34 @@ async function submitApplication(applicationId, payload, userId, context = null)
 
     const fullApp = await getById(applicationId);
 
-    // FN-216: Build PDF context with operating entity
+    // FN-260: Build PDF context with operating entity (auto-lookup if not passed)
     const pdfContext = {};
     if (context?.operatingEntity) {
       pdfContext.operatingEntity = context.operatingEntity;
+    } else {
+      try {
+        const oeId = app.operating_entity_id || null;
+        let oeRow = null;
+        if (oeId) {
+          oeRow = await trx('operating_entities').where({ id: oeId }).first();
+        }
+        if (!oeRow) {
+          const driverRow = await trx('drivers').where({ id: app.driver_id }).select('operating_entity_id').first();
+          if (driverRow?.operating_entity_id) {
+            oeRow = await trx('operating_entities').where({ id: driverRow.operating_entity_id }).first();
+          }
+        }
+        if (oeRow) {
+          pdfContext.operatingEntity = {
+            name: oeRow.name || oeRow.legal_name || '',
+            address: [oeRow.address_line1, oeRow.address_line2, oeRow.city, oeRow.state, oeRow.zip_code].filter(Boolean).join(', '),
+            phone: oeRow.phone || '',
+            email: oeRow.email || ''
+          };
+        }
+      } catch (oeErr) {
+        dtLogger.warn('operating_entity_lookup_failed', { applicationId, error: oeErr?.message });
+      }
     }
     // Pass audit trail from applicant_snapshot if available
     const snapshot = fullApp.applicant_snapshot || {};

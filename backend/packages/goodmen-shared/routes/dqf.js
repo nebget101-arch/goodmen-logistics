@@ -475,16 +475,16 @@ router.post('/driver/:driverId/auto-pull-emp-app', async (req, res) => {
     let operatingEntity = null;
     if (driver.operating_entity_id) {
       const oeRes = await query(
-        `SELECT name, address, city, state, zip, phone, email FROM operating_entities WHERE id = $1`,
+        `SELECT name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1`,
         [driver.operating_entity_id]
       );
       if (oeRes.rows.length > 0) {
         const oe = oeRes.rows[0];
         operatingEntity = {
-          name: oe.name,
-          address: [oe.address, oe.city, oe.state, oe.zip].filter(Boolean).join(', '),
-          phone: oe.phone,
-          email: oe.email
+          name: oe.name || oe.legal_name || '',
+          address: [oe.address_line1, oe.address_line2, oe.city, oe.state, oe.zip_code].filter(Boolean).join(', '),
+          phone: oe.phone || '',
+          email: oe.email || ''
         };
       }
     }
