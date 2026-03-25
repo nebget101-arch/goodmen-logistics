@@ -76,12 +76,12 @@ async function buildEmploymentApplicationPdf({ driver, application, signature })
 
   // Top section – applicant info
   await drawText(page, font, fullName, 110, 680);
-  await drawText(page, application.phone || driver?.phone || '', 110, 664);
-  await drawText(page, application.email || driver?.email || '', 110, 648);
-  await drawText(page, safeDate(application.dateOfBirth), 420, 648);
-  await drawText(page, maskSSN(application.ssnLast4 || application.ssn), 420, 664);
-  await drawText(page, application.positionAppliedFor || '', 180, 632);
-  await drawText(page, safeDate(application.dateAvailable), 430, 632);
+  await drawText(page, font, application.phone || driver?.phone || '', 110, 664);
+  await drawText(page, font, application.email || driver?.email || '', 110, 648);
+  await drawText(page, font, safeDate(application.dateOfBirth), 420, 648);
+  await drawText(page, font, maskSSN(application.ssnLast4 || application.ssn), 420, 664);
+  await drawText(page, font, application.positionAppliedFor || '', 180, 632);
+  await drawText(page, font, safeDate(application.dateAvailable), 430, 632);
 
   const cityStateZip = [
     application.addressCity || '',
@@ -92,42 +92,42 @@ async function buildEmploymentApplicationPdf({ driver, application, signature })
     .join(', ');
 
   // Address
-  await drawText(page, application.addressStreet || '', 140, 604);
-  await drawText(page, cityStateZip, 140, 588);
-  await drawText(page, application.yearsAtAddress || '', 500, 588);
+  await drawText(page, font, application.addressStreet || '', 140, 604);
+  await drawText(page, font, cityStateZip, 140, 588);
+  await drawText(page, font, application.yearsAtAddress || '', 500, 588);
 
   // CDL / license
   const licenseLine = `${application.licenseState || driver?.cdl_state || ''} ${application.licenseNumber ||
     driver?.cdl_number ||
     ''}`;
-  await drawText(page, licenseLine, 160, 558);
-  await drawText(page, application.licenseClass || '', 430, 558);
-  await drawText(page, application.licenseEndorsements || '', 160, 542);
-  await drawText(page, safeDate(application.licenseExpiry), 430, 542);
+  await drawText(page, font, licenseLine, 160, 558);
+  await drawText(page, font, application.licenseClass || '', 430, 558);
+  await drawText(page, font, application.licenseEndorsements || '', 160, 542);
+  await drawText(page, font, safeDate(application.licenseExpiry), 430, 542);
 
   // Current employer
-  await drawText(page, application.currentEmployerName || '', 140, 500);
-  await drawText(page, application.currentEmployerPhone || '', 420, 500);
-  await drawText(page, application.currentEmployerFrom || '', 140, 484);
-  await drawText(page, application.currentEmployerTo || '', 320, 484);
-  await drawText(page, application.currentEmployerReasonForLeaving || '', 140, 468, {
+  await drawText(page, font, application.currentEmployerName || '', 140, 500);
+  await drawText(page, font, application.currentEmployerPhone || '', 420, 500);
+  await drawText(page, font, application.currentEmployerFrom || '', 140, 484);
+  await drawText(page, font, application.currentEmployerTo || '', 320, 484);
+  await drawText(page, font, application.currentEmployerReasonForLeaving || '', 140, 468, {
     maxWidth: 400
   });
 
   // Previous employer
-  await drawText(page, application.previousEmployerName || '', 140, 438);
-  await drawText(page, application.previousEmployerPhone || '', 420, 438);
-  await drawText(page, application.previousEmployerFrom || '', 140, 422);
-  await drawText(page, application.previousEmployerTo || '', 320, 422);
-  await drawText(page, application.previousEmployerReasonForLeaving || '', 140, 406, {
+  await drawText(page, font, application.previousEmployerName || '', 140, 438);
+  await drawText(page, font, application.previousEmployerPhone || '', 420, 438);
+  await drawText(page, font, application.previousEmployerFrom || '', 140, 422);
+  await drawText(page, font, application.previousEmployerTo || '', 320, 422);
+  await drawText(page, font, application.previousEmployerReasonForLeaving || '', 140, 406, {
     maxWidth: 400
   });
 
   // Education / other
-  await drawText(page, application.educationSummary || '', 60, 360, {
+  await drawText(page, font, application.educationSummary || '', 60, 360, {
     maxWidth: 480
   });
-  await drawText(page, application.otherQualifications || '', 60, 320, {
+  await drawText(page, font, application.otherQualifications || '', 60, 320, {
     maxWidth: 480
   });
 
@@ -137,8 +137,8 @@ async function buildEmploymentApplicationPdf({ driver, application, signature })
   const sigDate = safeDate(
     signature?.signedAt || application.applicationSignatureDate
   );
-  await drawText(page, sigName, 140, 210);
-  await drawText(page, sigDate, 430, 210);
+  await drawText(page, font, sigName, 140, 210);
+  await drawText(page, font, sigDate, 430, 210);
 
   // ------------------------------------------------------------------
   // FN-215: Additional pages for 10-year history, disqualifications,
@@ -351,26 +351,26 @@ async function buildMvrAuthorizationPdf({ driver, mvr, signature }) {
     .join(' ');
 
   // Applicant block
-  await drawText(page, fullName, 140, 640);
-  await drawText(page, mvr.akaNames || '', 140, 624);
-  await drawText(page, safeDate(mvr.dateOfBirth), 430, 624);
+  await drawText(page, font, fullName, 140, 640);
+  await drawText(page, font, mvr.akaNames || '', 140, 624);
+  await drawText(page, font, safeDate(mvr.dateOfBirth), 430, 624);
 
   // License info
   const licenseLine = `${mvr.driverLicenseState || driver?.cdl_state || ''} ${mvr.driverLicenseNumber ||
     driver?.cdl_number ||
     ''}`;
-  await drawText(page, licenseLine, 180, 596);
-  await drawText(page, mvr.emailForReportCopy || '', 180, 580);
+  await drawText(page, font, licenseLine, 180, 596);
+  await drawText(page, font, mvr.emailForReportCopy || '', 180, 580);
 
   // Disclosure checkbox / text
   const consentText = mvr.acknowledgesRights ? 'YES' : 'NO';
-  await drawText(page, consentText, 90, 540);
+  await drawText(page, font, consentText, 90, 540);
 
   // Signature
   const sigName = signature?.signerName || mvr.mvrSignatureName || '';
   const sigDate = safeDate(signature?.signedAt || mvr.mvrSignatureDate);
-  await drawText(page, sigName, 160, 220);
-  await drawText(page, sigDate, 430, 220);
+  await drawText(page, font, sigName, 160, 220);
+  await drawText(page, font, sigDate, 430, 220);
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
