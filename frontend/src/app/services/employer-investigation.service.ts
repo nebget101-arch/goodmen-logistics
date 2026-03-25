@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
 export interface PastEmployerInvestigation {
@@ -58,7 +59,37 @@ export class EmployerInvestigationService {
   constructor(private http: HttpClient) {}
 
   getInvestigationStatus(driverId: string): Observable<InvestigationStatus> {
-    return this.http.get<InvestigationStatus>(`${this.baseUrl}/driver/${driverId}`);
+    return this.http.get<any>(`${this.baseUrl}/driver/${driverId}`).pipe(
+      map((resp: any) => {
+        // FN-232: Map API response to frontend InvestigationStatus interface
+        const employers = resp.employers || resp.pastEmployers || [];
+        return {
+          driverId: resp.driver?.id || driverId,
+          overallStatus: resp.driver?.investigationFileStatus || 'not_started',
+          completedCount: resp.summary?.completedEmployers ?? resp.completedCount ?? 0,
+          totalCount: resp.summary?.totalEmployers ?? resp.totalCount ?? 0,
+          pastEmployers: employers.map((e: any) => ({
+            id: e.id,
+            driverId: e.driverId || driverId,
+            employerName: e.employerName || e.employer_name || '',
+            contactName: e.contactName || e.contact_name || '',
+            contactEmail: e.contactEmail || e.contact_email || '',
+            contactPhone: e.contactPhone || e.contact_phone || '',
+            dotRegulated: e.dotRegulated ?? e.isDotRegulated ?? e.is_dot_regulated ?? false,
+            status: e.investigationStatus || e.status || 'not_started',
+            deadline: e.deadlineDate || e.deadline || '',
+            inquirySentAt: e.inquirySentAt || e.inquiry_sent_at || null,
+            followUpSentAt: e.followUpSentAt || e.follow_up_sent_at || null,
+            responseReceivedAt: e.responseReceivedAt || e.response_received_at || null,
+            noResponseDocumentedAt: e.noResponseDocumentedAt || null,
+            completedAt: e.completedAt || null,
+            notes: e.notes || '',
+            createdAt: e.createdAt || e.created_at || '',
+            updatedAt: e.updatedAt || e.updated_at || ''
+          }))
+        } as InvestigationStatus;
+      })
+    );
   }
 
   initiateInvestigation(driverId: string): Observable<InvestigationStatus> {
