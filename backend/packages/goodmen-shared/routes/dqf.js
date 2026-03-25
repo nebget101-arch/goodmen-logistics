@@ -7,6 +7,8 @@ const dtLogger = require('../utils/logger');
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange, computeWarningItems } = require('../services/dqf-service');
 const { createDriverDocument } = require('../services/driver-storage-service');
 const { generateEmploymentApplicationPdf } = require('../services/pdf.service');
+const { extractMvrData } = require('../services/mvr-extraction-service');
+const pdfParse = require('pdf-parse');
 
 // File upload (memory storage - max 10 MB, PDF/image only)
 const upload = multer({
@@ -445,7 +447,8 @@ router.get('/driver/:driverId/prehire-documents', async (req, res) => {
            'onboarding_cdl_back',
            'onboarding_medical_certificate',
            'onboarding_social_security_card',
-           'onboarding_other_certification'
+           'onboarding_other_certification',
+           'mvr_report'
          )
          AND (deleted_at IS NULL)
        ORDER BY created_at DESC`,
@@ -697,6 +700,220 @@ router.post('/driver/:driverId/requirement/:requirementKey/upload', upload.singl
     // eslint-disable-next-line no-console
     console.error('Error in POST /api/dqf/driver/:driverId/requirement/:requirementKey/upload', error);
     return res.status(500).json({ message: 'Failed to upload document' });
+  }
+});
+
+// FN-264: POST /api/dqf/driver/:driverId/mvr-upload
+// Upload an MVR PDF, extract data via AI, store report and document.
+router.post('/driver/:driverId/mvr-upload', upload.single('file'), async (req, res) => {
+  const start = Date.now();
+  try {
+    const { driverId } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'file is required' });
+    }
+
+    if (req.file.mimetype !== 'application/pdf') {
+      return res.status(400).json({ message: 'Only PDF files are accepted for MVR uploads' });
+    }
+
+    // Validate driver exists and OE access
+    const driverRes = await query(
+      'SELECT id, first_name, last_name, operating_entity_id, tenant_id FROM drivers WHERE id = $1',
+      [driverId]
+    );
+    if (driverRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    const driver = driverRes.rows[0];
+    if (req.context?.operatingEntityId && driver.operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // 1. Extract text from PDF
+    let pdfText = '';
+    try {
+      const parsed = await pdfParse(req.file.buffer);
+      pdfText = (parsed.text || '').trim();
+    } catch (parseErr) {
+      dtLogger.warn('mvr_upload_pdf_parse_failed', { driverId, error: parseErr.message });
+      // Continue with empty text -- extraction service will return manual fallback
+    }
+
+    // 2. Call AI extraction service
+    const extractedData = await extractMvrData(pdfText);
+
+    // 3. Store the PDF file as a driver document
+    const firstName = (driver.first_name || '').trim();
+    const lastName = (driver.last_name || '').trim();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const pdfFileName = firstName || lastName
+      ? `mvr_report_${firstName}_${lastName}_${dateStr}.pdf`.replace(/\s+/g, '_')
+      : `mvr_report_${driver.id}_${dateStr}.pdf`;
+
+    const doc = await createDriverDocument({
+      driverId: driver.id,
+      packetId: null,
+      docType: 'mvr_report',
+      fileName: pdfFileName,
+      mimeType: 'application/pdf',
+      bytes: req.file.buffer,
+      folder: 'mvr-reports'
+    });
+
+    // 4. Insert into driver_mvr_reports table
+    const userId = req.user?.id || null;
+    const mvrResult = await query(
+      `INSERT INTO driver_mvr_reports (
+        driver_id,
+        document_id,
+        tenant_id,
+        report_date,
+        report_source,
+        license_number,
+        license_state,
+        license_status,
+        license_class,
+        license_expiry,
+        endorsements,
+        restrictions,
+        violations,
+        accidents,
+        points_total,
+        raw_text,
+        extraction_method,
+        extracted_at,
+        created_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), $18)
+      RETURNING *`,
+      [
+        driver.id,
+        doc.id,
+        driver.tenant_id || null,
+        extractedData.reportDate || dateStr,
+        'manual_upload',
+        extractedData.licenseNumber,
+        extractedData.licenseState,
+        extractedData.licenseStatus,
+        extractedData.licenseClass,
+        extractedData.licenseExpiry,
+        extractedData.endorsements,
+        extractedData.restrictions,
+        JSON.stringify(extractedData.violations || []),
+        JSON.stringify(extractedData.accidents || []),
+        extractedData.pointsTotal || 0,
+        pdfText.slice(0, 50000) || null, // Store first 50K chars for reference
+        extractedData.extractionMethod || 'ai',
+        userId
+      ]
+    );
+
+    // 5. Auto-complete mvr_data_received DQF requirement
+    const currentRes = await query(
+      'SELECT status FROM dqf_driver_status WHERE driver_id = $1 AND requirement_key = $2',
+      [driverId, 'mvr_data_received']
+    );
+    const oldStatus = currentRes.rows.length > 0 ? currentRes.rows[0].status : 'missing';
+
+    await upsertRequirementStatus(driverId, 'mvr_data_received', 'complete', doc.id);
+    await computeAndUpdateDqfCompleteness(driverId);
+    await logStatusChange(driverId, 'mvr_data_received', oldStatus, 'complete', userId, 'MVR report uploaded and data extracted');
+
+    dtLogger.info('mvr_upload_complete', {
+      driverId,
+      documentId: doc.id,
+      mvrReportId: mvrResult.rows[0]?.id,
+      violationCount: (extractedData.violations || []).length,
+      accidentCount: (extractedData.accidents || []).length,
+      extractionMethod: extractedData.extractionMethod
+    });
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('POST', `/api/dqf/driver/${driverId}/mvr-upload`, 200, duration);
+
+    return res.json({
+      success: true,
+      documentId: doc.id,
+      mvrReportId: mvrResult.rows[0]?.id,
+      extractedData,
+      warning: extractedData.warning || null
+    });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('mvr_upload_failed', error, { driverId: req.params.driverId });
+    dtLogger.trackRequest('POST', `/api/dqf/driver/${req.params.driverId}/mvr-upload`, 500, duration);
+    // eslint-disable-next-line no-console
+    console.error('Error in POST /api/dqf/driver/:driverId/mvr-upload', error);
+    return res.status(500).json({ message: 'Failed to upload MVR report' });
+  }
+});
+
+// FN-264: GET /api/dqf/driver/:driverId/mvr-data
+// Return all MVR reports for a driver, ordered by report_date DESC.
+router.get('/driver/:driverId/mvr-data', async (req, res) => {
+  const start = Date.now();
+  try {
+    const { driverId } = req.params;
+
+    // Validate driver exists and OE access
+    const driverRes = await query(
+      'SELECT id, operating_entity_id FROM drivers WHERE id = $1',
+      [driverId]
+    );
+    if (driverRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    if (req.context?.operatingEntityId && driverRes.rows[0].operating_entity_id !== req.context.operatingEntityId) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    const result = await query(
+      `SELECT
+         id,
+         driver_id,
+         document_id,
+         report_date,
+         report_source,
+         license_number,
+         license_state,
+         license_status,
+         license_class,
+         license_expiry,
+         endorsements,
+         restrictions,
+         violations,
+         accidents,
+         points_total,
+         extraction_method,
+         extracted_at,
+         created_at,
+         jsonb_array_length(COALESCE(violations, '[]'::jsonb)) AS violation_count,
+         jsonb_array_length(COALESCE(accidents, '[]'::jsonb)) AS accident_count
+       FROM driver_mvr_reports
+       WHERE driver_id = $1
+       ORDER BY report_date DESC, created_at DESC`,
+      [driverId]
+    );
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('GET', `/api/dqf/driver/${driverId}/mvr-data`, 200, duration, {
+      driverId,
+      count: result.rows.length
+    });
+
+    return res.json({
+      driverId,
+      reports: result.rows
+    });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('mvr_data_fetch_failed', error, { driverId: req.params.driverId });
+    dtLogger.trackRequest('GET', `/api/dqf/driver/${req.params.driverId}/mvr-data`, 500, duration);
+    // eslint-disable-next-line no-console
+    console.error('Error in GET /api/dqf/driver/:driverId/mvr-data', error);
+    return res.status(500).json({ message: 'Failed to load MVR data' });
   }
 });
 
