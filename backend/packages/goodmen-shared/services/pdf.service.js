@@ -42,21 +42,99 @@ function newPageIfNeeded(pdfDoc, page, y, minY = 80) {
   return { page, y };
 }
 
-async function generateEmploymentApplicationPdf(fullApp) {
+async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const applicant = fullApp.applicant_snapshot || {};
-  const residencies = fullApp.residencies || [];
-  const licenses = fullApp.licenses || [];
+
+  // FN-216: Fallback reads — if structured arrays are empty, try building from snapshot top-level fields
+  let residencies = fullApp.residencies || [];
+  if (!residencies.length) {
+    if (applicant.addressStreet || applicant.addressCity) {
+      residencies.push({
+        residencyType: 'current',
+        street: applicant.addressStreet || '',
+        city: applicant.addressCity || '',
+        state: applicant.addressState || '',
+        zip: applicant.addressZip || '',
+        yearsAtAddress: applicant.yearsAtAddress || ''
+      });
+    }
+    if (Array.isArray(applicant.previousAddresses)) {
+      for (const pa of applicant.previousAddresses) {
+        residencies.push({
+          residencyType: 'previous',
+          street: pa.street || '',
+          city: pa.city || '',
+          state: pa.state || '',
+          zip: pa.zip || '',
+          yearsAtAddress: pa.yearsAtAddress || ''
+        });
+      }
+    }
+  }
+
+  let licenses = fullApp.licenses || [];
+  if (!licenses.length && Array.isArray(applicant.licenses)) {
+    licenses = applicant.licenses;
+  }
+
   const accidents = fullApp.accidents || [];
   const violations = fullApp.violations || [];
   const convictions = fullApp.convictions || [];
-  const employers = fullApp.employers || [];
-  const workAuth = applicant.workAuthorization || {};
-  const drugAlcohol = applicant.drugAlcohol || {};
-  const drivingExp = applicant.drivingExperience || {};
+
+  let employers = fullApp.employers || [];
+  if (!employers.length) {
+    if (applicant.currentEmployer && typeof applicant.currentEmployer === 'object') {
+      employers.push({ ...applicant.currentEmployer, is_current: true });
+    }
+    if (Array.isArray(applicant.previousEmployers)) {
+      for (const pe of applicant.previousEmployers) {
+        employers.push({ ...pe, is_current: false });
+      }
+    }
+  }
+
+  // FN-216: Work auth fallback from snapshot top-level
+  let workAuth = applicant.workAuthorization || {};
+  if (!workAuth.legallyAuthorizedToWork && applicant.legallyAuthorizedToWork !== undefined) {
+    workAuth = {
+      legallyAuthorizedToWork: applicant.legallyAuthorizedToWork,
+      convictedOfFelony: applicant.convictedOfFelony,
+      felonyDetails: applicant.felonyDetails,
+      unableToPerformFunctions: applicant.unableToPerformFunctions,
+      adaDetails: applicant.adaDetails
+    };
+  }
+
+  // FN-216: Drug/alcohol fallback from snapshot top-level
+  let drugAlcohol = applicant.drugAlcohol || {};
+  if (!drugAlcohol.violatedSubstanceProhibitions && applicant.violatedSubstanceProhibitions !== undefined) {
+    drugAlcohol = {
+      violatedSubstanceProhibitions: applicant.violatedSubstanceProhibitions,
+      failedRehabProgram: applicant.failedRehabProgram,
+      alcoholTestResult04OrHigher: applicant.alcoholTestResult04OrHigher,
+      positiveControlledSubstancesTest: applicant.positiveControlledSubstancesTest,
+      refusedRequiredTest: applicant.refusedRequiredTest,
+      otherDOTViolation: applicant.otherDOTViolation
+    };
+  }
+
+  // FN-216: Driving experience fallback from snapshot top-level
+  let drivingExp = applicant.drivingExperience || {};
+  if (!drivingExp.straightTruck && applicant.straightTruck !== undefined) {
+    drivingExp = {
+      straightTruck: applicant.straightTruck,
+      tractorSemiTrailer: applicant.tractorSemiTrailer,
+      tractorTwoTrailers: applicant.tractorTwoTrailers,
+      motorcoachSchoolBus: applicant.motorcoachSchoolBus,
+      motorcoachSchoolBusMore15: applicant.motorcoachSchoolBusMore15,
+      other: applicant.otherEquipment,
+      statesOperatedIn: applicant.statesOperatedIn
+    };
+  }
 
   // === PAGE 1: HEADER + APPLICANT INFO ===
   let page = pdfDoc.addPage([612, 792]);
@@ -65,8 +143,17 @@ async function generateEmploymentApplicationPdf(fullApp) {
   drawLine(page, bold, 'DRIVER EMPLOYMENT APPLICATION', 160, y, 16);
   y -= 18;
 
-  // Company info (from operating entity or tenant)
-  drawLine(page, font, '[COMPANY NAME, ADDRESS, PHONE NUMBER, AND EMAIL]', 36, y, 9);
+  // FN-216: Company info from operating entity context
+  const oe = context.operatingEntity || {};
+  let companyLine = '[COMPANY NAME, ADDRESS, PHONE NUMBER, AND EMAIL]';
+  if (oe.name) {
+    const parts = [oe.name];
+    if (oe.address) parts.push(oe.address);
+    if (oe.phone) parts.push(oe.phone);
+    if (oe.email) parts.push(oe.email);
+    companyLine = parts.join(' | ');
+  }
+  drawLine(page, font, companyLine, 36, y, 9);
   y -= 14;
   drawLine(page, font, 'An Equal Opportunity Employer', 36, y, 9);
   y -= 18;
@@ -290,6 +377,28 @@ async function generateEmploymentApplicationPdf(fullApp) {
   drawLine(page, font, `Date: ${fmtDate(cert.signatureDate || applicant.signatureDate || fullApp.signed_at || fullApp.submitted_at)}`, 36, y, 10);
   y -= 16;
   drawLine(page, font, `Applicant Name (printed): ${asText(cert.applicantPrintedName || applicant.applicantPrintedName || [applicant.firstName, applicant.middleName, applicant.lastName].filter(Boolean).join(' '))}`, 36, y, 10);
+
+  // === DOCUMENT AUDIT TRAIL ===
+  const audit = context.auditTrail || applicant.auditTrail || {};
+  if (audit.ipAddress || audit.submittedAt || audit.userAgent) {
+    y -= 8;
+    ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 80));
+    drawSectionHeader(page, bold, 'DOCUMENT AUDIT TRAIL', y);
+    y -= 16;
+    if (audit.ipAddress) {
+      drawLine(page, font, `IP Address: ${asText(audit.ipAddress)}`, 36, y, 8);
+      y -= 11;
+    }
+    if (audit.submittedAt) {
+      drawLine(page, font, `Submitted At: ${asText(audit.submittedAt)}`, 36, y, 8);
+      y -= 11;
+    }
+    if (audit.userAgent) {
+      const ua = asText(audit.userAgent).slice(0, 120);
+      drawLine(page, font, `User Agent: ${ua}`, 36, y, 7);
+      y -= 11;
+    }
+  }
 
   const bytes = await pdfDoc.save();
   return Buffer.from(bytes);

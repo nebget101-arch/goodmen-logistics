@@ -341,7 +341,16 @@ async function submitApplication(applicationId, payload, userId, context = null)
   return db.transaction(async (trx) => {
     const app = await trx('employment_applications').where({ id: applicationId }).forUpdate().first();
     if (!app) throw new Error('Application not found');
-    if (app.status && app.status !== 'draft') throw new Error('Application already submitted or in processing');
+
+    // FN-216: Allow resubmission — if already submitted, reset status so a new PDF is generated.
+    // The old PDF stays in document history.
+    if (app.status && app.status !== 'draft') {
+      dtLogger.info('employment_application_resubmission', {
+        applicationId,
+        previousStatus: app.status,
+        driverId: app.driver_id
+      });
+    }
 
     // persist final snapshot
     await trx('employment_applications').where({ id: applicationId }).update({
@@ -353,21 +362,50 @@ async function submitApplication(applicationId, payload, userId, context = null)
 
     const fullApp = await getById(applicationId);
 
+    // FN-216: Build PDF context with operating entity
+    const pdfContext = {};
+    if (context?.operatingEntity) {
+      pdfContext.operatingEntity = context.operatingEntity;
+    }
+    // Pass audit trail from applicant_snapshot if available
+    const snapshot = fullApp.applicant_snapshot || {};
+    if (snapshot.auditTrail) {
+      pdfContext.auditTrail = snapshot.auditTrail;
+    }
+
     // Generate PDF (pdfService returns Buffer)
     let pdfBuf;
     try {
-      pdfBuf = await pdfService.generateEmploymentApplicationPdf(fullApp);
+      pdfBuf = await pdfService.generateEmploymentApplicationPdf(fullApp, pdfContext);
     } catch (e) {
       dtLogger.error('pdf_generation_failed', { applicationId, error: e?.message || String(e) });
       throw new Error('PDF generation failed');
     }
 
+    // FN-216: Use driver name in filename: "{FirstName} {LastName} - Employment Application.pdf"
+    const driverFirstName = (snapshot.firstName || '').trim();
+    const driverLastName = (snapshot.lastName || '').trim();
+    let driverFileName;
+    if (driverFirstName || driverLastName) {
+      driverFileName = `${driverFirstName} ${driverLastName} - Employment Application.pdf`.trim();
+    } else {
+      // Fallback: try querying the drivers table
+      try {
+        const driverRow = await trx('drivers').where({ id: app.driver_id }).select('first_name', 'last_name').first();
+        if (driverRow && (driverRow.first_name || driverRow.last_name)) {
+          driverFileName = `${(driverRow.first_name || '').trim()} ${(driverRow.last_name || '').trim()} - Employment Application.pdf`.trim();
+        }
+      } catch (_) { /* fallback below */ }
+      if (!driverFileName) {
+        driverFileName = `Employment Application - ${app.driver_id}.pdf`;
+      }
+    }
+
     // Upload to storage (R2)
     let uploadResult;
     try {
-      const fileName = `driver-employment-application-${app.driver_id}-${Date.now()}.pdf`;
-      const res = await r2.uploadBuffer({ buffer: pdfBuf, fileName, contentType: 'application/pdf' });
-      uploadResult = { objectKey: res.key, bucketName: process.env.R2_BUCKET, fileName, contentType: 'application/pdf', fileSize: pdfBuf.length };
+      const res = await r2.uploadBuffer({ buffer: pdfBuf, fileName: driverFileName, contentType: 'application/pdf' });
+      uploadResult = { objectKey: res.key, bucketName: process.env.R2_BUCKET, fileName: driverFileName, contentType: 'application/pdf', fileSize: pdfBuf.length };
     } catch (e) {
       dtLogger.error('r2_upload_failed', { applicationId, error: e?.message || String(e) });
       throw new Error('Document upload failed');

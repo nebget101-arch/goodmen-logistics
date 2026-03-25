@@ -87,7 +87,85 @@ async function safeOptionalQuery(sql, params = [], fallbackRows = []) {
   }
 }
 
-async function upsertEmploymentApplicationFromPacket(packet, data, submit = false) {
+async function upsertEmploymentApplicationFromPacket(packet, data, submit = false, reqMeta = {}) {
+  // FN-216: Build employers from currentEmployer + previousEmployers if structured employers array is empty
+  let employers = data?.employers || [];
+  if (!employers.length) {
+    if (data?.currentEmployer && typeof data.currentEmployer === 'object') {
+      employers.push({ ...data.currentEmployer, isCurrent: true, tier: 'detailed' });
+    }
+    if (Array.isArray(data?.previousEmployers)) {
+      for (const pe of data.previousEmployers) {
+        employers.push({ ...pe, isCurrent: false, tier: 'detailed' });
+      }
+    }
+  }
+  employers = employers.map((emp) => ({ ...emp, tier: emp.tier || 'detailed' }));
+
+  // FN-216: Build residencies from current address + previousAddresses if structured residencies array is empty
+  let residencies = data?.residencies || [];
+  if (!residencies.length) {
+    if (data?.addressStreet || data?.addressCity) {
+      residencies.push({
+        residencyType: 'current',
+        street: data.addressStreet || '',
+        city: data.addressCity || '',
+        state: data.addressState || '',
+        zip: data.addressZip || '',
+        yearsAtAddress: data.yearsAtAddress || ''
+      });
+    }
+    if (Array.isArray(data?.previousAddresses)) {
+      for (const pa of data.previousAddresses) {
+        residencies.push({
+          residencyType: 'previous',
+          street: pa.street || '',
+          city: pa.city || '',
+          state: pa.state || '',
+          zip: pa.zip || '',
+          yearsAtAddress: pa.yearsAtAddress || ''
+        });
+      }
+    }
+  }
+
+  // FN-216: Build workAuthorization from new onboarding form fields
+  const workAuthorization = data?.workAuthorization || {
+    legallyAuthorizedToWork: data?.legallyAuthorizedToWork ?? null,
+    convictedOfFelony: data?.convictedOfFelony ?? null,
+    felonyDetails: data?.felonyDetails || null,
+    unableToPerformFunctions: data?.unableToPerformFunctions ?? null,
+    adaDetails: data?.adaDetails || null
+  };
+
+  // FN-216: Build drugAlcohol from new onboarding form fields
+  const drugAlcohol = data?.drugAlcohol || {
+    violatedSubstanceProhibitions: data?.violatedSubstanceProhibitions ?? null,
+    failedRehabProgram: data?.failedRehabProgram ?? null,
+    alcoholTestResult04OrHigher: data?.alcoholTestResult04OrHigher ?? null,
+    positiveControlledSubstancesTest: data?.positiveControlledSubstancesTest ?? null,
+    refusedRequiredTest: data?.refusedRequiredTest ?? null,
+    otherDOTViolation: data?.otherDOTViolation ?? null
+  };
+
+  // FN-216: Build drivingExperience from individual equipment fields
+  const drivingExperience = data?.drivingExperience || {
+    straightTruck: data?.straightTruck || null,
+    tractorSemiTrailer: data?.tractorSemiTrailer || null,
+    tractorTwoTrailers: data?.tractorTwoTrailers || null,
+    motorcoachSchoolBus: data?.motorcoachSchoolBus || null,
+    motorcoachSchoolBusMore15: data?.motorcoachSchoolBusMore15 || null,
+    otherEquipment: data?.otherEquipment || null,
+    statesOperatedIn: data?.statesOperatedIn || null
+  };
+
+  // FN-216: Build audit trail from request metadata
+  const auditTrail = {
+    ipAddress: reqMeta.ipAddress || null,
+    userAgent: reqMeta.userAgent || null,
+    submittedAt: new Date().toISOString()
+  };
+
   const payload = {
     applicationDate: data?.applicationDate || data?.dateOfApplication || null,
     applicantSnapshot: {
@@ -112,18 +190,51 @@ async function upsertEmploymentApplicationFromPacket(packet, data, submit = fals
       signatureDate: data?.signatureDate || data?.applicationSignatureDate || null,
       certificationAccepted: data?.certificationAccepted ?? null,
       // FN-215: preserve license class in snapshot for CDL validation
-      licenseClass: data?.licenseClass || null
+      licenseClass: data?.licenseClass || null,
+      // FN-216: preserve new form fields in snapshot for PDF fallback reads
+      addressStreet: data?.addressStreet || null,
+      addressCity: data?.addressCity || null,
+      addressState: data?.addressState || null,
+      addressZip: data?.addressZip || null,
+      yearsAtAddress: data?.yearsAtAddress || null,
+      previousAddresses: data?.previousAddresses || null,
+      currentEmployer: data?.currentEmployer || null,
+      previousEmployers: data?.previousEmployers || null,
+      legallyAuthorizedToWork: data?.legallyAuthorizedToWork ?? null,
+      convictedOfFelony: data?.convictedOfFelony ?? null,
+      felonyDetails: data?.felonyDetails || null,
+      unableToPerformFunctions: data?.unableToPerformFunctions ?? null,
+      adaDetails: data?.adaDetails || null,
+      straightTruck: data?.straightTruck || null,
+      tractorSemiTrailer: data?.tractorSemiTrailer || null,
+      tractorTwoTrailers: data?.tractorTwoTrailers || null,
+      motorcoachSchoolBus: data?.motorcoachSchoolBus || null,
+      motorcoachSchoolBusMore15: data?.motorcoachSchoolBusMore15 || null,
+      otherEquipment: data?.otherEquipment || null,
+      statesOperatedIn: data?.statesOperatedIn || null,
+      violatedSubstanceProhibitions: data?.violatedSubstanceProhibitions ?? null,
+      failedRehabProgram: data?.failedRehabProgram ?? null,
+      alcoholTestResult04OrHigher: data?.alcoholTestResult04OrHigher ?? null,
+      positiveControlledSubstancesTest: data?.positiveControlledSubstancesTest ?? null,
+      refusedRequiredTest: data?.refusedRequiredTest ?? null,
+      otherDOTViolation: data?.otherDOTViolation ?? null,
+      hasAccidents: data?.hasAccidents ?? null,
+      hasViolations: data?.hasViolations ?? null,
+      // FN-216: audit trail
+      auditTrail
     },
-    residencies: data?.residencies || [],
+    // FN-216: structured objects for employment-application.service
+    workAuthorization,
+    drugAlcohol,
+    hasAccidents: data?.hasAccidents ?? null,
+    hasViolations: data?.hasViolations ?? null,
+    residencies,
     licenses: data?.licenses || [],
-    drivingExperience: data?.drivingExperience || [],
+    drivingExperience,
     accidents: data?.accidents || [],
+    violations: data?.violations || [],
     convictions: data?.convictions || [],
-    // FN-215: employers may now include a `tier` field ('detailed' | 'summary')
-    employers: (data?.employers || []).map((emp) => ({
-      ...emp,
-      tier: emp.tier || 'detailed'
-    })),
+    employers,
     education: data?.education || [],
     // FN-215: disqualification and certification fields
     disqualifications: data?.disqualifications || [],
@@ -133,11 +244,24 @@ async function upsertEmploymentApplicationFromPacket(packet, data, submit = fals
   };
 
   const apps = await employmentAppService.getByDriverId(packet.driver_id);
-  let target = apps.find((a) => a.status === 'draft') || null;
-  if (!target) {
-    target = await employmentAppService.createDraft(packet.driver_id, payload, null, null);
+
+  // FN-216: For submission, handle resubmission by creating a new draft instead of reusing a submitted one
+  let target;
+  if (submit) {
+    // If a draft exists, reuse it; otherwise create a new one (even if a submitted app exists)
+    target = apps.find((a) => a.status === 'draft') || null;
+    if (!target) {
+      target = await employmentAppService.createDraft(packet.driver_id, payload, null, null);
+    } else {
+      await employmentAppService.updateDraft(target.id, payload, null, null);
+    }
   } else {
-    await employmentAppService.updateDraft(target.id, payload, null, null);
+    target = apps.find((a) => a.status === 'draft') || null;
+    if (!target) {
+      target = await employmentAppService.createDraft(packet.driver_id, payload, null, null);
+    } else {
+      await employmentAppService.updateDraft(target.id, payload, null, null);
+    }
   }
 
   // FN-215: validate completeness before submission
@@ -224,6 +348,22 @@ async function maybeGenerateOnboardingPdfs(packetId) {
   const driver = driverRes.rows[0];
   if (!driver) return;
 
+  // FN-216: Look up operating entity for PDF header
+  let operatingEntity = null;
+  try {
+    const oeId = packet.operating_entity_id || driver.operating_entity_id || null;
+    if (oeId) {
+      const oeRes = await query(
+        'SELECT id, name, address, phone, email FROM operating_entities WHERE id = $1',
+        [oeId]
+      );
+      operatingEntity = oeRes.rows[0] || null;
+    }
+  } catch (oeErr) {
+    // Tolerate missing operating_entities table
+    dtLogger.warn('operating_entity_lookup_fallback', { error: oeErr?.message });
+  }
+
   const esignRes = await query(
     `SELECT section_key, signer_name, signed_at
      FROM driver_esignatures
@@ -249,13 +389,20 @@ async function maybeGenerateOnboardingPdfs(packetId) {
     const buffer = await buildEmploymentApplicationPdf({
       driver,
       application: applicationData,
-      signature
+      signature,
+      operatingEntity
     });
+    // FN-216: use "{FirstName} {LastName} - Employment Application.pdf" filename
+    const firstName = (driver.first_name || '').trim();
+    const lastName = (driver.last_name || '').trim();
+    const pdfFileName = firstName || lastName
+      ? `${firstName} ${lastName} - Employment Application.pdf`.trim()
+      : 'Employment Application.pdf';
     await createDriverDocument({
       driverId: driver.id,
       packetId: packet.id,
       docType: 'employment_application_pdf',
-      fileName: `employment_application_${driver.last_name || 'driver'}.pdf`,
+      fileName: pdfFileName,
       mimeType: 'application/pdf',
       bytes: buffer
     });
@@ -513,7 +660,10 @@ router.post('/:packetId/sections/:sectionKey', rateLimited, async (req, res) => 
       if (sectionKey === 'employment_application') {
         // mirror into normalized employment application tables and perform final submission orchestration
         try {
-          await upsertEmploymentApplicationFromPacket(packet, data, true);
+          await upsertEmploymentApplicationFromPacket(packet, data, true, {
+            ipAddress: req.ip || '',
+            userAgent: req.headers['user-agent'] || ''
+          });
         } catch (syncError) {
           // Do not fail onboarding section save if normalized employment tables are not yet fully migrated.
           dtLogger.warn('employment_application_sync_failed_nonblocking', {
@@ -526,7 +676,10 @@ router.post('/:packetId/sections/:sectionKey', rateLimited, async (req, res) => 
     } else if (sectionKey === 'employment_application') {
       // keep draft in normalized employment application storage
       try {
-        await upsertEmploymentApplicationFromPacket(packet, data, false);
+        await upsertEmploymentApplicationFromPacket(packet, data, false, {
+          ipAddress: req.ip || '',
+          userAgent: req.headers['user-agent'] || ''
+        });
       } catch (syncError) {
         // Non-blocking for legacy schemas.
         dtLogger.warn('employment_application_draft_sync_failed_nonblocking', {
