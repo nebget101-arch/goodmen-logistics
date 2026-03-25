@@ -89,6 +89,7 @@ router.get('/drivers/:driverId', async (req, res) => {
          r.weight,
          COALESCE(s.status, 'missing') AS status,
          s.evidence_document_id,
+         s.completion_date,
          s.last_updated_at
        FROM dqf_requirements r
        LEFT JOIN dqf_driver_status s
@@ -207,7 +208,7 @@ router.get('/documents/:id/download', async (req, res) => {
 router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
   try {
     const { driverId, requirementKey } = req.params;
-    const { status, evidenceDocumentId, note } = req.body;
+    const { status, evidenceDocumentId, note, completionDate } = req.body;
 
     const driverScopeRes = await query(
       `SELECT id, operating_entity_id
@@ -233,8 +234,8 @@ router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
     );
     const oldStatus = currentRes.rows.length > 0 ? currentRes.rows[0].status : 'missing';
 
-    // Update the requirement
-    await upsertRequirementStatus(driverId, requirementKey, status, evidenceDocumentId || null);
+    // FN-223: Update the requirement with optional completion_date
+    await upsertRequirementStatus(driverId, requirementKey, status, evidenceDocumentId || null, completionDate || null);
 
     // Log the change
     const userId = req.user?.id || null;

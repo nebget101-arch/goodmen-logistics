@@ -697,7 +697,10 @@
                 <div class="dqf-req-info">
                   <span class="dqf-req-label">{{ req.label }}</span>
                   <span class="dqf-req-cfr" *ngIf="getCfrReference(req.key)">{{ getCfrReference(req.key) }}</span>
-                  <span class="dqf-req-meta" *ngIf="req.last_updated_at">
+                  <span class="dqf-req-meta" *ngIf="req.completion_date">
+                    Completed {{ req.completion_date | date:'shortDate' }}
+                  </span>
+                  <span class="dqf-req-meta" *ngIf="!req.completion_date && req.last_updated_at">
                     Updated {{ req.last_updated_at | date:'shortDate' }}
                   </span>
                 </div>
@@ -714,14 +717,31 @@
                   </ng-container>
                   <!-- Status buttons for manual status requirements -->
                   <ng-container *ngIf="!isDqfDocumentReq(req.key)">
-                    <button class="dqf-status-btn"
-                            *ngIf="req.status !== 'complete'"
-                            [class.active]="updateingRequirementKey === req.key"
-                            (click)="updateRequirementStatus(req, 'complete')">
-                      <span class="material-symbols-outlined" style="font-size:14px;">check_circle</span> Mark Done
-                    </button>
+                    <!-- FN-223: Inline date picker for clearinghouse items -->
+                    <ng-container *ngIf="requiresDateCapture(req.key) && req.status !== 'complete'">
+                      <input type="date" class="dqf-date-input" [(ngModel)]="dqfDateInputs[req.key]" [name]="'dqfDate_'+req.key" />
+                      <button class="dqf-status-btn"
+                              [class.active]="updateingRequirementKey === req.key"
+                              [disabled]="!dqfDateInputs[req.key]"
+                              (click)="updateRequirementStatusWithDate(req, 'complete')">
+                        <span class="material-symbols-outlined" style="font-size:14px;">check_circle</span> Mark Done
+                      </button>
+                    </ng-container>
+                    <!-- Standard mark done (no date) -->
+                    <ng-container *ngIf="!requiresDateCapture(req.key) && req.status !== 'complete' && req.status !== 'review_required'">
+                      <button class="dqf-status-btn"
+                              [class.active]="updateingRequirementKey === req.key"
+                              (click)="updateRequirementStatus(req, 'complete')">
+                        <span class="material-symbols-outlined" style="font-size:14px;">check_circle</span> Mark Done
+                      </button>
+                    </ng-container>
+                    <!-- Review required badge (FN-223: non-negative drug test) -->
+                    <span class="dqf-review-badge" *ngIf="req.status === 'review_required'">
+                      <span class="material-symbols-outlined" style="font-size:14px;">warning</span> Review Required
+                    </span>
+                    <!-- Undo button -->
                     <button class="dqf-status-btn dqf-status-btn-gray"
-                            *ngIf="req.status === 'complete'"
+                            *ngIf="req.status === 'complete' || req.status === 'review_required'"
                             (click)="updateRequirementStatus(req, 'missing')">
                       <span class="material-symbols-outlined" style="font-size:14px;">undo</span> Undo
                     </button>

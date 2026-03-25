@@ -771,8 +771,9 @@ export class ApiService {
     driverId: string,
     requirementKey: string,
     payload: {
-      status: 'missing' | 'sent' | 'received' | 'complete';
+      status: 'missing' | 'sent' | 'received' | 'complete' | 'review_required';
       evidenceDocumentId?: string;
+      completionDate?: string;
       note?: string;
     }
   ): Observable<any> {

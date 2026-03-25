@@ -732,6 +732,31 @@
   background: rgba(100, 116, 139, 0.3);
 }
 
+/* FN-223: Inline date input for clearinghouse items */
+.drivers-dashboard .dqf-date-input {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(2, 6, 23, 0.6);
+  color: #e2e8f0;
+  font-size: 12px;
+  max-width: 140px;
+}
+
+/* FN-223: Review required badge for non-negative drug test results */
+.drivers-dashboard .dqf-review-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #f59e0b;
+  font-weight: 500;
+}
+
 .drivers-dashboard .dqf-evidence-link {
   display: inline-flex;
   align-items: center;
@@ -1127,6 +1152,12 @@
   background: rgba(239, 68, 68, 0.2);
   border: 1px solid rgba(239, 68, 68, 0.5);
   color: #fca5a5;
+}
+
+.drivers-dashboard .dqf-chip-review {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
 }
 
 .drivers-dashboard .dqf-chip-na {

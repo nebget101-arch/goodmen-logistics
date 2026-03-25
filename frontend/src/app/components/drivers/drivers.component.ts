@@ -791,6 +791,7 @@ export class DriversComponent implements OnInit, OnDestroy {
         'employment_verification_submitted',
         'mvr_authorization_signed',
         'pre_employment_drug_test_submitted',
+        'pre_employment_drug_test_result_received',
         'psp_consent'
       ],
       within_30_days: [
@@ -850,6 +851,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       employment_verification_submitted: '49 CFR 391.23(d)',
       mvr_authorization_signed: '49 CFR 391.23(a)',
       pre_employment_drug_test_submitted: '49 CFR 382.301',
+      pre_employment_drug_test_result_received: '49 CFR 382.301',
       psp_consent: '49 CFR 391.23(i)'
     };
     return refs[key] || '';
@@ -913,6 +915,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       case 'complete': return 'dqf-chip-complete';
       case 'received':
       case 'sent': return 'dqf-chip-in-progress';
+      case 'review_required': return 'dqf-chip-review';
       case 'n/a': return 'dqf-chip-na';
       default: return 'dqf-chip-missing';
     }
@@ -923,6 +926,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       case 'complete': return 'Complete';
       case 'received': return 'In Progress';
       case 'sent': return 'In Progress';
+      case 'review_required': return 'Review Required';
       case 'n/a': return 'N/A';
       default: return 'Missing';
     }
@@ -987,6 +991,52 @@ export class DriversComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         console.error('Error updating requirement', err);
+        alert('Failed to update requirement status');
+        this.updateingRequirementKey = null;
+      }
+    });
+  }
+
+  // FN-223: Keys that require a date when marking done (inline date picker)
+  readonly dateCaptureDqfKeys = [
+    'clearinghouse_consent_sent',
+    'clearinghouse_consent_received',
+    'clearinghouse_result_received'
+  ];
+  dqfDateInputs: Record<string, string> = {};
+
+  requiresDateCapture(key: string): boolean {
+    return this.dateCaptureDqfKeys.includes(key);
+  }
+
+  updateRequirementStatusWithDate(requirement: any, newStatus: string): void {
+    if (!this.canManageDrivers || !this.selectedDriver) return;
+    const dateVal = this.dqfDateInputs[requirement.key];
+    this.updateingRequirementKey = requirement.key;
+    this.apiService.updateDqfRequirementStatus(
+      this.selectedDriver.id,
+      requirement.key,
+      {
+        status: newStatus as any,
+        completionDate: dateVal || undefined,
+        note: dateVal ? `Completed on ${dateVal}` : 'Updated via drivers form'
+      }
+    ).subscribe({
+      next: () => {
+        const idx = this.dqfRequirements.findIndex(r => r.key === requirement.key);
+        if (idx >= 0) {
+          this.dqfRequirements[idx].status = newStatus;
+          this.dqfRequirements[idx].completion_date = dateVal || null;
+        }
+        this.updateingRequirementKey = null;
+        this.dqfDateInputs[requirement.key] = '';
+        const total = this.dqfRequirements.reduce((sum, r) => sum + (r.weight || 1), 0);
+        const done = this.dqfRequirements.filter(r => r.status === 'complete').reduce((sum, r) => sum + (r.weight || 1), 0);
+        this.dqfCompleteness = total > 0 ? Math.round((done / total) * 100) : 0;
+        this.buildDqfCategories();
+        this.clearanceStatus = this.deriveClearanceFromRequirements();
+      },
+      error: () => {
         alert('Failed to update requirement status');
         this.updateingRequirementKey = null;
       }

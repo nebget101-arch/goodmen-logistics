@@ -1,6 +1,6 @@
 const { query } = require('../internal/db');
 
-async function upsertRequirementStatus(driverId, requirementKey, status, evidenceDocumentId) {
+async function upsertRequirementStatus(driverId, requirementKey, status, evidenceDocumentId, completionDate) {
   if (!driverId || !requirementKey) {
     throw new Error('driverId and requirementKey are required');
   }
@@ -8,13 +8,14 @@ async function upsertRequirementStatus(driverId, requirementKey, status, evidenc
   const finalStatus = status || 'missing';
 
   await query(
-    `INSERT INTO dqf_driver_status (driver_id, requirement_key, status, evidence_document_id, last_updated_at)
-     VALUES ($1, $2, $3, $4, NOW())
+    `INSERT INTO dqf_driver_status (driver_id, requirement_key, status, evidence_document_id, completion_date, last_updated_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
      ON CONFLICT (driver_id, requirement_key) DO UPDATE SET
        status = EXCLUDED.status,
        evidence_document_id = COALESCE(EXCLUDED.evidence_document_id, dqf_driver_status.evidence_document_id),
+       completion_date = COALESCE(EXCLUDED.completion_date, dqf_driver_status.completion_date),
        last_updated_at = NOW()`,
-    [driverId, requirementKey, finalStatus, evidenceDocumentId || null]
+    [driverId, requirementKey, finalStatus, evidenceDocumentId || null, completionDate || null]
   );
 }
 
