@@ -1,5 +1,7 @@
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
+// ─── Utility functions ───────────────────────────────────────────────────────
+
 function asText(v) {
   if (v === null || v === undefined) return '';
   return String(v);
@@ -32,22 +34,199 @@ function maskSSN(ssn) {
   return `XXX-XX-${last4}`;
 }
 
-function drawLine(page, font, txt, x, y, size = 9) {
-  page.drawText(asText(txt), { x, y, size, font });
+// ─── Professional PDF color scheme and layout constants ──────────────────────
+
+const COLORS = {
+  primary: rgb(0.06, 0.29, 0.42),
+  headerBg: rgb(0.93, 0.95, 0.97),
+  text: rgb(0.1, 0.1, 0.1),
+  label: rgb(0.4, 0.4, 0.4),
+  border: rgb(0.78, 0.82, 0.86),
+  white: rgb(1, 1, 1),
+  altRow: rgb(0.97, 0.97, 0.98),
+  auditBg: rgb(0.96, 0.96, 0.97),
+};
+
+const LAYOUT = {
+  pageWidth: 612,
+  pageHeight: 792,
+  marginLeft: 45,
+  marginRight: 45,
+  marginTop: 50,
+  marginBottom: 60,
+  contentWidth: 522,   // 612 - 45 - 45
+  headerHeight: 45,
+  footerHeight: 30,
+  contentStartY: 720,  // Below page header
+};
+
+// ─── Professional PDF drawing helpers ────────────────────────────────────────
+
+function drawPageHeader(page, font, boldFont, companyName, companyAddress) {
+  const { pageWidth, marginLeft, marginRight } = LAYOUT;
+  // Company name bold 13pt
+  page.drawText(companyName || '', { x: marginLeft, y: 755, size: 13, font: boldFont, color: COLORS.primary });
+  // Address 8pt
+  if (companyAddress) {
+    page.drawText(companyAddress, { x: marginLeft, y: 742, size: 8, font, color: COLORS.label });
+  }
+  // Title right-aligned
+  const title = 'DRIVER EMPLOYMENT APPLICATION';
+  const titleWidth = boldFont.widthOfTextAtSize(title, 10);
+  page.drawText(title, { x: pageWidth - marginRight - titleWidth, y: 755, size: 10, font: boldFont, color: COLORS.primary });
+  // Horizontal line
+  page.drawLine({
+    start: { x: marginLeft, y: 735 },
+    end: { x: pageWidth - marginRight, y: 735 },
+    thickness: 1,
+    color: COLORS.border
+  });
 }
 
-function drawSectionHeader(page, font, title, y) {
-  drawLine(page, font, title, 36, y, 11);
-  page.drawLine({ start: { x: 36, y: y - 3 }, end: { x: 576, y: y - 3 }, thickness: 0.7 });
+function drawPageFooter(page, font, pageNum, totalPages, docId, genDate) {
+  const { pageWidth, marginLeft, marginRight } = LAYOUT;
+  // Line above footer
+  page.drawLine({
+    start: { x: marginLeft, y: 45 },
+    end: { x: pageWidth - marginRight, y: 45 },
+    thickness: 0.5,
+    color: COLORS.border
+  });
+  // Left: doc ID
+  if (docId) {
+    page.drawText(`Doc: ${docId}`, { x: marginLeft, y: 32, size: 7, font, color: COLORS.label });
+  }
+  // Center: date
+  if (genDate) {
+    const dateText = `Generated: ${genDate}`;
+    const w = font.widthOfTextAtSize(dateText, 7);
+    page.drawText(dateText, { x: (pageWidth - w) / 2, y: 32, size: 7, font, color: COLORS.label });
+  }
+  // Right: page number
+  const pageText = `Page ${pageNum} of ${totalPages}`;
+  const pw = font.widthOfTextAtSize(pageText, 7);
+  page.drawText(pageText, { x: pageWidth - marginRight - pw, y: 32, size: 7, font, color: COLORS.label });
 }
 
-function newPageIfNeeded(pdfDoc, page, y, minY = 80) {
+function drawSectionBanner(page, boldFont, title, y) {
+  const { marginLeft, contentWidth } = LAYOUT;
+  page.drawRectangle({
+    x: marginLeft,
+    y: y - 4,
+    width: contentWidth,
+    height: 18,
+    color: COLORS.headerBg,
+    borderColor: COLORS.border,
+    borderWidth: 0.5
+  });
+  page.drawText(title, { x: marginLeft + 8, y: y, size: 10, font: boldFont, color: COLORS.primary });
+  return y - 24;
+}
+
+function drawFieldPair(page, font, boldFont, label1, value1, label2, value2, y) {
+  const { marginLeft, contentWidth } = LAYOUT;
+  const halfWidth = contentWidth / 2 - 5;
+  // Field 1
+  page.drawText(label1, { x: marginLeft, y: y + 10, size: 7, font, color: COLORS.label });
+  page.drawText(asText(value1), { x: marginLeft, y: y - 2, size: 9, font: boldFont, color: COLORS.text });
+  page.drawLine({
+    start: { x: marginLeft, y: y - 6 },
+    end: { x: marginLeft + halfWidth, y: y - 6 },
+    thickness: 0.5,
+    color: COLORS.border
+  });
+  // Field 2
+  if (label2) {
+    const x2 = marginLeft + halfWidth + 10;
+    page.drawText(label2, { x: x2, y: y + 10, size: 7, font, color: COLORS.label });
+    page.drawText(asText(value2), { x: x2, y: y - 2, size: 9, font: boldFont, color: COLORS.text });
+    page.drawLine({
+      start: { x: x2, y: y - 6 },
+      end: { x: x2 + halfWidth, y: y - 6 },
+      thickness: 0.5,
+      color: COLORS.border
+    });
+  }
+  return y - 28;
+}
+
+function drawSingleField(page, font, boldFont, label, value, y, fullWidth) {
+  const { marginLeft, contentWidth } = LAYOUT;
+  const w = fullWidth ? contentWidth : contentWidth / 2 - 5;
+  page.drawText(label, { x: marginLeft, y: y + 10, size: 7, font, color: COLORS.label });
+  page.drawText(asText(value), { x: marginLeft, y: y - 2, size: 9, font: boldFont, color: COLORS.text });
+  page.drawLine({
+    start: { x: marginLeft, y: y - 6 },
+    end: { x: marginLeft + w, y: y - 6 },
+    thickness: 0.5,
+    color: COLORS.border
+  });
+  return y - 28;
+}
+
+function drawTableHeader(page, boldFont, columns, y) {
+  const { marginLeft, contentWidth } = LAYOUT;
+  page.drawRectangle({
+    x: marginLeft,
+    y: y - 2,
+    width: contentWidth,
+    height: 16,
+    color: COLORS.primary
+  });
+  for (const col of columns) {
+    page.drawText(col.label, { x: col.x, y: y + 2, size: 7.5, font: boldFont, color: COLORS.white });
+  }
+  return y - 18;
+}
+
+function drawTableRow(page, font, columns, values, y, isAlt) {
+  const { marginLeft, contentWidth } = LAYOUT;
+  if (isAlt) {
+    page.drawRectangle({
+      x: marginLeft,
+      y: y - 2,
+      width: contentWidth,
+      height: 14,
+      color: COLORS.altRow
+    });
+  }
+  for (let i = 0; i < columns.length; i++) {
+    const maxChars = columns[i].maxChars || 40;
+    const val = asText(values[i]).substring(0, maxChars);
+    page.drawText(val, { x: columns[i].x, y: y + 1, size: 8, font, color: COLORS.text });
+  }
+  return y - 14;
+}
+
+function drawQuestionRow(page, font, boldFont, question, answer, y) {
+  const { marginLeft, contentWidth } = LAYOUT;
+  page.drawText(question, { x: marginLeft + 8, y, size: 8, font, color: COLORS.text });
+  const ansColor = answer === 'YES' ? rgb(0.7, 0.15, 0.15) : COLORS.primary;
+  const ansWidth = boldFont.widthOfTextAtSize(answer, 9);
+  page.drawText(answer, { x: marginLeft + contentWidth - ansWidth - 8, y, size: 9, font: boldFont, color: ansColor });
+  page.drawLine({
+    start: { x: marginLeft + 8, y: y - 4 },
+    end: { x: marginLeft + contentWidth - 8, y: y - 4 },
+    thickness: 0.3,
+    color: COLORS.border
+  });
+  return y - 16;
+}
+
+function newPageWithHeader(pdfDoc, font, boldFont, companyName, companyAddress) {
+  const page = pdfDoc.addPage([LAYOUT.pageWidth, LAYOUT.pageHeight]);
+  drawPageHeader(page, font, boldFont, companyName, companyAddress);
+  return { page, y: LAYOUT.contentStartY };
+}
+
+function checkPage(pdfDoc, page, y, minY, font, boldFont, companyName, companyAddress) {
   if (y < minY) {
-    page = pdfDoc.addPage([612, 792]);
-    y = 760;
+    return newPageWithHeader(pdfDoc, font, boldFont, companyName, companyAddress);
   }
   return { page, y };
 }
+
+// ─── Main PDF generator ─────────────────────────────────────────────────────
 
 async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   const pdfDoc = await PDFDocument.create();
@@ -56,7 +235,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
 
   const applicant = fullApp.applicant_snapshot || {};
 
-  // FN-216: Fallback reads — if structured arrays are empty, try building from snapshot top-level fields
+  // FN-216: Fallback reads -- if structured arrays are empty, try building from snapshot top-level fields
   let residencies = fullApp.residencies || [];
   if (!residencies.length) {
     if (applicant.addressStreet || applicant.addressCity) {
@@ -143,180 +322,253 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     };
   }
 
-  // === PAGE 1: HEADER + APPLICANT INFO ===
-  let page = pdfDoc.addPage([612, 792]);
-  let y = 760;
-
-  drawLine(page, bold, 'DRIVER EMPLOYMENT APPLICATION', 160, y, 16);
-  y -= 18;
-
   // FN-216: Company info from operating entity context
   const oe = context.operatingEntity || {};
-  let companyLine = '[COMPANY NAME, ADDRESS, PHONE NUMBER, AND EMAIL]';
-  if (oe.name) {
-    const parts = [oe.name];
-    if (oe.address) parts.push(oe.address);
+  const companyName = oe.name || '';
+  let companyAddress = '';
+  if (oe.address) {
+    const parts = [oe.address];
     if (oe.phone) parts.push(oe.phone);
     if (oe.email) parts.push(oe.email);
-    companyLine = parts.join(' | ');
+    companyAddress = parts.join('  |  ');
   }
-  drawLine(page, font, companyLine, 36, y, 9);
-  y -= 14;
-  drawLine(page, font, 'An Equal Opportunity Employer', 36, y, 9);
+
+  // Document metadata for footers
+  const docId = fullApp.id || fullApp.application_id || '';
+  const genDate = new Date().toISOString().slice(0, 10);
+
+  // === PAGE 1: HEADER + NOTICE + APPLICANT INFO ===
+  let page = pdfDoc.addPage([LAYOUT.pageWidth, LAYOUT.pageHeight]);
+  drawPageHeader(page, font, bold, companyName || '[COMPANY NAME]', companyAddress || '[ADDRESS, PHONE, EMAIL]');
+  let y = LAYOUT.contentStartY;
+
+  // Equal opportunity line
+  page.drawText('An Equal Opportunity Employer', {
+    x: LAYOUT.marginLeft,
+    y,
+    size: 8,
+    font,
+    color: COLORS.label
+  });
   y -= 18;
 
-  // 49 CFR Notice
-  drawLine(page, bold, 'PLEASE READ COMPLETELY', 36, y, 9);
-  y -= 12;
+  // 49 CFR Notice box
+  const noticeBoxHeight = 72;
+  page.drawRectangle({
+    x: LAYOUT.marginLeft,
+    y: y - noticeBoxHeight + 14,
+    width: LAYOUT.contentWidth,
+    height: noticeBoxHeight,
+    color: rgb(0.99, 0.97, 0.93),
+    borderColor: rgb(0.85, 0.75, 0.55),
+    borderWidth: 0.5
+  });
+
+  page.drawText('PLEASE READ COMPLETELY', { x: LAYOUT.marginLeft + 8, y, size: 8, font: bold, color: COLORS.primary });
+  y -= 11;
   const notice = [
     'The information requested on this form is required by federal law (49 CFR) to be provided by any driver applying for',
     'a commercial driver position as defined in 49 CFR 390.5. Failure to complete required areas can place both the',
     'applicant and carrier in violation of federal law. Information provided will be verified by carrier as required under',
-    'various parts of 49 CFR, including Part 382 and Part 391.',
-    '',
-    'PLEASE PRINT CLEARLY AND SIGN YOUR FULL LEGAL NAME AT THE END WHERE REQUIRED.',
-    'FALSE STATEMENTS MAY RESULT IN REFUSAL TO HIRE OR IMMEDIATE TERMINATION.'
+    'various parts of 49 CFR, including Part 382 and Part 391.'
   ];
   for (const line of notice) {
-    drawLine(page, line.startsWith('PLEASE') || line.startsWith('FALSE') ? bold : font, line, 36, y, 7.5);
-    y -= 10;
+    page.drawText(line, { x: LAYOUT.marginLeft + 8, y, size: 7, font, color: COLORS.text });
+    y -= 9;
   }
-  y -= 8;
-
-  // APPLICANT INFORMATION
-  drawSectionHeader(page, bold, 'APPLICANT INFORMATION', y);
+  y -= 2;
+  page.drawText('PLEASE PRINT CLEARLY AND SIGN YOUR FULL LEGAL NAME AT THE END WHERE REQUIRED.', { x: LAYOUT.marginLeft + 8, y, size: 7, font: bold, color: rgb(0.6, 0.15, 0.15) });
+  y -= 9;
+  page.drawText('FALSE STATEMENTS MAY RESULT IN REFUSAL TO HIRE OR IMMEDIATE TERMINATION.', { x: LAYOUT.marginLeft + 8, y, size: 7, font: bold, color: rgb(0.6, 0.15, 0.15) });
   y -= 16;
-  drawLine(page, font, `FIRST NAME: ${asText(applicant.firstName)}`, 36, y);
-  drawLine(page, font, `MIDDLE NAME: ${asText(applicant.middleName)}`, 220, y);
-  drawLine(page, font, `LAST NAME: ${asText(applicant.lastName)}`, 400, y);
-  y -= 13;
-  drawLine(page, font, `PHONE: ${asText(applicant.phone)}`, 36, y);
-  drawLine(page, font, `EMAIL: ${asText(applicant.email)}`, 220, y);
-  y -= 13;
-  drawLine(page, font, `DATE OF BIRTH: ${fmtDate(applicant.dateOfBirth)}`, 36, y);
-  drawLine(page, font, `SSN: ${maskSSN(applicant.ssn)}`, 220, y);
-  y -= 13;
-  drawLine(page, font, `POSITION APPLIED FOR: ${asText(applicant.positionAppliedFor)}`, 36, y);
-  drawLine(page, font, `DATE OF APPLICATION: ${fmtDate(applicant.dateOfApplication || fullApp.application_date)}`, 300, y);
-  y -= 18;
 
-  // RESIDENCY HISTORY
-  drawSectionHeader(page, bold, 'ADDRESS HISTORY (PAST 3 YEARS)', y);
-  y -= 14;
-  drawLine(page, bold, 'TYPE            STREET                      CITY                STATE   ZIP      YEARS', 36, y, 8);
-  y -= 12;
-  for (const r of residencies.slice(0, 8)) {
-    ({ page, y } = newPageIfNeeded(pdfDoc, page, y));
-    drawLine(page, font, `${asText(r.residency_type || r.residencyType).padEnd(14)} ${asText(r.street).padEnd(26)} ${asText(r.city).padEnd(18)} ${asText(r.state).padEnd(7)} ${asText(r.zip_code || r.zipCode || r.zip).padEnd(8)} ${asText(r.years_at_address || r.yearsAtAddress)}`, 36, y, 8);
-    y -= 11;
+  // === APPLICANT INFORMATION ===
+  y = drawSectionBanner(page, bold, 'APPLICANT INFORMATION', y);
+  y -= 4;
+  y = drawFieldPair(page, font, bold, 'FIRST NAME', applicant.firstName, 'MIDDLE NAME', applicant.middleName, y);
+  y = drawFieldPair(page, font, bold, 'LAST NAME', applicant.lastName, 'PHONE', applicant.phone, y);
+  y = drawFieldPair(page, font, bold, 'EMAIL', applicant.email, 'DATE OF BIRTH', fmtDate(applicant.dateOfBirth), y);
+  y = drawFieldPair(page, font, bold, 'SSN (MASKED)', maskSSN(applicant.ssn), 'POSITION APPLIED FOR', applicant.positionAppliedFor, y);
+  y = drawSingleField(page, font, bold, 'DATE OF APPLICATION', fmtDate(applicant.dateOfApplication || fullApp.application_date), y, false);
+  y -= 4;
+
+  // === ADDRESS HISTORY ===
+  ({ page, y } = checkPage(pdfDoc, page, y, 120, font, bold, companyName, companyAddress));
+  y = drawSectionBanner(page, bold, 'ADDRESS HISTORY (PAST 3 YEARS)', y);
+  y -= 2;
+
+  const addrColumns = [
+    { label: 'TYPE', x: LAYOUT.marginLeft + 4 },
+    { label: 'STREET', x: LAYOUT.marginLeft + 70 },
+    { label: 'CITY', x: LAYOUT.marginLeft + 230 },
+    { label: 'STATE', x: LAYOUT.marginLeft + 340 },
+    { label: 'ZIP', x: LAYOUT.marginLeft + 395 },
+    { label: 'YEARS', x: LAYOUT.marginLeft + 460 }
+  ];
+  y = drawTableHeader(page, bold, addrColumns, y);
+
+  for (let i = 0; i < residencies.slice(0, 8).length; i++) {
+    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+    const r = residencies[i];
+    y = drawTableRow(page, font, addrColumns, [
+      asText(r.residency_type || r.residencyType),
+      asText(r.street),
+      asText(r.city),
+      asText(r.state),
+      asText(r.zip_code || r.zipCode || r.zip),
+      asText(r.years_at_address || r.yearsAtAddress)
+    ], y, i % 2 === 1);
   }
-  y -= 8;
+  y -= 10;
 
-  // WORK AUTHORIZATION & CRIMINAL BACKGROUND
-  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 120));
-  drawSectionHeader(page, bold, 'WORK AUTHORIZATION & BACKGROUND', y);
-  y -= 16;
-  drawLine(page, font, `Legally authorized to work in U.S. under 49 CFR?: ${yn(workAuth.legallyAuthorizedToWork)}`, 36, y);
-  y -= 13;
-  drawLine(page, font, `Convicted of a felony?: ${yn(workAuth.convictedOfFelony)}`, 36, y);
-  y -= 13;
+  // === WORK AUTHORIZATION & BACKGROUND ===
+  ({ page, y } = checkPage(pdfDoc, page, y, 140, font, bold, companyName, companyAddress));
+  y = drawSectionBanner(page, bold, 'WORK AUTHORIZATION & BACKGROUND', y);
+  y -= 2;
+
+  y = drawQuestionRow(page, font, bold, 'Legally authorized to work in U.S. under 49 CFR?', yn(workAuth.legallyAuthorizedToWork), y);
+  y = drawQuestionRow(page, font, bold, 'Convicted of a felony?', yn(workAuth.convictedOfFelony), y);
   if (workAuth.convictedOfFelony === 'yes' && workAuth.felonyDetails) {
-    drawLine(page, font, `  Details: ${asText(workAuth.felonyDetails).slice(0, 90)}`, 36, y, 8);
-    y -= 11;
+    page.drawText(`Details: ${asText(workAuth.felonyDetails).slice(0, 90)}`, { x: LAYOUT.marginLeft + 16, y, size: 7.5, font, color: COLORS.text });
+    y -= 14;
   }
-  drawLine(page, font, `Unable to perform job functions / ADA consideration?: ${yn(workAuth.unableToPerformFunctions)}`, 36, y);
-  y -= 13;
+  y = drawQuestionRow(page, font, bold, 'Unable to perform job functions / ADA consideration?', yn(workAuth.unableToPerformFunctions), y);
   if (workAuth.unableToPerformFunctions === 'yes' && workAuth.adaDetails) {
-    drawLine(page, font, `  Details: ${asText(workAuth.adaDetails).slice(0, 90)}`, 36, y, 8);
-    y -= 11;
+    page.drawText(`Details: ${asText(workAuth.adaDetails).slice(0, 90)}`, { x: LAYOUT.marginLeft + 16, y, size: 7.5, font, color: COLORS.text });
+    y -= 14;
   }
-  y -= 8;
+  y -= 6;
 
   // === EMPLOYMENT HISTORY ===
-  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 140));
-  drawSectionHeader(page, bold, 'EMPLOYMENT HISTORY', y);
-  y -= 14;
-  drawLine(page, font, 'All applicants must provide information for any previous employer during the preceding 3 years.', 36, y, 7.5);
+  ({ page, y } = checkPage(pdfDoc, page, y, 160, font, bold, companyName, companyAddress));
+  y = drawSectionBanner(page, bold, 'EMPLOYMENT HISTORY', y);
+  page.drawText('All applicants must provide information for any previous employer during the preceding 3 years.', { x: LAYOUT.marginLeft + 4, y, size: 7.5, font, color: COLORS.label });
   y -= 10;
-  drawLine(page, font, 'Applicants shall also provide an additional 7 years for employers for whom they operated a CMV.', 36, y, 7.5);
-  y -= 14;
+  page.drawText('Applicants shall also provide an additional 7 years for employers for whom they operated a CMV.', { x: LAYOUT.marginLeft + 4, y, size: 7.5, font, color: COLORS.label });
+  y -= 16;
 
-  for (let i = 0; i < employers.length; i += 1) {
-    ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 130));
+  for (let i = 0; i < employers.length; i++) {
+    ({ page, y } = checkPage(pdfDoc, page, y, 140, font, bold, companyName, companyAddress));
     const e = employers[i] || {};
-    const label = e.is_current ? 'CURRENT / MOST RECENT EMPLOYER' : `PREVIOUS EMPLOYER ${i}`;
-    drawLine(page, bold, label, 36, y, 9);
-    y -= 12;
-    drawLine(page, font, `NAME: ${asText(e.company_name || e.employerName)}`, 36, y, 8);
-    drawLine(page, font, `PHONE: ${asText(e.phone || e.phoneNumber)}`, 360, y, 8);
-    y -= 11;
-    drawLine(page, font, `ADDRESS: ${asText(e.street_address || e.streetAddress)} ${asText(e.city)}, ${asText(e.state)} ${asText(e.zip_code || e.zipCode)}`, 36, y, 8);
-    y -= 11;
-    drawLine(page, font, `POSITION HELD: ${asText(e.position_held || e.positionHeld)}`, 36, y, 8);
-    drawLine(page, font, `CONTACT: ${asText(e.contact_person || e.contactPerson)}`, 300, y, 8);
-    y -= 11;
-    drawLine(page, font, `FROM: ${asText(e.from_month_year || e.fromDate)}   TO: ${asText(e.to_month_year || e.toDate)}   SALARY: ${asText(e.salary || e.salaryWage)}`, 36, y, 8);
-    y -= 11;
-    drawLine(page, font, `REASON FOR LEAVING: ${asText(e.reason_for_leaving || e.reasonForLeaving)}`, 36, y, 8);
-    y -= 14;
+    const empLabel = e.is_current ? 'CURRENT / MOST RECENT EMPLOYER' : `PREVIOUS EMPLOYER ${i}`;
+
+    // Employer sub-header with colored left border
+    page.drawRectangle({
+      x: LAYOUT.marginLeft,
+      y: y - 3,
+      width: 3,
+      height: 14,
+      color: COLORS.primary
+    });
+    page.drawText(empLabel, { x: LAYOUT.marginLeft + 10, y, size: 9, font: bold, color: COLORS.primary });
+    y -= 18;
+
+    y = drawFieldPair(page, font, bold, 'EMPLOYER NAME', e.company_name || e.employerName, 'PHONE', e.phone || e.phoneNumber, y);
+    y = drawSingleField(page, font, bold, 'ADDRESS', `${asText(e.street_address || e.streetAddress)} ${asText(e.city)}, ${asText(e.state)} ${asText(e.zip_code || e.zipCode)}`, y, true);
+    y = drawFieldPair(page, font, bold, 'POSITION HELD', e.position_held || e.positionHeld, 'CONTACT PERSON', e.contact_person || e.contactPerson, y);
+    y = drawFieldPair(page, font, bold, 'FROM', e.from_month_year || e.fromDate, 'TO', e.to_month_year || e.toDate, y);
+    y = drawFieldPair(page, font, bold, 'SALARY / WAGE', e.salary || e.salaryWage, 'REASON FOR LEAVING', e.reason_for_leaving || e.reasonForLeaving, y);
+    y -= 4;
   }
 
   // === ACCIDENT RECORD ===
-  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 100));
-  drawSectionHeader(page, bold, 'ACCIDENT RECORD (PAST 5 YEARS)', y);
-  y -= 14;
+  ({ page, y } = checkPage(pdfDoc, page, y, 100, font, bold, companyName, companyAddress));
+  y = drawSectionBanner(page, bold, 'ACCIDENT RECORD (PAST 5 YEARS)', y);
+  y -= 2;
+
   if (!accidents.length) {
-    drawLine(page, font, 'NONE', 36, y);
-    y -= 14;
+    page.drawText('None reported.', { x: LAYOUT.marginLeft + 8, y, size: 9, font, color: COLORS.label });
+    y -= 18;
   } else {
-    drawLine(page, bold, 'DATE          NATURE OF ACCIDENT                 FATALITIES   INJURIES   HAZ. SPILL', 36, y, 8);
-    y -= 12;
-    for (const a of accidents.slice(0, 10)) {
-      ({ page, y } = newPageIfNeeded(pdfDoc, page, y));
-      drawLine(page, font, `${fmtDate(a.date).padEnd(13)} ${asText(a.nature_of_accident || a.natureOfAccident).padEnd(34)} ${asText(a.fatalities_count || a.fatalities).padEnd(12)} ${asText(a.injuries_count || a.injuries).padEnd(10)} ${yn(a.hazardous_material_spill ?? a.hazardousMaterialSpill ?? a.chemical_spill)}`, 36, y, 8);
-      y -= 11;
+    const accColumns = [
+      { label: 'DATE', x: LAYOUT.marginLeft + 4 },
+      { label: 'NATURE OF ACCIDENT', x: LAYOUT.marginLeft + 80 },
+      { label: 'FATALITIES', x: LAYOUT.marginLeft + 290 },
+      { label: 'INJURIES', x: LAYOUT.marginLeft + 365 },
+      { label: 'HAZ. SPILL', x: LAYOUT.marginLeft + 440 }
+    ];
+    y = drawTableHeader(page, bold, accColumns, y);
+    for (let i = 0; i < accidents.slice(0, 10).length; i++) {
+      ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+      const a = accidents[i];
+      y = drawTableRow(page, font, accColumns, [
+        fmtDate(a.date),
+        asText(a.nature_of_accident || a.natureOfAccident),
+        asText(a.fatalities_count || a.fatalities),
+        asText(a.injuries_count || a.injuries),
+        yn(a.hazardous_material_spill ?? a.hazardousMaterialSpill ?? a.chemical_spill)
+      ], y, i % 2 === 1);
     }
   }
   y -= 8;
 
   // === TRAFFIC CONVICTIONS ===
-  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 100));
-  drawSectionHeader(page, bold, 'TRAFFIC CONVICTIONS (PAST 5 YEARS)', y);
-  y -= 14;
+  ({ page, y } = checkPage(pdfDoc, page, y, 100, font, bold, companyName, companyAddress));
+  y = drawSectionBanner(page, bold, 'TRAFFIC CONVICTIONS (PAST 5 YEARS)', y);
+  y -= 2;
+
   if (!violations.length && !convictions.length) {
-    drawLine(page, font, 'NONE', 36, y);
-    y -= 14;
+    page.drawText('None reported.', { x: LAYOUT.marginLeft + 8, y, size: 9, font, color: COLORS.label });
+    y -= 18;
   } else {
-    drawLine(page, bold, 'LOCATION                    DATE          CHARGE                    PENALTY', 36, y, 8);
-    y -= 12;
+    const violColumns = [
+      { label: 'LOCATION', x: LAYOUT.marginLeft + 4 },
+      { label: 'DATE', x: LAYOUT.marginLeft + 140 },
+      { label: 'CHARGE', x: LAYOUT.marginLeft + 230 },
+      { label: 'PENALTY', x: LAYOUT.marginLeft + 410 }
+    ];
+    y = drawTableHeader(page, bold, violColumns, y);
     const allViolations = [...violations, ...convictions];
-    for (const v of allViolations.slice(0, 10)) {
-      ({ page, y } = newPageIfNeeded(pdfDoc, page, y));
-      drawLine(page, font, `${asText(v.location || v.state_of_violation || v.stateOfViolation).padEnd(27)} ${fmtDate(v.date || v.date_convicted || v.dateConvicted).padEnd(13)} ${asText(v.charge || v.violation).padEnd(25)} ${asText(v.penalty)}`, 36, y, 8);
-      y -= 11;
+    for (let i = 0; i < allViolations.slice(0, 10).length; i++) {
+      ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+      const v = allViolations[i];
+      y = drawTableRow(page, font, violColumns, [
+        asText(v.location || v.state_of_violation || v.stateOfViolation),
+        fmtDate(v.date || v.date_convicted || v.dateConvicted),
+        asText(v.charge || v.violation),
+        asText(v.penalty)
+      ], y, i % 2 === 1);
     }
   }
   y -= 8;
 
   // === LICENSE HISTORY ===
-  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 100));
-  drawSectionHeader(page, bold, 'DRIVER LICENSES / PERMITS (PAST 3 YEARS)', y);
-  y -= 14;
-  drawLine(page, bold, 'STATE     LICENSE NO.              TYPE              EXPIRATION DATE', 36, y, 8);
-  y -= 12;
-  for (const l of licenses.slice(0, 5)) {
-    ({ page, y } = newPageIfNeeded(pdfDoc, page, y));
-    drawLine(page, font, `${asText(l.state).padEnd(9)} ${asText(l.license_number || l.licenseNumber).padEnd(24)} ${asText(l.license_class_or_type || l.type).padEnd(17)} ${fmtDate(l.expiration_date || l.expirationDate)}`, 36, y, 8);
-    y -= 11;
+  ({ page, y } = checkPage(pdfDoc, page, y, 100, font, bold, companyName, companyAddress));
+  y = drawSectionBanner(page, bold, 'DRIVER LICENSES / PERMITS (PAST 3 YEARS)', y);
+  y -= 2;
+
+  const licColumns = [
+    { label: 'STATE', x: LAYOUT.marginLeft + 4 },
+    { label: 'LICENSE NO.', x: LAYOUT.marginLeft + 70 },
+    { label: 'TYPE / CLASS', x: LAYOUT.marginLeft + 230 },
+    { label: 'EXPIRATION DATE', x: LAYOUT.marginLeft + 400 }
+  ];
+  y = drawTableHeader(page, bold, licColumns, y);
+  for (let i = 0; i < licenses.slice(0, 5).length; i++) {
+    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+    const l = licenses[i];
+    y = drawTableRow(page, font, licColumns, [
+      asText(l.state),
+      asText(l.license_number || l.licenseNumber),
+      asText(l.license_class_or_type || l.type),
+      fmtDate(l.expiration_date || l.expirationDate)
+    ], y, i % 2 === 1);
   }
   y -= 8;
 
   // === DRIVING EXPERIENCE ===
-  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 120));
-  drawSectionHeader(page, bold, 'DRIVING EXPERIENCE', y);
-  y -= 14;
-  drawLine(page, bold, 'CLASS OF EQUIPMENT                  TYPE              DATES FROM-TO         APPROX MILES', 36, y, 8);
-  y -= 12;
+  ({ page, y } = checkPage(pdfDoc, page, y, 140, font, bold, companyName, companyAddress));
+  y = drawSectionBanner(page, bold, 'DRIVING EXPERIENCE', y);
+  y -= 2;
+
+  const expColumns = [
+    { label: 'EXP?', x: LAYOUT.marginLeft + 4, maxChars: 4 },
+    { label: 'CLASS OF EQUIPMENT', x: LAYOUT.marginLeft + 38 },
+    { label: 'TYPE', x: LAYOUT.marginLeft + 210 },
+    { label: 'DATES FROM-TO', x: LAYOUT.marginLeft + 310 },
+    { label: 'APPROX MILES', x: LAYOUT.marginLeft + 440 }
+  ];
+  y = drawTableHeader(page, bold, expColumns, y);
 
   const expTypes = [
     { key: 'straightTruck', label: 'Straight Truck' },
@@ -326,25 +578,31 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     { key: 'motorcoachSchoolBusMore15', label: 'Motorcoach/School Bus (15+)' },
     { key: 'other', label: 'Other' }
   ];
-  for (const et of expTypes) {
+  for (let i = 0; i < expTypes.length; i++) {
+    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+    const et = expTypes[i];
     const exp = drivingExp[et.key] || {};
     const has = exp.hasExperience;
-    ({ page, y } = newPageIfNeeded(pdfDoc, page, y));
-    const checkMark = has ? 'YES' : 'NO';
     const desc = et.key === 'other' && exp.description ? `${et.label}: ${exp.description}` : et.label;
-    drawLine(page, font, `${checkMark.padEnd(4)} ${desc.padEnd(30)} ${asText(exp.typeOfEquipment).padEnd(17)} ${asText(exp.dateFrom).padEnd(10)}-${asText(exp.dateTo).padEnd(10)} ${asText(exp.approxMiles)}`, 36, y, 8);
-    y -= 11;
+    y = drawTableRow(page, font, expColumns, [
+      has ? 'YES' : 'NO',
+      desc,
+      asText(exp.typeOfEquipment),
+      `${asText(exp.dateFrom)} - ${asText(exp.dateTo)}`,
+      asText(exp.approxMiles)
+    ], y, i % 2 === 1);
   }
-  y -= 6;
-  drawLine(page, font, `States operated in for last 5 years: ${asText(drivingExp.statesOperatedIn)}`, 36, y, 8);
-  y -= 14;
+  y -= 4;
+  page.drawText(`States operated in for last 5 years: ${asText(drivingExp.statesOperatedIn)}`, {
+    x: LAYOUT.marginLeft + 4, y, size: 8, font, color: COLORS.text
+  });
+  y -= 16;
 
-  // === DRUG AND ALCOHOL INFORMATION ===
-  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 130));
-  drawSectionHeader(page, bold, 'DRUG & ALCOHOL INFORMATION', y);
+  // === DRUG & ALCOHOL INFORMATION ===
+  ({ page, y } = checkPage(pdfDoc, page, y, 160, font, bold, companyName, companyAddress));
+  y = drawSectionBanner(page, bold, 'DRUG & ALCOHOL INFORMATION', y);
+  page.drawText('In the previous three (3) years have you:', { x: LAYOUT.marginLeft + 4, y, size: 8, font, color: COLORS.label });
   y -= 14;
-  drawLine(page, font, 'In the previous three (3) years have you:', 36, y, 8);
-  y -= 12;
 
   const daQuestions = [
     { key: 'violatedSubstanceProhibitions', label: '1. Violated Alcohol/Controlled Substance prohibitions (49CFR Part 382/40)' },
@@ -355,16 +613,16 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     { key: 'otherDOTViolation', label: '6. Had any other violation of DOT drug/alcohol testing regulations' }
   ];
   for (const q of daQuestions) {
-    ({ page, y } = newPageIfNeeded(pdfDoc, page, y));
-    drawLine(page, font, `${q.label}: ${yn(drugAlcohol[q.key])}`, 36, y, 8);
-    y -= 11;
+    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+    y = drawQuestionRow(page, font, bold, q.label, yn(drugAlcohol[q.key]), y);
   }
-  y -= 12;
+  y -= 10;
 
   // === APPLICANT CERTIFICATION & SIGNATURE (FN-233) ===
-  ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 180));
-  drawSectionHeader(page, bold, 'APPLICANT CERTIFICATION & SIGNATURE', y);
-  y -= 16;
+  ({ page, y } = checkPage(pdfDoc, page, y, 240, font, bold, companyName, companyAddress));
+  y = drawSectionBanner(page, bold, 'APPLICANT CERTIFICATION & SIGNATURE', y);
+  y -= 2;
+
   const certParagraphs = [
     'I authorize investigations into my personal, employment, financial and related history.',
     'I understand that false or misleading information may result in discharge.',
@@ -373,60 +631,92 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     'I certify this application is true and complete to the best of my knowledge.'
   ];
   for (const p of certParagraphs) {
-    ({ page, y } = newPageIfNeeded(pdfDoc, page, y));
-    drawLine(page, font, p, 36, y, 9);
-    y -= 14;
+    page.drawText(p, { x: LAYOUT.marginLeft + 4, y, size: 8.5, font, color: COLORS.text });
+    y -= 12;
   }
-  y -= 10;
+  y -= 8;
 
   // FN-233: Captured applicant identity fields
   const certFullName = [applicant.firstName, applicant.middleName, applicant.lastName].filter(Boolean).join(' ');
-  drawLine(page, font, `Full Name: ${asText(certFullName)}`, 36, y, 9);
-  y -= 13;
-  drawLine(page, font, `Date of Birth: ${fmtDate(applicant.dateOfBirth)}`, 36, y, 9);
-  y -= 13;
-  drawLine(page, font, `SSN: ${maskSSN(applicant.ssn)}`, 36, y, 9);
-  y -= 13;
-  // License number from snapshot or from licenses array
+  y = drawFieldPair(page, font, bold, 'FULL NAME', certFullName, 'DATE OF BIRTH', fmtDate(applicant.dateOfBirth), y);
+  y = drawFieldPair(page, font, bold, 'SSN (MASKED)', maskSSN(applicant.ssn), 'POSITION APPLIED FOR', applicant.positionAppliedFor, y);
+
   const certLicenseNum = applicant.licenseNumber || (licenses.length > 0 ? (licenses[0].license_number || licenses[0].licenseNumber) : '') || '';
   const certLicenseState = applicant.licenseState || (licenses.length > 0 ? licenses[0].state : '') || '';
-  drawLine(page, font, `Driver's License Number: ${asText(certLicenseNum)}`, 36, y, 9);
-  y -= 13;
-  drawLine(page, font, `State of Issue: ${asText(certLicenseState)}`, 36, y, 9);
+  y = drawFieldPair(page, font, bold, "DRIVER'S LICENSE NUMBER", certLicenseNum, 'STATE OF ISSUE', certLicenseState, y);
+  y -= 4;
+
+  // Signature box
+  const sigBoxHeight = 72;
+  ({ page, y } = checkPage(pdfDoc, page, y, sigBoxHeight + 20, font, bold, companyName, companyAddress));
+  page.drawRectangle({
+    x: LAYOUT.marginLeft,
+    y: y - sigBoxHeight + 10,
+    width: LAYOUT.contentWidth,
+    height: sigBoxHeight,
+    borderColor: COLORS.primary,
+    borderWidth: 1,
+    color: COLORS.white
+  });
+  page.drawText('APPLICANT SIGNATURE', { x: LAYOUT.marginLeft + 8, y, size: 8, font: bold, color: COLORS.primary });
   y -= 16;
 
   const cert = applicant.certification || {};
-  drawLine(page, font, `Applicant Signature: ${asText(cert.applicantSignature || applicant.applicantSignature || applicant.applicantPrintedName || [applicant.firstName, applicant.lastName].filter(Boolean).join(' '))}`, 36, y, 10);
+  const sigName = asText(cert.applicantSignature || applicant.applicantSignature || applicant.applicantPrintedName || [applicant.firstName, applicant.lastName].filter(Boolean).join(' '));
+  page.drawText(`Signature: ${sigName}`, { x: LAYOUT.marginLeft + 8, y, size: 10, font: bold, color: COLORS.text });
+
+  const sigDateStr = fmtDate(fullApp.signed_certification_at || cert.signatureDate || applicant.signatureDate || fullApp.signed_at || fullApp.submitted_at);
+  const sigDateText = `Date: ${sigDateStr}`;
+  const sdw = bold.widthOfTextAtSize(sigDateText, 10);
+  page.drawText(sigDateText, { x: LAYOUT.marginLeft + LAYOUT.contentWidth - sdw - 8, y, size: 10, font: bold, color: COLORS.text });
   y -= 16;
-  drawLine(page, font, `Date: ${fmtDate(fullApp.signed_certification_at || cert.signatureDate || applicant.signatureDate || fullApp.signed_at || fullApp.submitted_at)}`, 36, y, 10);
-  y -= 16;
-  drawLine(page, font, `Applicant Name (printed): ${asText(cert.applicantPrintedName || applicant.applicantPrintedName || certFullName)}`, 36, y, 10);
-  y -= 12;
-  // FN-233: Electronic signature acknowledgment
-  drawLine(page, font, 'This application was signed electronically. The signer consents to the use of electronic', 36, y, 7);
-  y -= 10;
-  drawLine(page, font, 'signatures in accordance with applicable law.', 36, y, 7);
+
+  const printedName = asText(cert.applicantPrintedName || applicant.applicantPrintedName || certFullName);
+  page.drawText(`Printed Name: ${printedName}`, { x: LAYOUT.marginLeft + 8, y, size: 9, font, color: COLORS.text });
+  y -= 14;
+
+  page.drawText('This application was signed electronically. The signer consents to the use of electronic signatures in accordance with applicable law.', {
+    x: LAYOUT.marginLeft + 8, y, size: 6.5, font, color: COLORS.label
+  });
+  y -= sigBoxHeight - 42; // move past box bottom
 
   // === DOCUMENT AUDIT TRAIL ===
   const audit = context.auditTrail || applicant.auditTrail || {};
   if (audit.ipAddress || audit.submittedAt || audit.userAgent) {
     y -= 8;
-    ({ page, y } = newPageIfNeeded(pdfDoc, page, y, 80));
-    drawSectionHeader(page, bold, 'DOCUMENT AUDIT TRAIL', y);
-    y -= 16;
+    ({ page, y } = checkPage(pdfDoc, page, y, 80, font, bold, companyName, companyAddress));
+
+    const auditBoxHeight = 56;
+    page.drawRectangle({
+      x: LAYOUT.marginLeft,
+      y: y - auditBoxHeight + 12,
+      width: LAYOUT.contentWidth,
+      height: auditBoxHeight,
+      color: COLORS.auditBg,
+      borderColor: COLORS.border,
+      borderWidth: 0.5
+    });
+    page.drawText('DOCUMENT AUDIT TRAIL', { x: LAYOUT.marginLeft + 8, y, size: 8, font: bold, color: COLORS.label });
+    y -= 12;
     if (audit.ipAddress) {
-      drawLine(page, font, `IP Address: ${asText(audit.ipAddress)}`, 36, y, 8);
-      y -= 11;
+      page.drawText(`IP Address: ${asText(audit.ipAddress)}`, { x: LAYOUT.marginLeft + 8, y, size: 7, font, color: COLORS.label });
+      y -= 10;
     }
     if (audit.submittedAt) {
-      drawLine(page, font, `Submitted At: ${asText(audit.submittedAt)}`, 36, y, 8);
-      y -= 11;
+      page.drawText(`Submitted At: ${asText(audit.submittedAt)}`, { x: LAYOUT.marginLeft + 8, y, size: 7, font, color: COLORS.label });
+      y -= 10;
     }
     if (audit.userAgent) {
       const ua = asText(audit.userAgent).slice(0, 120);
-      drawLine(page, font, `User Agent: ${ua}`, 36, y, 7);
-      y -= 11;
+      page.drawText(`User Agent: ${ua}`, { x: LAYOUT.marginLeft + 8, y, size: 6.5, font, color: COLORS.label });
+      y -= 10;
     }
+  }
+
+  // === Add page footers to all pages ===
+  const allPages = pdfDoc.getPages();
+  for (let i = 0; i < allPages.length; i++) {
+    drawPageFooter(allPages[i], font, i + 1, allPages.length, asText(docId), genDate);
   }
 
   const bytes = await pdfDoc.save();

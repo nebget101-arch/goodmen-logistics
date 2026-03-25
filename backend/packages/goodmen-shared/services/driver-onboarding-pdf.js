@@ -641,29 +641,85 @@ async function generateConsentPdf({ template, consent, company, driver }) {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+  // Professional color scheme
+  const C = {
+    primary: rgb(0.06, 0.29, 0.42),
+    headerBg: rgb(0.93, 0.95, 0.97),
+    text: rgb(0.1, 0.1, 0.1),
+    label: rgb(0.4, 0.4, 0.4),
+    border: rgb(0.78, 0.82, 0.86),
+    white: rgb(1, 1, 1),
+    auditBg: rgb(0.96, 0.96, 0.97),
+  };
+
   const pageWidth = 612;
   const pageHeight = 792;
-  const margin = 50;
-  const textWidth = pageWidth - 2 * margin;
+  const marginLeft = 45;
+  const marginRight = 45;
+  const contentWidth = pageWidth - marginLeft - marginRight;
   const lineHeight = 13;
-  const bottomMargin = 60;
+  const bottomMargin = 65;
 
   let page = pdfDoc.addPage([pageWidth, pageHeight]);
-  let yPos = pageHeight - margin;
+  let yPos = pageHeight - 50;
+
+  const companyName = company?.name || 'Company Name';
+  const companyAddress = company?.address || '';
+  const docId = consent.id || 'N/A';
+  const genDate = new Date().toISOString().slice(0, 10);
+
+  // ── Page header helper ────────────────────────────────────────────────
+  function drawConsentPageHeader(pg) {
+    // Company name bold 13pt
+    pg.drawText(companyName, { x: marginLeft, y: 755, size: 13, font: boldFont, color: C.primary });
+    // Address
+    if (companyAddress) {
+      pg.drawText(companyAddress, { x: marginLeft, y: 742, size: 8, font, color: C.label });
+    }
+    // Document type right-aligned
+    const docType = 'CONSENT FORM';
+    const dtw = boldFont.widthOfTextAtSize(docType, 10);
+    pg.drawText(docType, { x: pageWidth - marginRight - dtw, y: 755, size: 10, font: boldFont, color: C.primary });
+    // Horizontal line
+    pg.drawLine({
+      start: { x: marginLeft, y: 735 },
+      end: { x: pageWidth - marginRight, y: 735 },
+      thickness: 1,
+      color: C.border
+    });
+  }
+
+  // ── Page footer helper ────────────────────────────────────────────────
+  function drawConsentPageFooter(pg, pageNum, totalPages) {
+    pg.drawLine({
+      start: { x: marginLeft, y: 45 },
+      end: { x: pageWidth - marginRight, y: 45 },
+      thickness: 0.5,
+      color: C.border
+    });
+    pg.drawText(`Doc: ${docId}`, { x: marginLeft, y: 32, size: 7, font, color: C.label });
+    const dateText = `Generated: ${genDate}`;
+    const dw = font.widthOfTextAtSize(dateText, 7);
+    pg.drawText(dateText, { x: (pageWidth - dw) / 2, y: 32, size: 7, font, color: C.label });
+    const pageText = `Page ${pageNum} of ${totalPages}`;
+    const pw = font.widthOfTextAtSize(pageText, 7);
+    pg.drawText(pageText, { x: pageWidth - marginRight - pw, y: 32, size: 7, font, color: C.label });
+  }
 
   function ensureSpace(needed) {
     if (yPos - needed < bottomMargin) {
       page = pdfDoc.addPage([pageWidth, pageHeight]);
-      yPos = pageHeight - margin;
+      drawConsentPageHeader(page);
+      yPos = 720;
     }
   }
 
   function drawTextLine(text, opts = {}) {
     const size = opts.size || 9;
     const f = opts.bold ? boldFont : font;
-    const x = opts.x || margin;
+    const x = opts.x || marginLeft;
 
-    const wrapped = wrapText(text || '', f, size, opts.maxWidth || textWidth);
+    const wrapped = wrapText(text || '', f, size, opts.maxWidth || contentWidth);
     for (const line of wrapped) {
       ensureSpace(lineHeight);
       page.drawText(line, {
@@ -671,30 +727,35 @@ async function generateConsentPdf({ template, consent, company, driver }) {
         y: yPos,
         size,
         font: f,
-        color: opts.color || rgb(0, 0, 0)
+        color: opts.color || C.text
       });
       yPos -= lineHeight;
     }
   }
 
-  // ── Header: Company info ──────────────────────────────────────────────
-  const companyName = company?.name || 'Company Name';
-  const companyAddress = company?.address || '';
+  // ── Page 1 header ─────────────────────────────────────────────────────
+  drawConsentPageHeader(page);
+  yPos = 720;
 
-  drawTextLine(companyName, { size: 12, bold: true });
-  if (companyAddress) {
-    drawTextLine(companyAddress, { size: 9 });
-  }
-  yPos -= lineHeight;
-
-  // ── Title ─────────────────────────────────────────────────────────────
-  drawTextLine(template.title || 'Consent Form', { size: 14, bold: true });
-  yPos -= lineHeight * 0.5;
+  // ── Document title banner ─────────────────────────────────────────────
+  const titleText = template.title || 'Consent Form';
+  page.drawRectangle({
+    x: marginLeft,
+    y: yPos - 4,
+    width: contentWidth,
+    height: 22,
+    color: C.headerBg,
+    borderColor: C.border,
+    borderWidth: 0.5
+  });
+  page.drawText(titleText, { x: marginLeft + 8, y: yPos + 2, size: 12, font: boldFont, color: C.primary });
+  yPos -= 28;
 
   if (template.cfr_reference) {
-    drawTextLine(`Reference: ${template.cfr_reference}`, { size: 8, color: rgb(0.4, 0.4, 0.4) });
+    page.drawText(`Reference: ${template.cfr_reference}`, { x: marginLeft + 4, y: yPos, size: 8, font, color: C.label });
+    yPos -= 16;
   }
-  yPos -= lineHeight;
+  yPos -= 4;
 
   // ── Body text ─────────────────────────────────────────────────────────
   const driverFullName = driver
@@ -717,13 +778,24 @@ async function generateConsentPdf({ template, consent, company, driver }) {
 
   yPos -= lineHeight;
 
-  // ── Captured fields section ───────────────────────────────────────────
+  // ── Captured fields in a bordered box ─────────────────────────────────
   const captureData = consent.capture_data || {};
   const captureKeys = Object.keys(captureData);
   if (captureKeys.length > 0) {
-    ensureSpace(lineHeight * (captureKeys.length + 3));
-    drawTextLine('CAPTURED INFORMATION', { size: 10, bold: true });
-    yPos -= lineHeight * 0.3;
+    const boxHeight = 20 + captureKeys.length * 16;
+    ensureSpace(boxHeight + 10);
+
+    page.drawRectangle({
+      x: marginLeft,
+      y: yPos - boxHeight + 14,
+      width: contentWidth,
+      height: boxHeight,
+      borderColor: C.border,
+      borderWidth: 0.5,
+      color: C.white
+    });
+    page.drawText('CAPTURED INFORMATION', { x: marginLeft + 8, y: yPos, size: 9, font: boldFont, color: C.primary });
+    yPos -= 16;
 
     const fieldLabels = {
       fullName: 'Full Name',
@@ -735,51 +807,81 @@ async function generateConsentPdf({ template, consent, company, driver }) {
 
     for (const key of captureKeys) {
       const label = fieldLabels[key] || key;
-      drawTextLine(`${label}: ${captureData[key] || ''}`, { size: 9 });
+      const value = captureData[key] || '';
+      // Label in gray, value in bold
+      page.drawText(`${label}:`, { x: marginLeft + 8, y: yPos, size: 7.5, font, color: C.label });
+      page.drawText(String(value), { x: marginLeft + 160, y: yPos, size: 9, font: boldFont, color: C.text });
+      yPos -= 14;
     }
-    yPos -= lineHeight;
+    yPos -= 10;
   }
 
-  // ── Signature section ─────────────────────────────────────────────────
-  ensureSpace(lineHeight * 6);
-  page.drawLine({
-    start: { x: margin, y: yPos },
-    end: { x: pageWidth - margin, y: yPos },
-    thickness: 0.5
+  // ── Professional signature block ──────────────────────────────────────
+  const sigBoxHeight = 68;
+  ensureSpace(sigBoxHeight + 10);
+
+  page.drawRectangle({
+    x: marginLeft,
+    y: yPos - sigBoxHeight + 12,
+    width: contentWidth,
+    height: sigBoxHeight,
+    borderColor: C.primary,
+    borderWidth: 1,
+    color: C.white
   });
-  yPos -= lineHeight;
+  page.drawText('APPLICANT SIGNATURE', { x: marginLeft + 8, y: yPos, size: 8, font: boldFont, color: C.primary });
+  yPos -= 16;
 
-  drawTextLine('SIGNATURE', { size: 10, bold: true });
-  yPos -= lineHeight * 0.3;
+  const signerName = consent.signer_name || '';
+  page.drawText(`Signed by: ${signerName}`, { x: marginLeft + 8, y: yPos, size: 10, font: boldFont, color: C.text });
 
-  drawTextLine(`Signed by: ${consent.signer_name || ''}`, { size: 9 });
   const signedDate = consent.signed_at
     ? new Date(consent.signed_at).toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
     : new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-  drawTextLine(`Date: ${signedDate}`, { size: 9 });
-  drawTextLine('Electronic signature acknowledged', { size: 9 });
-  yPos -= lineHeight;
+  const sigDateText = `Date: ${signedDate}`;
+  const sdw = boldFont.widthOfTextAtSize(sigDateText, 10);
+  page.drawText(sigDateText, { x: marginLeft + contentWidth - sdw - 8, y: yPos, size: 10, font: boldFont, color: C.text });
+  yPos -= 16;
 
-  // ── FN-234: Audit Trail Footer ──────────────────────────────────────
-  ensureSpace(lineHeight * 7);
-  page.drawLine({
-    start: { x: margin, y: yPos },
-    end: { x: pageWidth - margin, y: yPos },
-    thickness: 0.5,
-    color: rgb(0.7, 0.7, 0.7)
+  page.drawText('Electronic signature acknowledged. The signer consents to the use of electronic signatures in accordance with applicable law.', {
+    x: marginLeft + 8, y: yPos, size: 6.5, font, color: C.label
   });
-  yPos -= lineHeight;
+  yPos -= sigBoxHeight - 36;
 
-  drawTextLine('AUDIT TRAIL', { size: 9, bold: true, color: rgb(0.3, 0.3, 0.3) });
-  drawTextLine('Document signed electronically', { size: 7, color: rgb(0.5, 0.5, 0.5) });
+  // ── FN-234: Audit Trail in gray bordered box ──────────────────────────
+  const auditBoxHeight = 70;
+  ensureSpace(auditBoxHeight + 10);
+
+  page.drawRectangle({
+    x: marginLeft,
+    y: yPos - auditBoxHeight + 12,
+    width: contentWidth,
+    height: auditBoxHeight,
+    color: C.auditBg,
+    borderColor: C.border,
+    borderWidth: 0.5
+  });
+  page.drawText('DOCUMENT AUDIT TRAIL', { x: marginLeft + 8, y: yPos, size: 8, font: boldFont, color: C.label });
+  yPos -= 12;
+  page.drawText('Document signed electronically', { x: marginLeft + 8, y: yPos, size: 7, font, color: C.label });
+  yPos -= 10;
   const auditSignedAt = consent.signed_at
     ? new Date(consent.signed_at).toISOString()
     : new Date().toISOString();
-  drawTextLine(`Date/Time: ${auditSignedAt}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
-  drawTextLine(`IP Address: ${consent.ip_address || 'N/A'}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
-  const auditUa = (consent.user_agent || 'N/A').slice(0, 80);
-  drawTextLine(`User Agent: ${auditUa}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
-  drawTextLine(`Document ID: ${consent.id || 'N/A'}`, { size: 7, color: rgb(0.5, 0.5, 0.5) });
+  page.drawText(`Date/Time: ${auditSignedAt}`, { x: marginLeft + 8, y: yPos, size: 7, font, color: C.label });
+  yPos -= 10;
+  page.drawText(`IP Address: ${consent.ip_address || 'N/A'}`, { x: marginLeft + 8, y: yPos, size: 7, font, color: C.label });
+  yPos -= 10;
+  const auditUa = (consent.user_agent || 'N/A').slice(0, 100);
+  page.drawText(`User Agent: ${auditUa}`, { x: marginLeft + 8, y: yPos, size: 6.5, font, color: C.label });
+  yPos -= 10;
+  page.drawText(`Document ID: ${docId}`, { x: marginLeft + 8, y: yPos, size: 7, font, color: C.label });
+
+  // ── Add page footers to all pages ─────────────────────────────────────
+  const allPages = pdfDoc.getPages();
+  for (let i = 0; i < allPages.length; i++) {
+    drawConsentPageFooter(allPages[i], i + 1, allPages.length);
+  }
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);

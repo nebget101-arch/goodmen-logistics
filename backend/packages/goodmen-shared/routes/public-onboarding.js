@@ -7,10 +7,8 @@ const { hashToken } = require('../services/token-service');
 const dtLogger = require('../utils/logger');
 const { createDriverDocument } = require('../services/driver-storage-service');
 const { uploadBuffer } = require('../storage/r2-storage');
-const {
-  buildEmploymentApplicationPdf,
-  buildMvrAuthorizationPdf
-} = require('../services/driver-onboarding-pdf');
+const { buildMvrAuthorizationPdf } = require('../services/driver-onboarding-pdf');
+const { generateEmploymentApplicationPdf } = require('../services/pdf.service');
 const employmentAppService = require('../services/employment-application.service');
 // FN-235: DQF integration for employment application submission
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('../services/dqf-service');
@@ -430,13 +428,30 @@ async function maybeGenerateOnboardingPdfs(packetId) {
     !existingTypes.has('employment_application_pdf')
   ) {
     const applicationData = sections.employment_application.data || {};
-    const signature = esignatures.employment_application || null;
-    const buffer = await buildEmploymentApplicationPdf({
-      driver,
-      application: applicationData,
-      signature,
-      operatingEntity
-    });
+    // Build fullApp format for the professional PDF generator
+    const fullApp = {
+      id: packet.id,
+      applicant_snapshot: applicationData,
+      employers: applicationData.employers || [],
+      residencies: applicationData.residencies || [],
+      licenses: applicationData.licenses || [],
+      accidents: applicationData.accidents || [],
+      violations: applicationData.violations || [],
+      convictions: applicationData.convictions || [],
+      signed_certification_at: applicationData.signatureDate || applicationData.submittedAt
+    };
+    const pdfContext = {};
+    if (operatingEntity) {
+      pdfContext.operatingEntity = {
+        name: operatingEntity.name,
+        address: [operatingEntity.address, operatingEntity.city, operatingEntity.state, operatingEntity.zip].filter(Boolean).join(', '),
+        phone: operatingEntity.phone,
+        email: operatingEntity.email
+      };
+    }
+    if (applicationData.auditTrail) pdfContext.auditTrail = applicationData.auditTrail;
+
+    const buffer = await generateEmploymentApplicationPdf(fullApp, pdfContext);
     // FN-216: use "{FirstName} {LastName} - Employment Application.pdf" filename
     const firstName = (driver.first_name || '').trim();
     const lastName = (driver.last_name || '').trim();
