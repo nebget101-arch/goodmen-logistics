@@ -284,7 +284,11 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
         release_of_information: 'release_of_info_signed',
         fcra_authorization: 'fcra_authorization',
         psp_consent: 'psp_consent',
-        drug_alcohol_release: 'drug_alcohol_release_signed'
+        drug_alcohol_release: 'drug_alcohol_release_signed',
+        // FN-238: MVR consent form DQF mappings
+        mvr_disclosure: 'mvr_disclosure_signed',
+        mvr_authorization: 'mvr_authorization_signed',
+        mvr_release_of_liability: 'mvr_release_of_liability_signed'
       };
       const dqfKey = CONSENT_DQF_MAP[consentKey];
       if (dqfKey && documentId) {
