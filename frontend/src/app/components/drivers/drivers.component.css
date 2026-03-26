@@ -519,6 +519,46 @@
   min-height: 72px;
 }
 
+/* ── Date picker — match .form-input within driver modals (FN-273) ── */
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-text-field-wrapper {
+  background:
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.25), transparent 55%),
+    rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  border-radius: 10px;
+  padding: 0 4px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-form-field-infix {
+  min-height: 38px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-input-element {
+  font-size: 13px;
+  color: #e5e7eb;
+  caret-color: #67e8f9;
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-input-element::placeholder {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper {
+  border-color: rgba(56, 189, 248, 0.95);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-datepicker-toggle .mat-mdc-icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  --mdc-icon-button-icon-color: #94a3b8;
+  --mdc-icon-button-hover-icon-color: #67e8f9;
+}
+
 .drivers-dashboard .dqf-modal-footer {
   padding: 14px 20px;
   border-top: 1px solid rgba(148, 163, 184, 0.25);
