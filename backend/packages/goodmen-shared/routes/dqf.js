@@ -429,6 +429,18 @@ router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
   }
 });
 
+// POST /api/dqf/driver/:driverId/recalculate - Recalculate DQF completeness from current requirement statuses
+router.post('/driver/:driverId/recalculate', async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const completeness = await computeAndUpdateDqfCompleteness(driverId);
+    return res.json({ driverId, completeness });
+  } catch (error) {
+    dtLogger.error('dqf_recalculate_failed', error, { driverId: req.params.driverId });
+    return res.status(500).json({ message: 'Failed to recalculate DQF completeness' });
+  }
+});
+
 // GET /api/dqf/requirement/:driverId/:requirementKey/changes - Get change history for a requirement
 router.get('/requirement/:driverId/:requirementKey/changes', async (req, res) => {
   try {
