@@ -9,6 +9,8 @@ const { createDriverDocument } = require('../services/driver-storage-service');
 const { uploadBuffer } = require('../storage/r2-storage');
 const { buildMvrAuthorizationPdf } = require('../services/driver-onboarding-pdf');
 const { generateEmploymentApplicationPdf } = require('../services/pdf.service');
+// FN-269: pdf-lib for image-to-PDF conversion before R2 storage
+const { PDFDocument } = require('pdf-lib');
 const employmentAppService = require('../services/employment-application.service');
 // FN-235: DQF integration for employment application submission
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('../services/dqf-service');
@@ -43,12 +45,56 @@ const ALLOWED_ONBOARDING_DOC_TYPES = new Set([
   'other_certification'
 ]);
 
-// FN-250: Map onboarding doc types to DQF requirement keys for auto-completion
-const DOC_TYPE_TO_DQF_REQUIREMENT = {
-  cdl_front: 'cdl_on_file',
-  cdl_back: 'cdl_on_file',
-  medical_certificate: 'medical_cert_on_file'
+// FN-269: Map onboarding doc types to DQF requirement keys for auto-completion
+// Each doc type can trigger multiple DQF requirement completions
+const DOC_TYPE_TO_DQF_REQUIREMENTS = {
+  cdl_front: ['driver_license_front_on_file'],
+  cdl_back: ['driver_license_back_on_file'],
+  medical_certificate: ['medical_card_front_on_file', 'medical_card_received']
 };
+
+/**
+ * FN-269: Convert an image buffer to PDF using pdf-lib.
+ * Supports JPEG and PNG. Returns the original buffer for unsupported types (HEIC, etc.)
+ */
+async function convertImageToPdf(buffer, mimetype) {
+  try {
+    const pdfDoc = await PDFDocument.create();
+    let image;
+
+    if (mimetype === 'image/jpeg') {
+      image = await pdfDoc.embedJpg(buffer);
+    } else if (mimetype === 'image/png') {
+      image = await pdfDoc.embedPng(buffer);
+    } else {
+      // HEIC, GIF, WebP — pdf-lib can't embed these; store as-is
+      return { buffer, mimetype, converted: false };
+    }
+
+    // Create a page sized to the image (max 8.5x11 inches = 612x792 points)
+    const { width: imgW, height: imgH } = image.scale(1);
+    const maxW = 612;
+    const maxH = 792;
+    const scale = Math.min(maxW / imgW, maxH / imgH, 1);
+    const pageW = imgW * scale;
+    const pageH = imgH * scale;
+
+    const page = pdfDoc.addPage([pageW, pageH]);
+    page.drawImage(image, {
+      x: 0,
+      y: 0,
+      width: pageW,
+      height: pageH
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    return { buffer: Buffer.from(pdfBytes), mimetype: 'application/pdf', converted: true };
+  } catch (convErr) {
+    // If conversion fails, fall back to storing original
+    dtLogger.warn('image_to_pdf_conversion_failed', { mimetype, error: convErr?.message });
+    return { buffer, mimetype, converted: false };
+  }
+}
 
 function hasMeaningfulData(data) {
   if (!data || typeof data !== 'object') return false;
@@ -919,14 +965,30 @@ router.post(
 
       const driverId = packet.driver_id;
 
+      // FN-269: Convert images to PDF before R2 storage
+      let uploadBuffer_ = req.file.buffer;
+      let uploadMime = req.file.mimetype;
+      let uploadFileName = req.file.originalname || `onboarding-${docType}`;
+
+      if (req.file.mimetype.startsWith('image/')) {
+        const converted = await convertImageToPdf(req.file.buffer, req.file.mimetype);
+        uploadBuffer_ = converted.buffer;
+        uploadMime = converted.mimetype;
+        if (converted.converted) {
+          // Replace extension with .pdf
+          uploadFileName = uploadFileName.replace(/\.[^.]+$/, '.pdf');
+          dtLogger.info('image_converted_to_pdf', { driverId, docType, originalMime: req.file.mimetype });
+        }
+      }
+
       // Upload to R2
-      const fileExt = path.extname(req.file.originalname || '').toLowerCase();
-      const safeName = req.file.originalname
-        ? req.file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '_')
+      const fileExt = path.extname(uploadFileName).toLowerCase() || '.pdf';
+      const safeName = uploadFileName
+        ? uploadFileName.replace(/[^a-zA-Z0-9_.-]/g, '_')
         : `onboarding-${docType}${fileExt}`;
       const { key: storageKey } = await uploadBuffer({
-        buffer: req.file.buffer,
-        contentType: req.file.mimetype,
+        buffer: uploadBuffer_,
+        contentType: uploadMime,
         prefix: `drivers/${driverId}/onboarding-documents`,
         fileName: safeName
       });
@@ -950,27 +1012,45 @@ router.post(
           driverId,
           packet.id,
           onboardingDocType,
-          req.file.originalname || safeName,
-          req.file.mimetype,
-          req.file.size,
+          uploadFileName,
+          uploadMime,
+          Buffer.byteLength(uploadBuffer_),
           storageKey
         ]
       );
 
       const doc = result.rows[0];
 
-      // Auto-mark DQF requirement if applicable
-      const dqfKey = DOC_TYPE_TO_DQF_REQUIREMENT[docType];
-      if (dqfKey) {
+      // FN-269: Auto-mark DQF requirements if applicable
+      const dqfKeys = DOC_TYPE_TO_DQF_REQUIREMENTS[docType] || [];
+      if (dqfKeys.length > 0) {
         try {
-          await upsertRequirementStatus(driverId, dqfKey, 'complete', doc.id);
+          for (const dqfKey of dqfKeys) {
+            await upsertRequirementStatus(driverId, dqfKey, 'complete', doc.id);
+          }
+
+          // FN-269: CDL upload → check if BOTH front and back are now uploaded
+          if (docType === 'cdl_front' || docType === 'cdl_back') {
+            const cdlDocs = await query(
+              `SELECT doc_type FROM driver_documents
+               WHERE driver_id = $1 AND packet_id = $2
+                 AND doc_type IN ('onboarding_cdl_front', 'onboarding_cdl_back')
+                 AND deleted_at IS NULL`,
+              [driverId, packet.id]
+            );
+            const cdlTypes = new Set(cdlDocs.rows.map(r => r.doc_type));
+            if (cdlTypes.has('onboarding_cdl_front') && cdlTypes.has('onboarding_cdl_back')) {
+              await upsertRequirementStatus(driverId, 'cdl_on_file', 'complete', doc.id);
+            }
+          }
+
           await computeAndUpdateDqfCompleteness(driverId);
         } catch (dqfErr) {
           // Non-blocking: DQF auto-mark should not fail the upload
           dtLogger.warn('onboarding_doc_dqf_auto_mark_failed', {
             driverId,
             docType,
-            dqfKey,
+            dqfKeys,
             error: dqfErr?.message || String(dqfErr)
           });
         }
@@ -1029,13 +1109,22 @@ router.get('/:packetId/documents', rateLimited, async (req, res) => {
       [packet.driver_id, packet.id]
     );
 
+    // FN-269: Map DB column names to frontend expected format
+    // Strip 'onboarding_' prefix so frontend can match by document type key
+    const documents = docs.rows.map(row => ({
+      id: row.id,
+      document_type: row.doc_type.replace(/^onboarding_/, ''),
+      file_name: row.file_name,
+      uploaded_at: row.created_at
+    }));
+
     const duration = Date.now() - start;
     dtLogger.trackRequest('GET', `/public/onboarding/${packetId}/documents`, 200, duration, {
       driverId: packet.driver_id,
-      count: docs.rows.length
+      count: documents.length
     });
 
-    return res.json(docs.rows);
+    return res.json({ documents });
   } catch (error) {
     const duration = Date.now() - start;
     dtLogger.error('public_onboarding_list_documents_failed', error, { params: req.params });

@@ -746,22 +746,26 @@
                     <p class="doc-upload-card-desc">{{ docType.description }}</p>
                   </div>
                   <span *ngIf="docType.required && !uploadedDocuments.has(docType.key)"
-                        class="doc-upload-badge doc-upload-badge-required">Required</span>
+                        class="doc-upload-badge"
+                        [class.doc-upload-badge-required]="!pendingFiles.has(docType.key)"
+                        [class.doc-upload-badge-pending]="pendingFiles.has(docType.key)">
+                    {{ pendingFiles.has(docType.key) ? 'Ready to Save' : 'Required' }}
+                  </span>
                   <span *ngIf="!docType.required && !uploadedDocuments.has(docType.key)"
                         class="doc-upload-badge doc-upload-badge-optional">Optional</span>
                   <span *ngIf="uploadedDocuments.has(docType.key)"
                         class="doc-upload-badge doc-upload-badge-uploaded">
                     <span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span>
-                    Uploaded
+                    Saved
                   </span>
                 </div>
 
-                <!-- Upload area (not yet uploaded) -->
-                <div *ngIf="!uploadedDocuments.has(docType.key)" class="doc-upload-card-body">
+                <!-- Upload area (not yet uploaded and no file pending) -->
+                <div *ngIf="!uploadedDocuments.has(docType.key) && !pendingFiles.has(docType.key)" class="doc-upload-card-body">
                   <label class="doc-upload-btn"
                          [class.doc-upload-btn-disabled]="uploadingDocType !== null">
                     <span class="material-symbols-outlined">photo_camera</span>
-                    <span>{{ uploadingDocType === docType.key ? 'Uploading...' : 'Take Photo or Choose File' }}</span>
+                    <span>Take Photo or Choose File</span>
                     <input type="file"
                            accept="image/*,.heic,.heif,.pdf,application/pdf"
                            class="doc-upload-input"
@@ -769,7 +773,45 @@
                            (change)="onDocumentFileSelected($event, docType.key)" />
                   </label>
                   <span class="doc-upload-hint">JPG, PNG, HEIC, or PDF up to 10 MB</span>
-                  <!-- Spinner overlay while uploading this specific doc -->
+                </div>
+
+                <!-- FN-269: File preview state (file selected but not yet saved) -->
+                <div *ngIf="!uploadedDocuments.has(docType.key) && pendingFiles.has(docType.key)" class="doc-upload-card-body doc-upload-preview-body">
+                  <div class="doc-upload-preview-container">
+                    <!-- Image preview -->
+                    <img *ngIf="pendingFiles.get(docType.key)?.previewUrl"
+                         [src]="pendingFiles.get(docType.key)?.previewUrl"
+                         alt="Preview of {{ docType.label }}"
+                         class="doc-upload-preview-image" />
+                    <!-- PDF icon placeholder -->
+                    <div *ngIf="isPendingFilePdf(docType.key)" class="doc-upload-preview-pdf">
+                      <span class="material-symbols-outlined">picture_as_pdf</span>
+                      <span class="doc-upload-preview-pdf-label">PDF Document</span>
+                    </div>
+                    <!-- HEIC/unknown file icon -->
+                    <div *ngIf="!pendingFiles.get(docType.key)?.previewUrl && !isPendingFilePdf(docType.key)" class="doc-upload-preview-pdf">
+                      <span class="material-symbols-outlined">image</span>
+                      <span class="doc-upload-preview-pdf-label">Image File</span>
+                    </div>
+                  </div>
+                  <div class="doc-upload-preview-filename">{{ pendingFiles.get(docType.key)?.file?.name }}</div>
+                  <div class="doc-upload-preview-actions">
+                    <button class="doc-upload-save-btn"
+                            type="button"
+                            [disabled]="uploadingDocType !== null"
+                            (click)="saveDocument(docType.key)">
+                      <span class="material-symbols-outlined">{{ uploadingDocType === docType.key ? 'hourglass_top' : 'cloud_upload' }}</span>
+                      {{ uploadingDocType === docType.key ? 'Saving...' : 'Save Document' }}
+                    </button>
+                    <button class="doc-upload-cancel-btn"
+                            type="button"
+                            [disabled]="uploadingDocType === docType.key"
+                            (click)="cancelPendingFile(docType.key)">
+                      <span class="material-symbols-outlined">close</span>
+                      Cancel
+                    </button>
+                  </div>
+                  <!-- Spinner overlay while saving -->
                   <div *ngIf="uploadingDocType === docType.key" class="doc-upload-spinner">
                     <div class="doc-upload-spinner-ring"></div>
                   </div>

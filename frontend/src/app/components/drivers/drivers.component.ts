@@ -860,7 +860,7 @@ export class DriversComponent implements OnInit, OnDestroy {
         'driver_license_front_on_file',
         'driver_license_back_on_file',
         'medical_card_front_on_file',
-        'medical_card_back_on_file',
+        // FN-269: Removed medical_card_back_on_file (medical card is usually one page)
         'psp_authorization_document',
         'mvr_report_document'
       ],
@@ -878,7 +878,16 @@ export class DriversComponent implements OnInit, OnDestroy {
         // FN-261: Moved from Other to Pre-Hire Checklist
         'pre_employment_drug_test_scheduled',
         // FN-264: MVR data received checklist item
-        'mvr_data_received'
+        'mvr_data_received',
+        // FN-269: Medical card received (auto-completes on Medical Examiner's Certificate upload)
+        'medical_card_received',
+        // FN-269: Consent received tracking items
+        'fcra_disclosure_received',
+        'fcra_authorization_received',
+        'release_of_info_dq_safety_received',
+        'drug_alcohol_release_received',
+        'mvr_disclosure_received',
+        'mvr_release_of_liability_received'
       ],
       within_30_days: [
         'mvr_all_states',
@@ -919,7 +928,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       driver_license_front_on_file: '49 CFR 391.51(b)(2)',
       driver_license_back_on_file: '49 CFR 391.51(b)(2)',
       medical_card_front_on_file: '49 CFR 391.51(b)(7)',
-      medical_card_back_on_file: '49 CFR 391.51(b)(7)',
+      // FN-269: Removed medical_card_back_on_file
       green_card_on_file: '8 CFR 274a.2',
       eldt_certificate: '49 CFR 380.609',
       medical_variance_spe: '49 CFR 391.49',
@@ -951,7 +960,16 @@ export class DriversComponent implements OnInit, OnDestroy {
       pre_employment_drug_test_scheduled: '49 CFR 382.301',
       employment_verification_received: '49 CFR 391.23(d)',
       // FN-264: MVR data received
-      mvr_data_received: '49 CFR 391.23(a)(1)'
+      mvr_data_received: '49 CFR 391.23(a)(1)',
+      // FN-269: Medical card received
+      medical_card_received: '49 CFR 391.43',
+      // FN-269: Consent received tracking CFR references
+      fcra_disclosure_received: '15 U.S.C. \u00A7 1681',
+      fcra_authorization_received: '15 U.S.C. \u00A7 1681b',
+      release_of_info_dq_safety_received: '49 CFR \u00A7391.23',
+      drug_alcohol_release_received: '49 CFR Part 40',
+      mvr_disclosure_received: '15 U.S.C. \u00A71681b(b)(2)',
+      mvr_release_of_liability_received: '15 U.S.C. \u00A71681b(b)(2)'
     };
     return refs[key] || '';
   }
@@ -1256,7 +1274,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   isDqfDocumentReq(key: string): boolean {
     const docKeys = [
       'driver_license_front_on_file', 'driver_license_back_on_file',
-      'medical_card_front_on_file', 'medical_card_back_on_file',
+      'medical_card_front_on_file',
+      // FN-269: Removed medical_card_back_on_file
       'green_card_on_file', 'pre_employment_drug_test_completed',
       'release_of_info_signed'
     ];
@@ -1340,7 +1359,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       driver_license_front_on_file: 'driver_license_front',
       driver_license_back_on_file: 'driver_license_back',
       medical_card_front_on_file: 'medical_card_front',
-      medical_card_back_on_file: 'medical_card_back',
+      // FN-269: Removed medical_card_back_on_file
       green_card_on_file: 'green_card',
       pre_employment_drug_test_completed: 'drug_test_result',
       release_of_info_signed: 'release_of_info',
