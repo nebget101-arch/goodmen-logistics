@@ -197,14 +197,50 @@
               />
             </div>
             <div class="dqf-field">
-              <label for="address">Address</label>
+              <label for="streetAddress">Street Address</label>
               <input
-                id="address"
+                id="streetAddress"
                 type="text"
-                [(ngModel)]="newDriver.address"
+                [(ngModel)]="newDriver.streetAddress"
                 class="form-input"
-                placeholder="123 Main St, City, ST 12345"
+                placeholder="123 Main St"
               />
+            </div>
+            <div class="dqf-field-row" style="display: flex; gap: 8px;">
+              <div class="dqf-field" style="flex: 2;">
+                <label for="city">City</label>
+                <input
+                  id="city"
+                  type="text"
+                  [(ngModel)]="newDriver.city"
+                  class="form-input"
+                  placeholder="City"
+                />
+              </div>
+              <div class="dqf-field" style="flex: 1;">
+                <label for="state">State</label>
+                <input
+                  id="state"
+                  type="text"
+                  [(ngModel)]="newDriver.state"
+                  class="form-input"
+                  maxlength="2"
+                  placeholder="ST"
+                  style="text-transform: uppercase;"
+                />
+              </div>
+              <div class="dqf-field" style="flex: 1;">
+                <label for="zipCode">Zip Code</label>
+                <input
+                  id="zipCode"
+                  type="text"
+                  [(ngModel)]="newDriver.zipCode"
+                  class="form-input"
+                  maxlength="10"
+                  placeholder="12345"
+                  (blur)="onZipCodeBlur('new')"
+                />
+              </div>
             </div>
             <div class="dqf-field">
               <label for="dob">Date of Birth</label>
@@ -326,8 +362,22 @@
               <input id="editEmail" type="email" [(ngModel)]="editingDriver.email" class="form-input" />
             </div>
             <div class="dqf-field">
-              <label for="editAddress">Address</label>
-              <input id="editAddress" type="text" [(ngModel)]="editingDriver.address" class="form-input" placeholder="123 Main St, City, ST 12345" />
+              <label for="editStreetAddress">Street Address</label>
+              <input id="editStreetAddress" type="text" [(ngModel)]="editingDriver.streetAddress" class="form-input" placeholder="123 Main St" />
+            </div>
+            <div class="dqf-field-row" style="display: flex; gap: 8px;">
+              <div class="dqf-field" style="flex: 2;">
+                <label for="editCity">City</label>
+                <input id="editCity" type="text" [(ngModel)]="editingDriver.city" class="form-input" placeholder="City" />
+              </div>
+              <div class="dqf-field" style="flex: 1;">
+                <label for="editState">State</label>
+                <input id="editState" type="text" [(ngModel)]="editingDriver.state" class="form-input" maxlength="2" placeholder="ST" style="text-transform: uppercase;" />
+              </div>
+              <div class="dqf-field" style="flex: 1;">
+                <label for="editZipCode">Zip Code</label>
+                <input id="editZipCode" type="text" [(ngModel)]="editingDriver.zipCode" class="form-input" maxlength="10" placeholder="12345" (blur)="onZipCodeBlur('edit')" />
+              </div>
             </div>
             <div class="dqf-field">
               <label for="editDob">Date of Birth</label>
