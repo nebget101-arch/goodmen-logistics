@@ -283,6 +283,9 @@ export class OnboardingPacketComponent implements OnInit {
   deletingDocType: string | null = null;
   uploadError: string | null = null;
 
+  // FN-269: File preview state — file is selected but not yet uploaded
+  pendingFiles: Map<string, { file: File; previewUrl: string | null }> = new Map();
+
   get requiredDocsCount(): number {
     return this.documentTypes.filter(d => d.required).length;
   }
@@ -550,6 +553,7 @@ export class OnboardingPacketComponent implements OnInit {
     });
   }
 
+  // FN-269: File selection now stages the file for preview instead of auto-uploading
   onDocumentFileSelected(event: Event, docType: string): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -563,22 +567,59 @@ export class OnboardingPacketComponent implements OnInit {
     }
 
     this.uploadError = null;
+
+    // Generate preview URL for images; null for PDFs
+    let previewUrl: string | null = null;
+    if (file.type.startsWith('image/')) {
+      previewUrl = URL.createObjectURL(file);
+    }
+
+    // Stage the file for preview — do NOT upload yet
+    this.pendingFiles = new Map(this.pendingFiles);
+    this.pendingFiles.set(docType, { file, previewUrl });
+    input.value = '';
+  }
+
+  // FN-269: Cancel a pending file selection
+  cancelPendingFile(docType: string): void {
+    const pending = this.pendingFiles.get(docType);
+    if (pending?.previewUrl) {
+      URL.revokeObjectURL(pending.previewUrl);
+    }
+    this.pendingFiles = new Map(this.pendingFiles);
+    this.pendingFiles.delete(docType);
+  }
+
+  // FN-269: Upload the staged file when user clicks "Save Document"
+  saveDocument(docType: string): void {
+    const pending = this.pendingFiles.get(docType);
+    if (!pending || !this.packetId || !this.token) return;
+
+    this.uploadError = null;
     this.uploadingDocType = docType;
-    this.apiService.uploadOnboardingDocument(this.packetId, docType, file, this.token).subscribe({
+    this.apiService.uploadOnboardingDocument(this.packetId, docType, pending.file, this.token).subscribe({
       next: (res) => {
         this.uploadingDocType = null;
-        if (res.document) {
-          this.uploadedDocuments = new Map(this.uploadedDocuments);
-          this.uploadedDocuments.set(docType, res.document);
+        // Clean up preview
+        if (pending.previewUrl) {
+          URL.revokeObjectURL(pending.previewUrl);
         }
-        input.value = '';
+        this.pendingFiles = new Map(this.pendingFiles);
+        this.pendingFiles.delete(docType);
+        // Reload documents list from server to get accurate state
+        this.loadUploadedDocuments();
       },
       error: (err) => {
         this.uploadingDocType = null;
         this.uploadError = err?.error?.message || 'Failed to upload document. Please try again.';
-        input.value = '';
       }
     });
+  }
+
+  // FN-269: Check if a file is a PDF (for showing PDF icon vs image preview)
+  isPendingFilePdf(docType: string): boolean {
+    const pending = this.pendingFiles.get(docType);
+    return pending?.file?.type === 'application/pdf';
   }
 
   deleteUploadedDocument(docType: string, documentId: string): void {

@@ -328,14 +328,16 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
       // Maps consent key → array of DQF requirement keys to mark complete
       const CONSENT_DQF_MAP = {
         clearinghouse_full: ['clearinghouse_consent_received'],
-        release_of_information: ['release_of_info_signed'],
-        fcra_authorization: ['fcra_authorization'],
+        release_of_information: ['release_of_info_signed', 'release_of_info_dq_safety_received'],
+        fcra_disclosure: ['fcra_disclosure_received'],
+        fcra_authorization: ['fcra_authorization', 'fcra_authorization_received'],
         psp_consent: ['psp_consent', 'psp_authorization_document'],
-        drug_alcohol_release: ['drug_alcohol_release_signed'],
+        drug_alcohol_release: ['drug_alcohol_release_signed', 'drug_alcohol_release_received'],
         // FN-238: MVR consent form DQF mappings
-        mvr_disclosure: ['mvr_disclosure_signed'],
+        // FN-269: Added consent received tracking items
+        mvr_disclosure: ['mvr_disclosure_signed', 'mvr_disclosure_received'],
         mvr_authorization: ['mvr_authorization_signed'],
-        mvr_release_of_liability: ['mvr_release_of_liability_signed']
+        mvr_release_of_liability: ['mvr_release_of_liability_signed', 'mvr_release_of_liability_received']
       };
       const dqfKeys = CONSENT_DQF_MAP[consentKey] || [];
       for (const dqfKey of dqfKeys) {
