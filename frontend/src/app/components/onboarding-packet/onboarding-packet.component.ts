@@ -327,6 +327,7 @@ export class OnboardingPacketComponent implements OnInit {
         this.sections = res.sections || [];
         this.hydrateFromSections();
         this.loadConsentStatuses();
+        this.loadUploadedDocuments();
       },
       error: (err) => {
         this.loading = false;

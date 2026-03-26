@@ -1264,11 +1264,17 @@ router.post('/:packetId/finalize', rateLimited, async (req, res) => {
       try {
         const docsRes = await query(
           `SELECT doc_type FROM driver_documents
-           WHERE driver_id = $1 AND doc_type IN ('cdl_front', 'cdl_back', 'medical_certificate')`,
+           WHERE driver_id = $1 AND doc_type IN (
+             'onboarding_cdl_front', 'onboarding_cdl_back', 'onboarding_medical_certificate',
+             'cdl_front', 'cdl_back', 'medical_certificate'
+           )`,
           [packet.driver_id]
         );
         const uploadedTypes = new Set(docsRes.rows.map(r => r.doc_type));
-        const hasRequiredDocs = uploadedTypes.has('cdl_front') && uploadedTypes.has('cdl_back') && uploadedTypes.has('medical_certificate');
+        const hasRequiredDocs =
+          (uploadedTypes.has('onboarding_cdl_front') || uploadedTypes.has('cdl_front')) &&
+          (uploadedTypes.has('onboarding_cdl_back') || uploadedTypes.has('cdl_back')) &&
+          (uploadedTypes.has('onboarding_medical_certificate') || uploadedTypes.has('medical_certificate'));
         if (!hasRequiredDocs) {
           incompleteSections.push('document_uploads');
         }
