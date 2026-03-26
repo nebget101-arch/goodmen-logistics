@@ -152,7 +152,17 @@ export class VehiclesComponent implements OnInit, OnDestroy {
       next: (data) => {
         console.log('API returned:', data?.length, 'vehicles');
         // All vehicles from API are company-owned
-        this.allVehicles = (data || []);
+        // Sanitize nullable string fields to prevent .slice()/.toLowerCase() crashes
+        this.allVehicles = (data || []).map((v: Vehicle) => ({
+          ...v,
+          unit_number: v.unit_number || '',
+          vin: v.vin || '',
+          make: v.make || '',
+          model: v.model || '',
+          license_plate: v.license_plate || '',
+          state: v.state || '',
+          status: v.status || 'in-service',
+        }));
         console.log('Processing:', this.allVehicles.length, 'vehicles');
         console.log('First vehicle:', this.allVehicles[0]);
         this.applyFiltersAndSort();
@@ -198,13 +208,13 @@ export class VehiclesComponent implements OnInit, OnDestroy {
     // Apply search filter
     if (this.searchQuery.trim()) {
       const query = this.searchQuery.toLowerCase();
-      result = result.filter(vehicle => 
-        vehicle.unit_number.toLowerCase().includes(query) ||
-        vehicle.license_plate.toLowerCase().includes(query) ||
-        vehicle.vin.toLowerCase().includes(query) ||
-        vehicle.make.toLowerCase().includes(query) ||
-        vehicle.model.toLowerCase().includes(query) ||
-        `${vehicle.make} ${vehicle.model}`.toLowerCase().includes(query)
+      result = result.filter(vehicle =>
+        (vehicle.unit_number || '').toLowerCase().includes(query) ||
+        (vehicle.license_plate || '').toLowerCase().includes(query) ||
+        (vehicle.vin || '').toLowerCase().includes(query) ||
+        (vehicle.make || '').toLowerCase().includes(query) ||
+        (vehicle.model || '').toLowerCase().includes(query) ||
+        `${vehicle.make || ''} ${vehicle.model || ''}`.toLowerCase().includes(query)
       );
     }
 
@@ -229,11 +239,11 @@ export class VehiclesComponent implements OnInit, OnDestroy {
       let bValue: any;
 
       if (this.sortField === 'unit_number') {
-        aValue = a.unit_number;
-        bValue = b.unit_number;
+        aValue = a.unit_number || '';
+        bValue = b.unit_number || '';
       } else if (this.sortField === 'inspection_expiry') {
-        aValue = new Date(a.inspection_expiry).getTime();
-        bValue = new Date(b.inspection_expiry).getTime();
+        aValue = a.inspection_expiry ? new Date(a.inspection_expiry).getTime() : 0;
+        bValue = b.inspection_expiry ? new Date(b.inspection_expiry).getTime() : 0;
       }
 
       if (aValue < bValue) return this.sortOrder === 'asc' ? -1 : 1;
