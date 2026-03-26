@@ -25,6 +25,33 @@ const SAFETY_PERMS = [
 ];
 
 const routes: Routes = [
+  // Compliance — standalone page (no Claims & Accidents shell)
+  {
+    path: 'compliance',
+    component: ComplianceDashboardComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: SAFETY_PERMS },
+  },
+  // FMCSA Safety — standalone pages (no Claims & Accidents shell)
+  {
+    path: 'fmcsa',
+    component: FmcsaDashboardComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: SAFETY_PERMS },
+  },
+  {
+    path: 'fmcsa/carriers',
+    component: FmcsaCarriersComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: SAFETY_PERMS },
+  },
+  {
+    path: 'fmcsa/carriers/:id',
+    component: FmcsaCarrierDetailComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: SAFETY_PERMS },
+  },
+  // Claims & Accidents — shell with tabs
   {
     path: '',
     component: SafetyShellComponent,
@@ -37,10 +64,6 @@ const routes: Routes = [
       { path: 'claims', component: SafetyClaimsComponent },
       { path: 'tasks', component: SafetyTasksComponent },
       { path: 'reports', component: SafetyReportsComponent },
-      { path: 'compliance', component: ComplianceDashboardComponent },
-      { path: 'fmcsa', component: FmcsaDashboardComponent },
-      { path: 'fmcsa/carriers', component: FmcsaCarriersComponent },
-      { path: 'fmcsa/carriers/:id', component: FmcsaCarrierDetailComponent },
     ]
   }
 ];
