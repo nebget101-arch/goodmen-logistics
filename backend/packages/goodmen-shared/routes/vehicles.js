@@ -276,6 +276,12 @@ router.get('/', async (req, res) => {
       ? `
       SELECT
         av.*,
+        COALESCE(av.vin, '') AS vin,
+        COALESCE(av.make, '') AS make,
+        COALESCE(av.model, '') AS model,
+        COALESCE(av.license_plate, '') AS license_plate,
+        COALESCE(av.state, '') AS state,
+        COALESCE(av.unit_number, '') AS unit_number,
         oe.name AS operating_entity_name
       FROM ${vehicleSource} av
       LEFT JOIN operating_entities oe ON oe.id = av.operating_entity_id
@@ -284,6 +290,12 @@ router.get('/', async (req, res) => {
       : `
       SELECT
         av.*,
+        COALESCE(av.vin, '') AS vin,
+        COALESCE(av.make, '') AS make,
+        COALESCE(av.model, '') AS model,
+        COALESCE(av.license_plate, '') AS license_plate,
+        COALESCE(av.state, '') AS state,
+        COALESCE(av.unit_number, '') AS unit_number,
         NULL::text AS operating_entity_name
       FROM ${vehicleSource} av
       WHERE 1=1
@@ -367,21 +379,25 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ message: 'Operating entity context is required to create a vehicle' });
     }
 
-    const finalVin = (vin && vin.trim()) ? vin.trim() : (unit_number ? unit_number.slice(-4) : null);
-    const finalUnitNumber = (unit_number && unit_number.trim()) ? unit_number.trim() : (finalVin ? finalVin.slice(-4) : null);
-    
+    const finalVin = (vin && vin.trim()) ? vin.trim() : (unit_number ? unit_number.slice(-4) : '');
+    const finalUnitNumber = (unit_number && unit_number.trim()) ? unit_number.trim() : (finalVin ? finalVin.slice(-4) : '');
+    const finalMake = (make && make.trim()) ? make.trim() : '';
+    const finalModel = (model && model.trim()) ? model.trim() : '';
+    const finalLicensePlate = (license_plate && license_plate.trim()) ? license_plate.trim() : '';
+    const finalState = (state && state.trim()) ? state.trim() : '';
+
     const finalVehicleType = (vehicle_type && vehicle_type.trim()) ? vehicle_type.trim() : 'truck';
 
     const result = await query(
       `INSERT INTO vehicles (
-        unit_number, vin, make, model, year, license_plate, state, mileage, 
+        unit_number, vin, make, model, year, license_plate, state, mileage,
         inspection_expiry, next_pm_due, next_pm_mileage,
         insurance_expiry, registration_expiry, oos_reason, status, vehicle_type, tenant_id, operating_entity_id
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'in-service', $15, $16, $17) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'in-service', $15, $16, $17)
        RETURNING *`,
       [
-        finalUnitNumber, finalVin, make, model, year, license_plate, state, mileage || 0,
+        finalUnitNumber, finalVin, finalMake, finalModel, year, finalLicensePlate, finalState, mileage || 0,
         inspection_expiry, next_pm_due, next_pm_mileage,
         insurance_expiry, registration_expiry, oos_reason, finalVehicleType, tenantId, operatingEntityId
       ]
@@ -423,14 +439,21 @@ router.put('/:id', async (req, res) => {
     // Fields that should not be updated
     const excludedFields = ['id', 'created_at', 'updated_at', 'customer_id', 'source'];
     
+    // String fields that must never be null in the database
+    const nullSafeStringFields = new Set(['vin', 'make', 'model', 'license_plate', 'state', 'unit_number']);
+
     const fields = [];
     const values = [];
     let paramCount = 1;
-    
+
     Object.keys(req.body).forEach(key => {
       if (req.body[key] !== undefined && !excludedFields.includes(key) && vehicleColumns.has(key)) {
         fields.push(`${key} = $${paramCount}`);
-        values.push(req.body[key]);
+        let val = req.body[key];
+        if (nullSafeStringFields.has(key) && (val === null || val === undefined)) {
+          val = '';
+        }
+        values.push(val);
         paramCount++;
       }
     });
