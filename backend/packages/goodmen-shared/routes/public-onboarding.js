@@ -1235,26 +1235,31 @@ router.post('/:packetId/finalize', rateLimited, async (req, res) => {
       incompleteSections.push('employment_application');
     }
 
-    // 2. Consent forms: check if all required consents are signed
+    // 2. Consent forms: check if all onboarding consents are signed
+    // Only check the 8 consent keys shown in the driver onboarding flow
     if (sectionMap['consent_forms'] !== 'completed') {
       try {
-        // Only check the latest version of each consent template key
+        const ONBOARDING_CONSENT_KEYS = [
+          'fcra_disclosure', 'fcra_authorization',
+          'release_of_information', 'drug_alcohol_release',
+          'mvr_disclosure', 'mvr_authorization', 'mvr_release_of_liability',
+          'psp_consent'
+        ];
         const consentsRes = await query(
-          `SELECT DISTINCT ON (ct.key) ct.key, dc.id AS consent_id
-           FROM consent_templates ct
-           LEFT JOIN driver_consents dc
-             ON dc.consent_key = ct.key
-            AND dc.packet_id = $1
-            AND dc.status = 'signed'
-           WHERE ct.is_active = true
-           ORDER BY ct.key, ct.version DESC`,
-          [packetId]
+          `SELECT dc.consent_key
+           FROM driver_consents dc
+           WHERE dc.packet_id = $1
+             AND dc.status = 'signed'
+             AND dc.consent_key = ANY($2)`,
+          [packetId, ONBOARDING_CONSENT_KEYS]
         );
-        const allConsentsSigned = consentsRes.rows.length > 0 && consentsRes.rows.every(r => r.consent_id);
-        const unsignedKeys = consentsRes.rows.filter(r => !r.consent_id).map(r => r.key);
+        const signedKeys = new Set(consentsRes.rows.map(r => r.consent_key));
+        const unsignedKeys = ONBOARDING_CONSENT_KEYS.filter(k => !signedKeys.has(k));
+        const allConsentsSigned = unsignedKeys.length === 0;
         dtLogger.info('finalize_consent_check', {
           packetId,
-          totalTemplates: consentsRes.rows.length,
+          required: ONBOARDING_CONSENT_KEYS.length,
+          signed: signedKeys.size,
           allSigned: allConsentsSigned,
           unsignedKeys
         });
