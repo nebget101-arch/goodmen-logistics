@@ -112,16 +112,23 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
   ];
 
+  // Cached options — computed once and updated only when source data changes.
+  // Using getters that return new arrays on every call causes infinite change detection loops
+  // with OnPush child components like app-ai-select.
+  stateSelectOptionsCached: { value: string; label: string }[] = [];
+  driverSelectOptionsCached: { value: string; label: string }[] = [];
+  makeSelectOptionsCached: { value: string; label: string }[] = [];
+
   get stateSelectOptions(): { value: string; label: string }[] {
-    return this.states.map(s => ({ value: s, label: s }));
+    return this.stateSelectOptionsCached;
   }
 
   get driverSelectOptions(): { value: string; label: string }[] {
-    return this.drivers.map(d => ({ value: d.id, label: `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Unknown' }));
+    return this.driverSelectOptionsCached;
   }
 
   get makeSelectOptions(): { value: string; label: string }[] {
-    return this.makes.map(m => ({ value: m, label: m }));
+    return this.makeSelectOptionsCached;
   }
 
   statusSelectOptions = [
@@ -216,6 +223,11 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
   ngOnInit(): void {
     console.log('[VEHICLE-FORM] ngOnInit, isOpen:', this.isOpen, 'vehicleType:', this.vehicleType);
     try {
+      // Initialize cached select options (must be done here, not in field initializers,
+      // because 'makes' and 'states' may not be initialized yet at field declaration time)
+      this.stateSelectOptionsCached = this.states.map(s => ({ value: s, label: s }));
+      this.makeSelectOptionsCached = this.makes.map(m => ({ value: m, label: m }));
+      this.updateFilteredTrailerTypeOptions();
       this.loadDrivers();
       this.loadFormData();
     } catch (err) {
@@ -342,9 +354,14 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     this.apiService.getDispatchDrivers().subscribe({
       next: (data: any[]) => {
         this.drivers = Array.isArray(data) ? data : [];
+        this.driverSelectOptionsCached = this.drivers.map(d => ({
+          value: d.id,
+          label: `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Unknown'
+        }));
       },
       error: () => {
         this.drivers = [];
+        this.driverSelectOptionsCached = [];
       }
     });
   }
@@ -357,6 +374,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     this.trailerTypeDropdownOpen = true;
     this.trailerForm.trailer_type_code = '';
     this.trailerForm.trailer_type_label = '';
+    this.updateFilteredTrailerTypeOptions();
   }
 
   onTrailerTypeSearchBlur(): void {
@@ -368,12 +386,21 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     }, 150);
   }
 
+  private _filteredTrailerTypeOptionsCache: Array<{ id: string; value: string }> = this.trailerTypeOptions.slice(0, 40);
+
   get filteredTrailerTypeOptions(): Array<{ id: string; value: string }> {
+    return this._filteredTrailerTypeOptionsCache;
+  }
+
+  private updateFilteredTrailerTypeOptions(): void {
     const q = (this.trailerTypeSearch || '').trim().toLowerCase();
-    if (!q) return this.trailerTypeOptions.slice(0, 40);
-    return this.trailerTypeOptions
-      .filter((option) => option.id.toLowerCase().includes(q) || option.value.toLowerCase().includes(q))
-      .slice(0, 80);
+    if (!q) {
+      this._filteredTrailerTypeOptionsCache = this.trailerTypeOptions.slice(0, 40);
+    } else {
+      this._filteredTrailerTypeOptionsCache = this.trailerTypeOptions
+        .filter((option) => option.id.toLowerCase().includes(q) || option.value.toLowerCase().includes(q))
+        .slice(0, 80);
+    }
   }
 
   selectTrailerType(option: { id: string; value: string }): void {
