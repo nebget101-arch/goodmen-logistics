@@ -26,8 +26,8 @@ The argument is the Jira key (e.g., `FN-42`). This should be a **Story** key, no
 ### 2. Route by Story Type
 
 #### Story WITHOUT subtasks (standard flow)
-- Run `git log main..HEAD --oneline` to see commits
-- Run `git diff main...HEAD --stat` for changed files summary
+- Run `git log dev..HEAD --oneline` to see commits
+- Run `git diff dev...HEAD --stat` for changed files summary
 - Proceed to step 3
 
 #### Story WITH subtasks (merge flow)
@@ -37,8 +37,8 @@ The argument is the Jira key (e.g., `FN-42`). This should be a **Story** key, no
 - Collect all subtask branch names from Jira comments or story doc
 - Create the story-level merge branch and merge subtask branches:
   ```
-  git checkout main
-  git pull origin main
+  git checkout dev
+  git pull origin dev
   git checkout -b <agent>/$ARGS/<slug>
   ```
 - For each subtask branch (in dependency order):
@@ -46,17 +46,17 @@ The argument is the Jira key (e.g., `FN-42`). This should be a **Story** key, no
   git merge origin/<subtask-branch> --no-ff -m "Merge FN-XXX: <subtask summary>"
   ```
 - If merge conflicts occur, resolve them. If conflicts are complex, STOP and report to user.
-- Run `git log main..HEAD --oneline` to see all merged commits
-- Run `git diff main...HEAD --stat` for combined changed files summary
+- Run `git log dev..HEAD --oneline` to see all merged commits
+- Run `git diff dev...HEAD --stat` for combined changed files summary
 - Proceed to step 3
 
-### 3. Rebase on Main (standard flow only)
-Skip this step for the merge flow (subtask branches already merged from main-based branches).
+### 3. Rebase on Dev (standard flow only)
+Skip this step for the merge flow (subtask branches already merged from dev-based branches).
 
 For standard flow:
 ```
-git fetch origin main
-git rebase origin/main
+git fetch origin dev
+git rebase origin/dev
 ```
 Resolve conflicts if any. If conflicts are complex, STOP and report to user.
 
@@ -66,7 +66,7 @@ git push -u origin HEAD
 ```
 
 ### 5. Create PR
-Use `gh pr create` with this format:
+Use `gh pr create --base dev` with this format (PRs always target `dev`, never `main`):
 
 **Title**: `[$ARGS] <Jira summary>`
 

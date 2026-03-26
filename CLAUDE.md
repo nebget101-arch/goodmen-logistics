@@ -139,7 +139,7 @@ Epic: FN-100
     Subtask: FN-104 → branch: qa/FN-104/validation (only if automation)
 
 When all subtasks Done:
-  /create-pr FN-101 → merges FN-102 + FN-103 branches → single PR → main
+  /create-pr FN-101 → merges FN-102 + FN-103 branches → single PR → dev
 ```
 
 ### QA Evidence

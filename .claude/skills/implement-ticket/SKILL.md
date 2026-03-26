@@ -40,8 +40,8 @@ The argument is the Jira key (e.g., `FN-42`).
 
 ### 3. Create Branch
 ```
-git checkout main
-git pull origin main
+git checkout dev
+git pull origin dev
 git checkout -b <agent>/$ARGS/<slug>
 ```
 Where `<agent>` matches the label (`frontend`, `backend`, `ai`, `ios`, `qa`) and `<slug>` is a short kebab-case description.
