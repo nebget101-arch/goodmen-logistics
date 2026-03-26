@@ -533,8 +533,30 @@ export class OnboardingPacketComponent implements OnInit {
       });
   }
 
+  // FN-270: Track submission state
+  packetSubmitted = false;
+  packetSubmitting = false;
+  submissionEmailSent = false;
+
   submitFinalPacket(): void {
-    this.saveSuccess = 'Final packet review submission is not yet implemented. All sections are tracked individually.';
+    if (!this.packetId || !this.token || this.packetSubmitting) return;
+    this.packetSubmitting = true;
+    this.saveSuccess = null;
+    this.errorMessage = null;
+
+    this.apiService.finalizeOnboardingPacket(this.packetId, this.token).subscribe({
+      next: (res) => {
+        this.packetSubmitting = false;
+        this.packetSubmitted = true;
+        this.submissionEmailSent = !!res.emailSent;
+        this.saveSuccess = 'Your onboarding packet has been submitted successfully!';
+      },
+      error: (err) => {
+        this.packetSubmitting = false;
+        this.errorMessage =
+          err?.error?.message || 'Failed to submit onboarding packet. Please try again.';
+      }
+    });
   }
 
   // === Document Uploads (FN-250) ===
