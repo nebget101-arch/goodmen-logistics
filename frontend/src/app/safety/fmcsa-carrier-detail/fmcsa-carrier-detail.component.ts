@@ -396,8 +396,8 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
       .subscribe({
         next: (resp) => {
           this.basicDetails = resp.basic_details || [];
-          if (this.basicDetails.length > 0 && !this.selectedBasic) {
-            this.selectedBasic = this.basicDetails[0];
+          if (this.filteredBasicDetails.length > 0 && !this.selectedBasic) {
+            this.selectedBasic = this.filteredBasicDetails[0];
           }
           this.basicLoading = false;
         },
@@ -423,6 +423,12 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
 
   selectInspection(detail: InspectionDetail | null): void {
     this.selectedInspection = this.selectedInspection?.inspection_id === detail?.inspection_id ? null : detail;
+  }
+
+  private readonly HIDDEN_BASICS = ['CrashIndicator', 'HMCompliance'];
+
+  get filteredBasicDetails(): BasicDetail[] {
+    return this.basicDetails.filter(d => !this.HIDDEN_BASICS.includes(d.basic_name));
   }
 
   selectBasic(detail: BasicDetail): void {
