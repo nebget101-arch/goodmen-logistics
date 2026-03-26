@@ -1238,14 +1238,16 @@ router.post('/:packetId/finalize', rateLimited, async (req, res) => {
     // 2. Consent forms: check if all required consents are signed
     if (sectionMap['consent_forms'] !== 'completed') {
       try {
+        // Only check the latest version of each consent template key
         const consentsRes = await query(
-          `SELECT ct.key, dc.id AS consent_id
+          `SELECT DISTINCT ON (ct.key) ct.key, dc.id AS consent_id
            FROM consent_templates ct
            LEFT JOIN driver_consents dc
              ON dc.consent_key = ct.key
             AND dc.packet_id = $1
             AND dc.status = 'signed'
-           WHERE ct.is_active = true`,
+           WHERE ct.is_active = true
+           ORDER BY ct.key, ct.version DESC`,
           [packetId]
         );
         const allConsentsSigned = consentsRes.rows.length > 0 && consentsRes.rows.every(r => r.consent_id);
