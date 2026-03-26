@@ -252,61 +252,7 @@
           <span class="info-value">{{ selectedBasic.record_period }}</span>
         </div>
 
-        <!-- Measure Over Time -->
-        <div class="basic-subsection" *ngIf="selectedBasic.measures_history && selectedBasic.measures_history.length > 0">
-          <h4 class="subsection-title">Carrier Measure Over Time</h4>
-          <div class="table-wrapper">
-            <table class="history-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Measure</th>
-                  <th>Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let h of selectedBasic.measures_history">
-                  <td class="date-cell">{{ formatDate(h.snapshot_date) }}</td>
-                  <td>{{ h.measure_value !== null ? h.measure_value : 'N/A' }}</td>
-                  <td>
-                    <span class="release-type-tag">{{ h.release_type === 'M' ? 'Monthly' : h.release_type === 'Q' ? 'Quarterly' : h.release_type === 'S' ? 'Semi-Annual' : h.release_type }}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Violations -->
-        <div class="basic-subsection" *ngIf="selectedBasic.violations && selectedBasic.violations.length > 0">
-          <h4 class="subsection-title">Violation Summary ({{ selectedBasic.violations.length }})</h4>
-          <div class="table-wrapper">
-            <table class="history-table">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Description</th>
-                  <th class="num-col"># Violations</th>
-                  <th class="num-col"># OOS</th>
-                  <th class="num-col">Severity</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let v of selectedBasic.violations">
-                  <td><code class="viol-code">{{ v.violation_code }}</code></td>
-                  <td class="viol-desc">{{ v.description }}</td>
-                  <td class="num-col">{{ v.violation_count }}</td>
-                  <td class="num-col">{{ v.oos_violation_count }}</td>
-                  <td class="num-col">
-                    <span class="severity-badge">{{ v.severity_weight }}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Inspections -->
+        <!-- Inspections (before Violations) -->
         <div class="basic-subsection" *ngIf="selectedBasic.inspections && selectedBasic.inspections.length > 0">
           <h4 class="subsection-title">Inspection History ({{ selectedBasic.inspections.length }})</h4>
           <div class="table-wrapper">
@@ -404,6 +350,35 @@
                     </td>
                   </tr>
                 </ng-container>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Violations -->
+        <div class="basic-subsection" *ngIf="selectedBasic.violations && selectedBasic.violations.length > 0">
+          <h4 class="subsection-title">Violation Summary ({{ selectedBasic.violations.length }})</h4>
+          <div class="table-wrapper">
+            <table class="history-table violations-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Description</th>
+                  <th class="num-col"># Violations</th>
+                  <th class="num-col"># OOS</th>
+                  <th class="num-col">Severity</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let v of selectedBasic.violations">
+                  <td><code class="viol-code">{{ v.violation_code }}</code></td>
+                  <td class="viol-desc">{{ v.description }}</td>
+                  <td class="num-col">{{ v.violation_count }}</td>
+                  <td class="num-col">{{ v.oos_violation_count }}</td>
+                  <td class="num-col">
+                    <span class="severity-badge">{{ v.severity_weight }}</span>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
