@@ -1613,6 +1613,17 @@ export class DriversComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Validate: if a result is selected, require collection_date, test_date, and collection_site
+    if (form.result) {
+      const missing: string[] = [];
+      if (!form.collection_date) missing.push('Collection Date');
+      if (!form.collection_site) missing.push('Collection Site');
+      if (missing.length > 0) {
+        alert(`When a result is selected, the following fields are required: ${missing.join(', ')}`);
+        return;
+      }
+    }
+
     // FN-225: Validate attachment required when result is selected
     const hasExistingDoc = this.editingDrugTest?.result_document_id;
     if (form.result && !this.drugTestResultFile && !hasExistingDoc) {
