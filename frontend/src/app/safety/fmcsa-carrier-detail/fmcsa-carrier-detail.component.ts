@@ -5,8 +5,10 @@ import { takeUntil } from 'rxjs/operators';
 import {
   FmcsaSafetyService,
   MonitoredCarrier,
-  SafetySnapshot
+  SafetySnapshot,
+  BasicDetail
 } from '../fmcsa-safety.service';
+import { AccessControlService } from '../../services/access-control.service';
 
 interface ChartDataset {
   label: string;
@@ -29,8 +31,12 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
   carrier: MonitoredCarrier | null = null;
   latestSnapshot: SafetySnapshot | null = null;
   history: SafetySnapshot[] = [];
+  basicDetails: BasicDetail[] = [];
   loading = true;
   error = '';
+  scrapingBasic = false;
+  basicLoading = false;
+  selectedBasic: BasicDetail | null = null;
 
   chartLabels: string[] = [];
   chartData: ChartDataset[] = [];
@@ -57,7 +63,8 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private fmcsaService: FmcsaSafetyService
+    private fmcsaService: FmcsaSafetyService,
+    private accessControl: AccessControlService
   ) {}
 
   ngOnInit(): void {
@@ -138,6 +145,7 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
 
           this.buildChartData();
           this.loading = false;
+          this.loadBasicDetails();
           if (this.chartReady) {
             this.renderChart();
           }
@@ -353,6 +361,84 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
 
   nextPage(): void {
     if (this.historyPage < this.totalHistoryPages - 1) this.historyPage++;
+  }
+
+  // ─── BASIC Details ──────────────────────────────────────────────────────────
+
+  canScrape(): boolean {
+    return this.accessControl.hasPermission('fmcsa_safety.scrape');
+  }
+
+  scrapeBasicDetails(): void {
+    if (!this.carrier) return;
+    this.scrapingBasic = true;
+    this.fmcsaService.triggerCarrierBasicDetailScrape(this.carrier.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.scrapingBasic = false;
+        },
+        error: () => {
+          this.scrapingBasic = false;
+          this.error = 'Failed to trigger BASIC detail scrape';
+        }
+      });
+  }
+
+  loadBasicDetails(): void {
+    if (!this.carrier) return;
+    this.basicLoading = true;
+    this.fmcsaService.getCarrierBasicDetails(this.carrier.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          this.basicDetails = resp.basic_details || [];
+          if (this.basicDetails.length > 0 && !this.selectedBasic) {
+            this.selectedBasic = this.basicDetails[0];
+          }
+          this.basicLoading = false;
+        },
+        error: () => {
+          this.basicLoading = false;
+        }
+      });
+  }
+
+  selectBasic(detail: BasicDetail): void {
+    this.selectedBasic = detail;
+  }
+
+  getBasicDisplayName(name: string): string {
+    const map: Record<string, string> = {
+      'UnsafeDriving': 'Unsafe Driving',
+      'CrashIndicator': 'Crash Indicator',
+      'HOSCompliance': 'HOS Compliance',
+      'VehicleMaint': 'Vehicle Maint.',
+      'DrugsAlcohol': 'Ctrl Substances',
+      'HMCompliance': 'Hazmat',
+      'DriverFitness': 'Driver Fitness'
+    };
+    return map[name] || name;
+  }
+
+  getBasicColor(name: string): string {
+    const map: Record<string, string> = {
+      'UnsafeDriving': '#ef4444',
+      'CrashIndicator': '#10b981',
+      'HOSCompliance': '#f59e0b',
+      'VehicleMaint': '#8b5cf6',
+      'DrugsAlcohol': '#ec4899',
+      'HMCompliance': '#f97316',
+      'DriverFitness': '#38bdf8'
+    };
+    return map[name] || '#94a3b8';
+  }
+
+  getMeasureClass(percentile: number | null, threshold: number | null): string {
+    if (percentile === null) return 'score-na';
+    if (threshold && percentile >= threshold) return 'score-danger';
+    if (percentile >= 50) return 'score-warning';
+    return 'score-good';
   }
 
   // ─── Navigation ──────────────────────────────────────────────────────────────

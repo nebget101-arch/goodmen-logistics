@@ -496,6 +496,177 @@
   font-weight: 500;
 }
 
+/* ─── Primary Button ──────────────────────────────────────────────────────── */
+.btn-primary {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.spinner-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ─── BASIC Detail Tabs ──────────────────────────────────────────────────── */
+.basic-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.basic-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.basic-tab:hover {
+  color: #94a3b8;
+}
+
+.basic-tab.active {
+  color: #e2e8f0;
+}
+
+.basic-tab-measure {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+/* ─── BASIC Overview Stats ───────────────────────────────────────────────── */
+.basic-overview {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.basic-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(51, 65, 85, 0.4);
+  border-radius: 8px;
+}
+
+.basic-stat-label {
+  font-size: 0.74rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.basic-stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  padding: 2px 10px;
+  border-radius: 4px;
+}
+
+.basic-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.2);
+}
+
+/* ─── BASIC Subsections ──────────────────────────────────────────────────── */
+.basic-subsection {
+  margin-top: 20px;
+}
+
+.subsection-title {
+  margin: 0 0 12px;
+  font-size: 0.88rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* ─── Violation & Inspection Styles ──────────────────────────────────────── */
+.viol-code {
+  font-family: monospace;
+  background: rgba(56, 189, 248, 0.1);
+  color: #67e8f9;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.78rem;
+}
+
+.viol-desc {
+  max-width: 400px;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.num-col {
+  text-align: center !important;
+}
+
+.severity-badge {
+  display: inline-block;
+  min-width: 24px;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  background: rgba(249, 115, 22, 0.15);
+  color: #fb923c;
+}
+
+.viol-row td {
+  border-bottom: 1px solid rgba(51, 65, 85, 0.1) !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+
+.viol-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #64748b;
+  padding-left: 24px !important;
+}
+
+.viol-icon {
+  font-size: 16px;
+  color: #475569;
+}
+
+.release-type-tag {
+  display: inline-block;
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-size: 0.76rem;
+}
+
 /* ─── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .info-grid {
@@ -530,5 +701,18 @@
   .history-table th,
   .history-table td {
     padding: 8px 8px;
+  }
+
+  .basic-overview {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .basic-tabs {
+    gap: 2px;
+  }
+
+  .basic-tab {
+    padding: 8px 10px;
+    font-size: 0.72rem;
   }
 }

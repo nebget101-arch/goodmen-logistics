@@ -136,6 +136,70 @@ export interface MyScoresResponse {
   carriers: MonitoredCarrier[];
 }
 
+// ─── BASIC Detail Interfaces ──────────────────────────────────────────────────
+
+export interface BasicMeasureHistory {
+  id: string;
+  basic_detail_id: string;
+  snapshot_date: string;
+  measure_value: number | null;
+  history_value: number | null;
+  release_type: string | null;
+  release_id: number | null;
+}
+
+export interface BasicViolation {
+  id: string;
+  basic_detail_id: string;
+  violation_code: string | null;
+  description: string | null;
+  violation_count: number | null;
+  oos_violation_count: number | null;
+  severity_weight: number | null;
+}
+
+export interface InspectionViolation {
+  code: string | null;
+  description: string | null;
+  weight: number | null;
+}
+
+export interface BasicInspection {
+  id: string;
+  basic_detail_id: string;
+  inspection_date: string | null;
+  report_number: string | null;
+  report_state: string | null;
+  plate_number: string | null;
+  plate_state: string | null;
+  vehicle_type: string | null;
+  severity_weight: number | null;
+  time_weight: number | null;
+  total_weight: number | null;
+  violations: InspectionViolation[];
+}
+
+export interface BasicDetail {
+  id: string;
+  monitored_carrier_id: string;
+  basic_name: string;
+  measure_value: number | null;
+  percentile: number | null;
+  threshold: number | null;
+  safety_event_group: string | null;
+  acute_critical_violations: number;
+  investigation_results_text: string | null;
+  record_period: string | null;
+  scraped_at: string;
+  measures_history: BasicMeasureHistory[];
+  violations: BasicViolation[];
+  inspections: BasicInspection[];
+}
+
+export interface BasicDetailsResponse {
+  basic_details: BasicDetail[];
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 @Injectable({ providedIn: 'root' })
@@ -181,11 +245,27 @@ export class FmcsaSafetyService {
     return this.http.post<{ message: string; job: ScrapeJob }>(`${this.base}/scrape/${carrierId}`, {});
   }
 
+  triggerBasicDetailScrape(): Observable<{ message: string; job: ScrapeJob }> {
+    return this.http.post<{ message: string; job: ScrapeJob }>(`${this.base}/scrape/basic-details`, {});
+  }
+
+  triggerCarrierBasicDetailScrape(carrierId: string): Observable<{ message: string; job: ScrapeJob }> {
+    return this.http.post<{ message: string; job: ScrapeJob }>(`${this.base}/scrape/${carrierId}/basic-details`, {});
+  }
+
   // ─── Jobs ─────────────────────────────────────────────────────────────────
 
   getJobs(limit = 20): Observable<ScrapeJob[]> {
     const params = new HttpParams().set('limit', limit);
     return this.http.get<ScrapeJob[]>(`${this.base}/jobs`, { params });
+  }
+
+  // ─── Client-facing (my scores) ────────────────────────────────────────────
+
+  // ─── BASIC Details ──────────────────────────────────────────────────────────
+
+  getCarrierBasicDetails(carrierId: string): Observable<BasicDetailsResponse> {
+    return this.http.get<BasicDetailsResponse>(`${this.base}/carriers/${carrierId}/basic-details`);
   }
 
   // ─── Client-facing (my scores) ────────────────────────────────────────────
