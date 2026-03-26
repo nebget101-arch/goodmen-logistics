@@ -229,6 +229,10 @@ export class ApiService {
     return this.http.delete(`${this.baseUrl}/drivers/${id}`);
   }
 
+  lookupZipCode(zipCode: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/drivers/zip-lookup/${zipCode}`);
+  }
+
   // Settlements (payroll)
   listSettlements(filters?: { driver_id?: string; payroll_period_id?: string; settlement_status?: string; settlement_number?: string; limit?: number; offset?: number }): Observable<any> {
     let url = `${this.baseUrl}/settlements/settlements`;
