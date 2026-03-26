@@ -962,7 +962,6 @@ export class DriversComponent implements OnInit, OnDestroy {
       { key: 'pre_hire', label: 'Pre-Hire Documents (Before Driving)' },
       { key: 'pre_hire_checklist', label: 'Pre-Hire Checklist' },
       { key: 'within_30_days', label: 'Within 30 Days of Hire' },
-      { key: 'prehire_documents', label: 'Pre-Hire Documents' },
       { key: 'annual', label: 'Annual Requirements' },
       { key: 'other', label: 'Other Documents' }
     ];
@@ -982,7 +981,7 @@ export class DriversComponent implements OnInit, OnDestroy {
         requirements: reqs,
         expanded: hasIncomplete
       };
-    }).filter(cat => cat.requirements.length > 0 || cat.key === 'prehire_documents'); // FN-261: Skip empty categories; keep prehire_documents tab (document list, not requirements)
+    }).filter(cat => cat.requirements.length > 0); // FN-261: Skip empty categories
 
     // Any remaining requirements not in a named category go into "Other Documents"
     const uncategorized = this.dqfRequirements.filter(r => !assignedKeys.has(r.key));
@@ -1103,7 +1102,7 @@ export class DriversComponent implements OnInit, OnDestroy {
   /** FN-258: Switch active DQF tab */
   setActiveDqfTab(tabKey: string): void {
     this.activeDqfTab = tabKey;
-    if (tabKey === 'prehire_documents' && this.selectedDriver?.id) {
+    if (tabKey === 'pre_hire' && this.selectedDriver?.id) {
       this.loadPrehireDocuments(this.selectedDriver.id);
     }
   }

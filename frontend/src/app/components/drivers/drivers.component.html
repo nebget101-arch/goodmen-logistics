@@ -738,14 +738,8 @@
                   (click)="setActiveDqfTab(cat.key)">
             <span class="dqf-tab-label">{{ cat.label }}</span>
             <span class="dqf-tab-badge"
-                  *ngIf="cat.key !== 'prehire_documents'"
                   [ngClass]="getCategoryCompletionPct(cat) === 100 ? 'badge-complete' : 'badge-incomplete'">
               {{ getCategoryCompletionCount(cat) }}
-            </span>
-            <span class="dqf-tab-badge"
-                  *ngIf="cat.key === 'prehire_documents'"
-                  [ngClass]="prehireDocuments.length > 0 ? 'badge-complete' : 'badge-incomplete'">
-              {{ prehireDocuments.length }}
             </span>
           </button>
         </div>
@@ -905,8 +899,8 @@
                 </div>
               </div>
             </div>
-            <!-- FN-262: Pre-Hire Documents rendered as its own tab (prehire_documents) -->
-            <ng-container *ngIf="cat.key === 'prehire_documents'">
+            <!-- Pre-Hire Documents section inside Pre-Hire Documents (Before Driving) tab -->
+            <ng-container *ngIf="cat.key === 'pre_hire'">
               <section class="prehire-docs-section prehire-docs-inline">
                 <div *ngIf="prehireDocumentsLoading" class="dqf-loading">
                   <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
