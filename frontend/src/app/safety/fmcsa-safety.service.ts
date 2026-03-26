@@ -83,6 +83,32 @@ export interface SafetySnapshot {
   mcs150_mileage: number | null;
   mcs150_mileage_year: number | null;
   out_of_service_date: string | null;
+
+  // Inspection data (24-month)
+  vehicle_inspections: number | null;
+  driver_inspections: number | null;
+  hazmat_inspections: number | null;
+  iep_inspections: number | null;
+  vehicle_oos: number | null;
+  driver_oos: number | null;
+  hazmat_oos: number | null;
+  vehicle_oos_rate: string | null;
+  driver_oos_rate: string | null;
+  hazmat_oos_rate: string | null;
+  vehicle_oos_national_avg: string | null;
+  driver_oos_national_avg: string | null;
+  hazmat_oos_national_avg: string | null;
+
+  // Crash data (24-month)
+  crashes_fatal: number | null;
+  crashes_injury: number | null;
+  crashes_tow: number | null;
+  crashes_total: number | null;
+
+  // Carrier operations
+  operation_classification: string | null;
+  carrier_operation: string | null;
+  cargo_carried: string | null;
 }
 
 export interface ScrapeJob {

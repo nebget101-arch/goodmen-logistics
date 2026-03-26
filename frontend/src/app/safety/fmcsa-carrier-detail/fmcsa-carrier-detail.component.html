@@ -153,6 +153,117 @@
       </div>
     </div>
 
+    <!-- ─── Carrier Operations Section ──────────────────────────────────────── -->
+    <div class="section-card" *ngIf="latestSnapshot && (latestSnapshot.operation_classification || latestSnapshot.carrier_operation || latestSnapshot.cargo_carried)">
+      <h3 class="section-title">Carrier Operations</h3>
+      <div class="info-grid">
+        <div class="info-col">
+          <div class="info-row" *ngIf="latestSnapshot.operation_classification">
+            <span class="info-label">Operation Classification</span>
+            <span class="info-value">{{ latestSnapshot.operation_classification }}</span>
+          </div>
+          <div class="info-row" *ngIf="latestSnapshot.carrier_operation">
+            <span class="info-label">Carrier Operation</span>
+            <span class="info-value">{{ latestSnapshot.carrier_operation }}</span>
+          </div>
+        </div>
+        <div class="info-col" *ngIf="getCargoList().length > 0">
+          <div class="info-row">
+            <span class="info-label">Cargo Carried</span>
+            <span class="info-value cargo-list">
+              <span class="cargo-tag" *ngFor="let cargo of getCargoList()">{{ cargo }}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── US Inspections Section ────────────────────────────────────────────── -->
+    <div class="section-card" *ngIf="latestSnapshot">
+      <h3 class="section-title">US Inspections (24-Month)</h3>
+      <div class="table-wrapper">
+        <table class="history-table inspections-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Vehicle</th>
+              <th>Driver</th>
+              <th>Hazmat</th>
+              <th>IEP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="row-label">Inspections</td>
+              <td>{{ latestSnapshot.vehicle_inspections ?? 0 }}</td>
+              <td>{{ latestSnapshot.driver_inspections ?? 0 }}</td>
+              <td>{{ latestSnapshot.hazmat_inspections ?? 0 }}</td>
+              <td>{{ latestSnapshot.iep_inspections ?? 0 }}</td>
+            </tr>
+            <tr>
+              <td class="row-label">Out of Service</td>
+              <td>{{ latestSnapshot.vehicle_oos ?? 0 }}</td>
+              <td>{{ latestSnapshot.driver_oos ?? 0 }}</td>
+              <td>{{ latestSnapshot.hazmat_oos ?? 0 }}</td>
+              <td>N/A</td>
+            </tr>
+            <tr>
+              <td class="row-label">OOS Rate</td>
+              <td>
+                <span class="oos-rate"
+                  [ngClass]="isOosAboveAverage(latestSnapshot.vehicle_oos_rate, latestSnapshot.vehicle_oos_national_avg) ? 'oos-above' : 'oos-below'">
+                  {{ formatOosRate(latestSnapshot.vehicle_oos_rate) }}
+                </span>
+              </td>
+              <td>
+                <span class="oos-rate"
+                  [ngClass]="isOosAboveAverage(latestSnapshot.driver_oos_rate, latestSnapshot.driver_oos_national_avg) ? 'oos-above' : 'oos-below'">
+                  {{ formatOosRate(latestSnapshot.driver_oos_rate) }}
+                </span>
+              </td>
+              <td>
+                <span class="oos-rate"
+                  [ngClass]="isOosAboveAverage(latestSnapshot.hazmat_oos_rate, latestSnapshot.hazmat_oos_national_avg) ? 'oos-above' : 'oos-below'">
+                  {{ formatOosRate(latestSnapshot.hazmat_oos_rate) }}
+                </span>
+              </td>
+              <td>N/A</td>
+            </tr>
+            <tr>
+              <td class="row-label">Nat'l Average</td>
+              <td>{{ formatNationalAvg(latestSnapshot.vehicle_oos_national_avg) }}</td>
+              <td>{{ formatNationalAvg(latestSnapshot.driver_oos_national_avg) }}</td>
+              <td>{{ formatNationalAvg(latestSnapshot.hazmat_oos_national_avg) }}</td>
+              <td>N/A</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ─── US Crashes Section ────────────────────────────────────────────────── -->
+    <div class="section-card" *ngIf="latestSnapshot">
+      <h3 class="section-title">US Crashes (24-Month)</h3>
+      <div class="crash-grid">
+        <div class="crash-stat">
+          <span class="crash-count crash-fatal">{{ latestSnapshot.crashes_fatal ?? 0 }}</span>
+          <span class="crash-label">Fatal</span>
+        </div>
+        <div class="crash-stat">
+          <span class="crash-count crash-injury">{{ latestSnapshot.crashes_injury ?? 0 }}</span>
+          <span class="crash-label">Injury</span>
+        </div>
+        <div class="crash-stat">
+          <span class="crash-count crash-tow">{{ latestSnapshot.crashes_tow ?? 0 }}</span>
+          <span class="crash-label">Tow</span>
+        </div>
+        <div class="crash-stat">
+          <span class="crash-count crash-total">{{ latestSnapshot.crashes_total ?? 0 }}</span>
+          <span class="crash-label">Total</span>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── Snapshot History Table ──────────────────────────────────────────── -->
     <div class="section-card" *ngIf="history.length > 0">
       <h3 class="section-title">Snapshot History</h3>
