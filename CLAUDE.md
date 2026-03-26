@@ -99,25 +99,54 @@ All **prompt and config** files live in `.agent/`. The TPM agent never creates, 
 - **Intentional commits only**: Stage with explicit paths (`git add <files>`). Run `git diff --cached` before `git commit`.
 - **One branch per agent/task**: `agent/frontend/…`, `agent/backend/…`, etc. Never reset or reuse another agent's branch.
 
-## Jira status lifecycle — agents must follow this exactly
+## Jira Status Lifecycle
 
-Agents transition FN issues through every stage using `transitionJiraIssue` with the IDs below.
+Agents transition FN issues using `transitionJiraIssue` with these IDs.
 Cloud ID: `aff43a9d-6456-476c-9aa5-1b3da163f242`
 
 | Stage | Transition ID | When to apply |
 |-------|--------------|---------------|
-| **Selected for Development** | `21` | Issue picked from the work queue (before any code is touched) |
-| **In Progress** | `31` | Implementation has started (first file edited or branch created) |
-| **In Testing** | `51` | Implementation done; agent is verifying in browser / running tests |
+| **Backlog** | `11` | Default state for new issues |
+| **Selected for Development** | `21` | Issue picked from queue, ready for agent |
+| **In Progress** | `31` | Implementation started (branch created) |
+| **In Testing** | `51` | Implementation done; verifying in browser/tests |
 | **Code Review** | `61` | Pull request created and pushed |
-| **Done** | `41` | PR is merged (or user confirms it is merged) |
+| **Done** | `41` | PR merged or QA passed |
+| **Canceled** | `71` | Issue no longer needed |
 
-Apply transitions to both the **story** and all **sub-tasks** that are being worked on at each stage.
+### Lifecycle by Issue Type
 
-### Assignee (set once when moving to In Progress)
-Set the Jira assignee using `editJiraIssue` with `assignee: { accountId }`.
-- Read `accountId` from `.agent/jira_defaults.json` (`defaultAssigneeAccountId`).
-- If the API rejects it, call `lookupJiraAccountId` with `defaultAssigneeLookupEmail`.
+**Subtask**: `Backlog → Selected for Dev → In Progress → Done`
+- Each subtask gets its own branch: `<agent>/FN-XXX/<slug>`
+- No individual PR — subtask branches merge into the story branch
+- Transition to Done when implementation is committed and pushed
+
+**Story**: `Backlog → Selected for Dev → In Progress → Code Review → QA → Done`
+- If story has subtasks: implement subtasks first, then `/create-pr` merges all subtask branches
+- If story has no subtasks: standard single-branch workflow
+- Story branch (merge target): `<agent>/FN-STORY/<slug>`
+
+**Epic**: `Backlog → In Progress (auto) → Done (auto)`
+- Auto-transitions to In Progress when first child story starts
+- Auto-transitions to Done when ALL child stories are Done
+
+### Subtask Branch & Merge Strategy
+```
+Epic: FN-100
+  Story: FN-101 → branch: frontend/FN-101/feature-name (merge target)
+    Subtask: FN-102 → branch: frontend/FN-102/component-work
+    Subtask: FN-103 → branch: backend/FN-103/api-endpoint
+    Subtask: FN-104 → branch: qa/FN-104/validation (only if automation)
+
+When all subtasks Done:
+  /create-pr FN-101 → merges FN-102 + FN-103 branches → single PR → main
+```
+
+### QA Evidence
+- Screenshots saved to `docs/stories/evidence/FN-XXX/`
+- Committed to repo and linked in Jira comments
+- QA subtasks with automation work get their own branch
+- QA subtasks with manual testing only: evidence + story doc update, no branch
 
 ## Routine after coding (coding agents)
 
