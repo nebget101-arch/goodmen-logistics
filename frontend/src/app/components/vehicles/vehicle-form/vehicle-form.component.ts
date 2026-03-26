@@ -237,6 +237,18 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     if (this.vehicle) {
       this.isEditMode = true;
       this.formData = { ...this.vehicle };
+      // Sanitize null string fields to prevent template crashes
+      this.formData.unit_number = this.formData.unit_number || '';
+      this.formData.vin = this.formData.vin || '';
+      this.formData.make = this.formData.make || '';
+      this.formData.model = this.formData.model || '';
+      this.formData.license_plate = this.formData.license_plate || '';
+      this.formData.state = this.formData.state || '';
+      this.formData.inspection_expiry = this.formData.inspection_expiry || '';
+      this.formData.next_pm_due = this.formData.next_pm_due || '';
+      this.formData.insurance_expiry = this.formData.insurance_expiry || '';
+      this.formData.registration_expiry = this.formData.registration_expiry || '';
+      this.formData.oos_reason = this.formData.oos_reason || '';
       if (!this.formData.vehicle_type) {
         this.formData.vehicle_type = this.vehicleType;
       }
@@ -485,13 +497,13 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     this.saving = true;
 
     const vehicleData: any = {
-      unit_number: this.formData.unit_number,
-      vin: this.formData.vin,
-      make: this.formData.make,
-      model: this.formData.model,
+      unit_number: this.formData.unit_number || '',
+      vin: this.formData.vin || '',
+      make: this.formData.make || '',
+      model: this.formData.model || '',
       year: this.formData.year,
-      license_plate: this.formData.license_plate || null,
-      state: this.formData.state || null,
+      license_plate: this.formData.license_plate || '',
+      state: this.formData.state || '',
       status: this.formData.status || 'in-service',
       mileage: this.formData.mileage || 0,
       inspection_expiry: this.formData.inspection_expiry || null,
@@ -499,7 +511,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       next_pm_mileage: this.formData.next_pm_mileage || null,
       insurance_expiry: this.formData.insurance_expiry || null,
       registration_expiry: this.formData.registration_expiry || null,
-      oos_reason: this.formData.oos_reason || null,
+      oos_reason: this.formData.oos_reason || '',
       vehicle_type: this.formData.vehicle_type || this.vehicleType
     };
 
