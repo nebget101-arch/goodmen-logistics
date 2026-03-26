@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil, finalize } from 'rxjs/operators';
 import { AnnualComplianceService } from '../../services/annual-compliance.service';
+import { ApiService } from '../../services/api.service';
 import {
   ComplianceDashboardSummary,
   ComplianceGridRow,
@@ -46,8 +47,15 @@ export class ComplianceDashboardComponent implements OnInit, OnDestroy {
   selectedYear: number = new Date().getFullYear();
   yearOptions: number[] = [];
 
+  // Audit / compliance summary data
+  auditTrail: any[] = [];
+  complianceSummary: any = null;
+  auditLoading = true;
+  selectedCategory = 'dqf';
+
   constructor(
     private complianceService: AnnualComplianceService,
+    private apiService: ApiService,
     private router: Router
   ) {
     const currentYear = new Date().getFullYear();
@@ -93,6 +101,53 @@ export class ComplianceDashboardComponent implements OnInit, OnDestroy {
         next: (rows) => { this.medicalRows = rows; this.loadingMedical = false; },
         error: () => { this.loadingMedical = false; }
       });
+
+    this.loadAuditData();
+  }
+
+  // ─── Audit / Compliance Summary ────────────────────────────────────────────
+
+  loadAuditData(): void {
+    this.auditLoading = true;
+    this.apiService.getAuditTrail()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (data) => { this.auditTrail = data; },
+        error: () => {}
+      });
+
+    this.apiService.getComplianceSummary()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (data) => { this.complianceSummary = data; this.auditLoading = false; },
+        error: () => { this.auditLoading = false; }
+      });
+  }
+
+  exportAuditData(): void {
+    this.apiService.exportData(this.selectedCategory)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (data) => {
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${this.selectedCategory}-export-${new Date().toISOString().split('T')[0]}.json`;
+          a.click();
+          window.URL.revokeObjectURL(url);
+        },
+        error: () => { this.error = 'Failed to export audit data'; }
+      });
+  }
+
+  getBadgeIcon(action: string): string {
+    switch (action) {
+      case 'CREATE': return 'add_circle';
+      case 'UPDATE': return 'edit';
+      case 'DELETE': return 'delete';
+      default: return 'info';
+    }
   }
 
   // ─── Filter & Sort ──────────────────────────────────────────────────────────
