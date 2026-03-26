@@ -12,10 +12,14 @@ Validate the implemented ticket against its acceptance criteria.
 ## Input
 The argument is the Jira key (e.g., `FN-42`). Can be a Story or a QA Subtask.
 
+## Constants
+- **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
+- **Transition IDs**: In Testing=`51`, Code Review=`61`, Done=`41`, In Progress=`31`
+
 ## Steps
 
 ### 1. Gather Context
-- Fetch the Jira issue with `getJiraIssue` for `$ARGS`
+- Fetch the Jira issue with `getJiraIssue` for `$ARGS` (cloudId: `aff43a9d-6456-476c-9aa5-1b3da163f242`)
 - Determine if this is a Story or Subtask
 - Read the story doc: `docs/stories/$ARGS.md` (or parent story doc if subtask)
 - Find the PR: `gh pr list --search "$ARGS"` (for stories) or check parent story PR
@@ -76,17 +80,17 @@ If this is a QA subtask (`agent:qa`):
 - Create branch: `qa/$ARGS/<slug>`
 - Write test files (Cypress, unit specs, etc.)
 - Commit and push
-- Transition subtask to "Done"
+- Transition subtask to "Done" (transition ID `41`)
 
 **If manual testing only:**
 - No branch needed
 - Capture evidence screenshots and update story doc
-- Transition subtask to "Done"
+- Transition subtask to "Done" (transition ID `41`)
 
 ### 7. Handle Results
 
 **If ALL AC items PASS:**
-- Transition Jira to "Done" using `transitionJiraIssue`
+- Transition Jira to "Done" using `transitionJiraIssue` (transition ID `41`)
 - Update `docs/delivery-log.md` with completion
 - **Epic auto-close check**: Query all stories under the parent epic. If ALL are Done, transition the epic to "Done" automatically.
 - Print: "QA PASSED — $ARGS is Done"
@@ -97,7 +101,7 @@ If this is a QA subtask (`agent:qa`):
   - Summary: `[QA] $ARGS: <failure description>`
   - Description: reproduction steps, expected vs actual, evidence links
   - Link to parent story using `createIssueLink`
-- Transition original story back to "In Progress"
+- Transition original story back to "In Progress" (transition ID `31`)
 - Print: "QA FAILED — Bug FN-XXX created, $ARGS back to In Progress"
 
 ### 8. Epic Completion Check

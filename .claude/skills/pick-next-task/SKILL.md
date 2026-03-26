@@ -10,7 +10,11 @@ args: "<agent-type>"
 Find the next dependency-ready task for the specified agent type.
 
 ## Input
-The argument is the agent type: `frontend`, `backend`, `ai`, `ios`, `qa`.
+The argument is the agent type: `frontend`, `backend`, `ai`, `database`, `devops`, `qa`.
+
+## Constants
+- **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
+- **Jira Project Key**: `FN`
 
 ## Steps
 

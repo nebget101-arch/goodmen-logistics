@@ -12,12 +12,17 @@ Create a properly formatted PR and link it to Jira.
 ## Input
 The argument is the Jira key (e.g., `FN-42`). This should be a **Story** key, not a subtask.
 
+## Constants
+- **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
+- **PR base branch**: `dev` (always — never `main` unless user explicitly says otherwise)
+- **Transition IDs**: In Testing=`51`, Code Review=`61`, Done=`41`
+
 ## Steps
 
 ### 1. Gather Context
-- Fetch the Jira issue with `getJiraIssue` for `$ARGS`
+- Fetch the Jira issue with `getJiraIssue` for `$ARGS` (cloudId: `aff43a9d-6456-476c-9aa5-1b3da163f242`)
 - Determine if this is a **Story with subtasks**, **Story without subtasks**, or **Subtask**
-- Read `docs/stories/$ARGS.md`
+- Read `docs/stories/$ARGS.md` if it exists
 
 **If Subtask:**
 - Print error: "Subtasks don't get individual PRs. Run `/create-pr FN-PARENT` on the parent story instead."
@@ -131,8 +136,9 @@ Jira: $ARGS
 ```
 
 ### 6. Transition Jira
-- Move the Story to "Code Review" using `transitionJiraIssue`
+- Move the Story to "Code Review" using `transitionJiraIssue` (transition ID `61`)
 - Add a Jira comment with the PR URL
+- Include Render service names from `.agent/docs/render_services.md` if available
 
 ### 7. Output
 Print:
