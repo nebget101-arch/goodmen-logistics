@@ -8,6 +8,12 @@ user_invocable: true
 
 You are the TPM. Decompose the given requirement into actionable Jira work items.
 
+## Constants
+- **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
+- **Jira Project Key**: `FN`
+- **Transition IDs**: Selected for Development=`21`, In Progress=`31`, Done=`41`
+- **Agent labels**: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`, `agent:qa`
+
 ## Steps
 
 ### 1. Analyze the Requirement
@@ -23,9 +29,9 @@ You are the TPM. Decompose the given requirement into actionable Jira work items
 ### 2. Create Jira Breakdown
 For each work item, create a Jira issue in project **FN** with:
 - **Epic**: Top-level feature/initiative (no agent label — epics are containers)
-- **Story**: User-facing deliverable (assign agent type via label: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:ios`)
+- **Story**: User-facing deliverable (assign agent type via label: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`)
 - **Subtask**: Technical sub-unit under a story. **Each subtask MUST have an agent label** so it can be independently picked:
-  - Implementation subtasks: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:ios`
+  - Implementation subtasks: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`
   - QA subtasks: `agent:qa` — for validation/testing work
 - **Bug**: Defect found during analysis
 
@@ -64,7 +70,7 @@ For each Story, create `docs/stories/FN-XXX.md` using this template:
 - FN-YYY (must complete first)
 
 ## Agent
-[frontend | backend | ai | ios]
+[frontend | backend | ai | database | devops]
 
 ## Subtasks
 | Key | Summary | Agent | Branch | Status |
@@ -96,7 +102,7 @@ _To be filled by QA_
 ```
 
 ### 6. Queue Ready Work
-- For stories/subtasks with NO unresolved dependencies: transition to "Selected for Development"
+- For stories/subtasks with NO unresolved dependencies: transition to "Selected for Development" (transition ID `21`)
 - For stories/subtasks WITH dependencies: leave in backlog until dependencies are Done
 - **Subtask queuing**: If a story has subtasks, queue the dependency-free subtasks (not the story itself). The story moves through the lifecycle via its subtasks.
 - Update `docs/delivery-log.md` with the new work items

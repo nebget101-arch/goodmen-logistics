@@ -12,10 +12,13 @@ Perform a structured code review for the specified ticket.
 ## Input
 The argument is the Jira key (e.g., `FN-42`).
 
+## Constants
+- **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
+
 ## Steps
 
 ### 1. Gather Context
-- Fetch the Jira issue with `getJiraIssue` for `$ARGS`
+- Fetch the Jira issue with `getJiraIssue` for `$ARGS` (cloudId: `aff43a9d-6456-476c-9aa5-1b3da163f242`)
 - Read `docs/stories/$ARGS.md`
 - Find the PR: `gh pr list --search "$ARGS"`
 - Read the PR diff: `gh pr diff <number>`
