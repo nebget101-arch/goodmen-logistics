@@ -10,13 +10,19 @@
  *   POST   /api/fmcsa/safety/carriers
  *   DELETE /api/fmcsa/safety/carriers/:id
  *   GET    /api/fmcsa/safety/carriers/:id/history
+ *   GET    /api/fmcsa/safety/carriers/:id/basic-details
+ *   GET    /api/fmcsa/safety/carriers/:id/basic-details/:basicName
+ *   GET    /api/fmcsa/safety/carriers/:id/basic-details/:basicName/history
  *   POST   /api/fmcsa/safety/scrape
+ *   POST   /api/fmcsa/safety/scrape/basic-details
  *   POST   /api/fmcsa/safety/scrape/:carrierId
+ *   POST   /api/fmcsa/safety/scrape/:carrierId/basic-details
  *   GET    /api/fmcsa/safety/jobs
  *
  * Client-facing routes (tenant-scoped):
  *   GET    /api/fmcsa/safety/my-scores
  *   GET    /api/fmcsa/safety/my-scores/:dotNumber/history
+ *   GET    /api/fmcsa/safety/my-scores/:dotNumber/basic-details
  */
 
 const express = require('express');
@@ -288,6 +294,22 @@ router.post('/scrape', canScrape, async (req, res) => {
   }
 });
 
+// NOTE: /scrape/basic-details must be defined BEFORE /scrape/:carrierId
+// to prevent Express from matching "basic-details" as a carrierId param.
+router.post('/scrape/basic-details', canScrape, async (req, res) => {
+  try {
+    if (!scrapeQueue) {
+      return sendError(res, 503, 'Scrape queue not initialized');
+    }
+
+    const job = await scrapeQueue.enqueueFullBasicDetailScrape(userId(req));
+    res.status(202).json({ message: 'Full BASIC detail scrape started', job });
+  } catch (err) {
+    console.error('[fmcsa-safety] trigger full basic detail scrape error', err);
+    sendError(res, 500, 'Failed to trigger full BASIC detail scrape');
+  }
+});
+
 router.post('/scrape/:carrierId', canScrape, async (req, res) => {
   try {
     if (!scrapeQueue) {
@@ -307,6 +329,155 @@ router.post('/scrape/:carrierId', canScrape, async (req, res) => {
   } catch (err) {
     console.error('[fmcsa-safety] trigger single scrape error', err);
     sendError(res, 500, 'Failed to trigger scrape');
+  }
+});
+
+router.post('/scrape/:carrierId/basic-details', canScrape, async (req, res) => {
+  try {
+    if (!scrapeQueue) {
+      return sendError(res, 503, 'Scrape queue not initialized');
+    }
+
+    const carrier = await knex('fmcsa_monitored_carriers')
+      .where({ id: req.params.carrierId })
+      .first();
+    if (!carrier) {
+      return sendError(res, 404, 'Carrier not found');
+    }
+
+    const job = await scrapeQueue.enqueueBasicDetailScrape(
+      req.params.carrierId,
+      userId(req)
+    );
+    res.status(202).json({ message: 'BASIC detail scrape started', job });
+  } catch (err) {
+    console.error('[fmcsa-safety] trigger basic detail scrape error', err);
+    sendError(res, 500, 'Failed to trigger BASIC detail scrape');
+  }
+});
+
+// ─── Internal: BASIC Detail Data ────────────────────────────────────────────
+
+/**
+ * GET /carriers/:id/basic-details
+ * Latest BASIC detail records for a carrier (one per BASIC category).
+ */
+router.get('/carriers/:id/basic-details', canView, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get the latest scraped_at per basic_name
+    const details = await knex('fmcsa_basic_details')
+      .where({ monitored_carrier_id: id })
+      .distinctOn('basic_name')
+      .orderBy('basic_name')
+      .orderBy('scraped_at', 'desc')
+      .select('*');
+
+    // For each detail, fetch related measures history, violations, and inspections
+    const enriched = await Promise.all(
+      details.map(async (detail) => {
+        const [measuresHistory, violations, inspections] = await Promise.all([
+          knex('fmcsa_basic_measures_history')
+            .where({ basic_detail_id: detail.id })
+            .orderBy('snapshot_date')
+            .select('*'),
+          knex('fmcsa_violations')
+            .where({ basic_detail_id: detail.id })
+            .orderBy('violation_count', 'desc')
+            .select('*'),
+          knex('fmcsa_inspection_history')
+            .where({ basic_detail_id: detail.id })
+            .orderBy('inspection_date', 'desc')
+            .select('*'),
+        ]);
+
+        return {
+          ...detail,
+          measures_history: measuresHistory,
+          violations,
+          inspections,
+        };
+      })
+    );
+
+    res.json({ basic_details: enriched });
+  } catch (err) {
+    console.error('[fmcsa-safety] basic-details error', err);
+    sendError(res, 500, 'Failed to load BASIC details');
+  }
+});
+
+/**
+ * GET /carriers/:id/basic-details/:basicName
+ * Detailed data for a specific BASIC category for a carrier.
+ */
+router.get('/carriers/:id/basic-details/:basicName', canView, async (req, res) => {
+  try {
+    const { id, basicName } = req.params;
+
+    const detail = await knex('fmcsa_basic_details')
+      .where({ monitored_carrier_id: id, basic_name: basicName })
+      .orderBy('scraped_at', 'desc')
+      .first();
+
+    if (!detail) {
+      return sendError(res, 404, `No data found for BASIC: ${basicName}`);
+    }
+
+    const [measuresHistory, violations, inspections] = await Promise.all([
+      knex('fmcsa_basic_measures_history')
+        .where({ basic_detail_id: detail.id })
+        .orderBy('snapshot_date')
+        .select('*'),
+      knex('fmcsa_violations')
+        .where({ basic_detail_id: detail.id })
+        .orderBy('violation_count', 'desc')
+        .select('*'),
+      knex('fmcsa_inspection_history')
+        .where({ basic_detail_id: detail.id })
+        .orderBy('inspection_date', 'desc')
+        .select('*'),
+    ]);
+
+    res.json({
+      ...detail,
+      measures_history: measuresHistory,
+      violations,
+      inspections,
+    });
+  } catch (err) {
+    console.error('[fmcsa-safety] basic-detail error', err);
+    sendError(res, 500, 'Failed to load BASIC detail');
+  }
+});
+
+/**
+ * GET /carriers/:id/basic-details/:basicName/history
+ * History of BASIC detail records over time for a specific category.
+ */
+router.get('/carriers/:id/basic-details/:basicName/history', canView, async (req, res) => {
+  try {
+    const { id, basicName } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const details = await knex('fmcsa_basic_details')
+      .where({ monitored_carrier_id: id, basic_name: basicName })
+      .orderBy('scraped_at', 'desc')
+      .limit(limit)
+      .offset(offset)
+      .select('id', 'basic_name', 'measure_value', 'percentile', 'threshold',
+              'safety_event_group', 'acute_critical_violations', 'scraped_at');
+
+    const [{ count }] = await knex('fmcsa_basic_details')
+      .where({ monitored_carrier_id: id, basic_name: basicName })
+      .count('id as count');
+
+    res.json({ details, total: parseInt(count), limit, offset });
+  } catch (err) {
+    console.error('[fmcsa-safety] basic-detail history error', err);
+    sendError(res, 500, 'Failed to load BASIC detail history');
   }
 });
 
@@ -425,6 +596,77 @@ router.get('/my-scores/:dotNumber/history', canView, async (req, res) => {
   } catch (err) {
     console.error('[fmcsa-safety] my-scores history error', err);
     sendError(res, 500, 'Failed to load score history');
+  }
+});
+
+// ─── Client-facing: My BASIC Details ────────────────────────────────────────
+
+router.get('/my-scores/:dotNumber/basic-details', canView, async (req, res) => {
+  try {
+    const tid = tenantId(req);
+    if (!tid) {
+      return sendError(res, 401, 'Tenant context required');
+    }
+
+    const { dotNumber } = req.params;
+    if (!DOT_RE.test(dotNumber)) {
+      return sendError(res, 400, 'Invalid DOT number');
+    }
+
+    // Verify this DOT belongs to the tenant
+    const entity = await knex('operating_entities')
+      .where({ tenant_id: tid, dot_number: dotNumber })
+      .first();
+    if (!entity) {
+      return sendError(res, 403, 'DOT number not associated with your tenant');
+    }
+
+    const carrier = await knex('fmcsa_monitored_carriers')
+      .where({ dot_number: dotNumber })
+      .first();
+    if (!carrier) {
+      return res.json({ basic_details: [] });
+    }
+
+    // Get latest BASIC details per category
+    const details = await knex('fmcsa_basic_details')
+      .where({ monitored_carrier_id: carrier.id })
+      .distinctOn('basic_name')
+      .orderBy('basic_name')
+      .orderBy('scraped_at', 'desc')
+      .select('*');
+
+    // Enrich with related data
+    const enriched = await Promise.all(
+      details.map(async (detail) => {
+        const [measuresHistory, violations, inspections] = await Promise.all([
+          knex('fmcsa_basic_measures_history')
+            .where({ basic_detail_id: detail.id })
+            .orderBy('snapshot_date')
+            .select('*'),
+          knex('fmcsa_violations')
+            .where({ basic_detail_id: detail.id })
+            .orderBy('violation_count', 'desc')
+            .select('*'),
+          knex('fmcsa_inspection_history')
+            .where({ basic_detail_id: detail.id })
+            .orderBy('inspection_date', 'desc')
+            .select('*'),
+        ]);
+
+        return {
+          ...detail,
+          measures_history: measuresHistory,
+          violations,
+          inspections,
+        };
+      })
+    );
+
+    res.json({ basic_details: enriched });
+  } catch (err) {
+    console.error('[fmcsa-safety] my-scores basic-details error', err);
+    sendError(res, 500, 'Failed to load BASIC details');
   }
 });
 

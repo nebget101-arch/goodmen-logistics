@@ -1,7 +1,7 @@
 'use strict';
 
 const Queue = require('bull');
-const { scrapeAll } = require('./fmcsa-safer-scraper');
+const { scrapeAll, scrapeAllBasicDetails } = require('./fmcsa-safer-scraper');
 
 const LOG_PREFIX = '[fmcsa-queue]';
 
@@ -294,6 +294,138 @@ function createScrapeQueue(knex, redisUrl) {
     return { scrapeJobId: scrapeJob.id };
   });
 
+  /**
+   * Process SMS BASIC detail scraping for a single carrier.
+   * Scrapes all 7 BASIC detail pages and stores results in the
+   * fmcsa_basic_details, fmcsa_basic_measures_history,
+   * fmcsa_violations, and fmcsa_inspection_history tables.
+   *
+   * Data: { carrierId, scrapeJobId? }
+   */
+  queue.process('scrape-basic-details', async (job) => {
+    const { carrierId, scrapeJobId } = job.data;
+
+    const carrier = await knex('fmcsa_monitored_carriers')
+      .where({ id: carrierId })
+      .first();
+
+    if (!carrier) {
+      console.warn(
+        `${LOG_PREFIX} scrape-basic-details: carrier id=${carrierId} not found`
+      );
+      if (scrapeJobId) await incrementJobCount(scrapeJobId, 'failed_count');
+      return { status: 'carrier_not_found' };
+    }
+
+    let basicDetails;
+    try {
+      basicDetails = await scrapeAllBasicDetails(carrier.dot_number);
+    } catch (err) {
+      console.error(
+        `${LOG_PREFIX} scrape-basic-details: failed for DOT ${carrier.dot_number}:`,
+        err.message
+      );
+      if (scrapeJobId) await incrementJobCount(scrapeJobId, 'failed_count');
+      throw err;
+    }
+
+    if (!basicDetails || basicDetails.length === 0) {
+      console.warn(
+        `${LOG_PREFIX} scrape-basic-details: no BASIC data for DOT ${carrier.dot_number}`
+      );
+      if (scrapeJobId) await incrementJobCount(scrapeJobId, 'completed_count');
+      return { status: 'no_data' };
+    }
+
+    try {
+      const scrapedAt = new Date();
+
+      for (const detail of basicDetails) {
+        // Insert the BASIC detail record
+        const [basicDetailRow] = await knex('fmcsa_basic_details')
+          .insert({
+            monitored_carrier_id: carrier.id,
+            basic_name: detail.basic_name,
+            measure_value: detail.measure_value,
+            percentile: detail.percentile,
+            threshold: detail.threshold,
+            safety_event_group: detail.safety_event_group,
+            acute_critical_violations: detail.acute_critical_violations,
+            investigation_results_text: detail.investigation_results_text,
+            record_period: detail.record_period,
+            scraped_at: scrapedAt,
+            raw_json: JSON.stringify(detail),
+          })
+          .returning('id');
+
+        const basicDetailId = basicDetailRow.id;
+
+        // Insert measure history data points
+        if (detail.measures_history && detail.measures_history.length > 0) {
+          const historyRows = detail.measures_history
+            .filter((h) => h.snapshot_date)
+            .map((h) => ({
+              basic_detail_id: basicDetailId,
+              snapshot_date: h.snapshot_date,
+              measure_value: h.measure_value,
+              history_value: h.history_value,
+              release_type: h.release_type,
+              release_id: h.release_id,
+            }));
+          if (historyRows.length > 0) {
+            await knex('fmcsa_basic_measures_history').insert(historyRows);
+          }
+        }
+
+        // Insert violation summary records
+        if (detail.violations && detail.violations.length > 0) {
+          const violRows = detail.violations.map((v) => ({
+            basic_detail_id: basicDetailId,
+            violation_code: v.violation_code,
+            description: v.description,
+            violation_count: v.violation_count,
+            oos_violation_count: v.oos_violation_count,
+            severity_weight: v.severity_weight,
+          }));
+          await knex('fmcsa_violations').insert(violRows);
+        }
+
+        // Insert inspection history records
+        if (detail.inspections && detail.inspections.length > 0) {
+          const inspRows = detail.inspections.map((insp) => ({
+            basic_detail_id: basicDetailId,
+            inspection_date: insp.inspection_date,
+            report_number: insp.report_number,
+            report_state: insp.report_state,
+            plate_number: insp.plate_number,
+            plate_state: insp.plate_state,
+            vehicle_type: insp.vehicle_type,
+            severity_weight: insp.severity_weight,
+            time_weight: insp.time_weight,
+            total_weight: insp.total_weight,
+            violations: JSON.stringify(insp.violations || []),
+          }));
+          await knex('fmcsa_inspection_history').insert(inspRows);
+        }
+      }
+
+      if (scrapeJobId) await incrementJobCount(scrapeJobId, 'completed_count');
+    } catch (dbErr) {
+      console.error(
+        `${LOG_PREFIX} scrape-basic-details: DB insert failed for DOT ${carrier.dot_number}:`,
+        dbErr.message
+      );
+      if (scrapeJobId) await incrementJobCount(scrapeJobId, 'failed_count');
+      throw dbErr;
+    }
+
+    return {
+      status: 'ok',
+      dotNumber: carrier.dot_number,
+      basicsScraped: basicDetails.length,
+    };
+  });
+
   // ── Internal utilities ────────────────────────────────────────────
 
   /**
@@ -399,6 +531,57 @@ function createScrapeQueue(knex, redisUrl) {
   }
 
   /**
+   * Enqueue a BASIC detail scrape for a single carrier.
+   * @param {number|string} carrierId  - fmcsa_monitored_carriers.id
+   * @param {string} triggeredBy       - Who/what triggered the scrape
+   * @returns {object} The created fmcsa_scrape_jobs row
+   */
+  async function enqueueBasicDetailScrape(carrierId, triggeredBy) {
+    const scrapeJob = await createScrapeJobRow('basic_detail_scrape', triggeredBy, 1);
+    await queue.add('scrape-basic-details', {
+      carrierId,
+      scrapeJobId: scrapeJob.id,
+    });
+    console.log(
+      `${LOG_PREFIX} enqueueBasicDetailScrape: carrierId=${carrierId}, scrapeJobId=${scrapeJob.id} enqueued`
+    );
+    return scrapeJob;
+  }
+
+  /**
+   * Enqueue BASIC detail scrapes for all monitored carriers.
+   * @param {string} triggeredBy - Who/what triggered the scrape
+   * @returns {object} The created fmcsa_scrape_jobs row
+   */
+  async function enqueueFullBasicDetailScrape(triggeredBy) {
+    await seedMonitoredCarriers();
+
+    const carriers = await knex('fmcsa_monitored_carriers')
+      .where({ monitoring_active: true })
+      .select('id');
+
+    const scrapeJob = await createScrapeJobRow(
+      'full_basic_detail_scrape',
+      triggeredBy,
+      carriers.length
+    );
+
+    // Stagger each carrier by 15s — each carrier makes ~14 HTTP requests (7 BASICs × 2)
+    for (let i = 0; i < carriers.length; i++) {
+      await queue.add(
+        'scrape-basic-details',
+        { carrierId: carriers[i].id, scrapeJobId: scrapeJob.id },
+        { delay: i * 15000 }
+      );
+    }
+
+    console.log(
+      `${LOG_PREFIX} enqueueFullBasicDetailScrape: ${carriers.length} carriers enqueued, scrapeJobId=${scrapeJob.id}`
+    );
+    return scrapeJob;
+  }
+
+  /**
    * Register the daily repeatable job (3 AM UTC).
    */
   function initScheduler() {
@@ -430,6 +613,8 @@ function createScrapeQueue(knex, redisUrl) {
     queue,
     enqueueFullScrape,
     enqueueSingleScrape,
+    enqueueBasicDetailScrape,
+    enqueueFullBasicDetailScrape,
     seedMonitoredCarriers,
     initScheduler,
     shutdown,
