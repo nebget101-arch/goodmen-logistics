@@ -203,6 +203,74 @@ router.get('/drivers/:driverId', async (req, res) => {
       [driverId]
     );
 
+    // ── Auto-reconcile: sync onboarding completion to DQF if out of sync ──
+    const requirements = requirementsRes.rows;
+    try {
+      // Check employment_application_submitted
+      const empAppReq = requirements.find(r => r.key === 'employment_application_submitted');
+      if (empAppReq && empAppReq.status === 'missing') {
+        // Check if a completed onboarding section exists
+        const sectionCheck = await query(
+          `SELECT dos.id, dos.completed_at, dop.id AS packet_id
+           FROM driver_onboarding_sections dos
+           JOIN driver_onboarding_packets dop ON dop.id = dos.packet_id
+           WHERE dop.driver_id = $1
+             AND dos.section_key = 'employment_application'
+             AND dos.status = 'completed'
+           ORDER BY dos.completed_at DESC LIMIT 1`,
+          [driverId]
+        );
+        if (sectionCheck.rows.length > 0) {
+          // Also check for an existing document
+          const docCheck = await query(
+            `SELECT id FROM driver_documents
+             WHERE driver_id = $1 AND doc_type IN ('employment_application_signed', 'employment_application_pdf')
+             ORDER BY created_at DESC LIMIT 1`,
+            [driverId]
+          );
+          const evidenceDocId = docCheck.rows[0]?.id || null;
+          await upsertRequirementStatus(driverId, 'employment_application_submitted', 'complete', evidenceDocId, sectionCheck.rows[0].completed_at);
+          empAppReq.status = 'complete';
+          empAppReq.evidence_document_id = evidenceDocId;
+          empAppReq.completion_date = sectionCheck.rows[0].completed_at;
+          await computeAndUpdateDqfCompleteness(driverId);
+          dtLogger.info('dqf_auto_reconciled_emp_app', { driverId });
+        }
+      }
+
+      // Check employment_application_completed (legacy key)
+      const empAppCompReq = requirements.find(r => r.key === 'employment_application_completed');
+      if (empAppCompReq && empAppCompReq.status === 'missing') {
+        const sectionCheck2 = await query(
+          `SELECT dos.completed_at
+           FROM driver_onboarding_sections dos
+           JOIN driver_onboarding_packets dop ON dop.id = dos.packet_id
+           WHERE dop.driver_id = $1
+             AND dos.section_key = 'employment_application'
+             AND dos.status = 'completed'
+           LIMIT 1`,
+          [driverId]
+        );
+        if (sectionCheck2.rows.length > 0) {
+          const docCheck2 = await query(
+            `SELECT id FROM driver_documents
+             WHERE driver_id = $1 AND doc_type IN ('employment_application_signed', 'employment_application_pdf')
+             ORDER BY created_at DESC LIMIT 1`,
+            [driverId]
+          );
+          const evidenceDocId2 = docCheck2.rows[0]?.id || null;
+          await upsertRequirementStatus(driverId, 'employment_application_completed', 'complete', evidenceDocId2, sectionCheck2.rows[0].completed_at);
+          empAppCompReq.status = 'complete';
+          empAppCompReq.evidence_document_id = evidenceDocId2;
+          empAppCompReq.completion_date = sectionCheck2.rows[0].completed_at;
+          await computeAndUpdateDqfCompleteness(driverId);
+        }
+      }
+    } catch (reconcileErr) {
+      // Non-blocking — don't fail the DQF load
+      dtLogger.warn('dqf_auto_reconcile_failed', { driverId, error: reconcileErr?.message });
+    }
+
     const duration = Date.now() - start;
     dtLogger.trackRequest('GET', `/api/dqf/drivers/${driverId}`, 200, duration, {
       driverId
@@ -211,7 +279,7 @@ router.get('/drivers/:driverId', async (req, res) => {
     return res.json({
       driver: driverRes.rows[0],
       dqf: {
-        requirements: requirementsRes.rows,
+        requirements,
         documents: docsRes.rows,
         completeness: driverRes.rows[0].dqf_completeness
       }
