@@ -14,6 +14,8 @@ const { PDFDocument } = require('pdf-lib');
 const employmentAppService = require('../services/employment-application.service');
 // FN-235: DQF integration for employment application submission
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('../services/dqf-service');
+// FN-270: Packet submission confirmation email
+const { sendPacketSubmissionConfirmation } = require('../services/onboarding-email-service');
 
 // FN-250: Multer config for onboarding document uploads (memory storage for R2)
 const onboardingUpload = multer({
@@ -1187,6 +1189,129 @@ router.delete('/:packetId/documents/:documentId', rateLimited, async (req, res) 
     );
     console.error('Error in public onboarding delete document:', error);
     return res.status(500).json({ message: 'Failed to delete document' });
+  }
+});
+
+// FN-270: POST /public/onboarding/:packetId/finalize?token=...
+// Marks the packet as submitted and sends a confirmation email to the driver.
+router.post('/:packetId/finalize', rateLimited, async (req, res) => {
+  const start = Date.now();
+  try {
+    const { packetId } = req.params;
+    const { token } = req.query;
+
+    const { packet, error, status } = await loadPacketWithToken(packetId, token, true);
+    if (error) {
+      return res.status(status || 400).json({ message: error });
+    }
+
+    // Reject if already submitted
+    if (packet.status === 'submitted') {
+      return res.status(409).json({ message: 'Packet has already been submitted.' });
+    }
+
+    // Load sections to validate required ones are completed
+    let sectionsRes;
+    try {
+      sectionsRes = await query(
+        'SELECT section_key, status FROM driver_onboarding_sections WHERE packet_id = $1',
+        [packetId]
+      );
+    } catch (sErr) {
+      dtLogger.warn('finalize_sections_query_fallback', { error: sErr?.message });
+      sectionsRes = { rows: [] };
+    }
+
+    const sectionMap = {};
+    (sectionsRes.rows || []).forEach((s) => {
+      sectionMap[s.section_key] = s.status;
+    });
+
+    // Validate required sections
+    const requiredSections = ['employment_application', 'consent_forms', 'document_uploads'];
+    const incompleteSections = requiredSections.filter(
+      (key) => sectionMap[key] !== 'completed'
+    );
+    if (incompleteSections.length > 0) {
+      return res.status(422).json({
+        message: 'All required sections must be completed before submission.',
+        incompleteSections
+      });
+    }
+
+    // Update packet status to submitted
+    await query(
+      `UPDATE driver_onboarding_packets
+       SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [packetId]
+    );
+
+    // Trigger PDF generation for any remaining documents (non-blocking)
+    try {
+      await maybeGenerateOnboardingPdfs(packetId);
+    } catch (pdfErr) {
+      dtLogger.warn('finalize_pdf_generation_failed', {
+        packetId,
+        error: pdfErr?.message
+      });
+    }
+
+    // Load driver and operating entity for the confirmation email
+    const driverRes = await query(
+      'SELECT id, first_name, last_name, email, phone FROM drivers WHERE id = $1',
+      [packet.driver_id]
+    );
+    const driver = driverRes.rows[0] || null;
+
+    let operatingEntity = null;
+    try {
+      const oeId = packet.operating_entity_id || driver?.operating_entity_id || null;
+      if (oeId) {
+        const oeRes = await query(
+          'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1',
+          [oeId]
+        );
+        operatingEntity = oeRes.rows[0] || null;
+      }
+    } catch (oeErr) {
+      dtLogger.warn('finalize_operating_entity_lookup_fallback', { error: oeErr?.message });
+    }
+
+    // Send confirmation email (fire-and-forget, never blocks response)
+    if (driver?.email) {
+      sendPacketSubmissionConfirmation({
+        driverEmail: driver.email,
+        driverFirstName: driver.first_name,
+        driverLastName: driver.last_name,
+        operatingEntity,
+        completedSections: sectionMap
+      }).catch((emailErr) => {
+        dtLogger.error('finalize_confirmation_email_error', {
+          packetId,
+          driverId: driver?.id,
+          error: emailErr?.message || String(emailErr)
+        });
+      });
+    }
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('POST', `/public/onboarding/${packetId}/finalize`, 200, duration, {
+      driverId: packet.driver_id
+    });
+    dtLogger.info('onboarding_packet_finalized', { packetId, driverId: packet.driver_id });
+
+    return res.json({
+      success: true,
+      message: 'Onboarding packet submitted successfully.',
+      emailSent: !!driver?.email
+    });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('public_onboarding_finalize_failed', error, { params: req.params });
+    dtLogger.trackRequest('POST', `/public/onboarding/${req.params.packetId}/finalize`, 500, duration);
+    console.error('Error in public onboarding finalize:', error);
+    return res.status(500).json({ message: 'Failed to submit onboarding packet.' });
   }
 });
 

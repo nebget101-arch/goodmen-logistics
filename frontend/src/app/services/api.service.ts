@@ -968,6 +968,19 @@ export class ApiService {
     );
   }
 
+  // FN-270: Finalize (submit) an onboarding packet
+  finalizeOnboardingPacket(
+    packetId: string,
+    token: string
+  ): Observable<{ success: boolean; message: string; emailSent: boolean }> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    return this.http.post<{ success: boolean; message: string; emailSent: boolean }>(
+      `${publicBase}/${encodeURIComponent(packetId)}/finalize`,
+      {},
+      { params: { token } }
+    );
+  }
+
   updateCommunicationPreferences(payload: {
     email?: string;
     phone?: string;
