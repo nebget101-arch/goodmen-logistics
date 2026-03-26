@@ -187,11 +187,12 @@ function parseInspectionTable($) {
     hazmat_oos_national_avg: null,
   };
 
-  // Target the table directly via its summary attribute
-  const inspTable = $('table[summary="Inspections"]');
+  // Target the FIRST table with summary="Inspections" (US data).
+  // The page has two: US and Canada. .first() ensures we get the US one.
+  const inspTable = $('table[summary="Inspections"]').first();
   if (!inspTable.length) return result;
 
-  const rows = inspTable.find('tr');
+  const rows = inspTable.find('> tr, > tbody > tr');
   if (rows.length < 2) return result;
 
   // First row is the header — determine column indices
@@ -267,11 +268,11 @@ function parseCrashTable($) {
     crashes_total: null,
   };
 
-  // Target the table directly via its summary attribute
-  const crashTable = $('table[summary="Crashes"]');
+  // Target the FIRST crash table (US data). Page has US + Canada tables.
+  const crashTable = $('table[summary="Crashes"]').first();
   if (!crashTable.length) return result;
 
-  const rows = crashTable.find('tr');
+  const rows = crashTable.find('> tr, > tbody > tr');
   if (rows.length < 2) return result;
 
   // First row is the header — determine column indices
