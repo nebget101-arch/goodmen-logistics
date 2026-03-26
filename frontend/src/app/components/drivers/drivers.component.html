@@ -895,7 +895,7 @@
                   <ng-container *ngIf="!isDqfDocumentReq(req.key) && req.key !== 'employment_application_submitted' && req.key !== 'mvr_data_received'">
                     <!-- FN-223: Inline date picker for clearinghouse items -->
                     <ng-container *ngIf="requiresDateCapture(req.key) && req.status !== 'complete'">
-                      <input type="date" class="dqf-date-input" [(ngModel)]="dqfDateInputs[req.key]" [name]="'dqfDate_'+req.key" />
+                      <app-ai-date-picker [inline]="true" [(ngModel)]="dqfDateInputs[req.key]" [name]="'dqfDate_'+req.key" placeholder="Select date" ariaLabel="Requirement date"></app-ai-date-picker>
                       <button class="dqf-status-btn"
                               [class.active]="updateingRequirementKey === req.key"
                               [disabled]="!dqfDateInputs[req.key]"
