@@ -214,8 +214,13 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
   constructor(private apiService: ApiService) {}
 
   ngOnInit(): void {
-    this.loadDrivers();
-    this.loadFormData();
+    console.log('[VEHICLE-FORM] ngOnInit, isOpen:', this.isOpen, 'vehicleType:', this.vehicleType);
+    try {
+      this.loadDrivers();
+      this.loadFormData();
+    } catch (err) {
+      console.error('[VEHICLE-FORM] ERROR in ngOnInit:', err);
+    }
   }
 
   ngOnDestroy(): void {
@@ -226,10 +231,17 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    console.log('[VEHICLE-FORM] ngOnChanges fired, isOpen:', this.isOpen, 'changes:', Object.keys(changes));
     if (changes['vehicle'] || changes['isOpen']) {
-      this.loadFormData();
-      this.submitted = false;
-      this.errors = {};
+      try {
+        console.log('[VEHICLE-FORM] Loading form data, isOpen:', this.isOpen, 'vehicle:', this.vehicle?.id || 'new');
+        this.loadFormData();
+        this.submitted = false;
+        this.errors = {};
+        console.log('[VEHICLE-FORM] Form data loaded successfully, formData.vehicle_type:', this.formData.vehicle_type);
+      } catch (err) {
+        console.error('[VEHICLE-FORM] ERROR in loadFormData:', err);
+      }
     }
   }
 
