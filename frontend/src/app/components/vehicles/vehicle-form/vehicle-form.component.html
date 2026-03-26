@@ -345,8 +345,7 @@
           <div class="form-row">
             <!-- Inspection Expiry -->
             <div class="form-group">
-              <label for="inspection-expiry">Inspection Expiration Date</label>
-              <input id="inspection-expiry" type="date" class="form-input" [(ngModel)]="formData.inspection_expiry" name="inspection_expiry" />
+              <app-ai-date-picker inputId="inspection-expiry" label="Inspection Expiration Date" [(ngModel)]="formData.inspection_expiry" name="inspection_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
               <div *ngIf="formData.inspection_expiry" class="status-indicator">
                 <span [class]="'badge badge-' + getInspectionStatus()">
                   {{ getInspectionStatus() === 'expired' ? 'Expired' : 
@@ -357,8 +356,7 @@
 
             <!-- Registration Expiry -->
             <div class="form-group">
-              <label for="registration-expiry">Registration Expiry</label>
-              <input id="registration-expiry" type="date" class="form-input" [(ngModel)]="formData.registration_expiry" name="registration_expiry" />
+              <app-ai-date-picker inputId="registration-expiry" label="Registration Expiry" [(ngModel)]="formData.registration_expiry" name="registration_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
               <div *ngIf="formData.registration_expiry" class="status-indicator">
                 <span [class]="'badge badge-' + getRegistrationStatus()">
                   {{ getDaysUntilExpiry(formData.registration_expiry) >= 0 ? 
@@ -369,16 +367,14 @@
 
             <!-- Insurance Expiry -->
             <div class="form-group">
-              <label for="insurance-expiry">Insurance Expiry</label>
-              <input id="insurance-expiry" type="date" class="form-input" [(ngModel)]="formData.insurance_expiry" name="insurance_expiry" />
+              <app-ai-date-picker inputId="insurance-expiry" label="Insurance Expiry" [(ngModel)]="formData.insurance_expiry" name="insurance_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
             </div>
           </div>
 
           <div class="form-row">
             <!-- Next PM Due -->
             <div class="form-group">
-              <label for="next-pm-due">Next PM Due Date</label>
-              <input id="next-pm-due" type="date" class="form-input" [(ngModel)]="formData.next_pm_due" name="next_pm_due" />
+              <app-ai-date-picker inputId="next-pm-due" label="Next PM Due Date" [(ngModel)]="formData.next_pm_due" name="next_pm_due" placeholder="MM/DD/YYYY"></app-ai-date-picker>
             </div>
 
             <!-- Next PM Mileage -->
