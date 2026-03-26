@@ -64,20 +64,33 @@ function userId(req) {
 
 /**
  * Check if the user belongs to the platform default tenant (FleetNeuron Default).
- * The default tenant is the global admin — they can see and scrape ALL carriers.
- * Uses req.context.isGlobalAdmin set by tenant-context-middleware.
+ * The default tenant is the FIRST tenant created (oldest by created_at).
+ * Only users in this tenant can see all carriers and trigger full scrapes.
  */
-function isPlatformAdmin(req) {
-  return !!req.context?.isGlobalAdmin;
+let _defaultTenantId = null;
+async function isDefaultTenant(req) {
+  const tid = tenantId(req);
+  if (!tid) return false;
+
+  // Cache the default tenant ID (first tenant created)
+  if (!_defaultTenantId) {
+    const defaultTenant = await knex('tenants')
+      .where({ status: 'active' })
+      .orderBy('created_at', 'asc')
+      .first();
+    _defaultTenantId = defaultTenant?.id || null;
+  }
+
+  return tid === _defaultTenantId;
 }
 
 /**
  * Get the DOT numbers belonging to the user's tenant via operating_entities.
- * Returns null for platform admin / default tenant (meaning "show all").
+ * Returns null for the default tenant (meaning "show all").
  * Returns an array of DOT numbers for regular tenant users.
  */
 async function getTenantDotNumbers(req) {
-  if (isPlatformAdmin(req)) return null; // default tenant sees all
+  if (await isDefaultTenant(req)) return null; // default tenant sees all
 
   const tid = tenantId(req);
   if (!tid) return []; // no tenant = no data
@@ -110,7 +123,7 @@ async function verifyCarrierAccess(req, res) {
     sendError(res, 404, 'Carrier not found');
     return null;
   }
-  if (isPlatformAdmin(req)) return carrier;
+  if (await isDefaultTenant(req)) return carrier;
 
   const tenantDots = await getTenantDotNumbers(req);
   if (tenantDots !== null && !tenantDots.includes(carrier.dot_number)) {
@@ -355,7 +368,7 @@ router.get('/carriers/:id/history', canView, async (req, res) => {
 
 router.post('/scrape', canScrape, async (req, res) => {
   try {
-    if (!isPlatformAdmin(req)) {
+    if (!(await isDefaultTenant(req))) {
       return sendError(res, 403, 'Only platform admin can trigger full scrape');
     }
     if (!scrapeQueue) {
@@ -373,7 +386,7 @@ router.post('/scrape', canScrape, async (req, res) => {
 // to prevent Express from matching "basic-details" as a carrierId param.
 router.post('/scrape/basic-details', canScrape, async (req, res) => {
   try {
-    if (!isPlatformAdmin(req)) {
+    if (!(await isDefaultTenant(req))) {
       return sendError(res, 403, 'Only platform admin can trigger full BASIC detail scrape');
     }
     if (!scrapeQueue) {
