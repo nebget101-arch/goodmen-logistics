@@ -5,6 +5,7 @@ const auth = require('./auth-middleware');
 const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange, computeWarningItems } = require('../services/dqf-service');
+const { transformRow } = require('../utils/case-converter');
 const { createDriverDocument } = require('../services/driver-storage-service');
 const { generateEmploymentApplicationPdf } = require('../services/pdf.service');
 const { extractMvrData } = require('../services/mvr-extraction-service');
@@ -152,6 +153,7 @@ router.get('/drivers/:driverId', async (req, res) => {
          cdl_state,
          cdl_class,
          cdl_expiry,
+         date_of_birth,
          medical_cert_expiry,
          hire_date,
          status,
@@ -277,7 +279,7 @@ router.get('/drivers/:driverId', async (req, res) => {
     });
 
     return res.json({
-      driver: driverRes.rows[0],
+      driver: transformRow(driverRes.rows[0]),
       dqf: {
         requirements,
         documents: docsRes.rows,
