@@ -1245,8 +1245,7 @@ router.post('/:packetId/finalize', rateLimited, async (req, res) => {
              ON dc.consent_key = ct.key
             AND dc.packet_id = $1
             AND dc.status = 'signed'
-           WHERE ct.is_active = true
-             AND ct.consent_type IN ('authorization', 'disclosure')`,
+           WHERE ct.is_active = true`,
           [packetId]
         );
         const allConsentsSigned = consentsRes.rows.length > 0 && consentsRes.rows.every(r => r.consent_id);
