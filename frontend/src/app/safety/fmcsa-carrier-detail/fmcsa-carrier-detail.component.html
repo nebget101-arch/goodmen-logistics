@@ -19,6 +19,16 @@
           {{ carrier.safety_rating }}
         </span>
       </div>
+      <button
+        *ngIf="canScrape()"
+        type="button"
+        class="btn btn-primary"
+        [disabled]="scrapingBasic"
+        (click)="scrapeBasicDetails()">
+        <span class="material-symbols-outlined spinner-icon" *ngIf="scrapingBasic">progress_activity</span>
+        <span class="material-symbols-outlined" *ngIf="!scrapingBasic">sync</span>
+        {{ scrapingBasic ? 'Scraping...' : 'Scrape Details' }}
+      </button>
     </div>
 
     <!-- ─── Carrier Info Card ───────────────────────────────────────────────── -->
@@ -261,6 +271,173 @@
           <span class="crash-count crash-total">{{ latestSnapshot.crashes_total ?? 0 }}</span>
           <span class="crash-label">Total</span>
         </div>
+      </div>
+    </div>
+
+    <!-- ─── BASIC Details Section ────────────────────────────────────────────── -->
+    <div class="section-card" *ngIf="basicDetails.length > 0">
+      <h3 class="section-title">SMS BASIC Details</h3>
+
+      <!-- BASIC category tabs -->
+      <div class="basic-tabs">
+        <button
+          *ngFor="let detail of basicDetails"
+          type="button"
+          class="basic-tab"
+          [class.active]="selectedBasic?.basic_name === detail.basic_name"
+          [style.border-bottom-color]="selectedBasic?.basic_name === detail.basic_name ? getBasicColor(detail.basic_name) : 'transparent'"
+          (click)="selectBasic(detail)">
+          {{ getBasicDisplayName(detail.basic_name) }}
+          <span class="basic-tab-measure" *ngIf="detail.measure_value !== null">
+            {{ detail.measure_value }}
+          </span>
+        </button>
+      </div>
+
+      <!-- Selected BASIC detail -->
+      <ng-container *ngIf="selectedBasic">
+        <!-- Overview row -->
+        <div class="basic-overview">
+          <div class="basic-stat">
+            <span class="basic-stat-label">Measure</span>
+            <span class="basic-stat-value">{{ selectedBasic.measure_value !== null ? selectedBasic.measure_value : 'N/A' }}</span>
+          </div>
+          <div class="basic-stat">
+            <span class="basic-stat-label">Percentile</span>
+            <span class="basic-stat-value" [ngClass]="getMeasureClass(selectedBasic.percentile, selectedBasic.threshold)">
+              {{ selectedBasic.percentile !== null ? selectedBasic.percentile + '%' : 'N/A' }}
+            </span>
+          </div>
+          <div class="basic-stat">
+            <span class="basic-stat-label">Threshold</span>
+            <span class="basic-stat-value">{{ selectedBasic.threshold !== null ? selectedBasic.threshold + '%' : 'N/A' }}</span>
+          </div>
+          <div class="basic-stat">
+            <span class="basic-stat-label">Acute/Critical</span>
+            <span class="basic-stat-value" [ngClass]="selectedBasic.acute_critical_violations > 0 ? 'score-danger' : 'score-good'">
+              {{ selectedBasic.acute_critical_violations }}
+            </span>
+          </div>
+        </div>
+
+        <div class="basic-meta" *ngIf="selectedBasic.safety_event_group">
+          <span class="info-label">Safety Event Group</span>
+          <span class="info-value">{{ selectedBasic.safety_event_group }}</span>
+        </div>
+        <div class="basic-meta" *ngIf="selectedBasic.record_period">
+          <span class="info-label">Record Period</span>
+          <span class="info-value">{{ selectedBasic.record_period }}</span>
+        </div>
+
+        <!-- Measure Over Time -->
+        <div class="basic-subsection" *ngIf="selectedBasic.measures_history && selectedBasic.measures_history.length > 0">
+          <h4 class="subsection-title">Carrier Measure Over Time</h4>
+          <div class="table-wrapper">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Measure</th>
+                  <th>Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let h of selectedBasic.measures_history">
+                  <td class="date-cell">{{ formatDate(h.snapshot_date) }}</td>
+                  <td>{{ h.measure_value !== null ? h.measure_value : 'N/A' }}</td>
+                  <td>
+                    <span class="release-type-tag">{{ h.release_type === 'M' ? 'Monthly' : h.release_type === 'Q' ? 'Quarterly' : h.release_type === 'S' ? 'Semi-Annual' : h.release_type }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Violations -->
+        <div class="basic-subsection" *ngIf="selectedBasic.violations && selectedBasic.violations.length > 0">
+          <h4 class="subsection-title">Violation Summary ({{ selectedBasic.violations.length }})</h4>
+          <div class="table-wrapper">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Description</th>
+                  <th class="num-col"># Violations</th>
+                  <th class="num-col"># OOS</th>
+                  <th class="num-col">Severity</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let v of selectedBasic.violations">
+                  <td><code class="viol-code">{{ v.violation_code }}</code></td>
+                  <td class="viol-desc">{{ v.description }}</td>
+                  <td class="num-col">{{ v.violation_count }}</td>
+                  <td class="num-col">{{ v.oos_violation_count }}</td>
+                  <td class="num-col">
+                    <span class="severity-badge">{{ v.severity_weight }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Inspections -->
+        <div class="basic-subsection" *ngIf="selectedBasic.inspections && selectedBasic.inspections.length > 0">
+          <h4 class="subsection-title">Inspection History ({{ selectedBasic.inspections.length }})</h4>
+          <div class="table-wrapper">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Report #</th>
+                  <th>State</th>
+                  <th>Vehicle</th>
+                  <th class="num-col">SW</th>
+                  <th class="num-col">TiW</th>
+                  <th class="num-col">TotW</th>
+                </tr>
+              </thead>
+              <tbody>
+                <ng-container *ngFor="let insp of selectedBasic.inspections">
+                  <tr>
+                    <td class="date-cell">{{ formatDate(insp.inspection_date) }}</td>
+                    <td>{{ insp.report_number }}</td>
+                    <td>{{ insp.report_state }}</td>
+                    <td>{{ insp.plate_number }} {{ insp.plate_state }} - {{ insp.vehicle_type }}</td>
+                    <td class="num-col">{{ insp.severity_weight }}</td>
+                    <td class="num-col">{{ insp.time_weight }}</td>
+                    <td class="num-col">{{ insp.total_weight }}</td>
+                  </tr>
+                  <tr class="viol-row" *ngFor="let iv of insp.violations">
+                    <td colspan="4" class="viol-inline">
+                      <span class="material-symbols-outlined viol-icon">subdirectory_arrow_right</span>
+                      <code class="viol-code">{{ iv.code }}</code>
+                      {{ iv.description }}
+                    </td>
+                    <td class="num-col">{{ iv.weight }}</td>
+                    <td colspan="2"></td>
+                  </tr>
+                </ng-container>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- No data state -->
+        <div class="empty-hint" *ngIf="selectedBasic.violations.length === 0 && selectedBasic.inspections.length === 0 && selectedBasic.measure_value === null">
+          <span class="material-symbols-outlined">info</span>
+          No detailed data available for this BASIC category
+        </div>
+      </ng-container>
+    </div>
+
+    <div class="section-card" *ngIf="basicDetails.length === 0 && !basicLoading && !loading">
+      <h3 class="section-title">SMS BASIC Details</h3>
+      <div class="empty-hint">
+        <span class="material-symbols-outlined">info</span>
+        No BASIC detail data yet. Click "Scrape Details" to fetch violation and inspection data.
       </div>
     </div>
 

@@ -43,8 +43,18 @@ export class FmcsaDashboardComponent implements OnInit {
     this.scraping = true;
     this.fmcsaSafetyService.triggerScrape().subscribe({
       next: () => {
-        this.scraping = false;
-        this.loadDashboard();
+        // Also trigger BASIC detail scraping
+        this.fmcsaSafetyService.triggerBasicDetailScrape().subscribe({
+          next: () => {
+            this.scraping = false;
+            this.loadDashboard();
+          },
+          error: () => {
+            // BASIC detail scrape failed but main scrape succeeded
+            this.scraping = false;
+            this.loadDashboard();
+          }
+        });
       },
       error: () => {
         this.scraping = false;
