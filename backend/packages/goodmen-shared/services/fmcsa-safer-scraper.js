@@ -820,12 +820,12 @@ async function scrapeAll(dotNumber) {
  */
 const BASIC_CATEGORIES = [
   { name: 'UnsafeDriving', label: 'Unsafe Driving' },
-  { name: 'CrashIndicator', label: 'Crash Indicator' },
   { name: 'HOSCompliance', label: 'Hours-of-Service Compliance' },
   { name: 'VehicleMaint', label: 'Vehicle Maintenance' },
   { name: 'DrugsAlcohol', label: 'Controlled Substances and Alcohol' },
   { name: 'HMCompliance', label: 'Hazardous Materials Compliance' },
   { name: 'DriverFitness', label: 'Driver Fitness' },
+  // CrashIndicator excluded — FMCSA returns 500 for public inspection data
 ];
 
 /**
@@ -991,7 +991,9 @@ async function scrapeBasicInspections(dotNumber, basicName) {
   const encodedDot = encodeURIComponent(dotNumber);
   const url = `https://ai.fmcsa.dot.gov/SMS/Carrier/${encodedDot}/BASIC/${basicName}/Inspections/WithViolations/InspDateDESC/1.aspx?UserType=Public`;
 
-  const html = await fetchWithRetry(url);
+  // Use maxRetries=0 (single attempt) — a 500 here means the BASIC category
+  // doesn't have public inspection data (e.g. Crash Indicator), not a transient error.
+  const html = await fetchWithRetry(url, {}, 0);
   if (!html) return [];
 
   const $ = cheerio.load(html);
@@ -1012,7 +1014,11 @@ async function scrapeBasicInspections(dotNumber, basicName) {
       }
 
       const cells = $row.find('td');
+      // Extract inspection ID from the report link: /SMS/Event/Inspection/{id}.aspx
+      const reportLink = $(cells[1]).find('a').attr('href') || '';
+      const idMatch = reportLink.match(/Inspection\/(\d+)\.aspx/i);
       currentInspection = {
+        fmcsa_inspection_id: idMatch ? idMatch[1] : null,
         inspection_date: parseDate(clean($(cells[0]).text())),
         report_number: clean($(cells[1]).text()),
         report_state: clean($(cells[2]).text()),
@@ -1050,7 +1056,114 @@ async function scrapeBasicInspections(dotNumber, basicName) {
 }
 
 /**
- * Scrape all 7 BASIC detail pages for a given DOT number.
+ * Scrape a detailed inspection report page.
+ *
+ * URL: https://ai.fmcsa.dot.gov/SMS/Event/Inspection/{inspectionId}.aspx
+ *
+ * Returns:
+ *   - carrier_name, dot_number, carrier_address
+ *   - report_number, report_state, state, inspection_date, start_time, end_time
+ *   - level, facility, post_crash, hazmat_placard
+ *   - vehicles: [{ unit, type, make, plate_state, plate_number, vin }]
+ *   - violations: [{ vio_code, section, unit, oos, description, included_in_sms, basic, reason_not_included }]
+ */
+async function scrapeInspectionDetail(inspectionId) {
+  const url = `https://ai.fmcsa.dot.gov/SMS/Event/Inspection/${encodeURIComponent(inspectionId)}.aspx`;
+
+  const html = await fetchWithRetry(url, {}, 1);
+  if (!html) return null;
+
+  const $ = cheerio.load(html);
+
+  const result = {
+    inspection_id: inspectionId,
+    carrier_name: null,
+    dot_number: null,
+    carrier_address: null,
+    report_number: null,
+    report_state: null,
+    state: null,
+    inspection_date: null,
+    start_time: null,
+    end_time: null,
+    level: null,
+    facility: null,
+    post_crash: null,
+    hazmat_placard: null,
+    vehicles: [],
+    violations: [],
+  };
+
+  // Parse label/value pairs from <li> elements with <label> + <span class="val">
+  const parseSection = (selector) => {
+    const data = {};
+    $(selector).find('li').each((_i, li) => {
+      const label = clean($(li).find('label').text());
+      const value = clean($(li).find('.val').text());
+      if (label) {
+        const key = label.replace(/:$/, '').trim().toLowerCase();
+        data[key] = value;
+      }
+    });
+    return data;
+  };
+
+  // Carrier Information
+  const carrierInfo = parseSection('#cInfoPnl');
+  result.carrier_name = carrierInfo['carrier name'] || null;
+  result.dot_number = carrierInfo['u.s. dot#'] || null;
+  result.carrier_address = carrierInfo['carrier address'] || null;
+
+  // Time/Location
+  const locInfo = parseSection('#locPnl');
+  result.report_number = locInfo['report #'] || null;
+  result.report_state = locInfo['report state'] || null;
+  result.state = locInfo['state'] || null;
+  result.inspection_date = parseDate(locInfo['date']) || null;
+  result.start_time = locInfo['start time'] || null;
+  result.end_time = locInfo['end time'] || null;
+  result.level = locInfo['level'] || null;
+  result.facility = locInfo['facility'] || null;
+  result.post_crash = locInfo['post crash inspection'] || null;
+  result.hazmat_placard = locInfo['hazmat placard required'] || null;
+
+  // Vehicle Information
+  $('#vehicleTable tbody tr').each((_i, row) => {
+    const cells = $(row).find('td');
+    if (cells.length >= 6) {
+      result.vehicles.push({
+        unit: clean($(cells[0]).text()),
+        type: clean($(cells[1]).text()),
+        make: clean($(cells[2]).text()),
+        plate_state: clean($(cells[3]).text()),
+        plate_number: clean($(cells[4]).text()),
+        vin: clean($(cells[5]).text()),
+      });
+    }
+  });
+
+  // Carrier Violations
+  $('.inspViolationTbl tbody tr').each((_i, row) => {
+    const cells = $(row).find('td');
+    if (cells.length >= 7) {
+      result.violations.push({
+        vio_code: clean($(cells[0]).text()),
+        section: clean($(cells[1]).text()),
+        unit: clean($(cells[2]).text()),
+        oos: clean($(cells[3]).text()),
+        description: clean($(cells[4]).text()),
+        included_in_sms: clean($(cells[5]).text()),
+        basic: clean($(cells[6]).text()),
+        reason_not_included: cells.length > 7 ? clean($(cells[7]).text()) : null,
+      });
+    }
+  });
+
+  return result;
+}
+
+/**
+ * Scrape all 6 BASIC detail pages for a given DOT number.
  * Returns an array of BASIC detail objects (one per category).
  * Skips categories where no data is available.
  */
@@ -1085,6 +1198,7 @@ module.exports = {
   scrapeBasicDetailPage,
   scrapeBasicInspections,
   scrapeAllBasicDetails,
+  scrapeInspectionDetail,
   BASIC_CATEGORIES,
   // Exported for testing
   fetchWithRetry,

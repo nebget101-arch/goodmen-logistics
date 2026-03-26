@@ -1,7 +1,7 @@
 'use strict';
 
 const Queue = require('bull');
-const { scrapeAll, scrapeAllBasicDetails } = require('./fmcsa-safer-scraper');
+const { scrapeAll, scrapeAllBasicDetails, scrapeInspectionDetail } = require('./fmcsa-safer-scraper');
 
 const LOG_PREFIX = '[fmcsa-queue]';
 
@@ -406,6 +406,45 @@ function createScrapeQueue(knex, redisUrl) {
             violations: JSON.stringify(insp.violations || []),
           }));
           await knex('fmcsa_inspection_history').insert(inspRows);
+
+          // Scrape detailed inspection reports for each inspection
+          for (const insp of detail.inspections) {
+            if (!insp.fmcsa_inspection_id) continue;
+            // Skip if already scraped
+            const exists = await knex('fmcsa_inspection_details')
+              .where({ inspection_id: insp.fmcsa_inspection_id })
+              .first();
+            if (exists) continue;
+
+            try {
+              const inspDetail = await scrapeInspectionDetail(insp.fmcsa_inspection_id);
+              if (inspDetail) {
+                await knex('fmcsa_inspection_details').insert({
+                  monitored_carrier_id: carrier.id,
+                  inspection_id: insp.fmcsa_inspection_id,
+                  report_number: inspDetail.report_number,
+                  report_state: inspDetail.report_state,
+                  state: inspDetail.state,
+                  inspection_date: inspDetail.inspection_date,
+                  start_time: inspDetail.start_time,
+                  end_time: inspDetail.end_time,
+                  level: inspDetail.level,
+                  facility: inspDetail.facility,
+                  post_crash: inspDetail.post_crash,
+                  hazmat_placard: inspDetail.hazmat_placard,
+                  vehicles: JSON.stringify(inspDetail.vehicles || []),
+                  violations: JSON.stringify(inspDetail.violations || []),
+                });
+              }
+              // Small delay between inspection detail fetches
+              await new Promise((r) => setTimeout(r, 500));
+            } catch (inspErr) {
+              console.warn(
+                `${LOG_PREFIX} Failed to scrape inspection detail ${insp.fmcsa_inspection_id}:`,
+                inspErr.message
+              );
+            }
+          }
         }
       }
 

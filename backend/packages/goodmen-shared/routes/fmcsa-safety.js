@@ -453,6 +453,45 @@ router.get('/carriers/:id/basic-details/:basicName', canView, async (req, res) =
 });
 
 /**
+ * GET /carriers/:id/inspection-details
+ * All detailed inspection reports for a carrier.
+ */
+router.get('/carriers/:id/inspection-details', canView, async (req, res) => {
+  try {
+    const details = await knex('fmcsa_inspection_details')
+      .where({ monitored_carrier_id: req.params.id })
+      .orderBy('inspection_date', 'desc')
+      .select('*');
+    res.json({ inspection_details: details });
+  } catch (err) {
+    console.error('[fmcsa-safety] inspection-details error', err);
+    sendError(res, 500, 'Failed to load inspection details');
+  }
+});
+
+/**
+ * GET /carriers/:id/inspection-details/:inspectionId
+ * Single detailed inspection report.
+ */
+router.get('/carriers/:id/inspection-details/:inspectionId', canView, async (req, res) => {
+  try {
+    const detail = await knex('fmcsa_inspection_details')
+      .where({
+        monitored_carrier_id: req.params.id,
+        inspection_id: req.params.inspectionId,
+      })
+      .first();
+    if (!detail) {
+      return sendError(res, 404, 'Inspection detail not found');
+    }
+    res.json(detail);
+  } catch (err) {
+    console.error('[fmcsa-safety] inspection-detail error', err);
+    sendError(res, 500, 'Failed to load inspection detail');
+  }
+});
+
+/**
  * GET /carriers/:id/basic-details/:basicName/history
  * History of BASIC detail records over time for a specific category.
  */
