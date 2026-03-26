@@ -379,9 +379,14 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   }
 
   openAddVehicleForm(): void {
-    if (!this.canCreateVehicle()) return;
-    this.selectedVehicle = null;
-    this.showVehicleForm = true;
+    try {
+      if (!this.canCreateVehicle()) return;
+      this.selectedVehicle = null;
+      this.showVehicleForm = true;
+    } catch (err) {
+      console.error('Error opening add vehicle form:', err);
+      this.showVehicleForm = true;
+    }
   }
 
   openEditVehicleForm(vehicle: Vehicle): void {
