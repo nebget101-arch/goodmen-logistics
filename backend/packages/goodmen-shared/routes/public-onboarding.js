@@ -1251,6 +1251,13 @@ router.post('/:packetId/finalize', rateLimited, async (req, res) => {
           [packetId]
         );
         const allConsentsSigned = consentsRes.rows.length > 0 && consentsRes.rows.every(r => r.consent_id);
+        const unsignedKeys = consentsRes.rows.filter(r => !r.consent_id).map(r => r.key);
+        dtLogger.info('finalize_consent_check', {
+          packetId,
+          totalTemplates: consentsRes.rows.length,
+          allSigned: allConsentsSigned,
+          unsignedKeys
+        });
         if (!allConsentsSigned) {
           incompleteSections.push('consent_forms');
         }
