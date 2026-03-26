@@ -820,12 +820,12 @@ async function scrapeAll(dotNumber) {
  */
 const BASIC_CATEGORIES = [
   { name: 'UnsafeDriving', label: 'Unsafe Driving' },
-  { name: 'CrashIndicator', label: 'Crash Indicator' },
   { name: 'HOSCompliance', label: 'Hours-of-Service Compliance' },
   { name: 'VehicleMaint', label: 'Vehicle Maintenance' },
   { name: 'DrugsAlcohol', label: 'Controlled Substances and Alcohol' },
   { name: 'HMCompliance', label: 'Hazardous Materials Compliance' },
   { name: 'DriverFitness', label: 'Driver Fitness' },
+  // CrashIndicator excluded — FMCSA returns 500 for public inspection data
 ];
 
 /**
@@ -991,7 +991,9 @@ async function scrapeBasicInspections(dotNumber, basicName) {
   const encodedDot = encodeURIComponent(dotNumber);
   const url = `https://ai.fmcsa.dot.gov/SMS/Carrier/${encodedDot}/BASIC/${basicName}/Inspections/WithViolations/InspDateDESC/1.aspx?UserType=Public`;
 
-  const html = await fetchWithRetry(url);
+  // Use maxRetries=0 (single attempt) — a 500 here means the BASIC category
+  // doesn't have public inspection data (e.g. Crash Indicator), not a transient error.
+  const html = await fetchWithRetry(url, {}, 0);
   if (!html) return [];
 
   const $ = cheerio.load(html);
