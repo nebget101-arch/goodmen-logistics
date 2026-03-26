@@ -62,11 +62,61 @@ function userId(req) {
   return req.user?.id || null;
 }
 
+/**
+ * Check if the user is a super_admin (platform-level, cross-tenant access).
+ */
+function isSuperAdmin(req) {
+  const roles = req.user?.rbac?.roles || [];
+  return roles.some((r) => r.code === 'super_admin');
+}
+
+/**
+ * Get the DOT numbers belonging to the user's tenant via operating_entities.
+ * Returns null for super_admin (meaning "show all").
+ * Returns an array of DOT numbers for regular tenant users.
+ */
+async function getTenantDotNumbers(req) {
+  if (isSuperAdmin(req)) return null; // super_admin sees all
+
+  const tid = tenantId(req);
+  if (!tid) return []; // no tenant = no data
+
+  const entities = await knex('operating_entities')
+    .where({ tenant_id: tid })
+    .whereNotNull('dot_number')
+    .andWhere('dot_number', '!=', '')
+    .select('dot_number');
+
+  return entities.map((e) => e.dot_number);
+}
+
 function sendError(res, status, message) {
   return res.status(status).json({ error: message });
 }
 
 const DOT_RE = /^\d{1,8}$/;
+
+/**
+ * Verify the carrier belongs to the user's tenant.
+ * Super admins bypass this check. Returns the carrier row or sends 403/404.
+ */
+async function verifyCarrierAccess(req, res) {
+  const carrier = await knex('fmcsa_monitored_carriers')
+    .where({ id: req.params.id })
+    .first();
+  if (!carrier) {
+    sendError(res, 404, 'Carrier not found');
+    return null;
+  }
+  if (isSuperAdmin(req)) return carrier;
+
+  const tenantDots = await getTenantDotNumbers(req);
+  if (tenantDots !== null && !tenantDots.includes(carrier.dot_number)) {
+    sendError(res, 403, 'Carrier not associated with your tenant');
+    return null;
+  }
+  return carrier;
+}
 
 // ─── Score thresholds for alerts ─────────────────────────────────────────────
 const ALERT_THRESHOLD = 75; // percentile above which we flag a score
@@ -87,8 +137,11 @@ const SCORE_INCREASE_THRESHOLD = 15; // point increase between snapshots
  */
 router.get('/dashboard', canView, async (req, res) => {
   try {
-    // Get all monitored carriers with latest snapshot
-    const carriers = await knex('fmcsa_monitored_carriers as mc')
+    // Scope to tenant's DOT numbers (null = super_admin, show all)
+    const tenantDots = await getTenantDotNumbers(req);
+
+    // Get monitored carriers with latest snapshot
+    let query = knex('fmcsa_monitored_carriers as mc')
       .leftJoin(
         knex('fmcsa_safety_snapshots')
           .distinctOn('monitored_carrier_id')
@@ -109,6 +162,16 @@ router.get('/dashboard', canView, async (req, res) => {
         's.authority_common', 's.authority_contract', 's.authority_broker'
       )
       .orderBy('mc.legal_name');
+
+    // Non-super_admin: filter to only their tenant's DOT numbers
+    if (tenantDots !== null) {
+      if (tenantDots.length === 0) {
+        return res.json({ carriers: [], alerts: [], total_carriers: 0, alerts_count: 0, last_scrape_job: null });
+      }
+      query = query.whereIn('mc.dot_number', tenantDots);
+    }
+
+    const carriers = await query;
 
     // Generate alerts
     const alerts = [];
@@ -192,9 +255,13 @@ router.get('/dashboard', canView, async (req, res) => {
 
 router.get('/carriers', canView, async (req, res) => {
   try {
-    const carriers = await knex('fmcsa_monitored_carriers')
-      .orderBy('legal_name')
-      .select('*');
+    const tenantDots = await getTenantDotNumbers(req);
+    let query = knex('fmcsa_monitored_carriers').orderBy('legal_name').select('*');
+    if (tenantDots !== null) {
+      if (tenantDots.length === 0) return res.json([]);
+      query = query.whereIn('dot_number', tenantDots);
+    }
+    const carriers = await query;
     res.json(carriers);
   } catch (err) {
     console.error('[fmcsa-safety] list carriers error', err);
@@ -258,18 +325,21 @@ router.delete('/carriers/:id', canManage, async (req, res) => {
 
 router.get('/carriers/:id/history', canView, async (req, res) => {
   try {
+    const carrier = await verifyCarrierAccess(req, res);
+    if (!carrier) return; // response already sent
+
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
     const offset = parseInt(req.query.offset) || 0;
 
     const snapshots = await knex('fmcsa_safety_snapshots')
-      .where({ monitored_carrier_id: req.params.id })
+      .where({ monitored_carrier_id: carrier.id })
       .orderBy('scraped_at', 'desc')
       .limit(limit)
       .offset(offset)
       .select('*');
 
     const [{ count }] = await knex('fmcsa_safety_snapshots')
-      .where({ monitored_carrier_id: req.params.id })
+      .where({ monitored_carrier_id: carrier.id })
       .count('id as count');
 
     res.json({ snapshots, total: parseInt(count), limit, offset });
@@ -364,11 +434,12 @@ router.post('/scrape/:carrierId/basic-details', canScrape, async (req, res) => {
  */
 router.get('/carriers/:id/basic-details', canView, async (req, res) => {
   try {
-    const { id } = req.params;
+    const carrier = await verifyCarrierAccess(req, res);
+    if (!carrier) return;
 
     // Get the latest scraped_at per basic_name
     const details = await knex('fmcsa_basic_details')
-      .where({ monitored_carrier_id: id })
+      .where({ monitored_carrier_id: carrier.id })
       .distinctOn('basic_name')
       .orderBy('basic_name')
       .orderBy('scraped_at', 'desc')
@@ -414,10 +485,12 @@ router.get('/carriers/:id/basic-details', canView, async (req, res) => {
  */
 router.get('/carriers/:id/basic-details/:basicName', canView, async (req, res) => {
   try {
-    const { id, basicName } = req.params;
+    const carrier = await verifyCarrierAccess(req, res);
+    if (!carrier) return;
+    const { basicName } = req.params;
 
     const detail = await knex('fmcsa_basic_details')
-      .where({ monitored_carrier_id: id, basic_name: basicName })
+      .where({ monitored_carrier_id: carrier.id, basic_name: basicName })
       .orderBy('scraped_at', 'desc')
       .first();
 
@@ -458,8 +531,10 @@ router.get('/carriers/:id/basic-details/:basicName', canView, async (req, res) =
  */
 router.get('/carriers/:id/inspection-details', canView, async (req, res) => {
   try {
+    const carrier = await verifyCarrierAccess(req, res);
+    if (!carrier) return;
     const details = await knex('fmcsa_inspection_details')
-      .where({ monitored_carrier_id: req.params.id })
+      .where({ monitored_carrier_id: carrier.id })
       .orderBy('inspection_date', 'desc')
       .select('*');
     res.json({ inspection_details: details });
@@ -475,9 +550,11 @@ router.get('/carriers/:id/inspection-details', canView, async (req, res) => {
  */
 router.get('/carriers/:id/inspection-details/:inspectionId', canView, async (req, res) => {
   try {
+    const carrier = await verifyCarrierAccess(req, res);
+    if (!carrier) return;
     const detail = await knex('fmcsa_inspection_details')
       .where({
-        monitored_carrier_id: req.params.id,
+        monitored_carrier_id: carrier.id,
         inspection_id: req.params.inspectionId,
       })
       .first();
@@ -497,12 +574,14 @@ router.get('/carriers/:id/inspection-details/:inspectionId', canView, async (req
  */
 router.get('/carriers/:id/basic-details/:basicName/history', canView, async (req, res) => {
   try {
-    const { id, basicName } = req.params;
+    const carrier = await verifyCarrierAccess(req, res);
+    if (!carrier) return;
+    const { basicName } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
     const offset = parseInt(req.query.offset) || 0;
 
     const details = await knex('fmcsa_basic_details')
-      .where({ monitored_carrier_id: id, basic_name: basicName })
+      .where({ monitored_carrier_id: carrier.id, basic_name: basicName })
       .orderBy('scraped_at', 'desc')
       .limit(limit)
       .offset(offset)
@@ -510,7 +589,7 @@ router.get('/carriers/:id/basic-details/:basicName/history', canView, async (req
               'safety_event_group', 'acute_critical_violations', 'scraped_at');
 
     const [{ count }] = await knex('fmcsa_basic_details')
-      .where({ monitored_carrier_id: id, basic_name: basicName })
+      .where({ monitored_carrier_id: carrier.id, basic_name: basicName })
       .count('id as count');
 
     res.json({ details, total: parseInt(count), limit, offset });
