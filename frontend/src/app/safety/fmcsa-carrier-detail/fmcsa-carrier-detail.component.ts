@@ -6,7 +6,8 @@ import {
   FmcsaSafetyService,
   MonitoredCarrier,
   SafetySnapshot,
-  BasicDetail
+  BasicDetail,
+  InspectionDetail
 } from '../fmcsa-safety.service';
 import { AccessControlService } from '../../services/access-control.service';
 
@@ -32,6 +33,8 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
   latestSnapshot: SafetySnapshot | null = null;
   history: SafetySnapshot[] = [];
   basicDetails: BasicDetail[] = [];
+  inspectionDetails: InspectionDetail[] = [];
+  selectedInspection: InspectionDetail | null = null;
   loading = true;
   error = '';
   scrapingBasic = false;
@@ -402,6 +405,24 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
           this.basicLoading = false;
         }
       });
+
+    // Also load inspection details
+    this.fmcsaService.getCarrierInspectionDetails(this.carrier.id)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          this.inspectionDetails = (resp.inspection_details || []).map(d => ({
+            ...d,
+            vehicles: typeof d.vehicles === 'string' ? JSON.parse(d.vehicles) : (d.vehicles || []),
+            violations: typeof d.violations === 'string' ? JSON.parse(d.violations) : (d.violations || []),
+          }));
+        },
+        error: () => {}
+      });
+  }
+
+  selectInspection(detail: InspectionDetail | null): void {
+    this.selectedInspection = this.selectedInspection?.inspection_id === detail?.inspection_id ? null : detail;
   }
 
   selectBasic(detail: BasicDetail): void {
@@ -432,6 +453,11 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
       'DriverFitness': '#38bdf8'
     };
     return map[name] || '#94a3b8';
+  }
+
+  getInspectionDetailByReport(reportNumber: string | null): InspectionDetail | undefined {
+    if (!reportNumber) return undefined;
+    return this.inspectionDetails.find(d => d.report_number === reportNumber);
   }
 
   getMeasureClass(percentile: number | null, threshold: number | null): string {
