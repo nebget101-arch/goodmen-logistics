@@ -7,13 +7,15 @@ const { hashToken } = require('../services/token-service');
 const dtLogger = require('../utils/logger');
 const { createDriverDocument } = require('../services/driver-storage-service');
 const { uploadBuffer } = require('../storage/r2-storage');
-const {
-  buildEmploymentApplicationPdf,
-  buildMvrAuthorizationPdf
-} = require('../services/driver-onboarding-pdf');
+const { buildMvrAuthorizationPdf } = require('../services/driver-onboarding-pdf');
+const { generateEmploymentApplicationPdf } = require('../services/pdf.service');
+// FN-269: pdf-lib for image-to-PDF conversion before R2 storage
+const { PDFDocument } = require('pdf-lib');
 const employmentAppService = require('../services/employment-application.service');
 // FN-235: DQF integration for employment application submission
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('../services/dqf-service');
+// FN-270: Packet submission confirmation email
+const { sendPacketSubmissionConfirmation } = require('../services/onboarding-email-service');
 
 // FN-250: Multer config for onboarding document uploads (memory storage for R2)
 const onboardingUpload = multer({
@@ -45,12 +47,56 @@ const ALLOWED_ONBOARDING_DOC_TYPES = new Set([
   'other_certification'
 ]);
 
-// FN-250: Map onboarding doc types to DQF requirement keys for auto-completion
-const DOC_TYPE_TO_DQF_REQUIREMENT = {
-  cdl_front: 'cdl_on_file',
-  cdl_back: 'cdl_on_file',
-  medical_certificate: 'medical_cert_on_file'
+// FN-269: Map onboarding doc types to DQF requirement keys for auto-completion
+// Each doc type can trigger multiple DQF requirement completions
+const DOC_TYPE_TO_DQF_REQUIREMENTS = {
+  cdl_front: ['driver_license_front_on_file'],
+  cdl_back: ['driver_license_back_on_file'],
+  medical_certificate: ['medical_card_front_on_file', 'medical_card_received']
 };
+
+/**
+ * FN-269: Convert an image buffer to PDF using pdf-lib.
+ * Supports JPEG and PNG. Returns the original buffer for unsupported types (HEIC, etc.)
+ */
+async function convertImageToPdf(buffer, mimetype) {
+  try {
+    const pdfDoc = await PDFDocument.create();
+    let image;
+
+    if (mimetype === 'image/jpeg') {
+      image = await pdfDoc.embedJpg(buffer);
+    } else if (mimetype === 'image/png') {
+      image = await pdfDoc.embedPng(buffer);
+    } else {
+      // HEIC, GIF, WebP — pdf-lib can't embed these; store as-is
+      return { buffer, mimetype, converted: false };
+    }
+
+    // Create a page sized to the image (max 8.5x11 inches = 612x792 points)
+    const { width: imgW, height: imgH } = image.scale(1);
+    const maxW = 612;
+    const maxH = 792;
+    const scale = Math.min(maxW / imgW, maxH / imgH, 1);
+    const pageW = imgW * scale;
+    const pageH = imgH * scale;
+
+    const page = pdfDoc.addPage([pageW, pageH]);
+    page.drawImage(image, {
+      x: 0,
+      y: 0,
+      width: pageW,
+      height: pageH
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    return { buffer: Buffer.from(pdfBytes), mimetype: 'application/pdf', converted: true };
+  } catch (convErr) {
+    // If conversion fails, fall back to storing original
+    dtLogger.warn('image_to_pdf_conversion_failed', { mimetype, error: convErr?.message });
+    return { buffer, mimetype, converted: false };
+  }
+}
 
 function hasMeaningfulData(data) {
   if (!data || typeof data !== 'object') return false;
@@ -397,7 +443,7 @@ async function maybeGenerateOnboardingPdfs(packetId) {
     const oeId = packet.operating_entity_id || driver.operating_entity_id || null;
     if (oeId) {
       const oeRes = await query(
-        'SELECT id, name, address, phone, email FROM operating_entities WHERE id = $1',
+        'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1',
         [oeId]
       );
       operatingEntity = oeRes.rows[0] || null;
@@ -430,13 +476,30 @@ async function maybeGenerateOnboardingPdfs(packetId) {
     !existingTypes.has('employment_application_pdf')
   ) {
     const applicationData = sections.employment_application.data || {};
-    const signature = esignatures.employment_application || null;
-    const buffer = await buildEmploymentApplicationPdf({
-      driver,
-      application: applicationData,
-      signature,
-      operatingEntity
-    });
+    // Build fullApp format for the professional PDF generator
+    const fullApp = {
+      id: packet.id,
+      applicant_snapshot: applicationData,
+      employers: applicationData.employers || [],
+      residencies: applicationData.residencies || [],
+      licenses: applicationData.licenses || [],
+      accidents: applicationData.accidents || [],
+      violations: applicationData.violations || [],
+      convictions: applicationData.convictions || [],
+      signed_certification_at: applicationData.signatureDate || applicationData.submittedAt
+    };
+    const pdfContext = {};
+    if (operatingEntity) {
+      pdfContext.operatingEntity = {
+        name: operatingEntity.name || operatingEntity.legal_name || '',
+        address: [operatingEntity.address_line1, operatingEntity.address_line2, operatingEntity.city, operatingEntity.state, operatingEntity.zip_code].filter(Boolean).join(', '),
+        phone: operatingEntity.phone || '',
+        email: operatingEntity.email || ''
+      };
+    }
+    if (applicationData.auditTrail) pdfContext.auditTrail = applicationData.auditTrail;
+
+    const buffer = await generateEmploymentApplicationPdf(fullApp, pdfContext);
     // FN-216: use "{FirstName} {LastName} - Employment Application.pdf" filename
     const firstName = (driver.first_name || '').trim();
     const lastName = (driver.last_name || '').trim();
@@ -904,14 +967,30 @@ router.post(
 
       const driverId = packet.driver_id;
 
+      // FN-269: Convert images to PDF before R2 storage
+      let uploadBuffer_ = req.file.buffer;
+      let uploadMime = req.file.mimetype;
+      let uploadFileName = req.file.originalname || `onboarding-${docType}`;
+
+      if (req.file.mimetype.startsWith('image/')) {
+        const converted = await convertImageToPdf(req.file.buffer, req.file.mimetype);
+        uploadBuffer_ = converted.buffer;
+        uploadMime = converted.mimetype;
+        if (converted.converted) {
+          // Replace extension with .pdf
+          uploadFileName = uploadFileName.replace(/\.[^.]+$/, '.pdf');
+          dtLogger.info('image_converted_to_pdf', { driverId, docType, originalMime: req.file.mimetype });
+        }
+      }
+
       // Upload to R2
-      const fileExt = path.extname(req.file.originalname || '').toLowerCase();
-      const safeName = req.file.originalname
-        ? req.file.originalname.replace(/[^a-zA-Z0-9_.-]/g, '_')
+      const fileExt = path.extname(uploadFileName).toLowerCase() || '.pdf';
+      const safeName = uploadFileName
+        ? uploadFileName.replace(/[^a-zA-Z0-9_.-]/g, '_')
         : `onboarding-${docType}${fileExt}`;
       const { key: storageKey } = await uploadBuffer({
-        buffer: req.file.buffer,
-        contentType: req.file.mimetype,
+        buffer: uploadBuffer_,
+        contentType: uploadMime,
         prefix: `drivers/${driverId}/onboarding-documents`,
         fileName: safeName
       });
@@ -935,27 +1014,45 @@ router.post(
           driverId,
           packet.id,
           onboardingDocType,
-          req.file.originalname || safeName,
-          req.file.mimetype,
-          req.file.size,
+          uploadFileName,
+          uploadMime,
+          Buffer.byteLength(uploadBuffer_),
           storageKey
         ]
       );
 
       const doc = result.rows[0];
 
-      // Auto-mark DQF requirement if applicable
-      const dqfKey = DOC_TYPE_TO_DQF_REQUIREMENT[docType];
-      if (dqfKey) {
+      // FN-269: Auto-mark DQF requirements if applicable
+      const dqfKeys = DOC_TYPE_TO_DQF_REQUIREMENTS[docType] || [];
+      if (dqfKeys.length > 0) {
         try {
-          await upsertRequirementStatus(driverId, dqfKey, 'complete', doc.id);
+          for (const dqfKey of dqfKeys) {
+            await upsertRequirementStatus(driverId, dqfKey, 'complete', doc.id);
+          }
+
+          // FN-269: CDL upload → check if BOTH front and back are now uploaded
+          if (docType === 'cdl_front' || docType === 'cdl_back') {
+            const cdlDocs = await query(
+              `SELECT doc_type FROM driver_documents
+               WHERE driver_id = $1 AND packet_id = $2
+                 AND doc_type IN ('onboarding_cdl_front', 'onboarding_cdl_back')
+                 AND deleted_at IS NULL`,
+              [driverId, packet.id]
+            );
+            const cdlTypes = new Set(cdlDocs.rows.map(r => r.doc_type));
+            if (cdlTypes.has('onboarding_cdl_front') && cdlTypes.has('onboarding_cdl_back')) {
+              await upsertRequirementStatus(driverId, 'cdl_on_file', 'complete', doc.id);
+            }
+          }
+
           await computeAndUpdateDqfCompleteness(driverId);
         } catch (dqfErr) {
           // Non-blocking: DQF auto-mark should not fail the upload
           dtLogger.warn('onboarding_doc_dqf_auto_mark_failed', {
             driverId,
             docType,
-            dqfKey,
+            dqfKeys,
             error: dqfErr?.message || String(dqfErr)
           });
         }
@@ -1014,13 +1111,22 @@ router.get('/:packetId/documents', rateLimited, async (req, res) => {
       [packet.driver_id, packet.id]
     );
 
+    // FN-269: Map DB column names to frontend expected format
+    // Strip 'onboarding_' prefix so frontend can match by document type key
+    const documents = docs.rows.map(row => ({
+      id: row.id,
+      document_type: row.doc_type.replace(/^onboarding_/, ''),
+      file_name: row.file_name,
+      uploaded_at: row.created_at
+    }));
+
     const duration = Date.now() - start;
     dtLogger.trackRequest('GET', `/public/onboarding/${packetId}/documents`, 200, duration, {
       driverId: packet.driver_id,
-      count: docs.rows.length
+      count: documents.length
     });
 
-    return res.json(docs.rows);
+    return res.json({ documents });
   } catch (error) {
     const duration = Date.now() - start;
     dtLogger.error('public_onboarding_list_documents_failed', error, { params: req.params });
@@ -1083,6 +1189,192 @@ router.delete('/:packetId/documents/:documentId', rateLimited, async (req, res) 
     );
     console.error('Error in public onboarding delete document:', error);
     return res.status(500).json({ message: 'Failed to delete document' });
+  }
+});
+
+// FN-270: POST /public/onboarding/:packetId/finalize?token=...
+// Marks the packet as submitted and sends a confirmation email to the driver.
+router.post('/:packetId/finalize', rateLimited, async (req, res) => {
+  const start = Date.now();
+  try {
+    const { packetId } = req.params;
+    const { token } = req.query;
+
+    const { packet, error, status } = await loadPacketWithToken(packetId, token, true);
+    if (error) {
+      return res.status(status || 400).json({ message: error });
+    }
+
+    // Reject if already submitted
+    if (packet.status === 'submitted') {
+      return res.status(409).json({ message: 'Packet has already been submitted.' });
+    }
+
+    // Load sections to validate required ones are completed
+    let sectionsRes;
+    try {
+      sectionsRes = await query(
+        'SELECT section_key, status FROM driver_onboarding_sections WHERE packet_id = $1',
+        [packetId]
+      );
+    } catch (sErr) {
+      dtLogger.warn('finalize_sections_query_fallback', { error: sErr?.message });
+      sectionsRes = { rows: [] };
+    }
+
+    const sectionMap = {};
+    (sectionsRes.rows || []).forEach((s) => {
+      sectionMap[s.section_key] = s.status;
+    });
+
+    // Validate required sections — check actual completion, not just section status rows
+    const incompleteSections = [];
+
+    // 1. Employment application: check section status
+    if (sectionMap['employment_application'] !== 'completed') {
+      incompleteSections.push('employment_application');
+    }
+
+    // 2. Consent forms: check if all onboarding consents are signed
+    // Only check the 8 consent keys shown in the driver onboarding flow
+    if (sectionMap['consent_forms'] !== 'completed') {
+      try {
+        const ONBOARDING_CONSENT_KEYS = [
+          'fcra_disclosure', 'fcra_authorization',
+          'release_of_information', 'drug_alcohol_release',
+          'mvr_disclosure', 'mvr_authorization', 'mvr_release_of_liability',
+          'psp_consent'
+        ];
+        const consentsRes = await query(
+          `SELECT dc.consent_key
+           FROM driver_consents dc
+           WHERE dc.packet_id = $1
+             AND dc.status = 'signed'
+             AND dc.consent_key = ANY($2)`,
+          [packetId, ONBOARDING_CONSENT_KEYS]
+        );
+        const signedKeys = new Set(consentsRes.rows.map(r => r.consent_key));
+        const unsignedKeys = ONBOARDING_CONSENT_KEYS.filter(k => !signedKeys.has(k));
+        const allConsentsSigned = unsignedKeys.length === 0;
+        dtLogger.info('finalize_consent_check', {
+          packetId,
+          required: ONBOARDING_CONSENT_KEYS.length,
+          signed: signedKeys.size,
+          allSigned: allConsentsSigned,
+          unsignedKeys
+        });
+        if (!allConsentsSigned) {
+          incompleteSections.push('consent_forms');
+        }
+      } catch (cErr) {
+        dtLogger.warn('finalize_consent_check_fallback', { error: cErr?.message });
+        incompleteSections.push('consent_forms');
+      }
+    }
+
+    // 3. Document uploads: check if required docs exist
+    if (sectionMap['document_uploads'] !== 'completed') {
+      try {
+        const docsRes = await query(
+          `SELECT doc_type FROM driver_documents
+           WHERE driver_id = $1 AND doc_type IN (
+             'onboarding_cdl_front', 'onboarding_cdl_back', 'onboarding_medical_certificate',
+             'cdl_front', 'cdl_back', 'medical_certificate'
+           )`,
+          [packet.driver_id]
+        );
+        const uploadedTypes = new Set(docsRes.rows.map(r => r.doc_type));
+        const hasRequiredDocs =
+          (uploadedTypes.has('onboarding_cdl_front') || uploadedTypes.has('cdl_front')) &&
+          (uploadedTypes.has('onboarding_cdl_back') || uploadedTypes.has('cdl_back')) &&
+          (uploadedTypes.has('onboarding_medical_certificate') || uploadedTypes.has('medical_certificate'));
+        if (!hasRequiredDocs) {
+          incompleteSections.push('document_uploads');
+        }
+      } catch (dErr) {
+        dtLogger.warn('finalize_docs_check_fallback', { error: dErr?.message });
+        incompleteSections.push('document_uploads');
+      }
+    }
+
+    if (incompleteSections.length > 0) {
+      return res.status(422).json({
+        message: 'All required sections must be completed before submission.',
+        incompleteSections
+      });
+    }
+
+    // Update packet status to submitted
+    await query(
+      `UPDATE driver_onboarding_packets SET status = 'submitted' WHERE id = $1`,
+      [packetId]
+    );
+
+    // Trigger PDF generation for any remaining documents (non-blocking)
+    try {
+      await maybeGenerateOnboardingPdfs(packetId);
+    } catch (pdfErr) {
+      dtLogger.warn('finalize_pdf_generation_failed', {
+        packetId,
+        error: pdfErr?.message
+      });
+    }
+
+    // Load driver and operating entity for the confirmation email
+    const driverRes = await query(
+      'SELECT id, first_name, last_name, email, phone FROM drivers WHERE id = $1',
+      [packet.driver_id]
+    );
+    const driver = driverRes.rows[0] || null;
+
+    let operatingEntity = null;
+    try {
+      const oeId = packet.operating_entity_id || driver?.operating_entity_id || null;
+      if (oeId) {
+        const oeRes = await query(
+          'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1',
+          [oeId]
+        );
+        operatingEntity = oeRes.rows[0] || null;
+      }
+    } catch (oeErr) {
+      dtLogger.warn('finalize_operating_entity_lookup_fallback', { error: oeErr?.message });
+    }
+
+    // Send confirmation email (fire-and-forget, never blocks response)
+    if (driver?.email) {
+      sendPacketSubmissionConfirmation({
+        driverEmail: driver.email,
+        driverFirstName: driver.first_name,
+        driverLastName: driver.last_name,
+        operatingEntity,
+        completedSections: sectionMap
+      }).catch((emailErr) => {
+        dtLogger.error('finalize_confirmation_email_error', {
+          packetId,
+          driverId: driver?.id,
+          error: emailErr?.message || String(emailErr)
+        });
+      });
+    }
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('POST', `/public/onboarding/${packetId}/finalize`, 200, duration, {
+      driverId: packet.driver_id
+    });
+    dtLogger.info('onboarding_packet_finalized', { packetId, driverId: packet.driver_id });
+
+    return res.json({
+      success: true,
+      message: 'Onboarding packet submitted successfully.',
+      emailSent: !!driver?.email
+    });
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('public_onboarding_finalize_failed', error, { params: req.params });
+    dtLogger.trackRequest('POST', `/public/onboarding/${req.params.packetId}/finalize`, 500, duration);
+    console.error('Error in public onboarding finalize:', error);
+    return res.status(500).json({ message: 'Failed to submit onboarding packet.' });
   }
 });
 

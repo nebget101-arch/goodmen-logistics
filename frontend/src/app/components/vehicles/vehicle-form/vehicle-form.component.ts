@@ -112,11 +112,24 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
   ];
 
-  makes = ['Freightliner', 'Kenworth', 'Peterbilt', 'Volvo', 'Mack', 'International', 'Western Star'];
+  // Cached options — computed once and updated only when source data changes.
+  // Using getters that return new arrays on every call causes infinite change detection loops
+  // with OnPush child components like app-ai-select.
+  stateSelectOptionsCached: { value: string; label: string }[] = [];
+  driverSelectOptionsCached: { value: string; label: string }[] = [];
+  makeSelectOptionsCached: { value: string; label: string }[] = [];
 
-  readonly stateSelectOptions = this.states.map(s => ({ value: s, label: s }));
-  readonly makeSelectOptions = this.makes.map(m => ({ value: m, label: m }));
-  driverSelectOptions: { value: string; label: string }[] = [];
+  get stateSelectOptions(): { value: string; label: string }[] {
+    return this.stateSelectOptionsCached;
+  }
+
+  get driverSelectOptions(): { value: string; label: string }[] {
+    return this.driverSelectOptionsCached;
+  }
+
+  get makeSelectOptions(): { value: string; label: string }[] {
+    return this.makeSelectOptionsCached;
+  }
 
   statusSelectOptions = [
     { value: 'in-service', label: 'In Service' },
@@ -206,8 +219,18 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
   constructor(private apiService: ApiService) {}
 
   ngOnInit(): void {
-    this.loadDrivers();
-    this.loadFormData();
+    console.log('[VEHICLE-FORM] ngOnInit, isOpen:', this.isOpen, 'vehicleType:', this.vehicleType);
+    try {
+      // Initialize cached select options (must be done here, not in field initializers,
+      // because 'makes' and 'states' may not be initialized yet at field declaration time)
+      this.stateSelectOptionsCached = this.states.map(s => ({ value: s, label: s }));
+      this.makeSelectOptionsCached = this.makes.map(m => ({ value: m, label: m }));
+      this.updateFilteredTrailerTypeOptions();
+      this.loadDrivers();
+      this.loadFormData();
+    } catch (err) {
+      console.error('[VEHICLE-FORM] ERROR in ngOnInit:', err);
+    }
   }
 
   ngOnDestroy(): void {
@@ -218,10 +241,17 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    console.log('[VEHICLE-FORM] ngOnChanges fired, isOpen:', this.isOpen, 'changes:', Object.keys(changes));
     if (changes['vehicle'] || changes['isOpen']) {
-      this.loadFormData();
-      this.submitted = false;
-      this.errors = {};
+      try {
+        console.log('[VEHICLE-FORM] Loading form data, isOpen:', this.isOpen, 'vehicle:', this.vehicle?.id || 'new');
+        this.loadFormData();
+        this.submitted = false;
+        this.errors = {};
+        console.log('[VEHICLE-FORM] Form data loaded successfully, formData.vehicle_type:', this.formData.vehicle_type);
+      } catch (err) {
+        console.error('[VEHICLE-FORM] ERROR in loadFormData:', err);
+      }
     }
   }
 
@@ -229,6 +259,18 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     if (this.vehicle) {
       this.isEditMode = true;
       this.formData = { ...this.vehicle };
+      // Sanitize null string fields to prevent template crashes
+      this.formData.unit_number = this.formData.unit_number || '';
+      this.formData.vin = this.formData.vin || '';
+      this.formData.make = this.formData.make || '';
+      this.formData.model = this.formData.model || '';
+      this.formData.license_plate = this.formData.license_plate || '';
+      this.formData.state = this.formData.state || '';
+      this.formData.inspection_expiry = this.formData.inspection_expiry || '';
+      this.formData.next_pm_due = this.formData.next_pm_due || '';
+      this.formData.insurance_expiry = this.formData.insurance_expiry || '';
+      this.formData.registration_expiry = this.formData.registration_expiry || '';
+      this.formData.oos_reason = this.formData.oos_reason || '';
       if (!this.formData.vehicle_type) {
         this.formData.vehicle_type = this.vehicleType;
       }
@@ -310,14 +352,14 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     this.apiService.getDispatchDrivers().subscribe({
       next: (data: any[]) => {
         this.drivers = Array.isArray(data) ? data : [];
-        this.driverSelectOptions = this.drivers.map(d => ({
+        this.driverSelectOptionsCached = this.drivers.map(d => ({
           value: d.id,
           label: `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Unknown'
         }));
       },
       error: () => {
         this.drivers = [];
-        this.driverSelectOptions = [];
+        this.driverSelectOptionsCached = [];
       }
     });
   }
@@ -330,6 +372,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     this.trailerTypeDropdownOpen = true;
     this.trailerForm.trailer_type_code = '';
     this.trailerForm.trailer_type_label = '';
+    this.updateFilteredTrailerTypeOptions();
   }
 
   onTrailerTypeSearchBlur(): void {
@@ -341,12 +384,21 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     }, 150);
   }
 
+  private _filteredTrailerTypeOptionsCache: Array<{ id: string; value: string }> = this.trailerTypeOptions.slice(0, 40);
+
   get filteredTrailerTypeOptions(): Array<{ id: string; value: string }> {
+    return this._filteredTrailerTypeOptionsCache;
+  }
+
+  private updateFilteredTrailerTypeOptions(): void {
     const q = (this.trailerTypeSearch || '').trim().toLowerCase();
-    if (!q) return this.trailerTypeOptions.slice(0, 40);
-    return this.trailerTypeOptions
-      .filter((option) => option.id.toLowerCase().includes(q) || option.value.toLowerCase().includes(q))
-      .slice(0, 80);
+    if (!q) {
+      this._filteredTrailerTypeOptionsCache = this.trailerTypeOptions.slice(0, 40);
+    } else {
+      this._filteredTrailerTypeOptionsCache = this.trailerTypeOptions
+        .filter((option) => option.id.toLowerCase().includes(q) || option.value.toLowerCase().includes(q))
+        .slice(0, 80);
+    }
   }
 
   selectTrailerType(option: { id: string; value: string }): void {
@@ -482,13 +534,13 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     this.saving = true;
 
     const vehicleData: any = {
-      unit_number: this.formData.unit_number,
-      vin: this.formData.vin,
-      make: this.formData.make,
-      model: this.formData.model,
+      unit_number: this.formData.unit_number || '',
+      vin: this.formData.vin || '',
+      make: this.formData.make || '',
+      model: this.formData.model || '',
       year: this.formData.year,
-      license_plate: this.formData.license_plate || null,
-      state: this.formData.state || null,
+      license_plate: this.formData.license_plate || '',
+      state: this.formData.state || '',
       status: this.formData.status || 'in-service',
       mileage: this.formData.mileage || 0,
       inspection_expiry: this.formData.inspection_expiry || null,
@@ -496,7 +548,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       next_pm_mileage: this.formData.next_pm_mileage || null,
       insurance_expiry: this.formData.insurance_expiry || null,
       registration_expiry: this.formData.registration_expiry || null,
-      oos_reason: this.formData.oos_reason || null,
+      oos_reason: this.formData.oos_reason || '',
       vehicle_type: this.formData.vehicle_type || this.vehicleType
     };
 

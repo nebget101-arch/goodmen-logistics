@@ -199,4 +199,113 @@
       </table>
     </div>
   </section>
+
+  <!-- ═══ Compliance Audit & Reporting ═══ -->
+  <div class="audit-divider">
+    <h2 class="audit-section-title">
+      <span class="material-symbols-outlined">assessment</span>
+      Compliance Audit & Reporting
+    </h2>
+    <div class="audit-actions">
+      <select [(ngModel)]="selectedCategory" class="audit-select">
+        <option value="dqf">Driver Qualification Files</option>
+        <option value="hos">Hours of Service</option>
+        <option value="maintenance">Maintenance Records</option>
+        <option value="drug-alcohol">Drug & Alcohol Testing</option>
+      </select>
+      <button type="button" class="btn btn-primary" (click)="exportAuditData()">
+        <span class="material-symbols-outlined">ios_share</span> Export
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="auditLoading" class="loading-state">Loading audit data...</div>
+
+  <ng-container *ngIf="!auditLoading && complianceSummary">
+    <!-- Summary Info -->
+    <section class="section-card audit-summary">
+      <h3>Summary Report</h3>
+      <div class="summary-info-row">
+        <div class="summary-item"><span class="info-label">Company</span><span class="info-value">{{ complianceSummary.companyName }}</span></div>
+        <div class="summary-item"><span class="info-label">Report Period</span><span class="info-value">{{ complianceSummary.reportPeriod?.start }} to {{ complianceSummary.reportPeriod?.end }}</span></div>
+        <div class="summary-item"><span class="info-label">Generated</span><span class="info-value">{{ complianceSummary.generatedAt }}</span></div>
+      </div>
+    </section>
+
+    <!-- Driver Compliance -->
+    <section class="section-card" *ngIf="complianceSummary.driverCompliance">
+      <h3><span class="material-symbols-outlined section-icon">people</span> Driver Compliance</h3>
+      <div class="audit-stats-grid">
+        <div class="audit-stat"><span class="audit-stat-label">Total Drivers</span><span class="audit-stat-value">{{ complianceSummary.driverCompliance.totalDrivers }}</span></div>
+        <div class="audit-stat"><span class="audit-stat-label">Active Drivers</span><span class="audit-stat-value">{{ complianceSummary.driverCompliance.activeDrivers }}</span></div>
+        <div class="audit-stat"><span class="audit-stat-label">Avg DQF Completeness</span><span class="audit-stat-value">{{ complianceSummary.driverCompliance.averageDQFCompleteness }}%</span></div>
+        <div class="audit-stat audit-stat-warn"><span class="audit-stat-label">Expired Med Certs</span><span class="audit-stat-value">{{ complianceSummary.driverCompliance.expiredMedCerts }}</span></div>
+      </div>
+    </section>
+
+    <!-- Vehicle Compliance -->
+    <section class="section-card" *ngIf="complianceSummary.vehicleCompliance">
+      <h3><span class="material-symbols-outlined section-icon">local_shipping</span> Vehicle Compliance</h3>
+      <div class="audit-stats-grid">
+        <div class="audit-stat"><span class="audit-stat-label">Total Vehicles</span><span class="audit-stat-value">{{ complianceSummary.vehicleCompliance.totalVehicles }}</span></div>
+        <div class="audit-stat"><span class="audit-stat-label">In Service</span><span class="audit-stat-value">{{ complianceSummary.vehicleCompliance.inService }}</span></div>
+        <div class="audit-stat audit-stat-danger"><span class="audit-stat-label">Out of Service</span><span class="audit-stat-value">{{ complianceSummary.vehicleCompliance.outOfService }}</span></div>
+        <div class="audit-stat audit-stat-warn"><span class="audit-stat-label">Maintenance Overdue</span><span class="audit-stat-value">{{ complianceSummary.vehicleCompliance.maintenanceOverdue }}</span></div>
+      </div>
+    </section>
+
+    <!-- HOS Compliance -->
+    <section class="section-card" *ngIf="complianceSummary.hosCompliance">
+      <h3><span class="material-symbols-outlined section-icon">schedule</span> HOS Compliance</h3>
+      <div class="audit-stats-grid">
+        <div class="audit-stat"><span class="audit-stat-label">Total Records</span><span class="audit-stat-value">{{ complianceSummary.hosCompliance.totalRecords }}</span></div>
+        <div class="audit-stat"><span class="audit-stat-label">Compliant</span><span class="audit-stat-value">{{ complianceSummary.hosCompliance.compliant }}</span></div>
+        <div class="audit-stat audit-stat-warn"><span class="audit-stat-label">Warnings</span><span class="audit-stat-value">{{ complianceSummary.hosCompliance.warnings }}</span></div>
+        <div class="audit-stat audit-stat-danger"><span class="audit-stat-label">Violations</span><span class="audit-stat-value">{{ complianceSummary.hosCompliance.violations }}</span></div>
+      </div>
+    </section>
+
+    <!-- Recommended Actions -->
+    <section class="section-card" *ngIf="complianceSummary.recommendedActions?.length > 0">
+      <h3><span class="material-symbols-outlined section-icon">checklist</span> Recommended Actions</h3>
+      <div class="actions-list">
+        <div *ngFor="let action of complianceSummary.recommendedActions" class="action-item">
+          <span class="material-symbols-outlined">arrow_right</span>
+          <span>{{ action }}</span>
+        </div>
+      </div>
+    </section>
+  </ng-container>
+
+  <!-- Audit Trail -->
+  <section class="section-card" *ngIf="auditTrail.length > 0">
+    <h3><span class="material-symbols-outlined section-icon">history</span> Audit Trail (Recent Changes)</h3>
+    <div class="table-wrap">
+      <table class="compliance-table" aria-label="Audit trail">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Resource</th>
+            <th>IP Address</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let entry of auditTrail">
+            <td>{{ entry.timestamp | date:'short' }}</td>
+            <td>{{ entry.userId }}</td>
+            <td>
+              <span class="action-badge" [class.badge-delete]="entry.action === 'DELETE'" [class.badge-create]="entry.action === 'CREATE'">
+                <span class="material-symbols-outlined badge-icon">{{ getBadgeIcon(entry.action) }}</span>
+                {{ entry.action }}
+              </span>
+            </td>
+            <td>{{ entry.resource }}</td>
+            <td class="mono">{{ entry.ip }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
 </ng-container>

@@ -767,6 +767,10 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/dqf/drivers/${driverId}`);
   }
 
+  recalculateDqfCompleteness(driverId: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/dqf/driver/${driverId}/recalculate`, {});
+  }
+
   updateDqfRequirementStatus(
     driverId: string,
     requirementKey: string,
@@ -811,6 +815,22 @@ export class ApiService {
     return this.http.post<any>(
       `${this.baseUrl}/dqf/driver/${driverId}/auto-pull-emp-app`,
       {}
+    );
+  }
+
+  // ── FN-264: MVR report upload and data retrieval ──
+  uploadMvrReport(driverId: string, file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post(
+      `${this.baseUrl}/dqf/driver/${driverId}/mvr-upload`,
+      formData
+    );
+  }
+
+  getMvrData(driverId: string): Observable<any> {
+    return this.http.get(
+      `${this.baseUrl}/dqf/driver/${driverId}/mvr-data`
     );
   }
 
@@ -948,6 +968,19 @@ export class ApiService {
     const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
     return this.http.delete<{ success: boolean }>(
       `${publicBase}/${encodeURIComponent(packetId)}/documents/${encodeURIComponent(documentId)}`,
+      { params: { token } }
+    );
+  }
+
+  // FN-270: Finalize (submit) an onboarding packet
+  finalizeOnboardingPacket(
+    packetId: string,
+    token: string
+  ): Observable<{ success: boolean; message: string; emailSent: boolean }> {
+    const publicBase = this.baseUrl.replace(/\/api\/?$/, '/public/onboarding');
+    return this.http.post<{ success: boolean; message: string; emailSent: boolean }>(
+      `${publicBase}/${encodeURIComponent(packetId)}/finalize`,
+      {},
       { params: { token } }
     );
   }

@@ -746,22 +746,26 @@
                     <p class="doc-upload-card-desc">{{ docType.description }}</p>
                   </div>
                   <span *ngIf="docType.required && !uploadedDocuments.has(docType.key)"
-                        class="doc-upload-badge doc-upload-badge-required">Required</span>
+                        class="doc-upload-badge"
+                        [class.doc-upload-badge-required]="!pendingFiles.has(docType.key)"
+                        [class.doc-upload-badge-pending]="pendingFiles.has(docType.key)">
+                    {{ pendingFiles.has(docType.key) ? 'Ready to Save' : 'Required' }}
+                  </span>
                   <span *ngIf="!docType.required && !uploadedDocuments.has(docType.key)"
                         class="doc-upload-badge doc-upload-badge-optional">Optional</span>
                   <span *ngIf="uploadedDocuments.has(docType.key)"
                         class="doc-upload-badge doc-upload-badge-uploaded">
                     <span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span>
-                    Uploaded
+                    Saved
                   </span>
                 </div>
 
-                <!-- Upload area (not yet uploaded) -->
-                <div *ngIf="!uploadedDocuments.has(docType.key)" class="doc-upload-card-body">
+                <!-- Upload area (not yet uploaded and no file pending) -->
+                <div *ngIf="!uploadedDocuments.has(docType.key) && !pendingFiles.has(docType.key)" class="doc-upload-card-body">
                   <label class="doc-upload-btn"
                          [class.doc-upload-btn-disabled]="uploadingDocType !== null">
                     <span class="material-symbols-outlined">photo_camera</span>
-                    <span>{{ uploadingDocType === docType.key ? 'Uploading...' : 'Take Photo or Choose File' }}</span>
+                    <span>Take Photo or Choose File</span>
                     <input type="file"
                            accept="image/*,.heic,.heif,.pdf,application/pdf"
                            class="doc-upload-input"
@@ -769,7 +773,45 @@
                            (change)="onDocumentFileSelected($event, docType.key)" />
                   </label>
                   <span class="doc-upload-hint">JPG, PNG, HEIC, or PDF up to 10 MB</span>
-                  <!-- Spinner overlay while uploading this specific doc -->
+                </div>
+
+                <!-- FN-269: File preview state (file selected but not yet saved) -->
+                <div *ngIf="!uploadedDocuments.has(docType.key) && pendingFiles.has(docType.key)" class="doc-upload-card-body doc-upload-preview-body">
+                  <div class="doc-upload-preview-container">
+                    <!-- Image preview -->
+                    <img *ngIf="pendingFiles.get(docType.key)?.previewUrl"
+                         [src]="pendingFiles.get(docType.key)?.previewUrl"
+                         alt="Preview of {{ docType.label }}"
+                         class="doc-upload-preview-image" />
+                    <!-- PDF icon placeholder -->
+                    <div *ngIf="isPendingFilePdf(docType.key)" class="doc-upload-preview-pdf">
+                      <span class="material-symbols-outlined">picture_as_pdf</span>
+                      <span class="doc-upload-preview-pdf-label">PDF Document</span>
+                    </div>
+                    <!-- HEIC/unknown file icon -->
+                    <div *ngIf="!pendingFiles.get(docType.key)?.previewUrl && !isPendingFilePdf(docType.key)" class="doc-upload-preview-pdf">
+                      <span class="material-symbols-outlined">image</span>
+                      <span class="doc-upload-preview-pdf-label">Image File</span>
+                    </div>
+                  </div>
+                  <div class="doc-upload-preview-filename">{{ pendingFiles.get(docType.key)?.file?.name }}</div>
+                  <div class="doc-upload-preview-actions">
+                    <button class="doc-upload-save-btn"
+                            type="button"
+                            [disabled]="uploadingDocType !== null"
+                            (click)="saveDocument(docType.key)">
+                      <span class="material-symbols-outlined">{{ uploadingDocType === docType.key ? 'hourglass_top' : 'cloud_upload' }}</span>
+                      {{ uploadingDocType === docType.key ? 'Saving...' : 'Save Document' }}
+                    </button>
+                    <button class="doc-upload-cancel-btn"
+                            type="button"
+                            [disabled]="uploadingDocType === docType.key"
+                            (click)="cancelPendingFile(docType.key)">
+                      <span class="material-symbols-outlined">close</span>
+                      Cancel
+                    </button>
+                  </div>
+                  <!-- Spinner overlay while saving -->
                   <div *ngIf="uploadingDocType === docType.key" class="doc-upload-spinner">
                     <div class="doc-upload-spinner-ring"></div>
                   </div>
@@ -824,93 +866,116 @@
 
           <!-- STEP 5: REVIEW & SUBMIT -->
           <div *ngIf="currentStep === 'review_submit'">
-            <div class="onboard-form-header">
-              <div>
-                <div class="onboard-form-kicker">Step 4</div>
-                <h2>Review &amp; Submit</h2>
-                <p class="onboard-subtitle">Review all sections of your onboarding packet before final submission.</p>
+
+            <!-- FN-270: Success screen after submission -->
+            <div *ngIf="packetSubmitted" class="onboard-submission-success">
+              <div class="onboard-success-icon">
+                <span class="material-symbols-outlined">check_circle</span>
               </div>
-              <div class="onboard-form-badge" [class.onboard-form-badge-alt]="!packetReady">
-                <span class="material-symbols-outlined">{{ packetReady ? 'check_circle' : 'pending' }}</span>
-                <span>{{ packetReady ? 'Ready to submit' : 'Incomplete' }}</span>
+              <h2>Application Submitted</h2>
+              <p class="onboard-subtitle">
+                Your onboarding packet has been submitted successfully.
+              </p>
+              <p class="onboard-subtitle" *ngIf="submissionEmailSent && driver?.email">
+                A confirmation email has been sent to <strong>{{ driver.email }}</strong>.
+              </p>
+              <div class="onboard-success-detail">
+                <p>One of our team members will review your application and reach out to you shortly. No further action is required at this time.</p>
               </div>
             </div>
 
-            <div class="onboard-form-panel-grid">
-              <section class="onboard-panel">
-                <div class="onboard-panel-header">
-                  <span class="material-symbols-outlined">description</span>
-                  <div>
-                    <h3 class="onboard-section-title">Employment Application</h3>
-                    <p>{{ isSectionCompleted('employment_application') ? 'Completed' : 'Not yet submitted' }}</p>
-                  </div>
+            <!-- Review screen (before submission) -->
+            <ng-container *ngIf="!packetSubmitted">
+              <div class="onboard-form-header">
+                <div>
+                  <div class="onboard-form-kicker">Step 4</div>
+                  <h2>Review &amp; Submit</h2>
+                  <p class="onboard-subtitle">Review all sections of your onboarding packet before final submission.</p>
                 </div>
-                <div class="review-summary" *ngIf="employment.firstName">
-                  <div class="review-row"><span class="review-label">Name</span><span class="review-value">{{ employment.firstName }} {{ employment.middleName }} {{ employment.lastName }}</span></div>
-                  <div class="review-row" *ngIf="employment.positionAppliedFor"><span class="review-label">Position</span><span class="review-value">{{ employment.positionAppliedFor }}</span></div>
-                  <div class="review-row" *ngIf="employment.licenseNumber"><span class="review-label">CDL</span><span class="review-value">{{ employment.licenseState }} {{ employment.licenseNumber }} ({{ employment.licenseClass }})</span></div>
+                <div class="onboard-form-badge" [class.onboard-form-badge-alt]="!packetReady">
+                  <span class="material-symbols-outlined">{{ packetReady ? 'check_circle' : 'pending' }}</span>
+                  <span>{{ packetReady ? 'Ready to submit' : 'Incomplete' }}</span>
                 </div>
-                <button class="btn btn-secondary review-edit-btn" type="button" (click)="setStep('employment_application')" *ngIf="!isSectionCompleted('employment_application')">
-                  <span class="material-symbols-outlined">edit</span> Edit
-                </button>
-              </section>
+              </div>
 
-              <section class="onboard-panel">
-                <div class="onboard-panel-header">
-                  <span class="material-symbols-outlined">verified_user</span>
-                  <div>
-                    <h3 class="onboard-section-title">Consent Forms</h3>
-                    <p>{{ signedConsents.size }}/{{ consentKeys.length }} consent forms signed</p>
+              <div class="onboard-form-panel-grid">
+                <section class="onboard-panel">
+                  <div class="onboard-panel-header">
+                    <span class="material-symbols-outlined">description</span>
+                    <div>
+                      <h3 class="onboard-section-title">Employment Application</h3>
+                      <p>{{ isSectionCompleted('employment_application') ? 'Completed' : 'Not yet submitted' }}</p>
+                    </div>
                   </div>
-                </div>
-                <div class="review-consent-list">
-                  <div *ngFor="let c of consentKeys" class="review-consent-item">
-                    <span class="material-symbols-outlined" [class.review-check]="isConsentSigned(c.key)" [class.review-pending]="!isConsentSigned(c.key)">
-                      {{ isConsentSigned(c.key) ? 'check_circle' : 'radio_button_unchecked' }}
-                    </span>
-                    <span>{{ c.label }}</span>
+                  <div class="review-summary" *ngIf="employment.firstName">
+                    <div class="review-row"><span class="review-label">Name</span><span class="review-value">{{ employment.firstName }} {{ employment.middleName }} {{ employment.lastName }}</span></div>
+                    <div class="review-row" *ngIf="employment.positionAppliedFor"><span class="review-label">Position</span><span class="review-value">{{ employment.positionAppliedFor }}</span></div>
+                    <div class="review-row" *ngIf="employment.licenseNumber"><span class="review-label">CDL</span><span class="review-value">{{ employment.licenseState }} {{ employment.licenseNumber }} ({{ employment.licenseClass }})</span></div>
                   </div>
-                </div>
-                <button class="btn btn-secondary review-edit-btn" type="button" (click)="setStep('consent_forms')" *ngIf="!allConsentsSigned">
-                  <span class="material-symbols-outlined">edit</span> Sign Remaining
-                </button>
-              </section>
+                  <button class="btn btn-secondary review-edit-btn" type="button" (click)="setStep('employment_application')" *ngIf="!isSectionCompleted('employment_application')">
+                    <span class="material-symbols-outlined">edit</span> Edit
+                  </button>
+                </section>
 
-              <section class="onboard-panel">
-                <div class="onboard-panel-header">
-                  <span class="material-symbols-outlined">upload_file</span>
-                  <div>
-                    <h3 class="onboard-section-title">Document Uploads</h3>
-                    <p>{{ getSectionStatus('document_uploads') }}</p>
+                <section class="onboard-panel">
+                  <div class="onboard-panel-header">
+                    <span class="material-symbols-outlined">verified_user</span>
+                    <div>
+                      <h3 class="onboard-section-title">Consent Forms</h3>
+                      <p>{{ signedConsents.size }}/{{ consentKeys.length }} consent forms signed</p>
+                    </div>
                   </div>
-                </div>
-                <div class="review-consent-list">
-                  <div *ngFor="let d of documentTypes" class="review-consent-item">
-                    <span class="material-symbols-outlined"
-                          [class.review-check]="uploadedDocuments.has(d.key)"
-                          [class.review-pending]="!uploadedDocuments.has(d.key)">
-                      {{ uploadedDocuments.has(d.key) ? 'check_circle' : 'radio_button_unchecked' }}
-                    </span>
-                    <span>{{ d.label }}{{ d.required ? '' : ' (optional)' }}</span>
+                  <div class="review-consent-list">
+                    <div *ngFor="let c of consentKeys" class="review-consent-item">
+                      <span class="material-symbols-outlined" [class.review-check]="isConsentSigned(c.key)" [class.review-pending]="!isConsentSigned(c.key)">
+                        {{ isConsentSigned(c.key) ? 'check_circle' : 'radio_button_unchecked' }}
+                      </span>
+                      <span>{{ c.label }}</span>
+                    </div>
                   </div>
-                </div>
-                <button class="btn btn-secondary review-edit-btn" type="button"
-                        (click)="setStep('document_uploads')" *ngIf="!requiredDocsComplete">
-                  <span class="material-symbols-outlined">edit</span> Upload Documents
-                </button>
-              </section>
-            </div>
+                  <button class="btn btn-secondary review-edit-btn" type="button" (click)="setStep('consent_forms')" *ngIf="!allConsentsSigned">
+                    <span class="material-symbols-outlined">edit</span> Sign Remaining
+                  </button>
+                </section>
 
-            <div class="onboard-actions onboard-actions-split">
-              <button class="btn btn-secondary" type="button" (click)="setStep('document_uploads')">
-                <span class="material-symbols-outlined">arrow_back</span>
-                Back
-              </button>
-              <button class="btn btn-primary" type="button" (click)="submitFinalPacket()" [disabled]="!packetReady">
-                <span class="material-symbols-outlined">send</span>
-                Submit Onboarding Packet
-              </button>
-            </div>
+                <section class="onboard-panel">
+                  <div class="onboard-panel-header">
+                    <span class="material-symbols-outlined">upload_file</span>
+                    <div>
+                      <h3 class="onboard-section-title">Document Uploads</h3>
+                      <p>{{ getSectionStatus('document_uploads') }}</p>
+                    </div>
+                  </div>
+                  <div class="review-consent-list">
+                    <div *ngFor="let d of documentTypes" class="review-consent-item">
+                      <span class="material-symbols-outlined"
+                            [class.review-check]="uploadedDocuments.has(d.key)"
+                            [class.review-pending]="!uploadedDocuments.has(d.key)">
+                        {{ uploadedDocuments.has(d.key) ? 'check_circle' : 'radio_button_unchecked' }}
+                      </span>
+                      <span>{{ d.label }}{{ d.required ? '' : ' (optional)' }}</span>
+                    </div>
+                  </div>
+                  <button class="btn btn-secondary review-edit-btn" type="button"
+                          (click)="setStep('document_uploads')" *ngIf="!requiredDocsComplete">
+                    <span class="material-symbols-outlined">edit</span> Upload Documents
+                  </button>
+                </section>
+              </div>
+
+              <div class="onboard-actions onboard-actions-split">
+                <button class="btn btn-secondary" type="button" (click)="setStep('document_uploads')">
+                  <span class="material-symbols-outlined">arrow_back</span>
+                  Back
+                </button>
+                <button class="btn btn-primary" type="button"
+                        (click)="submitFinalPacket()"
+                        [disabled]="!packetReady || packetSubmitting">
+                  <span class="material-symbols-outlined">{{ packetSubmitting ? 'hourglass_empty' : 'send' }}</span>
+                  {{ packetSubmitting ? 'Submitting...' : 'Submit Onboarding Packet' }}
+                </button>
+              </div>
+            </ng-container>
           </div>
         </section>
       </div>

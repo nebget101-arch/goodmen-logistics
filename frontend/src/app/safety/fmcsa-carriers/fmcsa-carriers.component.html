@@ -1,0 +1,177 @@
+<div class="carriers-container">
+  <!-- Header Row -->
+  <div class="header-row">
+    <div>
+      <h2>Monitored Carriers</h2>
+      <p class="page-sub">FMCSA safety monitoring for your carrier fleet</p>
+    </div>
+    <button
+      *ngIf="canManage()"
+      class="btn btn-primary"
+      (click)="openAddForm()"
+    >
+      <span class="material-symbols-outlined">add</span>
+      Add Carrier
+    </button>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error" class="alert-error">
+    {{ error }}
+    <button class="btn btn-ghost btn-sm" (click)="error = ''">Dismiss</button>
+  </div>
+
+  <!-- Add Carrier Form -->
+  <div *ngIf="showAddForm" class="add-form">
+    <div class="add-form-header">
+      <h3>Add Carrier by DOT Number</h3>
+      <button class="close-btn" (click)="closeAddForm()">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <div class="add-form-body">
+      <div class="lookup-row">
+        <input
+          type="text"
+          class="form-input lookup-input"
+          placeholder="Enter DOT Number"
+          [(ngModel)]="lookupDotNumber"
+          (keyup.enter)="lookupCarrier()"
+        />
+        <button
+          class="btn btn-primary"
+          [disabled]="lookupLoading || !lookupDotNumber.trim()"
+          (click)="lookupCarrier()"
+        >
+          <span *ngIf="lookupLoading" class="spinner"></span>
+          {{ lookupLoading ? 'Looking up...' : 'Lookup' }}
+        </button>
+      </div>
+
+      <!-- Lookup Result -->
+      <div *ngIf="lookupResult && lookupResult.found" class="lookup-result">
+        <div class="lookup-result-grid">
+          <div class="lookup-field">
+            <span class="lookup-label">Legal Name</span>
+            <span class="lookup-value">{{ lookupResult.legalName || '-' }}</span>
+          </div>
+          <div class="lookup-field">
+            <span class="lookup-label">DBA</span>
+            <span class="lookup-value">{{ lookupResult.dbaName || '-' }}</span>
+          </div>
+          <div class="lookup-field">
+            <span class="lookup-label">MC Number</span>
+            <span class="lookup-value">{{ lookupResult.mcNumber || '-' }}</span>
+          </div>
+          <div class="lookup-field">
+            <span class="lookup-label">Status</span>
+            <span class="lookup-value">{{ lookupResult.status || '-' }}</span>
+          </div>
+          <div class="lookup-field">
+            <span class="lookup-label">Safety Rating</span>
+            <span class="lookup-value">{{ lookupResult.safetyRating || '-' }}</span>
+          </div>
+        </div>
+        <div class="lookup-actions">
+          <button
+            class="btn btn-primary"
+            [disabled]="addLoading"
+            (click)="addCarrier()"
+          >
+            <span *ngIf="addLoading" class="spinner"></span>
+            {{ addLoading ? 'Adding...' : 'Add to Monitoring' }}
+          </button>
+          <button class="btn btn-secondary" (click)="closeAddForm()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Not Found -->
+      <div *ngIf="lookupResult && !lookupResult.found" class="lookup-not-found">
+        <span class="material-symbols-outlined">search_off</span>
+        <p>Carrier not found for DOT# {{ lookupDotNumber }}</p>
+        <p class="lookup-not-found-hint" *ngIf="lookupResult.error">{{ lookupResult.error }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading-state">
+    <span class="spinner"></span> Loading carriers...
+  </div>
+
+  <!-- Carriers Table -->
+  <div *ngIf="!loading" class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>DOT Number</th>
+          <th>Legal Name</th>
+          <th>MC Number</th>
+          <th>Source</th>
+          <th>Status</th>
+          <th class="action-cell">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let carrier of carriers"
+          class="data-row"
+          (click)="navigateToDetail(carrier.id)"
+        >
+          <td class="dot-number">{{ carrier.dot_number }}</td>
+          <td>{{ carrier.legal_name }}</td>
+          <td>{{ carrier.mc_number || '-' }}</td>
+          <td>
+            <span
+              class="badge"
+              [ngClass]="carrier.source === 'operating_entity' ? 'badge-oe' : 'badge-manual'"
+            >
+              {{ sourceLabel(carrier.source) }}
+            </span>
+          </td>
+          <td>
+            <span
+              class="badge"
+              [ngClass]="carrier.monitoring_active ? 'badge-active' : 'badge-inactive'"
+            >
+              {{ carrier.monitoring_active ? 'Active' : 'Inactive' }}
+            </span>
+          </td>
+          <td class="action-cell" (click)="$event.stopPropagation()">
+            <button
+              class="btn btn-ghost btn-sm"
+              title="View details"
+              (click)="navigateToDetail(carrier.id)"
+            >
+              <span class="material-symbols-outlined">visibility</span>
+            </button>
+            <button
+              *ngIf="canManage()"
+              class="btn btn-ghost btn-sm btn-danger-ghost"
+              title="Remove carrier"
+              (click)="removeCarrier(carrier.id)"
+            >
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </td>
+        </tr>
+        <tr *ngIf="carriers.length === 0">
+          <td colspan="6" class="empty-row">
+            <div class="empty-state">
+              <span class="material-symbols-outlined empty-icon">local_shipping</span>
+              <p>No carriers are being monitored</p>
+              <button
+                *ngIf="canManage()"
+                class="btn btn-primary btn-sm"
+                (click)="openAddForm()"
+              >
+                Add your first carrier
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -1,0 +1,146 @@
+<div *ngIf="loading" class="loading-state">Loading FMCSA dashboard...</div>
+<div *ngIf="error" class="alert-error">{{ error }}</div>
+
+<ng-container *ngIf="!loading && dashboard">
+  <!-- Summary Cards -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon" style="color: #38bdf8">local_shipping</span>
+      <span class="kpi-label">Monitored Carriers</span>
+      <span class="kpi-value">{{ dashboard!.total_carriers }}</span>
+      <span class="kpi-sub">Total active monitoring</span>
+    </div>
+
+    <div class="kpi-card" [class.kpi-warn]="dashboard!.alerts_count > 0">
+      <span class="material-symbols-outlined kpi-icon">notification_important</span>
+      <span class="kpi-label">Active Alerts</span>
+      <span class="kpi-value" [style.color]="dashboard!.alerts_count > 0 ? '#ef4444' : '#f1f5f9'">
+        {{ dashboard!.alerts_count }}
+      </span>
+      <span class="kpi-sub">Requires attention</span>
+    </div>
+
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon" style="color: #38bdf8">schedule</span>
+      <span class="kpi-label">Last Scrape</span>
+      <span class="kpi-value kpi-value-sm">
+        <ng-container *ngIf="dashboard!.last_scrape_job?.completed_at; else neverScraped">
+          {{ dashboard!.last_scrape_job!.completed_at | date:'short' }}
+        </ng-container>
+        <ng-template #neverScraped>Never</ng-template>
+      </span>
+      <span class="kpi-sub" *ngIf="dashboard!.last_scrape_job">
+        Status: {{ dashboard!.last_scrape_job!.status }}
+      </span>
+    </div>
+
+    <div class="kpi-card kpi-action" *ngIf="canScrape()">
+      <span class="material-symbols-outlined kpi-icon" style="color: #38bdf8">sync</span>
+      <span class="kpi-label">Data Refresh</span>
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="scraping"
+        (click)="triggerScrape()">
+        <span class="material-symbols-outlined spinner-icon" *ngIf="scraping">progress_activity</span>
+        <span class="material-symbols-outlined" *ngIf="!scraping">refresh</span>
+        {{ scraping ? 'Scraping...' : 'Scrape Now' }}
+      </button>
+      <span class="kpi-sub">Refresh FMCSA data</span>
+    </div>
+  </div>
+
+  <!-- SMS Score Heatmap -->
+  <div class="info-panel heatmap-section">
+    <h3>SMS Score Heatmap</h3>
+    <div class="heatmap-scroll">
+      <table class="heatmap-grid">
+        <thead>
+          <tr>
+            <th class="carrier-col">Carrier</th>
+            <th>Unsafe Driving</th>
+            <th>HOS</th>
+            <th>Vehicle Maint.</th>
+            <th>Controlled Sub.</th>
+            <th>Driver Fitness</th>
+            <th>Crash Indicator</th>
+            <th>Hazmat</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let carrier of dashboard!.carriers"
+            class="heatmap-row"
+            (click)="navigateToCarrier(carrier.id)">
+            <td class="carrier-col">
+              <span class="carrier-name">{{ carrier.legal_name }}</span>
+              <span class="carrier-dot">DOT {{ carrier.dot_number }}</span>
+            </td>
+            <td>
+              <span class="score-cell" [ngClass]="getScoreClass(carrier.unsafe_driving_score)">
+                {{ carrier.unsafe_driving_score !== null ? carrier.unsafe_driving_score : 'N/A' }}
+              </span>
+            </td>
+            <td>
+              <span class="score-cell" [ngClass]="getScoreClass(carrier.hos_compliance_score)">
+                {{ carrier.hos_compliance_score !== null ? carrier.hos_compliance_score : 'N/A' }}
+              </span>
+            </td>
+            <td>
+              <span class="score-cell" [ngClass]="getScoreClass(carrier.vehicle_maintenance_score)">
+                {{ carrier.vehicle_maintenance_score !== null ? carrier.vehicle_maintenance_score : 'N/A' }}
+              </span>
+            </td>
+            <td>
+              <span class="score-cell" [ngClass]="getScoreClass(carrier.controlled_substances_score)">
+                {{ carrier.controlled_substances_score !== null ? carrier.controlled_substances_score : 'N/A' }}
+              </span>
+            </td>
+            <td>
+              <span class="score-cell" [ngClass]="getScoreClass(carrier.driver_fitness_score)">
+                {{ carrier.driver_fitness_score !== null ? carrier.driver_fitness_score : 'N/A' }}
+              </span>
+            </td>
+            <td>
+              <span class="score-cell" [ngClass]="getScoreClass(carrier.crash_indicator_score)">
+                {{ carrier.crash_indicator_score !== null ? carrier.crash_indicator_score : 'N/A' }}
+              </span>
+            </td>
+            <td>
+              <span class="score-cell" [ngClass]="getScoreClass(carrier.hazmat_score)">
+                {{ carrier.hazmat_score !== null ? carrier.hazmat_score : 'N/A' }}
+              </span>
+            </td>
+          </tr>
+          <tr *ngIf="dashboard!.carriers.length === 0">
+            <td colspan="8" class="empty-state">No monitored carriers found.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alerts Panel -->
+  <div class="info-panel alerts-section" *ngIf="dashboard!.alerts.length > 0">
+    <h3>Active Alerts</h3>
+    <div class="alerts-panel">
+      <button
+        type="button"
+        class="alert-item"
+        *ngFor="let alert of dashboard!.alerts"
+        [ngClass]="getAlertSeverityClass(alert.type)"
+        (click)="navigateToCarrier(alert.carrier_id)">
+        <span class="material-symbols-outlined alert-icon">{{ getAlertIcon(alert.type) }}</span>
+        <div class="alert-content">
+          <span class="alert-carrier">{{ alert.carrier_name }}</span>
+          <span class="alert-type">{{ formatAlertType(alert.type) }}</span>
+          <span class="alert-detail" *ngIf="alert.detail">{{ alert.detail }}</span>
+          <span class="alert-detail" *ngIf="alert.category && alert.score">
+            {{ alert.category }}: {{ alert.score }}
+          </span>
+        </div>
+        <span class="alert-severity-dot"></span>
+      </button>
+    </div>
+  </div>
+</ng-container>

@@ -174,6 +174,19 @@ export class DriversComponent implements OnInit, OnDestroy {
   autoPullingEmpApp = false;
   autoPullEmpAppError = '';
 
+  // FN-264: MVR report upload and extracted data
+  mvrData: {
+    license_status?: string;
+    license_class?: string;
+    violations_count?: number;
+    accidents_count?: number;
+    points_total?: number;
+    report_date?: string;
+    document_id?: string;
+  } | null = null;
+  mvrDataLoading = false;
+  mvrUploadProgress = false;
+
   // Dynamic DQF requirements
   dqfRequirements: any[] = [];
   dqfRequirementsLoading = false;
@@ -606,6 +619,7 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.loadDriverSafetySummary(driver.id);
     this.loadDrugAlcoholTests(driver.id);
     this.loadPrehireDocuments(driver.id);
+    this.loadMvrData(driver.id);
   }
 
   /** Load pre-hire documents for a driver (FN-237) */
@@ -899,19 +913,23 @@ export class DriversComponent implements OnInit, OnDestroy {
         'employment_application_submitted',
         'pre_employment_drug_test_completed',
         'clearinghouse_full_query_consent',
-        'road_test_certificate',
         'medical_examiners_certificate',
-        'nrcme_verification',
         'fcra_authorization',
         'fcra_disclosure_signed',
         'fcra_authorization_signed',
         'release_of_info_dq_safety_signed',
         'drug_alcohol_release_signed',
         'consent_forms_signed',
-        'release_of_info_signed',
         'mvr_disclosure_signed',
         'mvr_authorization_signed',
-        'mvr_release_of_liability_signed'
+        'mvr_release_of_liability_signed',
+        // FN-261: Moved from Ongoing to Pre-Hire Documents
+        'driver_license_front_on_file',
+        'driver_license_back_on_file',
+        'medical_card_front_on_file',
+        // FN-269: Removed medical_card_back_on_file (medical card is usually one page)
+        'psp_authorization_document',
+        'mvr_report_document'
       ],
       pre_hire_checklist: [
         'employment_application_completed',
@@ -923,28 +941,37 @@ export class DriversComponent implements OnInit, OnDestroy {
         'mvr_authorization_signed',
         'pre_employment_drug_test_submitted',
         'pre_employment_drug_test_result_received',
-        'psp_consent'
+        'psp_consent',
+        // FN-261: Moved from Other to Pre-Hire Checklist
+        'pre_employment_drug_test_scheduled',
+        // FN-264: MVR data received checklist item
+        'mvr_data_received',
+        // FN-269: Medical card received (auto-completes on Medical Examiner's Certificate upload)
+        'medical_card_received',
+        // FN-269: Consent received tracking items
+        'fcra_disclosure_received',
+        'fcra_authorization_received',
+        'release_of_info_dq_safety_received',
+        'drug_alcohol_release_received',
+        'mvr_disclosure_received',
+        'mvr_release_of_liability_received'
       ],
       within_30_days: [
         'mvr_all_states',
         'previous_employer_investigation',
-        'driver_investigation_history'
-      ],
-      ongoing: [
-        'driver_license_front_on_file',
-        'driver_license_back_on_file',
-        'medical_card_front_on_file',
-        'medical_card_back_on_file',
-        'green_card_on_file',
-        'eldt_certificate',
-        'medical_variance_spe'
+        'driver_investigation_history',
+        // FN-261: New requirement
+        'employment_verification_received'
       ],
       annual: [
         'annual_mvr_inquiry',
         'annual_driving_record_review',
+        // FN-261: Moved from Other to Annual Requirements
         'annual_clearinghouse_limited_query',
         'medical_cert_renewal'
-      ]
+      ],
+      // FN-270: Other Documents category removed — green_card_on_file excluded
+      other: []
     };
   }
 
@@ -966,7 +993,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       driver_license_front_on_file: '49 CFR 391.51(b)(2)',
       driver_license_back_on_file: '49 CFR 391.51(b)(2)',
       medical_card_front_on_file: '49 CFR 391.51(b)(7)',
-      medical_card_back_on_file: '49 CFR 391.51(b)(7)',
+      // FN-269: Removed medical_card_back_on_file
       green_card_on_file: '8 CFR 274a.2',
       eldt_certificate: '49 CFR 380.609',
       medical_variance_spe: '49 CFR 391.49',
@@ -984,6 +1011,8 @@ export class DriversComponent implements OnInit, OnDestroy {
       pre_employment_drug_test_submitted: '49 CFR 382.301',
       pre_employment_drug_test_result_received: '49 CFR 382.301',
       psp_consent: '49 CFR 391.23(i)',
+      psp_authorization_document: 'FMCSA PSP / 49 C.F.R. §383.5',
+      mvr_report_document: '49 CFR 391.23(a)(1)',
       // FN-236: Pre-hire consent form CFR references
       fcra_disclosure_signed: '15 U.S.C. \u00A7 1681',
       fcra_authorization_signed: '15 U.S.C. \u00A7 1681b',
@@ -991,7 +1020,21 @@ export class DriversComponent implements OnInit, OnDestroy {
       drug_alcohol_release_signed: '49 CFR Part 40',
       mvr_disclosure_signed: '15 U.S.C. \u00A71681b(b)(2)',
       mvr_release_of_liability_signed: '15 U.S.C. \u00A71681b(b)(2)',
-      employment_application_submitted: '49 CFR 391.21'
+      employment_application_submitted: '49 CFR 391.21',
+      // FN-261: New requirement CFR references
+      pre_employment_drug_test_scheduled: '49 CFR 382.301',
+      employment_verification_received: '49 CFR 391.23(d)',
+      // FN-264: MVR data received
+      mvr_data_received: '49 CFR 391.23(a)(1)',
+      // FN-269: Medical card received
+      medical_card_received: '49 CFR 391.43',
+      // FN-269: Consent received tracking CFR references
+      fcra_disclosure_received: '15 U.S.C. \u00A7 1681',
+      fcra_authorization_received: '15 U.S.C. \u00A7 1681b',
+      release_of_info_dq_safety_received: '49 CFR \u00A7391.23',
+      drug_alcohol_release_received: '49 CFR Part 40',
+      mvr_disclosure_received: '15 U.S.C. \u00A71681b(b)(2)',
+      mvr_release_of_liability_received: '15 U.S.C. \u00A71681b(b)(2)'
     };
     return refs[key] || '';
   }
@@ -999,12 +1042,13 @@ export class DriversComponent implements OnInit, OnDestroy {
   /** Build categories from flat requirements array */
   buildDqfCategories(): void {
     const categoryMap = this.getCategoryKeyMap();
+    // FN-261: Removed "Ongoing Documents" category; added "Other Documents"
     const categoryDefs: { key: string; label: string }[] = [
       { key: 'pre_hire', label: 'Pre-Hire Documents (Before Driving)' },
       { key: 'pre_hire_checklist', label: 'Pre-Hire Checklist' },
       { key: 'within_30_days', label: 'Within 30 Days of Hire' },
-      { key: 'ongoing', label: 'Ongoing Documents' },
-      { key: 'annual', label: 'Annual Requirements' }
+      { key: 'annual', label: 'Annual Requirements' },
+      { key: 'other', label: 'Other Documents' }
     ];
 
     const assignedKeys = new Set<string>();
@@ -1022,27 +1066,118 @@ export class DriversComponent implements OnInit, OnDestroy {
         requirements: reqs,
         expanded: hasIncomplete
       };
-    });
+    }).filter(cat => cat.requirements.length > 0); // FN-261: Skip empty categories
 
-    // Any remaining requirements not in a category go into "Other"
+    // Any remaining requirements not in a named category go into "Other Documents"
     const uncategorized = this.dqfRequirements.filter(r => !assignedKeys.has(r.key));
     if (uncategorized.length > 0) {
-      this.dqfCategories.push({
-        key: 'other',
-        label: 'Other Requirements',
-        requirements: uncategorized,
-        expanded: uncategorized.some(r => r.status !== 'complete')
-      });
+      const existingOther = this.dqfCategories.find(c => c.key === 'other');
+      if (existingOther) {
+        existingOther.requirements.push(...uncategorized);
+        existingOther.expanded = existingOther.requirements.some(r => r.status !== 'complete');
+      } else {
+        this.dqfCategories.push({
+          key: 'other',
+          label: 'Other Documents',
+          requirements: uncategorized,
+          expanded: uncategorized.some(r => r.status !== 'complete')
+        });
+      }
+    }
+
+    // FN-261: Apply warning overrides and recalculate DQF completeness
+    this.applyDqfWarningOverrides();
+    this.recalculateDqfCompleteness();
+  }
+
+  /**
+   * FN-261: Apply warning status overrides for time-sensitive categories.
+   * - "Within 30 Days" items: show WARNING if still within 30 days of hire.
+   * - "Annual Requirements": show WARNING if 10-12 months since hire, ERROR if 12+ months.
+   */
+  private applyDqfWarningOverrides(): void {
+    if (!this.selectedDriver?.hireDate) return;
+
+    const hireDate = new Date(this.selectedDriver.hireDate);
+    if (isNaN(hireDate.getTime())) return;
+
+    const now = new Date();
+    const thirtyDaysAfterHire = new Date(hireDate);
+    thirtyDaysAfterHire.setDate(thirtyDaysAfterHire.getDate() + 30);
+
+    // Within 30 Days: if still within the 30-day window, mark incomplete items as "warning"
+    const within30Cat = this.dqfCategories.find(c => c.key === 'within_30_days');
+    if (within30Cat && thirtyDaysAfterHire > now) {
+      for (const req of within30Cat.requirements) {
+        if (req.status !== 'complete') {
+          req._dqfOverrideStatus = 'warning';
+        }
+      }
+    }
+
+    // Annual Requirements: determine months since hire
+    const monthsSinceHire = (now.getFullYear() - hireDate.getFullYear()) * 12
+      + (now.getMonth() - hireDate.getMonth());
+
+    const annualCat = this.dqfCategories.find(c => c.key === 'annual');
+    if (annualCat) {
+      for (const req of annualCat.requirements) {
+        if (req.status === 'complete') continue;
+        if (monthsSinceHire < 10) {
+          // Not yet due: exclude from calc, no special badge needed
+          req._dqfExclude = true;
+        } else if (monthsSinceHire >= 10 && monthsSinceHire < 12) {
+          // Due soon: include in calc, show warning badge
+          req._dqfOverrideStatus = 'warning';
+        }
+        // 12+ months: stays as-is (missing/error), included in calc
+      }
     }
   }
 
+  /**
+   * FN-261: Recalculate DQF completeness excluding:
+   * - "Other Documents" category entirely
+   * - Items flagged with _dqfExclude (e.g., annual items not yet due)
+   * - "Within 30 Days" items still in warning window
+   */
+  private recalculateDqfCompleteness(): void {
+    let total = 0;
+    let done = 0;
+
+    for (const cat of this.dqfCategories) {
+      // FN-261: Exclude "Other Documents" from completeness calc
+      if (cat.key === 'other') continue;
+
+      for (const req of cat.requirements) {
+        // FN-261: Exclude items flagged for exclusion
+        if (req._dqfExclude) continue;
+        // FN-261: Exclude "Within 30 Days" items that are in warning period
+        if (cat.key === 'within_30_days' && req._dqfOverrideStatus === 'warning') continue;
+
+        const weight = req.weight || 1;
+        total += weight;
+        if (req.status === 'complete') {
+          done += weight;
+        }
+      }
+    }
+
+    this.dqfCompleteness = total > 0 ? Math.round((done / total) * 100) : 0;
+  }
+
   getCategoryCompletedCount(category: { requirements: any[] }): number {
-    return category.requirements.filter(r => r.status === 'complete').length;
+    return category.requirements.filter((r: Record<string, unknown>) =>
+      r['status'] === 'complete' && !r['_dqfExclude']
+    ).length;
   }
 
   getCategoryCompletionPct(category: { requirements: any[] }): number {
-    if (category.requirements.length === 0) return 100;
-    return Math.round((this.getCategoryCompletedCount(category) / category.requirements.length) * 100);
+    // FN-261: Exclude items flagged for exclusion from the percentage
+    const countable = category.requirements.filter((r: Record<string, unknown>) => !r['_dqfExclude']);
+    if (countable.length === 0) return 100;
+    const done = countable.filter((r: Record<string, unknown>) => r['status'] === 'complete').length;
+    return Math.round((done / countable.length) * 100);
   }
 
   toggleCategory(category: { expanded: boolean }): void {
@@ -1052,12 +1187,17 @@ export class DriversComponent implements OnInit, OnDestroy {
   /** FN-258: Switch active DQF tab */
   setActiveDqfTab(tabKey: string): void {
     this.activeDqfTab = tabKey;
+    if (tabKey === 'pre_hire' && this.selectedDriver?.id) {
+      this.loadPrehireDocuments(this.selectedDriver.id);
+    }
   }
 
   /** FN-258: Return "done/total" string for tab badge */
   getCategoryCompletionCount(cat: { requirements: any[] }): string {
-    const total = cat.requirements?.length || 0;
-    const done = cat.requirements?.filter((r: any) => r.status === 'complete').length || 0;
+    // FN-261: Exclude items flagged for exclusion from counts
+    const countable = cat.requirements?.filter((r: Record<string, unknown>) => !r['_dqfExclude']) || [];
+    const total = countable.length;
+    const done = countable.filter((r: Record<string, unknown>) => r['status'] === 'complete').length;
     return `${done}/${total}`;
   }
 
@@ -1067,9 +1207,15 @@ export class DriversComponent implements OnInit, OnDestroy {
       case 'received':
       case 'sent': return 'dqf-chip-in-progress';
       case 'review_required': return 'dqf-chip-review';
+      case 'warning': return 'dqf-chip-warning'; // FN-261
       case 'n/a': return 'dqf-chip-na';
       default: return 'dqf-chip-missing';
     }
+  }
+
+  /** FN-261: Resolve display status considering override */
+  getEffectiveStatus(req: Record<string, unknown>): string {
+    return (req['_dqfOverrideStatus'] as string) || (req['status'] as string) || 'missing';
   }
 
   getStatusChipLabel(status: string): string {
@@ -1078,6 +1224,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       case 'received': return 'In Progress';
       case 'sent': return 'In Progress';
       case 'review_required': return 'Review Required';
+      case 'warning': return 'Due Soon'; // FN-261
       case 'n/a': return 'N/A';
       default: return 'Missing';
     }
@@ -1131,11 +1278,7 @@ export class DriversComponent implements OnInit, OnDestroy {
           this.dqfRequirements[idx].status = newStatus;
         }
         this.updateingRequirementKey = null;
-        // Refresh completeness
-        const total = this.dqfRequirements.reduce((sum, r) => sum + (r.weight || 1), 0);
-        const done = this.dqfRequirements.filter(r => r.status === 'complete').reduce((sum, r) => sum + (r.weight || 1), 0);
-        this.dqfCompleteness = total > 0 ? Math.round((done / total) * 100) : 0;
-        // Rebuild categories to reflect new status
+        // FN-261: Rebuild categories (which also recalculates completeness with exclusions)
         this.buildDqfCategories();
         // Re-derive clearance status
         this.clearanceStatus = this.deriveClearanceFromRequirements();
@@ -1181,9 +1324,7 @@ export class DriversComponent implements OnInit, OnDestroy {
         }
         this.updateingRequirementKey = null;
         this.dqfDateInputs[requirement.key] = '';
-        const total = this.dqfRequirements.reduce((sum, r) => sum + (r.weight || 1), 0);
-        const done = this.dqfRequirements.filter(r => r.status === 'complete').reduce((sum, r) => sum + (r.weight || 1), 0);
-        this.dqfCompleteness = total > 0 ? Math.round((done / total) * 100) : 0;
+        // FN-261: Rebuild categories (which also recalculates completeness with exclusions)
         this.buildDqfCategories();
         this.clearanceStatus = this.deriveClearanceFromRequirements();
       },
@@ -1198,7 +1339,8 @@ export class DriversComponent implements OnInit, OnDestroy {
   isDqfDocumentReq(key: string): boolean {
     const docKeys = [
       'driver_license_front_on_file', 'driver_license_back_on_file',
-      'medical_card_front_on_file', 'medical_card_back_on_file',
+      'medical_card_front_on_file',
+      // FN-269: Removed medical_card_back_on_file
       'green_card_on_file', 'pre_employment_drug_test_completed',
       'release_of_info_signed'
     ];
@@ -1230,6 +1372,48 @@ export class DriversComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** FN-264: Upload an MVR report PDF and store extracted data */
+  uploadMvrReport(driverId: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input?.files?.[0];
+    if (!file) return;
+
+    this.mvrUploadProgress = true;
+    this.apiService.uploadMvrReport(driverId, file).subscribe({
+      next: (response: Record<string, unknown>) => {
+        this.mvrUploadProgress = false;
+        this.mvrData = (response?.['mvr_data'] as typeof this.mvrData) || null;
+        input.value = '';
+        // Reload DQF status to reflect completed requirement
+        if (this.selectedDriver) {
+          this.loadDQFStatus(this.selectedDriver);
+        }
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.mvrUploadProgress = false;
+        input.value = '';
+        console.error('MVR upload failed:', err);
+        alert(err?.error?.message || 'Failed to upload MVR report. Please try again.');
+      }
+    });
+  }
+
+  /** FN-264: Load previously extracted MVR data for a driver */
+  loadMvrData(driverId: string): void {
+    this.mvrDataLoading = true;
+    this.mvrData = null;
+    this.apiService.getMvrData(driverId).subscribe({
+      next: (data: unknown) => {
+        this.mvrData = (data as typeof this.mvrData) || null;
+        this.mvrDataLoading = false;
+      },
+      error: () => {
+        this.mvrData = null;
+        this.mvrDataLoading = false;
+      }
+    });
+  }
+
   onDQFFileSelectedForKey(event: any, requirementKey: string): void {
     if (!this.canManageDrivers) return;
 
@@ -1240,7 +1424,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       driver_license_front_on_file: 'driver_license_front',
       driver_license_back_on_file: 'driver_license_back',
       medical_card_front_on_file: 'medical_card_front',
-      medical_card_back_on_file: 'medical_card_back',
+      // FN-269: Removed medical_card_back_on_file
       green_card_on_file: 'green_card',
       pre_employment_drug_test_completed: 'drug_test_result',
       release_of_info_signed: 'release_of_info',
@@ -1340,23 +1524,39 @@ export class DriversComponent implements OnInit, OnDestroy {
     }
 
     this.saving = true;
-    this.apiService.updateDriver(this.selectedDriver.id, { 
-      dqfCompleteness: dqfCompleteness,
-      clearinghouseStatus: clearinghouseStatus,
-      status: status
-    }).subscribe({
-      next: (updatedDriver) => {
-        const index = this.drivers.findIndex(d => d.id === updatedDriver.id);
-        if (index !== -1) {
-          this.drivers[index] = updatedDriver;
+    // Recalculate DQF completeness on the server first, then update driver status
+    this.apiService.recalculateDqfCompleteness(this.selectedDriver.id).subscribe({
+      next: (recalcRes: any) => {
+        const serverCompleteness = recalcRes?.completeness ?? dqfCompleteness;
+        // Re-evaluate status based on server-calculated completeness
+        if (serverCompleteness !== 100) {
+          status = 'inactive';
+          statusMessage = 'Status set to INACTIVE: DQF must be 100% complete. ';
         }
-        this.closeDQFForm();
-        this.saving = false;
-        alert(`${statusMessage}DQF updated! Completeness: ${dqfCompleteness}% (${completedItems}/${totalItems} items complete)\nClearinghouse Status: ${clearinghouseStatus}`);
+        this.apiService.updateDriver(this.selectedDriver.id, {
+          clearinghouseStatus: clearinghouseStatus,
+          status: status
+        }).subscribe({
+          next: (updatedDriver) => {
+            updatedDriver.dqfCompleteness = serverCompleteness;
+            const index = this.drivers.findIndex(d => d.id === updatedDriver.id);
+            if (index !== -1) {
+              this.drivers[index] = updatedDriver;
+            }
+            this.closeDQFForm();
+            this.saving = false;
+            alert(`${statusMessage}DQF updated! Completeness: ${serverCompleteness}% (${completedItems}/${totalItems} items complete)\nClearinghouse Status: ${clearinghouseStatus}`);
+          },
+          error: (error) => {
+            console.error('Error updating driver:', error);
+            alert('Failed to update DQF. Please try again.');
+            this.saving = false;
+          }
+        });
       },
       error: (error) => {
-        console.error('Error updating DQF:', error);
-        alert('Failed to update DQF. Please try again.');
+        console.error('Error recalculating DQF:', error);
+        alert('Failed to recalculate DQF. Please try again.');
         this.saving = false;
       }
     });
@@ -1513,6 +1713,17 @@ export class DriversComponent implements OnInit, OnDestroy {
     if (!form.test_type || !form.substance_type) {
       alert('Please fill in all required fields (Test Type, Substance Type).');
       return;
+    }
+
+    // Validate: if a result is selected, require collection_date, test_date, and collection_site
+    if (form.result) {
+      const missing: string[] = [];
+      if (!form.collection_date) missing.push('Collection Date');
+      if (!form.collection_site) missing.push('Collection Site');
+      if (missing.length > 0) {
+        alert(`When a result is selected, the following fields are required: ${missing.join(', ')}`);
+        return;
+      }
     }
 
     // FN-225: Validate attachment required when result is selected

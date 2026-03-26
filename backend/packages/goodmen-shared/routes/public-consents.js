@@ -62,7 +62,7 @@ async function loadPacketWithToken(packetId, token) {
 /**
  * Load driver and operating entity details for template placeholder replacement.
  */
-async function loadDriverAndEntity(driverId) {
+async function loadDriverAndEntity(driverId, packetOperatingEntityId) {
   const driverRes = await query(
     'SELECT id, first_name, last_name, operating_entity_id FROM drivers WHERE id = $1',
     [driverId]
@@ -70,10 +70,12 @@ async function loadDriverAndEntity(driverId) {
   const driver = driverRes.rows[0] || null;
   let operatingEntity = null;
 
-  if (driver && driver.operating_entity_id) {
+  // Try driver's OE first, then packet's OE as fallback
+  const oeId = (driver && driver.operating_entity_id) || packetOperatingEntityId || null;
+  if (oeId) {
     const oeRes = await query(
       'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1',
-      [driver.operating_entity_id]
+      [oeId]
     );
     operatingEntity = oeRes.rows[0] || null;
   }
@@ -165,7 +167,7 @@ router.get('/:packetId/:consentKey', rateLimited, async (req, res) => {
     }
 
     // Load driver and operating entity for placeholder replacement
-    const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id);
+    const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id, packet.operating_entity_id);
 
     // Replace placeholders in template body text
     const renderedBodyText = replaceTemplatePlaceholders(template.body_text, { driver, operatingEntity });
@@ -284,7 +286,7 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
     let documentId = null;
     try {
       const template = await getTemplateByKey(consentKey);
-      const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id);
+      const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id, packet.operating_entity_id);
 
       const companyName = operatingEntity?.name || operatingEntity?.legal_name || 'Company Name';
       const companyAddress = operatingEntity
@@ -323,20 +325,27 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
       documentId = doc.id;
 
       // Update DQF requirement with evidence document ID
+      // Maps consent key → array of DQF requirement keys to mark complete
       const CONSENT_DQF_MAP = {
-        clearinghouse_full: 'clearinghouse_consent_received',
-        release_of_information: 'release_of_info_signed',
-        fcra_authorization: 'fcra_authorization',
-        psp_consent: 'psp_consent',
-        drug_alcohol_release: 'drug_alcohol_release_signed',
+        clearinghouse_full: ['clearinghouse_consent_received'],
+        release_of_information: ['release_of_info_signed', 'release_of_info_dq_safety_received'],
+        fcra_disclosure: ['fcra_disclosure_received'],
+        fcra_authorization: ['fcra_authorization', 'fcra_authorization_received'],
+        psp_consent: ['psp_consent', 'psp_authorization_document'],
+        drug_alcohol_release: ['drug_alcohol_release_signed', 'drug_alcohol_release_received'],
         // FN-238: MVR consent form DQF mappings
-        mvr_disclosure: 'mvr_disclosure_signed',
-        mvr_authorization: 'mvr_authorization_signed',
-        mvr_release_of_liability: 'mvr_release_of_liability_signed'
+        // FN-269: Added consent received tracking items
+        mvr_disclosure: ['mvr_disclosure_signed', 'mvr_disclosure_received'],
+        mvr_authorization: ['mvr_authorization_signed'],
+        mvr_release_of_liability: ['mvr_release_of_liability_signed', 'mvr_release_of_liability_received']
       };
-      const dqfKey = CONSENT_DQF_MAP[consentKey];
-      if (dqfKey && documentId) {
-        await upsertRequirementStatus(packet.driver_id, dqfKey, 'complete', documentId);
+      const dqfKeys = CONSENT_DQF_MAP[consentKey] || [];
+      for (const dqfKey of dqfKeys) {
+        if (documentId) {
+          await upsertRequirementStatus(packet.driver_id, dqfKey, 'complete', documentId);
+        }
+      }
+      if (dqfKeys.length > 0) {
         await computeAndUpdateDqfCompleteness(packet.driver_id);
       }
     } catch (pdfErr) {
