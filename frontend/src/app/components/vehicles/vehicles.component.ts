@@ -379,12 +379,17 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   }
 
   openAddVehicleForm(): void {
+    console.log('[VEHICLE] openAddVehicleForm called, canCreate:', this.canCreateVehicle());
     try {
-      if (!this.canCreateVehicle()) return;
+      if (!this.canCreateVehicle()) {
+        console.warn('[VEHICLE] Cannot create vehicle — permission denied');
+        return;
+      }
       this.selectedVehicle = null;
       this.showVehicleForm = true;
+      console.log('[VEHICLE] showVehicleForm set to:', this.showVehicleForm);
     } catch (err) {
-      console.error('Error opening add vehicle form:', err);
+      console.error('[VEHICLE] Error opening add vehicle form:', err);
       this.showVehicleForm = true;
     }
   }
