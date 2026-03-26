@@ -302,6 +302,7 @@ router.get('/documents/:id/download', async (req, res) => {
       `SELECT d.file_name,
               d.mime_type,
               d.storage_key,
+              d.storage_mode,
               d.blob_id,
               b.bytes
        FROM driver_documents d
@@ -333,11 +334,21 @@ router.get('/documents/:id/download', async (req, res) => {
     const docRow = result.rows[0];
     let bytes = docRow.bytes;
 
-    // Fallback: if join returned no bytes, try fetching blob by storage_key (e.g. older rows)
-    if (!bytes && docRow.storage_key) {
+    // If no bytes from DB blob, try downloading from R2 storage
+    if (!bytes && docRow.storage_key && docRow.storage_mode === 'r2') {
+      try {
+        const r2 = require('../storage/r2-storage');
+        bytes = await r2.downloadBuffer(docRow.storage_key);
+      } catch (r2Err) {
+        dtLogger.warn('r2_download_failed', { documentId: id, storageKey: docRow.storage_key, error: r2Err?.message });
+      }
+    }
+
+    // Fallback: try fetching blob by blob_id if bytes still not found
+    if (!bytes && docRow.blob_id) {
       const blobRes = await query(
-        `SELECT bytes FROM driver_document_blobs WHERE id::text = $1 OR id = $2::uuid`,
-        [docRow.storage_key, docRow.storage_key]
+        'SELECT bytes FROM driver_document_blobs WHERE id = $1',
+        [docRow.blob_id]
       );
       if (blobRes.rows.length > 0 && blobRes.rows[0].bytes) {
         bytes = blobRes.rows[0].bytes;
@@ -349,11 +360,10 @@ router.get('/documents/:id/download', async (req, res) => {
     }
     const fileName = docRow.file_name || 'document.pdf';
     const mimeType = docRow.mime_type || 'application/pdf';
-    const buffer = bytes;
 
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    return res.send(bytes);
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Error downloading driver document:', error);
