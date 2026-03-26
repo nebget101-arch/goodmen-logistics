@@ -811,10 +811,281 @@ async function scrapeAll(dotNumber) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// SMS BASIC Detail Page Scraping
+// ---------------------------------------------------------------------------
+
+/**
+ * All 7 BASIC categories and their URL slugs.
+ */
+const BASIC_CATEGORIES = [
+  { name: 'UnsafeDriving', label: 'Unsafe Driving' },
+  { name: 'CrashIndicator', label: 'Crash Indicator' },
+  { name: 'HOSCompliance', label: 'Hours-of-Service Compliance' },
+  { name: 'VehicleMaint', label: 'Vehicle Maintenance' },
+  { name: 'DrugsAlcohol', label: 'Controlled Substances and Alcohol' },
+  { name: 'HMCompliance', label: 'Hazardous Materials Compliance' },
+  { name: 'DriverFitness', label: 'Driver Fitness' },
+];
+
+/**
+ * Scrape a single SMS BASIC detail page.
+ *
+ * URL pattern: https://ai.fmcsa.dot.gov/SMS/Carrier/{DOT}/BASIC/{BasicName}.aspx
+ *
+ * Returns an object with:
+ *   - basic_name, measure_value, percentile, threshold
+ *   - safety_event_group, acute_critical_violations, investigation_results_text
+ *   - record_period
+ *   - measures_history: [{ snapshot_date, measure_value, history_value, release_type, release_id }]
+ *   - violations: [{ violation_code, description, violation_count, oos_violation_count, severity_weight }]
+ *   - inspections: [{ inspection_date, report_number, report_state, plate_number, plate_state, vehicle_type, severity_weight, time_weight, total_weight, violations: [...] }]
+ *
+ * Returns null if the page could not be fetched or carrier not found.
+ */
+async function scrapeBasicDetailPage(dotNumber, basicName) {
+  const encodedDot = encodeURIComponent(dotNumber);
+  const url = `https://ai.fmcsa.dot.gov/SMS/Carrier/${encodedDot}/BASIC/${basicName}.aspx`;
+
+  const html = await fetchWithRetry(url);
+  if (!html) return null;
+
+  const $ = cheerio.load(html);
+
+  // Detect "no data" pages
+  const bodyText = $('body').text();
+  if (
+    bodyText.includes('No carrier found') ||
+    bodyText.includes('Invalid DOT') ||
+    bodyText.includes('No records matching')
+  ) {
+    console.warn(`${LOG_PREFIX} No SMS BASIC data for DOT ${dotNumber} / ${basicName}`);
+    return null;
+  }
+
+  const result = {
+    basic_name: basicName,
+    measure_value: null,
+    percentile: null,
+    threshold: null,
+    safety_event_group: null,
+    acute_critical_violations: 0,
+    investigation_results_text: null,
+    record_period: null,
+    measures_history: [],
+    violations: [],
+    inspections: [],
+  };
+
+  // --- resultData div has measure, percentile, threshold as data attributes ---
+  const resultData = $('#resultData');
+  if (resultData.length) {
+    result.measure_value = parseNum(resultData.attr('data-measure'));
+    result.percentile = parseNum(resultData.attr('data-percentile'));
+    result.threshold = parseNum(resultData.attr('data-threshold'));
+  }
+
+  // --- Record period ---
+  const periodText = clean($('.basicDates').text());
+  if (periodText) {
+    result.record_period = periodText;
+  }
+
+  // --- Safety Event Group ---
+  const overviewBody = $('.overviewBody, .BASICOverview .overviewBody');
+  if (overviewBody.length) {
+    overviewBody.find('p').each((_i, el) => {
+      const text = clean($(el).text());
+      if (text && text.toLowerCase().includes('safety event group')) {
+        // Extract after "Safety Event Group:"
+        const match = text.match(/safety event group:\s*(.+)/i);
+        result.safety_event_group = match ? match[1].trim() : text;
+      }
+    });
+  }
+
+  // --- Investigation Results ---
+  const invSection = $('#InvestigationResults');
+  if (invSection.length) {
+    const invH4 = invSection.find('.rdHead h4');
+    if (invH4.length) {
+      const invText = clean(invH4.text());
+      result.investigation_results_text = invText;
+      // Extract count: "Unsafe Driving Acute/Critical Violations: 0"
+      const countMatch = invText && invText.match(/:\s*(\d+)/);
+      if (countMatch) {
+        result.acute_critical_violations = parseInt(countMatch[1], 10);
+      }
+    }
+  }
+
+  // --- Carrier Measure Over Time (from #measureHist table) ---
+  const measureTable = $('#measureHist');
+  if (measureTable.length) {
+    // Header row has <th> elements with data-snapshot-date, data-release-type, data-release-id
+    const headers = [];
+    measureTable.find('thead tr').last().find('th[data-snapshot-date]').each((_i, el) => {
+      headers.push({
+        snapshot_date: parseDate($(el).attr('data-snapshot-date')),
+        release_type: $(el).attr('data-release-type') || null,
+        release_id: parseNum($(el).attr('data-release-id')),
+      });
+    });
+
+    // Trend row measures
+    const trendMeasures = [];
+    measureTable.find('tbody.trend tr.measure td').each((_i, el) => {
+      trendMeasures.push(parseNum(clean($(el).text())));
+    });
+
+    // History row measures
+    const histMeasures = [];
+    measureTable.find('tbody.hist tr.measure td').each((_i, el) => {
+      histMeasures.push(parseNum(clean($(el).text())));
+    });
+
+    for (let i = 0; i < headers.length; i++) {
+      result.measures_history.push({
+        snapshot_date: headers[i].snapshot_date,
+        measure_value: trendMeasures[i] ?? null,
+        history_value: histMeasures[i] ?? null,
+        release_type: headers[i].release_type,
+        release_id: headers[i].release_id,
+      });
+    }
+  }
+
+  // --- Violation Summary ---
+  const violTable = $('#ViolationSummary table.smsEvents');
+  if (violTable.length) {
+    violTable.find('tbody.dataBody tr.violSummary').each((_i, row) => {
+      const cells = $(row).find('td');
+      if (cells.length >= 5) {
+        result.violations.push({
+          violation_code: clean($(cells[0]).text()),
+          description: clean($(cells[1]).text()),
+          violation_count: parseNum(clean($(cells[2]).text())),
+          oos_violation_count: parseNum(clean($(cells[3]).text())),
+          severity_weight: parseNum(clean($(cells[4]).text())),
+        });
+      }
+    });
+  }
+
+  // --- Inspection History (loaded via AJAX endpoint) ---
+  const inspections = await scrapeBasicInspections(dotNumber, basicName);
+  if (inspections) {
+    result.inspections = inspections;
+  }
+
+  return result;
+}
+
+/**
+ * Scrape the inspection history for a BASIC detail page.
+ * Inspections are loaded via a separate URL endpoint.
+ *
+ * URL: /SMS/Carrier/{DOT}/BASIC/{BasicName}/Inspections/WithViolations/InspDateDESC/1.aspx?UserType=Public
+ */
+async function scrapeBasicInspections(dotNumber, basicName) {
+  const encodedDot = encodeURIComponent(dotNumber);
+  const url = `https://ai.fmcsa.dot.gov/SMS/Carrier/${encodedDot}/BASIC/${basicName}/Inspections/WithViolations/InspDateDESC/1.aspx?UserType=Public`;
+
+  const html = await fetchWithRetry(url);
+  if (!html) return [];
+
+  const $ = cheerio.load(html);
+  const inspections = [];
+
+  const dataBody = $('tbody.dataBody');
+  if (!dataBody.length) return [];
+
+  let currentInspection = null;
+
+  dataBody.find('tr').each((_i, row) => {
+    const $row = $(row);
+
+    if ($row.hasClass('inspection')) {
+      // Save previous inspection
+      if (currentInspection) {
+        inspections.push(currentInspection);
+      }
+
+      const cells = $row.find('td');
+      currentInspection = {
+        inspection_date: parseDate(clean($(cells[0]).text())),
+        report_number: clean($(cells[1]).text()),
+        report_state: clean($(cells[2]).text()),
+        plate_number: clean($(cells[3]).text()),
+        plate_state: clean($(cells[4]).text()),
+        vehicle_type: clean($(cells[5]).text()),
+        severity_weight: parseNum(clean($(cells[6]).text())),
+        time_weight: parseNum(clean($(cells[7]).text())),
+        total_weight: cells.length > 8 ? parseNum(clean($(cells[8]).text())) : null,
+        violations: [],
+      };
+    } else if ($row.hasClass('viol') && currentInspection) {
+      // Violation row belongs to the current inspection
+      const violDesc = clean($row.find('.violCodeDesc').text());
+      const weight = parseNum(clean($row.find('td.weight').text()));
+
+      if (violDesc) {
+        // Parse "392.16-D State/Local Laws - ..." into code + description
+        const codeMatch = violDesc.match(/^(\S+)\s+(.+)/);
+        currentInspection.violations.push({
+          code: codeMatch ? codeMatch[1] : null,
+          description: codeMatch ? codeMatch[2] : violDesc,
+          weight: weight,
+        });
+      }
+    }
+  });
+
+  // Push the last inspection
+  if (currentInspection) {
+    inspections.push(currentInspection);
+  }
+
+  return inspections;
+}
+
+/**
+ * Scrape all 7 BASIC detail pages for a given DOT number.
+ * Returns an array of BASIC detail objects (one per category).
+ * Skips categories where no data is available.
+ */
+async function scrapeAllBasicDetails(dotNumber) {
+  const results = [];
+
+  // Scrape sequentially to respect rate limits (each makes 2 HTTP requests)
+  for (const category of BASIC_CATEGORIES) {
+    try {
+      const detail = await scrapeBasicDetailPage(dotNumber, category.name);
+      if (detail) {
+        results.push(detail);
+      }
+    } catch (err) {
+      console.error(
+        `${LOG_PREFIX} Failed to scrape BASIC detail ${category.name} for DOT ${dotNumber}:`,
+        err.message
+      );
+    }
+
+    // Small delay between BASIC pages to avoid hammering the server
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  return results;
+}
+
 module.exports = {
   scrapeCompanySnapshot,
   scrapeSmsScores,
   scrapeAll,
+  scrapeBasicDetailPage,
+  scrapeBasicInspections,
+  scrapeAllBasicDetails,
+  BASIC_CATEGORIES,
   // Exported for testing
   fetchWithRetry,
 };
