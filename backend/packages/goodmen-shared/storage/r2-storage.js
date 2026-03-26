@@ -128,6 +128,25 @@ async function getSignedUploadUrl({ key, contentType, expiresInSeconds }) {
   return { url, key, expiresIn: ttl };
 }
 
+async function downloadBuffer(key) {
+  const client = getClient();
+  const { bucket } = getR2Config();
+
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key
+    })
+  );
+
+  // Convert readable stream to Buffer
+  const chunks = [];
+  for await (const chunk of response.Body) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function deleteObject(key) {
   const client = getClient();
   const { bucket } = getR2Config();
@@ -144,6 +163,7 @@ async function deleteObject(key) {
 module.exports = {
   uploadBuffer,
   uploadStream,
+  downloadBuffer,
   getSignedUploadUrl,
   getSignedDownloadUrl,
   deleteObject
