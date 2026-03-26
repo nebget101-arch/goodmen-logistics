@@ -187,21 +187,15 @@ function parseInspectionTable($) {
     hazmat_oos_national_avg: null,
   };
 
-  // Find the header row containing "Inspection Type"
-  let headerRow = null;
-  $('tr').each((_i, row) => {
-    if (headerRow) return;
-    const text = $(row).text().toLowerCase();
-    if (text.includes('inspection type')) {
-      headerRow = row;
-    }
-  });
+  // Target the table directly via its summary attribute
+  const inspTable = $('table[summary="Inspections"]');
+  if (!inspTable.length) return result;
 
-  if (!headerRow) return result;
+  const rows = inspTable.find('tr');
+  if (rows.length < 2) return result;
 
-  // Determine column indices from the header row
-  // Expected: "Inspection Type" | "Vehicle" | "Driver" | "Hazmat" | "IEP"
-  const headerCells = $(headerRow).find('td, th');
+  // First row is the header — determine column indices
+  const headerCells = $(rows[0]).find('th, td');
   const colIndex = { vehicle: -1, driver: -1, hazmat: -1, iep: -1 };
   headerCells.each((i, cell) => {
     const t = clean($(cell).text());
@@ -213,19 +207,14 @@ function parseInspectionTable($) {
     else if (lower.includes('iep')) colIndex.iep = i;
   });
 
-  // Walk sibling rows after the header
-  const allRows = $(headerRow).parent().children('tr');
-  let headerFound = false;
-  allRows.each((_i, row) => {
-    if (row === headerRow) {
-      headerFound = true;
-      return;
-    }
-    if (!headerFound) return;
+  // Walk data rows (skip the header at index 0)
+  rows.each((i, row) => {
+    if (i === 0) return; // skip header
 
-    const cells = $(row).find('td, th');
+    const cells = $(row).find('th, td');
     if (cells.length < 2) return;
 
+    // Row label is in the first cell (TH with scope="ROW")
     const rowLabel = (clean($(cells[0]).text()) || '').toLowerCase();
 
     const cellVal = (idx) => {
@@ -278,21 +267,15 @@ function parseCrashTable($) {
     crashes_total: null,
   };
 
-  // Find header row with "Fatal" column (the crash table header)
-  let headerRow = null;
-  $('tr').each((_i, row) => {
-    if (headerRow) return;
-    const text = $(row).text().toLowerCase();
-    // Crash table header has "Fatal" and "Injury" and "Tow"
-    if (text.includes('fatal') && text.includes('injury') && text.includes('tow')) {
-      headerRow = row;
-    }
-  });
+  // Target the table directly via its summary attribute
+  const crashTable = $('table[summary="Crashes"]');
+  if (!crashTable.length) return result;
 
-  if (!headerRow) return result;
+  const rows = crashTable.find('tr');
+  if (rows.length < 2) return result;
 
-  // Determine column indices
-  const headerCells = $(headerRow).find('td, th');
+  // First row is the header — determine column indices
+  const headerCells = $(rows[0]).find('th, td');
   const colIndex = { fatal: -1, injury: -1, tow: -1, total: -1 };
   headerCells.each((i, cell) => {
     const t = (clean($(cell).text()) || '').toLowerCase();
@@ -302,17 +285,11 @@ function parseCrashTable($) {
     else if (t.includes('total')) colIndex.total = i;
   });
 
-  // Walk sibling rows after the header
-  const allRows = $(headerRow).parent().children('tr');
-  let headerFound = false;
-  allRows.each((_i, row) => {
-    if (row === headerRow) {
-      headerFound = true;
-      return;
-    }
-    if (!headerFound) return;
+  // Walk data rows (skip the header at index 0)
+  rows.each((i, row) => {
+    if (i === 0) return; // skip header
 
-    const cells = $(row).find('td, th');
+    const cells = $(row).find('th, td');
     if (cells.length < 2) return;
 
     const rowLabel = (clean($(cells[0]).text()) || '').toLowerCase();
@@ -331,6 +308,35 @@ function parseCrashTable($) {
   });
 
   return result;
+}
+
+/**
+ * Parse a "checkbox" section from the SAFER snapshot page.
+ *
+ * Several sections (Operation Classification, Carrier Operation, Cargo Carried)
+ * use a table with summary="<section name>" containing nested formatting tables.
+ * Selected items are marked with "X" in the first <TD>, with the label in the
+ * second <TD>.
+ *
+ * Returns a comma-separated string of selected items, or null if none found.
+ */
+function parseCheckboxSection($, summaryAttr) {
+  const items = [];
+  const table = $(`table[summary="${summaryAttr}"]`);
+  if (!table.length) return null;
+
+  table.find('tr').each((_i, row) => {
+    const cells = $(row).find('td');
+    if (cells.length >= 2) {
+      const marker = ($(cells[0]).text() || '').trim();
+      const label = ($(cells[1]).text() || '').trim();
+      if (marker === 'X' && label) {
+        items.push(label);
+      }
+    }
+  });
+
+  return items.length > 0 ? items.join(', ') : null;
 }
 
 /**
@@ -412,6 +418,11 @@ async function scrapeCompanySnapshot(dotNumber) {
   // --- Crash table ---
   const crashes = parseCrashTable($);
   Object.assign(data, crashes);
+
+  // --- Operation / Cargo checkbox sections ---
+  data.operation_classification = parseCheckboxSection($, 'Operation Classification');
+  data.carrier_operation = parseCheckboxSection($, 'Carrier Operation');
+  data.cargo_carried = parseCheckboxSection($, 'Cargo Carried');
 
   return data;
 }
@@ -787,6 +798,11 @@ async function scrapeAll(dotNumber) {
     crashes_injury: snapshot?.crashes_injury ?? null,
     crashes_tow: snapshot?.crashes_tow ?? null,
     crashes_total: snapshot?.crashes_total ?? null,
+
+    // Operation & Cargo (from snapshot)
+    operation_classification: snapshot?.operation_classification ?? null,
+    carrier_operation: snapshot?.carrier_operation ?? null,
+    cargo_carried: snapshot?.cargo_carried ?? null,
 
     // Raw
     raw_json: raw,

@@ -27,6 +27,7 @@ interface ChartDataset {
 })
 export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterViewInit {
   carrier: MonitoredCarrier | null = null;
+  latestSnapshot: SafetySnapshot | null = null;
   history: SafetySnapshot[] = [];
   loading = true;
   error = '';
@@ -117,6 +118,7 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
           // Merge latest snapshot data into carrier for the info card
           if (this.history.length > 0 && this.carrier) {
             const latest = this.history[this.history.length - 1];
+            this.latestSnapshot = latest;
             this.carrier = {
               ...this.carrier,
               total_drivers: latest.total_drivers ?? this.carrier.total_drivers,
@@ -300,6 +302,38 @@ export class FmcsaCarrierDetailComponent implements OnInit, OnDestroy, AfterView
     return new Date(dateStr).toLocaleDateString('en-US', {
       year: 'numeric', month: 'short', day: 'numeric'
     });
+  }
+
+  // ─── Inspection / Crash / Operations Helpers ────────────────────────────────
+
+  isOosAboveAverage(rate: string | null, avg: string | null): boolean {
+    if (!rate || !avg) return false;
+    const rateNum = parseFloat(rate.replace('%', ''));
+    const avgNum = parseFloat(avg.replace('%', ''));
+    if (isNaN(rateNum) || isNaN(avgNum)) return false;
+    return rateNum > avgNum;
+  }
+
+  formatOosRate(rate: string | null): string {
+    if (rate === null || rate === undefined) return '0%';
+    const num = parseFloat(rate.replace('%', ''));
+    if (isNaN(num)) return '0%';
+    return num + '%';
+  }
+
+  formatNationalAvg(avg: string | null): string {
+    if (!avg) return 'N/A';
+    const num = parseFloat(avg.replace('%', ''));
+    if (isNaN(num)) return 'N/A';
+    return num + '%';
+  }
+
+  getCargoList(): string[] {
+    if (!this.latestSnapshot?.cargo_carried) return [];
+    return this.latestSnapshot.cargo_carried
+      .split(',')
+      .map(c => c.trim())
+      .filter(c => c.length > 0);
   }
 
   // ─── Pagination ──────────────────────────────────────────────────────────────
