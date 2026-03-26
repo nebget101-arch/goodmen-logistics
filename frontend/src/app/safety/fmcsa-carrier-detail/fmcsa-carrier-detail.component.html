@@ -390,6 +390,7 @@
             <table class="history-table">
               <thead>
                 <tr>
+                  <th></th>
                   <th>Date</th>
                   <th>Report #</th>
                   <th>State</th>
@@ -401,7 +402,13 @@
               </thead>
               <tbody>
                 <ng-container *ngFor="let insp of selectedBasic.inspections">
-                  <tr>
+                  <tr class="insp-row" [class.insp-expanded]="selectedInspection?.report_number === insp.report_number"
+                      (click)="selectInspection(getInspectionDetailByReport(insp.report_number) || null)">
+                    <td class="expand-cell">
+                      <span class="material-symbols-outlined" *ngIf="getInspectionDetailByReport(insp.report_number)">
+                        {{ selectedInspection?.report_number === insp.report_number ? 'expand_less' : 'expand_more' }}
+                      </span>
+                    </td>
                     <td class="date-cell">{{ formatDate(insp.inspection_date) }}</td>
                     <td>{{ insp.report_number }}</td>
                     <td>{{ insp.report_state }}</td>
@@ -410,14 +417,68 @@
                     <td class="num-col">{{ insp.time_weight }}</td>
                     <td class="num-col">{{ insp.total_weight }}</td>
                   </tr>
-                  <tr class="viol-row" *ngFor="let iv of insp.violations">
-                    <td colspan="4" class="viol-inline">
-                      <span class="material-symbols-outlined viol-icon">subdirectory_arrow_right</span>
-                      <code class="viol-code">{{ iv.code }}</code>
-                      {{ iv.description }}
+
+                  <!-- Expanded inspection detail -->
+                  <tr *ngIf="selectedInspection?.report_number === insp.report_number" class="insp-detail-row">
+                    <td colspan="8">
+                      <div class="insp-detail-card">
+                        <!-- Time/Location -->
+                        <div class="insp-detail-grid">
+                          <div class="insp-detail-section">
+                            <h5>Time / Location</h5>
+                            <div class="insp-info-row"><span class="info-label">Level</span><span class="info-value">{{ selectedInspection!.level }}</span></div>
+                            <div class="insp-info-row"><span class="info-label">Facility</span><span class="info-value">{{ selectedInspection!.facility }}</span></div>
+                            <div class="insp-info-row"><span class="info-label">Time</span><span class="info-value">{{ selectedInspection!.start_time }} - {{ selectedInspection!.end_time }}</span></div>
+                            <div class="insp-info-row"><span class="info-label">Post Crash</span><span class="info-value">{{ selectedInspection!.post_crash }}</span></div>
+                            <div class="insp-info-row"><span class="info-label">Hazmat Placard</span><span class="info-value">{{ selectedInspection!.hazmat_placard }}</span></div>
+                          </div>
+
+                          <!-- Vehicles -->
+                          <div class="insp-detail-section" *ngIf="selectedInspection!.vehicles?.length">
+                            <h5>Vehicles ({{ selectedInspection!.vehicles.length }})</h5>
+                            <div class="insp-vehicle" *ngFor="let v of selectedInspection!.vehicles">
+                              <span class="vehicle-unit">Unit {{ v.unit }}</span>
+                              <span class="info-value">{{ v.type }} — {{ v.make }}</span>
+                              <span class="info-value">{{ v.plate_state }} {{ v.plate_number }}</span>
+                              <span class="info-value vin-text">VIN: {{ v.vin }}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Violations -->
+                        <div *ngIf="selectedInspection!.violations?.length" class="insp-violations-section">
+                          <h5>Carrier Violations ({{ selectedInspection!.violations.length }})</h5>
+                          <div class="table-wrapper">
+                            <table class="history-table insp-viol-table">
+                              <thead>
+                                <tr>
+                                  <th>Code</th>
+                                  <th>Section</th>
+                                  <th>Unit</th>
+                                  <th>OOS</th>
+                                  <th>Description</th>
+                                  <th>In SMS</th>
+                                  <th>BASIC</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr *ngFor="let v of selectedInspection!.violations">
+                                  <td><code class="viol-code">{{ v.vio_code }}</code></td>
+                                  <td>{{ v.section }}</td>
+                                  <td>{{ v.unit }}</td>
+                                  <td>
+                                    <span [ngClass]="v.oos === 'Yes' ? 'oos-yes' : 'oos-no'">{{ v.oos }}</span>
+                                  </td>
+                                  <td class="viol-desc">{{ v.description }}</td>
+                                  <td>{{ v.included_in_sms }}</td>
+                                  <td class="no-wrap">{{ v.basic }}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
                     </td>
-                    <td class="num-col">{{ iv.weight }}</td>
-                    <td colspan="2"></td>
                   </tr>
                 </ng-container>
               </tbody>

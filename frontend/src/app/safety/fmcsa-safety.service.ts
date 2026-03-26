@@ -200,6 +200,49 @@ export interface BasicDetailsResponse {
   basic_details: BasicDetail[];
 }
 
+export interface InspectionVehicle {
+  unit: string;
+  type: string;
+  make: string;
+  plate_state: string;
+  plate_number: string;
+  vin: string;
+}
+
+export interface InspectionDetailViolation {
+  vio_code: string;
+  section: string;
+  unit: string;
+  oos: string;
+  description: string;
+  included_in_sms: string;
+  basic: string;
+  reason_not_included: string | null;
+}
+
+export interface InspectionDetail {
+  id: string;
+  monitored_carrier_id: string;
+  inspection_id: string;
+  report_number: string | null;
+  report_state: string | null;
+  state: string | null;
+  inspection_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  level: string | null;
+  facility: string | null;
+  post_crash: string | null;
+  hazmat_placard: string | null;
+  vehicles: InspectionVehicle[];
+  violations: InspectionDetailViolation[];
+  scraped_at: string;
+}
+
+export interface InspectionDetailsResponse {
+  inspection_details: InspectionDetail[];
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 @Injectable({ providedIn: 'root' })
@@ -266,6 +309,10 @@ export class FmcsaSafetyService {
 
   getCarrierBasicDetails(carrierId: string): Observable<BasicDetailsResponse> {
     return this.http.get<BasicDetailsResponse>(`${this.base}/carriers/${carrierId}/basic-details`);
+  }
+
+  getCarrierInspectionDetails(carrierId: string): Observable<InspectionDetailsResponse> {
+    return this.http.get<InspectionDetailsResponse>(`${this.base}/carriers/${carrierId}/inspection-details`);
   }
 
   // ─── Client-facing (my scores) ────────────────────────────────────────────
