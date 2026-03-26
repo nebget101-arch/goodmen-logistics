@@ -709,8 +709,7 @@ router.put('/:id', async (req, res) => {
       'truckId',
       'trailerId',
       'coDriverId',
-      // legacy / dqf-related fields
-      'dqfCompleteness',
+      // legacy / dqf-related fields (dqfCompleteness excluded — server-calculated only)
       'clearinghouseStatus'
     ]);
 
