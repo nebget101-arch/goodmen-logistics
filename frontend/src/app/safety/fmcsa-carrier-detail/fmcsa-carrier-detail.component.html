@@ -86,83 +86,6 @@
       </div>
     </div>
 
-    <!-- ─── SMS Score Trend Chart ───────────────────────────────────────────── -->
-    <div class="section-card">
-      <h3 class="section-title">SMS Score Trends</h3>
-      <div *ngIf="history.length > 0" class="chart-container">
-        <canvas #smsChart></canvas>
-      </div>
-      <div *ngIf="history.length === 0" class="empty-hint">
-        <span class="material-symbols-outlined">show_chart</span>
-        No historical data available
-      </div>
-    </div>
-
-    <!-- ─── Licensing Section ───────────────────────────────────────────────── -->
-    <div class="section-card">
-      <h3 class="section-title">Licensing &amp; Authority</h3>
-      <div class="licensing-grid">
-        <div class="license-item">
-          <span class="info-label">Authority Common</span>
-          <span class="authority-badge" [ngClass]="getAuthorityClass(carrier.authority_common)">
-            {{ getAuthorityStatus(carrier.authority_common) }}
-          </span>
-        </div>
-        <div class="license-item">
-          <span class="info-label">Authority Contract</span>
-          <span class="authority-badge" [ngClass]="getAuthorityClass(carrier.authority_contract)">
-            {{ getAuthorityStatus(carrier.authority_contract) }}
-          </span>
-        </div>
-        <div class="license-item">
-          <span class="info-label">Authority Broker</span>
-          <span class="authority-badge" [ngClass]="getAuthorityClass(carrier.authority_broker)">
-            {{ getAuthorityStatus(carrier.authority_broker) }}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ─── Insurance Section ───────────────────────────────────────────────── -->
-    <div class="section-card">
-      <h3 class="section-title">Insurance</h3>
-      <div class="insurance-grid">
-        <div class="insurance-item">
-          <span class="insurance-type">BIPD Insurance</span>
-          <div class="insurance-detail">
-            <span class="insurance-status" [ngClass]="getInsuranceStatus(carrier.bipd_insurance_on_file) === 'filed' ? 'ins-filed' : 'ins-none'">
-              <span class="material-symbols-outlined">
-                {{ getInsuranceStatus(carrier.bipd_insurance_on_file) === 'filed' ? 'check_circle' : 'cancel' }}
-              </span>
-              {{ carrier.bipd_insurance_on_file || 'None on file' }}
-            </span>
-          </div>
-        </div>
-        <div class="insurance-item">
-          <span class="insurance-type">Cargo Insurance</span>
-          <div class="insurance-detail">
-            <span class="insurance-status" [ngClass]="getInsuranceStatus(carrier.cargo_insurance_on_file) === 'filed' ? 'ins-filed' : 'ins-none'">
-              <span class="material-symbols-outlined">
-                {{ getInsuranceStatus(carrier.cargo_insurance_on_file) === 'filed' ? 'check_circle' : 'cancel' }}
-              </span>
-              {{ carrier.cargo_insurance_on_file || 'None on file' }}
-            </span>
-          </div>
-        </div>
-        <div class="insurance-item">
-          <span class="insurance-type">Bond Insurance</span>
-          <div class="insurance-detail">
-            <span class="insurance-status" [ngClass]="getInsuranceStatus(carrier.bond_insurance_on_file) === 'filed' ? 'ins-filed' : 'ins-none'">
-              <span class="material-symbols-outlined">
-                {{ getInsuranceStatus(carrier.bond_insurance_on_file) === 'filed' ? 'check_circle' : 'cancel' }}
-              </span>
-              {{ carrier.bond_insurance_on_file || 'None on file' }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- ─── Carrier Operations Section ──────────────────────────────────────── -->
     <div class="section-card" *ngIf="latestSnapshot && (latestSnapshot.operation_classification || latestSnapshot.carrier_operation || latestSnapshot.cargo_carried)">
       <h3 class="section-title">Carrier Operations</h3>
@@ -275,13 +198,13 @@
     </div>
 
     <!-- ─── BASIC Details Section ────────────────────────────────────────────── -->
-    <div class="section-card" *ngIf="basicDetails.length > 0">
+    <div class="section-card" *ngIf="filteredBasicDetails.length > 0">
       <h3 class="section-title">SMS BASIC Details</h3>
 
       <!-- BASIC category tabs -->
       <div class="basic-tabs">
         <button
-          *ngFor="let detail of basicDetails"
+          *ngFor="let detail of filteredBasicDetails"
           type="button"
           class="basic-tab"
           [class.active]="selectedBasic?.basic_name === detail.basic_name"
@@ -494,7 +417,7 @@
       </ng-container>
     </div>
 
-    <div class="section-card" *ngIf="basicDetails.length === 0 && !basicLoading && !loading">
+    <div class="section-card" *ngIf="filteredBasicDetails.length === 0 && !basicLoading && !loading">
       <h3 class="section-title">SMS BASIC Details</h3>
       <div class="empty-hint">
         <span class="material-symbols-outlined">info</span>
