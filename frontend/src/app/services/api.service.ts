@@ -767,6 +767,10 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/dqf/drivers/${driverId}`);
   }
 
+  recalculateDqfCompleteness(driverId: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/dqf/driver/${driverId}/recalculate`, {});
+  }
+
   updateDqfRequirementStatus(
     driverId: string,
     requirementKey: string,

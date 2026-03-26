@@ -903,10 +903,8 @@ export class DriversComponent implements OnInit, OnDestroy {
         'annual_clearinghouse_limited_query',
         'medical_cert_renewal'
       ],
-      // FN-261: "Other Documents" now only contains green_card_on_file
-      other: [
-        'green_card_on_file'
-      ]
+      // FN-270: Other Documents category removed — green_card_on_file excluded
+      other: []
     };
   }
 
@@ -1459,23 +1457,39 @@ export class DriversComponent implements OnInit, OnDestroy {
     }
 
     this.saving = true;
-    this.apiService.updateDriver(this.selectedDriver.id, { 
-      dqfCompleteness: dqfCompleteness,
-      clearinghouseStatus: clearinghouseStatus,
-      status: status
-    }).subscribe({
-      next: (updatedDriver) => {
-        const index = this.drivers.findIndex(d => d.id === updatedDriver.id);
-        if (index !== -1) {
-          this.drivers[index] = updatedDriver;
+    // Recalculate DQF completeness on the server first, then update driver status
+    this.apiService.recalculateDqfCompleteness(this.selectedDriver.id).subscribe({
+      next: (recalcRes: any) => {
+        const serverCompleteness = recalcRes?.completeness ?? dqfCompleteness;
+        // Re-evaluate status based on server-calculated completeness
+        if (serverCompleteness !== 100) {
+          status = 'inactive';
+          statusMessage = 'Status set to INACTIVE: DQF must be 100% complete. ';
         }
-        this.closeDQFForm();
-        this.saving = false;
-        alert(`${statusMessage}DQF updated! Completeness: ${dqfCompleteness}% (${completedItems}/${totalItems} items complete)\nClearinghouse Status: ${clearinghouseStatus}`);
+        this.apiService.updateDriver(this.selectedDriver.id, {
+          clearinghouseStatus: clearinghouseStatus,
+          status: status
+        }).subscribe({
+          next: (updatedDriver) => {
+            updatedDriver.dqfCompleteness = serverCompleteness;
+            const index = this.drivers.findIndex(d => d.id === updatedDriver.id);
+            if (index !== -1) {
+              this.drivers[index] = updatedDriver;
+            }
+            this.closeDQFForm();
+            this.saving = false;
+            alert(`${statusMessage}DQF updated! Completeness: ${serverCompleteness}% (${completedItems}/${totalItems} items complete)\nClearinghouse Status: ${clearinghouseStatus}`);
+          },
+          error: (error) => {
+            console.error('Error updating driver:', error);
+            alert('Failed to update DQF. Please try again.');
+            this.saving = false;
+          }
+        });
       },
       error: (error) => {
-        console.error('Error updating DQF:', error);
-        alert('Failed to update DQF. Please try again.');
+        console.error('Error recalculating DQF:', error);
+        alert('Failed to recalculate DQF. Please try again.');
         this.saving = false;
       }
     });
