@@ -1306,9 +1306,7 @@ router.post('/:packetId/finalize', rateLimited, async (req, res) => {
 
     // Update packet status to submitted
     await query(
-      `UPDATE driver_onboarding_packets
-       SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
-       WHERE id = $1`,
+      `UPDATE driver_onboarding_packets SET status = 'submitted' WHERE id = $1`,
       [packetId]
     );
 
