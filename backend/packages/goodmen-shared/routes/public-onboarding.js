@@ -1227,11 +1227,58 @@ router.post('/:packetId/finalize', rateLimited, async (req, res) => {
       sectionMap[s.section_key] = s.status;
     });
 
-    // Validate required sections
-    const requiredSections = ['employment_application', 'consent_forms', 'document_uploads'];
-    const incompleteSections = requiredSections.filter(
-      (key) => sectionMap[key] !== 'completed'
-    );
+    // Validate required sections — check actual completion, not just section status
+    const incompleteSections = [];
+
+    // 1. Employment application: check section status
+    if (sectionMap['employment_application'] !== 'completed') {
+      incompleteSections.push('employment_application');
+    }
+
+    // 2. Consent forms: check if all required consents are signed (not the section row)
+    if (sectionMap['consent_forms'] !== 'completed') {
+      try {
+        const consentsRes = await query(
+          `SELECT ct.key, dc.id AS consent_id
+           FROM consent_templates ct
+           LEFT JOIN driver_consents dc
+             ON dc.consent_key = ct.key
+            AND dc.packet_id = $1
+            AND dc.status = 'signed'
+           WHERE ct.is_active = true
+             AND ct.consent_type IN ('authorization', 'disclosure')`,
+          [packetId]
+        );
+        const allConsentsSigned = consentsRes.rows.length > 0 && consentsRes.rows.every(r => r.consent_id);
+        if (!allConsentsSigned) {
+          incompleteSections.push('consent_forms');
+        }
+      } catch (cErr) {
+        // If consent check fails, fall back to section status
+        dtLogger.warn('finalize_consent_check_fallback', { error: cErr?.message });
+        incompleteSections.push('consent_forms');
+      }
+    }
+
+    // 3. Document uploads: check if required docs exist (CDL front, CDL back, medical cert)
+    if (sectionMap['document_uploads'] !== 'completed') {
+      try {
+        const docsRes = await query(
+          `SELECT doc_type FROM driver_documents
+           WHERE driver_id = $1 AND doc_type IN ('cdl_front', 'cdl_back', 'medical_certificate')`,
+          [packet.driver_id]
+        );
+        const uploadedTypes = new Set(docsRes.rows.map(r => r.doc_type));
+        const hasRequiredDocs = uploadedTypes.has('cdl_front') && uploadedTypes.has('cdl_back') && uploadedTypes.has('medical_certificate');
+        if (!hasRequiredDocs) {
+          incompleteSections.push('document_uploads');
+        }
+      } catch (dErr) {
+        dtLogger.warn('finalize_docs_check_fallback', { error: dErr?.message });
+        incompleteSections.push('document_uploads');
+      }
+    }
+
     if (incompleteSections.length > 0) {
       return res.status(422).json({
         message: 'All required sections must be completed before submission.',
