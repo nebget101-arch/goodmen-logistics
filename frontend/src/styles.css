@@ -839,6 +839,13 @@ body {
   max-width: 32px;
   line-height: 32px !important;
   margin: 0 auto;
+  color: #f1f5f9 !important;
+}
+
+/* Day-of-week headers */
+.mat-calendar-table-header th,
+.mat-calendar-body-label {
+  color: #94a3b8 !important;
 }
 
 .mat-calendar-body-cell:not(.mat-calendar-body-disabled):hover .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
@@ -859,8 +866,9 @@ body {
 }
 
 .mat-calendar-body-today:not(.mat-calendar-body-selected) .mat-calendar-body-cell-content {
-  border-color: rgba(56, 189, 248, 0.55);
-  color: #e0f2fe;
+  border-color: rgba(56, 189, 248, 0.7) !important;
+  color: #e0f2fe !important;
+  background: rgba(56, 189, 248, 0.14) !important;
 }
 
 .mat-calendar-previous-button,
@@ -903,15 +911,90 @@ body {
   background: rgba(148, 163, 184, 0.1) !important;
 }
 
-/* Panel class from app-ai-date-picker — solid readable panel over forms (FN-160) */
-.ai-datepicker-overlay.mat-datepicker-content {
+/* Panel class from app-ai-date-picker — solid readable panel over forms (FN-160, FN-180) */
+.ai-datepicker-overlay.mat-datepicker-content,
+.mat-datepicker-content.ai-datepicker-overlay {
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.99);
+  background: rgba(15, 23, 42, 0.99) !important;
   border: 1px solid rgba(71, 85, 105, 0.95);
   box-shadow:
     0 20px 48px rgba(2, 6, 23, 0.72),
     0 0 0 1px rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(16px);
+}
+
+.ai-datepicker-overlay .mat-calendar,
+.mat-datepicker-content.ai-datepicker-overlay .mat-calendar {
+  background: transparent !important;
+  width: 320px;
+  min-width: 320px;
+}
+
+/* Spacious year cells in multi-year view (element tag, not class) */
+mat-multi-year-view .mat-calendar-body-cell-content {
+  width: 62px !important;
+  max-width: 62px !important;
+  height: 36px !important;
+  line-height: 36px !important;
+  font-size: 0.85rem;
+}
+
+/* Month grid: 3 columns × 4 rows via CSS Grid */
+mat-year-view .mat-calendar-table,
+mat-year-view .mat-calendar-body {
+  display: block !important;
+  width: 100%;
+}
+
+mat-year-view .mat-calendar-body {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 4px !important;
+}
+
+mat-year-view .mat-calendar-body tr {
+  display: contents !important;
+}
+
+/* Hide the label cell so it doesn't consume a grid slot */
+mat-year-view .mat-calendar-body-label {
+  display: none !important;
+}
+
+mat-year-view .mat-calendar-body-cell-container {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 100% !important;
+  padding: 0 !important;
+  height: 46px;
+}
+
+mat-year-view .mat-calendar-body-cell {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+mat-year-view .mat-calendar-body-cell-content {
+  width: 90% !important;
+  max-width: none !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  font-size: 0.9rem;
+  border-radius: 8px !important;
+}
+
+/* Today's year/month highlighted in multi-year and year views
+   mat-calendar-body-today is on the content span itself in these views */
+mat-multi-year-view .mat-calendar-body-cell-content.mat-calendar-body-today:not(.mat-calendar-body-selected),
+mat-year-view .mat-calendar-body-cell-content.mat-calendar-body-today:not(.mat-calendar-body-selected) {
+  border-color: rgba(56, 189, 248, 0.7) !important;
+  color: #e0f2fe !important;
+  background: rgba(56, 189, 248, 0.14) !important;
 }
 
 /* app-ai-select panel — dark AI theme, cyan hover/selected */
