@@ -899,37 +899,8 @@
                 </div>
               </div>
             </div>
-            <!-- Pre-Hire Documents section inside Pre-Hire Documents (Before Driving) tab -->
-            <ng-container *ngIf="cat.key === 'pre_hire'">
-              <section class="prehire-docs-section prehire-docs-inline">
-                <div *ngIf="prehireDocumentsLoading" class="dqf-loading">
-                  <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
-                  Loading pre-hire documents...
-                </div>
-
-                <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length > 0" class="prehire-docs-list">
-                  <div *ngFor="let doc of prehireDocuments" class="prehire-doc-row">
-                    <div class="prehire-doc-status">
-                      <span class="material-symbols-outlined prehire-doc-check">check_circle</span>
-                    </div>
-                    <div class="prehire-doc-info">
-                      <span class="prehire-doc-name">{{ getPrehireDocLabel(doc.doc_type) }}</span>
-                      <span class="prehire-doc-date" *ngIf="doc.created_at">Signed {{ doc.created_at | date:'mediumDate' }}</span>
-                    </div>
-                    <div class="prehire-doc-actions">
-                      <a class="prehire-download-btn" [href]="getPrehireDocDownloadUrl(doc)" target="_blank" rel="noopener">
-                        <span class="material-symbols-outlined" style="font-size:15px;">download</span>
-                        Download
-                      </a>
-                    </div>
-                  </div>
-                </div>
-
-                <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length === 0" class="prehire-docs-empty">
-                  No pre-hire documents on file. Documents appear here once the driver signs their onboarding packet.
-                </div>
-              </section>
-            </ng-container>
+            <!-- FN-263: Pre-Hire Documents list hidden — documents now tracked via DQF requirement rows with upload/download -->
+            <!-- <ng-container *ngIf="cat.key === 'pre_hire'"> ... </ng-container> -->
         </div><!-- /dqf-tab-panel (FN-258) -->
 
         <!-- Legacy Checklist (shown only if no dynamic requirements) -->

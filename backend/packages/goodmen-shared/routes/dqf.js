@@ -810,7 +810,7 @@ router.post('/driver/:driverId/mvr-upload', upload.single('file'), async (req, r
       ]
     );
 
-    // 5. Auto-complete mvr_data_received DQF requirement
+    // 5. Auto-complete mvr_data_received (checklist) and mvr_report_document (Pre-Hire Documents)
     const currentRes = await query(
       'SELECT status FROM dqf_driver_status WHERE driver_id = $1 AND requirement_key = $2',
       [driverId, 'mvr_data_received']
@@ -818,8 +818,10 @@ router.post('/driver/:driverId/mvr-upload', upload.single('file'), async (req, r
     const oldStatus = currentRes.rows.length > 0 ? currentRes.rows[0].status : 'missing';
 
     await upsertRequirementStatus(driverId, 'mvr_data_received', 'complete', doc.id);
+    await upsertRequirementStatus(driverId, 'mvr_report_document', 'complete', doc.id);
     await computeAndUpdateDqfCompleteness(driverId);
     await logStatusChange(driverId, 'mvr_data_received', oldStatus, 'complete', userId, 'MVR report uploaded and data extracted');
+    await logStatusChange(driverId, 'mvr_report_document', 'missing', 'complete', userId, 'MVR report document uploaded');
 
     dtLogger.info('mvr_upload_complete', {
       driverId,
