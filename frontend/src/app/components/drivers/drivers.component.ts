@@ -43,11 +43,17 @@ export class DriversComponent implements OnInit, OnDestroy {
     cdlExpiry: '',
     medicalCertExpiry: '',
     hireDate: '',
-    address: '',
+    streetAddress: '',
+    city: '',
+    state: '',
+    zipCode: '',
     dateOfBirth: '',
     clearinghouseStatus: 'eligible'
   };
-  
+
+  zipLookupLoading = false;
+  editZipLookupLoading = false;
+
   dqfForm: any = {
     applicationComplete: false,
     mvrComplete: false,
@@ -398,7 +404,10 @@ export class DriversComponent implements OnInit, OnDestroy {
       cdlExpiry: '',
       medicalCertExpiry: '',
       hireDate: '',
-      address: '',
+      streetAddress: '',
+      city: '',
+      state: '',
+      zipCode: '',
       dateOfBirth: '',
       clearinghouseStatus: 'eligible'
     };
@@ -480,6 +489,38 @@ export class DriversComponent implements OnInit, OnDestroy {
 
   cancelEdit(): void {
     this.editingDriver = null;
+  }
+
+  onZipCodeBlur(target: 'new' | 'edit'): void {
+    const zipCode = target === 'new' ? this.newDriver.zipCode : this.editingDriver?.zipCode;
+    if (!zipCode || !/^\d{5}(-\d{4})?$/.test(zipCode)) return;
+
+    if (target === 'new') {
+      this.zipLookupLoading = true;
+    } else {
+      this.editZipLookupLoading = true;
+    }
+
+    this.apiService.lookupZipCode(zipCode).subscribe({
+      next: (result: any) => {
+        if (target === 'new') {
+          this.newDriver.city = result.city;
+          this.newDriver.state = result.state;
+          this.zipLookupLoading = false;
+        } else if (this.editingDriver) {
+          this.editingDriver.city = result.city;
+          this.editingDriver.state = result.state;
+          this.editZipLookupLoading = false;
+        }
+      },
+      error: () => {
+        if (target === 'new') {
+          this.zipLookupLoading = false;
+        } else {
+          this.editZipLookupLoading = false;
+        }
+      }
+    });
   }
 
   saveEdit(): void {
