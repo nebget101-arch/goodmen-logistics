@@ -4,7 +4,7 @@ const multer = require('multer');
 const auth = require('./auth-middleware');
 const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
-const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange, computeWarningItems } = require('../services/dqf-service');
+const { upsertRequirementStatus, computeAndUpdateDqfCompleteness, logStatusChange, computeWarningItems, computeDueDateAndUrgency } = require('../services/dqf-service');
 const { transformRow } = require('../utils/case-converter');
 const { createDriverDocument } = require('../services/driver-storage-service');
 const { generateEmploymentApplicationPdf } = require('../services/pdf.service');
@@ -115,6 +115,12 @@ router.get('/driver/:driverId/status', async (req, res) => {
     // Compute warning items
     const warningItems = await computeWarningItems(driverId);
 
+    // FN-319: Enrich requirements with due_date and urgency for time-sensitive items
+    const enrichedRequirements = reqRes.rows.map((req) => {
+      const { due_date, urgency } = computeDueDateAndUrgency(req.category, req.key, driver.hire_date);
+      return { ...req, due_date: due_date || null, urgency: urgency || null };
+    });
+
     const duration = Date.now() - start;
     dtLogger.trackRequest('GET', `/api/dqf/driver/${driverId}/status`, 200, duration);
 
@@ -122,7 +128,7 @@ router.get('/driver/:driverId/status', async (req, res) => {
       driverId,
       hire_date: driver.hire_date,
       completeness: driver.dqf_completeness,
-      requirements: reqRes.rows,
+      requirements: enrichedRequirements,
       warning_items: warningItems
     });
   } catch (error) {

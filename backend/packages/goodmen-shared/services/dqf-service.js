@@ -1,5 +1,70 @@
 const { query } = require('../internal/db');
 
+// Keys that belong to "annual" category (including clearinghouse moved from other)
+const ANNUAL_DUE_DATE_KEYS = [
+  'annual_mvr_inquiry',
+  'annual_driving_record_review',
+  'annual_clearinghouse_limited_query',
+  'annual_clearinghouse_query' // DB alias
+];
+
+/**
+ * Compute the due date and urgency for a time-sensitive DQF requirement.
+ * @param {string} category - 'within_30_days' or 'annual'
+ * @param {string} requirementKey
+ * @param {Date|string|null} hireDate
+ * @returns {{ due_date: string|null, urgency: 'green'|'yellow'|'red'|null }}
+ */
+function computeDueDateAndUrgency(category, requirementKey, hireDate) {
+  if (!hireDate) return { due_date: null, urgency: null };
+
+  const now = new Date();
+  const hire = new Date(hireDate);
+
+  if (category === 'within_30_days') {
+    const dueDate = new Date(hire);
+    dueDate.setDate(dueDate.getDate() + 30);
+    const daysRemaining = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+
+    let urgency;
+    if (daysRemaining < 0) {
+      urgency = 'red';
+    } else if (daysRemaining <= 15) {
+      urgency = 'yellow';
+    } else {
+      urgency = 'green';
+    }
+
+    return { due_date: dueDate.toISOString().split('T')[0], urgency };
+  }
+
+  if (category === 'annual' && ANNUAL_DUE_DATE_KEYS.includes(requirementKey)) {
+    // Find the next anniversary of hire date
+    let anniversaryYear = now.getFullYear();
+    const anniversaryThisYear = new Date(anniversaryYear, hire.getMonth(), hire.getDate());
+    if (anniversaryThisYear <= now) {
+      anniversaryYear += 1;
+    }
+    const nextAnniversary = new Date(anniversaryYear, hire.getMonth(), hire.getDate());
+
+    const msRemaining = nextAnniversary - now;
+    const daysRemaining = Math.ceil(msRemaining / (1000 * 60 * 60 * 24));
+
+    let urgency;
+    if (daysRemaining < 0) {
+      urgency = 'red';
+    } else if (daysRemaining <= 30) {
+      urgency = 'yellow';
+    } else {
+      urgency = 'green';
+    }
+
+    return { due_date: nextAnniversary.toISOString().split('T')[0], urgency };
+  }
+
+  return { due_date: null, urgency: null };
+}
+
 async function upsertRequirementStatus(driverId, requirementKey, status, evidenceDocumentId, completionDate) {
   if (!driverId || !requirementKey) {
     throw new Error('driverId and requirementKey are required');
@@ -61,6 +126,9 @@ async function computeAndUpdateDqfCompleteness(driverId) {
   res.rows.forEach((row) => {
     // Skip requirements explicitly excluded from DQF
     if (row.exclude_from_dqf) return;
+
+    // FN-319: Exclude "other" category entirely from completeness
+    if (row.category === 'other') return;
 
     const w = Number(row.weight) || 0;
 
@@ -214,6 +282,8 @@ module.exports = {
   upsertRequirementStatus,
   computeAndUpdateDqfCompleteness,
   logStatusChange,
-  computeWarningItems
+  computeWarningItems,
+  computeDueDateAndUrgency,
+  ANNUAL_DUE_DATE_KEYS
 };
 
