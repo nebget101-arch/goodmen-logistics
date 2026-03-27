@@ -105,6 +105,14 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     { value: 'other', label: 'Other Documents' }
   ];
 
+  docIconMap: Record<string, string> = {
+    inspection: 'verified_user',
+    registration: 'assignment',
+    insurance: 'security',
+    maintenance: 'build',
+    other: 'smart_toy'
+  };
+
   states = [
     'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
     'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
@@ -451,6 +459,10 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
 
   onUnitNumberInput(): void {
     this.unitNumberManuallyEdited = true;
+  }
+
+  getDocIcon(type: string): string {
+    return this.docIconMap[type] || 'description';
   }
 
   onFileSelect(event: Event, type: string): void {
