@@ -1387,51 +1387,95 @@
     </div>
   </div>
 
-  <!-- Bulk Upload Rate Confirmations modal -->
+  <!-- Bulk Upload Rate Confirmations modal — AI themed -->
   <div class="modal-backdrop" *ngIf="showBulkUploadModal">
-    <div class="modal" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h3>Bulk Upload Rate Confirmations</h3>
-        <button class="close" type="button" (click)="closeBulkUploadModal()">×</button>
+    <div class="modal bulk-ai-modal" (click)="$event.stopPropagation()">
+      <div class="bulk-ai-header">
+        <div class="bulk-ai-header-left">
+          <span class="bulk-ai-hero-pill">
+            <span class="material-symbols-outlined">auto_awesome</span> AI Batch Processing
+          </span>
+          <h3>
+            <span class="material-symbols-outlined bulk-ai-title-icon">neurology</span>
+            Bulk Upload Rate Confirmations
+          </h3>
+        </div>
+        <button class="bulk-ai-close" type="button" (click)="closeBulkUploadModal()">
+          <span class="material-symbols-outlined">close</span>
+        </button>
       </div>
-      <div class="modal-body">
-        <p>Upload up to 10 rate confirmation PDFs. You can add files from different folders in multiple steps. We'll extract load data with AI, match brokers in our database, and create draft loads at the top of the loads page for you to validate and approve.</p>
-        <div class="bulk-file-list" *ngIf="bulkPdfFiles.length">
-          <div class="bulk-file-list-header">
-            <span>{{ bulkPdfFiles.length }} file(s) (max 10)</span>
+      <div class="bulk-ai-body">
+        <p class="bulk-ai-desc">
+          Upload up to 10 rate confirmation PDFs. Our
+          <span class="bulk-ai-cyan">AI</span> will
+          <span class="bulk-ai-cyan">extract</span> load data, match brokers, and create draft loads for you to validate.
+        </p>
+
+        <!-- File list -->
+        <div class="bulk-ai-file-list" *ngIf="bulkPdfFiles.length">
+          <div class="bulk-ai-file-list-header">
+            <span class="bulk-ai-file-count">{{ bulkPdfFiles.length }}/10</span>
+            <span>files queued</span>
           </div>
-          <ul class="bulk-file-items">
-            <li *ngFor="let f of bulkPdfFiles; let i = index" class="bulk-file-item">
-              <span class="bulk-file-name">{{ f.name }}</span>
-              <button type="button" class="bulk-file-remove" (click)="removeBulkFile(i)" title="Remove" [disabled]="bulkUploading">
+          <ul class="bulk-ai-file-items">
+            <li *ngFor="let f of bulkPdfFiles; let i = index" class="bulk-ai-file-item">
+              <span class="material-symbols-outlined bulk-ai-file-icon">description</span>
+              <span class="bulk-ai-file-name">{{ f.name }}</span>
+              <button type="button" class="bulk-ai-file-remove" (click)="removeBulkFile(i)" title="Remove" [disabled]="bulkUploading">
                 <span class="material-symbols-outlined">close</span>
               </button>
             </li>
           </ul>
         </div>
+
+        <!-- Dropzone -->
         <div
-          class="dropzone"
+          class="bulk-ai-dropzone"
           (drop)="onBulkDrop($event)"
           (dragover)="allowDrop($event)"
+          *ngIf="bulkPdfFiles.length < 10"
         >
-          <p *ngIf="bulkPdfFiles.length === 0">Drag and drop PDFs here or click to upload (max 10)</p>
-          <p *ngIf="bulkPdfFiles.length && bulkPdfFiles.length < 10">Add more PDFs ({{ bulkPdfFiles.length }}/10)</p>
-          <p *ngIf="bulkPdfFiles.length >= 10" class="muted">Maximum 10 files. Remove one above to add more.</p>
+          <span class="material-symbols-outlined bulk-ai-dropzone-icon" *ngIf="bulkPdfFiles.length === 0">cloud_upload</span>
+          <span class="material-symbols-outlined bulk-ai-dropzone-icon" *ngIf="bulkPdfFiles.length > 0">add_circle</span>
+          <p *ngIf="bulkPdfFiles.length === 0">Drag & drop PDFs here or click to upload</p>
+          <p *ngIf="bulkPdfFiles.length > 0">Add more PDFs</p>
           <input #bulkFileInput type="file" accept="application/pdf" multiple (change)="onBulkFilesSelected($any($event.target).files, bulkFileInput)">
         </div>
-        <div *ngIf="bulkError" class="alert alert-error">{{ bulkError }}</div>
-        <div *ngIf="bulkResults.length" class="bulk-results">
-          <h4>Results</h4>
-          <ul>
-            <li *ngFor="let r of bulkResults">
-              <span *ngIf="r.success" class="bulk-result-ok">✓ {{ r.filename }} → Load #{{ r.data?.load_number || '--' }}</span>
-              <span *ngIf="!r.success" class="bulk-result-err">✗ {{ r.filename }}: {{ r.error || 'Failed' }}</span>
-            </li>
-          </ul>
+        <p class="bulk-ai-max-notice" *ngIf="bulkPdfFiles.length >= 10">Maximum 10 files reached. Remove a file to add more.</p>
+
+        <!-- Error -->
+        <div *ngIf="bulkError" class="bulk-ai-error">
+          <span class="material-symbols-outlined">error</span> {{ bulkError }}
+        </div>
+
+        <!-- Processing state -->
+        <div *ngIf="bulkUploading" class="bulk-ai-processing">
+          <div class="bulk-ai-processing-header">
+            <span class="material-symbols-outlined bulk-ai-pulse">neurology</span>
+            <span>AI is processing your documents...</span>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div *ngIf="bulkResults.length" class="bulk-ai-results">
+          <h4>
+            <span class="material-symbols-outlined">checklist</span> Results
+          </h4>
+          <div *ngFor="let r of bulkResults" class="bulk-ai-result-row">
+            <span *ngIf="r.success" class="bulk-ai-result-pill bulk-ai-result-ok">
+              <span class="material-symbols-outlined">check_circle</span>
+              {{ r.filename }} → Load #{{ r.data?.load_number || '--' }}
+            </span>
+            <span *ngIf="!r.success" class="bulk-ai-result-pill bulk-ai-result-err">
+              <span class="material-symbols-outlined">cancel</span>
+              {{ r.filename }}: {{ r.error || 'Failed' }}
+            </span>
+          </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" type="button" (click)="runBulkUpload()" [disabled]="bulkPdfFiles.length === 0 || bulkUploading">
+      <div class="bulk-ai-footer">
+        <button class="bulk-ai-btn" type="button" (click)="runBulkUpload()" [disabled]="bulkPdfFiles.length === 0 || bulkUploading">
+          <span class="material-symbols-outlined">auto_awesome</span>
           {{ bulkUploading ? 'Processing...' : 'Upload & Extract' }}
         </button>
         <button class="btn btn-secondary" type="button" (click)="closeBulkUploadModal()" [disabled]="bulkUploading">Close</button>
@@ -1441,28 +1485,48 @@
 
   <!-- Auto-create placeholder -->
   <div class="modal-backdrop" *ngIf="showAutoModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Auto-Create from PDF</h3>
-        <button class="close" (click)="closeAutoModal()">×</button>
+    <div class="modal ai-modal">
+      <div class="modal-header ai-modal-header">
+        <div class="ai-modal-title-group">
+          <span class="ai-hero-pill"><span class="material-symbols-outlined">auto_awesome</span> AI-Powered</span>
+          <h3><span class="material-symbols-outlined ai-title-icon">neurology</span> Auto-Create from PDF</h3>
+          <p class="ai-modal-subtitle">Upload a rate confirmation or similar PDF. Our AI will extract load details for you to review before saving.</p>
+        </div>
+        <button class="ai-close-btn" (click)="closeAutoModal()"><span class="material-symbols-outlined">close</span></button>
       </div>
       <div class="modal-body">
-        <p>Upload a rate confirmation or similar PDF. We&apos;ll try to extract load details for you, and you can review before saving.</p>
-        <div class="dropzone">
-          <p *ngIf="!autoPdfFile">Drag and drop PDF here or click to upload</p>
-          <p *ngIf="autoPdfFile"><strong>Selected file:</strong> {{ autoPdfFile.name }}</p>
-          <input type="file" accept="application/pdf" (change)="onAutoFileSelected($any($event.target).files)">
+        <div class="ai-dropzone" [class.ai-dropzone--has-file]="autoPdfFile" [class.ai-dropzone--extracting]="autoExtracting">
+          <div class="ai-dropzone-content" *ngIf="!autoPdfFile && !autoExtracting">
+            <span class="material-symbols-outlined ai-dropzone-icon">cloud_upload</span>
+            <p class="ai-dropzone-text">Drag and drop your PDF here</p>
+            <p class="ai-dropzone-hint">or click to browse files</p>
+            <input type="file" accept="application/pdf" (change)="onAutoFileSelected($any($event.target).files)" class="ai-dropzone-input">
+          </div>
+          <div class="ai-dropzone-content" *ngIf="autoPdfFile && !autoExtracting">
+            <span class="material-symbols-outlined ai-file-icon">description</span>
+            <p class="ai-dropzone-filename">{{ autoPdfFile.name }}</p>
+            <p class="ai-dropzone-hint">Ready for AI extraction</p>
+            <input type="file" accept="application/pdf" (change)="onAutoFileSelected($any($event.target).files)" class="ai-dropzone-input">
+          </div>
+          <div class="ai-dropzone-content ai-extracting-state" *ngIf="autoExtracting">
+            <span class="material-symbols-outlined ai-brain-pulse">neurology</span>
+            <p class="ai-extracting-text">AI is analyzing your document...</p>
+            <div class="ai-progress-bar"><div class="ai-progress-bar-fill"></div></div>
+          </div>
         </div>
-        <div *ngIf="autoError" class="alert alert-error">{{ autoError }}</div>
-        <p *ngIf="autoExtraction?.warning" class="alert alert-warning">
-          {{ autoExtraction?.warning }}
-        </p>
+        <div *ngIf="autoError" class="ai-alert ai-alert-error">
+          <span class="material-symbols-outlined">error</span> {{ autoError }}
+        </div>
+        <div *ngIf="autoExtraction?.warning" class="ai-alert ai-alert-warning">
+          <span class="material-symbols-outlined">warning</span> {{ autoExtraction?.warning }}
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-primary" type="button" (click)="runAutoExtraction()" [disabled]="!autoPdfFile || autoExtracting">
+        <button class="ai-btn-primary" type="button" (click)="runAutoExtraction()" [disabled]="!autoPdfFile || autoExtracting">
+          <span class="material-symbols-outlined">auto_awesome</span>
           {{ autoExtracting ? 'Extracting...' : 'Run Extraction' }}
         </button>
-        <button class="btn btn-secondary" type="button" (click)="closeAutoModal()">Close</button>
+        <button class="ai-btn-secondary" type="button" (click)="closeAutoModal()">Close</button>
       </div>
     </div>
   </div>
