@@ -1199,25 +1199,52 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * FN-320: Recalculate DQF completeness excluding:
-   * - "Other Documents" category entirely
-   * - Items flagged with _dqfExclude
-   * - Time-sensitive items not yet past due (urgency green or yellow)
+   * FN-365: Recalculate DQF completeness using the same date-math logic
+   * as the backend (dqf-service.js computeAndUpdateDqfCompleteness) so
+   * the displayed percentage matches what "Update DQF" computes.
+   *
+   * Exclusion rules (matching backend):
+   * - "Other Documents" category excluded entirely
+   * - Items flagged with _dqfExclude / exclude_from_dqf
+   * - "within_30_days" items: only counted if 30+ days have passed since hire
+   * - "annual" items: only counted if within 2 months of next hire anniversary
    */
   private recalculateDqfCompleteness(): void {
     let total = 0;
     let done = 0;
+    const now = new Date();
+    const hireDate = this.selectedDriver?.hireDate
+      ? new Date(this.selectedDriver.hireDate)
+      : null;
+    const hireDateValid = hireDate && !isNaN(hireDate.getTime());
 
     for (const cat of this.dqfCategories) {
-      // FN-320: Exclude "other" entirely
       if (cat.key === 'other') continue;
 
       for (const req of cat.requirements) {
         if (req._dqfExclude) continue;
 
-        // FN-320: Exclude time-sensitive items not yet past due (urgency green or yellow)
-        if ((cat.key === 'within_30_days' || cat.key === 'annual') &&
-            req.urgency && req.urgency !== 'red') continue;
+        // "within_30_days": only count if 30+ days have passed since hire
+        if (cat.key === 'within_30_days') {
+          if (!hireDateValid) continue;
+          const thirtyDaysAfterHire = new Date(hireDate!);
+          thirtyDaysAfterHire.setDate(thirtyDaysAfterHire.getDate() + 30);
+          if (now < thirtyDaysAfterHire) continue;
+        }
+
+        // "annual": only count if within 2 months of next hire anniversary
+        if (cat.key === 'annual') {
+          if (!hireDateValid) continue;
+          let anniversaryYear = now.getFullYear();
+          const anniversaryThisYear = new Date(anniversaryYear, hireDate!.getMonth(), hireDate!.getDate());
+          if (anniversaryThisYear < now) {
+            anniversaryYear += 1;
+          }
+          const nextAnniversary = new Date(anniversaryYear, hireDate!.getMonth(), hireDate!.getDate());
+          const twoMonthsBefore = new Date(nextAnniversary);
+          twoMonthsBefore.setMonth(twoMonthsBefore.getMonth() - 2);
+          if (now < twoMonthsBefore) continue;
+        }
 
         const weight = req.weight || 1;
         total += weight;
