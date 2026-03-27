@@ -124,6 +124,64 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     { value: 'shared', label: 'Shared' }
   ];
 
+  readonly driverTypeOptions = [
+    { value: 'company', label: 'Company' },
+    { value: 'owner_operator', label: 'Owner Operator' },
+    { value: 'hired_driver', label: 'Hired Driver' }
+  ];
+
+  readonly driverStatusOptions = [
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' },
+    { value: 'applicant', label: 'Applicant' }
+  ];
+
+  readonly payBasisOptions = [
+    { value: 'per_mile', label: 'Per Mile' },
+    { value: 'percentage', label: 'Percentage' },
+    { value: 'flatpay', label: 'Flat Pay' },
+    { value: 'hourly', label: 'Hourly' }
+  ];
+
+  readonly cdlClassOptions = [
+    { value: 'A', label: 'Class A' },
+    { value: 'B', label: 'Class B' },
+    { value: 'C', label: 'Class C' }
+  ];
+
+  readonly deductionTargetOptions = [
+    { value: 'primary', label: 'Primary payee' },
+    { value: 'additional', label: 'Additional payee' }
+  ];
+
+  readonly deductionAmountTypeOptions = [
+    { value: 'fixed', label: 'Fixed' },
+    { value: 'percentage', label: 'Percentage' }
+  ];
+
+  truckSelectOptions: { value: string; label: string }[] = [];
+
+  get trailerSelectOptions(): { value: string; label: string }[] {
+    return this.availableTrailers.map(t => ({
+      value: t.id,
+      label: [t.unit_number, t.make, t.model].filter(Boolean).join(' - ') || t.id
+    }));
+  }
+
+  get expenseCategoryOptions() {
+    return [
+      { value: '', label: 'Manual / not expense-specific' },
+      ...this.expenseKeys.map(e => ({ value: e.key, label: e.label }))
+    ];
+  }
+
+  get sourceTypeOptions() {
+    return [
+      { value: '', label: 'Select expense' },
+      ...this.deductionExpenseTypeOptions
+    ];
+  }
+
   recurringDeductions: any[] = [];
   loadingRecurringDeductions = false;
   addingRecurringDeduction = false;
@@ -366,6 +424,10 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
           const t = (v.vehicle_type || v.vehicleType || '').toString().toLowerCase();
           return t === 'trailer';
         });
+        this.truckSelectOptions = this.trucks.map(t => ({
+          value: t.id,
+          label: [t.unit_number, t.make, t.model].filter(Boolean).join(' - ') || t.id
+        }));
       },
       error: (err) => {
         console.error('Error loading vehicles for drivers page', err);
