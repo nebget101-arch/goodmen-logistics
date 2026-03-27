@@ -145,13 +145,8 @@ export class ScheduledDeductionsComponent implements OnInit {
     { value: 'false', label: 'Inactive' }
   ];
 
-  get driverOptions(): { value: string; label: string }[] {
-    return (this.drivers || []).map(d => ({ value: d.id, label: `${d.firstName} ${d.lastName}` }));
-  }
-
-  get payeeOptions(): { value: string; label: string }[] {
-    return (this.payees || []).map(p => ({ value: p.id, label: p.name }));
-  }
+  driverOptions: { value: string; label: string }[] = [];
+  payeeOptions: { value: string; label: string }[] = [];
 
   constructor(private apiService: ApiService) {}
 
@@ -184,6 +179,7 @@ export class ScheduledDeductionsComponent implements OnInit {
     this.apiService.getDrivers().subscribe({
       next: (data) => {
         this.drivers = data || [];
+        this.driverOptions = this.drivers.map(d => ({ value: d.id, label: `${d.firstName} ${d.lastName}` }));
       },
       error: (err) => console.error('Error loading drivers:', err)
     });
@@ -193,6 +189,7 @@ export class ScheduledDeductionsComponent implements OnInit {
     this.apiService.getAllPayees({ is_active: true, limit: 200 }).subscribe({
       next: (data) => {
         this.payees = data || [];
+        this.payeeOptions = this.payees.map(p => ({ value: p.id, label: p.name }));
       },
       error: (err) => console.error('Error loading payees:', err)
     });

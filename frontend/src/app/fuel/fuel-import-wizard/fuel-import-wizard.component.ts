@@ -44,16 +44,8 @@ export class FuelImportWizardComponent implements OnInit {
   cards: FuelCardAccount[] = [];
   selectedCardId = '';
 
-  get cardSelectOptions(): AiSelectOption[] {
-    return this.cards.map(c => ({
-      value: c.id,
-      label: `${c.display_name} (${c.provider_name})`
-    }));
-  }
-
-  get headerOptions(): AiSelectOption[] {
-    return (this.previewResult?.headers || []).map(h => ({ value: h, label: h }));
-  }
+  cardSelectOptions: AiSelectOption[] = [];
+  headerOptions: AiSelectOption[] = [];
 
   // Step 5 — Validate (stage)
   stageResult: StageResult | null = null;
@@ -74,7 +66,13 @@ export class FuelImportWizardComponent implements OnInit {
       error: () => {}
     });
     this.fuel.getCards().subscribe({
-      next: (cards) => { this.cards = cards.filter(c => c.status === 'active'); },
+      next: (cards) => {
+        this.cards = cards.filter(c => c.status === 'active');
+        this.cardSelectOptions = this.cards.map(c => ({
+          value: c.id,
+          label: `${c.display_name} (${c.provider_name})`
+        }));
+      },
       error: () => {}
     });
   }
@@ -125,6 +123,7 @@ export class FuelImportWizardComponent implements OnInit {
     this.previewError = '';
     this.columnMap = {};
     this.previewResult = null;
+    this.headerOptions = [];
   }
 
   nextFromUpload(): void {
@@ -134,6 +133,7 @@ export class FuelImportWizardComponent implements OnInit {
     this.fuel.previewImport(this.selectedFile, this.selectedProviderKey).subscribe({
       next: (res) => {
         this.previewResult = res;
+        this.headerOptions = (res.headers || []).map((h: string) => ({ value: h, label: h }));
         this.columnMap = { ...res.autoMapping } as Record<string, string>;
         this.previewLoading = false;
         this.currentStep = 'preview';
@@ -204,6 +204,7 @@ export class FuelImportWizardComponent implements OnInit {
     this.currentStep = 'provider';
     this.selectedFile = null;
     this.previewResult = null;
+    this.headerOptions = [];
     this.stageResult = null;
     this.commitResult = null;
     this.columnMap = {};

@@ -57,32 +57,25 @@ export class AppComponent implements OnInit {
     return !!localStorage.getItem('token');
   }
 
-  get operatingEntityOptions(): AiSelectOption[] {
-    const opts: AiSelectOption[] = [];
-    if (this.showAllEntitiesOption()) {
-      opts.push({ value: 'all', label: 'All Entities' });
-    }
-    for (const entity of this.operatingEntityContext.snapshot.accessibleOperatingEntities) {
-      opts.push({
-        value: entity.id,
-        label: entity.name + (entity.mcNumber ? ' \u00b7 MC ' + entity.mcNumber : '')
-      });
-    }
-    return opts;
-  }
+  operatingEntityOptions: AiSelectOption[] = [];
+  operatingEntityOptionsMobile: AiSelectOption[] = [];
 
-  get operatingEntityOptionsMobile(): AiSelectOption[] {
-    const opts: AiSelectOption[] = [];
-    if (this.showAllEntitiesOption()) {
-      opts.push({ value: 'all', label: 'All Entities' });
-    }
-    for (const entity of this.operatingEntityContext.snapshot.accessibleOperatingEntities) {
-      opts.push({
-        value: entity.id,
-        label: entity.name
-      });
-    }
-    return opts;
+  rebuildOperatingEntityOptions(): void {
+    const entities = this.operatingEntityContext.snapshot.accessibleOperatingEntities;
+    const prefix: AiSelectOption[] = this.showAllEntitiesOption()
+      ? [{ value: 'all', label: 'All Entities' }]
+      : [];
+    this.operatingEntityOptions = [
+      ...prefix,
+      ...entities.map(e => ({
+        value: e.id,
+        label: e.name + (e.mcNumber ? ' \u00b7 MC ' + e.mcNumber : '')
+      }))
+    ];
+    this.operatingEntityOptionsMobile = [
+      ...prefix,
+      ...entities.map(e => ({ value: e.id, label: e.name }))
+    ];
   }
 
   showAllEntitiesOption(): boolean {
@@ -260,6 +253,7 @@ export class AppComponent implements OnInit {
       });
     }
     this.operatingEntityContext.bootstrapFromSessionIfNeeded(this.isLoggedIn());
+    this.operatingEntityContext.context$().subscribe(() => this.rebuildOperatingEntityOptions());
   }
 
   toggleSidebar(): void {
