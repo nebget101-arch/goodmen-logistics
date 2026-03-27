@@ -345,10 +345,11 @@
           <div class="form-row">
             <!-- Inspection Expiry -->
             <div class="form-group">
-              <app-ai-date-picker inputId="inspection-expiry" label="Inspection Expiration Date" [(ngModel)]="formData.inspection_expiry" name="inspection_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+              <label for="inspection-expiry">Inspection Expiration Date</label>
+              <app-ai-date-picker inputId="inspection-expiry" [(ngModel)]="formData.inspection_expiry" name="inspection_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
               <div *ngIf="formData.inspection_expiry" class="status-indicator">
                 <span [class]="'badge badge-' + getInspectionStatus()">
-                  {{ getInspectionStatus() === 'expired' ? 'Expired' : 
+                  {{ getInspectionStatus() === 'expired' ? 'Expired' :
                      getInspectionStatus() === 'warning' ? 'Expiring Soon' : 'Valid' }}
                 </span>
               </div>
@@ -356,10 +357,11 @@
 
             <!-- Registration Expiry -->
             <div class="form-group">
-              <app-ai-date-picker inputId="registration-expiry" label="Registration Expiry" [(ngModel)]="formData.registration_expiry" name="registration_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+              <label for="registration-expiry">Registration Expiry</label>
+              <app-ai-date-picker inputId="registration-expiry" [(ngModel)]="formData.registration_expiry" name="registration_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
               <div *ngIf="formData.registration_expiry" class="status-indicator">
                 <span [class]="'badge badge-' + getRegistrationStatus()">
-                  {{ getDaysUntilExpiry(formData.registration_expiry) >= 0 ? 
+                  {{ getDaysUntilExpiry(formData.registration_expiry) >= 0 ?
                      'Expires in ' + getDaysUntilExpiry(formData.registration_expiry) + ' days' : 'Expired' }}
                 </span>
               </div>
@@ -367,14 +369,16 @@
 
             <!-- Insurance Expiry -->
             <div class="form-group">
-              <app-ai-date-picker inputId="insurance-expiry" label="Insurance Expiry" [(ngModel)]="formData.insurance_expiry" name="insurance_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+              <label for="insurance-expiry">Insurance Expiry</label>
+              <app-ai-date-picker inputId="insurance-expiry" [(ngModel)]="formData.insurance_expiry" name="insurance_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
             </div>
           </div>
 
-          <div class="form-row">
+          <div class="form-row pm-row">
             <!-- Next PM Due -->
             <div class="form-group">
-              <app-ai-date-picker inputId="next-pm-due" label="Next PM Due Date" [(ngModel)]="formData.next_pm_due" name="next_pm_due" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+              <label for="next-pm-due">Next PM Due Date</label>
+              <app-ai-date-picker inputId="next-pm-due" [(ngModel)]="formData.next_pm_due" name="next_pm_due" placeholder="MM/DD/YYYY"></app-ai-date-picker>
             </div>
 
             <!-- Next PM Mileage -->

@@ -352,6 +352,21 @@
   cursor: not-allowed;
 }
 
+/* Date picker placeholder centering */
+.vehicle-form-modal .form-group app-ai-date-picker ::ng-deep .mat-mdc-input-element::placeholder {
+  text-align: center;
+}
+
+/* PM fields: force two-column row so date and mileage align side-by-side */
+.vehicle-form-modal .pm-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Align date picker height with adjacent text inputs in the same row */
+.vehicle-form-modal .pm-row .form-group app-ai-date-picker ::ng-deep .mat-mdc-text-field-wrapper {
+  min-height: 42px;
+}
+
 @media (max-width: 768px) {
   .vehicle-form-modal.modal-container {
     margin: 0;
@@ -361,7 +376,8 @@
   .vehicle-form-modal .modal-header {
     border-radius: 0;
   }
-  .vehicle-form-modal .form-row {
+  .vehicle-form-modal .form-row,
+  .vehicle-form-modal .pm-row {
     grid-template-columns: 1fr;
   }
   .vehicle-form-modal .modal-footer {
