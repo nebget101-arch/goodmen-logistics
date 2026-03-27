@@ -73,6 +73,19 @@ export class SafetyAccidentDetailComponent implements OnInit {
   readonly CLAIM_TYPES = ['auto_liability', 'cargo', 'general_liability', 'workers_comp', 'property'];
   readonly NOTE_TYPES = ['general', 'investigation', 'legal', 'insurance'];
 
+  // Option arrays for app-ai-select (value/label pairs)
+  private toOptions(arr: readonly string[]): { value: string; label: string }[] {
+    return arr.map(v => ({ value: v, label: v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
+  }
+  readonly statusOptions = this.toOptions(this.STATUSES);
+  readonly severityOptions = this.toOptions(this.SEVERITIES);
+  readonly typeOptions = this.toOptions(this.TYPES);
+  readonly preventabilityOptions = this.toOptions(this.PREVENTABILITIES);
+  readonly partyTypeOptions = this.toOptions(this.PARTY_TYPES);
+  readonly docTypeOptions = this.toOptions(this.DOC_TYPES);
+  readonly claimTypeOptions = this.toOptions(this.CLAIM_TYPES);
+  readonly noteTypeOptions = this.toOptions(this.NOTE_TYPES);
+
   constructor(private route: ActivatedRoute, private router: Router, private safety: SafetyService) {}
 
   ngOnInit(): void {

@@ -45,13 +45,22 @@ export class ComplianceDashboardComponent implements OnInit, OnDestroy {
 
   // Bulk action controls
   selectedYear: number = new Date().getFullYear();
+  selectedYearStr: string = String(new Date().getFullYear());
   yearOptions: number[] = [];
+  yearSelectOptions: { value: string; label: string }[] = [];
 
   // Audit / compliance summary data
   auditTrail: any[] = [];
   complianceSummary: any = null;
   auditLoading = true;
   selectedCategory = 'dqf';
+
+  readonly categoryOptions: { value: string; label: string }[] = [
+    { value: 'dqf', label: 'Driver Qualification Files' },
+    { value: 'hos', label: 'Hours of Service' },
+    { value: 'maintenance', label: 'Maintenance Records' },
+    { value: 'drug-alcohol', label: 'Drug & Alcohol Testing' },
+  ];
 
   constructor(
     private complianceService: AnnualComplianceService,
@@ -60,6 +69,7 @@ export class ComplianceDashboardComponent implements OnInit, OnDestroy {
   ) {
     const currentYear = new Date().getFullYear();
     this.yearOptions = [currentYear - 1, currentYear, currentYear + 1];
+    this.yearSelectOptions = this.yearOptions.map(y => ({ value: String(y), label: String(y) }));
   }
 
   ngOnInit(): void {
@@ -270,6 +280,11 @@ export class ComplianceDashboardComponent implements OnInit, OnDestroy {
         },
         error: () => { this.error = 'Failed to export report'; }
       });
+  }
+
+  onYearChange(yearStr: string): void {
+    this.selectedYearStr = yearStr;
+    this.selectedYear = Number(yearStr);
   }
 
   // ─── Template helpers ───────────────────────────────────────────────────────
