@@ -68,6 +68,7 @@ const consentsRouter = require('@goodmen/shared/routes/consents');
 const publicConsentsRouter = require('@goodmen/shared/routes/public-consents');
 const safetyRouter = require('@goodmen/shared/routes/safety');
 const employerInvestigationsRouter = require('@goodmen/shared/routes/employer-investigations');
+const publicEmployerInvestigationsRouter = require('@goodmen/shared/routes/public-employer-investigations');
 const annualComplianceRouter = require('@goodmen/shared/routes/annual-compliance');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
@@ -92,6 +93,7 @@ app.use('/api/annual-compliance', authMiddleware, tenantContextMiddleware, annua
 app.use('/public/onboarding', publicOnboardingRouter);
 app.use('/public/roadside', publicRoadsideRouter);
 app.use('/public/consents', publicConsentsRouter);
+app.use('/public/employer-investigations', publicEmployerInvestigationsRouter);
 
 /**
  * @openapi
