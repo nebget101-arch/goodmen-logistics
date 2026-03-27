@@ -35,6 +35,7 @@ import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admi
 import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
+import { EmployerResponseComponent } from './public/components/employer-response/employer-response.component';
 import { PERMISSIONS } from './models/access-control.model';
 import { InternalTrialAdminGuard } from './guards/internal-trial-admin.guard';
 import { BillingAdminGuard } from './guards/billing-admin.guard';
@@ -139,6 +140,8 @@ const routes: Routes = [
   // Public driver onboarding packet link (no AuthGuard)
   { path: 'onboard/:packetId', component: OnboardingPacketComponent },
   { path: 'roadside/:callId', component: PublicRoadsideComponent },
+  // Public employer investigation response (no AuthGuard — token-validated)
+  { path: 'employer-response/:tokenId', component: EmployerResponseComponent },
   { path: 'shop-clients', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
   { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
   { path: 'settlements', loadChildren: () => import('./settlements/settlements.module').then(m => m.SettlementsModule) },

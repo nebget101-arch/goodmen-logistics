@@ -57,6 +57,7 @@ import { TrialRequestsAdminComponent } from './components/trial-requests-admin/t
 import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
+import { EmployerResponseComponent } from './public/components/employer-response/employer-response.component';
 import { RoadsideAiCallerComponent } from './components/roadside-ai-caller/roadside-ai-caller.component';
 import { PaymentMethodFormComponent } from './billing/payment-method-form/payment-method-form.component';
 import { TrialBannerComponent } from './shared/trial-banner/trial-banner.component';
@@ -115,6 +116,7 @@ import { DisqualificationHistoryComponent } from './components/onboarding-packet
     ,EmploymentApplicationComponent,
     RoadsideBoardComponent,
     PublicRoadsideComponent,
+    EmployerResponseComponent,
     RoadsideAiCallerComponent,
     PaymentMethodFormComponent,
     TrialBannerComponent,
