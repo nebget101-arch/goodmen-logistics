@@ -387,14 +387,19 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
     // 5) Add history entry
     await client.query(
       `INSERT INTO driver_investigation_history_file
-         (driver_id, related_employer_id, entry_type, summary, document_id)
-       VALUES ($1, $2, $3, $4, $5)`,
+         (driver_id, past_employer_id, entry_type, description, metadata)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [
         driver.id,
         token.past_employer_id,
         'employer_response',
         `Online response received from ${employer.employer_name} (completed by ${body.completed_by_name})`,
-        documentId
+        JSON.stringify({
+          responseId,
+          documentId,
+          completedBy: body.completed_by_name,
+          receivedVia: 'online_portal'
+        })
       ]
     );
 
