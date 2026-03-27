@@ -1185,24 +1185,25 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * FN-261: Recalculate DQF completeness excluding:
+   * FN-320: Recalculate DQF completeness excluding:
    * - "Other Documents" category entirely
-   * - Items flagged with _dqfExclude (e.g., annual items not yet due)
-   * - "Within 30 Days" items still in warning window
+   * - Items flagged with _dqfExclude
+   * - Time-sensitive items not yet past due (urgency green or yellow)
    */
   private recalculateDqfCompleteness(): void {
     let total = 0;
     let done = 0;
 
     for (const cat of this.dqfCategories) {
-      // FN-261: Exclude "Other Documents" from completeness calc
+      // FN-320: Exclude "other" entirely
       if (cat.key === 'other') continue;
 
       for (const req of cat.requirements) {
-        // FN-261: Exclude items flagged for exclusion
         if (req._dqfExclude) continue;
-        // FN-261: Exclude "Within 30 Days" items that are in warning period
-        if (cat.key === 'within_30_days' && req._dqfOverrideStatus === 'warning') continue;
+
+        // FN-320: Exclude time-sensitive items not yet past due (urgency green or yellow)
+        if ((cat.key === 'within_30_days' || cat.key === 'annual') &&
+            req.urgency && req.urgency !== 'red') continue;
 
         const weight = req.weight || 1;
         total += weight;
@@ -1248,6 +1249,43 @@ export class DriversComponent implements OnInit, OnDestroy {
     const total = countable.length;
     const done = countable.filter((r: Record<string, unknown>) => r['status'] === 'complete').length;
     return `${done}/${total}`;
+  }
+
+  /** FN-320: Determine badge color class for a DQF category tab */
+  getCategoryBadgeClass(cat: { key?: string; requirements: any[] }): string {
+    if (this.getCategoryCompletionPct(cat) === 100) return 'badge-complete';
+
+    const hasRed = cat.requirements.some((r: Record<string, unknown>) => r['urgency'] === 'red' && r['status'] !== 'complete');
+    const hasYellow = cat.requirements.some((r: Record<string, unknown>) => r['urgency'] === 'yellow' && r['status'] !== 'complete');
+
+    if (hasRed) return 'badge-overdue';
+    if (hasYellow) return 'badge-warning';
+
+    // For time-sensitive tabs where all items are green (not yet due), show green
+    if (cat.key === 'within_30_days' || cat.key === 'annual') {
+      const allGreen = cat.requirements.every((r: Record<string, unknown>) => r['urgency'] === 'green' || r['status'] === 'complete');
+      if (allGreen && cat.requirements.length > 0) return 'badge-safe';
+    }
+
+    return 'badge-incomplete';
+  }
+
+  /** FN-320: Determine urgency-based chip class for a DQF requirement */
+  getUrgencyChipClass(req: Record<string, unknown>): string {
+    if (req['status'] === 'complete') return 'dqf-chip-complete';
+    if (req['urgency'] === 'red') return 'dqf-chip-overdue';
+    if (req['urgency'] === 'yellow') return 'dqf-chip-warning';
+    if (req['urgency'] === 'green') return 'dqf-chip-safe';
+    return 'dqf-chip-missing';
+  }
+
+  /** FN-320: Human-readable urgency label for a DQF requirement */
+  getUrgencyLabel(req: Record<string, unknown>): string {
+    if (req['status'] === 'complete') return 'Complete';
+    if (req['urgency'] === 'red') return 'Overdue';
+    if (req['urgency'] === 'yellow') return 'Due Soon';
+    if (req['urgency'] === 'green') return 'On Track';
+    return req['status'] === 'missing' ? 'Missing' : String(req['status'] || 'Missing');
   }
 
   getStatusChipClass(status: string): string {
