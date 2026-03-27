@@ -340,11 +340,18 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
 
     // We must commit the transaction before using createDriverDocument (which uses its own query)
     // so instead, do a manual insert within the transaction
+    // Store the PDF blob first, then create the document record pointing to it
+    const blobRes = await client.query(
+      `INSERT INTO driver_document_blobs (bytes) VALUES ($1) RETURNING id`,
+      [pdfBuffer]
+    );
+    const blobId = blobRes.rows[0].id;
+
     const storageKey = `investigations/${driver.id}/${fileName}`;
     const docRes = await client.query(
       `INSERT INTO driver_documents (
-        driver_id, doc_type, file_name, mime_type, size_bytes, storage_mode, storage_key
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        driver_id, doc_type, file_name, mime_type, size_bytes, storage_mode, storage_key, blob_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING id`,
       [
         driver.id,
@@ -353,16 +360,11 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
         'application/pdf',
         Buffer.byteLength(pdfBuffer),
         'db',
-        storageKey
+        storageKey,
+        blobId
       ]
     );
     const documentId = docRes.rows[0].id;
-
-    // Store the PDF blob in document_blobs
-    await client.query(
-      `INSERT INTO document_blobs (document_id, data) VALUES ($1, $2)`,
-      [documentId, pdfBuffer]
-    );
 
     // Update the response record with PDF info
     await client.query(
@@ -385,20 +387,14 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
     // 5) Add history entry
     await client.query(
       `INSERT INTO driver_investigation_history_file
-         (driver_id, past_employer_id, entry_type, description, metadata)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+         (driver_id, related_employer_id, entry_type, summary, document_id)
+       VALUES ($1, $2, $3, $4, $5)`,
       [
         driver.id,
         token.past_employer_id,
         'employer_response',
         `Online response received from ${employer.employer_name} (completed by ${body.completed_by_name})`,
-        JSON.stringify({
-          responseType: 'online_form',
-          receivedVia: 'online_portal',
-          responseId,
-          documentId,
-          completedBy: body.completed_by_name
-        })
+        documentId
       ]
     );
 
