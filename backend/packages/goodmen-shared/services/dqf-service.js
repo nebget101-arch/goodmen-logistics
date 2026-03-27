@@ -122,13 +122,25 @@ async function computeAndUpdateDqfCompleteness(driverId) {
   const now = new Date();
   let totalWeight = 0;
   let completedWeight = 0;
+  const counted = [];
+  const skipped = [];
+
+  // FN-366: Keys that are no longer displayed on the frontend DQF checklist
+  // but were not marked exclude_from_dqf in migrations. Exclude them here
+  // so backend completeness matches what the user sees.
+  const BACKEND_EXTRA_EXCLUDES = new Set([
+    'medical_card_back_on_file',   // FN-269: medical card is one page; frontend removed this
+  ]);
 
   res.rows.forEach((row) => {
     // Skip requirements explicitly excluded from DQF
-    if (row.exclude_from_dqf) return;
+    if (row.exclude_from_dqf) { skipped.push({ key: row.key, reason: 'exclude_from_dqf' }); return; }
 
     // FN-319: Exclude "other" category entirely from completeness
-    if (row.category === 'other') return;
+    if (row.category === 'other') { skipped.push({ key: row.key, reason: 'other_category' }); return; }
+
+    // FN-366: Exclude keys removed from frontend display
+    if (BACKEND_EXTRA_EXCLUDES.has(row.key)) { skipped.push({ key: row.key, reason: 'frontend_removed' }); return; }
 
     const w = Number(row.weight) || 0;
 
@@ -136,21 +148,18 @@ async function computeAndUpdateDqfCompleteness(driverId) {
     // hire_date anniversary is within 2 months (i.e. hire_date + 10 months has passed)
     if (row.category === 'annual' && hireDate) {
       const hire = new Date(hireDate);
-      // Find the next anniversary year
       let anniversaryYear = now.getFullYear();
       const anniversaryThisYear = new Date(anniversaryYear, hire.getMonth(), hire.getDate());
       if (anniversaryThisYear < now) {
-        // Anniversary already passed this year — look at next year
         anniversaryYear += 1;
       }
       const nextAnniversary = new Date(anniversaryYear, hire.getMonth(), hire.getDate());
       const twoMonthsBefore = new Date(nextAnniversary);
       twoMonthsBefore.setMonth(twoMonthsBefore.getMonth() - 2);
 
-      // Only count if we are within 2 months of the next anniversary
-      if (now < twoMonthsBefore) return;
+      if (now < twoMonthsBefore) { skipped.push({ key: row.key, reason: 'annual_not_due' }); return; }
     } else if (row.category === 'annual' && !hireDate) {
-      // No hire_date — cannot determine anniversary; skip from calculation
+      skipped.push({ key: row.key, reason: 'annual_no_hire_date' });
       return;
     }
 
@@ -160,9 +169,9 @@ async function computeAndUpdateDqfCompleteness(driverId) {
       const hire = new Date(hireDate);
       const thirtyDaysAfterHire = new Date(hire);
       thirtyDaysAfterHire.setDate(thirtyDaysAfterHire.getDate() + 30);
-      if (now < thirtyDaysAfterHire) return;
+      if (now < thirtyDaysAfterHire) { skipped.push({ key: row.key, reason: 'within_30_not_due' }); return; }
     } else if (row.category === 'within_30_days' && !hireDate) {
-      // No hire_date — skip from calculation
+      skipped.push({ key: row.key, reason: 'within_30_no_hire_date' });
       return;
     }
 
@@ -170,6 +179,7 @@ async function computeAndUpdateDqfCompleteness(driverId) {
     if (row.status === 'complete') {
       completedWeight += w;
     }
+    counted.push({ key: row.key, category: row.category, weight: w, status: row.status });
   });
 
   const completeness = totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 0;
@@ -179,7 +189,7 @@ async function computeAndUpdateDqfCompleteness(driverId) {
     driverId
   ]);
 
-  return completeness;
+  return { completeness, totalWeight, completedWeight, counted, skipped };
 }
 
 async function logStatusChange(driverId, requirementKey, oldStatus, newStatus, changedByUserId, note) {
