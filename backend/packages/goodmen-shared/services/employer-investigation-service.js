@@ -110,7 +110,7 @@ async function checkAndCompleteInvestigation(client, driverId) {
  */
 async function loadDriverAndOe(client, driverId) {
   const driverRes = await client.query(
-    `SELECT d.id, d.first_name, d.last_name, d.middle_name,
+    `SELECT d.id, d.first_name, d.last_name,
             d.cdl_number, d.cdl_state, d.date_of_birth,
             d.operating_entity_id
        FROM drivers d WHERE d.id = $1`,
@@ -122,7 +122,7 @@ async function loadDriverAndOe(client, driverId) {
   const oeRes = await client.query(
     `SELECT oe.id, oe.name, oe.legal_name, oe.address_line1, oe.address_line2,
             oe.city, oe.state, oe.zip_code, oe.phone, oe.email,
-            oe.dot_number, oe.usdot_number
+            oe.dot_number
        FROM operating_entities oe WHERE oe.id = $1`,
     [driver.operating_entity_id]
   );
@@ -347,7 +347,7 @@ async function sendInquiry(pastEmployerId, userId) {
     );
 
     // Generate request PDF
-    const driverName = [driver.first_name, driver.middle_name, driver.last_name].filter(Boolean).join(' ');
+    const driverName = [driver.first_name, driver.last_name].filter(Boolean).join(' ');
     let pdfBuffer = null;
     try {
       pdfBuffer = await buildRequestPdf(
@@ -479,7 +479,7 @@ async function sendFollowUp(pastEmployerId, userId) {
     tokenId = tokenResult.tokenId;
 
     // Generate request PDF with the new link
-    const driverName = [driver.first_name, driver.middle_name, driver.last_name].filter(Boolean).join(' ');
+    const driverName = [driver.first_name, driver.last_name].filter(Boolean).join(' ');
     let pdfBuffer = null;
     try {
       pdfBuffer = await buildRequestPdf(
