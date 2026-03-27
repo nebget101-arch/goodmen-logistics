@@ -213,17 +213,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   statusOptions: LoadStatus[] = ['NEW', 'DRAFT', 'DISPATCHED', 'CANCELLED', 'TONU', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
   billingOptions: BillingStatus[] = ['PENDING', 'CANCELLED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
 
-  get driverFilterOptions(): AiSelectOption[] {
-    return this.drivers.map(d => ({ value: d.id, label: d.name }));
-  }
-
-  get statusFilterOptions(): AiSelectOption[] {
-    return this.statusOptions.map(s => ({ value: s, label: this.getStatusLabel(s) }));
-  }
-
-  get billingFilterOptions(): AiSelectOption[] {
-    return this.billingOptions.map(b => ({ value: b, label: this.getBillingLabel(b) }));
-  }
+  driverFilterOptions: AiSelectOption[] = [];
+  statusFilterOptions: AiSelectOption[] = [];
+  billingFilterOptions: AiSelectOption[] = [];
 
   attachmentTypeFilterOptions: AiSelectOption[] = [
     { value: 'RATE_CONFIRMATION', label: 'Rate Conf' },
@@ -485,6 +477,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         });
       }
     });
+    this.statusFilterOptions = this.statusOptions.map(s => ({ value: s, label: this.getStatusLabel(s) }));
+    this.billingFilterOptions = this.billingOptions.map(b => ({ value: b, label: this.getBillingLabel(b) }));
     this.loadDropdownData();
     this.loadLoads();
 
@@ -557,9 +551,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
           id: driver.id,
           name: `${driver.firstName} ${driver.lastName}`.trim()
         }));
+        this.driverFilterOptions = this.drivers.map(d => ({ value: d.id, label: d.name }));
       },
       error: () => {
         this.drivers = [];
+        this.driverFilterOptions = [];
       }
     });
 
