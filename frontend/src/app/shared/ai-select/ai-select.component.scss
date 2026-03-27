@@ -24,6 +24,10 @@
       radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.08), transparent 52%),
       rgba(2, 6, 23, 0.8);
     transition: border-color 150ms ease, box-shadow 150ms ease;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
   }
 
   .mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper {
@@ -31,16 +35,30 @@
     box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
   }
 
-  /* Match app-ai-date-picker / .form-input row height (~38px infix) */
+  /* Match text-input filter height (36px total) */
   .mat-mdc-form-field-infix {
-    min-height: 38px;
-    padding-top: 8px;
-    padding-bottom: 8px;
+    min-height: 36px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
   }
 
+  /* Hide subscript so it doesn't add extra height */
+  .mat-mdc-form-field-subscript-wrapper {
+    display: none;
+  }
+
+  /* Center placeholder and value text */
   .mat-mdc-select-value,
   .mat-mdc-select-placeholder {
     color: #e5e7eb;
+    text-align: center;
+  }
+
+  .mat-mdc-select-placeholder {
+    color: #94a3b8;
   }
 
   .mat-mdc-select-arrow {

@@ -15,6 +15,9 @@
   min-height: 36px;
   padding-top: 6px;
   padding-bottom: 6px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 :host(.ai-date-picker--inline) .ai-date-picker-field {
@@ -31,6 +34,9 @@
   min-height: 36px;
   padding-top: 6px;
   padding-bottom: 6px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 /* Match AI_THEME_VISUAL_REFERENCE form inputs: dark surface, 10px radius, cyan focus */
@@ -49,6 +55,10 @@
       radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.08), transparent 52%),
       rgba(2, 6, 23, 0.8);
     transition: border-color 150ms ease, box-shadow 150ms ease;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
   }
 
   .mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper {
@@ -56,11 +66,19 @@
     box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
   }
 
-  /* Align closer to .form-input / filter rows (~38px content) — FN-167 */
+  /* Match text-input filter height (36px total) — FN-167 / FN-362 */
   .mat-mdc-form-field-infix {
-    min-height: 38px;
-    padding-top: 8px;
-    padding-bottom: 8px;
+    min-height: 36px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+  }
+
+  /* Hide subscript so it doesn't add extra height */
+  .mat-mdc-form-field-subscript-wrapper {
+    display: none;
   }
 
   .mat-datepicker-toggle {
@@ -68,16 +86,23 @@
   }
 
   .mat-datepicker-toggle .mat-mdc-icon-button {
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     --mdc-icon-button-icon-color: #94a3b8;
     --mdc-icon-button-hover-icon-color: #67e8f9;
   }
 
+  /* Center placeholder and value text */
   .mat-mdc-input-element {
     color: #e5e7eb;
     caret-color: #67e8f9;
+    text-align: center;
+  }
+
+  .mat-mdc-input-element::placeholder {
+    text-align: center;
+    color: #94a3b8;
   }
 
   .mat-mdc-form-field-label,
