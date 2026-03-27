@@ -85,8 +85,8 @@
 /* Date picker – match Driver's Name / All dropdowns: subtle border, rounded, no white outline */
 .ai-date-wrapper {
   display: inline-block;
-  width: 150px;
-  min-width: 150px;
+  width: 200px;
+  min-width: 200px;
 }
 
 .ai-date-wrapper ::ng-deep .ai-date-field {
@@ -135,6 +135,11 @@
 .ai-date-wrapper ::ng-deep .ai-date-field .mat-mdc-input-element {
   color: #e5e7eb;
   font-size: 0.875rem;
+  text-align: center;
+}
+
+.ai-date-wrapper ::ng-deep .ai-date-field .mat-mdc-input-element::placeholder {
+  text-align: center;
 }
 
 .ai-date-wrapper ::ng-deep .ai-date-field .mat-mdc-form-field-infix {
@@ -210,13 +215,18 @@
   font-size: 0.875rem;
 }
 
-/* app-ai-select provides its own Material outlined styling — only constrain width */
+/* app-ai-select provides its own Material outlined styling — constrain to uniform width */
 .select-sort,
 .select-filter {
-  width: 180px;
-  min-width: 140px;
-  max-width: 200px;
+  width: 200px;
+  min-width: 200px;
   flex-shrink: 0;
+}
+
+/* Center placeholder text inside ai-select dropdowns */
+.select-sort ::ng-deep .ai-select-trigger,
+.select-filter ::ng-deep .ai-select-trigger {
+  text-align: center;
 }
 
 .driver-filter-dropdown {
@@ -227,14 +237,17 @@
 .btn-dropdown {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 8px 14px;
+  min-width: 200px;
   border: 1px solid rgba(148, 163, 184, 0.4);
   border-radius: 8px;
   background: rgba(30, 41, 59, 0.8);
   color: #e5e7eb;
   font-size: 0.875rem;
   cursor: pointer;
+  text-align: center;
 }
 
 .btn-dropdown .chevron {
