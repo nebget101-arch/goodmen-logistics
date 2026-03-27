@@ -87,6 +87,13 @@ export class DriversComponent implements OnInit, OnDestroy {
   canManageDrivers = false;
   canAccessDqf = false;
 
+  // Invite modal state
+  showInviteModal = false;
+  inviteSending = false;
+  inviteSuccess: string | null = null;
+  inviteError: string | null = null;
+  inviteForm = { firstName: '', lastName: '', email: '', phone: '' };
+
   driverFilters: {
     name: string;
     cdlNumber: string;
@@ -519,6 +526,48 @@ export class DriversComponent implements OnInit, OnDestroy {
         } else {
           this.editZipLookupLoading = false;
         }
+      }
+    });
+  }
+
+  closeInviteModal(): void {
+    this.showInviteModal = false;
+    this.inviteForm = { firstName: '', lastName: '', email: '', phone: '' };
+    this.inviteSuccess = null;
+    this.inviteError = null;
+    this.inviteSending = false;
+  }
+
+  sendInvite(): void {
+    if (!this.canManageDrivers) return;
+
+    const { firstName, lastName, email } = this.inviteForm;
+    if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
+      this.inviteError = 'First name, last name, and email are required.';
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      this.inviteError = 'Please enter a valid email address.';
+      return;
+    }
+
+    this.inviteSending = true;
+    this.inviteError = null;
+
+    this.apiService.inviteDriver({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.trim(),
+      phone: this.inviteForm.phone?.trim() || undefined
+    }).subscribe({
+      next: (result: any) => {
+        this.inviteSending = false;
+        this.inviteSuccess = result.sentTo || email.trim();
+        this.loadDrivers();
+      },
+      error: (err: any) => {
+        this.inviteSending = false;
+        this.inviteError = err.error?.message || 'Failed to send invitation. Please try again.';
       }
     });
   }
