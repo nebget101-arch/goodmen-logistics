@@ -37,12 +37,13 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     sectionLabel: 'Safety',
     sectionIcon: 'shield_person',
-    tabs: ['hos', 'audit', 'drivers', 'safety_claims'],
+    tabs: ['hos', 'drivers', 'safety_claims', 'fmcsa_safety'],
     children: [
       { path: '/hos', label: 'HOS', tab: 'hos' },
       { path: '/drivers/dqf', label: 'DQF', tab: 'drivers', roles: ['super_admin', 'admin', 'company_admin', 'safety_manager', 'safety'] },
-      { path: '/audit', label: 'Audit', tab: 'audit' },
+      { path: '/safety/compliance', label: 'Compliance', tab: 'safety_claims' },
       { path: '/safety', label: 'Claims & Accidents', tab: 'safety_claims' },
+      { path: '/safety/fmcsa', label: 'FMCSA Safety', tab: 'fmcsa_safety' },
     ],
   },
   {

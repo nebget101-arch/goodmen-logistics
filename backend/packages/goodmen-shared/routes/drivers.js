@@ -197,8 +197,14 @@ router.get('/', async (req, res) => {
           d.status,
           d.hire_date,
           d.termination_date,
+          d.date_of_birth,
+          d.street_address,
+          d.city,
+          d.state,
+          d.zip_code,
           dl.cdl_number,
           dl.cdl_state,
+          dl.cdl_class,
           dl.cdl_expiry,
           dc.medical_cert_expiry,
           dc.clearinghouse_status,
@@ -391,6 +397,34 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// GET zip code lookup (Zippopotam.us - free, no API key)
+router.get('/zip-lookup/:zipCode', async (req, res) => {
+  try {
+    const { zipCode } = req.params;
+    if (!/^\d{5}(-\d{4})?$/.test(zipCode)) {
+      return res.status(400).json({ message: 'Invalid zip code format' });
+    }
+    const zip5 = zipCode.slice(0, 5);
+    const response = await fetch(`https://api.zippopotam.us/us/${zip5}`);
+    if (!response.ok) {
+      return res.status(404).json({ message: 'Zip code not found' });
+    }
+    const data = await response.json();
+    const place = data.places?.[0];
+    if (!place) {
+      return res.status(404).json({ message: 'Zip code not found' });
+    }
+    return res.json({
+      zipCode: zip5,
+      city: place['place name'],
+      state: place['state abbreviation']
+    });
+  } catch (error) {
+    dtLogger.error('zip_lookup_failed', error, { zipCode: req.params.zipCode });
+    return res.status(500).json({ message: 'Zip code lookup failed' });
+  }
+});
+
 // POST create new driver
 router.post('/', async (req, res) => {
   if (!canWriteDrivers(req)) {
@@ -411,7 +445,11 @@ router.post('/', async (req, res) => {
       cdlExpiry,
       medicalCertExpiry,
       hireDate,
-      address,
+      streetAddress,
+      address, // backward compat
+      city,
+      state: driverState,
+      zipCode,
       dateOfBirth,
       clearinghouseStatus,
       driverType,
@@ -472,7 +510,10 @@ router.post('/', async (req, res) => {
         cdl_expiry,
         medical_cert_expiry,
         hire_date,
-        address,
+        street_address,
+        city,
+        state,
+        zip_code,
         date_of_birth,
         clearinghouse_status,
         dqf_completeness,
@@ -488,15 +529,15 @@ router.post('/', async (req, res) => {
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-        $12, $13, $14, $15, $16, 0, 'active',
-        COALESCE($17, 'company'),
-        $18,
-        $19,
-        $20,
+        $12, $13, $14, $15, $16, $17, $18, $19, 0, 'active',
+        COALESCE($20, 'company'),
         $21,
         $22,
         $23,
-        $24
+        $24,
+        $25,
+        $26,
+        $27
       )
       RETURNING *`,
       [
@@ -513,7 +554,10 @@ router.post('/', async (req, res) => {
         cdlExpiry || null,
         medicalCertExpiry || null,
         hireDate || null,
-        address,
+        streetAddress || address || null,
+        city || null,
+        driverState || null,
+        zipCode || null,
         dateOfBirth || null,
         clearinghouseStatus || 'eligible',
         driverType,
@@ -699,7 +743,10 @@ router.put('/:id', async (req, res) => {
       'phone',
       'status',
       'hireDate',
-      'address',
+      'streetAddress',
+      'city',
+      'state',
+      'zipCode',
       'dateOfBirth',
       'driverType',
       'payBasis',
@@ -709,8 +756,7 @@ router.put('/:id', async (req, res) => {
       'truckId',
       'trailerId',
       'coDriverId',
-      // legacy / dqf-related fields
-      'dqfCompleteness',
+      // legacy / dqf-related fields (dqfCompleteness excluded — server-calculated only)
       'clearinghouseStatus'
     ]);
 

@@ -326,6 +326,7 @@
 }
 
 .drivers-dashboard .modal.dqf-modal {
+  position: relative;
   background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.15), transparent 50%),
     rgba(15, 23, 42, 0.98);
   border: 1px solid rgba(59, 130, 246, 0.5);
@@ -344,6 +345,9 @@
 }
 
 .drivers-dashboard .modal-header.dqf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.25);
   background: rgba(30, 41, 59, 0.4);
@@ -377,8 +381,9 @@
   color: var(--text-light);
   cursor: pointer;
   font-size: 20px;
-  padding: 4px;
+  padding: 4px 8px;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .drivers-dashboard .dqf-close-btn:hover {
@@ -387,8 +392,8 @@
 
 .drivers-dashboard .dqf-close-btn-ai {
   position: absolute;
-  top: -14px;
-  right: -14px;
+  top: 12px;
+  right: 12px;
   z-index: 10;
   display: flex;
   align-items: center;
@@ -517,6 +522,46 @@
 .drivers-dashboard textarea.form-input {
   resize: vertical;
   min-height: 72px;
+}
+
+/* ── Date picker — match .form-input within driver modals (FN-273) ── */
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-text-field-wrapper {
+  background:
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.25), transparent 55%),
+    rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  border-radius: 10px;
+  padding: 0 4px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-form-field-infix {
+  min-height: 38px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-input-element {
+  font-size: 13px;
+  color: #e5e7eb;
+  caret-color: #67e8f9;
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-input-element::placeholder {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper {
+  border-color: rgba(56, 189, 248, 0.95);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+.drivers-dashboard .dqf-field app-ai-date-picker ::ng-deep .mat-datepicker-toggle .mat-mdc-icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  --mdc-icon-button-icon-color: #94a3b8;
+  --mdc-icon-button-hover-icon-color: #67e8f9;
 }
 
 .drivers-dashboard .dqf-modal-footer {
@@ -721,6 +766,12 @@
 .drivers-dashboard .dqf-req-row.dqf-status-missing {
   border-left-color: #ef4444;
   background: rgba(239, 68, 68, 0.04);
+}
+
+/* FN-261: Warning row styling for due-soon items */
+.drivers-dashboard .dqf-req-row.dqf-status-warning {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.06);
 }
 
 .drivers-dashboard .dqf-req-main {
@@ -1388,6 +1439,13 @@
   background: rgba(100, 116, 139, 0.2);
   border: 1px solid rgba(100, 116, 139, 0.4);
   color: #94a3b8;
+}
+
+/* FN-261: Warning/Due Soon badge — amber/yellow distinct from in_progress */
+.drivers-dashboard .dqf-chip-warning {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
 }
 
 .drivers-dashboard .dqf-chip-mini {
@@ -2065,6 +2123,13 @@
     border-color: #94a3b8;
   }
 
+  /* FN-261: Warning chip for print */
+  .drivers-dashboard .dqf-chip-warning {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #f59e0b;
+  }
+
   .drivers-dashboard .dqf-modal-body {
     padding: 12px;
   }
@@ -2084,6 +2149,12 @@
   border-radius: 10px;
   background: rgba(15, 23, 42, 0.5);
   overflow: hidden;
+}
+
+/* FN-261: Inline prehire docs within tab panel */
+.prehire-docs-section.prehire-docs-inline {
+  margin-top: 16px;
+  border-color: rgba(51, 65, 85, 0.4);
 }
 
 .prehire-docs-header {
@@ -2184,9 +2255,198 @@
   border-color: rgba(56, 189, 248, 0.4);
 }
 
+/* FN-264: MVR summary card */
+.drivers-dashboard .mvr-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  margin-top: 6px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.drivers-dashboard .mvr-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.drivers-dashboard .mvr-summary-row:last-of-type {
+  border-bottom: none;
+}
+
+.drivers-dashboard .mvr-summary-label {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.drivers-dashboard .mvr-summary-value {
+  font-size: 12px;
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.drivers-dashboard .mvr-violation-count {
+  color: #ef4444;
+}
+
+.drivers-dashboard .mvr-accident-count {
+  color: #ef4444;
+}
+
+.drivers-dashboard .mvr-clean-count {
+  color: #22c55e;
+}
+
+.drivers-dashboard .mvr-download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #38bdf8;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.drivers-dashboard .mvr-download-link:hover {
+  text-decoration: underline;
+}
+
 .prehire-docs-empty {
   padding: 20px 18px;
   font-size: 13px;
   color: #94a3b8;
   text-align: center;
+}
+
+/* Invite Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.invite-modal {
+  background: var(--card-bg, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 12px;
+  width: 440px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--border-color, #334155);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-light, #94a3b8);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: var(--text-primary, #f1f5f9);
+}
+
+.modal-body {
+  padding: 16px 24px;
+}
+
+.invite-description {
+  color: var(--text-light, #94a3b8);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.invite-success-msg {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.invite-error-msg {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 24px 20px;
+}
+
+.spinner-small {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border-color, #475569);
+  color: var(--text-primary, #f1f5f9);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.btn-outline:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--text-light, #94a3b8);
 }

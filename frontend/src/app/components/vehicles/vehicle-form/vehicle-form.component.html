@@ -17,7 +17,7 @@
               <div class="form-row trailer-top-row">
                 <div class="form-group">
                   <label for="trailer-unit-number">Unit <span class="req">*</span></label>
-                  <input id="trailer-unit-number" type="text" class="form-input" [(ngModel)]="formData.unit_number" name="trailer_unit_number" [class.error]="errors.unit_number" />
+                  <input id="trailer-unit-number" type="text" class="form-input" [(ngModel)]="formData.unit_number" name="trailer_unit_number" (input)="onUnitNumberInput()" [class.error]="errors.unit_number" />
                   <small class="error-text" *ngIf="errors.unit_number">{{ errors.unit_number }}</small>
                 </div>
 
@@ -228,10 +228,11 @@
                 class="form-input"
                 [(ngModel)]="formData.unit_number"
                 name="unit_number"
-                readonly
-                placeholder="Auto-generated"
+                (input)="onUnitNumberInput()"
+                placeholder="Last 4 of VIN"
+                [class.error]="errors.unit_number"
               />
-              <small class="help-text">Auto-generated from VIN</small>
+              <small class="help-text">Auto-filled from VIN (editable)</small>
             </div>
 
             <!-- VIN -->
@@ -274,15 +275,10 @@
             <!-- Make -->
             <div class="form-group">
               <label for="make">Make *</label>
-              <app-ai-select
-                inputId="make"
-                [options]="makeSelectOptions"
-                [(ngModel)]="formData.make"
-                name="make"
-                placeholder="Select Make"
-                [allowEmpty]="true"
-                emptyLabel="Select Make"
-              ></app-ai-select>
+              <select id="make" class="form-input" [(ngModel)]="formData.make" name="make" [class.error]="errors.make">
+                <option value="">Select Make</option>
+                <option *ngFor="let m of makes" [value]="m">{{ m }}</option>
+              </select>
               <small class="error-text" *ngIf="errors.make">{{ errors.make }}</small>
             </div>
 
@@ -321,15 +317,10 @@
             <!-- State -->
             <div class="form-group">
               <label for="state">State *</label>
-              <app-ai-select
-                inputId="state"
-                [options]="stateSelectOptions"
-                [(ngModel)]="formData.state"
-                name="state"
-                placeholder="Select State"
-                [allowEmpty]="true"
-                emptyLabel="Select State"
-              ></app-ai-select>
+              <select id="state" class="form-input" [(ngModel)]="formData.state" name="state" [class.error]="errors.state">
+                <option value="">Select State</option>
+                <option *ngFor="let s of states" [value]="s">{{ s }}</option>
+              </select>
               <small class="error-text" *ngIf="errors.state">{{ errors.state }}</small>
             </div>
 
@@ -355,16 +346,11 @@
           <div class="form-row">
             <!-- Inspection Expiry -->
             <div class="form-group">
-              <app-ai-date-picker
-                inputId="inspection-expiry"
-                label="Inspection Expiration Date"
-                [(ngModel)]="formData.inspection_expiry"
-                name="inspection_expiry"
-                placeholder="MM/DD/YYYY"
-              ></app-ai-date-picker>
+              <label for="inspection-expiry">Inspection Expiration Date</label>
+              <app-ai-date-picker inputId="inspection-expiry" [(ngModel)]="formData.inspection_expiry" name="inspection_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
               <div *ngIf="formData.inspection_expiry" class="status-indicator">
                 <span [class]="'badge badge-' + getInspectionStatus()">
-                  {{ getInspectionStatus() === 'expired' ? 'Expired' : 
+                  {{ getInspectionStatus() === 'expired' ? 'Expired' :
                      getInspectionStatus() === 'warning' ? 'Expiring Soon' : 'Valid' }}
                 </span>
               </div>
@@ -372,16 +358,11 @@
 
             <!-- Registration Expiry -->
             <div class="form-group">
-              <app-ai-date-picker
-                inputId="registration-expiry"
-                label="Registration Expiry"
-                [(ngModel)]="formData.registration_expiry"
-                name="registration_expiry"
-                placeholder="MM/DD/YYYY"
-              ></app-ai-date-picker>
+              <label for="registration-expiry">Registration Expiry</label>
+              <app-ai-date-picker inputId="registration-expiry" [(ngModel)]="formData.registration_expiry" name="registration_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
               <div *ngIf="formData.registration_expiry" class="status-indicator">
                 <span [class]="'badge badge-' + getRegistrationStatus()">
-                  {{ getDaysUntilExpiry(formData.registration_expiry) >= 0 ? 
+                  {{ getDaysUntilExpiry(formData.registration_expiry) >= 0 ?
                      'Expires in ' + getDaysUntilExpiry(formData.registration_expiry) + ' days' : 'Expired' }}
                 </span>
               </div>
@@ -389,26 +370,16 @@
 
             <!-- Insurance Expiry -->
             <div class="form-group">
-              <app-ai-date-picker
-                inputId="insurance-expiry"
-                label="Insurance Expiry"
-                [(ngModel)]="formData.insurance_expiry"
-                name="insurance_expiry"
-                placeholder="MM/DD/YYYY"
-              ></app-ai-date-picker>
+              <label for="insurance-expiry">Insurance Expiry</label>
+              <app-ai-date-picker inputId="insurance-expiry" [(ngModel)]="formData.insurance_expiry" name="insurance_expiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
             </div>
           </div>
 
-          <div class="form-row">
+          <div class="form-row pm-row">
             <!-- Next PM Due -->
             <div class="form-group">
-              <app-ai-date-picker
-                inputId="next-pm-due"
-                label="Next PM Due Date"
-                [(ngModel)]="formData.next_pm_due"
-                name="next_pm_due"
-                placeholder="MM/DD/YYYY"
-              ></app-ai-date-picker>
+              <label for="next-pm-due">Next PM Due Date</label>
+              <app-ai-date-picker inputId="next-pm-due" [(ngModel)]="formData.next_pm_due" name="next_pm_due" placeholder="MM/DD/YYYY"></app-ai-date-picker>
             </div>
 
             <!-- Next PM Mileage -->
@@ -434,13 +405,10 @@
             <!-- Status -->
             <div class="form-group">
               <label for="status">Vehicle Status</label>
-              <app-ai-select
-                inputId="status"
-                [options]="statusSelectOptions"
-                [(ngModel)]="formData.status"
-                name="status"
-                placeholder="Status"
-              ></app-ai-select>
+              <select id="status" class="form-input" [(ngModel)]="formData.status" name="status">
+                <option value="in-service">In Service</option>
+                <option value="out-of-service">Out of Service</option>
+              </select>
             </div>
           </div>
 
@@ -468,7 +436,7 @@
             <div *ngFor="let docType of documentTypes; let i = index" class="document-item">
               <div class="document-header">
                 <div class="document-info">
-                  <span class="document-icon" [class]="'icon-' + docType.value">📄</span>
+                  <span class="material-symbols-outlined document-icon ai-doc-icon">{{ getDocIcon(docType.value) }}</span>
                   <span class="document-label">{{ docType.label }}</span>
                 </div>
                 <label [for]="'file-' + docType.value" class="upload-btn">
