@@ -67,11 +67,11 @@
               {{ employer.dotRegulated ? 'DOT' : 'Non-DOT' }}
             </span>
           </div>
-          <div class="inv-employer-badges">
-            <span *ngIf="employerViews.get(employer.id)?.isNew" class="inv-badge inv-badge-new">NEW</span>
-            <div class="inv-deadline" [ngClass]="getDeadlineClass(employer.deadline)">
+          <div class="inv-employer-badges" *ngIf="employerViews.get(employer.id) as view">
+            <span *ngIf="view.isNew" class="inv-badge inv-badge-new">NEW</span>
+            <div class="inv-deadline" [ngClass]="view.deadlineClass">
               <span class="material-symbols-outlined">schedule</span>
-              {{ getDeadlineLabel(employer.deadline) }}
+              {{ view.deadlineLabel }}
             </div>
           </div>
         </div>
@@ -88,7 +88,7 @@
           </span>
         </div>
 
-        <!-- Email status timestamps -->
+        <!-- Email status timestamps + Response summary (all from cached view) -->
         <ng-container *ngIf="employerViews.get(employer.id) as view">
           <div class="inv-timestamps" *ngIf="employer.inquirySentAt || employer.followUpSentAt || employer.responseReceivedAt">
             <span *ngIf="employer.inquirySentAt" class="inv-timestamp">
