@@ -326,7 +326,8 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     this.formData.vin = vin;
 
     if (vin && vin.length >= 4 && !this.unitNumberManuallyEdited) {
-      this.formData.unit_number = vin.slice(-4);
+      const suffix = vin.slice(-4);
+      this.formData.unit_number = this.isTrailerMode ? `TR-${suffix}` : suffix;
     }
 
     if (this.vinDecodeTimer) {
