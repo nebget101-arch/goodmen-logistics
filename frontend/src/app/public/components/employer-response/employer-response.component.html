@@ -1,0 +1,346 @@
+<div class="employer-response-page">
+  <!-- Loading -->
+  <div *ngIf="loading" class="er-loading-container">
+    <div class="er-loading-card">
+      <div class="er-spinner"></div>
+      <p>Loading investigation details...</p>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div *ngIf="error && !loading && !submitted" class="er-error-container">
+    <div class="er-error-card">
+      <span class="material-symbols-outlined er-error-icon">error</span>
+      <h2>Unable to load</h2>
+      <p>{{ error }}</p>
+    </div>
+  </div>
+
+  <!-- Success / Submitted -->
+  <div *ngIf="submitted" class="er-success-container">
+    <div class="er-success-card">
+      <span class="material-symbols-outlined er-success-icon">check_circle</span>
+      <h2>Thank you</h2>
+      <p>Your response has been recorded successfully.</p>
+      <p *ngIf="resultDocumentId" class="er-audit-info">
+        Document ID: <strong>{{ resultDocumentId }}</strong>
+      </p>
+      <p class="er-muted-text">You may close this window.</p>
+    </div>
+  </div>
+
+  <!-- Form -->
+  <div *ngIf="!loading && !error && !submitted && context" class="er-form-container">
+    <div class="er-card">
+      <!-- Page Header -->
+      <div class="er-page-header">
+        <div class="er-badge">
+          <span class="material-symbols-outlined">assignment</span>
+          FMCSA Employment Verification
+        </div>
+        <h1>{{ context.oeName }}</h1>
+        <h2>Previous Employment Verification Request</h2>
+        <div class="er-context-card">
+          <div class="er-context-row">
+            <span class="er-context-label">Regarding driver:</span>
+            <strong>{{ context.driverName }}</strong>
+          </div>
+          <div *ngIf="context.oeAddress" class="er-context-row">
+            <span class="er-context-label">Requesting carrier:</span>
+            <span>{{ context.oeName }}</span>
+          </div>
+          <div *ngIf="context.oeDotNumber" class="er-context-row">
+            <span class="er-context-label">DOT number:</span>
+            <span>{{ context.oeDotNumber }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inline error banner -->
+      <div *ngIf="error" class="er-inline-error">
+        <span class="material-symbols-outlined">error</span>
+        {{ error }}
+      </div>
+
+      <!-- Quick exit checkbox -->
+      <label class="er-no-history-check">
+        <input type="checkbox" [(ngModel)]="noSafetyHistory" />
+        <span class="er-checkbox-label">No safety performance history to report for this driver</span>
+      </label>
+
+      <!-- Section A: Employment Verification -->
+      <div class="er-section">
+        <h3>
+          <span class="material-symbols-outlined">work</span>
+          Section A &mdash; Employment Verification
+        </h3>
+
+        <div class="er-field-group">
+          <label class="er-label">Was this person employed by your company?</label>
+          <div class="er-radio-row">
+            <label class="er-radio">
+              <input type="radio" name="wasEmployed" value="yes" [(ngModel)]="wasEmployed" />
+              <span>Yes</span>
+            </label>
+            <label class="er-radio">
+              <input type="radio" name="wasEmployed" value="no" [(ngModel)]="wasEmployed" />
+              <span>No</span>
+            </label>
+          </div>
+        </div>
+
+        <div *ngIf="wasEmployed === 'yes'" class="er-field-group">
+          <label class="er-label" for="employedAs">Position / Title</label>
+          <input id="employedAs" type="text" class="er-input" [(ngModel)]="employedAs"
+                 placeholder="e.g. OTR Driver, Local Delivery Driver" />
+        </div>
+
+        <div *ngIf="wasEmployed === 'yes'" class="er-date-row">
+          <div class="er-field-group">
+            <label class="er-label" for="employmentFrom">Employment From</label>
+            <input id="employmentFrom" type="date" class="er-input" [(ngModel)]="employmentFrom" />
+          </div>
+          <div class="er-field-group">
+            <label class="er-label" for="employmentTo">Employment To</label>
+            <input id="employmentTo" type="date" class="er-input" [(ngModel)]="employmentTo" />
+          </div>
+        </div>
+
+        <div *ngIf="wasEmployed === 'yes'" class="er-field-group">
+          <label class="er-label">Did this person operate a Commercial Motor Vehicle (CMV)?</label>
+          <div class="er-radio-row">
+            <label class="er-radio">
+              <input type="radio" name="droveCmv" value="yes" [(ngModel)]="droveCmv" />
+              <span>Yes</span>
+            </label>
+            <label class="er-radio">
+              <input type="radio" name="droveCmv" value="no" [(ngModel)]="droveCmv" />
+              <span>No</span>
+            </label>
+          </div>
+        </div>
+
+        <div *ngIf="droveCmv === 'yes'" class="er-field-group">
+          <label class="er-label">Types of vehicles operated (select all that apply)</label>
+          <div class="er-checkbox-grid">
+            <label *ngFor="let vt of vehicleTypeOptions" class="er-checkbox-item"
+                   [class.er-checkbox-selected]="isVehicleTypeSelected(vt)"
+                   (click)="toggleVehicleType(vt)">
+              <span class="material-symbols-outlined">{{ isVehicleTypeSelected(vt) ? 'check_box' : 'check_box_outline_blank' }}</span>
+              {{ vt }}
+            </label>
+          </div>
+        </div>
+
+        <div *ngIf="wasEmployed === 'yes'" class="er-field-group">
+          <label class="er-label" for="reasonForLeaving">Reason for leaving</label>
+          <textarea id="reasonForLeaving" class="er-textarea" [(ngModel)]="reasonForLeaving"
+                    placeholder="Voluntary resignation, termination, layoff, etc." rows="3"></textarea>
+        </div>
+      </div>
+
+      <!-- Section B: Accident History -->
+      <div class="er-section" *ngIf="!noSafetyHistory">
+        <h3>
+          <span class="material-symbols-outlined">car_crash</span>
+          Section B &mdash; Accident History
+        </h3>
+        <p class="er-section-desc">
+          List all DOT-reportable accidents involving this driver during their employment
+          (accidents resulting in fatality, bodily injury requiring medical treatment away from
+          the scene, or disabling damage to any vehicle requiring tow-away).
+        </p>
+
+        <label class="er-no-history-check">
+          <input type="checkbox" [(ngModel)]="noAccidentData" />
+          <span class="er-checkbox-label">No accident data to report for this driver</span>
+        </label>
+
+        <div *ngIf="!noAccidentData">
+          <div *ngFor="let acc of accidents; let i = index" class="er-accident-row">
+            <div class="er-accident-header">
+              <span class="er-accident-num">Accident {{ i + 1 }}</span>
+              <button type="button" class="er-remove-btn" (click)="removeAccident(i)">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div class="er-date-row">
+              <div class="er-field-group">
+                <label class="er-label">Date</label>
+                <input type="date" class="er-input" [(ngModel)]="acc.date" />
+              </div>
+              <div class="er-field-group">
+                <label class="er-label">Location</label>
+                <input type="text" class="er-input" [(ngModel)]="acc.location"
+                       placeholder="City, State" />
+              </div>
+            </div>
+            <div class="er-toggle-row">
+              <label class="er-toggle-item">
+                <input type="checkbox" [(ngModel)]="acc.towAway" />
+                <span>Tow-away</span>
+              </label>
+              <label class="er-toggle-item">
+                <input type="checkbox" [(ngModel)]="acc.injuries" />
+                <span>Injuries</span>
+              </label>
+              <label class="er-toggle-item">
+                <input type="checkbox" [(ngModel)]="acc.fatalities" />
+                <span>Fatalities</span>
+              </label>
+              <label class="er-toggle-item">
+                <input type="checkbox" [(ngModel)]="acc.hazmatSpill" />
+                <span>Hazmat spill</span>
+              </label>
+            </div>
+          </div>
+
+          <button type="button" class="er-add-btn" (click)="addAccident()">
+            <span class="material-symbols-outlined">add_circle</span>
+            Add Accident
+          </button>
+
+          <div class="er-field-group" style="margin-top: 16px;">
+            <label class="er-label" for="otherAccidentRemarks">Additional accident remarks</label>
+            <textarea id="otherAccidentRemarks" class="er-textarea" [(ngModel)]="otherAccidentRemarks"
+                      placeholder="Any additional information about accidents..." rows="3"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section C: Drug & Alcohol History -->
+      <div class="er-section" *ngIf="!noSafetyHistory">
+        <h3>
+          <span class="material-symbols-outlined">science</span>
+          Section C &mdash; Drug &amp; Alcohol History
+        </h3>
+        <p class="er-section-desc">
+          Per 49 CFR 40.25, previous employers must provide information regarding DOT drug
+          and alcohol testing results for the past 3 years.
+        </p>
+
+        <!-- Positive drug tests -->
+        <div class="er-field-group">
+          <label class="er-label">Did this driver have any positive drug test results?</label>
+          <div class="er-radio-row">
+            <label class="er-radio">
+              <input type="radio" name="positiveDrugTests" value="yes" [(ngModel)]="positiveDrugTests" />
+              <span>Yes</span>
+            </label>
+            <label class="er-radio">
+              <input type="radio" name="positiveDrugTests" value="no" [(ngModel)]="positiveDrugTests" />
+              <span>No</span>
+            </label>
+          </div>
+          <textarea *ngIf="positiveDrugTests === 'yes'" class="er-textarea"
+                    [(ngModel)]="positiveDrugTestDetails"
+                    placeholder="Provide details..." rows="3"></textarea>
+        </div>
+
+        <!-- Alcohol violation -->
+        <div class="er-field-group">
+          <label class="er-label">Did this driver have any alcohol test result of 0.04 or greater?</label>
+          <div class="er-radio-row">
+            <label class="er-radio">
+              <input type="radio" name="alcoholViolation" value="yes" [(ngModel)]="alcoholViolation" />
+              <span>Yes</span>
+            </label>
+            <label class="er-radio">
+              <input type="radio" name="alcoholViolation" value="no" [(ngModel)]="alcoholViolation" />
+              <span>No</span>
+            </label>
+          </div>
+          <textarea *ngIf="alcoholViolation === 'yes'" class="er-textarea"
+                    [(ngModel)]="alcoholViolationDetails"
+                    placeholder="Provide details..." rows="3"></textarea>
+        </div>
+
+        <!-- Test refusals -->
+        <div class="er-field-group">
+          <label class="er-label">Did this driver refuse to submit to a required drug or alcohol test?</label>
+          <div class="er-radio-row">
+            <label class="er-radio">
+              <input type="radio" name="testRefusals" value="yes" [(ngModel)]="testRefusals" />
+              <span>Yes</span>
+            </label>
+            <label class="er-radio">
+              <input type="radio" name="testRefusals" value="no" [(ngModel)]="testRefusals" />
+              <span>No</span>
+            </label>
+          </div>
+          <textarea *ngIf="testRefusals === 'yes'" class="er-textarea"
+                    [(ngModel)]="testRefusalDetails"
+                    placeholder="Provide details..." rows="3"></textarea>
+        </div>
+
+        <!-- Return to duty -->
+        <div class="er-field-group">
+          <label class="er-label">Did this driver complete a return-to-duty process?</label>
+          <div class="er-radio-row">
+            <label class="er-radio">
+              <input type="radio" name="returnToDuty" value="yes" [(ngModel)]="returnToDuty" />
+              <span>Yes</span>
+            </label>
+            <label class="er-radio">
+              <input type="radio" name="returnToDuty" value="no" [(ngModel)]="returnToDuty" />
+              <span>No</span>
+            </label>
+            <label class="er-radio">
+              <input type="radio" name="returnToDuty" value="na" [(ngModel)]="returnToDuty" />
+              <span>N/A</span>
+            </label>
+          </div>
+          <textarea *ngIf="returnToDuty === 'yes'" class="er-textarea"
+                    [(ngModel)]="returnToDutyDetails"
+                    placeholder="Provide details about the return-to-duty process..." rows="3"></textarea>
+        </div>
+      </div>
+
+      <!-- Section D: Certification & Signature -->
+      <div class="er-section">
+        <h3>
+          <span class="material-symbols-outlined">verified_user</span>
+          Section D &mdash; Certification &amp; Signature
+        </h3>
+        <p class="er-legal-text">
+          I certify that the information provided above is true and accurate to the best of
+          my knowledge. I understand that this information will be used in compliance with
+          49 CFR Part 391.23 for the purpose of investigating the safety performance history
+          of the above-named driver.
+        </p>
+
+        <div class="er-date-row">
+          <div class="er-field-group">
+            <label class="er-label" for="completedByName">Your Name *</label>
+            <input id="completedByName" type="text" class="er-input" [(ngModel)]="completedByName"
+                   placeholder="Full name" />
+          </div>
+          <div class="er-field-group">
+            <label class="er-label" for="completedByTitle">Your Title *</label>
+            <input id="completedByTitle" type="text" class="er-input" [(ngModel)]="completedByTitle"
+                   placeholder="e.g. Safety Director, HR Manager" />
+          </div>
+        </div>
+
+        <div class="er-field-group">
+          <label class="er-label" for="otherRemarks">Additional remarks (optional)</label>
+          <textarea id="otherRemarks" class="er-textarea" [(ngModel)]="otherRemarks"
+                    placeholder="Any other information you wish to provide..." rows="3"></textarea>
+        </div>
+
+        <button type="button" class="er-submit-btn"
+                [disabled]="submitting || !completedByName.trim() || !completedByTitle.trim()"
+                (click)="submitResponse()">
+          <span class="material-symbols-outlined">send</span>
+          {{ submitting ? 'Submitting...' : 'Submit Response' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="er-footer">
+      <span class="er-footer-brand">FleetNeuron</span>
+      <span class="er-footer-copy">Secure FMCSA Employment Verification</span>
+    </footer>
+  </div>
+</div>
