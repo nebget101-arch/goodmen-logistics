@@ -10,39 +10,6 @@
     </button>
   </div>
 
-  <!-- Filters -->
-  <div class="filters-row">
-    <input class="filter-input" type="text" placeholder="Search by #, city, narrative…" [(ngModel)]="filters.search" (keyup.enter)="applyFilters()">
-    <app-ai-select
-      class="filter-select"
-      [options]="statusSelectOptions"
-      [ngModel]="filters.status"
-      (ngModelChange)="filters.status = $event; applyFilters()"
-      [allowEmpty]="true"
-      emptyLabel="All Statuses"
-    ></app-ai-select>
-    <app-ai-select
-      class="filter-select"
-      [options]="severitySelectOptions"
-      [ngModel]="filters.severity"
-      (ngModelChange)="filters.severity = $event; applyFilters()"
-      [allowEmpty]="true"
-      emptyLabel="All Severities"
-    ></app-ai-select>
-    <app-ai-select
-      class="filter-select"
-      [options]="typeSelectOptions"
-      [ngModel]="filters.incident_type"
-      (ngModelChange)="filters.incident_type = $event; applyFilters()"
-      [allowEmpty]="true"
-      emptyLabel="All Types"
-    ></app-ai-select>
-    <button type="button" class="btn btn-sm btn-secondary" (click)="applyFilters()">
-      <span class="material-symbols-outlined">search</span>
-    </button>
-    <button type="button" class="btn btn-sm btn-ghost" (click)="clearFilters()">Clear</button>
-  </div>
-
   <!-- Loading / error -->
   <div *ngIf="loading" class="loading-state">Loading incidents…</div>
   <div *ngIf="error" class="alert-error">{{ error }}</div>
@@ -63,6 +30,49 @@
           <th>DOT</th>
           <th>Prev.</th>
           <th></th>
+        </tr>
+        <tr class="header-filters">
+          <th>
+            <input type="text" placeholder="Search #, city, narrative…" [(ngModel)]="filters.search" (keyup.enter)="applyFilters()">
+          </th>
+          <th></th>
+          <th>
+            <app-ai-select
+              [options]="typeSelectOptions"
+              [ngModel]="filters.incident_type"
+              (ngModelChange)="filters.incident_type = $event; applyFilters()"
+              [allowEmpty]="true"
+              emptyLabel="All Types"
+            ></app-ai-select>
+          </th>
+          <th>
+            <app-ai-select
+              [options]="severitySelectOptions"
+              [ngModel]="filters.severity"
+              (ngModelChange)="filters.severity = $event; applyFilters()"
+              [allowEmpty]="true"
+              emptyLabel="All Severities"
+            ></app-ai-select>
+          </th>
+          <th>
+            <app-ai-select
+              [options]="statusSelectOptions"
+              [ngModel]="filters.status"
+              (ngModelChange)="filters.status = $event; applyFilters()"
+              [allowEmpty]="true"
+              emptyLabel="All Statuses"
+            ></app-ai-select>
+          </th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th>
+            <button type="button" class="clear-filters-btn" (click)="clearFilters()" title="Clear filters">
+              <span class="material-symbols-outlined">filter_list_off</span>
+            </button>
+          </th>
         </tr>
       </thead>
       <tbody>
