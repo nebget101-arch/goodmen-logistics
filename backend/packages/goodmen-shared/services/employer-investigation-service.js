@@ -12,7 +12,7 @@ const { buildRequestPdf } = require('./investigation-pdf-service');
 const { sendEmail } = require('./notification-service');
 const dtLogger = require('../utils/logger');
 
-const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'https://fleetneuron.ai';
+const FRONTEND_BASE_URL = (process.env.PUBLIC_APP_URL || process.env.FRONTEND_BASE_URL || 'https://fleetneuron.ai').replace(/\/$/, '');
 const TOKEN_EXPIRY_DAYS = 30;
 
 // ---------------------------------------------------------------------------
