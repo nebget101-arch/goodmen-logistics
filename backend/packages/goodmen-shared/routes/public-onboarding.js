@@ -1310,6 +1310,61 @@ router.post('/:packetId/finalize', rateLimited, async (req, res) => {
       [packetId]
     );
 
+    // FN-291: If driver status is 'pending', populate driver fields from application data
+    try {
+      const driverStatusRes = await query(
+        'SELECT id, status FROM drivers WHERE id = $1',
+        [packet.driver_id]
+      );
+      const driverRow = driverStatusRes.rows[0];
+      if (driverRow && driverRow.status === 'pending') {
+        // Load employment_application section data
+        const appDataRes = await query(
+          `SELECT data FROM driver_onboarding_sections
+           WHERE packet_id = $1 AND section_key = 'employment_application'`,
+          [packetId]
+        );
+        const appData = appDataRes.rows[0]?.data || {};
+
+        // Build update fields from application data
+        const updates = [];
+        const values = [];
+        let paramIdx = 1;
+
+        // Always transition from pending to applicant
+        updates.push(`status = 'applicant'`);
+
+        if (appData.phone) { updates.push(`phone = $${paramIdx}`); values.push(appData.phone); paramIdx++; }
+        if (appData.dateOfBirth) { updates.push(`date_of_birth = $${paramIdx}`); values.push(appData.dateOfBirth); paramIdx++; }
+        if (appData.streetAddress) { updates.push(`street_address = $${paramIdx}`); values.push(appData.streetAddress); paramIdx++; }
+        if (appData.city) { updates.push(`city = $${paramIdx}`); values.push(appData.city); paramIdx++; }
+        if (appData.state) { updates.push(`state = $${paramIdx}`); values.push(appData.state); paramIdx++; }
+        if (appData.zipCode) { updates.push(`zip_code = $${paramIdx}`); values.push(appData.zipCode); paramIdx++; }
+        if (appData.cdlNumber) { updates.push(`cdl_number = $${paramIdx}`); values.push(appData.cdlNumber); paramIdx++; }
+        if (appData.cdlState) { updates.push(`cdl_state = $${paramIdx}`); values.push(appData.cdlState.toUpperCase()); paramIdx++; }
+        if (appData.cdlClass) { updates.push(`cdl_class = $${paramIdx}`); values.push(appData.cdlClass); paramIdx++; }
+        if (appData.cdlExpiry) { updates.push(`cdl_expiry = $${paramIdx}`); values.push(appData.cdlExpiry); paramIdx++; }
+
+        updates.push(`updated_at = NOW()`);
+        values.push(packet.driver_id);
+
+        await query(
+          `UPDATE drivers SET ${updates.join(', ')} WHERE id = $${paramIdx}`,
+          values
+        );
+
+        dtLogger.info('pending_driver_populated_from_application', {
+          packetId, driverId: packet.driver_id,
+          fieldsUpdated: updates.length - 2 // exclude status and updated_at
+        });
+      }
+    } catch (populateErr) {
+      dtLogger.warn('finalize_populate_pending_driver_failed', {
+        packetId, driverId: packet.driver_id,
+        error: populateErr?.message
+      });
+    }
+
     // Trigger PDF generation for any remaining documents (non-blocking)
     try {
       await maybeGenerateOnboardingPdfs(packetId);
