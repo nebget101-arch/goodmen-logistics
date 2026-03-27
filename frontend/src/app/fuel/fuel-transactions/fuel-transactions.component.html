@@ -16,46 +16,6 @@
     </div>
   </div>
 
-  <!-- Filter Bar -->
-  <div class="filter-bar">
-    <div class="filter-group">
-      <label for="fuelTxnDateFrom">From</label>
-      <app-ai-date-picker
-        inputId="fuelTxnDateFrom"
-        [inline]="true"
-        class="filter-input"
-        [(ngModel)]="dateFrom"
-        (ngModelChange)="applyFilters()"
-        name="fuelTxnDateFrom"
-        ariaLabel="Filter from date"
-        placeholder="From"
-      ></app-ai-date-picker>
-    </div>
-    <div class="filter-group">
-      <label for="fuelTxnDateTo">To</label>
-      <app-ai-date-picker
-        inputId="fuelTxnDateTo"
-        [inline]="true"
-        class="filter-input"
-        [(ngModel)]="dateTo"
-        (ngModelChange)="applyFilters()"
-        name="fuelTxnDateTo"
-        ariaLabel="Filter to date"
-        placeholder="To"
-      ></app-ai-date-picker>
-    </div>
-    <div class="filter-group">
-      <label>Provider</label>
-      <input type="text" [(ngModel)]="provider" placeholder="EFS, Comdata…" class="filter-input" (keyup.enter)="applyFilters()" />
-    </div>
-    <div class="filter-group">
-      <label>Matched</label>
-      <app-ai-select [(ngModel)]="matchedStatus" (ngModelChange)="applyFilters()" class="filter-input" [options]="matchedStatusOptions" [allowEmpty]="true" emptyLabel="All" placeholder="Matched"></app-ai-select>
-    </div>
-    <button class="btn-ghost btn-sm" (click)="clearFilters()">
-      <span class="material-symbols-outlined">filter_alt_off</span>
-    </button>
-  </div>
 
   <!-- Error -->
   <div class="error-banner" *ngIf="error">
@@ -86,6 +46,53 @@
           <th>Matched</th>
           <th>Settlement</th>
           <th>Actions</th>
+        </tr>
+        <tr class="header-filters">
+          <!-- Date: from / to -->
+          <th>
+            <div class="date-range-filter">
+              <input type="date" [(ngModel)]="dateFrom" (change)="applyFilters()" placeholder="From" />
+              <input type="date" [(ngModel)]="dateTo" (change)="applyFilters()" placeholder="To" />
+            </div>
+          </th>
+          <!-- Provider -->
+          <th>
+            <input type="text" [(ngModel)]="provider" placeholder="EFS, Comdata…" (keyup.enter)="applyFilters()" />
+          </th>
+          <!-- Card -->
+          <th></th>
+          <!-- Truck -->
+          <th></th>
+          <!-- Driver -->
+          <th></th>
+          <!-- Vendor -->
+          <th></th>
+          <!-- Location -->
+          <th></th>
+          <!-- Gallons -->
+          <th></th>
+          <!-- Amount -->
+          <th></th>
+          <!-- PPG -->
+          <th></th>
+          <!-- Matched -->
+          <th>
+            <select [(ngModel)]="matchedStatus" (change)="applyFilters()">
+              <option value="">All</option>
+              <option value="matched">Matched</option>
+              <option value="partial">Partial</option>
+              <option value="unmatched">Unmatched</option>
+              <option value="manual">Manual</option>
+            </select>
+          </th>
+          <!-- Settlement -->
+          <th></th>
+          <!-- Actions -->
+          <th>
+            <button class="btn-ghost btn-sm" (click)="clearFilters()" title="Clear filters">
+              <span class="material-symbols-outlined">filter_alt_off</span>
+            </button>
+          </th>
         </tr>
       </thead>
       <tbody>
