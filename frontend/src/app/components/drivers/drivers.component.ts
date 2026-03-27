@@ -1585,55 +1585,42 @@ export class DriversComponent implements OnInit, OnDestroy {
   saveDQFForm(): void {
     if (!this.canManageDrivers) return;
 
-    // Count how many checkboxes are checked (excluding notes which is a string)
-    const checkboxes = [
-      this.dqfForm.applicationComplete,
-      this.dqfForm.mvrComplete,
-      this.dqfForm.roadTestComplete,
-      this.dqfForm.medicalCertComplete,
-      this.dqfForm.annualReviewComplete,
-      this.dqfForm.clearinghouseConsentComplete
-    ];
-    
-    const completedItems = checkboxes.filter(v => v === true).length;
-    const totalItems = checkboxes.length;
-    const dqfCompleteness = Math.round((completedItems / totalItems) * 100);
+    // FN-348: Use the DQF categories-based completeness (same as recalculateDqfCompleteness)
+    // instead of the legacy 6-checkbox count. The frontend completeness already excludes
+    // time-sensitive items not yet due and the "other" category.
+    const dqfCompleteness = this.dqfCompleteness;
 
     // Set clearinghouse status based on consent checkbox
     const clearinghouseStatus = this.dqfForm.clearinghouseConsentComplete ? 'eligible' : 'query-pending';
 
-    // Check if driver should be set to inactive based on DQF and expiry dates
-    const today = new Date();
-    const cdlExpiry = this.selectedDriver.cdlExpiry ? new Date(this.selectedDriver.cdlExpiry) : null;
-    const medicalExpiry = this.selectedDriver.medicalCertExpiry ? new Date(this.selectedDriver.medicalCertExpiry) : null;
-    
-    let status = this.selectedDriver.status;
-    let statusMessage = '';
-    
-    if (dqfCompleteness !== 100) {
-      status = 'inactive';
-      statusMessage = 'Status set to INACTIVE: DQF must be 100% complete. ';
-    } else if (cdlExpiry && cdlExpiry < today) {
-      status = 'inactive';
-      statusMessage = 'Status set to INACTIVE: CDL expired. ';
-    } else if (medicalExpiry && medicalExpiry < today) {
-      status = 'inactive';
-      statusMessage = 'Status set to INACTIVE: Medical certificate expired. ';
-    } else if (dqfCompleteness === 100 && (!cdlExpiry || cdlExpiry >= today) && (!medicalExpiry || medicalExpiry >= today)) {
-      status = 'active';
-      statusMessage = 'Status set to ACTIVE: All requirements met. ';
-    }
-
     this.saving = true;
-    // Recalculate DQF completeness on the server first, then update driver status
+    // Recalculate DQF completeness on the server, then determine status
     this.apiService.recalculateDqfCompleteness(this.selectedDriver.id).subscribe({
       next: (recalcRes: any) => {
         const serverCompleteness = recalcRes?.completeness ?? dqfCompleteness;
-        // Re-evaluate status based on server-calculated completeness
+
+        // Determine status from server-calculated completeness + expiry dates
+        const today = new Date();
+        const cdlExpiry = this.selectedDriver.cdlExpiry ? new Date(this.selectedDriver.cdlExpiry) : null;
+        const medicalExpiry = this.selectedDriver.medicalCertExpiry ? new Date(this.selectedDriver.medicalCertExpiry) : null;
+
+        let status = this.selectedDriver.status;
+        let statusMessage = '';
+
         if (serverCompleteness !== 100) {
           status = 'inactive';
           statusMessage = 'Status set to INACTIVE: DQF must be 100% complete. ';
+        } else if (cdlExpiry && cdlExpiry < today) {
+          status = 'inactive';
+          statusMessage = 'Status set to INACTIVE: CDL expired. ';
+        } else if (medicalExpiry && medicalExpiry < today) {
+          status = 'inactive';
+          statusMessage = 'Status set to INACTIVE: Medical certificate expired. ';
+        } else {
+          status = 'active';
+          statusMessage = 'Status set to ACTIVE: All requirements met. ';
         }
+
         this.apiService.updateDriver(this.selectedDriver.id, {
           clearinghouseStatus: clearinghouseStatus,
           status: status
@@ -1646,7 +1633,7 @@ export class DriversComponent implements OnInit, OnDestroy {
             }
             this.closeDQFForm();
             this.saving = false;
-            alert(`${statusMessage}DQF updated! Completeness: ${serverCompleteness}% (${completedItems}/${totalItems} items complete)\nClearinghouse Status: ${clearinghouseStatus}`);
+            alert(`${statusMessage}DQF updated! Completeness: ${serverCompleteness}%\nClearinghouse Status: ${clearinghouseStatus}`);
           },
           error: (error) => {
             console.error('Error updating driver:', error);
