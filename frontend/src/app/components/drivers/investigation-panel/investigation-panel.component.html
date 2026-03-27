@@ -67,9 +67,12 @@
               {{ employer.dotRegulated ? 'DOT' : 'Non-DOT' }}
             </span>
           </div>
-          <div class="inv-deadline" [ngClass]="getDeadlineClass(employer.deadline)">
-            <span class="material-symbols-outlined">schedule</span>
-            {{ getDeadlineLabel(employer.deadline) }}
+          <div class="inv-employer-badges">
+            <span *ngIf="isNewResponse(employer)" class="inv-badge inv-badge-new">NEW</span>
+            <div class="inv-deadline" [ngClass]="getDeadlineClass(employer.deadline)">
+              <span class="material-symbols-outlined">schedule</span>
+              {{ getDeadlineLabel(employer.deadline) }}
+            </div>
           </div>
         </div>
 
@@ -83,6 +86,43 @@
           <span *ngIf="employer.contactPhone">
             <span class="material-symbols-outlined">phone</span> {{ employer.contactPhone }}
           </span>
+        </div>
+
+        <!-- Email status timestamps -->
+        <div class="inv-timestamps" *ngIf="employer.inquirySentAt || employer.followUpSentAt || employer.responseReceivedAt">
+          <span *ngIf="employer.inquirySentAt" class="inv-timestamp">
+            <span class="material-symbols-outlined">mark_email_read</span>
+            Inquiry sent {{ formatTimestamp(employer.inquirySentAt) }}
+          </span>
+          <span *ngIf="employer.followUpSentAt" class="inv-timestamp">
+            <span class="material-symbols-outlined">forward_to_inbox</span>
+            Follow-up sent {{ formatTimestamp(employer.followUpSentAt) }}
+          </span>
+          <span *ngIf="employer.responseReceivedAt" class="inv-timestamp inv-timestamp-success">
+            <span class="material-symbols-outlined">task_alt</span>
+            Response received {{ formatTimestamp(employer.responseReceivedAt) }}
+          </span>
+        </div>
+
+        <!-- Response summary -->
+        <div class="inv-response-summary" *ngIf="getLatestResponse(employer) as resp">
+          <div class="inv-response-header">
+            <span class="material-symbols-outlined">description</span>
+            Response Details
+          </div>
+          <div class="inv-response-details">
+            <span *ngIf="resp.responseType">Type: <strong>{{ resp.responseType }}</strong></span>
+            <span *ngIf="resp.receivedVia">Via: <strong>{{ resp.receivedVia }}</strong></span>
+          </div>
+          <button
+            *ngIf="resp.documentId"
+            class="inv-btn inv-btn-download"
+            (click)="downloadResponse(employer)"
+            [disabled]="downloadingDocId === resp.documentId"
+          >
+            <span class="material-symbols-outlined">download</span>
+            {{ downloadingDocId === resp.documentId ? 'Downloading...' : 'Download Response' }}
+          </button>
         </div>
 
         <!-- Step indicator -->
