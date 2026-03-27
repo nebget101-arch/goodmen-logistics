@@ -205,6 +205,45 @@
             </div>
           </div>
 
+          <!-- Documents Section (Trailer) -->
+          <div class="form-section">
+            <h3 class="section-title">Documents</h3>
+            <div class="documents-list">
+              <div *ngFor="let docType of documentTypes; let i = index" class="document-item">
+                <div class="document-header">
+                  <div class="document-info">
+                    <span class="material-symbols-outlined document-icon ai-doc-icon">{{ getDocIcon(docType.value) }}</span>
+                    <span class="document-label">{{ docType.label }}</span>
+                  </div>
+                  <label [for]="'trailer-file-' + docType.value" class="upload-btn">
+                    📎 Upload
+                    <input
+                      [id]="'trailer-file-' + docType.value"
+                      type="file"
+                      (change)="onFileSelect($event, docType.value)"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      hidden
+                    />
+                  </label>
+                </div>
+                <div class="uploaded-files">
+                  <div *ngFor="let doc of documents; let j = index" class="uploaded-file">
+                    <span *ngIf="doc.type === docType.value" class="file-name">{{ doc.name }}</span>
+                    <button
+                      *ngIf="doc.type === docType.value"
+                      type="button"
+                      class="remove-file-btn"
+                      (click)="removeDocument(j)"
+                      aria-label="Remove file"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div *ngIf="errors.submit" class="form-error">{{ errors.submit }}</div>
 
           <div class="modal-footer">

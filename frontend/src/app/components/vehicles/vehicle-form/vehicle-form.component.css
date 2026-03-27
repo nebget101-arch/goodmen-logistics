@@ -508,3 +508,35 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* --- Trailer form fixes --- */
+
+/* 1. Trailer grid: consistent column widths and spacing */
+.trailer-layout {
+  gap: 16px;
+}
+
+.trailer-layout .form-group {
+  padding: 0;
+  margin: 0;
+}
+
+/* 2. Date label visibility inside trailer section */
+.trailer-layout label,
+.trailer-layout .form-group label {
+  color: var(--text-primary, #f1f5f9);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  display: block;
+}
+
+/* 3. Date placeholder centering */
+.vehicle-form-modal app-ai-date-picker input::placeholder {
+  text-align: center;
+}
+
+/* 4. Dropdown placeholder centering */
+.vehicle-form-modal app-ai-select .mat-mdc-select-placeholder {
+  text-align: center;
+}
