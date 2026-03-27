@@ -66,6 +66,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
 
   currentYear = new Date().getFullYear();
   maxYear = new Date().getFullYear() + 1;
+  unitNumberManuallyEdited = false;
 
   formData: VehicleFormData = {
     unit_number: '',
@@ -260,6 +261,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
   loadFormData(): void {
     if (this.vehicle) {
       this.isEditMode = true;
+      this.unitNumberManuallyEdited = true; // Don't auto-overwrite existing unit numbers
       this.formData = { ...this.vehicle };
       // Sanitize null string fields to prevent template crashes
       this.formData.unit_number = this.formData.unit_number || '';
@@ -287,6 +289,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       this.syncTrailerTypeSearchFromCurrent();
     } else {
       this.isEditMode = false;
+      this.unitNumberManuallyEdited = false;
       this.formData = {
         unit_number: '',
         vin: '',
@@ -314,10 +317,8 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     const vin = (this.formData.vin || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     this.formData.vin = vin;
 
-    if (vin && vin.length >= 4 && !this.formData.unit_number) {
-      const nextNumber = this.getNextUnitNumber();
-      const prefix = (this.formData.vehicle_type || this.vehicleType) === 'trailer' ? 'TRL' : 'TRK';
-      this.formData.unit_number = `${prefix}-${nextNumber}`;
+    if (vin && vin.length >= 4 && !this.unitNumberManuallyEdited) {
+      this.formData.unit_number = vin.slice(-4);
     }
 
     if (this.vinDecodeTimer) {
@@ -448,10 +449,8 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     });
   }
 
-  getNextUnitNumber(): string {
-    // This would typically come from the backend
-    const timestamp = Date.now().toString().slice(-3);
-    return timestamp.padStart(3, '0');
+  onUnitNumberInput(): void {
+    this.unitNumberManuallyEdited = true;
   }
 
   onFileSelect(event: Event, type: string): void {

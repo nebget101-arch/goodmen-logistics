@@ -17,7 +17,7 @@
               <div class="form-row trailer-top-row">
                 <div class="form-group">
                   <label for="trailer-unit-number">Unit <span class="req">*</span></label>
-                  <input id="trailer-unit-number" type="text" class="form-input" [(ngModel)]="formData.unit_number" name="trailer_unit_number" [class.error]="errors.unit_number" />
+                  <input id="trailer-unit-number" type="text" class="form-input" [(ngModel)]="formData.unit_number" name="trailer_unit_number" (input)="onUnitNumberInput()" [class.error]="errors.unit_number" />
                   <small class="error-text" *ngIf="errors.unit_number">{{ errors.unit_number }}</small>
                 </div>
 
@@ -228,10 +228,11 @@
                 class="form-input"
                 [(ngModel)]="formData.unit_number"
                 name="unit_number"
-                readonly
-                placeholder="Auto-generated"
+                (input)="onUnitNumberInput()"
+                placeholder="Last 4 of VIN"
+                [class.error]="errors.unit_number"
               />
-              <small class="help-text">Auto-generated from VIN</small>
+              <small class="help-text">Auto-filled from VIN (editable)</small>
             </div>
 
             <!-- VIN -->
