@@ -436,7 +436,7 @@
             <div *ngFor="let docType of documentTypes; let i = index" class="document-item">
               <div class="document-header">
                 <div class="document-info">
-                  <span class="document-icon" [class]="'icon-' + docType.value">📄</span>
+                  <span class="material-symbols-outlined document-icon ai-doc-icon">{{ getDocIcon(docType.value) }}</span>
                   <span class="document-label">{{ docType.label }}</span>
                 </div>
                 <label [for]="'file-' + docType.value" class="upload-btn">
