@@ -233,6 +233,14 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/drivers/zip-lookup/${zipCode}`);
   }
 
+  inviteDriver(data: { firstName: string; lastName: string; email: string; phone?: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/onboarding/invite`, data);
+  }
+
+  resendOnboardingPacket(packetId: string, email?: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/onboarding/packets/${packetId}/resend`, email ? { email } : {});
+  }
+
   // Settlements (payroll)
   listSettlements(filters?: { driver_id?: string; payroll_period_id?: string; settlement_status?: string; settlement_number?: string; limit?: number; offset?: number }): Observable<any> {
     let url = `${this.baseUrl}/settlements/settlements`;
