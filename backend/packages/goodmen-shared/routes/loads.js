@@ -77,7 +77,7 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
          WHERE l.driver_id = $1
            AND l.id <> $2
            AND s.stop_type = 'DELIVERY'
-         ORDER BY COALESCE(s.stop_date, l.delivery_date, l.completed_date, l.created_at) DESC
+         ORDER BY COALESCE(s.stop_date, l.completed_date, l.created_at) DESC
          LIMIT 1`,
         [loadRow.driver_id, loadId]
       );
@@ -285,8 +285,8 @@ async function getLoadDetail(clientOrQuery, loadId, context = null) {
   const deliveries = stopsRows.filter((s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'DELIVERY');
   const firstPickup = pickups[0];
   const lastDelivery = deliveries.length ? deliveries[deliveries.length - 1] : null;
-  const pickupDate = firstPickup?.stop_date ?? loadRow.pickup_date ?? null;
-  const deliveryDate = lastDelivery?.stop_date ?? loadRow.delivery_date ?? null;
+  const pickupDate = firstPickup?.stop_date ?? null;
+  const deliveryDate = lastDelivery?.stop_date ?? null;
   return {
     ...loadRow,
     ...tripMetrics,
@@ -392,15 +392,15 @@ router.get('/', async (req, res) => {
       params.push(dateTo);
       const idxTo = params.length;
       where.push(`(
-        (COALESCE(pickup.stop_date, l.pickup_date)::date >= $${idxFrom} AND COALESCE(pickup.stop_date, l.pickup_date)::date <= $${idxTo})
-        OR (COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date >= $${idxFrom} AND COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date <= $${idxTo})
+        (pickup.stop_date::date >= $${idxFrom} AND pickup.stop_date::date <= $${idxTo})
+        OR (COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${idxFrom} AND COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${idxTo})
       )`);
     } else if (dateFrom) {
       params.push(dateFrom);
-      where.push(`(COALESCE(pickup.stop_date, l.pickup_date)::date >= $${params.length} OR COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date >= $${params.length})`);
+      where.push(`(pickup.stop_date::date >= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${params.length})`);
     } else if (dateTo) {
       params.push(dateTo);
-      where.push(`(COALESCE(pickup.stop_date, l.pickup_date)::date <= $${params.length} OR COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date <= $${params.length})`);
+      where.push(`(pickup.stop_date::date <= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${params.length})`);
     }
 
     const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -441,10 +441,10 @@ router.get('/', async (req, res) => {
     params.push(offset);
     const sortMap = {
       load_number: 'l.load_number',
-      pickup_date: 'COALESCE(pickup.stop_date, l.pickup_date)',
+      pickup_date: 'pickup.stop_date',
       rate: 'l.rate',
       // Sort "Completed" by delivery date when present, then completed_date, then created_at
-      completed_date: 'COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)',
+      completed_date: 'COALESCE(delivery.stop_date, l.completed_date, l.created_at)',
       created_at: 'l.created_at'
     };
     const orderBy = sortMap[sortBy] || 'l.created_at';
@@ -460,8 +460,8 @@ router.get('/', async (req, res) => {
         UPPER(l.billing_status::text) as billing_status,
         l.rate,
         l.completed_date,
-        COALESCE(pickup.stop_date, l.pickup_date) as pickup_date,
-        COALESCE(delivery.stop_date, l.delivery_date) as delivery_date,
+        pickup.stop_date as pickup_date,
+        delivery.stop_date as delivery_date,
         pickup.city as pickup_city,
         pickup.state as pickup_state,
         pickup.zip as pickup_zip,
@@ -576,9 +576,8 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
         tenant_id, operating_entity_id,
         load_number, status, billing_status, dispatcher_user_id,
         driver_id, truck_id, trailer_id, broker_id, broker_name,
-        po_number, rate, notes, completed_date,
-        pickup_location, delivery_location, pickup_date, delivery_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        po_number, rate, notes, completed_date
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
       RETURNING *`,
       [
         tenantId,
@@ -595,11 +594,7 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
         normalizeNullable(body.poNumber),
         normalizeNullable(body.rate) || 0,
         normalizeNullable(body.notes),
-        normalizeNullable(body.completedDate),
-        pickupLocation,
-        deliveryLocation,
-        normalizeNullable(pickupDate),
-        normalizeNullable(deliveryDate)
+        normalizeNullable(body.completedDate)
       ]
     );
 
@@ -613,7 +608,7 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
         [
           loadId,
           stopType,
-          normalizeNullable(stop.date || stop.stopDate),
+          normalizeNullable(stop.date || stop.stopDate || stop.stop_date),
           normalizeNullable(stop.city),
           normalizeNullable(stop.state),
           normalizeNullable(stop.zip),
@@ -741,17 +736,15 @@ async function processSingleRateConfirmation(file, req, dispatcherUserId) {
         tenant_id, operating_entity_id,
         load_number, status, billing_status, dispatcher_user_id,
         driver_id, truck_id, trailer_id, broker_id, broker_name,
-        po_number, rate, notes, completed_date,
-        pickup_location, delivery_location, pickup_date, delivery_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        po_number, rate, notes, completed_date
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
       RETURNING *`,
       [
         req.context?.tenantId || null,
         req.context?.operatingEntityId || null,
         loadNumber, 'DRAFT', 'PENDING', dispatcherUserId,
         null, null, null, brokerId, finalBrokerName,
-        poValue, data.rate || 0, null, null,
-        pickupLocation, deliveryLocation, normalizeNullable(pickupDate), normalizeNullable(deliveryDate)
+        poValue, data.rate || 0, null, null
       ]
     );
     loadId = insertResult.rows[0].id;
@@ -979,29 +972,7 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
           ]
         );
       }
-      if (loadPickupDate != null || loadDeliveryDate != null) {
-        const loadDateUpdates = [];
-        const loadDateValues = [];
-        let loadDateIdx = 1;
-        if (loadPickupDate != null) {
-          loadDateUpdates.push(`pickup_date = $${loadDateIdx}`);
-          loadDateValues.push(normalizeNullable(loadPickupDate));
-          loadDateIdx += 1;
-        }
-        if (loadDeliveryDate != null) {
-          loadDateUpdates.push(`delivery_date = $${loadDateIdx}`);
-          loadDateValues.push(normalizeNullable(loadDeliveryDate));
-          loadDateIdx += 1;
-        }
-        if (loadDateUpdates.length > 0) {
-          loadDateValues.push(req.params.id);
-          const whereParam = loadDateIdx;
-          await client.query(
-            `UPDATE loads SET ${loadDateUpdates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${whereParam} AND tenant_id = $${whereParam + 1} AND operating_entity_id = $${whereParam + 2}`,
-            [...loadDateValues, req.context?.tenantId || null, req.context?.operatingEntityId || null]
-          );
-        }
-      }
+      // Pickup/delivery dates are stored in load_stops — no denormalized columns on loads table
     }
 
     await client.query('COMMIT');
