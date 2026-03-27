@@ -327,7 +327,7 @@ async function sendInquiry(pastEmployerId, userId) {
     // Fetch employer record (with contact info)
     const empRes = await client.query(
       `SELECT id, driver_id, employer_name, contact_name, contact_phone,
-              contact_email, contact_fax, usdot_number,
+              contact_email, contact_fax,
               start_date, end_date, position_held
          FROM driver_past_employers WHERE id = $1`,
       [pastEmployerId]
@@ -353,7 +353,7 @@ async function sendInquiry(pastEmployerId, userId) {
       pdfBuffer = await buildRequestPdf(
         driver,
         { company_name: emp.employer_name, contact_name: emp.contact_name, contact_phone: emp.contact_phone,
-          contact_email: emp.contact_email, contact_fax: emp.contact_fax, usdot_number: emp.usdot_number,
+          contact_email: emp.contact_email, contact_fax: emp.contact_fax,
           start_date: emp.start_date, end_date: emp.end_date },
         oe,
         publicUrl
@@ -435,7 +435,7 @@ async function sendFollowUp(pastEmployerId, userId) {
 
     const empRes = await client.query(
       `SELECT id, driver_id, employer_name, contact_name, contact_phone,
-              contact_email, contact_fax, usdot_number,
+              contact_email, contact_fax,
               start_date, end_date, share_token_id
          FROM driver_past_employers WHERE id = $1`,
       [pastEmployerId]
@@ -485,7 +485,7 @@ async function sendFollowUp(pastEmployerId, userId) {
       pdfBuffer = await buildRequestPdf(
         driver,
         { company_name: emp.employer_name, contact_name: emp.contact_name, contact_phone: emp.contact_phone,
-          contact_email: emp.contact_email, contact_fax: emp.contact_fax, usdot_number: emp.usdot_number,
+          contact_email: emp.contact_email, contact_fax: emp.contact_fax,
           start_date: emp.start_date, end_date: emp.end_date },
         oe,
         publicUrl
