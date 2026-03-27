@@ -40,6 +40,25 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
   creatingPeriod = false;
   activeOperatingEntityName = '';
 
+  dateBasisOptions = [
+    { value: 'pickup', label: 'Pickup date' },
+    { value: 'delivery', label: 'Delivery date' }
+  ];
+
+  get payrollPeriodOptions(): { value: string; label: string }[] {
+    return this.payrollPeriods.map(p => ({
+      value: p.id,
+      label: `${p.period_start} – ${p.period_end} (${p.status})`
+    }));
+  }
+
+  get driverOptions(): { value: string; label: string }[] {
+    return this.drivers.map(d => ({
+      value: d.id,
+      label: this.getDriverDisplayName(d)
+    }));
+  }
+
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
 
