@@ -195,7 +195,30 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
     }
 
     const { driver, oe, employer } = ctx;
-    const body = req.body || {};
+    const raw = req.body || {};
+
+    // Normalize: frontend sends nested camelCase, backend expects flat snake_case.
+    // Support both formats for forward compatibility.
+    const cert = raw.certification || {};
+    const emp = raw.employmentVerification || {};
+    const acc = raw.accidentHistory || {};
+    const da = raw.drugAlcoholHistory || {};
+    const body = {
+      completed_by_name: raw.completed_by_name || cert.completedByName || null,
+      completed_by_title: raw.completed_by_title || cert.completedByTitle || null,
+      other_remarks: raw.other_remarks || cert.otherRemarks || null,
+      employed_as: raw.employed_as || emp.employedAs || null,
+      employment_from: raw.employment_from || emp.employmentFrom || null,
+      employment_to: raw.employment_to || emp.employmentTo || null,
+      drove_cmv: raw.drove_cmv != null ? raw.drove_cmv : (emp.droveCmv != null ? emp.droveCmv : null),
+      vehicle_types: raw.vehicle_types || emp.vehicleTypes || [],
+      reason_for_leaving: raw.reason_for_leaving || emp.reasonForLeaving || null,
+      no_safety_history: raw.no_safety_history || raw.noSafetyHistory || false,
+      accidents: raw.accidents || acc.accidents || [],
+      drug_alcohol_history: raw.drug_alcohol_history || da || {},
+      signature_data: raw.signature_data || cert.signatureData || {},
+      _raw: raw // preserve original for response_data column
+    };
 
     // Validate required fields
     if (!body.completed_by_name) {
@@ -231,22 +254,22 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
       [
         token.past_employer_id,
         'online_form',
-        JSON.stringify(body),
+        JSON.stringify(body._raw),
         'online_portal',
         null, // no authenticated user
-        body.employed_as || null,
-        body.employment_from || null,
-        body.employment_to || null,
-        body.drove_cmv != null ? body.drove_cmv : null,
-        JSON.stringify(body.vehicle_types || []),
-        body.reason_for_leaving || null,
-        JSON.stringify(body.accidents || []),
-        JSON.stringify(body.drug_alcohol_history || {}),
-        body.no_safety_history || false,
-        body.other_remarks || null,
+        body.employed_as,
+        body.employment_from,
+        body.employment_to,
+        body.drove_cmv,
+        JSON.stringify(body.vehicle_types),
+        body.reason_for_leaving,
+        JSON.stringify(body.accidents),
+        JSON.stringify(body.drug_alcohol_history),
+        body.no_safety_history,
+        body.other_remarks,
         body.completed_by_name,
-        body.completed_by_title || null,
-        JSON.stringify(body.signature_data || {})
+        body.completed_by_title,
+        JSON.stringify(body.signature_data)
       ]
     );
     const responseId = responseRes.rows[0].id;
