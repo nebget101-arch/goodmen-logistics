@@ -85,7 +85,7 @@ async function loadInvestigationContext(token) {
     `SELECT pe.id, pe.driver_id, pe.employer_name, pe.contact_name,
             pe.contact_phone, pe.contact_email, pe.contact_fax,
             pe.start_date, pe.end_date, pe.position_held,
-            pe.investigation_status, pe.usdot_number
+            pe.investigation_status
        FROM driver_past_employers pe
       WHERE pe.id = $1`,
     [token.past_employer_id]
@@ -98,7 +98,7 @@ async function loadInvestigationContext(token) {
 
   // Load driver
   const driverRes = await query(
-    `SELECT d.id, d.first_name, d.last_name, d.middle_name,
+    `SELECT d.id, d.first_name, d.last_name,
             d.cdl_number, d.cdl_state, d.date_of_birth,
             d.operating_entity_id
        FROM drivers d
@@ -115,7 +115,7 @@ async function loadInvestigationContext(token) {
   const oeRes = await query(
     `SELECT oe.id, oe.name, oe.legal_name, oe.address_line1, oe.address_line2,
             oe.city, oe.state, oe.zip_code, oe.phone, oe.email,
-            oe.dot_number, oe.usdot_number
+            oe.dot_number
        FROM operating_entities oe
       WHERE oe.id = $1`,
     [driver.operating_entity_id]
@@ -148,7 +148,7 @@ router.get('/:tokenId', rateLimited, async (req, res) => {
     }
 
     const { driver, oe, employer } = ctx;
-    const driverName = [driver.first_name, driver.middle_name, driver.last_name].filter(Boolean).join(' ');
+    const driverName = [driver.first_name, driver.last_name].filter(Boolean).join(' ');
 
     const duration = Date.now() - start;
     dtLogger.trackRequest('GET', '/public/employer-investigations/:tokenId', 200, duration);
@@ -157,7 +157,7 @@ router.get('/:tokenId', rateLimited, async (req, res) => {
       driverName,
       oeName: oe.name || oe.legal_name || '',
       oeAddress: [oe.address_line1, oe.address_line2, oe.city, oe.state, oe.zip_code].filter(Boolean).join(', '),
-      oeDotNumber: oe.dot_number || oe.usdot_number || '',
+      oeDotNumber: oe.dot_number || '',
       employerName: employer.employer_name || '',
       employerContactName: employer.contact_name || ''
     });
@@ -254,7 +254,6 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
     // 2) Generate response PDF
     const driverData = {
       first_name: driver.first_name,
-      middle_name: driver.middle_name,
       last_name: driver.last_name,
       cdl_number: driver.cdl_number,
       cdl_state: driver.cdl_state,
@@ -266,7 +265,6 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
       contact_name: employer.contact_name,
       contact_phone: employer.contact_phone,
       contact_email: employer.contact_email,
-      usdot_number: employer.usdot_number,
       start_date: employer.start_date,
       end_date: employer.end_date
     };
@@ -281,7 +279,7 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
       zip_code: oe.zip_code,
       phone: oe.phone,
       email: oe.email,
-      dot_number: oe.dot_number || oe.usdot_number
+      dot_number: oe.dot_number || ''
     };
 
     // Build response_data for the PDF (map body fields to the PDF service format)
