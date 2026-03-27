@@ -361,10 +361,14 @@
           </th>
           <!-- Driver -->
           <th>
-            <select [(ngModel)]="filters.driverId" (change)="onFilterChange()">
-              <option value="">All Drivers</option>
-              <option *ngFor="let d of drivers" [value]="d.id">{{ d.name }}</option>
-            </select>
+            <app-ai-select
+              [(ngModel)]="filters.driverId"
+              (ngModelChange)="onFilterChange()"
+              [options]="driverFilterOptions"
+              [allowEmpty]="true"
+              emptyLabel="All Drivers"
+              placeholder="Driver"
+            ></app-ai-select>
           </th>
           <!-- Broker -->
           <th>
@@ -410,17 +414,25 @@
           <th></th>
           <!-- Status -->
           <th>
-            <select [(ngModel)]="filters.status" (change)="onFilterChange()">
-              <option value="">All</option>
-              <option *ngFor="let s of statusOptions" [value]="s">{{ getStatusLabel(s) }}</option>
-            </select>
+            <app-ai-select
+              [(ngModel)]="filters.status"
+              (ngModelChange)="onFilterChange()"
+              [options]="statusFilterOptions"
+              [allowEmpty]="true"
+              emptyLabel="All"
+              placeholder="Status"
+            ></app-ai-select>
           </th>
           <!-- Billing -->
           <th>
-            <select [(ngModel)]="filters.billingStatus" (change)="onFilterChange()">
-              <option value="">All</option>
-              <option *ngFor="let b of billingOptions" [value]="b">{{ getBillingLabel(b) }}</option>
-            </select>
+            <app-ai-select
+              [(ngModel)]="filters.billingStatus"
+              (ngModelChange)="onFilterChange()"
+              [options]="billingFilterOptions"
+              [allowEmpty]="true"
+              emptyLabel="All"
+              placeholder="Billing"
+            ></app-ai-select>
           </th>
           <!-- Notes -->
           <th>
@@ -432,16 +444,13 @@
           </th>
           <!-- Attachments -->
           <th>
-            <select [(ngModel)]="headerFilters.attachmentType">
-              <option value="">All</option>
-              <option value="RATE_CONFIRMATION">Rate Conf</option>
-              <option value="BOL">BOL</option>
-              <option value="LUMPER">Lumper</option>
-              <option value="PROOF_OF_DELIVERY">POD</option>
-              <option value="ROADSIDE_MAINTENANCE_RECEIPT">Roadside Receipt</option>
-              <option value="OTHER">Other</option>
-              <option value="CONFIRMATION">Confirmation</option>
-            </select>
+            <app-ai-select
+              [(ngModel)]="headerFilters.attachmentType"
+              [options]="attachmentTypeFilterOptions"
+              [allowEmpty]="true"
+              emptyLabel="All"
+              placeholder="Attachments"
+            ></app-ai-select>
           </th>
           <!-- Actions -->
           <th></th>
