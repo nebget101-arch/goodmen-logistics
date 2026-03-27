@@ -45,18 +45,18 @@ export class LoadsComponent implements OnInit {
     { value: 'completed', label: 'Completed' }
   ];
 
-  get driverSelectOptions(): AiSelectOption[] {
-    return this.filteredDrivers.map(d => ({
+  driverSelectOptions: AiSelectOption[] = [];
+
+  rebuildDriverSelectOptions(): void {
+    const filtered = !this.driverSearch
+      ? this.drivers
+      : this.drivers.filter(d =>
+          (d.firstName + ' ' + d.lastName).toLowerCase().includes(this.driverSearch.toLowerCase())
+        );
+    this.driverSelectOptions = filtered.map(d => ({
       value: d.id,
       label: `${d.firstName} ${d.lastName}`
     }));
-  }
-
-  get filteredDrivers() {
-    if (!this.driverSearch) return this.drivers;
-    return this.drivers.filter(d =>
-      (d.firstName + ' ' + d.lastName).toLowerCase().includes(this.driverSearch.toLowerCase())
-    );
   }
 
   constructor(private apiService: ApiService, private http: HttpClient) { }
@@ -90,9 +90,11 @@ export class LoadsComponent implements OnInit {
     this.apiService.getDrivers().subscribe({
       next: (data) => {
         this.drivers = data;
+        this.rebuildDriverSelectOptions();
       },
       error: (err) => {
         this.drivers = [];
+        this.rebuildDriverSelectOptions();
       }
     });
   }

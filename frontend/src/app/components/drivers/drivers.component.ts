@@ -219,17 +219,14 @@ export class DriversComponent implements OnInit, OnDestroy {
     { value: 'C', label: 'Class C' }
   ];
 
-  get drugTestTypeOptions(): AiSelectOption[] {
-    return this.drugTestTypes.map(tt => ({ value: tt, label: this.drugTestTypeLabels[tt] }));
-  }
+  readonly drugTestTypeOptions: AiSelectOption[] =
+    this.drugTestTypes.map(tt => ({ value: tt, label: this.drugTestTypeLabels[tt] }));
 
-  get substanceTypeOptions(): AiSelectOption[] {
-    return this.substanceTypes.map(st => ({ value: st, label: this.substanceTypeLabels[st] }));
-  }
+  readonly substanceTypeOptions: AiSelectOption[] =
+    this.substanceTypes.map(st => ({ value: st, label: this.substanceTypeLabels[st] }));
 
-  get drugTestResultOptions(): AiSelectOption[] {
-    return this.drugTestResults.map(r => ({ value: r, label: this.drugTestResultLabels[r] }));
-  }
+  readonly drugTestResultOptions: AiSelectOption[] =
+    this.drugTestResults.map(r => ({ value: r, label: this.drugTestResultLabels[r] }));
 
   newDrugTest: DrugAlcoholTest = this.getEmptyDrugTest('');
 

@@ -161,26 +161,22 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
 
   truckSelectOptions: { value: string; label: string }[] = [];
 
-  get trailerSelectOptions(): { value: string; label: string }[] {
-    return this.availableTrailers.map(t => ({
-      value: t.id,
-      label: [t.unit_number, t.make, t.model].filter(Boolean).join(' - ') || t.id
-    }));
-  }
+  trailerSelectOptions: { value: string; label: string }[] = [];
 
-  get expenseCategoryOptions() {
-    return [
-      { value: '', label: 'Manual / not expense-specific' },
-      ...this.expenseKeys.map(e => ({ value: e.key, label: e.label }))
-    ];
-  }
+  readonly expenseCategoryOptions = [
+    { value: '', label: 'Manual / not expense-specific' },
+    ...this.expenseKeys.map(e => ({ value: e.key, label: e.label }))
+  ];
 
-  get sourceTypeOptions() {
-    return [
-      { value: '', label: 'Select expense' },
-      ...this.deductionExpenseTypeOptions
-    ];
-  }
+  readonly sourceTypeOptions = [
+    { value: '', label: 'Select expense' },
+    { value: 'fuel', label: 'Fuel' },
+    { value: 'insurance', label: 'Insurance' },
+    { value: 'eld', label: 'ELD' },
+    { value: 'trailer_rent', label: 'Trailer rent' },
+    { value: 'toll', label: 'Tolls' },
+    { value: 'repairs', label: 'Repairs' }
+  ];
 
   recurringDeductions: any[] = [];
   loadingRecurringDeductions = false;
@@ -428,11 +424,16 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
           value: t.id,
           label: [t.unit_number, t.make, t.model].filter(Boolean).join(' - ') || t.id
         }));
+        this.trailerSelectOptions = this.trailers.map(t => ({
+          value: t.id,
+          label: [t.unit_number, t.make, t.model].filter(Boolean).join(' - ') || t.id
+        }));
       },
       error: (err) => {
         console.error('Error loading vehicles for drivers page', err);
         this.trucks = [];
         this.trailers = [];
+        this.trailerSelectOptions = [];
       }
     });
   }

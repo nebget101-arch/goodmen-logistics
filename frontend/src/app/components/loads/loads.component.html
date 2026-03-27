@@ -110,7 +110,7 @@
                     <h4>Driver</h4>
                     <div>
                       <label>Driver:
-                        <input [(ngModel)]="driverSearch" name="driverSearch" placeholder="Search driver..." autocomplete="off">
+                        <input [(ngModel)]="driverSearch" (ngModelChange)="rebuildDriverSelectOptions()" name="driverSearch" placeholder="Search driver..." autocomplete="off">
                         <app-ai-select [(ngModel)]="newLoad.driverId" name="driverId" [options]="driverSelectOptions" placeholder="Select driver"></app-ai-select>
                       </label>
                     </div>
