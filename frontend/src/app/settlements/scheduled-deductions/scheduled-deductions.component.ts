@@ -140,6 +140,19 @@ export class ScheduledDeductionsComponent implements OnInit {
     { value: 'repairs', label: 'Repairs' }
   ];
 
+  enabledFilterOptions = [
+    { value: 'true', label: 'Active' },
+    { value: 'false', label: 'Inactive' }
+  ];
+
+  get driverOptions(): { value: string; label: string }[] {
+    return (this.drivers || []).map(d => ({ value: d.id, label: `${d.firstName} ${d.lastName}` }));
+  }
+
+  get payeeOptions(): { value: string; label: string }[] {
+    return (this.payees || []).map(p => ({ value: p.id, label: p.name }));
+  }
+
   constructor(private apiService: ApiService) {}
 
   ngOnInit(): void {

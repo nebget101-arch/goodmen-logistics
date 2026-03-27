@@ -48,9 +48,12 @@
   <div class="action-row">
     <div class="year-selector">
       <label for="yearSelect">Year:</label>
-      <select id="yearSelect" [(ngModel)]="selectedYear">
-        <option *ngFor="let y of yearOptions" [ngValue]="y">{{ y }}</option>
-      </select>
+      <app-ai-select
+        inputId="yearSelect"
+        [options]="yearSelectOptions"
+        [(ngModel)]="selectedYearStr"
+        (ngModelChange)="onYearChange($event)"
+      ></app-ai-select>
     </div>
     <button
       type="button"
@@ -207,12 +210,11 @@
       Compliance Audit & Reporting
     </h2>
     <div class="audit-actions">
-      <select [(ngModel)]="selectedCategory" class="audit-select">
-        <option value="dqf">Driver Qualification Files</option>
-        <option value="hos">Hours of Service</option>
-        <option value="maintenance">Maintenance Records</option>
-        <option value="drug-alcohol">Drug & Alcohol Testing</option>
-      </select>
+      <app-ai-select
+        inputId="auditCategory"
+        [options]="categoryOptions"
+        [(ngModel)]="selectedCategory"
+      ></app-ai-select>
       <button type="button" class="btn btn-primary" (click)="exportAuditData()">
         <span class="material-symbols-outlined">ios_share</span> Export
       </button>
