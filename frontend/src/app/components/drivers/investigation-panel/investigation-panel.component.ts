@@ -1,6 +1,7 @@
 import { Component, Input, OnInit, OnChanges, SimpleChanges, EventEmitter, Output } from '@angular/core';
 import {
   EmployerInvestigationService,
+  EmployerResponse,
   InvestigationStatus,
   PastEmployerInvestigation
 } from '../../../services/employer-investigation.service';
@@ -223,6 +224,55 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
 
   isTerminalStatus(status: string): boolean {
     return status === 'response_received' || status === 'no_response_documented' || status === 'complete';
+  }
+
+  getLatestResponse(employer: PastEmployerInvestigation): EmployerResponse | null {
+    return employer.responses?.length ? employer.responses[0] : null;
+  }
+
+  hasResponseDocument(employer: PastEmployerInvestigation): boolean {
+    const resp = this.getLatestResponse(employer);
+    return !!resp?.documentId;
+  }
+
+  isNewResponse(employer: PastEmployerInvestigation): boolean {
+    if (!employer.responseReceivedAt) return false;
+    const received = new Date(employer.responseReceivedAt);
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    return received > threeDaysAgo;
+  }
+
+  downloadingDocId: string | null = null;
+
+  downloadResponse(employer: PastEmployerInvestigation): void {
+    const resp = this.getLatestResponse(employer);
+    if (!resp?.documentId) return;
+
+    this.downloadingDocId = resp.documentId;
+    this.investigationService.downloadResponseDocument(resp.documentId).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `response-${employer.employerName.replace(/\s+/g, '-')}.pdf`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.downloadingDocId = null;
+      },
+      error: (err) => {
+        console.error('Error downloading response document:', err);
+        alert('Failed to download response document.');
+        this.downloadingDocId = null;
+      }
+    });
+  }
+
+  formatTimestamp(ts: string | null): string {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }
 
   private updateEmployer(updated: PastEmployerInvestigation): void {
