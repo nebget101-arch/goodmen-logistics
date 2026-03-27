@@ -35,20 +35,22 @@
         <tr class="header-filters drivers-header-filters">
           <th><input type="text" placeholder="Search" [(ngModel)]="driverFilters.name" /></th>
           <th>
-            <select [(ngModel)]="driverFilters.type">
-              <option value="">All</option>
-              <option value="company">company</option>
-              <option value="owner_operator">owner_operator</option>
-              <option value="hired_driver">hired_driver</option>
-            </select>
+            <app-ai-select
+              [options]="driverTypeOptions"
+              [(ngModel)]="driverFilters.type"
+              [allowEmpty]="true"
+              emptyLabel="All"
+              placeholder="All"
+            ></app-ai-select>
           </th>
           <th>
-            <select [(ngModel)]="driverFilters.status">
-              <option value="">All</option>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-              <option value="applicant">applicant</option>
-            </select>
+            <app-ai-select
+              [options]="driverStatusOptions"
+              [(ngModel)]="driverFilters.status"
+              [allowEmpty]="true"
+              emptyLabel="All"
+              placeholder="All"
+            ></app-ai-select>
           </th>
           <th>
             <app-ai-date-picker
@@ -64,13 +66,13 @@
           <th><input type="text" placeholder="Truck" [(ngModel)]="driverFilters.truck" /></th>
           <th><input type="text" placeholder="Trailer" [(ngModel)]="driverFilters.trailer" /></th>
           <th>
-            <select [(ngModel)]="driverFilters.payBasis">
-              <option value="">All</option>
-              <option value="per_mile">per_mile</option>
-              <option value="percentage">percentage</option>
-              <option value="flatpay">flatpay</option>
-              <option value="hourly">hourly</option>
-            </select>
+            <app-ai-select
+              [options]="payBasisOptions"
+              [(ngModel)]="driverFilters.payBasis"
+              [allowEmpty]="true"
+              emptyLabel="All"
+              placeholder="All"
+            ></app-ai-select>
           </th>
           <th><input type="text" placeholder="Rate / %" [(ngModel)]="driverFilters.payRate" /></th>
           <th></th>
@@ -273,29 +275,25 @@
               </div>
               <div class="field">
                 <label for="truck">Truck</label>
-                <select
-                  id="truck"
-                  class="form-input"
+                <app-ai-select
+                  inputId="truck"
+                  [options]="truckSelectOptions"
                   [(ngModel)]="newDriver.truckId"
-                >
-                  <option value="">-- Select truck --</option>
-                  <option *ngFor="let t of trucks" [value]="t.id">
-                    {{ t.unit_number }} - {{ t.make }} {{ t.model }}
-                  </option>
-                </select>
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select truck --"
+                  placeholder="Select truck"
+                ></app-ai-select>
               </div>
               <div class="field">
                 <label for="trailer">Trailer</label>
-                <select
-                  id="trailer"
-                  class="form-input"
+                <app-ai-select
+                  inputId="trailer"
+                  [options]="trailerSelectOptions"
                   [(ngModel)]="newDriver.trailerId"
-                >
-                  <option value="">-- Select trailer --</option>
-                  <option *ngFor="let tr of availableTrailers" [value]="tr.id">
-                    {{ tr.unit_number }} - {{ tr.make }} {{ tr.model }}
-                  </option>
-                </select>
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select trailer --"
+                  placeholder="Select trailer"
+                ></app-ai-select>
               </div>
               <div class="field field-wide">
                 <label for="fuelCard">Fuel card #</label>
@@ -324,15 +322,12 @@
               </div>
               <div class="field">
                 <label for="cdlClass">CDL Class</label>
-                <select
-                  id="cdlClass"
-                  class="form-input"
+                <app-ai-select
+                  inputId="cdlClass"
+                  [options]="cdlClassOptions"
                   [(ngModel)]="newDriver.cdlClass"
-                >
-                  <option value="A">Class A</option>
-                  <option value="B">Class B</option>
-                  <option value="C">Class C</option>
-                </select>
+                  placeholder="Select CDL class"
+                ></app-ai-select>
               </div>
               <div class="field">
                 <label for="cdlExpiry">CDL Expiry</label>
@@ -432,9 +427,13 @@
               <div class="expense-matrix">
                 <div class="expense-row" *ngFor="let e of expenseKeys">
                   <span class="expense-label">{{ e.label }}</span>
-                  <select class="form-input form-select-sm" [ngModel]="expenseResponsibility[e.key]" (ngModelChange)="setExpenseResponsibility(e.key, $event)" name="expense-{{ e.key }}">
-                    <option *ngFor="let o of responsibilityOptions" [value]="o.value">{{ o.label }}</option>
-                  </select>
+                  <app-ai-select
+                    [options]="responsibilityOptions"
+                    [ngModel]="expenseResponsibility[e.key]"
+                    (ngModelChange)="setExpenseResponsibility(e.key, $event)"
+                    [name]="'expense-' + e.key"
+                    placeholder="Select"
+                  ></app-ai-select>
                 </div>
               </div>
             </div>
@@ -680,10 +679,13 @@
                   <div class="deduction-form-grid">
                     <div class="field">
                       <label for="rdExpenseCategory">Expense category (from responsibility)</label>
-                      <select id="rdExpenseCategory" class="form-input" [(ngModel)]="newRecurringDeduction.expense_category" (ngModelChange)="onRecurringExpenseCategoryChange()">
-                        <option value="">Manual / not expense-specific</option>
-                        <option *ngFor="let e of expenseKeys" [value]="e.key">{{ e.label }}</option>
-                      </select>
+                      <app-ai-select
+                        inputId="rdExpenseCategory"
+                        [options]="expenseCategoryOptions"
+                        [(ngModel)]="newRecurringDeduction.expense_category"
+                        (ngModelChange)="onRecurringExpenseCategoryChange()"
+                        placeholder="Select category"
+                      ></app-ai-select>
                     </div>
 
                     <div class="field" *ngIf="newRecurringDeduction.expense_category">
@@ -698,10 +700,12 @@
 
                     <div class="field">
                       <label for="rdTarget">Apply to</label>
-                      <select id="rdTarget" class="form-input" [(ngModel)]="newRecurringDeduction.target">
-                        <option value="primary">Primary payee</option>
-                        <option value="additional" [disabled]="!selectedAdditionalPayeeId">Additional payee</option>
-                      </select>
+                      <app-ai-select
+                        inputId="rdTarget"
+                        [options]="deductionTargetOptions"
+                        [(ngModel)]="newRecurringDeduction.target"
+                        placeholder="Select target"
+                      ></app-ai-select>
                     </div>
 
                     <div class="field field-wide">
@@ -711,10 +715,12 @@
 
                     <div class="field">
                       <label for="rdAmountType">Amount type</label>
-                      <select id="rdAmountType" class="form-input" [(ngModel)]="newRecurringDeduction.amount_type">
-                        <option value="fixed">Fixed</option>
-                        <option value="percentage">Percentage</option>
-                      </select>
+                      <app-ai-select
+                        inputId="rdAmountType"
+                        [options]="deductionAmountTypeOptions"
+                        [(ngModel)]="newRecurringDeduction.amount_type"
+                        placeholder="Select type"
+                      ></app-ai-select>
                     </div>
 
                     <div class="field">
@@ -724,9 +730,12 @@
 
                     <div class="field">
                       <label for="rdFrequency">Frequency</label>
-                      <select id="rdFrequency" class="form-input" [(ngModel)]="newRecurringDeduction.frequency">
-                        <option *ngFor="let f of deductionFrequencyOptions" [value]="f.value">{{ f.label }}</option>
-                      </select>
+                      <app-ai-select
+                        inputId="rdFrequency"
+                        [options]="deductionFrequencyOptions"
+                        [(ngModel)]="newRecurringDeduction.frequency"
+                        placeholder="Select frequency"
+                      ></app-ai-select>
                     </div>
 
                     <div class="field">
@@ -741,17 +750,22 @@
 
                     <div class="field">
                       <label for="rdAppliesWhen">Applies when</label>
-                      <select id="rdAppliesWhen" class="form-input" [(ngModel)]="newRecurringDeduction.applies_when">
-                        <option *ngFor="let a of deductionAppliesWhenOptions" [value]="a.value">{{ a.label }}</option>
-                      </select>
+                      <app-ai-select
+                        inputId="rdAppliesWhen"
+                        [options]="deductionAppliesWhenOptions"
+                        [(ngModel)]="newRecurringDeduction.applies_when"
+                        placeholder="Select condition"
+                      ></app-ai-select>
                     </div>
 
                     <div class="field" *ngIf="newRecurringDeduction.applies_when === 'specific_expense'">
                       <label for="rdSourceType">Expense type</label>
-                      <select id="rdSourceType" class="form-input" [(ngModel)]="newRecurringDeduction.source_type">
-                        <option value="">Select expense</option>
-                        <option *ngFor="let e of deductionExpenseTypeOptions" [value]="e.value">{{ e.label }}</option>
-                      </select>
+                      <app-ai-select
+                        inputId="rdSourceType"
+                        [options]="sourceTypeOptions"
+                        [(ngModel)]="newRecurringDeduction.source_type"
+                        placeholder="Select expense"
+                      ></app-ai-select>
                     </div>
                   </div>
                 </div>
