@@ -445,8 +445,21 @@ router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
 router.post('/driver/:driverId/recalculate', async (req, res) => {
   try {
     const { driverId } = req.params;
-    const completeness = await computeAndUpdateDqfCompleteness(driverId);
-    return res.json({ driverId, completeness });
+    const result = await computeAndUpdateDqfCompleteness(driverId);
+    // FN-366: result is now { completeness, totalWeight, completedWeight, counted, skipped }
+    const completeness = typeof result === 'object' ? result.completeness : result;
+    const response = { driverId, completeness };
+    // Include breakdown in debug mode (query param ?debug=1)
+    if (req.query.debug === '1' && typeof result === 'object') {
+      response.breakdown = {
+        totalWeight: result.totalWeight,
+        completedWeight: result.completedWeight,
+        missing: result.counted.filter(r => r.status !== 'complete').map(r => r.key),
+        counted: result.counted.length,
+        skipped: result.skipped
+      };
+    }
+    return res.json(response);
   } catch (error) {
     dtLogger.error('dqf_recalculate_failed', error, { driverId: req.params.driverId });
     return res.status(500).json({ message: 'Failed to recalculate DQF completeness' });
