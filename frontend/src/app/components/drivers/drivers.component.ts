@@ -1016,7 +1016,7 @@ export class DriversComponent implements OnInit, OnDestroy {
         'annual_mvr_inquiry',
         'annual_driving_record_review',
         // FN-261: Moved from Other to Annual Requirements
-        'annual_clearinghouse_limited_query',
+        'annual_clearinghouse_query',
         'medical_cert_renewal'
       ],
       // FN-270: Other Documents category removed — green_card_on_file excluded
@@ -1048,7 +1048,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       medical_variance_spe: '49 CFR 391.49',
       annual_mvr_inquiry: '49 CFR 391.25(a)',
       annual_driving_record_review: '49 CFR 391.25(c)',
-      annual_clearinghouse_limited_query: '49 CFR 382.701(b)',
+      annual_clearinghouse_query: '49 CFR 382.701(b)',
       medical_cert_renewal: '49 CFR 391.45',
       employment_application_completed: '49 CFR 391.21',
       cdl_on_file: '49 CFR 391.51(b)(2)',
