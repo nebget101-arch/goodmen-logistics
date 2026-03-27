@@ -62,6 +62,42 @@
 
 .panel-header {
   margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-clear-filters {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+}
+
+.header-filters th {
+  padding: 4px 6px;
+}
+
+.header-filters input,
+.header-filters select {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 6px;
+  color: #e2e8f0;
+  box-sizing: border-box;
+}
+
+.header-filters input:focus,
+.header-filters select:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.95);
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+}
+
+.header-filters select option {
+  background: #1e293b;
+  color: #e2e8f0;
 }
 
 .panel-header h2 {

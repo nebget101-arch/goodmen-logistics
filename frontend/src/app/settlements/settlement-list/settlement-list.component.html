@@ -13,40 +13,6 @@
     </div>
   </div>
 
-  <div class="filters-bar">
-    <div class="filter-group">
-      <label for="filter-week">Week starting</label>
-      <input id="filter-week" type="week" class="form-input" [(ngModel)]="filters.weekStart" (change)="loadSettlements()" />
-    </div>
-    <div class="filter-group">
-      <label for="filter-driver">Driver</label>
-      <app-ai-select
-        inputId="filter-driver"
-        class="form-select"
-        [options]="driverSelectOptions"
-        [ngModel]="filters.driverId"
-        (ngModelChange)="filters.driverId = $event; loadSettlements()"
-        [allowEmpty]="true"
-        emptyLabel="All drivers"
-      ></app-ai-select>
-    </div>
-    <div class="filter-group">
-      <label for="filter-status">Status</label>
-      <app-ai-select
-        inputId="filter-status"
-        class="form-select"
-        [options]="statusSelectOptions"
-        [ngModel]="filters.status"
-        (ngModelChange)="filters.status = $event; loadSettlements()"
-        [allowEmpty]="true"
-        emptyLabel="All statuses"
-      ></app-ai-select>
-    </div>
-    <div class="filter-group filter-actions">
-      <button type="button" class="btn-secondary" (click)="clearFilters()">Clear filters</button>
-    </div>
-  </div>
-
   <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
   <div *ngIf="loading" class="loading-wrap">
     <div class="spinner"></div>
@@ -70,6 +36,40 @@
             <th scope="col">Net additional</th>
             <th scope="col">Updated</th>
             <th scope="col">Actions</th>
+          </tr>
+          <tr class="header-filters">
+            <th></th>
+            <th>
+              <input type="week" [(ngModel)]="filters.weekStart" (change)="loadSettlements()" placeholder="Week" />
+            </th>
+            <th>
+              <app-ai-select
+                [options]="driverSelectOptions"
+                [ngModel]="filters.driverId"
+                (ngModelChange)="filters.driverId = $event; loadSettlements()"
+                [allowEmpty]="true"
+                emptyLabel="All"
+                placeholder="All"
+              ></app-ai-select>
+            </th>
+            <th></th>
+            <th></th>
+            <th>
+              <app-ai-select
+                [options]="statusSelectOptions"
+                [ngModel]="filters.status"
+                (ngModelChange)="filters.status = $event; loadSettlements()"
+                [allowEmpty]="true"
+                emptyLabel="All"
+                placeholder="All"
+              ></app-ai-select>
+            </th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
           </tr>
         </thead>
         <tbody>

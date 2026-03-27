@@ -18,6 +18,7 @@ import {
 import { LoadsService, BrokerOption } from '../../services/loads.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
 type SortDir = 'asc' | 'desc';
 
@@ -211,6 +212,28 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   statusOptions: LoadStatus[] = ['NEW', 'DRAFT', 'DISPATCHED', 'CANCELLED', 'TONU', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
   billingOptions: BillingStatus[] = ['PENDING', 'CANCELLED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
+
+  get driverFilterOptions(): AiSelectOption[] {
+    return this.drivers.map(d => ({ value: d.id, label: d.name }));
+  }
+
+  get statusFilterOptions(): AiSelectOption[] {
+    return this.statusOptions.map(s => ({ value: s, label: this.getStatusLabel(s) }));
+  }
+
+  get billingFilterOptions(): AiSelectOption[] {
+    return this.billingOptions.map(b => ({ value: b, label: this.getBillingLabel(b) }));
+  }
+
+  attachmentTypeFilterOptions: AiSelectOption[] = [
+    { value: 'RATE_CONFIRMATION', label: 'Rate Conf' },
+    { value: 'BOL', label: 'BOL' },
+    { value: 'LUMPER', label: 'Lumper' },
+    { value: 'PROOF_OF_DELIVERY', label: 'POD' },
+    { value: 'ROADSIDE_MAINTENANCE_RECEIPT', label: 'Roadside Receipt' },
+    { value: 'OTHER', label: 'Other' },
+    { value: 'CONFIRMATION', label: 'Confirmation' }
+  ];
 
   grossPeriod = 'all';
   grossPeriodOptions: { value: string; label: string }[] = [
