@@ -767,7 +767,7 @@
                   (click)="setActiveDqfTab(cat.key)">
             <span class="dqf-tab-label">{{ cat.label }}</span>
             <span class="dqf-tab-badge"
-                  [ngClass]="getCategoryCompletionPct(cat) === 100 ? 'badge-complete' : 'badge-incomplete'">
+                  [ngClass]="getCategoryBadgeClass(cat)">
               {{ getCategoryCompletionCount(cat) }}
             </span>
           </button>
@@ -777,14 +777,18 @@
         <div *ngFor="let cat of dqfCategories" class="dqf-tab-panel" [class.active]="activeDqfTab === cat.key">
             <div *ngFor="let req of cat.requirements" class="dqf-req-row" [ngClass]="'dqf-status-' + getEffectiveStatus(req)">
               <div class="dqf-req-main">
-                <!-- Status chip (FN-261: use effective status for warning overrides) -->
-                <span class="dqf-status-chip" [ngClass]="getStatusChipClass(getEffectiveStatus(req))">
-                  {{ getStatusChipLabel(getEffectiveStatus(req)) }}
+                <!-- Status chip (FN-320: use urgency-based class when urgency present) -->
+                <span class="dqf-status-chip"
+                      [ngClass]="req.urgency ? getUrgencyChipClass(req) : getStatusChipClass(getEffectiveStatus(req))">
+                  {{ req.urgency ? getUrgencyLabel(req) : getStatusChipLabel(getEffectiveStatus(req)) }}
                 </span>
                 <!-- Requirement info -->
                 <div class="dqf-req-info">
                   <span class="dqf-req-label">{{ getDqfReqLabel(req) }}</span>
                   <span class="dqf-req-cfr" *ngIf="getCfrReference(req.key)">{{ getCfrReference(req.key) }}</span>
+                  <span *ngIf="req.due_date" class="dqf-due-date">
+                    Due: {{ req.due_date }}
+                  </span>
                   <span class="dqf-req-meta" *ngIf="req.completion_date">
                     Completed {{ req.completion_date | date:'shortDate' }}
                   </span>
