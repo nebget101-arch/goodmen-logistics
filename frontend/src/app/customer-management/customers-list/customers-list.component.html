@@ -54,48 +54,9 @@
   </div>
 
   <div class="card customers-card">
-  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
-
-  <div class="filters customers-filters">
-    <input class="form-input" placeholder="Search company, phone, email" [(ngModel)]="filters.search" (input)="loadCustomers()" />
-
-    <app-ai-select
-      label="Type"
-      [options]="typeOptions"
-      [(ngModel)]="filters.type"
-      (ngModelChange)="loadCustomers()"
-      [allowEmpty]="true"
-      emptyLabel="All Types"
-    ></app-ai-select>
-
-    <app-ai-select
-      label="Status"
-      [options]="statusOptions"
-      [(ngModel)]="filters.status"
-      (ngModelChange)="loadCustomers()"
-      [allowEmpty]="true"
-      emptyLabel="All Statuses"
-    ></app-ai-select>
-
-    <app-ai-select
-      label="Payment Terms"
-      [options]="paymentTermsOptions"
-      [(ngModel)]="filters.paymentTerms"
-      (ngModelChange)="loadCustomers()"
-      [allowEmpty]="true"
-      emptyLabel="All Payment Terms"
-    ></app-ai-select>
-
-    <app-ai-select
-      label="Location"
-      [options]="locationOptions"
-      [(ngModel)]="filters.locationId"
-      (ngModelChange)="loadCustomers()"
-      [allowEmpty]="true"
-      emptyLabel="All Locations"
-    ></app-ai-select>
-
-    <button class="btn btn-secondary" (click)="clearFilters()">Clear</button>
+  <div class="card-header-row">
+    <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+    <button class="btn btn-secondary btn-clear-filters" (click)="clearFilters()">Clear Filters</button>
   </div>
 
   <div *ngIf="loading" class="loading-state">
@@ -115,6 +76,38 @@
           <th>Default Location</th>
           <th>Last Service Date</th>
           <th>Actions</th>
+        </tr>
+        <tr class="header-filters">
+          <th>
+            <input type="text" placeholder="Search" [(ngModel)]="filters.search" (input)="loadCustomers()" />
+          </th>
+          <th>
+            <select [(ngModel)]="filters.type" (ngModelChange)="loadCustomers()">
+              <option value="">All</option>
+              <option *ngFor="let opt of typeOptions" [value]="opt.value">{{ opt.label }}</option>
+            </select>
+          </th>
+          <th>
+            <select [(ngModel)]="filters.status" (ngModelChange)="loadCustomers()">
+              <option value="">All</option>
+              <option *ngFor="let opt of statusOptions" [value]="opt.value">{{ opt.label }}</option>
+            </select>
+          </th>
+          <th>
+            <select [(ngModel)]="filters.paymentTerms" (ngModelChange)="loadCustomers()">
+              <option value="">Pay Terms</option>
+              <option *ngFor="let opt of paymentTermsOptions" [value]="opt.value">{{ opt.label }}</option>
+            </select>
+          </th>
+          <th></th>
+          <th>
+            <select [(ngModel)]="filters.locationId" (ngModelChange)="loadCustomers()">
+              <option value="">All</option>
+              <option *ngFor="let opt of locationOptions" [value]="opt.value">{{ opt.label }}</option>
+            </select>
+          </th>
+          <th></th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
