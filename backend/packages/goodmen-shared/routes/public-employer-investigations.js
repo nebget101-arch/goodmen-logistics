@@ -229,6 +229,7 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
     const responseRes = await client.query(
       `INSERT INTO employer_investigation_responses (
         past_employer_id,
+        driver_id,
         response_type,
         response_data,
         received_via,
@@ -246,10 +247,11 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
         completed_by_name,
         completed_by_title,
         signature_data
-      ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18::jsonb)
+      ) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13::jsonb, $14::jsonb, $15, $16, $17, $18, $19::jsonb)
       RETURNING id`,
       [
         token.past_employer_id,
+        driver.id,
         'online_form',
         JSON.stringify(body._raw),
         'online_portal',
