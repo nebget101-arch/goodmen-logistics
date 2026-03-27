@@ -7,6 +7,13 @@
  */
 const { query, getClient } = require('../internal/db');
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('./dqf-service');
+const { generateToken, hashToken } = require('./token-service');
+const { buildRequestPdf } = require('./investigation-pdf-service');
+const { sendEmail } = require('./notification-service');
+const dtLogger = require('../utils/logger');
+
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'https://fleetneuron.ai';
+const TOKEN_EXPIRY_DAYS = 30;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -96,6 +103,111 @@ async function checkAndCompleteInvestigation(client, driverId) {
   }
 
   return false;
+}
+
+/**
+ * Load driver and OE data for PDF generation and email.
+ */
+async function loadDriverAndOe(client, driverId) {
+  const driverRes = await client.query(
+    `SELECT d.id, d.first_name, d.last_name, d.middle_name,
+            d.cdl_number, d.cdl_state, d.date_of_birth,
+            d.operating_entity_id
+       FROM drivers d WHERE d.id = $1`,
+    [driverId]
+  );
+  if (driverRes.rows.length === 0) return { driver: null, oe: null };
+  const driver = driverRes.rows[0];
+
+  const oeRes = await client.query(
+    `SELECT oe.id, oe.name, oe.legal_name, oe.address_line1, oe.address_line2,
+            oe.city, oe.state, oe.zip_code, oe.phone, oe.email,
+            oe.dot_number, oe.usdot_number
+       FROM operating_entities oe WHERE oe.id = $1`,
+    [driver.operating_entity_id]
+  );
+  const oe = oeRes.rows.length > 0 ? oeRes.rows[0] : {};
+
+  return { driver, oe };
+}
+
+/**
+ * Create a secure token for a past employer, store it, and return the raw token
+ * and the public response URL.
+ */
+async function createInvestigationToken(client, pastEmployerId, driverId, userId) {
+  const rawToken = generateToken();
+  const tokenHashVal = hashToken(rawToken);
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + TOKEN_EXPIRY_DAYS);
+
+  const tokenRes = await client.query(
+    `INSERT INTO employer_investigation_tokens
+       (past_employer_id, driver_id, token_hash, expires_at, created_by, status)
+     VALUES ($1, $2, $3, $4, $5, 'active')
+     RETURNING id`,
+    [pastEmployerId, driverId, tokenHashVal, expiresAt.toISOString(), userId || null]
+  );
+
+  // Link the token to the past employer record
+  await client.query(
+    `UPDATE driver_past_employers
+        SET share_token_id = $1, inquiry_created_by = $2, updated_at = NOW()
+      WHERE id = $3`,
+    [tokenRes.rows[0].id, userId || null, pastEmployerId]
+  );
+
+  const publicUrl = `${FRONTEND_BASE_URL}/employer-response/${rawToken}`;
+  return { rawToken, tokenId: tokenRes.rows[0].id, publicUrl };
+}
+
+/**
+ * Build and send the inquiry email to a past employer's contact.
+ * Returns { sent, error? }.
+ */
+async function sendInquiryEmail(contactEmail, { driverName, oeName, publicUrl, pdfBuffer, isFollowUp }) {
+  if (!contactEmail) {
+    return { sent: false, error: 'No contact email on file' };
+  }
+
+  const prefix = isFollowUp ? 'FOLLOW-UP: ' : '';
+  const subject = `${prefix}Previous Employment Verification Request -- ${driverName} -- ${oeName}`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #0f4a6b;">${prefix}Previous Employment Verification Request</h2>
+      <p>Dear Former Employer,</p>
+      <p>Pursuant to 49 CFR &sect;391.23(d)(2) and &sect;40.25, <strong>${oeName}</strong> is required to
+      investigate the safety performance history of all prospective drivers. We are requesting information
+      regarding <strong>${driverName}</strong>, who has applied for a driver position with our company.</p>
+      <p>Please complete the investigation by clicking the button below:</p>
+      <p style="text-align: center; margin: 24px 0;">
+        <a href="${publicUrl}"
+           style="display: inline-block; background-color: #0f4a6b; color: #ffffff;
+                  padding: 14px 28px; text-decoration: none; border-radius: 6px;
+                  font-weight: bold; font-size: 16px;">
+          Complete Investigation
+        </a>
+      </p>
+      <p style="color: #666; font-size: 13px;">
+        If the button does not work, copy and paste this link into your browser:<br>
+        <a href="${publicUrl}">${publicUrl}</a>
+      </p>
+      <p style="color: #666; font-size: 13px;">
+        This link will expire in ${TOKEN_EXPIRY_DAYS} days. Federal regulations require previous employers
+        to respond to these inquiries within 30 days of receipt.
+      </p>
+      <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
+      <p style="color: #999; font-size: 11px;">&mdash; FleetNeuron AI</p>
+    </div>
+  `;
+
+  // Build SendGrid message with optional PDF attachment
+  const msgOptions = { to: contactEmail, subject, html };
+
+  // Note: sendEmail in notification-service uses sgMail.send which supports attachments
+  // but our sendEmail wrapper doesn't pass them through. We send just the link for now.
+  return sendEmail(msgOptions);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +314,8 @@ async function initiateInvestigation(driverId, userId) {
 
 /**
  * Record that an inquiry was sent to a past employer.
+ * FN-331: Now generates a request PDF, creates a secure token, and emails
+ * the employer's contact with a link to the public response form.
  */
 async function sendInquiry(pastEmployerId, userId) {
   if (!pastEmployerId) throw new Error('pastEmployerId is required');
@@ -210,9 +324,12 @@ async function sendInquiry(pastEmployerId, userId) {
   try {
     await client.query('BEGIN');
 
-    // Fetch employer to get driver_id
+    // Fetch employer record (with contact info)
     const empRes = await client.query(
-      `SELECT id, driver_id, employer_name FROM driver_past_employers WHERE id = $1`,
+      `SELECT id, driver_id, employer_name, contact_name, contact_phone,
+              contact_email, contact_fax, usdot_number,
+              start_date, end_date, position_held
+         FROM driver_past_employers WHERE id = $1`,
       [pastEmployerId]
     );
     if (empRes.rows.length === 0) {
@@ -220,33 +337,82 @@ async function sendInquiry(pastEmployerId, userId) {
     }
     const emp = empRes.rows[0];
 
+    // Load driver + OE for PDF generation
+    const { driver, oe } = await loadDriverAndOe(client, emp.driver_id);
+    if (!driver) throw new Error('Driver not found');
+
+    // Create secure token and public URL
+    const { publicUrl, tokenId } = await createInvestigationToken(
+      client, pastEmployerId, emp.driver_id, userId
+    );
+
+    // Generate request PDF
+    const driverName = [driver.first_name, driver.middle_name, driver.last_name].filter(Boolean).join(' ');
+    let pdfBuffer = null;
+    try {
+      pdfBuffer = await buildRequestPdf(
+        driver,
+        { company_name: emp.employer_name, contact_name: emp.contact_name, contact_phone: emp.contact_phone,
+          contact_email: emp.contact_email, contact_fax: emp.contact_fax, usdot_number: emp.usdot_number,
+          start_date: emp.start_date, end_date: emp.end_date },
+        oe,
+        publicUrl
+      );
+    } catch (pdfErr) {
+      dtLogger.error('send_inquiry_pdf_generation_failed', pdfErr, { pastEmployerId });
+      // Non-fatal: continue without PDF
+    }
+
+    // Update employer status and inquiry timestamp
     await client.query(
       `UPDATE driver_past_employers
           SET investigation_status = 'inquiry_sent',
               inquiry_sent_at = NOW(),
+              inquiry_email_sent_to = $1,
               updated_at = NOW()
-        WHERE id = $1`,
-      [pastEmployerId]
+        WHERE id = $2`,
+      [emp.contact_email || null, pastEmployerId]
     );
 
     await appendGoodFaithEffort(client, pastEmployerId, {
       action: 'inquiry_sent',
       date: new Date().toISOString(),
-      by: userId
+      by: userId,
+      emailSentTo: emp.contact_email || null,
+      tokenId
     });
 
     await addHistoryEntry(client, {
       driverId: emp.driver_id,
       pastEmployerId,
       entryType: 'employer_inquiry',
-      description: `Inquiry sent to ${emp.employer_name}`,
-      metadata: { action: 'inquiry_sent' },
+      description: `Inquiry sent to ${emp.employer_name}${emp.contact_email ? ` (${emp.contact_email})` : ''}`,
+      metadata: { action: 'inquiry_sent', emailSentTo: emp.contact_email || null, tokenId },
       createdBy: userId
     });
 
     await client.query('COMMIT');
 
-    return { pastEmployerId, investigationStatus: 'inquiry_sent' };
+    // Send email to employer contact (fire-and-forget, outside transaction)
+    let emailResult = { sent: false, error: 'No contact email' };
+    if (emp.contact_email) {
+      sendInquiryEmail(emp.contact_email, {
+        driverName,
+        oeName: oe.name || oe.legal_name || '',
+        publicUrl,
+        pdfBuffer,
+        isFollowUp: false
+      }).then((result) => {
+        if (!result.sent) {
+          dtLogger.warn('send_inquiry_email_failed', { pastEmployerId, error: result.error });
+        }
+      }).catch((err) => {
+        dtLogger.error('send_inquiry_email_error', err, { pastEmployerId });
+      });
+      emailResult = { sent: true }; // optimistic -- actual send is async
+    }
+
+    return { pastEmployerId, investigationStatus: 'inquiry_sent', emailResult };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -257,6 +423,8 @@ async function sendInquiry(pastEmployerId, userId) {
 
 /**
  * Record that a follow-up was sent to a past employer.
+ * FN-331: Generates a new token if the previous one expired, and emails
+ * the employer with a "FOLLOW-UP:" prefix.
  */
 async function sendFollowUp(pastEmployerId, userId) {
   if (!pastEmployerId) throw new Error('pastEmployerId is required');
@@ -266,7 +434,10 @@ async function sendFollowUp(pastEmployerId, userId) {
     await client.query('BEGIN');
 
     const empRes = await client.query(
-      `SELECT id, driver_id, employer_name FROM driver_past_employers WHERE id = $1`,
+      `SELECT id, driver_id, employer_name, contact_name, contact_phone,
+              contact_email, contact_fax, usdot_number,
+              start_date, end_date, share_token_id
+         FROM driver_past_employers WHERE id = $1`,
       [pastEmployerId]
     );
     if (empRes.rows.length === 0) {
@@ -274,33 +445,104 @@ async function sendFollowUp(pastEmployerId, userId) {
     }
     const emp = empRes.rows[0];
 
+    // Load driver + OE for PDF / email
+    const { driver, oe } = await loadDriverAndOe(client, emp.driver_id);
+    if (!driver) throw new Error('Driver not found');
+
+    // Check if the existing token is still active; if expired or used, create a new one
+    let publicUrl;
+    let tokenId;
+    let needsNewToken = true;
+
+    if (emp.share_token_id) {
+      const existingToken = await client.query(
+        `SELECT id, expires_at, status FROM employer_investigation_tokens WHERE id = $1`,
+        [emp.share_token_id]
+      );
+      if (existingToken.rows.length > 0) {
+        const tok = existingToken.rows[0];
+        if (tok.status === 'active' && new Date(tok.expires_at) > new Date()) {
+          needsNewToken = false;
+          // We don't have the raw token anymore, so we must create a new one anyway
+          // to include in the email. Expire the old one.
+          await client.query(
+            `UPDATE employer_investigation_tokens SET status = 'expired' WHERE id = $1`,
+            [tok.id]
+          );
+        }
+      }
+    }
+
+    // Always create a new token for the follow-up email
+    const tokenResult = await createInvestigationToken(client, pastEmployerId, emp.driver_id, userId);
+    publicUrl = tokenResult.publicUrl;
+    tokenId = tokenResult.tokenId;
+
+    // Generate request PDF with the new link
+    const driverName = [driver.first_name, driver.middle_name, driver.last_name].filter(Boolean).join(' ');
+    let pdfBuffer = null;
+    try {
+      pdfBuffer = await buildRequestPdf(
+        driver,
+        { company_name: emp.employer_name, contact_name: emp.contact_name, contact_phone: emp.contact_phone,
+          contact_email: emp.contact_email, contact_fax: emp.contact_fax, usdot_number: emp.usdot_number,
+          start_date: emp.start_date, end_date: emp.end_date },
+        oe,
+        publicUrl
+      );
+    } catch (pdfErr) {
+      dtLogger.error('send_follow_up_pdf_generation_failed', pdfErr, { pastEmployerId });
+    }
+
     await client.query(
       `UPDATE driver_past_employers
           SET investigation_status = 'follow_up_sent',
               follow_up_sent_at = NOW(),
+              inquiry_email_sent_to = $1,
               updated_at = NOW()
-        WHERE id = $1`,
-      [pastEmployerId]
+        WHERE id = $2`,
+      [emp.contact_email || null, pastEmployerId]
     );
 
     await appendGoodFaithEffort(client, pastEmployerId, {
       action: 'follow_up_sent',
       date: new Date().toISOString(),
-      by: userId
+      by: userId,
+      emailSentTo: emp.contact_email || null,
+      tokenId
     });
 
     await addHistoryEntry(client, {
       driverId: emp.driver_id,
       pastEmployerId,
       entryType: 'employer_inquiry',
-      description: `Follow-up sent to ${emp.employer_name}`,
-      metadata: { action: 'follow_up_sent' },
+      description: `Follow-up sent to ${emp.employer_name}${emp.contact_email ? ` (${emp.contact_email})` : ''}`,
+      metadata: { action: 'follow_up_sent', emailSentTo: emp.contact_email || null, tokenId },
       createdBy: userId
     });
 
     await client.query('COMMIT');
 
-    return { pastEmployerId, investigationStatus: 'follow_up_sent' };
+    // Send follow-up email (fire-and-forget)
+    let emailResult = { sent: false, error: 'No contact email' };
+    if (emp.contact_email) {
+      sendInquiryEmail(emp.contact_email, {
+        driverName,
+        oeName: oe.name || oe.legal_name || '',
+        publicUrl,
+        pdfBuffer,
+        isFollowUp: true
+      }).then((result) => {
+        if (!result.sent) {
+          dtLogger.warn('send_follow_up_email_failed', { pastEmployerId, error: result.error });
+        }
+      }).catch((err) => {
+        dtLogger.error('send_follow_up_email_error', err, { pastEmployerId });
+      });
+      emailResult = { sent: true };
+    }
+
+    return { pastEmployerId, investigationStatus: 'follow_up_sent', emailResult };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

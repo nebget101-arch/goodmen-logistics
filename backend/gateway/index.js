@@ -209,6 +209,10 @@ app.use(
   buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
 );
 app.use(
+  '/public/employer-investigations',
+  buildProxy(DRIVERS_COMPLIANCE_SERVICE_URL, 'drivers')
+);
+app.use(
   '/api/vehicles',
   buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
 );
