@@ -48,71 +48,61 @@
   gap: 10px;
 }
 
-/* Filter Bar */
-.filter-bar {
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  padding: 14px 16px;
+/* Inline Header Filters */
+thead .header-filters th {
+  padding: 4px 6px 8px;
 }
 
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.filter-group label {
+thead .header-filters th input,
+thead .header-filters th select {
+  width: 100%;
+  padding: 4px 6px;
   font-size: 11px;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.filter-input {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 6px;
-  color: #f1f5f9;
-  padding: 7px 10px;
-  font-size: 13px;
-  min-width: 130px;
-  min-height: 36px;
-  line-height: 1.25;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.8);
   box-sizing: border-box;
+  background:
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.28), transparent 55%),
+    rgba(15, 23, 42, 0.98);
+  color: var(--text-dark);
+  min-height: 28px;
+  line-height: 1.25;
   outline: none;
 }
 
-.filter-input:is(select):not([multiple]) {
+thead .header-filters th input:focus,
+thead .header-filters th select:focus {
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+thead .header-filters th select:not([multiple]) {
   appearance: none;
   -webkit-appearance: none;
-  padding: 7px 30px 7px 10px;
+  padding: 4px 22px 4px 6px;
   cursor: pointer;
-  color-scheme: dark;
   background:
-    var(--fn-select-chevron) no-repeat right 8px center / 12px,
-    rgba(255,255,255,0.05);
+    var(--fn-select-chevron) no-repeat right 4px center / 10px,
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.28), transparent 55%),
+    rgba(15, 23, 42, 0.98);
 }
 
-.filter-input:is(select):not([multiple]):focus {
-  background:
-    var(--fn-select-chevron) no-repeat right 8px center / 12px,
-    rgba(251, 191, 36, 0.04);
-}
-
-.filter-input:focus {
-  border-color: rgba(251, 191, 36, 0.5);
-  background: rgba(251, 191, 36, 0.04);
-}
-
-.filter-input option {
+thead .header-filters th select option {
   background: #1e293b;
   color: #f1f5f9;
+}
+
+thead .header-filters th input[type="date"] {
+  color-scheme: dark;
+}
+
+.date-range-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.date-range-filter input {
+  min-width: 110px;
 }
 
 /* Buttons */

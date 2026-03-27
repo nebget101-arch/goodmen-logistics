@@ -2,8 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { FuelService } from '../fuel.service';
 import { FuelTransaction } from '../fuel.model';
 import { Router } from '@angular/router';
-import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
-
 @Component({
   selector: 'app-fuel-transactions',
   templateUrl: './fuel-transactions.component.html',
@@ -30,13 +28,6 @@ export class FuelTransactionsComponent implements OnInit {
   drawerLoading = false;
 
   deletingId: string | null = null;
-
-  matchedStatusOptions: AiSelectOption[] = [
-    { value: 'matched', label: 'Matched' },
-    { value: 'partial', label: 'Partial' },
-    { value: 'unmatched', label: 'Unmatched' },
-    { value: 'manual', label: 'Manual' }
-  ];
 
   constructor(private fuel: FuelService, private router: Router) {}
 
