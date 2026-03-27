@@ -382,6 +382,11 @@
     }
   }
 
+  /* --- Column header labels: center-aligned --- */
+  thead tr:first-child th {
+    text-align: center;
+  }
+
   thead .header-filters th {
     padding: 4px 6px 8px;
 
@@ -399,6 +404,44 @@
       color: var(--text-dark);
       min-height: 28px;
       line-height: 1.25;
+    }
+
+    /* --- app-ai-select: match compact 28px text inputs --- */
+    app-ai-select {
+      ::ng-deep .mat-mdc-text-field-wrapper {
+        min-height: 28px;
+        padding: 0 6px;
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.8);
+        background:
+          radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.28), transparent 55%),
+          rgba(15, 23, 42, 0.98);
+      }
+
+      ::ng-deep .mat-mdc-form-field-infix {
+        min-height: 28px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+      }
+
+      ::ng-deep .mat-mdc-select-value,
+      ::ng-deep .mat-mdc-select-placeholder {
+        font-size: 11px;
+        line-height: 20px;
+        vertical-align: middle;
+      }
+
+      ::ng-deep .mat-mdc-select-arrow-wrapper {
+        height: 20px;
+      }
+
+      ::ng-deep .ai-select-field {
+        font-size: 11px;
+      }
+
+      ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+        display: none;
+      }
     }
 
     select:not([multiple]) {
