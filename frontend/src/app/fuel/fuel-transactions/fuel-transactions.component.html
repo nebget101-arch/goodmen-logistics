@@ -50,13 +50,7 @@
     </div>
     <div class="filter-group">
       <label>Matched</label>
-      <select [(ngModel)]="matchedStatus" (change)="applyFilters()" class="filter-input">
-        <option value="">All</option>
-        <option value="matched">Matched</option>
-        <option value="partial">Partial</option>
-        <option value="unmatched">Unmatched</option>
-        <option value="manual">Manual</option>
-      </select>
+      <app-ai-select [(ngModel)]="matchedStatus" (ngModelChange)="applyFilters()" class="filter-input" [options]="matchedStatusOptions" [allowEmpty]="true" emptyLabel="All" placeholder="Matched"></app-ai-select>
     </div>
     <button class="btn-ghost btn-sm" (click)="clearFilters()">
       <span class="material-symbols-outlined">filter_alt_off</span>

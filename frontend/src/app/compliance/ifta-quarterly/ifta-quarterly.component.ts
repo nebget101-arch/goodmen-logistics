@@ -3,6 +3,7 @@ import { Subject, Subscription, debounceTime } from 'rxjs';
 import { ApiService } from '../../services/api.service';
 import { IftaService } from '../ifta.service';
 import { IftaFuelEntry, IftaFinding, IftaJurisdictionSummary, IftaMilesEntry, IftaQuarter } from '../ifta.model';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
 interface TruckOption {
   id: string;
@@ -37,6 +38,20 @@ export class IftaQuarterlyComponent implements OnInit, OnDestroy {
   taxYear = new Date().getFullYear();
   filingEntityName = '';
   statusBadge = 'draft';
+
+  quarterOptions: AiSelectOption<number>[] = [
+    { value: 1, label: 'Q1' },
+    { value: 2, label: 'Q2' },
+    { value: 3, label: 'Q3' },
+    { value: 4, label: 'Q4' }
+  ];
+
+  get existingQuarterOptions(): AiSelectOption[] {
+    return this.quarters.map(q => ({
+      value: q.id,
+      label: `Q${q.quarter} ${q.tax_year} \u2022 ${q.filing_entity_name || 'Entity'} \u2022 ${q.status}`
+    }));
+  }
 
   trucks: TruckOption[] = [];
   truckFilter = '';

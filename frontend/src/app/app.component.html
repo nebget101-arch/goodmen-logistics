@@ -46,20 +46,13 @@
         *ngIf="isLoggedIn() && operatingEntityContext.snapshot.isLoaded && operatingEntityContext.snapshot.accessibleOperatingEntities.length > 0"
       >
         <label for="globalCompanySwitcher" class="company-switcher-label">Company</label>
-        <select
-          id="globalCompanySwitcher"
+        <app-ai-select
+          inputId="globalCompanySwitcher"
           class="company-switcher-select"
-          [value]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
-          (change)="onOperatingEntityChange(($any($event.target)).value)"
-        >
-          <option *ngIf="showAllEntitiesOption()" value="all">All Entities</option>
-          <option
-            *ngFor="let entity of operatingEntityContext.snapshot.accessibleOperatingEntities"
-            [value]="entity.id"
-          >
-            {{ entity.name }}{{ entity.mcNumber ? ' · MC ' + entity.mcNumber : '' }}
-          </option>
-        </select>
+          [options]="operatingEntityOptions"
+          [ngModel]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
+          (ngModelChange)="onOperatingEntityChange($event)"
+        ></app-ai-select>
       </div>
 
       <div class="company-switcher company-switcher-loading" *ngIf="isLoggedIn() && !operatingEntityContext.snapshot.isLoaded">
@@ -114,20 +107,13 @@
         class="mobile-company-switcher"
         *ngIf="operatingEntityContext.snapshot.isLoaded && operatingEntityContext.snapshot.accessibleOperatingEntities.length > 0"
       >
-        <select
+        <app-ai-select
           class="company-switcher-select"
-          [value]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
-          (change)="onOperatingEntityChange(($any($event.target)).value)"
-          aria-label="Select company"
-        >
-          <option *ngIf="showAllEntitiesOption()" value="all">All Entities</option>
-          <option
-            *ngFor="let entity of operatingEntityContext.snapshot.accessibleOperatingEntities"
-            [value]="entity.id"
-          >
-            {{ entity.name }}
-          </option>
-        </select>
+          [options]="operatingEntityOptionsMobile"
+          [ngModel]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
+          (ngModelChange)="onOperatingEntityChange($event)"
+          ariaLabel="Select company"
+        ></app-ai-select>
       </div>
 
       <div class="user-menu-wrap mobile-user-menu" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">

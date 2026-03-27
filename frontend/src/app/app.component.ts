@@ -8,6 +8,7 @@ import { OperatingEntityContextService } from './services/operating-entity-conte
 import { ReferenceDataService } from './services/reference-data.service';
 import { NAV_TOP_LINKS, NAV_SECTIONS, NavSection, NavLink } from './config/nav.config';
 import { PERMISSIONS } from './models/access-control.model';
+import { AiSelectOption } from './shared/ai-select/ai-select.component';
 
 @Component({
   selector: 'app-root',
@@ -54,6 +55,34 @@ export class AppComponent implements OnInit {
 
   isLoggedIn(): boolean {
     return !!localStorage.getItem('token');
+  }
+
+  get operatingEntityOptions(): AiSelectOption[] {
+    const opts: AiSelectOption[] = [];
+    if (this.showAllEntitiesOption()) {
+      opts.push({ value: 'all', label: 'All Entities' });
+    }
+    for (const entity of this.operatingEntityContext.snapshot.accessibleOperatingEntities) {
+      opts.push({
+        value: entity.id,
+        label: entity.name + (entity.mcNumber ? ' \u00b7 MC ' + entity.mcNumber : '')
+      });
+    }
+    return opts;
+  }
+
+  get operatingEntityOptionsMobile(): AiSelectOption[] {
+    const opts: AiSelectOption[] = [];
+    if (this.showAllEntitiesOption()) {
+      opts.push({ value: 'all', label: 'All Entities' });
+    }
+    for (const entity of this.operatingEntityContext.snapshot.accessibleOperatingEntities) {
+      opts.push({
+        value: entity.id,
+        label: entity.name
+      });
+    }
+    return opts;
   }
 
   showAllEntitiesOption(): boolean {

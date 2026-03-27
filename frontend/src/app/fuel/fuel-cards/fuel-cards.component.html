@@ -88,19 +88,12 @@
 
     <label>
       Import Method
-      <select formControlName="import_method">
-        <option value="csv_upload">CSV Upload</option>
-        <option value="api">API</option>
-        <option value="manual">Manual</option>
-      </select>
+      <app-ai-select formControlName="import_method" [options]="importMethodOptions" placeholder="Import Method"></app-ai-select>
     </label>
 
     <label>
       Status
-      <select formControlName="status">
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </select>
+      <app-ai-select formControlName="status" [options]="cardStatusOptions" placeholder="Status"></app-ai-select>
     </label>
 
     <label class="full-row">

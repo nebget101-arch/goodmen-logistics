@@ -158,10 +158,7 @@
 
       <div class="card-assoc">
         <label>Associate with Fuel Card Account (optional)</label>
-        <select [(ngModel)]="selectedCardId" class="filter-input">
-          <option value="">— None —</option>
-          <option *ngFor="let c of cards" [value]="c.id">{{ c.display_name }} ({{ c.provider_name }})</option>
-        </select>
+        <app-ai-select [(ngModel)]="selectedCardId" class="filter-input" [options]="cardSelectOptions" [allowEmpty]="true" emptyLabel="— None —" placeholder="Fuel Card"></app-ai-select>
       </div>
 
       <div class="map-grid">
@@ -174,11 +171,13 @@
           <div class="map-arrow">
             <span class="material-symbols-outlined">arrow_forward</span>
           </div>
-          <select class="filter-input map-select"
-                  [(ngModel)]="columnMap[field.key]">
-            <option value="">— Skip —</option>
-            <option *ngFor="let h of previewResult?.headers" [value]="h">{{ h }}</option>
-          </select>
+          <app-ai-select class="filter-input map-select"
+                         [(ngModel)]="columnMap[field.key]"
+                         [options]="headerOptions"
+                         [allowEmpty]="true"
+                         emptyLabel="— Skip —"
+                         placeholder="Map column">
+          </app-ai-select>
           <span class="map-status-icon material-symbols-outlined" *ngIf="columnMap[field.key]">check_circle</span>
           <span class="map-status-icon material-symbols-outlined warn" *ngIf="!columnMap[field.key] && field.required">error</span>
         </div>

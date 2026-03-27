@@ -16,6 +16,7 @@ import {
   DRUG_TEST_RESULT_LABELS
 } from '../../models/drug-alcohol.model';
 import { InvestigationHistoryComponent } from './investigation-history/investigation-history.component';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
 @Component({
   selector: 'app-drivers',
@@ -201,6 +202,34 @@ export class DriversComponent implements OnInit, OnDestroy {
   ];
   substanceTypes: SubstanceType[] = ['drug', 'alcohol', 'both'];
   drugTestResults: DrugTestResult[] = ['negative', 'positive', 'refused', 'cancelled', 'invalid'];
+
+  clearinghouseStatusOptions: AiSelectOption[] = [
+    { value: 'eligible', label: 'eligible' },
+    { value: 'query-pending', label: 'query-pending' }
+  ];
+
+  driverStatusOptions: AiSelectOption[] = [
+    { value: 'active', label: 'active' },
+    { value: 'inactive', label: 'inactive' }
+  ];
+
+  cdlClassOptions: AiSelectOption[] = [
+    { value: 'A', label: 'Class A' },
+    { value: 'B', label: 'Class B' },
+    { value: 'C', label: 'Class C' }
+  ];
+
+  get drugTestTypeOptions(): AiSelectOption[] {
+    return this.drugTestTypes.map(tt => ({ value: tt, label: this.drugTestTypeLabels[tt] }));
+  }
+
+  get substanceTypeOptions(): AiSelectOption[] {
+    return this.substanceTypes.map(st => ({ value: st, label: this.substanceTypeLabels[st] }));
+  }
+
+  get drugTestResultOptions(): AiSelectOption[] {
+    return this.drugTestResults.map(r => ({ value: r, label: this.drugTestResultLabels[r] }));
+  }
 
   newDrugTest: DrugAlcoholTest = this.getEmptyDrugTest('');
 
