@@ -96,8 +96,8 @@ async function sendEmail(options) {
       to,
       from: FROM_EMAIL,
       subject,
-      text: text || '',
-      html: html || (text ? text.replace(/\n/g, '<br>') : '')
+      ...(text ? { text } : {}),
+      html: html || (text ? text.replace(/\n/g, '<br>') : subject)
     });
     return { sent: true };
   } catch (err) {
