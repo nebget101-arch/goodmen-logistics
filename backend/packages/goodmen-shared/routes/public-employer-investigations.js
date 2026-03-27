@@ -180,7 +180,6 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
     const { tokenId } = req.params;
     const { token, error, status } = await validateToken(tokenId);
     if (error) {
-      client.release();
       const duration = Date.now() - start;
       dtLogger.trackRequest('POST', '/public/employer-investigations/:tokenId/respond', status, duration);
       return res.status(status).json({ message: error });
@@ -188,7 +187,6 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
 
     const ctx = await loadInvestigationContext(token);
     if (ctx.error) {
-      client.release();
       const duration = Date.now() - start;
       dtLogger.trackRequest('POST', '/public/employer-investigations/:tokenId/respond', ctx.status, duration);
       return res.status(ctx.status).json({ message: ctx.error });
@@ -222,7 +220,6 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
 
     // Validate required fields
     if (!body.completed_by_name) {
-      client.release();
       return res.status(400).json({ message: 'completed_by_name is required' });
     }
 
