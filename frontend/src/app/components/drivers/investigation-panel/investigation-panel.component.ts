@@ -6,6 +6,15 @@ import {
   PastEmployerInvestigation
 } from '../../../services/employer-investigation.service';
 
+interface EmployerCachedView {
+  latestResponse: EmployerResponse | null;
+  hasDocument: boolean;
+  isNew: boolean;
+  inquirySentFormatted: string;
+  followUpSentFormatted: string;
+  responseReceivedFormatted: string;
+}
+
 @Component({
   selector: 'app-investigation-panel',
   templateUrl: './investigation-panel.component.html',
@@ -42,6 +51,8 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
     complete: 'Complete'
   };
 
+  employerViews: Map<string, EmployerCachedView> = new Map();
+
   constructor(private investigationService: EmployerInvestigationService) {}
 
   ngOnInit(): void {
@@ -71,6 +82,7 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
               totalCount: status.totalCount ?? 0
             }
           : null;
+        this.rebuildEmployerViews();
         this.loading = false;
       },
       error: (err) => {
@@ -226,31 +238,14 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
     return status === 'response_received' || status === 'no_response_documented' || status === 'complete';
   }
 
-  getLatestResponse(employer: PastEmployerInvestigation): EmployerResponse | null {
-    return employer.responses?.length ? employer.responses[0] : null;
-  }
-
-  hasResponseDocument(employer: PastEmployerInvestigation): boolean {
-    const resp = this.getLatestResponse(employer);
-    return !!resp?.documentId;
-  }
-
-  isNewResponse(employer: PastEmployerInvestigation): boolean {
-    if (!employer.responseReceivedAt) return false;
-    const received = new Date(employer.responseReceivedAt);
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-    return received > threeDaysAgo;
-  }
-
   downloadingDocId: string | null = null;
 
   downloadResponse(employer: PastEmployerInvestigation): void {
-    const resp = this.getLatestResponse(employer);
-    if (!resp?.documentId) return;
+    const view = this.employerViews.get(employer.id);
+    if (!view?.latestResponse?.documentId) return;
 
-    this.downloadingDocId = resp.documentId;
-    this.investigationService.downloadResponseDocument(resp.documentId).subscribe({
+    this.downloadingDocId = view.latestResponse.documentId;
+    this.investigationService.downloadResponseDocument(view.latestResponse.documentId).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -268,11 +263,34 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
     });
   }
 
-  formatTimestamp(ts: string | null): string {
+  private formatTimestamp(ts: string | null): string {
     if (!ts) return '';
     const d = new Date(ts);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
       ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  private rebuildEmployerViews(): void {
+    this.employerViews = new Map();
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    for (const emp of this.investigationStatus?.pastEmployers ?? []) {
+      const responses = emp.responses ?? [];
+      const latest = responses.length ? responses[0] : null;
+      const isNew = emp.responseReceivedAt
+        ? new Date(emp.responseReceivedAt) > threeDaysAgo
+        : false;
+
+      this.employerViews.set(emp.id, {
+        latestResponse: latest,
+        hasDocument: !!latest?.documentId,
+        isNew,
+        inquirySentFormatted: this.formatTimestamp(emp.inquirySentAt),
+        followUpSentFormatted: this.formatTimestamp(emp.followUpSentAt),
+        responseReceivedFormatted: this.formatTimestamp(emp.responseReceivedAt)
+      });
+    }
   }
 
   private updateEmployer(updated: PastEmployerInvestigation): void {
@@ -284,5 +302,6 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
     // Recalculate completed count
     this.investigationStatus.completedCount = this.investigationStatus.pastEmployers
       .filter(e => this.isTerminalStatus(e.status)).length;
+    this.rebuildEmployerViews();
   }
 }
