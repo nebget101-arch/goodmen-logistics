@@ -1117,22 +1117,10 @@ export class DriversComponent implements OnInit, OnDestroy {
       };
     }).filter(cat => cat.requirements.length > 0); // FN-261: Skip empty categories
 
-    // Any remaining requirements not in a named category go into "Other Documents"
-    const uncategorized = this.dqfRequirements.filter(r => !assignedKeys.has(r.key));
-    if (uncategorized.length > 0) {
-      const existingOther = this.dqfCategories.find(c => c.key === 'other');
-      if (existingOther) {
-        existingOther.requirements.push(...uncategorized);
-        existingOther.expanded = existingOther.requirements.some(r => r.status !== 'complete');
-      } else {
-        this.dqfCategories.push({
-          key: 'other',
-          label: 'Other Documents',
-          requirements: uncategorized,
-          expanded: uncategorized.some(r => r.status !== 'complete')
-        });
-      }
-    }
+    // FN-341: Uncategorized requirements are intentionally excluded from display.
+    // Items not in any explicit category (e.g. eldt_certificate, green_card_on_file,
+    // medical_certificate_on_file, etc.) are optional/informational and should not
+    // appear in the DQF checklist or affect completeness calculation.
 
     // FN-261: Apply warning overrides and recalculate DQF completeness
     this.applyDqfWarningOverrides();
@@ -1154,32 +1142,58 @@ export class DriversComponent implements OnInit, OnDestroy {
     const thirtyDaysAfterHire = new Date(hireDate);
     thirtyDaysAfterHire.setDate(thirtyDaysAfterHire.getDate() + 30);
 
-    // Within 30 Days: if still within the 30-day window, mark incomplete items as "warning"
+    // FN-339/FN-340: Within 30 Days — compute due_date and urgency
     const within30Cat = this.dqfCategories.find(c => c.key === 'within_30_days');
-    if (within30Cat && thirtyDaysAfterHire > now) {
+    if (within30Cat) {
+      const dueDate30 = new Date(thirtyDaysAfterHire);
+      const daysRemaining30 = Math.ceil((dueDate30.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
       for (const req of within30Cat.requirements) {
-        if (req.status !== 'complete') {
+        req.due_date = dueDate30.toISOString().slice(0, 10);
+        if (req.status === 'complete') continue;
+        if (daysRemaining30 < 0) {
+          req.urgency = 'red';
+          req._dqfOverrideStatus = 'warning';
+        } else if (daysRemaining30 <= 15) {
+          req.urgency = 'yellow';
+          req._dqfOverrideStatus = 'warning';
+        } else {
+          req.urgency = 'green';
           req._dqfOverrideStatus = 'warning';
         }
       }
     }
 
-    // Annual Requirements: determine months since hire
-    const monthsSinceHire = (now.getFullYear() - hireDate.getFullYear()) * 12
-      + (now.getMonth() - hireDate.getMonth());
+    // FN-339/FN-340: Annual Requirements — compute due_date and urgency
+    const annualDueDate = new Date(hireDate);
+    annualDueDate.setFullYear(annualDueDate.getFullYear() + 1);
+    // Roll forward to the next anniversary if already past
+    while (annualDueDate < now) {
+      annualDueDate.setFullYear(annualDueDate.getFullYear() + 1);
+    }
+    const monthsUntilAnnualDue = (annualDueDate.getFullYear() - now.getFullYear()) * 12
+      + (annualDueDate.getMonth() - now.getMonth());
 
     const annualCat = this.dqfCategories.find(c => c.key === 'annual');
     if (annualCat) {
       for (const req of annualCat.requirements) {
+        req.due_date = annualDueDate.toISOString().slice(0, 10);
         if (req.status === 'complete') continue;
-        if (monthsSinceHire < 10) {
-          // Not yet due: exclude from calc, no special badge needed
-          req._dqfExclude = true;
-        } else if (monthsSinceHire >= 10 && monthsSinceHire < 12) {
-          // Due soon: include in calc, show warning badge
+        if (monthsUntilAnnualDue <= 0) {
+          // Past due
+          req.urgency = 'red';
+        } else if (monthsUntilAnnualDue <= 1) {
+          // Due within 1 month
+          req.urgency = 'yellow';
           req._dqfOverrideStatus = 'warning';
+        } else if (monthsUntilAnnualDue <= 2) {
+          // Due within 2 months — show on track but include in calc
+          req.urgency = 'green';
+          req._dqfOverrideStatus = 'warning';
+        } else {
+          // Not yet due: exclude from calc
+          req.urgency = 'green';
+          req._dqfExclude = true;
         }
-        // 12+ months: stays as-is (missing/error), included in calc
       }
     }
   }
