@@ -12,20 +12,6 @@
     </div>
   </div>
 
-  <div class="filters-bar">
-    <div class="filter-group">
-      <label for="filter-driver">Driver</label>
-      <app-ai-select inputId="filter-driver" [options]="driverOptions" [(ngModel)]="filters.driverId" (ngModelChange)="loadDeductions()" placeholder="All drivers" [allowEmpty]="true" emptyLabel="All drivers"></app-ai-select>
-    </div>
-    <div class="filter-group">
-      <label for="filter-enabled">Status</label>
-      <app-ai-select inputId="filter-enabled" [options]="enabledFilterOptions" [(ngModel)]="filters.enabled" (ngModelChange)="loadDeductions()" placeholder="All" [allowEmpty]="true" emptyLabel="All"></app-ai-select>
-    </div>
-    <div class="filter-group filter-actions">
-      <button type="button" class="btn-secondary" (click)="clearFilters()">Clear filters</button>
-    </div>
-  </div>
-
   <div class="backfill-card">
     <div class="backfill-header">
       <h3>Bulk backfill past settlements</h3>
@@ -103,6 +89,22 @@
             <th scope="col">End date</th>
             <th scope="col">Status</th>
             <th scope="col">Actions</th>
+          </tr>
+          <tr class="header-filters">
+            <th></th>
+            <th>
+              <app-ai-select [options]="driverOptions" [(ngModel)]="filters.driverId" (ngModelChange)="loadDeductions()" [allowEmpty]="true" emptyLabel="All" placeholder="All"></app-ai-select>
+            </th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th>
+              <app-ai-select [options]="enabledFilterOptions" [(ngModel)]="filters.enabled" (ngModelChange)="loadDeductions()" [allowEmpty]="true" emptyLabel="All" placeholder="All"></app-ai-select>
+            </th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
