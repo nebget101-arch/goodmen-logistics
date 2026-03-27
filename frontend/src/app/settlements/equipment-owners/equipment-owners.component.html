@@ -166,9 +166,7 @@
 
             <div class="field field-wide">
               <label for="ownerSettlementTemplateType">Settlement template type</label>
-              <select id="ownerSettlementTemplateType" class="form-input" [(ngModel)]="formData.settlement_template_type">
-                <option *ngFor="let option of settlementTemplateTypes" [value]="option.value">{{ option.label }}</option>
-              </select>
+              <app-ai-select inputId="ownerSettlementTemplateType" [options]="settlementTemplateTypes" [(ngModel)]="formData.settlement_template_type" placeholder="Select template type" [allowEmpty]="true" emptyLabel="Select template type"></app-ai-select>
             </div>
 
             <label class="check-inline field-wide active-check">
