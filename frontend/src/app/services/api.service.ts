@@ -1528,5 +1528,14 @@ export class ApiService {
     const aiBase = this.baseUrl.replace(/\/api\/?$/, '/api/ai');
     return this.http.post(`${aiBase}/customers/analysis`, payload);
   }
+
+  // Public employer investigation response (token-validated, no auth)
+  getEmployerInvestigationContext(tokenId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/public/employer-investigations/${encodeURIComponent(tokenId)}`);
+  }
+
+  submitEmployerInvestigationResponse(tokenId: string, data: Record<string, unknown>): Observable<any> {
+    return this.http.post(`${this.baseUrl}/public/employer-investigations/${encodeURIComponent(tokenId)}/respond`, data);
+  }
 }
 
