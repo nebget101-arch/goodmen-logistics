@@ -4,6 +4,14 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
+export interface EmployerResponse {
+  id: string;
+  responseType: string;
+  receivedVia: string;
+  documentId: string | null;
+  createdAt: string;
+}
+
 export interface PastEmployerInvestigation {
   id: string;
   driverId: string;
@@ -20,6 +28,7 @@ export interface PastEmployerInvestigation {
   noResponseDocumentedAt: string | null;
   completedAt: string | null;
   notes: string;
+  responses: EmployerResponse[];
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +93,13 @@ export class EmployerInvestigationService {
             noResponseDocumentedAt: e.noResponseDocumentedAt || null,
             completedAt: e.completedAt || null,
             notes: e.notes || '',
+            responses: (e.responses || []).map((r: any) => ({
+              id: r.id,
+              responseType: r.response_type || r.responseType || '',
+              receivedVia: r.received_via || r.receivedVia || '',
+              documentId: r.document_id || r.documentId || null,
+              createdAt: r.created_at || r.createdAt || ''
+            })),
             createdAt: e.createdAt || e.created_at || '',
             updatedAt: e.updatedAt || e.updated_at || ''
           }))
@@ -118,5 +134,11 @@ export class EmployerInvestigationService {
 
   getHistoryFile(driverId: string): Observable<HistoryFileEntry[]> {
     return this.http.get<HistoryFileEntry[]>(`${this.baseUrl}/driver/${driverId}/history-file`);
+  }
+
+  downloadResponseDocument(documentId: string): Observable<Blob> {
+    return this.http.get(`${environment.apiUrl}/dqf/documents/${documentId}/download`, {
+      responseType: 'blob'
+    });
   }
 }
