@@ -67,9 +67,11 @@
       <div class="detail-section">
         <h4>Notes</h4>
         <div class="note-composer">
-          <select class="form-input form-input-sm" [(ngModel)]="noteType">
-            <option *ngFor="let t of NOTE_TYPES" [value]="t">{{ t | titlecase }}</option>
-          </select>
+          <app-ai-select
+            inputId="noteType"
+            [options]="noteTypeOptions"
+            [(ngModel)]="noteType"
+          ></app-ai-select>
           <textarea class="form-input note-input" [(ngModel)]="newNote" rows="2" placeholder="Add a note…"></textarea>
           <button type="button" class="btn btn-sm btn-primary" (click)="addNote()" [disabled]="!newNote.trim()">Add Note</button>
         </div>
@@ -89,26 +91,34 @@
       <div class="edit-form">
         <div class="form-row-2">
           <div class="form-row"><label>Incident Type</label>
-            <select class="form-input" [(ngModel)]="editForm.incident_type">
-              <option *ngFor="let t of TYPES" [value]="t">{{ t | titlecase }}</option>
-            </select>
+            <app-ai-select
+              inputId="editIncidentType"
+              [options]="typeOptions"
+              [(ngModel)]="editForm.incident_type"
+            ></app-ai-select>
           </div>
           <div class="form-row"><label>Status</label>
-            <select class="form-input" [(ngModel)]="editForm.status">
-              <option *ngFor="let s of STATUSES" [value]="s">{{ s | titlecase }}</option>
-            </select>
+            <app-ai-select
+              inputId="editStatus"
+              [options]="statusOptions"
+              [(ngModel)]="editForm.status"
+            ></app-ai-select>
           </div>
         </div>
         <div class="form-row-2">
           <div class="form-row"><label>Severity</label>
-            <select class="form-input" [(ngModel)]="editForm.severity">
-              <option *ngFor="let s of SEVERITIES" [value]="s">{{ s | titlecase }}</option>
-            </select>
+            <app-ai-select
+              inputId="editSeverity"
+              [options]="severityOptions"
+              [(ngModel)]="editForm.severity"
+            ></app-ai-select>
           </div>
           <div class="form-row"><label>Preventability</label>
-            <select class="form-input" [(ngModel)]="editForm.preventability">
-              <option *ngFor="let p of PREVENTABILITIES" [value]="p">{{ p | titlecase }}</option>
-            </select>
+            <app-ai-select
+              inputId="editPreventability"
+              [options]="preventabilityOptions"
+              [(ngModel)]="editForm.preventability"
+            ></app-ai-select>
           </div>
         </div>
         <div class="flags-row">
@@ -164,9 +174,11 @@
     <div *ngIf="showPartyForm" class="sub-form">
       <div class="form-row-2">
         <div class="form-row"><label>Party Type</label>
-          <select class="form-input" [(ngModel)]="partyForm.party_type">
-            <option *ngFor="let t of PARTY_TYPES" [value]="t">{{ t | titlecase }}</option>
-          </select>
+          <app-ai-select
+            inputId="partyType"
+            [options]="partyTypeOptions"
+            [(ngModel)]="partyForm.party_type"
+          ></app-ai-select>
         </div>
         <div class="form-row"><label>Name</label><input type="text" class="form-input" [(ngModel)]="partyForm.name"></div>
       </div>
@@ -243,9 +255,11 @@
   <!-- ─ DOCUMENTS tab ─ -->
   <div *ngIf="activeTab === 'documents'" class="tab-content">
     <div class="upload-row">
-      <select class="form-input form-input-sm" [(ngModel)]="docType">
-        <option *ngFor="let t of DOC_TYPES" [value]="t">{{ t | titlecase }}</option>
-      </select>
+      <app-ai-select
+        inputId="docType"
+        [options]="docTypeOptions"
+        [(ngModel)]="docType"
+      ></app-ai-select>
       <input type="file" class="file-input" id="docFileInput" (change)="onDocFileChange($event)">
       <label for="docFileInput" class="btn btn-sm btn-secondary">
         <span class="material-symbols-outlined">attach_file</span>
@@ -321,9 +335,11 @@
     <div *ngIf="showClaimForm" class="sub-form">
       <div class="form-row-2">
         <div class="form-row"><label>Claim Type</label>
-          <select class="form-input" [(ngModel)]="claimForm.claim_type">
-            <option *ngFor="let t of CLAIM_TYPES" [value]="t">{{ t | titlecase }}</option>
-          </select>
+          <app-ai-select
+            inputId="claimType"
+            [options]="claimTypeOptions"
+            [(ngModel)]="claimForm.claim_type"
+          ></app-ai-select>
         </div>
         <div class="form-row"><label>Insurance Carrier</label><input type="text" class="form-input" [(ngModel)]="claimForm.insurance_carrier"></div>
       </div>
