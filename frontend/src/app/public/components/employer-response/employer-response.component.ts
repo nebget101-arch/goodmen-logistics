@@ -29,7 +29,7 @@ export interface AccidentRow {
 })
 export class EmployerResponseComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
-  private baseUrl = environment.apiUrl;
+  private baseUrl = environment.apiUrl.replace(/\/api\/?$/, '');
 
   tokenId = '';
   loading = true;
