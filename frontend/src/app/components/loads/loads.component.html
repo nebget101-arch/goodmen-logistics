@@ -76,20 +76,10 @@
                   <div style="flex: 1 1 300px; min-width: 300px;">
                     <h4>Status & Billing</h4>
                     <div><label>Status:
-                      <select [(ngModel)]="newLoad.status" name="status">
-                        <option value="new">New</option>
-                        <option value="pending">Pending</option>
-                        <option value="tonu">TONU</option>
-                        <option value="delivered">Delivered</option>
-                        <option value="completed">Completed</option>
-                      </select>
+                      <app-ai-select [(ngModel)]="newLoad.status" name="status" [options]="loadStatusOptions" placeholder="Status"></app-ai-select>
                     </label></div>
                     <div><label>Billing Status:
-                      <select [(ngModel)]="newLoad.billingStatus" name="billingStatus">
-                        <option value="pending">Pending</option>
-                        <option value="funded">Funded</option>
-                        <option value="invoiced">Invoiced</option>
-                      </select>
+                      <app-ai-select [(ngModel)]="newLoad.billingStatus" name="billingStatus" [options]="billingStatusOptions" placeholder="Billing Status"></app-ai-select>
                     </label></div>
                     <div><label>Dispatcher: <input [(ngModel)]="newLoad.dispatcher" name="dispatcher"></label></div>
                     <div><label>Notes: <input [(ngModel)]="newLoad.notes" name="notes"></label></div>
@@ -121,11 +111,7 @@
                     <div>
                       <label>Driver:
                         <input [(ngModel)]="driverSearch" name="driverSearch" placeholder="Search driver..." autocomplete="off">
-                        <select [(ngModel)]="newLoad.driverId" name="driverId">
-                          <option *ngFor="let d of filteredDrivers" [value]="d.id">
-                            {{ d.firstName }} {{ d.lastName }}
-                          </option>
-                        </select>
+                        <app-ai-select [(ngModel)]="newLoad.driverId" name="driverId" [options]="driverSelectOptions" placeholder="Select driver"></app-ai-select>
                       </label>
                     </div>
                     <div><label>Truck: <input [(ngModel)]="newLoad.truck" name="truck"></label></div>
@@ -174,11 +160,7 @@
                   <div><label>Shipper: <input [(ngModel)]="editLoad.shipper" name="editShipper"></label></div>
                   <div><label>Consignee: <input [(ngModel)]="editLoad.consignee" name="editConsignee"></label></div>
                   <div><label>BOL #: <input [(ngModel)]="editLoad.bolNumber" name="editBolNumber"></label></div>
-                  <div><label>Status: <select [(ngModel)]="editLoad.status" name="editStatus">
-                    <option value="pending">Pending</option>
-                    <option value="in-transit">In Transit</option>
-                    <option value="completed">Completed</option>
-                  </select></label></div>
+                  <div><label>Status: <app-ai-select [(ngModel)]="editLoad.status" name="editStatus" [options]="editLoadStatusOptions" placeholder="Status"></app-ai-select></label></div>
                   <div class="modal-footer">
                     <button class="btn btn-primary" type="submit">Save</button>
                     <button class="btn btn-secondary" type="button" (click)="closeEditModal()">Cancel</button>

@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { FuelService } from '../fuel.service';
 import { FuelCardAccount } from '../fuel.model';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
 @Component({
   selector: 'app-fuel-cards',
@@ -17,6 +18,17 @@ export class FuelCardsComponent implements OnInit {
   editing: FuelCardAccount | null = null;
   saving = false;
   form: FormGroup;
+
+  importMethodOptions: AiSelectOption[] = [
+    { value: 'csv_upload', label: 'CSV Upload' },
+    { value: 'api', label: 'API' },
+    { value: 'manual', label: 'Manual' }
+  ];
+
+  cardStatusOptions: AiSelectOption[] = [
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' }
+  ];
 
   constructor(private fuel: FuelService, private fb: FormBuilder) {
     this.form = this.fb.group({

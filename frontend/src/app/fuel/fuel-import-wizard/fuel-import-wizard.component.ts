@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FuelService } from '../fuel.service';
 import { FuelCardAccount, ImportPreviewResult, ProviderTemplate, FUEL_NORMALIZED_FIELDS, StageResult } from '../fuel.model';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
 export type WizardStep = 'provider' | 'upload' | 'preview' | 'map' | 'validate' | 'import' | 'result';
 
@@ -42,6 +43,17 @@ export class FuelImportWizardComponent implements OnInit {
   // Fuel cards for card association
   cards: FuelCardAccount[] = [];
   selectedCardId = '';
+
+  get cardSelectOptions(): AiSelectOption[] {
+    return this.cards.map(c => ({
+      value: c.id,
+      label: `${c.display_name} (${c.provider_name})`
+    }));
+  }
+
+  get headerOptions(): AiSelectOption[] {
+    return (this.previewResult?.headers || []).map(h => ({ value: h, label: h }));
+  }
 
   // Step 5 — Validate (stage)
   stageResult: StageResult | null = null;

@@ -58,18 +58,10 @@
             <input type="text" placeholder="Min %" [(ngModel)]="driverFilters.dqfMin" />
           </th>
           <th>
-            <select [(ngModel)]="driverFilters.clearinghouseStatus">
-              <option value="">All</option>
-              <option value="eligible">eligible</option>
-              <option value="query-pending">query-pending</option>
-            </select>
+            <app-ai-select [(ngModel)]="driverFilters.clearinghouseStatus" [options]="clearinghouseStatusOptions" [allowEmpty]="true" emptyLabel="All" placeholder="Clearinghouse"></app-ai-select>
           </th>
           <th>
-            <select [(ngModel)]="driverFilters.status">
-              <option value="">All</option>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
+            <app-ai-select [(ngModel)]="driverFilters.status" [options]="driverStatusOptions" [allowEmpty]="true" emptyLabel="All" placeholder="Status"></app-ai-select>
           </th>
           <th></th>
         </tr>
@@ -297,16 +289,13 @@
             </div>
             <div class="dqf-field">
               <label for="cdlClass">CDL Class *</label>
-              <select
-                id="cdlClass"
+              <app-ai-select
+                inputId="cdlClass"
                 [(ngModel)]="newDriver.cdlClass"
                 class="form-input"
-                required
-              >
-                <option value="A">Class A</option>
-                <option value="B">Class B</option>
-                <option value="C">Class C</option>
-              </select>
+                [options]="cdlClassOptions"
+                placeholder="Select CDL class"
+              ></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="cdlExpiry">CDL Expiry</label>
@@ -426,11 +415,7 @@
             </div>
             <div class="dqf-field">
               <label for="editCdlClass">CDL Class *</label>
-              <select id="editCdlClass" [(ngModel)]="editingDriver.cdlClass" class="form-input">
-                <option value="A">Class A</option>
-                <option value="B">Class B</option>
-                <option value="C">Class C</option>
-              </select>
+              <app-ai-select inputId="editCdlClass" [(ngModel)]="editingDriver.cdlClass" class="form-input" [options]="cdlClassOptions" placeholder="CDL Class"></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="editCdlExpiry">CDL Expiry</label>
@@ -507,10 +492,7 @@
 
           <!-- Filters -->
           <div class="da-filters">
-            <select [(ngModel)]="drugTestTypeFilter" class="da-filter-select">
-              <option value="">All Test Types</option>
-              <option *ngFor="let tt of drugTestTypes" [value]="tt">{{ drugTestTypeLabels[tt] }}</option>
-            </select>
+            <app-ai-select [(ngModel)]="drugTestTypeFilter" class="da-filter-select" [options]="drugTestTypeOptions" [allowEmpty]="true" emptyLabel="All Test Types" placeholder="Test Type"></app-ai-select>
             <label class="da-filter-check">
               <input type="checkbox" [ngModel]="drugTestClearinghouseFilter === 'pending'"
                      (ngModelChange)="drugTestClearinghouseFilter = $event ? 'pending' : ''">
@@ -574,15 +556,11 @@
               <div>
                 <div class="dqf-field">
                   <label>Test Type *</label>
-                  <select [(ngModel)]="activeDrugTestForm.test_type" class="form-input" required>
-                    <option *ngFor="let tt of drugTestTypes" [value]="tt">{{ drugTestTypeLabels[tt] }}</option>
-                  </select>
+                  <app-ai-select [(ngModel)]="activeDrugTestForm.test_type" class="form-input" [options]="drugTestTypeOptions" placeholder="Test Type"></app-ai-select>
                 </div>
                 <div class="dqf-field">
                   <label>Substance Type *</label>
-                  <select [(ngModel)]="activeDrugTestForm.substance_type" class="form-input" required>
-                    <option *ngFor="let st of substanceTypes" [value]="st">{{ substanceTypeLabels[st] }}</option>
-                  </select>
+                  <app-ai-select [(ngModel)]="activeDrugTestForm.substance_type" class="form-input" [options]="substanceTypeOptions" placeholder="Substance Type"></app-ai-select>
                 </div>
                 <div class="dqf-field" *ngIf="showPanelDetails()">
                   <label>Panel Details (5-Panel)</label>
@@ -596,10 +574,7 @@
                 </div>
                 <div class="dqf-field">
                   <label>Result</label>
-                  <select [(ngModel)]="activeDrugTestForm.result" class="form-input">
-                    <option [ngValue]="undefined">-- Select --</option>
-                    <option *ngFor="let r of drugTestResults" [value]="r">{{ drugTestResultLabels[r] }}</option>
-                  </select>
+                  <app-ai-select [(ngModel)]="activeDrugTestForm.result" class="form-input" [options]="drugTestResultOptions" [allowEmpty]="true" emptyLabel="-- Select --" placeholder="Result"></app-ai-select>
                 </div>
                 <div class="dqf-field">
                   <label>CCF Number</label>
