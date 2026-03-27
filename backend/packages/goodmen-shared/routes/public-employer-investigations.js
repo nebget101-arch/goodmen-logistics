@@ -340,10 +340,11 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
 
     // We must commit the transaction before using createDriverDocument (which uses its own query)
     // so instead, do a manual insert within the transaction
+    const storageKey = `investigations/${driver.id}/${fileName}`;
     const docRes = await client.query(
       `INSERT INTO driver_documents (
-        driver_id, doc_type, file_name, mime_type, size_bytes, storage_mode
-      ) VALUES ($1, $2, $3, $4, $5, $6)
+        driver_id, doc_type, file_name, mime_type, size_bytes, storage_mode, storage_key
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id`,
       [
         driver.id,
@@ -351,7 +352,8 @@ router.post('/:tokenId/respond', rateLimited, express.json(), async (req, res) =
         fileName,
         'application/pdf',
         Buffer.byteLength(pdfBuffer),
-        'db'
+        'db',
+        storageKey
       ]
     );
     const documentId = docRes.rows[0].id;
