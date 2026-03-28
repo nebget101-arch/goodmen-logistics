@@ -370,6 +370,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
 
     th {
       text-align: left;
@@ -379,6 +380,9 @@
       color: var(--text-light);
       padding: 10px;
       cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     td {
@@ -386,6 +390,10 @@
       border-top: 1px solid var(--border-color);
       vertical-align: top;
       font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 0;
     }
   }
 
@@ -497,9 +505,14 @@
   }
 
   .notes-cell {
-    max-width: 260px;
+    max-width: none;
     color: var(--text-light);
     white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
 
   .attachment-chips {

@@ -327,6 +327,22 @@
 
   <div class="table-card">
     <table class="table" *ngIf="!loading">
+      <colgroup>
+        <col style="width: 5%">   <!-- Load # -->
+        <col style="width: 6%">   <!-- Date -->
+        <col style="width: 9%">   <!-- Driver -->
+        <col style="width: 10%">  <!-- Broker -->
+        <col style="width: 6%">   <!-- PO # -->
+        <col style="width: 9%">   <!-- Pickup -->
+        <col style="width: 9%">   <!-- Delivery -->
+        <col style="width: 6%">   <!-- Rate -->
+        <col style="width: 7%">   <!-- Completed -->
+        <col style="width: 6%">   <!-- Status -->
+        <col style="width: 6%">   <!-- Billing -->
+        <col style="width: 9%">   <!-- Notes -->
+        <col style="width: 7%">   <!-- Attachments -->
+        <col style="width: 5%">   <!-- Actions -->
+      </colgroup>
       <thead>
         <tr>
           <th (click)="toggleSort('load_number')">Load #</th>
@@ -361,14 +377,11 @@
           </th>
           <!-- Driver -->
           <th>
-            <app-ai-select
-              [(ngModel)]="filters.driverId"
-              (ngModelChange)="onFilterChange()"
-              [options]="driverFilterOptions"
-              [allowEmpty]="true"
-              emptyLabel="All Drivers"
+            <input
+              type="text"
               placeholder="Driver"
-            ></app-ai-select>
+              [(ngModel)]="headerFilters.driver"
+            />
           </th>
           <!-- Broker -->
           <th>
@@ -414,25 +427,19 @@
           <th></th>
           <!-- Status -->
           <th>
-            <app-ai-select
-              [(ngModel)]="filters.status"
-              (ngModelChange)="onFilterChange()"
-              [options]="statusFilterOptions"
-              [allowEmpty]="true"
-              emptyLabel="All"
+            <input
+              type="text"
               placeholder="Status"
-            ></app-ai-select>
+              [(ngModel)]="headerFilters.status"
+            />
           </th>
           <!-- Billing -->
           <th>
-            <app-ai-select
-              [(ngModel)]="filters.billingStatus"
-              (ngModelChange)="onFilterChange()"
-              [options]="billingFilterOptions"
-              [allowEmpty]="true"
-              emptyLabel="All"
+            <input
+              type="text"
               placeholder="Billing"
-            ></app-ai-select>
+              [(ngModel)]="headerFilters.billingStatus"
+            />
           </th>
           <!-- Notes -->
           <th>
@@ -444,13 +451,11 @@
           </th>
           <!-- Attachments -->
           <th>
-            <app-ai-select
+            <input
+              type="text"
+              placeholder="Attach."
               [(ngModel)]="headerFilters.attachmentType"
-              [options]="attachmentTypeFilterOptions"
-              [allowEmpty]="true"
-              emptyLabel="All"
-              placeholder="Attachments"
-            ></app-ai-select>
+            />
           </th>
           <!-- Actions -->
           <th></th>
@@ -458,20 +463,20 @@
       </thead>
       <tbody>
         <tr *ngFor="let load of filteredLoads" [ngClass]="rowClass(load)">
-          <td>
+          <td [title]="load.load_number || ''">
             <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
           </td>
-          <td>{{ formatDateLocal(load.pickup_date) || '--' }}</td>
-          <td>{{ load.driver_name || '--' }}</td>
-          <td>{{ load.broker_name || '--' }}</td>
-          <td>{{ load.po_number || '--' }}</td>
-          <td>{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
-          <td>{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
-          <td>${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
-          <td>{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
-          <td><app-status-pill [status]="load.status"></app-status-pill></td>
-          <td><app-status-pill [status]="load.billing_status"></app-status-pill></td>
-          <td class="notes-cell">{{ load.notes || '--' }}</td>
+          <td [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
+          <td [title]="load.driver_name || '--'">{{ load.driver_name || '--' }}</td>
+          <td [title]="load.broker_name || '--'">{{ load.broker_name || '--' }}</td>
+          <td [title]="load.po_number || '--'">{{ load.po_number || '--' }}</td>
+          <td [title]="(load.pickup_city || '--') + ', ' + (load.pickup_state || '')">{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
+          <td [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
+          <td [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
+          <td [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
+          <td [title]="load.status || ''"><app-status-pill [status]="load.status" [compact]="true"></app-status-pill></td>
+          <td [title]="load.billing_status || ''"><app-status-pill [status]="load.billing_status" [compact]="true"></app-status-pill></td>
+          <td class="notes-cell" [title]="load.notes || '--'">{{ load.notes || '--' }}</td>
           <td>
             <div class="attachment-chips attachment-chips--clickable" (click)="openEditForAttachments(load)" role="button" tabindex="0" (keydown.enter)="openEditForAttachments(load)" (keydown.space)="openEditForAttachments(load); $event.preventDefault()" title="Open attachments">
               <app-attachment-chip *ngFor="let type of (load.attachment_types || [])" [type]="type"></app-attachment-chip>
