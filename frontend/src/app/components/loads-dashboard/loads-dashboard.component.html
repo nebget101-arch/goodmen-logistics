@@ -418,8 +418,12 @@
               [(ngModel)]="headerFilters.rate"
             />
           </th>
-          <!-- Completed (left blank for now) -->
-          <th></th>
+          <!-- Completed -->
+          <th>
+            <app-inline-date-filter
+              [(value)]="headerFilters.completed"
+            ></app-inline-date-filter>
+          </th>
           <!-- Status -->
           <th>
             <input
