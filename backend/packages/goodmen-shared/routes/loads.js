@@ -72,6 +72,9 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
   let prevState = null;
   if (loadRow?.driver_id) {
     try {
+      // Find the effective date of the current load (earliest pickup stop or load created_at)
+      const currentLoadDate = firstPickup?.stop_date || loadRow.pickup_date || loadRow.created_at || null;
+
       const prevResult = await exec(
         `SELECT s.zip, s.city, s.state
          FROM loads l
@@ -79,9 +82,12 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
          WHERE l.driver_id = $1
            AND l.id <> $2
            AND s.stop_type = 'DELIVERY'
-         ORDER BY COALESCE(s.stop_date, l.completed_date, l.created_at) DESC
+           AND COALESCE(s.stop_date, l.completed_date, l.created_at) <=
+               COALESCE($3::date, l.created_at)
+         ORDER BY COALESCE(s.stop_date, l.completed_date, l.created_at) DESC,
+                  l.created_at DESC
          LIMIT 1`,
-        [loadRow.driver_id, loadId]
+        [loadRow.driver_id, loadId, currentLoadDate]
       );
       prevZip = (prevResult.rows[0]?.zip || '').toString().trim() || null;
       prevCity = (prevResult.rows[0]?.city || '').toString().trim() || null;
