@@ -13,6 +13,7 @@
  *   POST   /api/fuel/mapping-profiles
  *   DELETE /api/fuel/mapping-profiles/:id
  *   POST   /api/fuel/import/preview
+ *   POST   /api/fuel/import/ai-preprocess
  *   POST   /api/fuel/import/stage
  *   POST   /api/fuel/import/commit/:batchId
  *   GET    /api/fuel/import/batches
@@ -234,6 +235,61 @@ router.post('/import/preview', upload.single('file'), async (req, res) => {
   } catch (err) {
     dtLogger.error('fuel_import_preview_error', err);
     sendError(res, 400, err.message || 'Preview failed');
+  }
+});
+
+// ─── Import – AI Preprocess (FN-406) ─────────────────────────────────────────
+// Accepts file + provider, parses headers/sample rows, sends to AI service for
+// column mapping inference, product type detection, and row split proposals.
+router.post('/import/ai-preprocess', upload.single('file'), async (req, res) => {
+  try {
+    requireTenant(req, res);
+    if (!req.file) return sendError(res, 400, 'No file uploaded');
+
+    const providerKey = req.body.provider_key || 'generic';
+    const providerName = req.body.provider_name || providerKey;
+
+    // Parse file to get headers + all rows
+    const { headers, rows } = parseFileBuffer(req.file.buffer, req.file.originalname);
+    if (!headers || headers.length === 0) {
+      return sendError(res, 400, 'Could not parse headers from file');
+    }
+
+    // Build sample rows as objects (header → value)
+    const sampleRows = rows.slice(0, 20).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+      return obj;
+    });
+
+    // Call AI service
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+    const response = await fetch(`${aiServiceUrl}/api/ai/fuel/preprocess`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        headers,
+        sampleRows,
+        totalRows: rows.length,
+        providerName,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      dtLogger.error('fuel_ai_preprocess_error', {
+        status: response.status,
+        body: errorBody,
+      });
+      return sendError(res, response.status === 400 ? 400 : 502,
+        errorBody.error || 'AI preprocessing failed');
+    }
+
+    const aiResult = await response.json();
+    res.json(aiResult);
+  } catch (err) {
+    dtLogger.error('fuel_ai_preprocess_error', err);
+    sendError(res, 500, err.message || 'AI preprocessing failed');
   }
 });
 

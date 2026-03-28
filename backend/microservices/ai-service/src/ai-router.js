@@ -5,6 +5,7 @@ const { handleWorkOrderTriage } = require('./handlers/work-order-triage-handler'
 const { handleInventoryRecommendations } = require('./handlers/inventory-recommendations-handler');
 const { handlePartsAnalysis } = require('./handlers/parts-analysis-handler');
 const { handleCustomersAnalysis } = require('./handlers/customers-analysis-handler');
+const { handleFuelPreprocess } = require('./handlers/fuel-preprocess-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -21,6 +22,9 @@ function buildAiRouter(deps) {
   );
   router.post('/shop-clients/analysis', (req, res) =>
     handleCustomersAnalysis(req, res, deps)
+  );
+  router.post('/fuel/preprocess', (req, res) =>
+    handleFuelPreprocess(req, res, deps)
   );
 
   return router;

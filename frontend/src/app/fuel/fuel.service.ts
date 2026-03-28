@@ -5,7 +5,7 @@ import { environment } from '../../environments/environment';
 import {
   FuelCardAccount, FuelMappingProfile, FuelImportBatch, FuelImportBatchRow,
   FuelTransaction, FuelException, FuelOverview, ProviderTemplate,
-  ImportPreviewResult, StageResult
+  ImportPreviewResult, StageResult, AiPreprocessResult
 } from './fuel.model';
 
 @Injectable({ providedIn: 'root' })
@@ -51,6 +51,14 @@ export class FuelService {
     fd.append('file', file);
     fd.append('provider_key', providerKey);
     return this.http.post<ImportPreviewResult>(`${this.base}/import/preview`, fd);
+  }
+
+  aiPreprocess(file: File, providerKey: string, providerName: string): Observable<AiPreprocessResult> {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('provider_key', providerKey);
+    fd.append('provider_name', providerName);
+    return this.http.post<AiPreprocessResult>(`${this.base}/import/ai-preprocess`, fd);
   }
 
   stageImport(file: File, providerName: string, columnMap: Record<string, string | null>, cardAccountId?: string): Observable<StageResult> {
