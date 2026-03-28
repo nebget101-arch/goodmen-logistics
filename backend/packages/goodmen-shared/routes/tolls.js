@@ -342,4 +342,97 @@ router.get('/exceptions', async (req, res) => {
   }
 });
 
+// ─── CSV AI Normalization ─────────────────────────────────────────────────────
+router.post('/import/ai-normalize', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const { batchId, headers, sampleRows } = req.body || {};
+    if (!batchId || !Array.isArray(headers) || !headers.length) {
+      return res.status(400).json({ error: 'batchId and headers[] are required' });
+    }
+    if (!Array.isArray(sampleRows) || !sampleRows.length) {
+      return res.status(400).json({ error: 'sampleRows[] must contain at least one row' });
+    }
+
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+
+    let aiResponse;
+    try {
+      aiResponse = await fetch(`${aiServiceUrl}/api/ai/tolls/csv-normalize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ headers, sampleRows }),
+        signal: controller.signal,
+      });
+    } catch (fetchErr) {
+      clearTimeout(timeout);
+      if (fetchErr.name === 'AbortError') {
+        dtLogger.error('toll_csv_ai_timeout', { batchId });
+        return res.status(504).json({ error: 'AI service timeout' });
+      }
+      dtLogger.error('toll_csv_ai_unreachable', { batchId, err: fetchErr.message });
+      return res.status(502).json({ error: 'AI service unreachable' });
+    }
+    clearTimeout(timeout);
+
+    if (!aiResponse.ok) {
+      const errBody = await aiResponse.json().catch(() => ({}));
+      dtLogger.error('toll_csv_ai_error', { batchId, status: aiResponse.status, errBody });
+      return res.status(aiResponse.status >= 500 ? 502 : aiResponse.status).json({
+        error: errBody.error || 'AI normalization failed',
+      });
+    }
+
+    const aiResult = await aiResponse.json();
+    const data = aiResult.data || aiResult;
+    const overallConfidence = data.overallConfidence ?? data.confidence ?? 0;
+
+    // Auto-save mapping profile when AI confidence is high enough
+    if (overallConfidence >= 0.8 && data.columnMapping) {
+      try {
+        await knex('toll_import_mapping_profiles')
+          .insert({
+            tenant_id: tid,
+            batch_id: batchId,
+            source_headers: JSON.stringify(headers),
+            column_mapping: JSON.stringify(data.columnMapping),
+            confidence_scores: JSON.stringify(data.confidenceScores || {}),
+            overall_confidence: overallConfidence,
+            created_by: req.user?.id || null,
+          })
+          .onConflict(['tenant_id', 'batch_id'])
+          .merge({
+            source_headers: JSON.stringify(headers),
+            column_mapping: JSON.stringify(data.columnMapping),
+            confidence_scores: JSON.stringify(data.confidenceScores || {}),
+            overall_confidence: overallConfidence,
+            updated_at: new Date(),
+          });
+      } catch (saveErr) {
+        // Non-fatal: log but still return the AI result to the frontend
+        dtLogger.error('toll_mapping_profile_save_failed', { batchId, err: saveErr.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      batchId,
+      overallConfidence,
+      columnMapping: data.columnMapping || {},
+      confidenceScores: data.confidenceScores || {},
+      normalizedSample: data.normalizedSample || [],
+      warnings: data.warnings || [],
+      mappingProfileSaved: overallConfidence >= 0.8 && !!data.columnMapping,
+    });
+  } catch (error) {
+    dtLogger.error('toll_csv_ai_normalize_failed', error);
+    res.status(500).json({ error: 'Failed to normalize CSV data' });
+  }
+});
+
 module.exports = router;
