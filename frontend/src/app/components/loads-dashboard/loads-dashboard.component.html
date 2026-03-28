@@ -377,14 +377,11 @@
           </th>
           <!-- Driver -->
           <th>
-            <app-ai-select
-              [(ngModel)]="filters.driverId"
-              (ngModelChange)="onFilterChange()"
-              [options]="driverFilterOptions"
-              [allowEmpty]="true"
-              emptyLabel="All Drivers"
+            <input
+              type="text"
               placeholder="Driver"
-            ></app-ai-select>
+              [(ngModel)]="headerFilters.driver"
+            />
           </th>
           <!-- Broker -->
           <th>
@@ -430,25 +427,19 @@
           <th></th>
           <!-- Status -->
           <th>
-            <app-ai-select
-              [(ngModel)]="filters.status"
-              (ngModelChange)="onFilterChange()"
-              [options]="statusFilterOptions"
-              [allowEmpty]="true"
-              emptyLabel="All"
+            <input
+              type="text"
               placeholder="Status"
-            ></app-ai-select>
+              [(ngModel)]="headerFilters.status"
+            />
           </th>
           <!-- Billing -->
           <th>
-            <app-ai-select
-              [(ngModel)]="filters.billingStatus"
-              (ngModelChange)="onFilterChange()"
-              [options]="billingFilterOptions"
-              [allowEmpty]="true"
-              emptyLabel="All"
+            <input
+              type="text"
               placeholder="Billing"
-            ></app-ai-select>
+              [(ngModel)]="headerFilters.billingStatus"
+            />
           </th>
           <!-- Notes -->
           <th>
@@ -460,13 +451,11 @@
           </th>
           <!-- Attachments -->
           <th>
-            <app-ai-select
+            <input
+              type="text"
+              placeholder="Attach."
               [(ngModel)]="headerFilters.attachmentType"
-              [options]="attachmentTypeFilterOptions"
-              [allowEmpty]="true"
-              emptyLabel="All"
-              placeholder="Attachments"
-            ></app-ai-select>
+            />
           </th>
           <!-- Actions -->
           <th></th>
