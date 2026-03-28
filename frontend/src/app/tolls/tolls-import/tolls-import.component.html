@@ -57,10 +57,66 @@
   </div>
 </section>
 
-<!-- ─── Step 2: Map Columns ──────────────────────────────────────────────────── -->
+<!-- ─── Step 2: AI Analysis ───────────────────────────────────────────────────── -->
+<section *ngIf="currentStep === 'ai_analyze'" class="wizard-panel">
+  <h3>AI Column Detection</h3>
+
+  <!-- Loading state -->
+  <div class="ai-loading" *ngIf="aiLoading">
+    <span class="spinner spinner-lg"></span>
+    <p>AI is analyzing your CSV format...</p>
+    <small>Detecting column mappings automatically</small>
+  </div>
+
+  <!-- AI Results -->
+  <ng-container *ngIf="!aiLoading && aiResult?.success">
+    <!-- Overall confidence banner -->
+    <div class="confidence-banner"
+         [class.high]="getConfidenceLevel(aiResult.overallConfidence) === 'high'"
+         [class.medium]="getConfidenceLevel(aiResult.overallConfidence) === 'medium'"
+         [class.low]="getConfidenceLevel(aiResult.overallConfidence) === 'low'">
+      <span class="material-symbols-outlined">psychology</span>
+      <span>Overall confidence: <strong>{{ getConfidenceLabel(aiResult.overallConfidence) }}</strong></span>
+    </div>
+
+    <!-- AI mapping table -->
+    <div class="ai-map-table" *ngIf="aiMappedFields.length">
+      <div class="ai-map-row" *ngFor="let m of aiMappedFields">
+        <span class="ai-field-label">{{ m.label }}</span>
+        <span class="material-symbols-outlined arrow">arrow_forward</span>
+        <span class="ai-raw-header">{{ m.rawHeader }}</span>
+        <span class="confidence-badge"
+              [class.high]="getConfidenceLevel(m.confidence) === 'high'"
+              [class.medium]="getConfidenceLevel(m.confidence) === 'medium'"
+              [class.low]="getConfidenceLevel(m.confidence) === 'low'">
+          {{ getConfidenceLabel(m.confidence) }}
+        </span>
+      </div>
+    </div>
+
+    <p class="hint" *ngIf="!aiMappedFields.length">No column mappings detected. Please map manually.</p>
+  </ng-container>
+
+  <!-- Error / fallback -->
+  <div class="warn-banner" *ngIf="!aiLoading && aiError">
+    {{ aiError }}
+  </div>
+
+  <div class="wizard-footer" *ngIf="!aiLoading">
+    <button class="btn btn-ghost" (click)="skipAiMapping()">Skip to Manual Mapping</button>
+    <button class="btn btn-primary" *ngIf="aiResult?.success && aiMappedFields.length" (click)="acceptAiMapping()">
+      Accept AI Mapping
+    </button>
+    <button class="btn btn-primary" *ngIf="!aiResult?.success || !aiMappedFields.length" (click)="skipAiMapping()">
+      Map Manually
+    </button>
+  </div>
+</section>
+
+<!-- ─── Step 3: Map Columns ──────────────────────────────────────────────────── -->
 <section *ngIf="currentStep === 'map'" class="wizard-panel">
   <h3>Map Columns</h3>
-  <p class="hint">Map your CSV columns to toll transaction fields.</p>
+  <p class="hint">Map your CSV columns to toll transaction fields. AI-detected mappings are pre-filled.</p>
 
   <!-- Profile load/save -->
   <div class="profile-row">
@@ -87,6 +143,13 @@
             [class.mapped]="columnMap[f.key]"
             [class.error]="f.required && !columnMap[f.key]">
         {{ columnMap[f.key] ? 'check_circle' : (f.required ? 'error' : 'remove') }}
+      </span>
+      <span class="confidence-badge inline"
+            *ngIf="getFieldConfidence(f.key) as fc"
+            [class.high]="getConfidenceLevel(fc.confidence) === 'high'"
+            [class.medium]="getConfidenceLevel(fc.confidence) === 'medium'"
+            [class.low]="getConfidenceLevel(fc.confidence) === 'low'">
+        AI {{ getConfidenceLabel(fc.confidence) }}
       </span>
     </div>
   </div>

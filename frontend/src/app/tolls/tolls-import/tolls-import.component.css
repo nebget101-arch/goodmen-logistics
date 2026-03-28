@@ -255,4 +255,61 @@ select.form-control { appearance: auto; }
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
+.spinner-lg { width: 32px; height: 32px; border-width: 3px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── AI Analysis Step ─────────────────────────────────────────────────────── */
+.ai-loading {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+.ai-loading p { margin: 1rem 0 0.25rem; font-size: 1rem; }
+.ai-loading small { color: rgba(255,255,255,0.4); }
+.ai-loading .spinner-lg {
+  border-color: rgba(255,255,255,0.15);
+  border-top-color: #fbbf24;
+}
+
+.confidence-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+.confidence-banner.high { background: rgba(74,222,128,0.12); color: #4ade80; }
+.confidence-banner.medium { background: rgba(251,191,36,0.12); color: #fbbf24; }
+.confidence-banner.low { background: rgba(248,113,113,0.12); color: #f87171; }
+
+.ai-map-table { margin-bottom: 1rem; }
+.ai-map-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 0.85rem;
+}
+.ai-field-label { min-width: 150px; font-weight: 500; }
+.ai-raw-header {
+  flex: 1;
+  padding: 0.3rem 0.6rem;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.confidence-badge {
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.confidence-badge.high { background: rgba(74,222,128,0.2); color: #4ade80; }
+.confidence-badge.medium { background: rgba(251,191,36,0.2); color: #fbbf24; }
+.confidence-badge.low { background: rgba(248,113,113,0.2); color: #f87171; }
+.confidence-badge.inline { margin-left: 0.25rem; font-size: 0.65rem; }

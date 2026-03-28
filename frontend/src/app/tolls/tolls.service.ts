@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { TollAccount, TollCommitResult, TollDevice, TollImportBatch, TollMappingProfile, TollOverview, TollUploadResult } from './tolls.model';
+import { TollAccount, TollAiNormalizeResult, TollCommitResult, TollDevice, TollImportBatch, TollMappingProfile, TollOverview, TollUploadResult } from './tolls.model';
 
 @Injectable({ providedIn: 'root' })
 export class TollsService {
@@ -64,5 +64,9 @@ export class TollsService {
 
   saveMappingProfile(profile: { profile_name: string; provider_name?: string; column_map: Record<string, string>; is_default?: boolean }): Observable<TollMappingProfile> {
     return this.http.post<TollMappingProfile>(`${this.base}/import/mapping-profiles`, profile);
+  }
+
+  aiNormalize(batchId: string): Observable<TollAiNormalizeResult> {
+    return this.http.post<TollAiNormalizeResult>(`${this.base}/import/ai-normalize`, { batch_id: batchId });
   }
 }

@@ -80,6 +80,21 @@ export interface TollMappingProfile {
   created_at: string;
 }
 
+export interface TollAiColumnMapping {
+  rawHeader: string | null;
+  confidence: number;
+}
+
+export interface TollAiNormalizeResult {
+  success: boolean;
+  columnMapping: Record<string, TollAiColumnMapping>;
+  overallConfidence: number;
+  meta?: {
+    model: string;
+    processingTimeMs: number;
+  };
+}
+
 /** Normalized field keys used in toll column mapping */
 export const TOLL_NORMALIZED_FIELDS: { key: string; label: string; required: boolean }[] = [
   { key: 'transaction_date', label: 'Transaction Date', required: true },

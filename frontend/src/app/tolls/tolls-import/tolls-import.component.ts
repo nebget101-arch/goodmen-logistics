@@ -1,8 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { TollsService } from '../tolls.service';
-import { TollAccount, TollMappingProfile, TollUploadResult, TollCommitResult, TOLL_NORMALIZED_FIELDS } from '../tolls.model';
+import { TollAccount, TollMappingProfile, TollUploadResult, TollCommitResult, TollAiNormalizeResult, TollAiColumnMapping, TOLL_NORMALIZED_FIELDS } from '../tolls.model';
 
-type WizardStep = 'upload' | 'map' | 'preview' | 'commit' | 'result';
+type WizardStep = 'upload' | 'ai_analyze' | 'map' | 'preview' | 'commit' | 'result';
 
 @Component({
   selector: 'app-tolls-import',
@@ -10,13 +10,14 @@ type WizardStep = 'upload' | 'map' | 'preview' | 'commit' | 'result';
   styleUrls: ['./tolls-import.component.css']
 })
 export class TollsImportComponent implements OnInit {
-  steps: WizardStep[] = ['upload', 'map', 'preview', 'commit', 'result'];
+  steps: WizardStep[] = ['upload', 'ai_analyze', 'map', 'preview', 'commit', 'result'];
   stepLabels: Record<WizardStep, string> = {
     upload: '1. Upload',
-    map: '2. Map Columns',
-    preview: '3. Preview',
-    commit: '4. Import',
-    result: '5. Results'
+    ai_analyze: '2. AI Analysis',
+    map: '3. Map Columns',
+    preview: '4. Preview',
+    commit: '5. Import',
+    result: '6. Results'
   };
   currentStep: WizardStep = 'upload';
   get stepIndex(): number { return this.steps.indexOf(this.currentStep); }
@@ -31,6 +32,12 @@ export class TollsImportComponent implements OnInit {
   // Accounts
   accounts: TollAccount[] = [];
   selectedAccountId = '';
+
+  // AI Analysis
+  aiLoading = false;
+  aiError = '';
+  aiResult: TollAiNormalizeResult | null = null;
+  aiConfidenceMap: Record<string, TollAiColumnMapping> = {};
 
   // Mapping
   normalizedFields = TOLL_NORMALIZED_FIELDS;
@@ -96,16 +103,86 @@ export class TollsImportComponent implements OnInit {
         next: (res) => {
           this.uploadResult = res;
           this.allRows = res.sampleRows;
-          // Initialize column map with empty values
           this.normalizedFields.forEach(f => { this.columnMap[f.key] = ''; });
           this.uploadLoading = false;
-          this.currentStep = 'map';
+          // Automatically trigger AI analysis
+          this.currentStep = 'ai_analyze';
+          this.runAiNormalize();
         },
         error: (err) => {
           this.uploadError = err.error?.error || 'Upload failed';
           this.uploadLoading = false;
         }
       });
+  }
+
+  // ─── AI Analysis step ───────────────────────────────────────────────────────
+
+  runAiNormalize(): void {
+    if (!this.uploadResult) return;
+    this.aiLoading = true;
+    this.aiError = '';
+    this.aiResult = null;
+
+    this.tollsSvc.aiNormalize(this.uploadResult.batchId).subscribe({
+      next: (res) => {
+        this.aiResult = res;
+        this.aiLoading = false;
+
+        if (res.success && res.columnMapping) {
+          this.aiConfidenceMap = res.columnMapping;
+          // Pre-fill column map with high/medium confidence mappings
+          for (const [normalizedKey, mapping] of Object.entries(res.columnMapping)) {
+            if (mapping.rawHeader && mapping.confidence >= 0.5) {
+              this.columnMap[normalizedKey] = mapping.rawHeader;
+            }
+          }
+        }
+
+        // If overall confidence is very low, skip directly to manual mapping
+        if (!res.success || res.overallConfidence < 0.3) {
+          this.aiError = 'AI could not confidently map columns. Please map manually.';
+        }
+      },
+      error: (err) => {
+        this.aiLoading = false;
+        this.aiError = err.error?.error || 'AI analysis failed. You can map columns manually.';
+      }
+    });
+  }
+
+  getConfidenceLevel(confidence: number): 'high' | 'medium' | 'low' {
+    if (confidence >= 0.8) return 'high';
+    if (confidence >= 0.5) return 'medium';
+    return 'low';
+  }
+
+  getConfidenceLabel(confidence: number): string {
+    const pct = Math.round(confidence * 100);
+    return `${pct}%`;
+  }
+
+  get aiMappedFields(): { key: string; label: string; rawHeader: string | null; confidence: number }[] {
+    if (!this.aiResult?.columnMapping) return [];
+    return this.normalizedFields
+      .filter(f => this.aiResult!.columnMapping[f.key]?.rawHeader)
+      .map(f => ({
+        key: f.key,
+        label: f.label,
+        rawHeader: this.aiResult!.columnMapping[f.key].rawHeader,
+        confidence: this.aiResult!.columnMapping[f.key].confidence
+      }));
+  }
+
+  acceptAiMapping(): void {
+    this.currentStep = 'map';
+  }
+
+  skipAiMapping(): void {
+    // Clear AI-prefilled mappings
+    this.normalizedFields.forEach(f => { this.columnMap[f.key] = ''; });
+    this.aiConfidenceMap = {};
+    this.currentStep = 'map';
   }
 
   // ─── Map step ────────────────────────────────────────────────────────────────
@@ -122,6 +199,10 @@ export class TollsImportComponent implements OnInit {
 
   get canProceedFromMap(): boolean {
     return this.requiredUnmapped.length === 0;
+  }
+
+  getFieldConfidence(key: string): TollAiColumnMapping | null {
+    return this.aiConfidenceMap[key] || null;
   }
 
   loadProfiles(): void {
@@ -213,6 +294,9 @@ export class TollsImportComponent implements OnInit {
     this.commitResult = null;
     this.commitError = '';
     this.selectedAccountId = '';
+    this.aiResult = null;
+    this.aiError = '';
+    this.aiConfidenceMap = {};
     this.currentStep = 'upload';
   }
 
