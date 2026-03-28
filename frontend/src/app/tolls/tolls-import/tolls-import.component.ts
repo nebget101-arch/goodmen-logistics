@@ -124,7 +124,11 @@ export class TollsImportComponent implements OnInit {
     this.aiError = '';
     this.aiResult = null;
 
-    this.tollsSvc.aiNormalize(this.uploadResult.batchId).subscribe({
+    this.tollsSvc.aiNormalize(
+      this.uploadResult.batchId,
+      this.uploadResult.headers,
+      this.uploadResult.sampleRows
+    ).subscribe({
       next: (res) => {
         this.aiResult = res;
         this.aiLoading = false;
