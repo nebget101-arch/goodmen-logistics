@@ -22,6 +22,7 @@
           <th>Provider</th>
           <th>Account</th>
           <th>Import Method</th>
+          <th>Assigned Driver</th>
           <th>Status</th>
           <th>Created</th>
           <th>Actions</th>
@@ -36,16 +37,40 @@
           <td>{{ card.provider_name }}</td>
           <td>{{ card.account_number_masked || '—' }}</td>
           <td class="mono">{{ card.import_method }}</td>
+          <td class="driver-cell">
+            <ng-container *ngIf="assignedDriverMap[card.id]; else noDriver">
+              {{ driverName(assignedDriverMap[card.id].driver_id) }}
+            </ng-container>
+            <ng-template #noDriver><span class="muted">—</span></ng-template>
+          </td>
           <td>
             <span class="pill" [ngClass]="statusClass(card.status)">{{ card.status }}</span>
           </td>
           <td class="date-cell">{{ card.created_at | date:'medium' }}</td>
           <td class="actions-cell">
-            <button class="action-btn" (click)="openEdit(card)">
+            <button class="action-btn" (click)="openEdit(card)" title="Edit Card">
               <span class="material-symbols-outlined">edit</span>
             </button>
-            <button class="action-btn danger" *ngIf="card.status === 'active'" (click)="deactivate(card)">
+            <button class="action-btn danger" *ngIf="card.status === 'active'" (click)="deactivate(card)" title="Deactivate">
               <span class="material-symbols-outlined">block</span>
+            </button>
+            <!-- Assign / Reassign / Revoke -->
+            <ng-container *ngIf="!assignedDriverMap[card.id]">
+              <button class="action-btn assign-btn" (click)="openAssignDialog(card)" title="Assign Driver">
+                <span class="material-symbols-outlined">person_add</span>
+              </button>
+            </ng-container>
+            <ng-container *ngIf="assignedDriverMap[card.id]">
+              <button class="action-btn" (click)="openAssignDialog(card)" title="Reassign Driver">
+                <span class="material-symbols-outlined">swap_horiz</span>
+              </button>
+              <button class="action-btn danger" (click)="revokeAssignment(card)" title="Revoke Assignment">
+                <span class="material-symbols-outlined">person_remove</span>
+              </button>
+            </ng-container>
+            <!-- History -->
+            <button class="action-btn" (click)="openHistory(card)" title="Assignment History">
+              <span class="material-symbols-outlined">history</span>
             </button>
           </td>
         </tr>
@@ -60,7 +85,7 @@
   </div>
 </div>
 
-<!-- Modal -->
+<!-- Create / Edit Modal -->
 <div class="modal-overlay" *ngIf="showModal" (click)="closeModal()"></div>
 <div class="modal" *ngIf="showModal">
   <div class="modal-header">
@@ -109,4 +134,88 @@
       </button>
     </div>
   </form>
+</div>
+
+<!-- Assign / Reassign Driver Dialog -->
+<div class="modal-overlay" *ngIf="showAssignDialog" (click)="closeAssignDialog()"></div>
+<div class="modal" *ngIf="showAssignDialog">
+  <div class="modal-header">
+    <h3>
+      {{ assignedDriverMap[assigningCard?.id || ''] ? 'Reassign Driver' : 'Assign Driver' }}
+      — {{ assigningCard?.display_name }}
+    </h3>
+    <button class="close-btn" (click)="closeAssignDialog()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <form [formGroup]="assignForm" (ngSubmit)="saveAssignment()" class="form-grid">
+    <label class="full-row">
+      Driver
+      <select formControlName="driver_id">
+        <option value="">-- Select Driver --</option>
+        <option *ngFor="let d of drivers" [value]="d.id">{{ d.first_name }} {{ d.last_name }}</option>
+      </select>
+    </label>
+
+    <label class="full-row">
+      Notes (optional)
+      <input type="text" formControlName="notes" placeholder="Optional notes…" />
+    </label>
+
+    <div class="modal-actions full-row">
+      <button type="button" class="btn-ghost" (click)="closeAssignDialog()" [disabled]="savingAssign">Cancel</button>
+      <button type="submit" class="btn-primary" [disabled]="savingAssign || assignForm.invalid">
+        <span *ngIf="savingAssign" class="spinner-sm"></span>
+        <span *ngIf="!savingAssign">{{ assignedDriverMap[assigningCard?.id || ''] ? 'Reassign' : 'Assign' }}</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Assignment History Panel -->
+<div class="modal-overlay" *ngIf="showHistoryPanel" (click)="closeHistory()"></div>
+<div class="modal modal-wide" *ngIf="showHistoryPanel">
+  <div class="modal-header">
+    <h3>Assignment History — {{ historyCard?.display_name }}</h3>
+    <button class="close-btn" (click)="closeHistory()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <div class="history-body">
+    <div class="loading-state" *ngIf="historyLoading">
+      <div class="spinner"></div> Loading history…
+    </div>
+
+    <div class="empty-state" *ngIf="!historyLoading && historyRows.length === 0">
+      <span class="material-symbols-outlined empty-icon">history</span>
+      <p>No assignment history for this card.</p>
+    </div>
+
+    <table class="history-table" *ngIf="!historyLoading && historyRows.length > 0">
+      <thead>
+        <tr>
+          <th>Driver</th>
+          <th>Assigned</th>
+          <th>Revoked</th>
+          <th>Status</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of historyRows">
+          <td class="driver-cell">{{ driverName(row.driver_id) }}</td>
+          <td>{{ row.assigned_at | date:'medium' }}</td>
+          <td>{{ row.revoked_at ? (row.revoked_at | date:'medium') : '—' }}</td>
+          <td>
+            <span class="pill" [ngClass]="row.status === 'active' ? 'pill-green' : 'pill-neutral'">
+              {{ row.status }}
+            </span>
+          </td>
+          <td>{{ row.notes || '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </div>
