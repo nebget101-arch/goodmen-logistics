@@ -1,0 +1,8 @@
+{
+  "dev": {
+    "url": "https://dev.fleetneuron.ai",
+    "username": "admin.main",
+    "password": "Admin123!",
+    "note": "Test environment — no real data"
+  }
+}

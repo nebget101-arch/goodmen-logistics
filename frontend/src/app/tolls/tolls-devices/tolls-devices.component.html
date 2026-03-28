@@ -1,23 +1,42 @@
-<div *ngIf="loading">Loading devices…</div>
+<div class="devices-header">
+  <h3 class="section-title">Devices</h3>
+  <button class="btn-add" (click)="openAddDialog()">+ Add Device</button>
+</div>
+
+<div *ngIf="successMsg" class="success-banner">{{ successMsg }}</div>
+<div *ngIf="loading" class="loading-text">Loading devices...</div>
 <div *ngIf="error" class="error">{{ error }}</div>
 
 <table *ngIf="!loading && !error" class="simple-table">
   <thead>
     <tr>
       <th>Device</th>
+      <th>Account</th>
       <th>Plate</th>
       <th>Truck</th>
       <th>Driver</th>
+      <th>Start</th>
+      <th>End</th>
       <th>Status</th>
+      <th></th>
     </tr>
   </thead>
   <tbody>
+    <tr *ngIf="rows.length === 0">
+      <td colspan="9" class="empty-row">No devices found. Click "Add Device" to create one.</td>
+    </tr>
     <tr *ngFor="let row of rows">
-      <td>{{ row.device_number_masked || '—' }}</td>
-      <td>{{ row.plate_number || '—' }}</td>
-      <td>{{ row.truck_id || '—' }}</td>
-      <td>{{ row.driver_id || '—' }}</td>
+      <td>{{ row.device_number_masked || '---' }}</td>
+      <td>{{ getAccountName(row.toll_account_id) }}</td>
+      <td>{{ row.plate_number || '---' }}</td>
+      <td>{{ row.truck_id || '---' }}</td>
+      <td>{{ row.driver_id || '---' }}</td>
+      <td>{{ row.effective_start_date ? (row.effective_start_date | date:'mediumDate') : '---' }}</td>
+      <td>{{ row.effective_end_date ? (row.effective_end_date | date:'mediumDate') : '---' }}</td>
       <td>{{ row.status }}</td>
+      <td>
+        <button class="btn-edit" (click)="openEditDialog(row)">Edit</button>
+      </td>
     </tr>
   </tbody>
 </table>
