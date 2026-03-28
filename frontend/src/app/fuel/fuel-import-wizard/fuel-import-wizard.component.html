@@ -102,7 +102,137 @@
       </div>
     </div>
 
-    <!-- ──────────── STEP 3: Preview ──────────── -->
+    <!-- ──────────── STEP 3: AI Analysis ──────────── -->
+    <div class="step-panel" *ngIf="currentStep === 'ai_analysis'">
+      <div class="step-heading">
+        <h2>AI Analysis</h2>
+        <p>Our AI is analyzing your file to suggest column mappings and detect data patterns.</p>
+      </div>
+
+      <!-- Loading state -->
+      <div class="loading-state" *ngIf="aiLoading">
+        <div class="spinner"></div> Analyzing file with AI...
+      </div>
+
+      <!-- Error banner -->
+      <div class="error-banner" *ngIf="aiError && !aiLoading">
+        <span class="material-symbols-outlined">error</span> {{ aiError }}
+      </div>
+      <div class="step-footer" *ngIf="aiError && !aiLoading">
+        <button class="btn-ghost" (click)="currentStep = 'upload'">
+          <span class="material-symbols-outlined">arrow_back</span> Back
+        </button>
+        <button class="btn-primary" (click)="skipAiMapping()">
+          Map Manually <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+      </div>
+
+      <!-- AI data available -->
+      <div *ngIf="aiPreprocessData && !aiLoading && !aiError">
+
+        <!-- Overall confidence -->
+        <div class="ai-confidence-banner" [ngClass]="getConfidenceClass(aiPreprocessData.overallConfidence)">
+          <span class="material-symbols-outlined">psychology</span>
+          Overall confidence: <strong>{{ getConfidenceLabel(aiPreprocessData.overallConfidence) }}</strong>
+        </div>
+
+        <!-- Column Mapping Table -->
+        <div class="ai-section">
+          <h3 class="ai-section-title">
+            <span class="material-symbols-outlined">view_column</span> Column Mapping
+          </h3>
+          <div class="ai-mapping-table">
+            <div class="ai-mapping-header">
+              <span class="ai-col-field">FleetNeuron Field</span>
+              <span class="ai-col-arrow"></span>
+              <span class="ai-col-raw">Detected Header</span>
+              <span class="ai-col-confidence">Confidence</span>
+            </div>
+            <div *ngFor="let entry of aiMappingEntries"
+                 class="ai-mapping-row"
+                 [class.unmapped]="!entry.rawHeader">
+              <span class="ai-col-field">{{ entry.field }}</span>
+              <span class="ai-col-arrow">
+                <span class="material-symbols-outlined">arrow_forward</span>
+              </span>
+              <span class="ai-col-raw">{{ entry.rawHeader || '-- not mapped --' }}</span>
+              <span class="ai-col-confidence">
+                <span class="confidence-badge" [ngClass]="getConfidenceClass(entry.confidence)">
+                  {{ getConfidenceLabel(entry.confidence) }}
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Split Strategy -->
+        <div class="ai-section">
+          <h3 class="ai-section-title">
+            <span class="material-symbols-outlined">call_split</span> Split Strategy
+          </h3>
+          <div class="ai-split-chip">
+            {{ getSplitStrategyLabel(aiPreprocessData.splitStrategy.type) }}
+          </div>
+        </div>
+
+        <!-- Row Breakdown -->
+        <div class="ai-section">
+          <h3 class="ai-section-title">
+            <span class="material-symbols-outlined">analytics</span> Row Breakdown
+          </h3>
+          <div class="ai-row-breakdown">
+            <div class="ai-breakdown-card green">
+              <span class="ai-breakdown-count">{{ aiPreprocessData.rowAnalysis.normalRows }}</span>
+              <span class="ai-breakdown-label">Normal</span>
+            </div>
+            <div class="ai-breakdown-card blue">
+              <span class="ai-breakdown-count">{{ aiPreprocessData.rowAnalysis.splitRows }}</span>
+              <span class="ai-breakdown-label">Split</span>
+            </div>
+            <div class="ai-breakdown-card muted">
+              <span class="ai-breakdown-count">{{ aiPreprocessData.rowAnalysis.skipRows }}</span>
+              <span class="ai-breakdown-label">Skipped</span>
+            </div>
+            <div class="ai-breakdown-card yellow">
+              <span class="ai-breakdown-count">{{ aiPreprocessData.rowAnalysis.flaggedRows }}</span>
+              <span class="ai-breakdown-label">Flagged</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flagged Rows -->
+        <div class="ai-section" *ngIf="aiPreprocessData.flaggedRows.length > 0">
+          <h3 class="ai-section-title clickable" (click)="showFlaggedRows = !showFlaggedRows">
+            <span class="material-symbols-outlined">flag</span> Flagged Rows ({{ aiPreprocessData.flaggedRows.length }})
+            <span class="material-symbols-outlined expand-icon">{{ showFlaggedRows ? 'expand_less' : 'expand_more' }}</span>
+          </h3>
+          <div class="ai-flagged-list" *ngIf="showFlaggedRows">
+            <div *ngFor="let row of aiPreprocessData.flaggedRows" class="ai-flagged-row">
+              <span class="ai-flagged-rownum">Row {{ row.rowNumber }}</span>
+              <span class="ai-flagged-reason">{{ row.reason }}</span>
+              <span class="confidence-badge" [ngClass]="getConfidenceClass(row.confidence)">
+                {{ getConfidenceLabel(row.confidence) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="step-footer">
+          <button class="btn-ghost" (click)="currentStep = 'upload'">
+            <span class="material-symbols-outlined">arrow_back</span> Back
+          </button>
+          <button class="btn-ghost" (click)="skipAiMapping()">
+            Map Manually
+          </button>
+          <button class="btn-primary" (click)="acceptAiMapping()">
+            Accept AI Mapping <span class="material-symbols-outlined">arrow_forward</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ──────────── STEP 4: Preview ──────────── -->
     <div class="step-panel" *ngIf="currentStep === 'preview' && previewResult">
       <div class="step-heading">
         <h2>File Preview</h2>
@@ -140,7 +270,7 @@
       </div>
 
       <div class="step-footer">
-        <button class="btn-ghost" (click)="currentStep = 'upload'">
+        <button class="btn-ghost" (click)="currentStep = 'ai_analysis'">
           <span class="material-symbols-outlined">arrow_back</span> Back
         </button>
         <button class="btn-primary" (click)="nextFromPreview()">
@@ -149,7 +279,7 @@
       </div>
     </div>
 
-    <!-- ──────────── STEP 4: Map ──────────── -->
+    <!-- ──────────── STEP 5: Map ──────────── -->
     <div class="step-panel" *ngIf="currentStep === 'map'">
       <div class="step-heading">
         <h2>Map Columns</h2>
@@ -198,7 +328,7 @@
       </div>
     </div>
 
-    <!-- ──────────── STEP 5: Validate ──────────── -->
+    <!-- ──────────── STEP 6: Validate ──────────── -->
     <div class="step-panel" *ngIf="currentStep === 'validate'">
       <div class="step-heading">
         <h2>Validation Results</h2>
@@ -257,7 +387,7 @@
       </div>
     </div>
 
-    <!-- ──────────── STEP 6: Import Confirmation ──────────── -->
+    <!-- ──────────── STEP 7: Import Confirmation ──────────── -->
     <div class="step-panel" *ngIf="currentStep === 'import'">
       <div class="step-heading">
         <h2>Ready to Import</h2>
@@ -301,7 +431,7 @@
       </div>
     </div>
 
-    <!-- ──────────── STEP 7: Result ──────────── -->
+    <!-- ──────────── STEP 8: Result ──────────── -->
     <div class="step-panel result-panel" *ngIf="currentStep === 'result' && commitResult">
       <span class="material-symbols-outlined result-icon">check_circle</span>
       <h2>Import Complete!</h2>
