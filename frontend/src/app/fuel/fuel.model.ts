@@ -123,6 +123,7 @@ export interface FuelOverview {
   month: { totalAmount: number; totalGallons: number; avgPpg: number; count: number };
   topVendors: { name: string; total: number; count: number }[];
   byState: { state: string; gallons: number; amount: number }[];
+  byProductType: { productType: string; gallons: number; amount: number; count: number }[];
   unmatchedTransactions: number;
   openExceptions: number;
   lastBatch: Partial<FuelImportBatch> | null;
