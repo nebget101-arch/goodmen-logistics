@@ -31,6 +31,9 @@
  *   POST   /api/fuel/cards/:cardId/assign-driver
  *   POST   /api/fuel/cards/:cardId/revoke-driver
  *   GET    /api/fuel/driver-assignments
+ *   GET    /api/fuel/accounts/:accountId/cards
+ *   POST   /api/fuel/accounts/:accountId/cards
+ *   PATCH  /api/fuel/accounts/cards/:cardId
  */
 
 const express = require('express');
@@ -104,11 +107,26 @@ router.get('/providers/templates', (_req, res) => {
 router.get('/cards', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
+
+    const cardCountSub = knex('fuel_cards')
+      .where('fuel_cards.fuel_card_account_id', knex.raw('fuel_card_accounts.id'))
+      .count('* as cnt')
+      .as('card_count');
+
     const rows = await applyOperatingEntityFilter(
-      knex('fuel_card_accounts').where({ tenant_id: tid }),
-      req
+      knex('fuel_card_accounts')
+        .where({ 'fuel_card_accounts.tenant_id': tid })
+        .select('fuel_card_accounts.*', cardCountSub),
+      req,
+      'fuel_card_accounts.operating_entity_id'
     )
-      .orderBy('created_at', 'desc');
+      .orderBy('fuel_card_accounts.created_at', 'desc');
+
+    // Coerce card_count from string to integer
+    for (const row of rows) {
+      row.card_count = parseInt(row.card_count, 10) || 0;
+    }
+
     res.json(rows);
   } catch (err) {
     dtLogger.error('fuel_cards_list_error', err);
@@ -309,6 +327,100 @@ router.get('/driver-assignments', async (req, res) => {
   } catch (err) {
     dtLogger.error('fuel_driver_assignments_list_error', err);
     sendError(res, 500, 'Failed to fetch driver assignments');
+  }
+});
+
+// ─── Fuel Cards (under Account) ──────────────────────────────────────────────
+
+/**
+ * GET /accounts/:accountId/cards
+ * List all cards belonging to a fuel card account (tenant-scoped).
+ */
+router.get('/accounts/:accountId/cards', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { accountId } = req.params;
+
+    // Verify account belongs to tenant
+    const account = await knex('fuel_card_accounts')
+      .where({ id: accountId, tenant_id: tid })
+      .first('id');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
+
+    const rows = await knex('fuel_cards')
+      .where({ fuel_card_account_id: accountId, tenant_id: tid })
+      .orderBy('created_at', 'desc');
+
+    res.json(rows);
+  } catch (err) {
+    dtLogger.error('fuel_account_cards_list_error', err);
+    sendError(res, 500, 'Failed to fetch cards for account');
+  }
+});
+
+/**
+ * POST /accounts/:accountId/cards
+ * Create a new card under a fuel card account.
+ * Body: { card_number_masked, card_number_last4?, status?, notes? }
+ */
+router.post('/accounts/:accountId/cards', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { accountId } = req.params;
+    const { card_number_masked, card_number_last4, status, notes } = req.body;
+
+    if (!card_number_masked) return sendError(res, 400, 'card_number_masked is required');
+
+    // Verify account belongs to tenant
+    const account = await knex('fuel_card_accounts')
+      .where({ id: accountId, tenant_id: tid })
+      .first('id');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
+
+    const [row] = await knex('fuel_cards').insert({
+      tenant_id: tid,
+      fuel_card_account_id: accountId,
+      card_number_masked,
+      card_number_last4: card_number_last4 || null,
+      status: status || 'active',
+      notes: notes || null,
+    }).returning('*');
+
+    res.status(201).json(row);
+  } catch (err) {
+    // Handle unique constraint violation (duplicate card number per tenant)
+    if (err.code === '23505' && err.constraint === 'uq_fc_tenant_card_number') {
+      return sendError(res, 409, 'A card with this number already exists for this tenant');
+    }
+    dtLogger.error('fuel_account_card_create_error', err);
+    sendError(res, 500, 'Failed to create fuel card');
+  }
+});
+
+/**
+ * PATCH /accounts/cards/:cardId
+ * Update a fuel card's fields (status, notes, card_number_last4).
+ */
+router.patch('/accounts/cards/:cardId', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const allowed = ['card_number_last4', 'status', 'notes'];
+    const patch = {};
+    for (const f of allowed) {
+      if (req.body[f] !== undefined) patch[f] = req.body[f];
+    }
+    if (Object.keys(patch).length === 0) return sendError(res, 400, 'No valid fields to update');
+    patch.updated_at = new Date();
+
+    const [row] = await knex('fuel_cards')
+      .where({ id: req.params.cardId, tenant_id: tid })
+      .update(patch)
+      .returning('*');
+    if (!row) return sendError(res, 404, 'Fuel card not found');
+    res.json(row);
+  } catch (err) {
+    dtLogger.error('fuel_card_patch_error', err);
+    sendError(res, 500, 'Failed to update fuel card');
   }
 });
 
