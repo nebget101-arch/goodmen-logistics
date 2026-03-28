@@ -1,5 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { SharedModule } from '../shared/shared.module';
 
 import { TollsRoutingModule } from './tolls-routing.module';
 import { TollsShellComponent } from './tolls-shell/tolls-shell.component';
@@ -24,6 +26,8 @@ import { TollsExceptionsComponent } from './tolls-exceptions/tolls-exceptions.co
   ],
   imports: [
     CommonModule,
+    FormsModule,
+    SharedModule,
     TollsRoutingModule,
   ]
 })
