@@ -1,6 +1,8 @@
 import { Component, OnInit } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { TollsService } from '../tolls.service';
-import { TollDevice } from '../tolls.model';
+import { TollAccount, TollDevice } from '../tolls.model';
+import { DeviceDialogComponent, DeviceDialogData } from './device-dialog/device-dialog.component';
 
 @Component({
   selector: 'app-tolls-devices',
@@ -9,13 +11,24 @@ import { TollDevice } from '../tolls.model';
 })
 export class TollsDevicesComponent implements OnInit {
   rows: TollDevice[] = [];
+  accounts: TollAccount[] = [];
   loading = false;
   error = '';
+  successMsg = '';
 
-  constructor(private tolls: TollsService) {}
+  constructor(
+    private tolls: TollsService,
+    private dialog: MatDialog
+  ) {}
 
   ngOnInit(): void {
+    this.loadDevices();
+    this.loadAccounts();
+  }
+
+  loadDevices(): void {
     this.loading = true;
+    this.error = '';
     this.tolls.getDevices().subscribe({
       next: (rows) => {
         this.rows = rows || [];
@@ -26,5 +39,52 @@ export class TollsDevicesComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  private loadAccounts(): void {
+    this.tolls.getAccounts().subscribe({
+      next: (accounts) => {
+        this.accounts = accounts || [];
+      },
+      error: () => {
+        this.accounts = [];
+      }
+    });
+  }
+
+  openAddDialog(): void {
+    this.openDialog();
+  }
+
+  openEditDialog(device: TollDevice): void {
+    this.openDialog(device);
+  }
+
+  private openDialog(device?: TollDevice): void {
+    const data: DeviceDialogData = {
+      device,
+      accounts: this.accounts
+    };
+
+    const dialogRef = this.dialog.open(DeviceDialogComponent, {
+      width: '540px',
+      maxWidth: '96vw',
+      disableClose: false,
+      panelClass: 'dark-dialog',
+      data
+    });
+
+    dialogRef.afterClosed().subscribe((result: { saved: boolean } | undefined) => {
+      if (result?.saved) {
+        this.successMsg = device ? 'Device updated successfully.' : 'Device created successfully.';
+        this.loadDevices();
+        setTimeout(() => { this.successMsg = ''; }, 4000);
+      }
+    });
+  }
+
+  getAccountName(accountId: string): string {
+    const acct = this.accounts.find((a) => a.id === accountId);
+    return acct ? (acct.display_name || acct.provider_name) : accountId || '—';
   }
 }
