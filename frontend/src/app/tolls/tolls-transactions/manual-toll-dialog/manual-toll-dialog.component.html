@@ -1,0 +1,168 @@
+<div class="manual-toll-dialog">
+  <h2 class="dialog-title">Add Manual Toll</h2>
+
+  <form [formGroup]="form" (ngSubmit)="save()" class="dialog-form">
+    <!-- Row: Date + Amount -->
+    <div class="form-row">
+      <div class="form-field">
+        <label class="field-label">Date <span class="required">*</span></label>
+        <input type="date"
+               formControlName="transaction_date"
+               class="field-input">
+        <div *ngIf="form.get('transaction_date')?.touched && form.get('transaction_date')?.hasError('required')"
+             class="field-error">
+          Date is required.
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label class="field-label">Amount <span class="required">*</span></label>
+        <input type="number"
+               formControlName="amount"
+               class="field-input"
+               placeholder="0.00"
+               step="0.01"
+               min="0">
+        <div *ngIf="form.get('amount')?.touched && form.get('amount')?.hasError('required')"
+             class="field-error">
+          Amount is required.
+        </div>
+        <div *ngIf="form.get('amount')?.touched && form.get('amount')?.hasError('min')"
+             class="field-error">
+          Amount must be 0 or more.
+        </div>
+      </div>
+    </div>
+
+    <!-- Provider -->
+    <div class="form-field">
+      <label class="field-label">Provider</label>
+      <input type="text"
+             formControlName="provider_name"
+             class="field-input"
+             placeholder="e.g. E-ZPass, SunPass">
+    </div>
+
+    <!-- Plaza Name -->
+    <div class="form-field">
+      <label class="field-label">Plaza Name</label>
+      <input type="text"
+             formControlName="plaza_name"
+             class="field-input"
+             placeholder="e.g. George Washington Bridge">
+    </div>
+
+    <!-- Row: Entry / Exit Location -->
+    <div class="form-row">
+      <div class="form-field">
+        <label class="field-label">Entry Location</label>
+        <input type="text"
+               formControlName="entry_location"
+               class="field-input"
+               placeholder="Entry point">
+      </div>
+
+      <div class="form-field">
+        <label class="field-label">Exit Location</label>
+        <input type="text"
+               formControlName="exit_location"
+               class="field-input"
+               placeholder="Exit point">
+      </div>
+    </div>
+
+    <!-- Row: City / State -->
+    <div class="form-row">
+      <div class="form-field">
+        <label class="field-label">City</label>
+        <input type="text"
+               formControlName="city"
+               class="field-input"
+               placeholder="City">
+      </div>
+
+      <div class="form-field">
+        <label class="field-label">State</label>
+        <input type="text"
+               formControlName="state"
+               class="field-input"
+               placeholder="e.g. NJ"
+               maxlength="2"
+               style="text-transform: uppercase;">
+      </div>
+    </div>
+
+    <!-- Truck (autocomplete) -->
+    <div class="form-field">
+      <label class="field-label">Truck</label>
+      <input type="text"
+             [formControl]="truckControl"
+             class="field-input"
+             placeholder="Search by unit number..."
+             (input)="form.patchValue({ truck_id: '' })"
+             autocomplete="off">
+      <div class="autocomplete-dropdown" *ngIf="(filteredTrucks$ | async) as trucks">
+        <div *ngIf="trucks.length > 0 && truckControl.value && !form.value.truck_id"
+             class="autocomplete-list">
+          <div *ngFor="let t of trucks"
+               class="autocomplete-item"
+               (click)="onTruckSelected(t.id); truckControl.setValue(t.label)">
+            {{ t.label }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Driver (autocomplete) -->
+    <div class="form-field">
+      <label class="field-label">Driver</label>
+      <input type="text"
+             [formControl]="driverControl"
+             class="field-input"
+             placeholder="Search by driver name..."
+             (input)="form.patchValue({ driver_id: '' })"
+             autocomplete="off">
+      <div class="autocomplete-dropdown" *ngIf="(filteredDrivers$ | async) as drivers">
+        <div *ngIf="drivers.length > 0 && driverControl.value && !form.value.driver_id"
+             class="autocomplete-list">
+          <div *ngFor="let d of drivers"
+               class="autocomplete-item"
+               (click)="onDriverSelected(d.id); driverControl.setValue(d.label)">
+            {{ d.label }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Load -->
+    <div class="form-field">
+      <label class="field-label">Load</label>
+      <input type="text"
+             formControlName="load_number"
+             class="field-input"
+             placeholder="Load number or reference">
+    </div>
+
+    <!-- Notes -->
+    <div class="form-field">
+      <label class="field-label">Notes</label>
+      <textarea formControlName="notes"
+                class="field-input field-textarea"
+                placeholder="Optional notes..."
+                rows="3"></textarea>
+    </div>
+
+    <!-- Error message -->
+    <div *ngIf="errorMsg" class="error-banner">{{ errorMsg }}</div>
+
+    <!-- Actions -->
+    <div class="dialog-actions">
+      <button type="button" class="btn-cancel" (click)="cancel()" [disabled]="saving">
+        Cancel
+      </button>
+      <button type="submit" class="btn-save" [disabled]="saving">
+        {{ saving ? 'Saving...' : 'Add Toll' }}
+      </button>
+    </div>
+  </form>
+</div>

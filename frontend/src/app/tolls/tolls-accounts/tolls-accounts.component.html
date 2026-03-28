@@ -1,4 +1,10 @@
-<div *ngIf="loading">Loading accounts…</div>
+<div class="accounts-header">
+  <button type="button" class="btn btn-primary" (click)="openCreate()">
+    <span class="material-symbols-outlined">add</span> Add Account
+  </button>
+</div>
+
+<div *ngIf="loading">Loading accounts...</div>
 <div *ngIf="error" class="error">{{ error }}</div>
 
 <table *ngIf="!loading && !error" class="simple-table">
@@ -7,15 +13,73 @@
       <th>Provider</th>
       <th>Name</th>
       <th>Account</th>
+      <th>Import Method</th>
       <th>Status</th>
+      <th>Actions</th>
     </tr>
   </thead>
   <tbody>
     <tr *ngFor="let row of rows">
       <td>{{ row.provider_name }}</td>
       <td>{{ row.display_name }}</td>
-      <td>{{ row.account_number_masked || '—' }}</td>
+      <td>{{ row.account_number_masked || '--' }}</td>
+      <td>{{ row.import_method }}</td>
       <td>{{ row.status }}</td>
+      <td>
+        <button type="button" class="btn-icon" title="Edit" (click)="openEdit(row)">
+          <span class="material-symbols-outlined">edit</span>
+        </button>
+      </td>
+    </tr>
+    <tr *ngIf="rows.length === 0">
+      <td colspan="6" class="empty">No toll accounts yet. Click "Add Account" to create one.</td>
     </tr>
   </tbody>
 </table>
+
+<!-- Toast -->
+<div *ngIf="toast" class="toast" [class.toast-error]="toastType === 'error'" [class.toast-success]="toastType === 'success'">
+  {{ toast }}
+</div>
+
+<!-- Create / Edit Dialog -->
+<div class="dialog-backdrop" *ngIf="showDialog" (click)="closeDialog()">
+  <div class="dialog" (click)="$event.stopPropagation()">
+    <div class="dialog-header">
+      <h3>{{ editingAccount ? 'Edit Account' : 'Add Account' }}</h3>
+      <button type="button" class="btn-icon dialog-close" (click)="closeDialog()">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <label class="form-label">
+        Provider Name <span class="required">*</span>
+        <input type="text" [(ngModel)]="formProviderName" placeholder="e.g. E-ZPass, TxTag, SunPass" />
+      </label>
+      <label class="form-label">
+        Display Name <span class="required">*</span>
+        <input type="text" [(ngModel)]="formDisplayName" placeholder="e.g. Main Fleet E-ZPass" />
+      </label>
+      <label class="form-label">
+        Account Number
+        <input type="text" [(ngModel)]="formAccountNumber" placeholder="Account # (masked)" />
+      </label>
+      <label class="form-label">
+        Import Method
+        <select [(ngModel)]="formImportMethod">
+          <option *ngFor="let opt of importMethodOptions" [value]="opt.value">{{ opt.label }}</option>
+        </select>
+      </label>
+      <label class="form-label">
+        Notes
+        <textarea [(ngModel)]="formNotes" rows="3" placeholder="Optional notes"></textarea>
+      </label>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" (click)="closeDialog()" [disabled]="saving">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="saveAccount()" [disabled]="!isFormValid || saving">
+        {{ saving ? 'Saving...' : (editingAccount ? 'Update' : 'Create') }}
+      </button>
+    </div>
+  </div>
+</div>

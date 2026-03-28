@@ -865,6 +865,15 @@ body {
   outline-offset: 1px;
 }
 
+/* Dark-themed Material dialog panel */
+.dark-dialog .mat-mdc-dialog-container,
+.dark-dialog .mat-mdc-dialog-surface {
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
 .mat-calendar-body-today:not(.mat-calendar-body-selected) .mat-calendar-body-cell-content {
   border-color: rgba(56, 189, 248, 0.7) !important;
   color: #e0f2fe !important;
@@ -2131,4 +2140,13 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
     width: auto;
     max-height: 70vh;
   }
+}
+
+/* Invoice preview dialog — transparent container so component dark bg shows (FN-442) */
+.invoice-preview-panel .mat-mdc-dialog-container,
+.invoice-preview-panel .mat-mdc-dialog-surface {
+  background: transparent;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  overflow: hidden;
 }

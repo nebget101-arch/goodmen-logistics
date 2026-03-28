@@ -1,0 +1,309 @@
+.invoice-preview-dialog {
+  background: rgba(15, 23, 42, 0.96);
+  color: #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.dialog-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.close-btn:hover {
+  background: rgba(51, 65, 85, 0.8);
+  color: #e2e8f0;
+}
+
+/* Warnings banner */
+.warnings-banner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.warnings-banner .warning-icon {
+  color: #eab308;
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.warnings-banner ul {
+  margin: 0;
+  padding: 0 0 0 16px;
+  font-size: 0.85rem;
+  color: #fde68a;
+}
+
+/* Error banner */
+.error-banner {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  color: #fca5a5;
+  font-size: 0.85rem;
+}
+
+.error-banner .material-icons {
+  color: #ef4444;
+  font-size: 20px;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: #94a3b8;
+}
+
+.empty-state .material-icons {
+  font-size: 48px;
+  margin-bottom: 8px;
+  opacity: 0.4;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Table */
+.table-wrapper {
+  overflow-x: auto;
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 16px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+thead th {
+  text-align: left;
+  padding: 8px 6px;
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+  white-space: nowrap;
+}
+
+tbody tr {
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+  transition: background 0.15s;
+}
+
+tbody tr:hover {
+  background: rgba(51, 65, 85, 0.3);
+}
+
+tbody tr.flagged {
+  background: rgba(234, 179, 8, 0.05);
+}
+
+tbody td {
+  padding: 6px;
+  vertical-align: middle;
+}
+
+/* Editable cell inputs */
+.cell-input {
+  width: 100%;
+  min-width: 80px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 6px;
+  color: #e2e8f0;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.cell-input:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+
+.cell-input.warn-input {
+  border-color: rgba(234, 179, 8, 0.6);
+}
+
+.amount-input {
+  min-width: 70px;
+  max-width: 90px;
+  text-align: right;
+}
+
+/* Flags */
+.flags-cell {
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.badge-warn {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.badge-dup {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+/* Remove row button */
+.remove-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.remove-btn:hover:not(:disabled) {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.remove-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Dialog actions footer */
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid rgba(51, 65, 85, 0.8);
+}
+
+.row-count {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-cancel {
+  background: rgba(51, 65, 85, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  color: #e2e8f0;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: rgba(51, 65, 85, 0.9);
+}
+
+.btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-confirm {
+  background: #38bdf8;
+  border: none;
+  color: #0f172a;
+  padding: 8px 24px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: #67e8f9;
+}
+
+.btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Spinner */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(15, 23, 42, 0.3);
+  border-top-color: #0f172a;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Date input color scheme for dark theme */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+}
