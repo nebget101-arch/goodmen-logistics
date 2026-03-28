@@ -504,17 +504,6 @@
     background: rgba(198, 40, 40, 0.04);
   }
 
-  .notes-cell {
-    max-width: none;
-    color: var(--text-light);
-    white-space: normal;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-
   .attachment-chips {
     display: flex;
     flex-wrap: wrap;

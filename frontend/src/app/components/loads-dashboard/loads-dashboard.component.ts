@@ -191,7 +191,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     rate: string;
     status: string;
     billingStatus: string;
-    notes: string;
     attachmentType: string;
   } = {
     date: '',
@@ -203,7 +202,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     rate: '',
     status: '',
     billingStatus: '',
-    notes: '',
     attachmentType: ''
   };
 
@@ -278,7 +276,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     rate: 'Rate',
     status: 'Status',
     billingStatus: 'Billing',
-    notes: 'Notes',
     attachmentType: 'Attachment'
   };
 
@@ -2419,11 +2416,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         if (!billingText.includes(hf.billingStatus.toLowerCase())) return false;
       }
 
-      if (hf.notes) {
-        const notes = (load.notes || '').toString().toLowerCase();
-        if (!notes.includes(hf.notes.toLowerCase())) return false;
-      }
-
       if (hf.attachmentType) {
         const types = Array.isArray(load.attachment_types) ? load.attachment_types : [];
         const typesText = types.join(' ').toLowerCase().replace(/_/g, ' ');
@@ -2535,7 +2527,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       rate: '',
       status: '',
       billingStatus: '',
-      notes: '',
       attachmentType: ''
     };
 
