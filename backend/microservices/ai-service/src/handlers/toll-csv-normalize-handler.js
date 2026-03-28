@@ -17,13 +17,12 @@ const TOLL_NORMALIZED_FIELDS = [
   { key: 'exit_location', label: 'Exit Location', required: false },
   { key: 'city', label: 'City', required: false },
   { key: 'state', label: 'State (2-letter)', required: false },
-  { key: 'device_number', label: 'Transponder / Device Number', required: false },
-  { key: 'plate_number', label: 'License Plate Number', required: false },
-  { key: 'vehicle_class', label: 'Vehicle Class / Axle Count', required: false },
+  { key: 'device_number_masked', label: 'Transponder / Device Number', required: false },
+  { key: 'plate_number_raw', label: 'License Plate Number', required: false },
+  { key: 'unit_number_raw', label: 'Truck Unit Number', required: false },
+  { key: 'driver_name_raw', label: 'Driver Name', required: false },
   { key: 'external_transaction_id', label: 'Transaction ID / Reference #', required: false },
   { key: 'posted_date', label: 'Posted / Settlement Date', required: false },
-  { key: 'discount_amount', label: 'Discount Amount', required: false },
-  { key: 'payment_type', label: 'Payment Type (tag/cash/video)', required: false },
 ];
 
 const MAX_SAMPLE_ROWS = 20;
@@ -113,6 +112,24 @@ function validateNormalizeResult(result) {
   }
   if (!result.columnMapping || typeof result.columnMapping !== 'object') {
     result.columnMapping = {};
+  }
+  // Remap legacy/AI-generated keys to match DB column names
+  const keyAliases = {
+    device_number: 'device_number_masked',
+    plate_number: 'plate_number_raw',
+    driver_name: 'driver_name_raw',
+    unit_number: 'unit_number_raw',
+    vehicle_class: null,       // drop — not in DB
+    discount_amount: null,     // drop — not in DB
+    payment_type: null,        // drop — not in DB
+  };
+  for (const [oldKey, newKey] of Object.entries(keyAliases)) {
+    if (result.columnMapping[oldKey]) {
+      if (newKey) {
+        result.columnMapping[newKey] = result.columnMapping[oldKey];
+      }
+      delete result.columnMapping[oldKey];
+    }
   }
   if (typeof result.overallConfidence !== 'number') {
     result.overallConfidence = 0.5;
