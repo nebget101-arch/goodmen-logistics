@@ -1052,6 +1052,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         ? this.sortedStops.map((s, i) => ({ ...s, sequence: i + 1 }))
         : [];
       body = {
+        billingStatus: formValue.billingStatus || null,
         dispatcherUserId: this.dispatcherUserId,
         driverId: formValue.driverId || null,
         truckId: formValue.truckId || null,
