@@ -1037,7 +1037,29 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     const status = (load.status || '').toString().toUpperCase();
     if (status !== 'DRAFT') return;
     this.errorMessage = '';
-    this.loadsService.approveDraft(load.id).subscribe({
+
+    // When approving from the detail modal, send current form state so edits are persisted
+    let body: Record<string, unknown> = {};
+    if (this.editingLoadId && this.editingLoadDetail) {
+      const formValue = this.manualLoadForm.getRawValue();
+      const stops: LoadStop[] = this.sortedStops?.length
+        ? this.sortedStops.map((s, i) => ({ ...s, sequence: i + 1 }))
+        : [];
+      body = {
+        dispatcherUserId: this.dispatcherUserId,
+        driverId: formValue.driverId || null,
+        truckId: formValue.truckId || null,
+        trailerId: formValue.trailerId || null,
+        brokerId: formValue.brokerId || null,
+        brokerName: formValue.brokerName || null,
+        poNumber: formValue.poNumber || null,
+        rate: formValue.rate ? Number(formValue.rate) : 0,
+        notes: formValue.notes || null,
+        stops
+      };
+    }
+
+    this.loadsService.approveDraft(load.id, body).subscribe({
       next: () => {
         this.successMessage = 'Load approved.';
         this.closeManualModal();
