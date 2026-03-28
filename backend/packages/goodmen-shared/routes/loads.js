@@ -1112,6 +1112,15 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
       // Pickup/delivery dates are stored in load_stops — no denormalized columns on loads table
     }
 
+    // Auto-set completed_date when status transitions to DELIVERED or COMPLETED (if not already set)
+    if (status && ['DELIVERED', 'COMPLETED'].includes(status)) {
+      await client.query(
+        `UPDATE loads SET completed_date = COALESCE(completed_date, delivery_date, CURRENT_DATE), updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND completed_date IS NULL`,
+        [req.params.id]
+      );
+    }
+
     await client.query('COMMIT');
     const updated = await getLoadDetail(client, req.params.id, req.context || null);
     if (!updated) {
