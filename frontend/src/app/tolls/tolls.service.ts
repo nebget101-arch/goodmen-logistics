@@ -91,8 +91,8 @@ export class TollsService {
     return this.http.post<TollMappingProfile>(`${this.base}/import/mapping-profiles`, profile);
   }
 
-  aiNormalize(batchId: string): Observable<TollAiNormalizeResult> {
-    return this.http.post<TollAiNormalizeResult>(`${this.base}/import/ai-normalize`, { batch_id: batchId });
+  aiNormalize(batchId: string, headers: string[], sampleRows: Record<string, string>[]): Observable<TollAiNormalizeResult> {
+    return this.http.post<TollAiNormalizeResult>(`${this.base}/import/ai-normalize`, { batchId, headers, sampleRows });
   }
 
   getTransactions(filters: {
