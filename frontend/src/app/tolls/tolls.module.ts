@@ -14,6 +14,7 @@ import { TollsDevicesComponent } from './tolls-devices/tolls-devices.component';
 import { TollsExceptionsComponent } from './tolls-exceptions/tolls-exceptions.component';
 import { DeviceDialogComponent } from './tolls-devices/device-dialog/device-dialog.component';
 import { ManualTollDialogComponent } from './tolls-transactions/manual-toll-dialog/manual-toll-dialog.component';
+import { InvoicePreviewDialogComponent } from './tolls-transactions/invoice-preview-dialog/invoice-preview-dialog.component';
 
 @NgModule({
   declarations: [
@@ -27,6 +28,7 @@ import { ManualTollDialogComponent } from './tolls-transactions/manual-toll-dial
     TollsExceptionsComponent,
     DeviceDialogComponent,
     ManualTollDialogComponent,
+    InvoicePreviewDialogComponent,
   ],
   imports: [
     CommonModule,

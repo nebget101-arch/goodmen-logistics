@@ -16,6 +16,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const multer = require('multer');
 const XLSX = require('xlsx');
+const path = require('path');
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
 const { recalcAndUpdateSettlement } = require('../services/settlement-service');
@@ -35,6 +36,17 @@ const upload = multer({
       return cb(null, true);
     }
     cb(new Error('Only CSV and XLSX files are accepted'));
+  }
+});
+
+const invoiceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = /jpg|jpeg|png|pdf|webp/;
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.test(ext) || allowed.test(file.mimetype)) return cb(null, true);
+    cb(new Error('Only JPG, PNG, PDF, and WebP files are allowed'));
   }
 });
 
@@ -951,6 +963,113 @@ router.post('/transactions/:id/unlink-from-settlement', async (req, res) => {
     dtLogger.error('toll_unlink_from_settlement_failed', error);
     res.status(500).json({ error: 'Failed to unlink toll from settlement' });
   }
+});
+
+// ─── Invoice Image Upload + AI Extraction ────────────────────────────────────
+router.post('/import/invoice-image', invoiceUpload.array('images', 10), async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const files = req.files || [];
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'At least one image file is required' });
+    }
+
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+    const results = [];
+
+    for (const file of files) {
+      const imageBase64 = file.buffer.toString('base64');
+      const mediaType = file.mimetype || 'image/jpeg';
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
+
+      let aiResponse;
+      try {
+        aiResponse = await fetch(`${aiServiceUrl}/api/ai/tolls/invoice-vision`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64, mediaType }),
+          signal: controller.signal,
+        });
+      } catch (fetchErr) {
+        clearTimeout(timeout);
+        if (fetchErr.name === 'AbortError') {
+          dtLogger.error('toll_invoice_ai_timeout', { file: file.originalname });
+          results.push({ file: file.originalname, error: 'AI service timeout', transactions: [] });
+          continue;
+        }
+        dtLogger.error('toll_invoice_ai_unreachable', { file: file.originalname, err: fetchErr.message });
+        results.push({ file: file.originalname, error: 'AI service unreachable', transactions: [] });
+        continue;
+      }
+      clearTimeout(timeout);
+
+      if (!aiResponse.ok) {
+        const errBody = await aiResponse.json().catch(() => ({}));
+        results.push({ file: file.originalname, error: errBody.error || 'AI extraction failed', transactions: [] });
+        continue;
+      }
+
+      const aiResult = await aiResponse.json();
+      const extraction = aiResult.data || {};
+      const transactions = extraction.transactions || [];
+
+      const plate = (extraction.invoiceMeta?.licensePlate || '').toString().trim().toUpperCase();
+      let matchedTruckId = null;
+      let matchedDriverId = null;
+      let matchFailed = false;
+
+      if (plate) {
+        const device = await knex('toll_devices')
+          .where({ tenant_id: tid })
+          .whereRaw('UPPER(TRIM(plate_number)) = ?', [plate])
+          .first('truck_id', 'driver_id');
+        if (device) {
+          matchedTruckId = device.truck_id || null;
+          matchedDriverId = device.driver_id || null;
+        } else {
+          matchFailed = true;
+        }
+      }
+
+      const enriched = [];
+      for (const txn of transactions) {
+        let isDuplicate = false;
+        if (txn.transaction_date && txn.amount && plate) {
+          const existing = await knex('toll_transactions')
+            .where({ tenant_id: tid })
+            .whereRaw('transaction_date = ?', [txn.transaction_date])
+            .whereRaw('ABS(amount::numeric - ?) < 0.01', [txn.amount])
+            .whereRaw('UPPER(TRIM(license_plate)) = ?', [plate])
+            .first('id');
+          isDuplicate = !!existing;
+        }
+
+        enriched.push({
+          ...txn,
+          license_plate: plate || null,
+          truck_id: matchedTruckId,
+          driver_id: matchedDriverId,
+          matched_status: matchedTruckId ? 'matched' : 'unmatched',
+          is_duplicate: isDuplicate,
+          match_failed: matchFailed,
+        });
+      }
+
+      results.push({
+        file: file.originalname,
+        invoiceMeta: extraction.invoiceMeta || {},
+        confidence: extraction.confidence || 0,
+        warnings: extraction.warnings || [],
+        transactions: enriched,
+      });
+    }
+
+    res.json({ success: true, results });
+  } catch (error) {
+    dtLogger.error('toll_invoice_image_upload_failed', error);
+    res.status(500).json({ error: 'Failed to process toll invoice images' });
   }
 });
 

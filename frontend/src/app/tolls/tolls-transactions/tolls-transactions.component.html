@@ -6,6 +6,15 @@
       <span class="total-badge" *ngIf="!loading">{{ total | number }} records</span>
     </div>
     <div class="header-actions">
+      <button class="btn-upload" (click)="triggerFileInput()" [disabled]="uploading">
+        <span class="material-icons btn-icon">photo_camera</span>
+        <span *ngIf="!uploading">Upload Toll Invoice</span>
+        <span *ngIf="uploading" class="uploading-label">
+          <span class="spinner"></span>
+          Extracting...
+        </span>
+      </button>
+      <input #invoiceFileInput type="file" [accept]="acceptedTypes" multiple hidden (change)="onFilesSelected($event)" />
       <button class="btn-primary" (click)="openDialog()">
         <span class="material-symbols-outlined">add</span> Add Manual Toll
       </button>
@@ -15,6 +24,8 @@
   <!-- Error / Success -->
   <div class="alert alert-error" *ngIf="error">{{ error }}</div>
   <div class="alert alert-success" *ngIf="saveSuccess">{{ saveSuccess }}</div>
+  <div class="success-banner" *ngIf="successMessage"><span class="material-icons">check_circle</span> {{ successMessage }}</div>
+  <div class="error-banner" *ngIf="uploadError"><span class="material-icons">error</span> {{ uploadError }}</div>
 
   <!-- Loading -->
   <div class="loading-state" *ngIf="loading">

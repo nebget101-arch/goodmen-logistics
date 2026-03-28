@@ -85,3 +85,39 @@ export interface TollOverview {
   };
   lastBatch: Partial<TollImportBatch> | null;
 }
+
+/** A single extracted transaction row returned by the AI invoice parser */
+export interface ExtractedTollTransaction {
+  transaction_date: string;
+  provider_name: string;
+  plaza_name: string;
+  plate_number: string;
+  amount: number;
+  entry_point?: string;
+  exit_point?: string;
+  vehicle_class?: string;
+  /** Set by the AI if plate was not matched to a known vehicle */
+  plate_unmatched?: boolean;
+  /** Set by the AI if a similar existing transaction was found */
+  possible_duplicate?: boolean;
+}
+
+/** Response from POST /api/tolls/import/invoice-image */
+export interface InvoiceExtractionResponse {
+  success: boolean;
+  transactions: ExtractedTollTransaction[];
+  warnings?: string[];
+}
+
+/** Payload for creating a single toll transaction */
+export interface CreateTollTransactionPayload {
+  transaction_date: string;
+  provider_name: string;
+  plaza_name: string;
+  plate_number: string;
+  amount: number;
+  entry_point?: string;
+  exit_point?: string;
+  vehicle_class?: string;
+  source: 'invoice_upload';
+}

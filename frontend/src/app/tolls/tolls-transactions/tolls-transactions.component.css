@@ -66,3 +66,16 @@
 .form-group textarea { resize: vertical; }
 
 .dialog-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px 18px; border-top: 1px solid rgba(148,163,184,.1); }
+
+/* Invoice upload */
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.btn-upload { display: inline-flex; align-items: center; gap: 6px; background: #38bdf8; color: #0f172a; border: none; border-radius: 8px; padding: 8px 18px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: background 0.15s; font-family: inherit; }
+.btn-upload:hover:not(:disabled) { background: #67e8f9; }
+.btn-upload:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-icon { font-size: 18px; }
+.uploading-label { display: inline-flex; align-items: center; gap: 6px; }
+.success-banner { display: flex; align-items: center; gap: 8px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; color: #86efac; font-size: 0.85rem; }
+.success-banner .material-icons { color: #22c55e; font-size: 20px; }
+.error-banner { display: flex; align-items: center; gap: 8px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; color: #fca5a5; font-size: 0.85rem; }
+.error-banner .material-icons { color: #ef4444; font-size: 20px; }
+.placeholder { border: 1px dashed rgba(255, 255, 255, 0.2); border-radius: 10px; padding: 1rem; color: #94a3b8; }
