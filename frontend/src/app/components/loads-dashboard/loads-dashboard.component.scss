@@ -402,6 +402,11 @@
     text-align: center;
   }
 
+  thead .header-filters {
+    position: relative;
+    z-index: 10;
+  }
+
   thead .header-filters th {
     padding: 4px 6px 8px;
 
