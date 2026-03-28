@@ -400,6 +400,115 @@ async function generateSettlementNumberWithContext(knex, driver, period) {
 }
 
 /**
+ * Consume unlinked toll transactions for a settlement.
+ * Queries toll_transactions where driver_id matches and settlement_link_status = 'none',
+ * checks expense_responsibility_profiles for toll_responsibility setting,
+ * creates settlement_adjustment_items and links toll transactions.
+ *
+ * @param {object} knex - Knex instance
+ * @param {string} settlementId - Settlement UUID
+ * @param {string} driverId - Driver UUID
+ * @param {string} periodStart - Period start date (YYYY-MM-DD)
+ * @param {string} periodEnd - Period end date (YYYY-MM-DD)
+ * @param {string|null} userId - User performing the action
+ * @param {string|null} tenantId - Tenant UUID
+ */
+async function consumeTollsForSettlement(knex, settlementId, driverId, periodStart, periodEnd, userId, tenantId) {
+  // 1. Get unlinked toll transactions for the driver in the period
+  let tollQuery = knex('toll_transactions')
+    .where({
+      driver_id: driverId,
+      settlement_link_status: 'none'
+    })
+    .where('transaction_date', '>=', periodStart)
+    .where('transaction_date', '<=', periodEnd);
+
+  if (tenantId) {
+    tollQuery = tollQuery.where('tenant_id', tenantId);
+  }
+
+  const tolls = await tollQuery.orderBy('transaction_date', 'asc');
+  if (!tolls.length) return [];
+
+  // 2. Get the driver's expense responsibility profile
+  const asOf = toDateOnly(periodEnd) || toDateOnly(new Date());
+  const expenseProfile = await knex('expense_responsibility_profiles')
+    .where({ driver_id: driverId })
+    .whereRaw('effective_start_date <= ?', [asOf])
+    .where(function () {
+      this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [asOf]);
+    })
+    .orderBy('effective_start_date', 'desc')
+    .first();
+
+  const tollResponsibility = expenseProfile?.toll_responsibility || 'company';
+
+  // 3. If company pays, skip — no deduction from driver
+  if (tollResponsibility === 'company') return [];
+
+  // 4. Determine split percentage for shared responsibility
+  let driverSharePct = 1.0; // 100% for 'driver' responsibility
+  if (tollResponsibility === 'shared') {
+    const customRules = expenseProfile?.custom_rules || {};
+    // custom_rules may contain toll_split_percentage (0-100)
+    const splitPct = Number(customRules.toll_split_percentage);
+    driverSharePct = (!Number.isNaN(splitPct) && splitPct >= 0 && splitPct <= 100)
+      ? splitPct / 100
+      : 0.5; // Default 50/50 if not configured
+  }
+
+  // 5. Determine charge_party
+  const chargeParty = tollResponsibility === 'shared' ? 'shared' : 'driver';
+
+  // 6. Create adjustment items and link toll transactions
+  const createdAdjustments = [];
+  for (const toll of tolls) {
+    const tollAmount = Number(toll.amount) || 0;
+    if (tollAmount === 0) continue;
+
+    const deductionAmount = Math.round(tollAmount * driverSharePct * 100) / 100;
+    if (deductionAmount === 0) continue;
+
+    const description = [
+      'Toll',
+      toll.plaza_name || toll.provider_name || '',
+      toll.transaction_date ? `(${toDateOnly(toll.transaction_date)})` : ''
+    ].filter(Boolean).join(' — ');
+
+    const [adj] = await knex('settlement_adjustment_items')
+      .insert({
+        settlement_id: settlementId,
+        item_type: 'deduction',
+        source_type: 'imported_toll',
+        description,
+        amount: deductionAmount,
+        charge_party: chargeParty,
+        apply_to: 'primary_payee',
+        source_reference_id: toll.id,
+        source_reference_type: 'toll_transaction',
+        occurrence_date: toll.transaction_date,
+        status: 'applied',
+        created_by: userId
+      })
+      .returning('*');
+
+    // Link the toll transaction to this settlement
+    await knex('toll_transactions')
+      .where({ id: toll.id })
+      .update({
+        settlement_id: settlementId,
+        settlement_adjustment_item_id: adj.id,
+        settlement_link_status: 'linked',
+        updated_at: knex.fn.now()
+      });
+
+    createdAdjustments.push(adj);
+  }
+
+  return createdAdjustments;
+}
+
+/**
  * Create draft settlement: resolve profile + payees, get eligible loads + recurring deductions,
  * build load items with pay snapshot, insert adjustments for recurring deductions, recalc totals.
  */
@@ -572,6 +681,17 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
         created_by: userId
       });
     }
+
+    // Auto-consume unlinked toll transactions for the period
+    await consumeTollsForSettlement(
+      knex,
+      settlement.id,
+      driverId,
+      period.period_start,
+      period.period_end,
+      userId,
+      tenantId
+    );
 
     await recalcAndUpdateSettlement(knex, settlement.id);
     return knex('settlements').where({ id: settlement.id }).first();
@@ -1037,6 +1157,7 @@ module.exports = {
   getAlreadySettledLoadIds,
   createDraftSettlement,
   recalcAndUpdateSettlement,
+  consumeTollsForSettlement,
   addLoadToSettlement,
   removeLoadFromSettlement,
   addAdjustment,

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Tolls API – Phase 1 scaffold.
+ * Tolls API – Phase 1 scaffold + settlement integration.
  * Mounted at /api/tolls in logistics service.
  */
 
@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
+const { recalcAndUpdateSettlement } = require('../services/settlement-service');
 
 function tenantId(req) {
   return req.context?.tenantId || req.user?.tenantId || null;
@@ -339,6 +340,205 @@ router.get('/exceptions', async (req, res) => {
   } catch (error) {
     dtLogger.error('tolls_exceptions_list_failed', error);
     res.status(500).json({ error: 'Failed to fetch toll exceptions' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Manual toll-to-settlement posting
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/tolls/:id/post-to-settlement
+ * Manually link a single toll transaction to a settlement as a deduction.
+ * Body: { settlement_id }
+ *
+ * Creates a settlement_adjustment_item and updates the toll transaction's
+ * settlement_link_status to 'linked'.
+ */
+router.post('/transactions/:id/post-to-settlement', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const { settlement_id } = req.body || {};
+    if (!settlement_id) {
+      return res.status(400).json({ error: 'settlement_id is required' });
+    }
+
+    // Fetch the toll transaction
+    const toll = await knex('toll_transactions')
+      .where({ id: req.params.id, tenant_id: tid })
+      .first();
+
+    if (!toll) {
+      return res.status(404).json({ error: 'Toll transaction not found' });
+    }
+
+    if (toll.settlement_link_status === 'linked') {
+      return res.status(409).json({
+        error: 'Toll transaction already linked to a settlement',
+        settlement_id: toll.settlement_id
+      });
+    }
+
+    // Verify the settlement exists and belongs to the same tenant
+    const settlement = await knex('settlements')
+      .where({ id: settlement_id, tenant_id: tid })
+      .first();
+
+    if (!settlement) {
+      return res.status(404).json({ error: 'Settlement not found' });
+    }
+
+    if (settlement.settlement_status === 'void') {
+      return res.status(409).json({ error: 'Cannot post to a voided settlement' });
+    }
+
+    // Determine toll responsibility from expense_responsibility_profiles
+    const asOf = settlement.date || new Date().toISOString().slice(0, 10);
+    const expenseProfile = await knex('expense_responsibility_profiles')
+      .where({ driver_id: settlement.driver_id })
+      .whereRaw('effective_start_date <= ?', [asOf])
+      .where(function () {
+        this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [asOf]);
+      })
+      .orderBy('effective_start_date', 'desc')
+      .first();
+
+    const tollResponsibility = expenseProfile?.toll_responsibility || 'company';
+
+    let driverSharePct = 1.0;
+    let chargeParty = 'driver';
+
+    if (tollResponsibility === 'company') {
+      // Manual override: allow posting even if company responsibility,
+      // but mark as company charge so it shows on statement without deduction
+      driverSharePct = 0;
+      chargeParty = 'company';
+    } else if (tollResponsibility === 'shared') {
+      chargeParty = 'shared';
+      const customRules = expenseProfile?.custom_rules || {};
+      const splitPct = Number(customRules.toll_split_percentage);
+      driverSharePct = (!Number.isNaN(splitPct) && splitPct >= 0 && splitPct <= 100)
+        ? splitPct / 100
+        : 0.5;
+    }
+
+    const tollAmount = Number(toll.amount) || 0;
+    const deductionAmount = Math.round(tollAmount * driverSharePct * 100) / 100;
+
+    const description = [
+      'Toll',
+      toll.plaza_name || toll.provider_name || '',
+      toll.transaction_date ? `(${String(toll.transaction_date).slice(0, 10)})` : ''
+    ].filter(Boolean).join(' — ');
+
+    // Create the settlement adjustment item
+    const [adj] = await knex('settlement_adjustment_items')
+      .insert({
+        settlement_id,
+        item_type: 'deduction',
+        source_type: 'imported_toll',
+        description,
+        amount: deductionAmount,
+        charge_party: chargeParty,
+        apply_to: 'primary_payee',
+        source_reference_id: toll.id,
+        source_reference_type: 'toll_transaction',
+        occurrence_date: toll.transaction_date,
+        status: 'applied',
+        created_by: req.user?.id ?? null
+      })
+      .returning('*');
+
+    // Link the toll transaction to this settlement
+    await knex('toll_transactions')
+      .where({ id: toll.id })
+      .update({
+        settlement_id,
+        settlement_adjustment_item_id: adj.id,
+        settlement_link_status: 'linked',
+        updated_at: knex.fn.now()
+      });
+
+    // Recalculate settlement totals
+    await recalcAndUpdateSettlement(knex, settlement_id);
+
+    res.json({
+      success: true,
+      adjustment: adj,
+      toll_transaction_id: toll.id,
+      settlement_id
+    });
+  } catch (error) {
+    dtLogger.error('toll_post_to_settlement_failed', error);
+    res.status(500).json({ error: 'Failed to post toll to settlement' });
+  }
+});
+
+/**
+ * POST /api/tolls/transactions/:id/unlink-from-settlement
+ * Unlink a toll transaction from its settlement (reverses post-to-settlement).
+ * Removes the settlement_adjustment_item and resets the toll's settlement fields.
+ */
+router.post('/transactions/:id/unlink-from-settlement', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const toll = await knex('toll_transactions')
+      .where({ id: req.params.id, tenant_id: tid })
+      .first();
+
+    if (!toll) {
+      return res.status(404).json({ error: 'Toll transaction not found' });
+    }
+
+    if (toll.settlement_link_status !== 'linked' || !toll.settlement_id) {
+      return res.status(409).json({ error: 'Toll transaction is not linked to any settlement' });
+    }
+
+    const settlementId = toll.settlement_id;
+
+    // Check settlement is not approved/void
+    const settlement = await knex('settlements')
+      .where({ id: settlementId, tenant_id: tid })
+      .first();
+
+    if (settlement && (settlement.settlement_status === 'approved' || settlement.settlement_status === 'void')) {
+      return res.status(409).json({ error: `Cannot unlink from a ${settlement.settlement_status} settlement` });
+    }
+
+    // Remove the adjustment item if it exists
+    if (toll.settlement_adjustment_item_id) {
+      await knex('settlement_adjustment_items')
+        .where({ id: toll.settlement_adjustment_item_id })
+        .delete();
+    }
+
+    // Reset toll transaction settlement fields
+    await knex('toll_transactions')
+      .where({ id: toll.id })
+      .update({
+        settlement_id: null,
+        settlement_adjustment_item_id: null,
+        settlement_link_status: 'none',
+        updated_at: knex.fn.now()
+      });
+
+    // Recalculate settlement totals
+    if (settlement) {
+      await recalcAndUpdateSettlement(knex, settlementId);
+    }
+
+    res.json({
+      success: true,
+      toll_transaction_id: toll.id,
+      unlinked_from_settlement: settlementId
+    });
+  } catch (error) {
+    dtLogger.error('toll_unlink_from_settlement_failed', error);
+    res.status(500).json({ error: 'Failed to unlink toll from settlement' });
   }
 });
 
