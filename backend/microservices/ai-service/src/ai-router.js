@@ -6,6 +6,7 @@ const { handleInventoryRecommendations } = require('./handlers/inventory-recomme
 const { handlePartsAnalysis } = require('./handlers/parts-analysis-handler');
 const { handleCustomersAnalysis } = require('./handlers/customers-analysis-handler');
 const { handleFuelPreprocess } = require('./handlers/fuel-preprocess-handler');
+const { handleTollCsvNormalize } = require('./handlers/toll-csv-normalize-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -25,6 +26,9 @@ function buildAiRouter(deps) {
   );
   router.post('/fuel/preprocess', (req, res) =>
     handleFuelPreprocess(req, res, deps)
+  );
+  router.post('/tolls/csv-normalize', (req, res) =>
+    handleTollCsvNormalize(req, res, deps)
   );
 
   return router;
