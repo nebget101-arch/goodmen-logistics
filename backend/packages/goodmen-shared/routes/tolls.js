@@ -453,6 +453,78 @@ router.post('/transactions', async (req, res) => {
   }
 });
 
+// POST /transactions/batch – create multiple toll transactions at once (invoice upload flow)
+router.post('/transactions/batch', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const { transactions } = req.body || {};
+    if (!Array.isArray(transactions) || !transactions.length) {
+      return res.status(400).json({ error: 'transactions array is required' });
+    }
+
+    const userId = req.user?.id || null;
+    const created = [];
+    const errors = [];
+
+    for (let i = 0; i < transactions.length; i++) {
+      const txn = transactions[i];
+      if (!txn.transaction_date || !txn.provider_name || txn.amount === undefined) {
+        errors.push({ index: i, error: 'Missing required fields (transaction_date, provider_name, amount)' });
+        continue;
+      }
+
+      const dedupeHash = buildDedupeHash(tid, txn.provider_name, txn.external_transaction_id, txn.transaction_date, txn.amount);
+
+      // Skip duplicates
+      const existing = await knex('toll_transactions')
+        .where({ tenant_id: tid, dedupe_hash: dedupeHash })
+        .first('id');
+      if (existing) {
+        errors.push({ index: i, error: 'Duplicate transaction', existingId: existing.id });
+        continue;
+      }
+
+      const [row] = await knex('toll_transactions')
+        .insert({
+          tenant_id: tid,
+          operating_entity_id: operatingEntityId(req),
+          provider_name: txn.provider_name,
+          external_transaction_id: txn.external_transaction_id || null,
+          transaction_date: txn.transaction_date,
+          truck_id: txn.truck_id || null,
+          driver_id: txn.driver_id || null,
+          load_id: txn.load_id || null,
+          unit_number_raw: txn.unit_number_raw || null,
+          driver_name_raw: txn.driver_name_raw || null,
+          device_number_masked: txn.device_number_masked || null,
+          plate_number_raw: txn.plate_number_raw || null,
+          plaza_name: txn.plaza_name || null,
+          entry_location: txn.entry_location || txn.entry_point || null,
+          exit_location: txn.exit_location || txn.exit_point || null,
+          city: txn.city || null,
+          state: txn.state ? txn.state.toUpperCase().slice(0, 2) : null,
+          amount: parseFloat(txn.amount) || 0,
+          currency: 'USD',
+          matched_status: txn.matched_status || (txn.truck_id ? 'matched' : 'unmatched'),
+          validation_status: 'valid',
+          settlement_link_status: 'none',
+          is_manual: txn.source === 'invoice_upload' ? false : true,
+          dedupe_hash: dedupeHash,
+          created_by: userId,
+        })
+        .returning('*');
+      created.push(row);
+    }
+
+    res.status(201).json({ success: true, created: created.length, errors });
+  } catch (error) {
+    dtLogger.error('tolls_transaction_batch_create_failed', error);
+    res.status(500).json({ error: 'Failed to create toll transactions' });
+  }
+});
+
 router.get('/exceptions', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -1053,6 +1125,29 @@ router.post('/import/invoice-image', invoiceUpload.array('images', 10), async (r
           driver_id: matchedDriverId,
           matched_status: matchedTruckId ? 'matched' : 'unmatched',
           is_duplicate: isDuplicate,
+          match_failed: matchFailed,
+        });
+      }
+
+      // Add late fees as a separate line item if present
+      const meta = extraction.invoiceMeta || {};
+      if (meta.hasLateFees && meta.lateFees > 0) {
+        enriched.push({
+          transaction_date: meta.invoiceDate || meta.dueDate || null,
+          provider_name: meta.providerName || 'Unknown',
+          plaza_name: null,
+          entry_location: null,
+          exit_location: null,
+          city: null,
+          state: null,
+          amount: meta.lateFees,
+          external_transaction_id: null,
+          notes: 'Late fee / penalty',
+          plate_number_raw: plate || null,
+          truck_id: matchedTruckId,
+          driver_id: matchedDriverId,
+          matched_status: matchedTruckId ? 'matched' : 'unmatched',
+          is_duplicate: false,
           match_failed: matchFailed,
         });
       }
