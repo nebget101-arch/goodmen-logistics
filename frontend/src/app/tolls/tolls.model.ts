@@ -68,6 +68,7 @@ export interface TollTransaction {
   validation_status: string;
   settlement_link_status: string;
   is_manual: boolean;
+  source?: 'manual' | 'import' | 'invoice_upload';
   notes?: string;
   created_at: string;
   updated_at: string;

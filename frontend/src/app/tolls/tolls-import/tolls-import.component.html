@@ -72,11 +72,11 @@
   <ng-container *ngIf="!aiLoading && aiResult?.success">
     <!-- Overall confidence banner -->
     <div class="confidence-banner"
-         [class.high]="getConfidenceLevel(aiResult.overallConfidence) === 'high'"
-         [class.medium]="getConfidenceLevel(aiResult.overallConfidence) === 'medium'"
-         [class.low]="getConfidenceLevel(aiResult.overallConfidence) === 'low'">
+         [class.high]="getConfidenceLevel(aiResult!.overallConfidence) === 'high'"
+         [class.medium]="getConfidenceLevel(aiResult!.overallConfidence) === 'medium'"
+         [class.low]="getConfidenceLevel(aiResult!.overallConfidence) === 'low'">
       <span class="material-symbols-outlined">psychology</span>
-      <span>Overall confidence: <strong>{{ getConfidenceLabel(aiResult.overallConfidence) }}</strong></span>
+      <span>Overall confidence: <strong>{{ getConfidenceLabel(aiResult!.overallConfidence) }}</strong></span>
     </div>
 
     <!-- AI mapping table -->
@@ -212,7 +212,7 @@
     </div>
     <div class="confirm-row" *ngIf="selectedAccountId">
       <span>Toll Account</span>
-      <strong>{{ accounts.length ? (accounts | slice:0:accounts.length)?.find?.('') : '' }}</strong>
+      <strong>{{ getAccountName(selectedAccountId) }}</strong>
     </div>
   </div>
 

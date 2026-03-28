@@ -162,6 +162,12 @@ export class TollsImportComponent implements OnInit {
     return `${pct}%`;
   }
 
+  getAccountName(accountId: string | null): string {
+    if (!accountId || !this.accounts.length) return '';
+    const acct = this.accounts.find(a => a.id === accountId);
+    return acct ? acct.display_name || acct.provider_name : '';
+  }
+
   get aiMappedFields(): { key: string; label: string; rawHeader: string | null; confidence: number }[] {
     if (!this.aiResult?.columnMapping) return [];
     return this.normalizedFields
