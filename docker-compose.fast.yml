@@ -158,6 +158,7 @@ services:
     environment:
       - PORT=5006
       - PG_HOST=host.docker.internal
+      - AI_SERVICE_URL=http://ai-service:4100
     volumes:
       - ./backend/microservices/logistics-service:/usr/src/app/backend/microservices/logistics-service
       - ./backend/packages:/usr/src/app/backend/packages

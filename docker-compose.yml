@@ -176,6 +176,7 @@ services:
     environment:
       - PORT=5006
       - PG_HOST=host.docker.internal
+      - AI_SERVICE_URL=http://ai-service:4100
     volumes:
       - ./backend:/usr/src/app/backend
     ports:
