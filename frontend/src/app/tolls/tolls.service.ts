@@ -7,6 +7,7 @@ import {
   TollAiNormalizeResult,
   TollCommitResult,
   TollDevice,
+  TollDeviceAssignment,
   TollException,
   TollImportBatch,
   TollMappingProfile,
@@ -49,6 +50,22 @@ export class TollsService {
 
   updateDevice(id: string, payload: Partial<TollDevice>): Observable<TollDevice> {
     return this.http.patch<TollDevice>(`${this.base}/devices/${id}`, payload);
+  }
+
+  assignVehicle(deviceId: string, payload: { truck_id?: string; plate_number?: string; notes?: string }): Observable<TollDeviceAssignment> {
+    return this.http.post<TollDeviceAssignment>(`${this.base}/devices/${deviceId}/assign-vehicle`, payload);
+  }
+
+  removeVehicle(deviceId: string, notes?: string): Observable<{ removed: boolean }> {
+    return this.http.post<{ removed: boolean }>(`${this.base}/devices/${deviceId}/remove-vehicle`, { notes });
+  }
+
+  assignDriver(deviceId: string, driverId: string): Observable<TollDeviceAssignment> {
+    return this.http.post<TollDeviceAssignment>(`${this.base}/devices/${deviceId}/assign-driver`, { driver_id: driverId });
+  }
+
+  getDeviceAssignments(deviceId: string): Observable<TollDeviceAssignment[]> {
+    return this.http.get<TollDeviceAssignment[]>(`${this.base}/devices/${deviceId}/assignments`);
   }
 
   getExceptions(filters: { limit?: number; offset?: number; status?: string } = {}): Observable<{ rows: TollException[]; total: number }> {
