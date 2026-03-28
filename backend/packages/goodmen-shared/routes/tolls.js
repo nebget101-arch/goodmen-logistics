@@ -1,14 +1,41 @@
 'use strict';
 
 /**
- * Tolls API – Phase 1 scaffold.
+ * Tolls API – Phase 1 scaffold + CSV import pipeline.
  * Mounted at /api/tolls in logistics service.
+ *
+ * Import endpoints (FN-431):
+ *   POST   /api/tolls/import/upload           – upload & parse CSV
+ *   POST   /api/tolls/import/commit           – commit mapped rows
+ *   GET    /api/tolls/import/mapping-profiles  – list mapping profiles
+ *   POST   /api/tolls/import/mapping-profiles  – create mapping profile
  */
 
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
+const multer = require('multer');
+const XLSX = require('xlsx');
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
+
+// ─── File upload (memory storage – max 10 MB) ─────────────────────────────────
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'text/csv', 'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/octet-stream', 'text/plain'
+    ];
+    const ext = (file.originalname || '').split('.').pop().toLowerCase();
+    if (allowed.includes(file.mimetype) || ['csv', 'xlsx', 'xls', 'txt'].includes(ext)) {
+      return cb(null, true);
+    }
+    cb(new Error('Only CSV and XLSX files are accepted'));
+  }
+});
 
 function tenantId(req) {
   return req.context?.tenantId || req.user?.tenantId || null;
@@ -361,6 +388,302 @@ router.get('/exceptions', async (req, res) => {
   } catch (error) {
     dtLogger.error('tolls_exceptions_list_failed', error);
     res.status(500).json({ error: 'Failed to fetch toll exceptions' });
+  }
+});
+
+// ─── CSV / XLSX parsing (same pattern as fuel-parser.js) ──────────────────────
+function parseFileBuffer(buffer, originalFileName) {
+  const ext = (originalFileName || '').toLowerCase().split('.').pop();
+  let workbook;
+  if (ext === 'xlsx' || ext === 'xls') {
+    workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  } else {
+    workbook = XLSX.read(buffer, { type: 'buffer', raw: false, cellDates: true });
+  }
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) return { headers: [], rows: [] };
+
+  const sheet = workbook.Sheets[sheetName];
+  const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false });
+  if (!rawRows || rawRows.length < 2) return { headers: [], rows: [] };
+
+  const headerRow = rawRows[0].map((h) => String(h || '').trim());
+  const dataRows = rawRows.slice(1);
+
+  const rows = dataRows
+    .map((row) => {
+      const obj = {};
+      headerRow.forEach((header, idx) => {
+        let val = String(row[idx] ?? '').trim();
+        if (/^[=+\-@\t\r]/.test(val)) val = "'" + val;
+        obj[header] = val;
+      });
+      return obj;
+    })
+    .filter((row) => Object.values(row).some((v) => v !== ''));
+
+  return { headers: headerRow, rows };
+}
+
+// ─── Dedupe hash helper ───────────────────────────────────────────────────────
+function computeDedupeHash(tenantId, provider, transactionDate, amount, plazaName) {
+  const raw = [tenantId, provider, transactionDate, amount, plazaName]
+    .map((v) => String(v || '').trim().toLowerCase())
+    .join('|');
+  return crypto.createHash('md5').update(raw).digest('hex');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Import endpoints (FN-431)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// POST /import/upload – accept CSV, parse headers + sample rows
+router.post('/import/upload', upload.single('file'), async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const accountId = req.body.accountId || null;
+
+    // Parse the uploaded file
+    const { headers, rows } = parseFileBuffer(req.file.buffer, req.file.originalname);
+    if (!headers.length) {
+      return res.status(400).json({ error: 'Could not parse file – no headers found' });
+    }
+
+    // Create toll_import_batches record
+    const [batch] = await knex('toll_import_batches')
+      .insert({
+        tenant_id: tid,
+        operating_entity_id: operatingEntityId(req),
+        toll_account_id: accountId,
+        source_file_name: req.file.originalname,
+        import_status: 'uploaded',
+        total_rows: rows.length,
+        started_at: new Date(),
+        created_by: req.user?.id || null
+      })
+      .returning('*');
+
+    const sampleRows = rows.slice(0, 5);
+
+    res.status(201).json({
+      batchId: batch.id,
+      headers,
+      sampleRows,
+      totalRows: rows.length
+    });
+  } catch (error) {
+    dtLogger.error('tolls_import_upload_failed', error);
+    res.status(500).json({ error: 'Failed to upload and parse toll file' });
+  }
+});
+
+// POST /import/commit – commit mapped rows into toll_transactions
+router.post('/import/commit', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const { batchId, rows } = req.body || {};
+    if (!batchId || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'batchId and a non-empty rows array are required' });
+    }
+
+    // Verify batch belongs to tenant
+    const batch = await knex('toll_import_batches')
+      .where({ id: batchId, tenant_id: tid })
+      .first();
+    if (!batch) {
+      return res.status(404).json({ error: 'Import batch not found' });
+    }
+
+    let imported = 0;
+    let duplicates = 0;
+    let errors = 0;
+    let exceptions = 0;
+
+    for (const row of rows) {
+      try {
+        // Generate dedupe hash
+        const dedupeHash = computeDedupeHash(
+          tid,
+          row.provider_name || row.provider || '',
+          row.transaction_date || '',
+          row.amount || '',
+          row.plaza_name || ''
+        );
+
+        // Check for duplicates
+        const existing = await knex('toll_transactions')
+          .where({ tenant_id: tid, dedupe_hash: dedupeHash })
+          .first('id');
+        if (existing) {
+          duplicates++;
+          continue;
+        }
+
+        // Auto-match: lookup device_number or plate_number in toll_devices
+        let truckId = row.truck_id || null;
+        let driverId = row.driver_id || null;
+        let matchFailed = false;
+
+        if (!truckId || !driverId) {
+          const deviceLookup = row.device_number || row.transponder_number || null;
+          const plateLookup = row.plate_number || row.license_plate || null;
+
+          let device = null;
+          if (deviceLookup) {
+            device = await knex('toll_devices')
+              .where({ tenant_id: tid, device_number_masked: deviceLookup, status: 'active' })
+              .first();
+          }
+          if (!device && plateLookup) {
+            device = await knex('toll_devices')
+              .where({ tenant_id: tid, plate_number: plateLookup, status: 'active' })
+              .first();
+          }
+
+          if (device) {
+            truckId = truckId || device.truck_id || null;
+            driverId = driverId || device.driver_id || null;
+          } else if (deviceLookup || plateLookup) {
+            matchFailed = true;
+          }
+        }
+
+        // Insert toll_transactions
+        const [txn] = await knex('toll_transactions')
+          .insert({
+            tenant_id: tid,
+            operating_entity_id: operatingEntityId(req) || null,
+            source_batch_id: batchId,
+            toll_account_id: batch.toll_account_id || null,
+            provider_name: row.provider_name || row.provider || null,
+            transaction_date: row.transaction_date || null,
+            posted_date: row.posted_date || null,
+            plaza_name: row.plaza_name || null,
+            plaza_state: row.plaza_state || row.state || null,
+            entry_plaza: row.entry_plaza || null,
+            exit_plaza: row.exit_plaza || null,
+            amount: parseFloat(row.amount) || 0,
+            discount_amount: parseFloat(row.discount_amount) || 0,
+            truck_id: truckId,
+            driver_id: driverId,
+            unit_number_raw: row.unit_number || row.device_number || null,
+            driver_name_raw: row.driver_name || null,
+            dedupe_hash: dedupeHash,
+            validation_status: matchFailed ? 'exception' : 'valid',
+            created_by: req.user?.id || null
+          })
+          .returning('*');
+
+        // Create audit row
+        await knex('toll_import_batch_rows').insert({
+          batch_id: batchId,
+          tenant_id: tid,
+          row_number: imported + duplicates + errors + 1,
+          raw_data: JSON.stringify(row),
+          toll_transaction_id: txn.id,
+          status: matchFailed ? 'exception' : 'success'
+        });
+
+        // If matching failed, create exception
+        if (matchFailed) {
+          await knex('toll_transaction_exceptions').insert({
+            tenant_id: tid,
+            toll_transaction_id: txn.id,
+            exception_type: 'match_failed',
+            resolution_status: 'open',
+            details: JSON.stringify({
+              device_number: row.device_number || null,
+              plate_number: row.plate_number || null,
+              reason: 'Could not match device or plate to a toll device record'
+            })
+          });
+          exceptions++;
+        }
+
+        imported++;
+      } catch (rowError) {
+        dtLogger.error('tolls_import_row_error', { batchId, row, error: rowError.message });
+        errors++;
+
+        // Still create audit row for failed rows
+        await knex('toll_import_batch_rows').insert({
+          batch_id: batchId,
+          tenant_id: tid,
+          row_number: imported + duplicates + errors,
+          raw_data: JSON.stringify(row),
+          status: 'error',
+          error_message: rowError.message
+        }).catch(() => { /* best effort audit */ });
+      }
+    }
+
+    // Update batch counters and status
+    await knex('toll_import_batches')
+      .where({ id: batchId })
+      .update({
+        import_status: 'completed',
+        total_rows: rows.length,
+        success_rows: imported,
+        failed_rows: errors,
+        duplicate_rows: duplicates,
+        completed_at: new Date(),
+        updated_at: new Date()
+      });
+
+    res.json({ imported, duplicates, errors, exceptions });
+  } catch (error) {
+    dtLogger.error('tolls_import_commit_failed', error);
+    res.status(500).json({ error: 'Failed to commit toll import' });
+  }
+});
+
+// GET /import/mapping-profiles – list profiles for tenant
+router.get('/import/mapping-profiles', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+    const rows = await knex('toll_import_mapping_profiles')
+      .where({ tenant_id: tid })
+      .orderBy('created_at', 'desc');
+    res.json(rows);
+  } catch (error) {
+    dtLogger.error('tolls_mapping_profiles_list_failed', error);
+    res.status(500).json({ error: 'Failed to fetch toll mapping profiles' });
+  }
+});
+
+// POST /import/mapping-profiles – create a new profile
+router.post('/import/mapping-profiles', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const { name, columnMappings } = req.body || {};
+    if (!name || !columnMappings) {
+      return res.status(400).json({ error: 'name and columnMappings are required' });
+    }
+
+    const [row] = await knex('toll_import_mapping_profiles')
+      .insert({
+        tenant_id: tid,
+        profile_name: name,
+        column_mappings: JSON.stringify(columnMappings),
+        created_by: req.user?.id || null
+      })
+      .returning('*');
+
+    res.status(201).json(row);
+  } catch (error) {
+    dtLogger.error('tolls_mapping_profile_create_failed', error);
+    res.status(500).json({ error: 'Failed to create toll mapping profile' });
   }
 });
 
