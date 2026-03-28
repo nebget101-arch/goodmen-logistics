@@ -27,6 +27,10 @@
  *   POST   /api/fuel/exceptions/bulk-resolve
  *   POST   /api/fuel/reprocess-unmatched
  *   GET    /api/fuel/overview
+ *   GET    /api/fuel/cards/:cardId/assignments
+ *   POST   /api/fuel/cards/:cardId/assign-driver
+ *   POST   /api/fuel/cards/:cardId/revoke-driver
+ *   GET    /api/fuel/driver-assignments
  */
 
 const express = require('express');
@@ -160,6 +164,151 @@ router.patch('/cards/:id', async (req, res) => {
   } catch (err) {
     dtLogger.error('fuel_card_patch_error', err);
     sendError(res, 500, 'Failed to update fuel card account');
+  }
+});
+
+// ─── Fuel Card ↔ Driver Assignments ──────────────────────────────────────────
+
+/**
+ * GET /cards/:cardId/assignments
+ * List all assignments (active + revoked) for a fuel card.
+ */
+router.get('/cards/:cardId/assignments', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { cardId } = req.params;
+
+    const rows = await knex('fuel_card_driver_assignments as a')
+      .leftJoin('drivers as d', 'd.id', 'a.driver_id')
+      .where({ 'a.tenant_id': tid, 'a.fuel_card_account_id': cardId })
+      .select(
+        'a.*',
+        knex.raw("COALESCE(d.first_name || ' ' || d.last_name, NULL) AS driver_name")
+      )
+      .orderBy('a.assigned_date', 'desc');
+
+    res.json(rows);
+  } catch (err) {
+    dtLogger.error('fuel_card_assignments_list_error', err);
+    sendError(res, 500, 'Failed to fetch card assignments');
+  }
+});
+
+/**
+ * POST /cards/:cardId/assign-driver
+ * Assign a driver to a fuel card. Auto-revokes any existing active assignment.
+ */
+router.post('/cards/:cardId/assign-driver', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { cardId } = req.params;
+    const { driverId, cardNumberLast4, notes } = req.body;
+
+    if (!driverId) return sendError(res, 400, 'driverId is required');
+
+    // Verify the card exists and belongs to this tenant
+    const card = await knex('fuel_card_accounts')
+      .where({ id: cardId, tenant_id: tid })
+      .first('id');
+    if (!card) return sendError(res, 404, 'Fuel card account not found');
+
+    // Verify the driver exists and belongs to this tenant
+    const driver = await knex('drivers')
+      .where({ id: driverId, tenant_id: tid })
+      .first('id');
+    if (!driver) return sendError(res, 404, 'Driver not found');
+
+    const uid = userId(req);
+
+    // Auto-revoke any existing active assignment for this card
+    await knex('fuel_card_driver_assignments')
+      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' })
+      .update({
+        status: 'revoked',
+        revoked_date: new Date(),
+        revoked_by: uid,
+        updated_at: new Date()
+      });
+
+    // Create new active assignment
+    const [row] = await knex('fuel_card_driver_assignments').insert({
+      tenant_id: tid,
+      fuel_card_account_id: cardId,
+      driver_id: driverId,
+      card_number_last4: cardNumberLast4 || null,
+      status: 'active',
+      assigned_date: new Date(),
+      assigned_by: uid,
+      notes: notes || null
+    }).returning('*');
+
+    res.status(201).json(row);
+  } catch (err) {
+    dtLogger.error('fuel_card_assign_driver_error', err);
+    sendError(res, 500, 'Failed to assign driver to card');
+  }
+});
+
+/**
+ * POST /cards/:cardId/revoke-driver
+ * Revoke the active driver assignment for a fuel card.
+ */
+router.post('/cards/:cardId/revoke-driver', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { cardId } = req.params;
+    const { notes } = req.body;
+
+    const active = await knex('fuel_card_driver_assignments')
+      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' })
+      .first();
+
+    if (!active) return sendError(res, 404, 'No active assignment found for this card');
+
+    const [row] = await knex('fuel_card_driver_assignments')
+      .where({ id: active.id })
+      .update({
+        status: 'revoked',
+        revoked_date: new Date(),
+        revoked_by: userId(req),
+        notes: notes || active.notes,
+        updated_at: new Date()
+      })
+      .returning('*');
+
+    res.json(row);
+  } catch (err) {
+    dtLogger.error('fuel_card_revoke_driver_error', err);
+    sendError(res, 500, 'Failed to revoke card assignment');
+  }
+});
+
+/**
+ * GET /driver-assignments?driver_id=<uuid>
+ * List all card assignments for a specific driver.
+ */
+router.get('/driver-assignments', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { driver_id } = req.query;
+
+    if (!driver_id) return sendError(res, 400, 'driver_id query param is required');
+
+    const rows = await knex('fuel_card_driver_assignments as a')
+      .leftJoin('fuel_card_accounts as c', 'c.id', 'a.fuel_card_account_id')
+      .where({ 'a.tenant_id': tid, 'a.driver_id': driver_id })
+      .select(
+        'a.*',
+        'c.display_name as card_display_name',
+        'c.provider_name as card_provider_name',
+        'c.account_number_masked as card_account_number_masked'
+      )
+      .orderBy('a.assigned_date', 'desc');
+
+    res.json(rows);
+  } catch (err) {
+    dtLogger.error('fuel_driver_assignments_list_error', err);
+    sendError(res, 500, 'Failed to fetch driver assignments');
   }
 });
 

@@ -350,8 +350,25 @@ async function commitBatch({ batchId, tenantId, operatingEntityId = null, import
 
     // ─── Entity matching ────────────────────────────────────────────────────────
     const truckId = await findTruckByUnit(tenantId, normalized.unit_number_raw);
-    const driverId = await findDriverByName(tenantId, normalized.driver_name_raw);
+    let driverId = await findDriverByName(tenantId, normalized.driver_name_raw);
     const cardId = await findFuelCard(tenantId, normalized.card_number_masked, batch.provider_name);
+
+    // ─── Card-driver assignment lookup (FN-461) ──────────────────────────────
+    let driverCardMismatch = false;
+    if (cardId) {
+      const activeAssignment = await knex('fuel_card_driver_assignments')
+        .where({ fuel_card_account_id: cardId, tenant_id: tenantId, status: 'active' })
+        .first('driver_id');
+
+      if (activeAssignment) {
+        // If CSV driver name matched a different driver, flag mismatch
+        if (driverId && driverId !== activeAssignment.driver_id) {
+          driverCardMismatch = true;
+        }
+        // Card-driver assignment overrides CSV driver name match
+        driverId = activeAssignment.driver_id;
+      }
+    }
 
     const matchedParts = [];
     if (truckId) matchedParts.push('truck');
@@ -424,6 +441,18 @@ async function commitBatch({ batchId, tenantId, operatingEntityId = null, import
       }
     }
 
+    // ─── Driver-card mismatch exception (FN-461) ────────────────────────────
+    if (driverCardMismatch) {
+      await knex('fuel_transaction_exceptions').insert({
+        fuel_transaction_id: txn.id,
+        tenant_id: tenantId,
+        exception_type: 'driver_card_mismatch',
+        exception_message: buildExceptionMessage('driver_card_mismatch', normalized),
+        resolution_status: 'open'
+      });
+      exceptions++;
+    }
+
     // ─── Missing card number exception ────────────────────────────────────────
     if (!normalized.card_number_masked) {
       await knex('fuel_transaction_exceptions').insert({
@@ -459,6 +488,7 @@ function buildExceptionMessage(type, normalized) {
   if (type === 'unmatched_driver') return `Could not match driver "${normalized.driver_name_raw}" to any driver record`;
   if (type === 'unmatched_card') return `No fuel card account matched for this transaction`;
   if (type === 'missing_card_number') return `Transaction has no card number – card-based matching unavailable`;
+  if (type === 'driver_card_mismatch') return `CSV driver "${normalized.driver_name_raw}" differs from the driver assigned to this fuel card – using card assignment`;
   if (type === 'money_code_skip') return `Non-fuel transaction (money code / cash advance) — skipped from import`;
   if (type === 'low_confidence_mapping') return `AI column mapping confidence below threshold — review for accuracy`;
   return `Unresolved exception: ${type}`;
