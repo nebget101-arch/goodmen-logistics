@@ -42,6 +42,32 @@ export interface TollImportBatch {
   completed_at?: string;
 }
 
+export interface TollTransaction {
+  id: string;
+  tenant_id: string;
+  toll_account_id?: string;
+  toll_device_id?: string;
+  provider_name: string;
+  external_transaction_id?: string;
+  transaction_date: string;
+  plaza_name?: string;
+  entry_location?: string;
+  exit_location?: string;
+  city?: string;
+  state?: string;
+  amount: number;
+  truck_id?: string;
+  truck_unit_number?: string;
+  driver_id?: string;
+  driver_name?: string;
+  load_id?: string;
+  load_number?: string;
+  matched_status: 'matched' | 'unmatched' | 'partial' | 'manual';
+  is_manual: boolean;
+  notes?: string;
+  created_at: string;
+}
+
 export interface TollOverview {
   success: boolean;
   cards: {

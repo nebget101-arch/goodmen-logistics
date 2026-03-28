@@ -1,4 +1,73 @@
-<section class="placeholder">
-  <h3>Toll Transactions</h3>
-  <p>Phase 1 skeleton ready. Grid, filters, assignment, and posting workflow will be implemented in next phases.</p>
-</section>
+<!-- Filters -->
+<div class="filters-row">
+  <label class="filter-field">
+    From
+    <input type="date" [(ngModel)]="filterDateFrom" (change)="applyFilters()" />
+  </label>
+  <label class="filter-field">
+    To
+    <input type="date" [(ngModel)]="filterDateTo" (change)="applyFilters()" />
+  </label>
+  <label class="filter-field">
+    Status
+    <select [(ngModel)]="filterStatus" (change)="applyFilters()">
+      <option *ngFor="let opt of matchedStatusOptions" [value]="opt.value">{{ opt.label }}</option>
+    </select>
+  </label>
+  <button type="button" class="btn btn-secondary btn-sm" (click)="clearFilters()">Clear</button>
+</div>
+
+<div *ngIf="loading" class="loading-msg">Loading transactions...</div>
+<div *ngIf="error" class="error">{{ error }}</div>
+
+<div class="table-wrap" *ngIf="!loading && !error">
+  <table class="txn-table">
+    <thead>
+      <tr>
+        <th class="sortable" (click)="toggleSort('transaction_date')">
+          Date
+          <span *ngIf="sortIcon('transaction_date')" class="material-symbols-outlined sort-icon">{{ sortIcon('transaction_date') }}</span>
+        </th>
+        <th>Provider</th>
+        <th>Plaza / Location</th>
+        <th>Truck</th>
+        <th>Driver</th>
+        <th>Load #</th>
+        <th class="sortable" (click)="toggleSort('amount')">
+          Amount
+          <span *ngIf="sortIcon('amount')" class="material-symbols-outlined sort-icon">{{ sortIcon('amount') }}</span>
+        </th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let txn of rows">
+        <td>{{ formatDate(txn.transaction_date) }}</td>
+        <td>{{ txn.provider_name || '--' }}</td>
+        <td>{{ txn.plaza_name || txn.entry_location || '--' }}</td>
+        <td>{{ txn.truck_unit_number || '--' }}</td>
+        <td>{{ txn.driver_name || '--' }}</td>
+        <td>{{ txn.load_number || '--' }}</td>
+        <td class="amount-cell">{{ formatCurrency(txn.amount) }}</td>
+        <td>
+          <span class="status-badge" [ngClass]="'status-' + txn.matched_status">{{ txn.matched_status }}</span>
+        </td>
+      </tr>
+      <tr *ngIf="rows.length === 0">
+        <td colspan="8" class="empty">No transactions found for the selected filters.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination" *ngIf="!loading && total > 0">
+  <span class="page-info">{{ (page - 1) * pageSize + 1 }}–{{ page * pageSize < total ? page * pageSize : total }} of {{ total }}</span>
+  <button type="button" class="btn-icon" [disabled]="page <= 1" (click)="prevPage()">
+    <span class="material-symbols-outlined">chevron_left</span>
+  </button>
+  <span class="page-num">{{ page }} / {{ maxPage }}</span>
+  <button type="button" class="btn-icon" [disabled]="page >= maxPage" (click)="nextPage()">
+    <span class="material-symbols-outlined">chevron_right</span>
+  </button>
+</div>

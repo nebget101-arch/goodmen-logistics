@@ -1,5 +1,6 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 
 import { TollsRoutingModule } from './tolls-routing.module';
 import { TollsShellComponent } from './tolls-shell/tolls-shell.component';
@@ -24,6 +25,7 @@ import { TollsExceptionsComponent } from './tolls-exceptions/tolls-exceptions.co
   ],
   imports: [
     CommonModule,
+    FormsModule,
     TollsRoutingModule,
   ]
 })
