@@ -183,20 +183,26 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   // Header row filters (per-column filters under table headers)
   headerFilters: {
     date: string;
+    driver: string;
     broker: string;
     po: string;
     pickup: string;
     delivery: string;
     rate: string;
+    status: string;
+    billingStatus: string;
     notes: string;
     attachmentType: string;
   } = {
     date: '',
+    driver: '',
     broker: '',
     po: '',
     pickup: '',
     delivery: '',
     rate: '',
+    status: '',
+    billingStatus: '',
     notes: '',
     attachmentType: ''
   };
@@ -264,11 +270,14 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   private headerFilterLabels: { [K in keyof typeof this.headerFilters]: string } = {
     date: 'Date',
+    driver: 'Driver',
     broker: 'Broker',
     po: 'PO #',
     pickup: 'Pickup',
     delivery: 'Delivery',
     rate: 'Rate',
+    status: 'Status',
+    billingStatus: 'Billing',
     notes: 'Notes',
     attachmentType: 'Attachment'
   };
@@ -2395,6 +2404,21 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         if (!rateStr.includes(hf.rate)) return false;
       }
 
+      if (hf.driver) {
+        const driverName = (load.driver_name || '').toString().toLowerCase();
+        if (!driverName.includes(hf.driver.toLowerCase())) return false;
+      }
+
+      if (hf.status) {
+        const statusText = (load.status || '').toString().toLowerCase().replace(/_/g, ' ');
+        if (!statusText.includes(hf.status.toLowerCase())) return false;
+      }
+
+      if (hf.billingStatus) {
+        const billingText = (load.billing_status || '').toString().toLowerCase().replace(/_/g, ' ');
+        if (!billingText.includes(hf.billingStatus.toLowerCase())) return false;
+      }
+
       if (hf.notes) {
         const notes = (load.notes || '').toString().toLowerCase();
         if (!notes.includes(hf.notes.toLowerCase())) return false;
@@ -2402,7 +2426,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
       if (hf.attachmentType) {
         const types = Array.isArray(load.attachment_types) ? load.attachment_types : [];
-        if (!types.includes(hf.attachmentType as any)) return false;
+        const typesText = types.join(' ').toLowerCase().replace(/_/g, ' ');
+        if (!typesText.includes(hf.attachmentType.toLowerCase())) return false;
       }
 
       return true;
@@ -2502,11 +2527,14 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   clearAllFilters(): void {
     this.headerFilters = {
       date: '',
+      driver: '',
       broker: '',
       po: '',
       pickup: '',
       delivery: '',
       rate: '',
+      status: '',
+      billingStatus: '',
       notes: '',
       attachmentType: ''
     };
