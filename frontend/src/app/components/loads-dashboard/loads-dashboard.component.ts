@@ -2244,6 +2244,22 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return base + (att.file_url.startsWith('/') ? att.file_url : '/' + att.file_url);
   }
 
+  /** Fetch load detail and open the first attachment matching the given type in a new tab. */
+  downloadAttachmentByType(load: LoadListItem, type: string): void {
+    this.loadsService.getLoad(load.id).subscribe({
+      next: (res) => {
+        const detail = res?.data;
+        if (!detail) return;
+        const att = (detail.attachments || []).find(
+          (a) => (a.type || '').toString().toUpperCase() === (type || '').toString().toUpperCase()
+        );
+        if (!att) return;
+        const url = this.getAttachmentUrl(att);
+        if (url) window.open(url, '_blank');
+      }
+    });
+  }
+
   /** First rate confirmation PDF URL for draft review (side-by-side view). */
   get draftRateConPdfUrl(): string {
     const atts = this.editingLoadDetail?.attachments || [];

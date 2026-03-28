@@ -478,8 +478,17 @@
           <td [title]="load.billing_status || ''"><app-status-pill [status]="load.billing_status" [compact]="true"></app-status-pill></td>
           <td class="notes-cell" [title]="load.notes || '--'">{{ load.notes || '--' }}</td>
           <td>
-            <div class="attachment-chips attachment-chips--clickable" (click)="openEditForAttachments(load)" role="button" tabindex="0" (keydown.enter)="openEditForAttachments(load)" (keydown.space)="openEditForAttachments(load); $event.preventDefault()" title="Open attachments">
-              <app-attachment-chip *ngFor="let type of (load.attachment_types || [])" [type]="type"></app-attachment-chip>
+            <div class="attachment-chips">
+              <app-attachment-chip
+                *ngFor="let type of (load.attachment_types || [])"
+                [type]="type"
+                class="attachment-chip--download"
+                role="button"
+                tabindex="0"
+                [title]="'Download ' + type"
+                (click)="downloadAttachmentByType(load, type); $event.stopPropagation()"
+                (keydown.enter)="downloadAttachmentByType(load, type); $event.stopPropagation()"
+              ></app-attachment-chip>
             </div>
           </td>
           <td>
