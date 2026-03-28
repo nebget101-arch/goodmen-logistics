@@ -400,9 +400,16 @@ router.get('/import/batches/:id', async (req, res) => {
     ).first();
     if (!batch) return sendError(res, 404, 'Batch not found');
 
-    const batchRows = await knex('fuel_import_batch_rows')
+    let batchRowsQuery = knex('fuel_import_batch_rows')
       .where({ batch_id: batch.id })
       .orderBy('row_number', 'asc');
+
+    // Optional filter by resolution_status (e.g., ?resolution_status=skipped)
+    if (req.query.resolution_status) {
+      batchRowsQuery = batchRowsQuery.where('resolution_status', req.query.resolution_status);
+    }
+
+    const batchRows = await batchRowsQuery;
 
     res.json({ batch, rows: batchRows });
   } catch (err) {
@@ -577,7 +584,7 @@ router.delete('/transactions/:id', async (req, res) => {
 router.get('/exceptions', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const { limit = 50, offset = 0, status } = req.query;
+    const { limit = 50, offset = 0, status, exception_type } = req.query;
 
     let q = knex('fuel_transaction_exceptions as e')
       .join('fuel_transactions as ft', 'ft.id', 'e.fuel_transaction_id')
@@ -592,6 +599,7 @@ router.get('/exceptions', async (req, res) => {
     applyOperatingEntityFilter(q, req, 'ft.operating_entity_id');
 
     if (status) q = q.where('e.resolution_status', status);
+    if (exception_type) q = q.where('e.exception_type', exception_type);
 
     const rows = await q.limit(Number(limit)).offset(Number(offset));
     const [{ total }] = await knex('fuel_transaction_exceptions as e')
@@ -601,6 +609,7 @@ router.get('/exceptions', async (req, res) => {
         applyOperatingEntityFilter(qb, req, 'ft.operating_entity_id');
       })
       .modify((qb) => { if (status) qb.where('resolution_status', status); })
+      .modify((qb) => { if (exception_type) qb.where('exception_type', exception_type); })
       .count('* as total');
 
     res.json({ rows, total: Number(total) });
