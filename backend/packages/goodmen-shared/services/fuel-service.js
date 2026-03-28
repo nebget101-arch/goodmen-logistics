@@ -8,7 +8,7 @@
 
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
-const { parseFileBuffer, buildAutoMapping, applyMapping, validateRow } = require('./fuel-parser');
+const { parseFileBuffer, buildAutoMapping, applyMapping, validateRow, normalizeRow } = require('./fuel-parser');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -209,48 +209,62 @@ async function stageBatch({
 
   const rowInserts = [];
 
+  let expandedRowNum = 0;
+
   for (let i = 0; i < rawRows.length; i++) {
     const rawRow = rawRows[i];
-    const normalized = applyMapping(rawRow, columnMap);
-    const { errors, warnings } = validateRow(normalized, seenExtIds);
+    const mapped = applyMapping(rawRow, columnMap);
 
-    if (normalized.external_transaction_id) {
-      if (seenExtIds.has(normalized.external_transaction_id)) {
-        warnings.push(`Duplicate external ID within this file: "${normalized.external_transaction_id}"`);
+    // Normalize: split multi-product rows into separate batch rows
+    const splitResults = normalizeRow(mapped, rawRow, i + 1);
+
+    for (const { normalized, source_transaction_id } of splitResults) {
+      expandedRowNum++;
+      const { errors, warnings } = validateRow(normalized, seenExtIds);
+
+      // Duplicate detection uses source_transaction_id + product_type for split rows
+      const dupeKey = source_transaction_id && normalized.product_type
+        ? `${source_transaction_id}::${normalized.product_type}`
+        : normalized.external_transaction_id || null;
+
+      if (dupeKey) {
+        if (seenExtIds.has(dupeKey)) {
+          warnings.push(`Duplicate transaction within this file: "${dupeKey}"`);
+        } else {
+          seenExtIds.add(dupeKey);
+        }
+      }
+
+      // Check DB-level duplicates
+      if (errors.length === 0) {
+        const isDupe = await isDuplicateTransaction(tenantId, normalized);
+        if (isDupe) {
+          warnings.push('Possible duplicate – a matching transaction already exists in the database');
+        }
+      }
+
+      let resolutionStatus = 'valid';
+      if (errors.length > 0) {
+        resolutionStatus = 'failed';
+        failedCount++;
+      } else if (warnings.length > 0) {
+        resolutionStatus = 'warning';
+        warningCount++;
       } else {
-        seenExtIds.add(normalized.external_transaction_id);
+        successCount++;
       }
-    }
 
-    // Check DB-level duplicates
-    if (errors.length === 0) {
-      const isDupe = await isDuplicateTransaction(tenantId, normalized);
-      if (isDupe) {
-        warnings.push('Possible duplicate – a matching transaction already exists in the database');
-      }
+      rowInserts.push({
+        batch_id: batchId,
+        row_number: expandedRowNum,
+        raw_payload: JSON.stringify(rawRow),
+        normalized_payload: JSON.stringify({ ...normalized, source_transaction_id }),
+        validation_errors: JSON.stringify(errors),
+        warnings: JSON.stringify(warnings),
+        match_result: null,
+        resolution_status: resolutionStatus
+      });
     }
-
-    let resolutionStatus = 'valid';
-    if (errors.length > 0) {
-      resolutionStatus = 'failed';
-      failedCount++;
-    } else if (warnings.length > 0) {
-      resolutionStatus = 'warning';
-      warningCount++;
-    } else {
-      successCount++;
-    }
-
-    rowInserts.push({
-      batch_id: batchId,
-      row_number: i + 1,
-      raw_payload: JSON.stringify(rawRow),
-      normalized_payload: JSON.stringify(normalized),
-      validation_errors: JSON.stringify(errors),
-      warnings: JSON.stringify(warnings),
-      match_result: null,
-      resolution_status: resolutionStatus
-    });
   }
 
   // Bulk insert batch rows in chunks to avoid parameter limits
@@ -259,17 +273,18 @@ async function stageBatch({
     await knex('fuel_import_batch_rows').insert(rowInserts.slice(i, i + CHUNK));
   }
 
-  // Update batch summary
+  // Update batch summary (total_rows reflects expanded/split row count)
   await knex('fuel_import_batches').where({ id: batchId }).update({
     import_status: 'validated',
+    total_rows: expandedRowNum,
     success_rows: successCount,
     warning_rows: warningCount,
     failed_rows: failedCount
   });
 
-  dtLogger.info('fuel_batch_staged', { batchId, tenantId, total: rawRows.length, success: successCount, warning: warningCount, failed: failedCount });
+  dtLogger.info('fuel_batch_staged', { batchId, tenantId, rawRows: rawRows.length, expandedRows: expandedRowNum, success: successCount, warning: warningCount, failed: failedCount });
 
-  return { batchId, totalRows: rawRows.length, successCount, warningCount, failedCount };
+  return { batchId, totalRows: expandedRowNum, successCount, warningCount, failedCount };
 }
 
 /**
