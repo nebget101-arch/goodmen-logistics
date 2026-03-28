@@ -557,6 +557,98 @@
         </div>
       </div>
       <div class="draft-review__right" [class.draft-review__right--full]="!editingLoadDetail || !isDraftLoad(editingLoadDetail)">
+
+      <!-- Inline Edit Stop panel (draft review only) -->
+      <div class="edit-stop-inline" *ngIf="isDraftEditStopInline">
+        <div class="edit-stop-inline__header">
+          <button type="button" class="edit-stop-inline__back" (click)="closeEditStopModal()">
+            <span class="material-symbols-outlined">arrow_back</span>
+            Back
+          </button>
+          <h3>Edit Stop</h3>
+        </div>
+        <form [formGroup]="editStopForm" (ngSubmit)="saveEditStop()" class="edit-stop-inline__body">
+          <div class="new-stop-form">
+            <div class="new-stop-field">
+              <label>Stop type</label>
+              <div class="radio-group">
+                <label class="radio-option"><input type="radio" formControlName="stopType" value="PICKUP" (change)="onEditStopTypeChange('PICKUP')"> <span>Pickup</span></label>
+                <label class="radio-option"><input type="radio" formControlName="stopType" value="DELIVERY" (change)="onEditStopTypeChange('DELIVERY')"> <span>Delivery</span></label>
+                <label class="radio-option"><input type="radio" formControlName="stopType" value="OTHER" (change)="onEditStopTypeChange('OTHER')"> <span>Other</span></label>
+              </div>
+            </div>
+            <div class="new-stop-field" *ngIf="sortedStops.length">
+              <label>Order (after)</label>
+              <select formControlName="orderAfterIndex">
+                <option [value]="-1">Driver position: {{ driverPositionDisplay }}</option>
+                <option *ngFor="let stop of sortedStops; let i = index" [value]="i">
+                  #{{ i + 1 }} {{ stop.stop_type }}: {{ stop.city || '--' }}, {{ stop.state || '' }}
+                </option>
+              </select>
+            </div>
+            <div class="new-stop-field">
+              <label>Appointment</label>
+              <div class="radio-group">
+                <label class="radio-option"><input type="radio" formControlName="appointmentType" value="FCFS"> <span>FCFS</span></label>
+                <label class="radio-option"><input type="radio" formControlName="appointmentType" value="Appt"> <span>Appt</span></label>
+              </div>
+            </div>
+            <div class="new-stop-row">
+              <div class="new-stop-field">
+                <label>Date *</label>
+                <app-ai-date-picker formControlName="stopDate" [inline]="true" ariaLabel="Stop date"></app-ai-date-picker>
+              </div>
+              <div class="new-stop-field" *ngIf="editStopForm.get('appointmentType')?.value === 'Appt'">
+                <label>Appt time</label>
+                <input type="time" formControlName="apptTime" placeholder="08:30 AM">
+              </div>
+            </div>
+            <div class="new-stop-field">
+              <label>Company</label>
+              <input formControlName="company" placeholder="Search by name or MC number">
+            </div>
+            <div class="new-stop-field">
+              <label>Street</label>
+              <input formControlName="address1" placeholder="Street address">
+            </div>
+            <div class="new-stop-row">
+              <div class="new-stop-field">
+                <label>City *</label>
+                <input formControlName="city" placeholder="City">
+              </div>
+              <div class="new-stop-field">
+                <label>State *</label>
+                <input formControlName="state" placeholder="State">
+              </div>
+              <div class="new-stop-field">
+                <label>Zip</label>
+                <input formControlName="zip" placeholder="Zip" (blur)="lookupZipForEditStop()">
+              </div>
+            </div>
+            <div class="new-stop-field">
+              <label>Phone</label>
+              <input formControlName="phone" type="tel" placeholder="Phone">
+            </div>
+            <div class="new-stop-field">
+              <label>Notes</label>
+              <textarea formControlName="notes" rows="3" placeholder="Notes"></textarea>
+            </div>
+          </div>
+          <div *ngIf="editStopError" class="alert alert-error">{{ editStopError }}</div>
+          <div class="edit-stop-inline__footer">
+            <button type="button" class="link link-danger" (click)="removeEditStop()" [disabled]="savingEditStop">Remove Stop</button>
+            <div class="edit-stop-actions">
+              <button class="btn btn-secondary" type="button" (click)="closeEditStopModal()" [disabled]="savingEditStop">Cancel</button>
+              <button class="btn btn-primary" type="submit" [disabled]="savingEditStop">
+                {{ savingEditStop ? 'Saving...' : 'Save' }}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Normal form view (hidden when inline edit stop is open in draft mode) -->
+      <div class="draft-review__normal" [hidden]="isDraftEditStopInline">
       <!-- Edit header: top row = Load | Trip info | Driver & Broker (3 cols); below = Trip stops full width -->
       <div class="edit-load-header" *ngIf="editingLoadDetail">
         <div class="edit-load-header__row">
@@ -1064,7 +1156,8 @@
           </ng-container>
         </div>
       </form>
-      </div>
+      </div> <!-- /.draft-review__normal -->
+      </div> <!-- /.draft-review__right -->
     </div>
   </div>
 
@@ -1299,8 +1392,8 @@
     </div>
   </div>
 
-  <!-- Edit Stop modal -->
-  <div class="modal-backdrop" *ngIf="showEditStopModal" (click)="closeEditStopModal()">
+  <!-- Edit Stop modal (non-draft loads only; draft loads use inline panel) -->
+  <div class="modal-backdrop" *ngIf="showEditStopModal && !isDraftEditStopInline" (click)="closeEditStopModal()">
     <div class="modal edit-stop-modal" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h3>Edit Stop</h3>
