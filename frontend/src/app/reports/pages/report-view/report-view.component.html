@@ -30,6 +30,11 @@
   <p class="error" *ngIf="error"><span class="material-symbols-outlined">error</span> {{ error }}</p>
   <p class="loading" *ngIf="isLoading">Loading {{ config.title }}...</p>
 
+  <div *ngIf="!isLoading && isAllZeroData" class="reports-zero-warning">
+    <span class="material-symbols-outlined warning-icon">warning</span>
+    No revenue or expense data found for the selected filters. Check your date range and company selection.
+  </div>
+
   <div class="entity-subtotals" *ngIf="!isLoading && operatingEntitySubtotals().length">
     <h3>Operating Entity Subtotals</h3>
     <div class="entity-subtotals-grid">
