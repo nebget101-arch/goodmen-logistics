@@ -78,6 +78,8 @@ export interface FuelTransaction {
   currency: string;
   odometer?: number;
   product_type?: string;
+  category?: 'fuel' | 'maintenance' | 'advance';
+  source_transaction_id?: string;
   notes?: string;
   matched_status: MatchedStatus;
   validation_status: ValidationStatus;
@@ -163,4 +165,5 @@ export const FUEL_NORMALIZED_FIELDS: { key: string; label: string; required: boo
   { key: 'posted_date', label: 'Posted Date', required: false },
   { key: 'provider_name', label: 'Provider Name', required: false },
   { key: 'external_transaction_id', label: 'External Transaction ID', required: false },
+  { key: 'category', label: 'Category', required: false },
 ];
