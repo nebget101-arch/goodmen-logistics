@@ -181,11 +181,20 @@ export interface ExtractedTollTransaction {
   possible_duplicate?: boolean;
 }
 
+/** A single file result from the invoice extraction endpoint */
+export interface InvoiceFileResult {
+  file: string;
+  invoiceMeta?: Record<string, unknown>;
+  confidence?: number;
+  warnings?: string[];
+  error?: string;
+  transactions: ExtractedTollTransaction[];
+}
+
 /** Response from POST /api/tolls/import/invoice-image */
 export interface InvoiceExtractionResponse {
   success: boolean;
-  transactions: ExtractedTollTransaction[];
-  warnings?: string[];
+  results: InvoiceFileResult[];
 }
 
 /** Payload for creating a single toll transaction */

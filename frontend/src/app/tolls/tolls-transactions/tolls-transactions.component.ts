@@ -169,15 +169,22 @@ export class TollsTransactionsComponent implements OnInit {
       this.uploading = false;
       this.cdr.markForCheck();
 
-      if (!result.transactions?.length) {
-        this.uploadError = 'No transactions could be extracted from the uploaded invoice.';
+      // Flatten transactions and warnings from all file results
+      const allTransactions = (result.results || []).flatMap(r => r.transactions || []);
+      const allWarnings = (result.results || []).flatMap(r => r.warnings || []);
+      const errors = (result.results || []).filter(r => r.error).map(r => `${r.file}: ${r.error}`);
+
+      if (!allTransactions.length) {
+        this.uploadError = errors.length
+          ? errors.join('; ')
+          : 'No transactions could be extracted from the uploaded invoice.';
         this.cdr.markForCheck();
         return;
       }
 
       const dialogData: InvoicePreviewDialogData = {
-        transactions: result.transactions,
-        warnings: result.warnings || [],
+        transactions: allTransactions,
+        warnings: allWarnings,
       };
 
       const dialogRef = this.dialog.open(InvoicePreviewDialogComponent, {
