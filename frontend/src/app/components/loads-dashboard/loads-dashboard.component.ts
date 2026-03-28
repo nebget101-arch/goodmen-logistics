@@ -1093,6 +1093,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return (load.status || '').toString().toUpperCase() === 'DRAFT';
   }
 
+  get isDraftEditStopInline(): boolean {
+    return this.showEditStopModal && !!this.editingLoadDetail && this.isDraftLoad(this.editingLoadDetail);
+  }
+
   /** True if load can be deleted (NEW or DRAFT only). */
   canDeleteLoad(load: LoadListItem): boolean {
     const s = (load.status || '').toString().toUpperCase();
