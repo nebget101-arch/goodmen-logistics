@@ -20,6 +20,17 @@
     <p>Analyzing fleet telemetry…</p>
   </div>
 
+  <div *ngIf="!loading && isDegraded" class="degraded-banner">
+    <span class="degraded-banner__icon">&#9888;</span>
+    <div class="degraded-banner__text">
+      <strong>Some dashboard metrics may be incomplete.</strong>
+      Individual pages show the most current data.
+      <span *ngIf="degradedGroups.length" class="degraded-banner__groups">
+        Affected: {{ degradedGroups.join(', ') }}
+      </span>
+    </div>
+  </div>
+
   <section *ngIf="!loading" class="dashboard-grid">
     <!-- Metrics Column -->
     <div class="dashboard-column">

@@ -93,7 +93,7 @@ async function tableExists(tableName) {
 // Protect all dashboard routes: admin, safety
 router.use(auth(['admin', 'safety']));
 
-// GET dashboard statistics
+// GET dashboard statistics — isolated query groups via Promise.allSettled
 router.get('/stats', async (req, res) => {
   const startTime = Date.now();
   try {
@@ -104,176 +104,118 @@ router.get('/stats', async (req, res) => {
     const hasDrivers = await tableExists('drivers');
     const hasLoads = await tableExists('loads');
     const hasHosRecords = await tableExists('hos_records');
+    const params = [tenantId, operatingEntityId];
 
-    const activeDriversExpr = hasDrivers
-      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND status = 'active')`
-      : '0';
-    const totalDriversExpr = hasDrivers
-      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2))`
-      : '0';
+    // Define isolated query groups — each resolves independently
+    const groups = {
+      drivers: hasDrivers
+        ? query(`SELECT
+            COUNT(*) FILTER (WHERE status = 'active') AS "activeDrivers",
+            COUNT(*) AS "totalDrivers"
+          FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)`, params)
+        : Promise.resolve({ rows: [{ activeDrivers: 0, totalDrivers: 0 }] }),
 
-    const activeLoadsExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('IN_TRANSIT', 'IN-TRANSIT', 'in-transit'))`
-      : '0';
-    const pendingLoadsExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('NEW', 'PENDING', 'pending'))`
-      : '0';
-    const completedLoadsTodayExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('DELIVERED', 'COMPLETED', 'completed') AND DATE(COALESCE(completed_date, delivery_date, created_at)) = CURRENT_DATE)`
-      : '0';
-    const loadsDispatchedExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(status::text, ' ', '_')) IN ('DISPATCHED'))`
-      : '0';
-    const loadsInTransitExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(status::text, ' ', '_')) IN ('IN_TRANSIT', 'EN_ROUTE', 'PICKED_UP'))`
-      : '0';
-    const loadsDeliveredExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('DELIVERED', 'COMPLETED', 'completed'))`
-      : '0';
-    const loadsCanceledExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(status::text) IN ('CANCELLED', 'CANCELED', 'cancelled', 'canceled'))`
-      : '0';
+      vehicles: query(`SELECT
+          COUNT(*) FILTER (WHERE status = 'in-service') AS "activeVehicles",
+          COUNT(*) AS "totalVehicles",
+          COUNT(*) FILTER (WHERE status = 'out-of-service') AS "oosVehicles",
+          COUNT(*) FILTER (WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') AS "vehiclesNeedingMaintenance"
+        FROM (${vehicleSqlPg}) scoped_vehicles`, params),
 
-    const billingPendingExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PENDING')`
-      : '0';
-    const billingCanceledExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('CANCELLED', 'CANCELED'))`
-      : '0';
-    const billingInvoicedExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING'))`
-      : '0';
-    const billingFundedExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'FUNDED')`
-      : '0';
-    const billingPaidExpr = hasLoads
-      ? `(SELECT COUNT(*) FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PAID')`
-      : '0';
+      loads: hasLoads
+        ? query(`SELECT
+            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('IN_TRANSIT', 'IN-TRANSIT')) AS "activeLoads",
+            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('NEW', 'PENDING')) AS "pendingLoads",
+            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('DELIVERED', 'COMPLETED') AND DATE(COALESCE(completed_date, delivery_date, created_at)) = CURRENT_DATE) AS "completedLoadsToday",
+            COUNT(*) FILTER (WHERE UPPER(REPLACE(status::text, ' ', '_')) = 'DISPATCHED') AS "loadsDispatched",
+            COUNT(*) FILTER (WHERE UPPER(REPLACE(status::text, ' ', '_')) IN ('IN_TRANSIT', 'EN_ROUTE', 'PICKED_UP')) AS "loadsInTransit",
+            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('DELIVERED', 'COMPLETED')) AS "loadsDelivered",
+            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('CANCELLED', 'CANCELED')) AS "loadsCanceled"
+          FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)`, params)
+        : Promise.resolve({ rows: [{ activeLoads: 0, pendingLoads: 0, completedLoadsToday: 0, loadsDispatched: 0, loadsInTransit: 0, loadsDelivered: 0, loadsCanceled: 0 }] }),
 
-    const hosViolationsExpr = hasHosRecords && hasDrivers
-      ? `(SELECT COUNT(*) FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2) AND array_length(hr.violations, 1) > 0)`
-      : '0';
-    const hosWarningsExpr = hasHosRecords && hasDrivers
-      ? `(SELECT COUNT(*) FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2) AND hr.status = 'warning')`
-      : '0';
+      billing: hasLoads
+        ? query(`SELECT
+            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PENDING') AS "billingPending",
+            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('CANCELLED', 'CANCELED')) AS "billingCanceled",
+            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING')) AS "billingInvoiced",
+            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'FUNDED') AS "billingFunded",
+            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PAID') AS "billingPaid"
+          FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)`, params)
+        : Promise.resolve({ rows: [{ billingPending: 0, billingCanceled: 0, billingInvoiced: 0, billingFunded: 0, billingPaid: 0 }] }),
 
-    const dqfComplianceRateExpr = hasDrivers
-      ? `(SELECT COALESCE(ROUND(AVG(dqf_completeness)), 0) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2))`
-      : '0';
-    const expiredMedCertsExpr = hasDrivers
-      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND medical_cert_expiry <= CURRENT_DATE)`
-      : '0';
-    const upcomingMedCertsExpr = hasDrivers
-      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND medical_cert_expiry > CURRENT_DATE AND medical_cert_expiry <= CURRENT_DATE + INTERVAL '30 days')`
-      : '0';
-    const expiredCDLsExpr = hasDrivers
-      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND cdl_expiry <= CURRENT_DATE)`
-      : '0';
-    const clearinghouseIssuesExpr = hasDrivers
-      ? `(SELECT COUNT(*) FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2) AND clearinghouse_status != 'eligible')`
-      : '0';
+      hos: hasHosRecords && hasDrivers
+        ? query(`SELECT
+            COUNT(*) FILTER (WHERE array_length(hr.violations, 1) > 0) AS "hosViolations",
+            COUNT(*) FILTER (WHERE hr.status = 'warning') AS "hosWarnings"
+          FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id
+          WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2)`, params)
+        : Promise.resolve({ rows: [{ hosViolations: 0, hosWarnings: 0 }] }),
 
-    const stats = await query(`
-      SELECT 
-        ${activeDriversExpr} as "activeDrivers",
-        ${totalDriversExpr} as "totalDrivers",
-        (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'in-service') as "activeVehicles",
-        (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles) as "totalVehicles",
-        (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'out-of-service') as "oosVehicles",
-        ${activeLoadsExpr} as "activeLoads",
-        ${pendingLoadsExpr} as "pendingLoads",
-        ${completedLoadsTodayExpr} as "completedLoadsToday",
-        ${loadsDispatchedExpr} as "loadsDispatched",
-        ${loadsInTransitExpr} as "loadsInTransit",
-        ${loadsDeliveredExpr} as "loadsDelivered",
-        ${loadsCanceledExpr} as "loadsCanceled",
-        ${billingPendingExpr} as "billingPending",
-        ${billingCanceledExpr} as "billingCanceled",
-        ${billingInvoicedExpr} as "billingInvoiced",
-        ${billingFundedExpr} as "billingFunded",
-        ${billingPaidExpr} as "billingPaid",
-        ${hosViolationsExpr} as "hosViolations",
-        ${hosWarningsExpr} as "hosWarnings",
-        ${dqfComplianceRateExpr} as "dqfComplianceRate",
-        (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') as "vehiclesNeedingMaintenance",
-        ${expiredMedCertsExpr} as "expiredMedCerts",
-        ${upcomingMedCertsExpr} as "upcomingMedCerts",
-        ${expiredCDLsExpr} as "expiredCDLs",
-        ${clearinghouseIssuesExpr} as "clearinghouseIssues"
-      `, [tenantId, operatingEntityId]);
+      compliance: hasDrivers
+        ? query(`SELECT
+            COALESCE(ROUND(AVG(dqf_completeness)), 0) AS "dqfComplianceRate",
+            COUNT(*) FILTER (WHERE medical_cert_expiry <= CURRENT_DATE) AS "expiredMedCerts",
+            COUNT(*) FILTER (WHERE medical_cert_expiry > CURRENT_DATE AND medical_cert_expiry <= CURRENT_DATE + INTERVAL '30 days') AS "upcomingMedCerts",
+            COUNT(*) FILTER (WHERE cdl_expiry <= CURRENT_DATE) AS "expiredCDLs",
+            COUNT(*) FILTER (WHERE clearinghouse_status != 'eligible') AS "clearinghouseIssues"
+          FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)`, params)
+        : Promise.resolve({ rows: [{ dqfComplianceRate: 0, expiredMedCerts: 0, upcomingMedCerts: 0, expiredCDLs: 0, clearinghouseIssues: 0 }] })
+    };
+
+    // Default zeros for each group (used when a group fails)
+    const groupDefaults = {
+      drivers: { activeDrivers: 0, totalDrivers: 0 },
+      vehicles: { activeVehicles: 0, totalVehicles: 0, oosVehicles: 0, vehiclesNeedingMaintenance: 0 },
+      loads: { activeLoads: 0, pendingLoads: 0, completedLoadsToday: 0, loadsDispatched: 0, loadsInTransit: 0, loadsDelivered: 0, loadsCanceled: 0 },
+      billing: { billingPending: 0, billingCanceled: 0, billingInvoiced: 0, billingFunded: 0, billingPaid: 0 },
+      hos: { hosViolations: 0, hosWarnings: 0 },
+      compliance: { dqfComplianceRate: 0, expiredMedCerts: 0, upcomingMedCerts: 0, expiredCDLs: 0, clearinghouseIssues: 0 }
+    };
+
+    const groupNames = Object.keys(groups);
+    const results = await Promise.allSettled(Object.values(groups));
+
+    const statsData = {};
+    const degradedGroups = [];
+
+    results.forEach((result, idx) => {
+      const groupName = groupNames[idx];
+      if (result.status === 'fulfilled') {
+        const row = result.value?.rows?.[0] || groupDefaults[groupName];
+        Object.entries(row).forEach(([k, v]) => { statsData[k] = Number(v) || 0; });
+      } else {
+        dtLogger.error(`Dashboard stats group "${groupName}" failed`, result.reason, {
+          path: '/api/dashboard/stats',
+          group: groupName
+        });
+        Object.assign(statsData, groupDefaults[groupName]);
+        degradedGroups.push(groupName);
+      }
+    });
+
+    if (degradedGroups.length > 0) {
+      statsData.degraded = true;
+      statsData.degradedGroups = degradedGroups;
+    }
+
     const duration = Date.now() - startTime;
-    
-    const statsData = stats.rows[0];
     dtLogger.trackDatabase('SELECT', 'dashboard_stats', duration, true);
-    dtLogger.trackRequest('GET', '/api/dashboard/stats', 200, duration);
-    
+    dtLogger.trackRequest('GET', '/api/dashboard/stats', 200, duration, degradedGroups.length > 0 ? { degraded: true, degradedGroups } : undefined);
+
     // Track key business metrics
-    dtLogger.sendMetric('custom.drivers.active', parseInt(statsData.activeDrivers) || 0);
-    dtLogger.sendMetric('custom.vehicles.active', parseInt(statsData.activeVehicles) || 0);
-    dtLogger.sendMetric('custom.loads.active', parseInt(statsData.activeLoads) || 0);
-    dtLogger.sendMetric('custom.hos.violations', parseInt(statsData.hosViolations) || 0);
-    dtLogger.sendMetric('custom.compliance.dqf_rate', parseInt(statsData.dqfComplianceRate) || 0);
-    
+    dtLogger.sendMetric('custom.drivers.active', statsData.activeDrivers || 0);
+    dtLogger.sendMetric('custom.vehicles.active', statsData.activeVehicles || 0);
+    dtLogger.sendMetric('custom.loads.active', statsData.activeLoads || 0);
+    dtLogger.sendMetric('custom.hos.violations', statsData.hosViolations || 0);
+    dtLogger.sendMetric('custom.compliance.dqf_rate', statsData.dqfComplianceRate || 0);
+
     res.json(statsData);
   } catch (error) {
     const duration = Date.now() - startTime;
     dtLogger.error('Failed to fetch dashboard stats', error, { path: '/api/dashboard/stats' });
-    console.error('Error fetching dashboard stats:', error);
-
-    // Graceful degradation for partial dev schemas.
-    // Return a stable payload so dashboard UI can render instead of hard-failing.
-    try {
-      const tenantId = req.context?.tenantId || null;
-      const operatingEntityId = req.context?.operatingEntityId || null;
-      const vehicleSource = await resolveVehicleSource();
-      const vehicleSqlPg = buildVehicleUnionSqlPg(vehicleSource);
-
-      const counts = await query(
-        `SELECT
-           (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'in-service') AS "activeVehicles",
-           (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles) AS "totalVehicles",
-           (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE status = 'out-of-service') AS "oosVehicles",
-           (SELECT COUNT(*) FROM (${vehicleSqlPg}) scoped_vehicles WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') AS "vehiclesNeedingMaintenance"`,
-        [tenantId, operatingEntityId]
-      );
-
-      const row = counts?.rows?.[0] || {};
-      const fallback = {
-        activeDrivers: 0,
-        totalDrivers: 0,
-        activeVehicles: Number(row.activeVehicles || 0),
-        totalVehicles: Number(row.totalVehicles || 0),
-        oosVehicles: Number(row.oosVehicles || 0),
-        activeLoads: 0,
-        pendingLoads: 0,
-        completedLoadsToday: 0,
-        loadsDispatched: 0,
-        loadsInTransit: 0,
-        loadsDelivered: 0,
-        loadsCanceled: 0,
-        billingPending: 0,
-        billingCanceled: 0,
-        billingInvoiced: 0,
-        billingFunded: 0,
-        billingPaid: 0,
-        hosViolations: 0,
-        hosWarnings: 0,
-        dqfComplianceRate: 0,
-        vehiclesNeedingMaintenance: Number(row.vehiclesNeedingMaintenance || 0),
-        expiredMedCerts: 0,
-        upcomingMedCerts: 0,
-        expiredCDLs: 0,
-        clearinghouseIssues: 0,
-        degraded: true
-      };
-
-      dtLogger.trackRequest('GET', '/api/dashboard/stats', 200, duration, { degraded: true });
-      return res.json(fallback);
-    } catch (fallbackError) {
-      dtLogger.error('Failed dashboard stats fallback', fallbackError, { path: '/api/dashboard/stats' });
-      dtLogger.trackRequest('GET', '/api/dashboard/stats', 500, duration);
-      return res.status(500).json({ message: 'Failed to fetch dashboard statistics' });
-    }
+    dtLogger.trackRequest('GET', '/api/dashboard/stats', 500, duration);
+    return res.status(500).json({ message: 'Failed to fetch dashboard statistics' });
   }
 });
 

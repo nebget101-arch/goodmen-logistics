@@ -12,6 +12,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   stats: any = {};
   alerts: any[] = [];
   loading = true;
+  isDegraded = false;
+  degradedGroups: string[] = [];
   activeOperatingEntityName = '';
 
   private destroy$ = new Subject<void>();
@@ -60,6 +62,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.apiService.getDashboardStats().subscribe({
       next: (data) => {
         this.stats = data;
+        this.isDegraded = !!data?.degraded;
+        this.degradedGroups = Array.isArray(data?.degradedGroups) ? data.degradedGroups : [];
         this.loading = false;
       },
       error: (error) => {
