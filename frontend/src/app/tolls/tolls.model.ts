@@ -115,12 +115,10 @@ export interface TollUploadResult {
 }
 
 export interface TollCommitResult {
-  batchId: string;
-  totalRows: number;
-  successCount: number;
-  duplicateCount: number;
-  errorCount: number;
-  exceptionsCreated: number;
+  imported: number;
+  duplicates: number;
+  errors: number;
+  exceptions: number;
 }
 
 export interface TollMappingProfile {

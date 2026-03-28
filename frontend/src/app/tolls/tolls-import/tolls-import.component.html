@@ -234,19 +234,19 @@
 
   <div class="result-grid" *ngIf="commitResult">
     <div class="result-card success">
-      <span class="big-num">{{ commitResult.successCount }}</span>
+      <span class="big-num">{{ commitResult.imported }}</span>
       <span>Imported</span>
     </div>
     <div class="result-card warn">
-      <span class="big-num">{{ commitResult.duplicateCount }}</span>
+      <span class="big-num">{{ commitResult.duplicates }}</span>
       <span>Duplicates</span>
     </div>
     <div class="result-card error">
-      <span class="big-num">{{ commitResult.errorCount }}</span>
+      <span class="big-num">{{ commitResult.errors }}</span>
       <span>Errors</span>
     </div>
-    <div class="result-card muted" *ngIf="commitResult.exceptionsCreated">
-      <span class="big-num">{{ commitResult.exceptionsCreated }}</span>
+    <div class="result-card muted" *ngIf="commitResult.exceptions">
+      <span class="big-num">{{ commitResult.exceptions }}</span>
       <span>Exceptions</span>
     </div>
   </div>
