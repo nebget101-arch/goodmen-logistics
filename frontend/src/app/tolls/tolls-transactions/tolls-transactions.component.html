@@ -1,4 +1,43 @@
-<section class="placeholder">
-  <h3>Toll Transactions</h3>
-  <p>Phase 1 skeleton ready. Grid, filters, assignment, and posting workflow will be implemented in next phases.</p>
+<section class="transactions-section">
+  <!-- Header row -->
+  <div class="section-header">
+    <h3>Toll Transactions</h3>
+    <div class="header-actions">
+      <button class="btn-upload" (click)="triggerFileInput()" [disabled]="uploading">
+        <span class="material-icons btn-icon">photo_camera</span>
+        <span *ngIf="!uploading">Upload Toll Invoice</span>
+        <span *ngIf="uploading" class="uploading-label">
+          <span class="spinner"></span>
+          Extracting...
+        </span>
+      </button>
+
+      <!-- Hidden file input -->
+      <input
+        #invoiceFileInput
+        type="file"
+        [accept]="acceptedTypes"
+        multiple
+        hidden
+        (change)="onFilesSelected($event)"
+      />
+    </div>
+  </div>
+
+  <!-- Success message -->
+  <div class="success-banner" *ngIf="successMessage">
+    <span class="material-icons">check_circle</span>
+    <span>{{ successMessage }}</span>
+  </div>
+
+  <!-- Error message -->
+  <div class="error-banner" *ngIf="uploadError">
+    <span class="material-icons">error</span>
+    <span>{{ uploadError }}</span>
+  </div>
+
+  <!-- Placeholder for future transactions grid -->
+  <div class="placeholder">
+    <p>Transaction grid, filters, assignment, and posting workflow will be implemented in next phases.</p>
+  </div>
 </section>
