@@ -322,6 +322,91 @@ function validateRow(row, existingExternalIds = new Set()) {
   return { errors, warnings, skipReason: null };
 }
 
+// ─── Multi-product column patterns for row splitting ─────────────────────────
+const PRODUCT_COLUMN_PATTERNS = [
+  { product: 'diesel', gallonsKeys: ['diesel_gallons', 'diesel gallons', 'diesel qty'], amountKeys: ['diesel_amount', 'diesel amount', 'diesel total', 'diesel cost'] },
+  { product: 'def', gallonsKeys: ['def_gallons', 'def gallons', 'def qty'], amountKeys: ['def_amount', 'def amount', 'def total', 'def cost'] },
+  { product: 'reefer', gallonsKeys: ['reefer_gallons', 'reefer gallons', 'reefer qty'], amountKeys: ['reefer_amount', 'reefer amount', 'reefer total', 'reefer cost'] }
+];
+
+/**
+ * Normalize a mapped row into one or more rows, splitting multi-product
+ * transactions into separate rows per product type.
+ *
+ * @param {Record<string, string>} mappedRow - Already column-mapped normalized row
+ * @param {Record<string, string>} rawRow - Original raw row (for multi-column detection)
+ * @param {number} rowNumber - 1-based row number in file
+ * @returns {{ normalized: Record<string, string>, source_transaction_id: string }[]}
+ */
+function normalizeRow(mappedRow, rawRow, rowNumber) {
+  const sourceId = mappedRow.external_transaction_id || String(rowNumber);
+  const baseRow = { ...mappedRow };
+
+  // Strategy 1: Check for multi-column split (e.g., diesel_gallons + def_gallons columns in raw data)
+  const rawKeysLower = Object.keys(rawRow || {}).map(k => k.toLowerCase().trim());
+  const splitRows = [];
+
+  for (const pattern of PRODUCT_COLUMN_PATTERNS) {
+    const gallonsKey = pattern.gallonsKeys.find(k => rawKeysLower.includes(k));
+    const amountKey = pattern.amountKeys.find(k => rawKeysLower.includes(k));
+
+    if (gallonsKey || amountKey) {
+      // Find the original-cased key from rawRow
+      const origGallonsKey = gallonsKey ? Object.keys(rawRow).find(k => k.toLowerCase().trim() === gallonsKey) : null;
+      const origAmountKey = amountKey ? Object.keys(rawRow).find(k => k.toLowerCase().trim() === amountKey) : null;
+
+      const gallons = parseFloat(origGallonsKey ? rawRow[origGallonsKey] : '0') || 0;
+      const amount = parseFloat(origAmountKey ? rawRow[origAmountKey] : '0') || 0;
+
+      if (gallons > 0 || amount > 0) {
+        splitRows.push({
+          normalized: {
+            ...baseRow,
+            product_type: pattern.product,
+            category: 'fuel',
+            gallons: String(gallons),
+            amount: String(amount),
+            price_per_gallon: gallons > 0 ? String((amount / gallons).toFixed(4)) : ''
+          },
+          source_transaction_id: sourceId
+        });
+      }
+    }
+  }
+
+  if (splitRows.length > 0) {
+    return splitRows;
+  }
+
+  // Strategy 2: Description-based — use product_type from mapped row
+  const productDesc = (mappedRow.product_type || '').toLowerCase().trim();
+  let productType = 'diesel'; // default
+  if (productDesc.includes('def') || productDesc.includes('fluid')) {
+    productType = 'def';
+  } else if (productDesc.includes('reefer') || productDesc.includes('refer')) {
+    productType = 'reefer';
+  } else if (productDesc.includes('diesel') || productDesc.includes('ulsd') || productDesc.includes('fuel')) {
+    productType = 'diesel';
+  }
+
+  // Determine category
+  let category = 'fuel';
+  if (productDesc.includes('oil') || productDesc.includes('maintenance') || productDesc.includes('repair') || productDesc.includes('tire')) {
+    category = 'maintenance';
+  } else if (productDesc.includes('advance') || productDesc.includes('cash') || productDesc.includes('atm')) {
+    category = 'advance';
+  }
+
+  return [{
+    normalized: {
+      ...baseRow,
+      product_type: productType,
+      category
+    },
+    source_transaction_id: sourceId
+  }];
+}
+
 module.exports = {
   getProviderTemplates,
   parseFileBuffer,
@@ -329,5 +414,6 @@ module.exports = {
   applyMapping,
   validateRow,
   isMoneyCode,
+  normalizeRow,
   PROVIDER_TEMPLATES
 };
