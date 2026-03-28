@@ -298,18 +298,21 @@ async function stageBatch({
   }
 
   // Update batch summary (total_rows reflects expanded/split row count)
+  const splitRows = expandedRowNum - rawRows.length;
   await knex('fuel_import_batches').where({ id: batchId }).update({
     import_status: 'validated',
+    raw_rows: rawRows.length,
     total_rows: expandedRowNum,
+    split_rows: splitRows > 0 ? splitRows : 0,
     success_rows: successCount,
     warning_rows: warningCount,
     failed_rows: failedCount,
     skipped_rows: skippedCount
   });
 
-  dtLogger.info('fuel_batch_staged', { batchId, tenantId, rawRows: rawRows.length, expandedRows: expandedRowNum, success: successCount, warning: warningCount, failed: failedCount, skipped: skippedCount });
+  dtLogger.info('fuel_batch_staged', { batchId, tenantId, rawRows: rawRows.length, expandedRows: expandedRowNum, splitRows: splitRows > 0 ? splitRows : 0, success: successCount, warning: warningCount, failed: failedCount, skipped: skippedCount });
 
-  return { batchId, totalRows: expandedRowNum, successCount, warningCount, failedCount, skippedCount };
+  return { batchId, rawRows: rawRows.length, totalRows: expandedRowNum, splitRows: splitRows > 0 ? splitRows : 0, successCount, warningCount, failedCount, skippedCount };
 }
 
 /**
@@ -456,6 +459,8 @@ function buildExceptionMessage(type, normalized) {
   if (type === 'unmatched_driver') return `Could not match driver "${normalized.driver_name_raw}" to any driver record`;
   if (type === 'unmatched_card') return `No fuel card account matched for this transaction`;
   if (type === 'missing_card_number') return `Transaction has no card number – card-based matching unavailable`;
+  if (type === 'money_code_skip') return `Non-fuel transaction (money code / cash advance) — skipped from import`;
+  if (type === 'low_confidence_mapping') return `AI column mapping confidence below threshold — review for accuracy`;
   return `Unresolved exception: ${type}`;
 }
 
