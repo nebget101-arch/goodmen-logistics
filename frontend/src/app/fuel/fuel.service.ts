@@ -5,7 +5,7 @@ import { environment } from '../../environments/environment';
 import {
   FuelCardAccount, FuelMappingProfile, FuelImportBatch, FuelImportBatchRow,
   FuelTransaction, FuelException, FuelOverview, ProviderTemplate,
-  ImportPreviewResult, StageResult, AiPreprocessResult
+  ImportPreviewResult, StageResult, AiPreprocessResult, CardDriverAssignment
 } from './fuel.model';
 
 @Injectable({ providedIn: 'root' })
@@ -30,6 +30,18 @@ export class FuelService {
 
   updateCard(id: string, patch: Partial<FuelCardAccount>): Observable<FuelCardAccount> {
     return this.http.patch<FuelCardAccount>(`${this.base}/cards/${id}`, patch);
+  }
+
+  getCardAssignments(cardId: string): Observable<CardDriverAssignment[]> {
+    return this.http.get<CardDriverAssignment[]>(`${this.base}/cards/${cardId}/assignments`);
+  }
+
+  assignDriver(cardId: string, driverId: string, notes?: string): Observable<CardDriverAssignment> {
+    return this.http.post<CardDriverAssignment>(`${this.base}/cards/${cardId}/assign-driver`, { driver_id: driverId, notes });
+  }
+
+  revokeDriver(cardId: string, notes?: string): Observable<{ revoked: boolean }> {
+    return this.http.post<{ revoked: boolean }>(`${this.base}/cards/${cardId}/revoke-driver`, { notes });
   }
 
   // ─── Mapping Profiles ─────────────────────────────────────────────────────────

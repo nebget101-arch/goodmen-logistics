@@ -57,9 +57,9 @@
             <input type="checkbox" [checked]="selected.has(row.id)" (change)="toggleSelect(row.id)" />
           </td>
           <td>
-            <span class="type-badge" [ngClass]="typeClass(row.exception_type)">{{ row.exception_type }}</span>
+            <span class="type-badge" [ngClass]="typeClass(row.exception_type)">{{ typeLabel(row.exception_type) }}</span>
           </td>
-          <td class="msg-cell">{{ row.exception_message || '—' }}</td>
+          <td class="msg-cell" [class.msg-mismatch]="isMismatch(row)">{{ row.exception_message || '—' }}</td>
           <td>
             <span class="pill" [ngClass]="statusClass(row.resolution_status)">{{ row.resolution_status }}</span>
           </td>
@@ -72,8 +72,15 @@
           </td>
           <td class="num-col">${{ row.amount | number:'1.2-2' }}</td>
           <td class="actions-cell">
-            <button class="action-btn ok" (click)="resolveOne(row, 'resolved')" [disabled]="resolvingId === row.id">Resolve</button>
-            <button class="action-btn" (click)="resolveOne(row, 'ignored')" [disabled]="resolvingId === row.id">Ignore</button>
+            <ng-container *ngIf="!isMismatch(row)">
+              <button class="action-btn ok" (click)="resolveOne(row, 'resolved')" [disabled]="resolvingId === row.id">Resolve</button>
+              <button class="action-btn" (click)="resolveOne(row, 'ignored')" [disabled]="resolvingId === row.id">Ignore</button>
+            </ng-container>
+            <ng-container *ngIf="isMismatch(row)">
+              <button class="action-btn ok" (click)="resolveMismatch(row, 'keep_assigned')" [disabled]="resolvingId === row.id" title="Keep the driver assigned to this card">Keep Assigned</button>
+              <button class="action-btn warn-btn" (click)="resolveMismatch(row, 'use_transaction')" [disabled]="resolvingId === row.id" title="Override with the driver from the transaction">Use Txn Driver</button>
+              <button class="action-btn" (click)="resolveMismatch(row, 'ignore')" [disabled]="resolvingId === row.id">Ignore</button>
+            </ng-container>
           </td>
         </tr>
       </tbody>

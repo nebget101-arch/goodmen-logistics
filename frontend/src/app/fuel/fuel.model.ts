@@ -196,6 +196,18 @@ export interface AiPreprocessResult {
   };
 }
 
+export interface CardDriverAssignment {
+  id: string;
+  fuel_card_account_id: string;
+  driver_id: string;
+  card_number_last4?: string;
+  assigned_at: string;
+  revoked_at?: string;
+  status: 'active' | 'revoked';
+  notes?: string;
+  driver_name?: string;
+}
+
 /** Normalized field keys used in column mapping */
 export const FUEL_NORMALIZED_FIELDS: { key: string; label: string; required: boolean }[] = [
   { key: 'transaction_date', label: 'Transaction Date', required: true },
