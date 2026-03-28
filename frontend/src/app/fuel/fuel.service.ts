@@ -93,6 +93,7 @@ export class FuelService {
     date_from?: string; date_to?: string;
     provider?: string; truck_id?: string; driver_id?: string;
     matched_status?: string; batch_id?: string;
+    product_type?: string; category?: string;
   } = {}): Observable<{ rows: FuelTransaction[]; total: number }> {
     let p = new HttpParams();
     Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p = p.set(k, v.toString()); });

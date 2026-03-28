@@ -43,6 +43,7 @@
           <th class="num-col">Gallons</th>
           <th class="num-col">Amount</th>
           <th class="num-col">PPG</th>
+          <th>Product</th>
           <th>Matched</th>
           <th>Settlement</th>
           <th>Actions</th>
@@ -75,6 +76,15 @@
           <th></th>
           <!-- PPG -->
           <th></th>
+          <!-- Product Type -->
+          <th>
+            <select [(ngModel)]="productType" (change)="applyFilters()">
+              <option value="">All</option>
+              <option value="diesel">Diesel</option>
+              <option value="def">DEF</option>
+              <option value="reefer">Reefer</option>
+            </select>
+          </th>
           <!-- Matched -->
           <th>
             <select [(ngModel)]="matchedStatus" (change)="applyFilters()">
@@ -121,6 +131,7 @@
             <span *ngIf="txn.price_per_gallon">${{ txn.price_per_gallon | number:'1.3-3' }}</span>
             <span *ngIf="!txn.price_per_gallon" class="empty-dash">—</span>
           </td>
+          <td class="product-cell">{{ txn.product_type || '—' }}</td>
           <td (click)="$event.stopPropagation()">
             <span class="pill" [ngClass]="matchClass(txn.matched_status)">{{ txn.matched_status }}</span>
           </td>
@@ -215,6 +226,16 @@
       <div class="detail-section">
         <div class="detail-label">Odometer</div>
         <div class="detail-value">{{ drawerTxn!.odometer | number }}</div>
+      </div>
+    </div>
+    <div class="detail-row-2">
+      <div class="detail-section" *ngIf="drawerTxn!.product_type">
+        <div class="detail-label">Product Type</div>
+        <div class="detail-value">{{ drawerTxn!.product_type }}</div>
+      </div>
+      <div class="detail-section" *ngIf="drawerTxn!.category">
+        <div class="detail-label">Category</div>
+        <div class="detail-value">{{ drawerTxn!.category }}</div>
       </div>
     </div>
     <div class="detail-section">
