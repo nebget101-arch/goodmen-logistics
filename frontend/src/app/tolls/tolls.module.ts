@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialogModule } from '@angular/material/dialog';
+import { SharedModule } from '../shared/shared.module';
 
 import { TollsRoutingModule } from './tolls-routing.module';
 import { TollsShellComponent } from './tolls-shell/tolls-shell.component';
@@ -35,6 +36,7 @@ import { InvoicePreviewDialogComponent } from './tolls-transactions/invoice-prev
     FormsModule,
     ReactiveFormsModule,
     MatDialogModule,
+    SharedModule,
     TollsRoutingModule,
   ]
 })

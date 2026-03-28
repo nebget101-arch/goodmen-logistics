@@ -4,11 +4,15 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   TollAccount,
+  TollAiNormalizeResult,
+  TollCommitResult,
   TollDevice,
   TollException,
   TollImportBatch,
+  TollMappingProfile,
   TollOverview,
   TollTransaction,
+  TollUploadResult,
   InvoiceExtractionResponse,
   CreateTollTransactionPayload,
 } from './tolls.model';
@@ -62,6 +66,33 @@ export class TollsService {
   getImportBatches(limit = 50, offset = 0): Observable<{ rows: TollImportBatch[]; total: number }> {
     const params = new HttpParams().set('limit', limit).set('offset', offset);
     return this.http.get<{ rows: TollImportBatch[]; total: number }>(`${this.base}/import/batches`, { params });
+  }
+
+  uploadImportCSV(file: File, tollAccountId?: string): Observable<TollUploadResult> {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (tollAccountId) fd.append('toll_account_id', tollAccountId);
+    return this.http.post<TollUploadResult>(`${this.base}/import/upload`, fd);
+  }
+
+  commitImport(batchId: string, rows: Record<string, string>[], columnMap: Record<string, string>): Observable<TollCommitResult> {
+    return this.http.post<TollCommitResult>(`${this.base}/import/commit`, {
+      batch_id: batchId,
+      rows,
+      column_map: columnMap
+    });
+  }
+
+  getMappingProfiles(): Observable<{ rows: TollMappingProfile[] }> {
+    return this.http.get<{ rows: TollMappingProfile[] }>(`${this.base}/import/mapping-profiles`);
+  }
+
+  saveMappingProfile(profile: { profile_name: string; provider_name?: string; column_map: Record<string, string>; is_default?: boolean }): Observable<TollMappingProfile> {
+    return this.http.post<TollMappingProfile>(`${this.base}/import/mapping-profiles`, profile);
+  }
+
+  aiNormalize(batchId: string): Observable<TollAiNormalizeResult> {
+    return this.http.post<TollAiNormalizeResult>(`${this.base}/import/ai-normalize`, { batch_id: batchId });
   }
 
   getTransactions(filters: {
