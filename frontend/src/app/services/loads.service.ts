@@ -221,8 +221,8 @@ export class LoadsService {
     );
   }
 
-  approveDraft(loadId: string): Observable<{ success: boolean; data: LoadDetail }> {
-    return this.http.patch<{ success: boolean; data: LoadDetail }>(`${this.baseUrl}/loads/${loadId}/approve-draft`, {});
+  approveDraft(loadId: string, body: Record<string, unknown> = {}): Observable<{ success: boolean; data: LoadDetail }> {
+    return this.http.patch<{ success: boolean; data: LoadDetail }>(`${this.baseUrl}/loads/${loadId}/approve-draft`, body);
   }
 
   deleteDraftLoad(loadId: string): Observable<{ success: boolean }> {
