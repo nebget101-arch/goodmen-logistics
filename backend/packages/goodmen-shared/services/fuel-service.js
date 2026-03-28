@@ -206,13 +206,30 @@ async function stageBatch({
   let successCount = 0;
   let warningCount = 0;
   let failedCount = 0;
+  let skippedCount = 0;
 
   const rowInserts = [];
 
   for (let i = 0; i < rawRows.length; i++) {
     const rawRow = rawRows[i];
     const normalized = applyMapping(rawRow, columnMap);
-    const { errors, warnings } = validateRow(normalized, seenExtIds);
+    const { errors, warnings, skipReason } = validateRow(normalized, seenExtIds);
+
+    // ─── Money Code / non-fuel skip ───────────────────────────────────────────
+    if (skipReason) {
+      skippedCount++;
+      rowInserts.push({
+        batch_id: batchId,
+        row_number: i + 1,
+        raw_payload: JSON.stringify(rawRow),
+        normalized_payload: JSON.stringify(normalized),
+        validation_errors: JSON.stringify([]),
+        warnings: JSON.stringify([skipReason]),
+        match_result: null,
+        resolution_status: 'skipped'
+      });
+      continue;
+    }
 
     if (normalized.external_transaction_id) {
       if (seenExtIds.has(normalized.external_transaction_id)) {
@@ -264,12 +281,13 @@ async function stageBatch({
     import_status: 'validated',
     success_rows: successCount,
     warning_rows: warningCount,
-    failed_rows: failedCount
+    failed_rows: failedCount,
+    skipped_rows: skippedCount
   });
 
-  dtLogger.info('fuel_batch_staged', { batchId, tenantId, total: rawRows.length, success: successCount, warning: warningCount, failed: failedCount });
+  dtLogger.info('fuel_batch_staged', { batchId, tenantId, total: rawRows.length, success: successCount, warning: warningCount, failed: failedCount, skipped: skippedCount });
 
-  return { batchId, totalRows: rawRows.length, successCount, warningCount, failedCount };
+  return { batchId, totalRows: rawRows.length, successCount, warningCount, failedCount, skippedCount };
 }
 
 /**
@@ -379,6 +397,18 @@ async function commitBatch({ batchId, tenantId, operatingEntityId = null, import
       }
     }
 
+    // ─── Missing card number exception ────────────────────────────────────────
+    if (!normalized.card_number_masked) {
+      await knex('fuel_transaction_exceptions').insert({
+        fuel_transaction_id: txn.id,
+        tenant_id: tenantId,
+        exception_type: 'missing_card_number',
+        exception_message: buildExceptionMessage('missing_card_number', normalized),
+        resolution_status: 'open'
+      });
+      exceptions++;
+    }
+
     imported++;
   }
 
@@ -401,6 +431,7 @@ function buildExceptionMessage(type, normalized) {
   if (type === 'unmatched_truck') return `Could not match truck unit "${normalized.unit_number_raw}" to any vehicle in the system`;
   if (type === 'unmatched_driver') return `Could not match driver "${normalized.driver_name_raw}" to any driver record`;
   if (type === 'unmatched_card') return `No fuel card account matched for this transaction`;
+  if (type === 'missing_card_number') return `Transaction has no card number – card-based matching unavailable`;
   return `Unresolved exception: ${type}`;
 }
 
