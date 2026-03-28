@@ -164,6 +164,20 @@ router.get('/devices', async (req, res) => {
   }
 });
 
+// FN-451: Validate truck_id / driver_id references exist for the tenant
+async function validateDeviceRefs(tid, body) {
+  const errors = [];
+  if (body.truck_id) {
+    const truck = await knex('vehicles').where({ id: body.truck_id, tenant_id: tid }).first('id');
+    if (!truck) errors.push(`truck_id "${body.truck_id}" does not exist for this tenant`);
+  }
+  if (body.driver_id) {
+    const driver = await knex('drivers').where({ id: body.driver_id, tenant_id: tid }).first('id');
+    if (!driver) errors.push(`driver_id "${body.driver_id}" does not exist for this tenant`);
+  }
+  return errors;
+}
+
 router.post('/devices', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -171,6 +185,10 @@ router.post('/devices', async (req, res) => {
 
     const { toll_account_id, device_number_masked, plate_number, truck_id, trailer_id, driver_id, effective_start_date, effective_end_date, notes } = req.body || {};
     if (!toll_account_id) return res.status(400).json({ error: 'toll_account_id is required' });
+
+    // Validate truck_id / driver_id references
+    const refErrors = await validateDeviceRefs(tid, req.body);
+    if (refErrors.length > 0) return res.status(400).json({ error: refErrors.join('; ') });
 
     const account = await applyOperatingEntityFilter(
       knex('toll_accounts').where({ id: toll_account_id, tenant_id: tid }),
@@ -205,6 +223,10 @@ router.patch('/devices/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
     if (!tid) return;
+
+    // Validate truck_id / driver_id references if provided
+    const refErrors = await validateDeviceRefs(tid, req.body || {});
+    if (refErrors.length > 0) return res.status(400).json({ error: refErrors.join('; ') });
 
     const allowed = [
       'device_number_masked', 'plate_number', 'truck_id', 'trailer_id', 'driver_id',
