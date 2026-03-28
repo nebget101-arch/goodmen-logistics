@@ -1305,4 +1305,190 @@ router.post('/import/ai-normalize', async (req, res) => {
   }
 });
 
+// ─── FN-468: Device assignment endpoints ─────────────────────────────────────
+
+/**
+ * GET /api/tolls/devices/:deviceId/assignments
+ * List all vehicle assignments (active + history) for a device.
+ */
+router.get('/devices/:deviceId/assignments', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const { deviceId } = req.params;
+
+    // Verify device exists and belongs to tenant
+    const device = await applyOperatingEntityFilter(
+      knex('toll_devices').where({ id: deviceId, tenant_id: tid }),
+      req
+    ).first('id');
+    if (!device) return res.status(404).json({ error: 'Toll device not found' });
+
+    const rows = await knex('toll_device_vehicle_assignments')
+      .where({ tenant_id: tid, toll_device_id: deviceId })
+      .orderBy('assigned_date', 'desc');
+
+    res.json(rows);
+  } catch (error) {
+    dtLogger.error('tolls_device_assignments_list_failed', error);
+    res.status(500).json({ error: 'Failed to fetch device assignments' });
+  }
+});
+
+/**
+ * POST /api/tolls/devices/:deviceId/assign-vehicle
+ * Assign transponder to vehicle.
+ * Body: { truck_id, plate_number, notes }
+ * Auto-removes previous active assignment. Updates toll_devices.truck_id.
+ */
+router.post('/devices/:deviceId/assign-vehicle', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const { deviceId } = req.params;
+    const { truck_id, plate_number, notes } = req.body || {};
+
+    if (!truck_id) return res.status(400).json({ error: 'truck_id is required' });
+
+    // Verify device exists and belongs to tenant
+    const device = await applyOperatingEntityFilter(
+      knex('toll_devices').where({ id: deviceId, tenant_id: tid }),
+      req
+    ).first('id');
+    if (!device) return res.status(404).json({ error: 'Toll device not found' });
+
+    // Verify truck exists for tenant
+    const truck = await knex('vehicles').where({ id: truck_id, tenant_id: tid }).first('id');
+    if (!truck) return res.status(400).json({ error: `truck_id "${truck_id}" does not exist for this tenant` });
+
+    const now = new Date();
+
+    await knex.transaction(async (trx) => {
+      // Auto-remove any current active assignment
+      await trx('toll_device_vehicle_assignments')
+        .where({ tenant_id: tid, toll_device_id: deviceId, status: 'active' })
+        .update({
+          status: 'removed',
+          removed_date: now,
+          removed_by: req.user?.id || null,
+          updated_at: now
+        });
+
+      // Create new assignment
+      await trx('toll_device_vehicle_assignments').insert({
+        tenant_id: tid,
+        toll_device_id: deviceId,
+        truck_id,
+        plate_number: plate_number || null,
+        assigned_date: now,
+        status: 'active',
+        assigned_by: req.user?.id || null,
+        notes: notes || null
+      });
+
+      // Update toll_devices.truck_id
+      await trx('toll_devices')
+        .where({ id: deviceId, tenant_id: tid })
+        .update({ truck_id, updated_at: now });
+    });
+
+    const updatedDevice = await knex('toll_devices').where({ id: deviceId }).first();
+    res.json({ success: true, device: updatedDevice });
+  } catch (error) {
+    dtLogger.error('tolls_device_assign_vehicle_failed', error);
+    res.status(500).json({ error: 'Failed to assign vehicle to device' });
+  }
+});
+
+/**
+ * POST /api/tolls/devices/:deviceId/remove-vehicle
+ * Remove current vehicle assignment.
+ * Body: { notes }
+ * Clears toll_devices.truck_id.
+ */
+router.post('/devices/:deviceId/remove-vehicle', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const { deviceId } = req.params;
+    const { notes } = req.body || {};
+
+    // Verify device exists and belongs to tenant
+    const device = await applyOperatingEntityFilter(
+      knex('toll_devices').where({ id: deviceId, tenant_id: tid }),
+      req
+    ).first('id');
+    if (!device) return res.status(404).json({ error: 'Toll device not found' });
+
+    const now = new Date();
+
+    await knex.transaction(async (trx) => {
+      // Remove active assignment(s)
+      const updated = await trx('toll_device_vehicle_assignments')
+        .where({ tenant_id: tid, toll_device_id: deviceId, status: 'active' })
+        .update({
+          status: 'removed',
+          removed_date: now,
+          removed_by: req.user?.id || null,
+          notes: notes ? trx.raw("COALESCE(notes || ' | ', '') || ?", [notes]) : undefined,
+          updated_at: now
+        });
+
+      // Clear toll_devices.truck_id
+      await trx('toll_devices')
+        .where({ id: deviceId, tenant_id: tid })
+        .update({ truck_id: null, updated_at: now });
+    });
+
+    const updatedDevice = await knex('toll_devices').where({ id: deviceId }).first();
+    res.json({ success: true, device: updatedDevice });
+  } catch (error) {
+    dtLogger.error('tolls_device_remove_vehicle_failed', error);
+    res.status(500).json({ error: 'Failed to remove vehicle from device' });
+  }
+});
+
+/**
+ * POST /api/tolls/devices/:deviceId/assign-driver
+ * Direct driver override on device (skips vehicle->driver chain).
+ * Body: { driver_id, notes }
+ * Updates toll_devices.driver_id.
+ */
+router.post('/devices/:deviceId/assign-driver', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const { deviceId } = req.params;
+    const { driver_id, notes } = req.body || {};
+
+    if (!driver_id) return res.status(400).json({ error: 'driver_id is required' });
+
+    // Verify device exists and belongs to tenant
+    const device = await applyOperatingEntityFilter(
+      knex('toll_devices').where({ id: deviceId, tenant_id: tid }),
+      req
+    ).first('id');
+    if (!device) return res.status(404).json({ error: 'Toll device not found' });
+
+    // Verify driver exists for tenant
+    const driver = await knex('drivers').where({ id: driver_id, tenant_id: tid }).first('id');
+    if (!driver) return res.status(400).json({ error: `driver_id "${driver_id}" does not exist for this tenant` });
+
+    const now = new Date();
+    await knex('toll_devices')
+      .where({ id: deviceId, tenant_id: tid })
+      .update({ driver_id, notes: notes || undefined, updated_at: now });
+
+    const updatedDevice = await knex('toll_devices').where({ id: deviceId }).first();
+    res.json({ success: true, device: updatedDevice });
+  } catch (error) {
+    dtLogger.error('tolls_device_assign_driver_failed', error);
+    res.status(500).json({ error: 'Failed to assign driver to device' });
+  }
+});
+
 module.exports = router;

@@ -28,6 +28,20 @@ export interface TollDevice {
   updated_at: string;
 }
 
+export interface TollDeviceAssignment {
+  id: string;
+  toll_device_id: string;
+  truck_id?: string;
+  driver_id?: string;
+  plate_number?: string;
+  unit_number?: string;
+  driver_override_id?: string;
+  assigned_at: string;
+  removed_at?: string;
+  status: 'active' | 'removed';
+  notes?: string;
+}
+
 export interface TollImportBatch {
   id: string;
   tenant_id: string;
