@@ -189,6 +189,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     pickup: string;
     delivery: string;
     rate: string;
+    completed: string;
     status: string;
     billingStatus: string;
     notes: string;
@@ -201,6 +202,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     pickup: '',
     delivery: '',
     rate: '',
+    completed: '',
     status: '',
     billingStatus: '',
     notes: '',
@@ -276,6 +278,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     pickup: 'Pickup',
     delivery: 'Delivery',
     rate: 'Rate',
+    completed: 'Completed',
     status: 'Status',
     billingStatus: 'Billing',
     notes: 'Notes',
@@ -2404,6 +2407,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         if (!rateStr.includes(hf.rate)) return false;
       }
 
+      if (hf.completed) {
+        const completedStr = (load.completed_date || '').toString();
+        if (!completedStr.includes(hf.completed)) return false;
+      }
+
       if (hf.driver) {
         const driverName = (load.driver_name || '').toString().toLowerCase();
         if (!driverName.includes(hf.driver.toLowerCase())) return false;
@@ -2533,6 +2541,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       pickup: '',
       delivery: '',
       rate: '',
+      completed: '',
       status: '',
       billingStatus: '',
       notes: '',
