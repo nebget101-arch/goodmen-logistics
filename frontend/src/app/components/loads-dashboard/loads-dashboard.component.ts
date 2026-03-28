@@ -268,6 +268,33 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return map[s] ?? s.replace(/_/g, ' ');
   }
 
+  private statusColorMap: Record<string, string> = {
+    NEW: '#3b82f6',
+    DRAFT: '#6366f1',
+    DISPATCHED: '#f97316',
+    EN_ROUTE: '#eab308',
+    PICKED_UP: '#eab308',
+    IN_TRANSIT: '#eab308',
+    DELIVERED: '#22c55e',
+    CANCELLED: '#ef4444',
+    CANCELED: '#ef4444',
+    TONU: '#ef4444'
+  };
+
+  get statusBarSegments(): { status: string; label: string; amount: number; pct: number; color: string }[] {
+    const total = this.summaryTotals.totalGross || 0;
+    if (total <= 0) return [];
+    return this.statusOptions
+      .filter(s => (this.summaryTotals.byStatus[s] || 0) > 0)
+      .map(s => ({
+        status: s,
+        label: this.getStatusLabel(s),
+        amount: this.summaryTotals.byStatus[s] || 0,
+        pct: ((this.summaryTotals.byStatus[s] || 0) / total) * 100,
+        color: this.statusColorMap[s] || '#64748b'
+      }));
+  }
+
   private headerFilterLabels: { [K in keyof typeof this.headerFilters]: string } = {
     date: 'Date',
     driver: 'Driver',

@@ -65,52 +65,49 @@
   <div *ngIf="errorMessage" class="alert alert-error">{{ errorMessage }}</div>
   <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
 
-  <div class="summary-bar" *ngIf="!loading">
-    <div class="summary-total">
-      <span class="summary-label">Gross Amount</span>
-      <span class="summary-value">${{ summaryTotals.totalGross | number:'1.0-2' }}</span>
+  <div class="status-summary-bar" *ngIf="!loading">
+    <div class="status-summary-bar__header">
+      <div class="status-summary-bar__period">
+        <button
+          type="button"
+          class="period-chip"
+          *ngFor="let opt of grossPeriodOptions"
+          [class.active]="grossPeriod === opt.value"
+          (click)="setGrossPeriod(opt.value)"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+      <div class="status-summary-bar__total">
+        TOTAL: ${{ summaryTotals.totalGross | number:'1.0-2' }}
+      </div>
     </div>
-    <div class="summary-group gross-period-group">
-      <span class="label">Period</span>
+    <div class="status-summary-bar__track">
+      <div
+        *ngFor="let seg of statusBarSegments"
+        class="status-summary-bar__segment"
+        [style.width.%]="seg.pct"
+        [style.background]="seg.color"
+        [title]="seg.label + ': $' + (seg.amount | number:'1.0-2')"
+        (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
+        [class.active]="filters.status === seg.status"
+      >
+        <span class="segment-label" *ngIf="seg.pct > 8">{{ seg.label }}</span>
+        <span class="segment-value" *ngIf="seg.pct > 5">${{ seg.amount | number:'1.0-0' }}</span>
+      </div>
+    </div>
+    <div class="status-summary-bar__legend">
       <button
         type="button"
-        class="chip"
-        *ngFor="let opt of grossPeriodOptions"
-        [class.active]="grossPeriod === opt.value"
-        (click)="setGrossPeriod(opt.value)"
+        class="legend-item"
+        *ngFor="let seg of statusBarSegments"
+        [class.active]="filters.status === seg.status"
+        (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
       >
-        {{ opt.label }}
+        <span class="legend-dot" [style.background]="seg.color"></span>
+        <span class="legend-label">{{ seg.label }}</span>
+        <span class="legend-value">${{ seg.amount | number:'1.0-2' }}</span>
       </button>
-    </div>
-    <div class="summary-groups">
-      <div class="summary-group">
-        <span class="label">By status</span>
-        <button
-          type="button"
-          class="chip"
-          *ngFor="let s of statusOptions"
-          [class.muted]="!summaryTotals.byStatus[s]"
-          [class.active]="filters.status === s"
-          (click)="setStatusFilter(filters.status === s ? '' : s)"
-        >
-          <span class="chip-label">{{ getStatusLabel(s) }}</span>
-          <span class="chip-value">${{ (summaryTotals.byStatus[s] || 0) | number:'1.0-2' }}</span>
-        </button>
-      </div>
-      <div class="summary-group">
-        <span class="label">By billing</span>
-        <button
-          type="button"
-          class="chip"
-          *ngFor="let b of billingOptions"
-          [class.muted]="!summaryTotals.byBilling[b]"
-          [class.active]="filters.billingStatus === b"
-          (click)="setBillingFilter(filters.billingStatus === b ? '' : b)"
-        >
-          <span class="chip-label">{{ getBillingLabel(b) }}</span>
-          <span class="chip-value">${{ (summaryTotals.byBilling[b] || 0) | number:'1.0-2' }}</span>
-        </button>
-      </div>
     </div>
   </div>
 
