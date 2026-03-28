@@ -238,6 +238,12 @@ export class ReportViewComponent implements OnInit, OnDestroy {
     return String(value);
   }
 
+  get isAllZeroData(): boolean {
+    if (this.rows.length > 0) return false;
+    if (this.cards.length === 0) return false;
+    return this.cards.every((card) => !card.value || Number(card.value) === 0);
+  }
+
   trackByIndex(index: number): number {
     return index;
   }
