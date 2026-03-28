@@ -1,5 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ReactiveFormsModule } from '@angular/forms';
+import { MatDialogModule } from '@angular/material/dialog';
 
 import { TollsRoutingModule } from './tolls-routing.module';
 import { TollsShellComponent } from './tolls-shell/tolls-shell.component';
@@ -10,6 +12,7 @@ import { TollsHistoryComponent } from './tolls-history/tolls-history.component';
 import { TollsAccountsComponent } from './tolls-accounts/tolls-accounts.component';
 import { TollsDevicesComponent } from './tolls-devices/tolls-devices.component';
 import { TollsExceptionsComponent } from './tolls-exceptions/tolls-exceptions.component';
+import { ManualTollDialogComponent } from './tolls-transactions/manual-toll-dialog/manual-toll-dialog.component';
 
 @NgModule({
   declarations: [
@@ -21,9 +24,12 @@ import { TollsExceptionsComponent } from './tolls-exceptions/tolls-exceptions.co
     TollsAccountsComponent,
     TollsDevicesComponent,
     TollsExceptionsComponent,
+    ManualTollDialogComponent,
   ],
   imports: [
     CommonModule,
+    ReactiveFormsModule,
+    MatDialogModule,
     TollsRoutingModule,
   ]
 })

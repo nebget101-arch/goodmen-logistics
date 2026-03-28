@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { TollAccount, TollDevice, TollImportBatch, TollOverview } from './tolls.model';
+import { TollAccount, TollDevice, TollImportBatch, TollOverview, TollTransaction } from './tolls.model';
 
 @Injectable({ providedIn: 'root' })
 export class TollsService {
@@ -41,5 +41,14 @@ export class TollsService {
   getImportBatches(limit = 50, offset = 0): Observable<{ rows: TollImportBatch[]; total: number }> {
     const params = new HttpParams().set('limit', limit).set('offset', offset);
     return this.http.get<{ rows: TollImportBatch[]; total: number }>(`${this.base}/import/batches`, { params });
+  }
+
+  getTransactions(limit = 50, offset = 0): Observable<{ rows: TollTransaction[]; total: number }> {
+    const params = new HttpParams().set('limit', limit).set('offset', offset);
+    return this.http.get<{ rows: TollTransaction[]; total: number }>(`${this.base}/transactions`, { params });
+  }
+
+  createTransaction(payload: Partial<TollTransaction>): Observable<TollTransaction> {
+    return this.http.post<TollTransaction>(`${this.base}/transactions`, payload);
   }
 }
