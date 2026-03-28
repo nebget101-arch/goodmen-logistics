@@ -746,21 +746,27 @@ router.post('/import/commit', async (req, res) => {
             operating_entity_id: operatingEntityId(req) || null,
             source_batch_id: resolvedBatchId,
             toll_account_id: batch.toll_account_id || null,
-            provider_name: row.provider_name || row.provider || null,
-            transaction_date: row.transaction_date || null,
+            provider_name: row.provider_name || row.provider || 'Unknown',
+            transaction_date: row.transaction_date || new Date(),
             posted_date: row.posted_date || null,
             plaza_name: row.plaza_name || null,
-            plaza_state: row.plaza_state || row.state || null,
-            entry_plaza: row.entry_plaza || null,
-            exit_plaza: row.exit_plaza || null,
+            entry_location: row.entry_location || null,
+            exit_location: row.exit_location || null,
+            city: row.city || null,
+            state: row.state ? String(row.state).toUpperCase().slice(0, 2) : null,
             amount: parseFloat(row.amount) || 0,
-            discount_amount: parseFloat(row.discount_amount) || 0,
+            currency: 'USD',
             truck_id: truckId,
             driver_id: driverId,
-            unit_number_raw: row.unit_number || row.device_number || null,
-            driver_name_raw: row.driver_name || null,
-            dedupe_hash: dedupeHash,
+            unit_number_raw: row.unit_number_raw || row.unit_number || row.device_number || null,
+            driver_name_raw: row.driver_name_raw || row.driver_name || null,
+            device_number_masked: row.device_number_masked || null,
+            plate_number_raw: row.plate_number_raw || row.plate_number || null,
+            matched_status: truckId && driverId ? 'matched' : (truckId || driverId ? 'partial' : 'unmatched'),
             validation_status: matchFailed ? 'exception' : 'valid',
+            settlement_link_status: 'none',
+            is_manual: false,
+            dedupe_hash: dedupeHash,
             created_by: req.user?.id || null
           })
           .returning('*');
@@ -768,11 +774,9 @@ router.post('/import/commit', async (req, res) => {
         // Create audit row
         await knex('toll_import_batch_rows').insert({
           batch_id: resolvedBatchId,
-          tenant_id: tid,
           row_number: imported + duplicates + errors + 1,
-          raw_data: JSON.stringify(row),
-          toll_transaction_id: txn.id,
-          status: matchFailed ? 'exception' : 'success'
+          raw_payload: JSON.stringify(row),
+          resolution_status: matchFailed ? 'exception' : 'imported'
         });
 
         // If matching failed, create exception
@@ -793,17 +797,16 @@ router.post('/import/commit', async (req, res) => {
 
         imported++;
       } catch (rowError) {
-        dtLogger.error('tolls_import_row_error', { batchId, row, error: rowError.message });
+        dtLogger.error('tolls_import_row_error', { batchId: resolvedBatchId, row, error: rowError.message });
         errors++;
 
         // Still create audit row for failed rows
         await knex('toll_import_batch_rows').insert({
           batch_id: resolvedBatchId,
-          tenant_id: tid,
           row_number: imported + duplicates + errors,
-          raw_data: JSON.stringify(row),
-          status: 'error',
-          error_message: rowError.message
+          raw_payload: JSON.stringify(row),
+          validation_errors: JSON.stringify([rowError.message]),
+          resolution_status: 'error'
         }).catch(() => { /* best effort audit */ });
       }
     }
@@ -816,7 +819,7 @@ router.post('/import/commit', async (req, res) => {
         total_rows: mappedRows.length,
         success_rows: imported,
         failed_rows: errors,
-        duplicate_rows: duplicates,
+        warning_rows: duplicates,
         completed_at: new Date(),
         updated_at: new Date()
       });
