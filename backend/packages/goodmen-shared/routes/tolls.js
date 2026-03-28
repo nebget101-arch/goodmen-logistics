@@ -651,6 +651,17 @@ router.post('/import/upload', upload.single('file'), async (req, res) => {
   }
 });
 
+// ─── Date parsing helper ──────────────────────────────────────────────────────
+function parseDate(val) {
+  if (!val) return null;
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  // Try parsing as Date
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
 // POST /import/commit – commit mapped rows into toll_transactions
 router.post('/import/commit', async (req, res) => {
   try {
@@ -747,8 +758,8 @@ router.post('/import/commit', async (req, res) => {
             source_batch_id: resolvedBatchId,
             toll_account_id: batch.toll_account_id || null,
             provider_name: row.provider_name || row.provider || 'Unknown',
-            transaction_date: row.transaction_date || new Date(),
-            posted_date: row.posted_date || null,
+            transaction_date: parseDate(row.transaction_date) || new Date().toISOString().slice(0, 10),
+            posted_date: parseDate(row.posted_date),
             plaza_name: row.plaza_name || null,
             entry_location: row.entry_location || null,
             exit_location: row.exit_location || null,
