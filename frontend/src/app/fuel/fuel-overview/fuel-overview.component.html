@@ -41,6 +41,20 @@
     </button>
   </div>
 
+  <!-- ─ Product Type Breakdown ─ -->
+  <div class="panels-row" *ngIf="overview!.byProductType && overview!.byProductType.length > 0">
+    <div class="panel panel-wide">
+      <h3>Spend by Product Type (30 days)</h3>
+      <div class="product-type-grid">
+        <div class="product-type-card" *ngFor="let pt of overview!.byProductType">
+          <span class="pt-label" [ngClass]="'pt-' + pt.productType">{{ pt.productType | uppercase }}</span>
+          <span class="pt-amount">{{ fmtCurrency(pt.amount) }}</span>
+          <span class="pt-sub">{{ fmt(pt.gallons, 1) }} gal · {{ pt.count }} txns</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ─ Bottom panels ─ -->
   <div class="panels-row">
     <!-- Top vendors -->

@@ -1549,14 +1549,18 @@ async function buildExpenses(req, filters) {
 		fuel AS (
 			SELECT
 				${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
-				'Fuel'::text AS category,
+				CASE
+					WHEN ft.product_type IS NOT NULL AND ft.product_type != 'diesel'
+					THEN 'Fuel (' || INITCAP(ft.product_type) || ')'
+					ELSE 'Fuel'
+				END AS category,
 				'fuel_transaction'::text AS source,
 				COUNT(*)::int AS expense_count,
 				COALESCE(SUM(ft.amount), 0)::numeric AS total_amount
 			FROM fuel_transactions ft
 			${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = ft.operating_entity_id' : ''}
 			WHERE ${fuelClauses.join(' AND ')}
-			${allMode ? 'GROUP BY 1,2,3' : ''}
+			GROUP BY ${allMode ? '1,2,3' : '1,2'}
 		),
 		tolls AS (
 			SELECT

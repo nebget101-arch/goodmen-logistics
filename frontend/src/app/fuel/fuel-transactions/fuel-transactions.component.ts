@@ -19,6 +19,7 @@ export class FuelTransactionsComponent implements OnInit {
   provider = '';
   matchedStatus = '';
   productType = '';
+  categoryFilter = '';
   search = '';
 
   pageSize = 50;
@@ -45,6 +46,7 @@ export class FuelTransactionsComponent implements OnInit {
       provider: this.provider || undefined,
       matched_status: this.matchedStatus || undefined,
       product_type: this.productType || undefined,
+      category: this.categoryFilter || undefined,
     }).subscribe({
       next: (res) => { this.rows = res.rows; this.total = res.total; this.loading = false; },
       error: (err) => { this.error = err.error?.error || 'Failed to load transactions'; this.loading = false; }
@@ -52,7 +54,7 @@ export class FuelTransactionsComponent implements OnInit {
   }
 
   applyFilters(): void { this.pageOffset = 0; this.load(); }
-  clearFilters(): void { this.dateFrom = ''; this.dateTo = ''; this.provider = ''; this.matchedStatus = ''; this.productType = ''; this.pageOffset = 0; this.load(); }
+  clearFilters(): void { this.dateFrom = ''; this.dateTo = ''; this.provider = ''; this.matchedStatus = ''; this.productType = ''; this.categoryFilter = ''; this.pageOffset = 0; this.load(); }
 
   get pageNumber(): number { return Math.floor(this.pageOffset / this.pageSize) + 1; }
   get totalPages(): number { return Math.ceil(this.total / this.pageSize); }

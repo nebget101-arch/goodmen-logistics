@@ -740,6 +740,18 @@ router.get('/overview', async (req, res) => {
       .modify((qb) => applyOperatingEntityFilter(qb, req, 'ft.operating_entity_id'))
       .count('* as count');
 
+    // Product type breakdown (30 days)
+    const byProductType = await knex('fuel_transactions')
+      .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
+      .where('transaction_date', '>=', monthAgo.toISOString().slice(0, 10))
+      .groupByRaw('COALESCE(product_type, \'diesel\')')
+      .select(knex.raw('COALESCE(product_type, \'diesel\') as product_type'))
+      .sum('gallons as gallons')
+      .sum('amount as amount')
+      .count('* as count')
+      .orderBy('amount', 'desc');
+
     const lastBatch = await knex('fuel_import_batches')
       .where({ tenant_id: tid })
       .modify((qb) => applyOperatingEntityFilter(qb, req))
@@ -760,6 +772,7 @@ router.get('/overview', async (req, res) => {
       },
       topVendors: topVendors.map((v) => ({ name: v.vendor_name, total: parseFloat(v.total), count: Number(v.count) })),
       byState: byState.map((s) => ({ state: s.state, gallons: parseFloat(s.gallons), amount: parseFloat(s.amount) })),
+      byProductType: byProductType.map((p) => ({ productType: p.product_type, gallons: parseFloat(p.gallons), amount: parseFloat(p.amount), count: Number(p.count) })),
       unmatchedTransactions: Number(unmatchedCount.count) || 0,
       openExceptions: Number(exceptionsOpen.count) || 0,
       lastBatch: lastBatch || null

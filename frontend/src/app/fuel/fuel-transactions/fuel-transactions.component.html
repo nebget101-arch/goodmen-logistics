@@ -44,6 +44,7 @@
           <th class="num-col">Amount</th>
           <th class="num-col">PPG</th>
           <th>Product</th>
+          <th>Category</th>
           <th>Matched</th>
           <th>Settlement</th>
           <th>Actions</th>
@@ -85,6 +86,15 @@
               <option value="reefer">Reefer</option>
             </select>
           </th>
+          <!-- Category -->
+          <th>
+            <select [(ngModel)]="categoryFilter" (change)="applyFilters()">
+              <option value="">All</option>
+              <option value="fuel">Fuel</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="advance">Advance</option>
+            </select>
+          </th>
           <!-- Matched -->
           <th>
             <select [(ngModel)]="matchedStatus" (change)="applyFilters()">
@@ -107,7 +117,10 @@
       </thead>
       <tbody>
         <tr *ngFor="let txn of rows" (click)="openDrawer(txn)" class="txn-row">
-          <td class="date-cell">{{ txn.transaction_date }}</td>
+          <td class="date-cell">
+            {{ txn.transaction_date }}
+            <span *ngIf="txn.source_transaction_id" class="split-badge" title="Split row — grouped by source transaction">S</span>
+          </td>
           <td class="provider-cell">{{ txn.provider_name }}</td>
           <td class="card-cell">{{ txn.card_number_masked || '—' }}</td>
           <td class="unit-cell">
@@ -132,6 +145,10 @@
             <span *ngIf="!txn.price_per_gallon" class="empty-dash">—</span>
           </td>
           <td class="product-cell">{{ txn.product_type || '—' }}</td>
+          <td class="category-cell">
+            <span *ngIf="txn.category">{{ txn.category }}</span>
+            <span *ngIf="!txn.category" class="empty-dash">—</span>
+          </td>
           <td (click)="$event.stopPropagation()">
             <span class="pill" [ngClass]="matchClass(txn.matched_status)">{{ txn.matched_status }}</span>
           </td>
