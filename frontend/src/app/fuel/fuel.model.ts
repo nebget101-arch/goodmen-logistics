@@ -146,6 +146,53 @@ export interface StageResult {
   failedCount: number;
 }
 
+// ─── AI Preprocessing types (FN-406) ─────────────────────────────────────────
+
+export interface AiColumnMapping {
+  rawHeader: string | null;
+  confidence: number;
+}
+
+export interface AiSplitStrategy {
+  type: 'multi_column' | 'description_parse' | 'none';
+  details: Record<string, unknown>;
+}
+
+export interface AiRowAnalysis {
+  totalRows: number;
+  normalRows: number;
+  splitRows: number;
+  skipRows: number;
+  flaggedRows: number;
+}
+
+export interface AiFlaggedRow {
+  rowNumber: number;
+  reason: string;
+  confidence: number;
+}
+
+export interface AiPreprocessData {
+  columnMapping: Record<string, AiColumnMapping>;
+  productTypeColumn: string | null;
+  splitStrategy: AiSplitStrategy;
+  rowAnalysis: AiRowAnalysis;
+  skippedRowIndices: number[];
+  flaggedRows: AiFlaggedRow[];
+  overallConfidence: number;
+}
+
+export interface AiPreprocessResult {
+  success: boolean;
+  data: AiPreprocessData;
+  meta: {
+    model: string;
+    processingTimeMs: number;
+    headersAnalyzed: number;
+    sampleRowsAnalyzed: number;
+  };
+}
+
 /** Normalized field keys used in column mapping */
 export const FUEL_NORMALIZED_FIELDS: { key: string; label: string; required: boolean }[] = [
   { key: 'transaction_date', label: 'Transaction Date', required: true },
@@ -163,4 +210,5 @@ export const FUEL_NORMALIZED_FIELDS: { key: string; label: string; required: boo
   { key: 'posted_date', label: 'Posted Date', required: false },
   { key: 'provider_name', label: 'Provider Name', required: false },
   { key: 'external_transaction_id', label: 'External Transaction ID', required: false },
+  { key: 'category', label: 'Category', required: false },
 ];
