@@ -189,9 +189,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     pickup: string;
     delivery: string;
     rate: string;
+    completed: string;
     status: string;
     billingStatus: string;
-    notes: string;
     attachmentType: string;
   } = {
     date: '',
@@ -201,9 +201,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     pickup: '',
     delivery: '',
     rate: '',
+    completed: '',
     status: '',
     billingStatus: '',
-    notes: '',
     attachmentType: ''
   };
 
@@ -268,6 +268,33 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return map[s] ?? s.replace(/_/g, ' ');
   }
 
+  private statusColorMap: Record<string, string> = {
+    NEW: '#3b82f6',
+    DRAFT: '#6366f1',
+    DISPATCHED: '#f97316',
+    EN_ROUTE: '#eab308',
+    PICKED_UP: '#eab308',
+    IN_TRANSIT: '#eab308',
+    DELIVERED: '#22c55e',
+    CANCELLED: '#ef4444',
+    CANCELED: '#ef4444',
+    TONU: '#ef4444'
+  };
+
+  get statusBarSegments(): { status: string; label: string; amount: number; pct: number; color: string }[] {
+    const total = this.summaryTotals.totalGross || 0;
+    if (total <= 0) return [];
+    return this.statusOptions
+      .filter(s => (this.summaryTotals.byStatus[s] || 0) > 0)
+      .map(s => ({
+        status: s,
+        label: this.getStatusLabel(s),
+        amount: this.summaryTotals.byStatus[s] || 0,
+        pct: ((this.summaryTotals.byStatus[s] || 0) / total) * 100,
+        color: this.statusColorMap[s] || '#64748b'
+      }));
+  }
+
   private headerFilterLabels: { [K in keyof typeof this.headerFilters]: string } = {
     date: 'Date',
     driver: 'Driver',
@@ -276,9 +303,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     pickup: 'Pickup',
     delivery: 'Delivery',
     rate: 'Rate',
+    completed: 'Completed',
     status: 'Status',
     billingStatus: 'Billing',
-    notes: 'Notes',
     attachmentType: 'Attachment'
   };
 
@@ -2244,6 +2271,22 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return base + (att.file_url.startsWith('/') ? att.file_url : '/' + att.file_url);
   }
 
+  /** Fetch load detail and open the first attachment matching the given type in a new tab. */
+  downloadAttachmentByType(load: LoadListItem, type: string): void {
+    this.loadsService.getLoad(load.id).subscribe({
+      next: (res) => {
+        const detail = res?.data;
+        if (!detail) return;
+        const att = (detail.attachments || []).find(
+          (a) => (a.type || '').toString().toUpperCase() === (type || '').toString().toUpperCase()
+        );
+        if (!att) return;
+        const url = this.getAttachmentUrl(att);
+        if (url) window.open(url, '_blank');
+      }
+    });
+  }
+
   /** First rate confirmation PDF URL for draft review (side-by-side view). */
   get draftRateConPdfUrl(): string {
     const atts = this.editingLoadDetail?.attachments || [];
@@ -2404,6 +2447,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         if (!rateStr.includes(hf.rate)) return false;
       }
 
+      if (hf.completed) {
+        const completedStr = (load.completed_date || '').toString();
+        if (!completedStr.includes(hf.completed)) return false;
+      }
+
       if (hf.driver) {
         const driverName = (load.driver_name || '').toString().toLowerCase();
         if (!driverName.includes(hf.driver.toLowerCase())) return false;
@@ -2417,11 +2465,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       if (hf.billingStatus) {
         const billingText = (load.billing_status || '').toString().toLowerCase().replace(/_/g, ' ');
         if (!billingText.includes(hf.billingStatus.toLowerCase())) return false;
-      }
-
-      if (hf.notes) {
-        const notes = (load.notes || '').toString().toLowerCase();
-        if (!notes.includes(hf.notes.toLowerCase())) return false;
       }
 
       if (hf.attachmentType) {
@@ -2533,9 +2576,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       pickup: '',
       delivery: '',
       rate: '',
+      completed: '',
       status: '',
       billingStatus: '',
-      notes: '',
       attachmentType: ''
     };
 
