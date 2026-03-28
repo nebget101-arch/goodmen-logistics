@@ -328,19 +328,18 @@
   <div class="table-card">
     <table class="table" *ngIf="!loading">
       <colgroup>
-        <col style="width: 5%">   <!-- Load # -->
-        <col style="width: 6%">   <!-- Date -->
-        <col style="width: 9%">   <!-- Driver -->
-        <col style="width: 10%">  <!-- Broker -->
-        <col style="width: 6%">   <!-- PO # -->
-        <col style="width: 9%">   <!-- Pickup -->
-        <col style="width: 9%">   <!-- Delivery -->
-        <col style="width: 6%">   <!-- Rate -->
-        <col style="width: 7%">   <!-- Completed -->
+        <col style="width: 6%">   <!-- Load # -->
+        <col style="width: 7%">   <!-- Date -->
+        <col style="width: 8%">   <!-- Driver -->
+        <col style="width: 12%">  <!-- Broker -->
+        <col style="width: 7%">   <!-- PO # -->
+        <col style="width: 11%">  <!-- Pickup -->
+        <col style="width: 11%">  <!-- Delivery -->
+        <col style="width: 5%">   <!-- Rate -->
+        <col style="width: 8%">   <!-- Completed -->
         <col style="width: 6%">   <!-- Status -->
         <col style="width: 6%">   <!-- Billing -->
-        <col style="width: 9%">   <!-- Notes -->
-        <col style="width: 7%">   <!-- Attachments -->
+        <col style="width: 8%">   <!-- Attachments -->
         <col style="width: 5%">   <!-- Actions -->
       </colgroup>
       <thead>
@@ -356,7 +355,6 @@
           <th (click)="toggleSort('completed_date')">Completed</th>
           <th>Status</th>
           <th>Billing</th>
-          <th>Notes</th>
           <th>Attachments</th>
           <th>Actions</th>
         </tr>
@@ -441,14 +439,6 @@
               [(ngModel)]="headerFilters.billingStatus"
             />
           </th>
-          <!-- Notes -->
-          <th>
-            <input
-              type="text"
-              placeholder="Notes"
-              [(ngModel)]="headerFilters.notes"
-            />
-          </th>
           <!-- Attachments -->
           <th>
             <input
@@ -476,7 +466,6 @@
           <td [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
           <td [title]="load.status || ''"><app-status-pill [status]="load.status" [compact]="true"></app-status-pill></td>
           <td [title]="load.billing_status || ''"><app-status-pill [status]="load.billing_status" [compact]="true"></app-status-pill></td>
-          <td class="notes-cell" [title]="load.notes || '--'">{{ load.notes || '--' }}</td>
           <td>
             <div class="attachment-chips attachment-chips--clickable" (click)="openEditForAttachments(load)" role="button" tabindex="0" (keydown.enter)="openEditForAttachments(load)" (keydown.space)="openEditForAttachments(load); $event.preventDefault()" title="Open attachments">
               <app-attachment-chip *ngFor="let type of (load.attachment_types || [])" [type]="type"></app-attachment-chip>
