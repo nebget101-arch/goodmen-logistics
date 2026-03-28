@@ -1,14 +1,27 @@
 'use strict';
 
 /**
- * FN-440: Claude Vision toll invoice extraction handler.
+ * FN-440 / FN-458: Claude Vision toll invoice extraction handler.
+ * Uses the native Anthropic SDK for image/vision support.
  * Accepts a toll invoice image (base64) and uses Claude Vision API
  * to extract structured toll transaction data.
  */
 
+const Anthropic = require('@anthropic-ai/sdk');
 const { logAiInteraction } = require('../analytics/logger');
 
 const SUPPORTED_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+// Lazy-init Anthropic client (uses ANTHROPIC_API_KEY env var by default)
+let anthropicClient = null;
+function getAnthropicClient() {
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic.default({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
+  }
+  return anthropicClient;
+}
 
 function buildTollVisionPrompt() {
   return `You are a toll invoice data extraction specialist for a fleet management system called FleetNeuron.
@@ -100,7 +113,7 @@ function validateExtractionResult(result) {
     result.warnings = [];
   }
   // Ensure each transaction has required fields
-  result.transactions = result.transactions.map((txn, i) => ({
+  result.transactions = result.transactions.map((txn) => ({
     transaction_date: txn.transaction_date || null,
     provider_name: txn.provider_name || result.invoiceMeta.providerName || 'Unknown',
     plaza_name: txn.plaza_name || null,
@@ -115,10 +128,10 @@ function validateExtractionResult(result) {
   return result;
 }
 
-async function handleTollInvoiceVision(req, res, deps) {
+async function handleTollInvoiceVision(req, res, _deps) {
   const startedAt = Date.now();
   try {
-    const { openai } = deps;
+    const client = getAnthropicClient();
     const { imageBase64, mediaType } = req.body || {};
 
     if (!imageBase64) {
@@ -139,34 +152,36 @@ async function handleTollInvoiceVision(req, res, deps) {
     }
 
     const prompt = buildTollVisionPrompt();
+    const model = process.env.ANTHROPIC_VISION_MODEL || 'claude-sonnet-4-20250514';
 
-    const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    const message = await client.messages.create({
+      model,
+      max_tokens: 4096,
       messages: [
-        {
-          role: 'system',
-          content: 'You are a precise toll invoice data extraction assistant. Return ONLY valid JSON.'
-        },
         {
           role: 'user',
           content: [
-            { type: 'text', text: prompt },
             {
-              type: 'image_url',
-              image_url: {
-                url: `data:${resolvedMediaType};base64,${imageBase64}`,
-                detail: 'high'
-              }
-            }
-          ]
-        }
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: resolvedMediaType,
+                data: imageBase64,
+              },
+            },
+            {
+              type: 'text',
+              text: prompt,
+            },
+          ],
+        },
       ],
+      system: 'You are a precise toll invoice data extraction assistant. Return ONLY valid JSON.',
       temperature: 0.1,
-      max_tokens: 4096,
     });
 
     const processingTimeMs = Date.now() - startedAt;
-    const aiContent = completion.choices[0]?.message?.content || '{}';
+    const aiContent = message.content[0]?.text || '{}';
 
     let result;
     try {

@@ -7,6 +7,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@goodmen/shared": "file:../../packages/goodmen-shared",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -16,4 +17,3 @@
     "pgvector": "^0.1.8"
   }
 }
-
