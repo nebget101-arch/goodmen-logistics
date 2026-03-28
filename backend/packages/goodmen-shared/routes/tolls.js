@@ -684,6 +684,20 @@ router.post('/import/commit', async (req, res) => {
               mapped[normalizedKey] = raw[rawHeader];
             }
           }
+          // Carry forward unmapped raw values for auto-detection
+          // (plate numbers, transponder IDs, driver names, etc.)
+          if (!mapped.plate_number_raw) {
+            mapped.plate_number_raw = raw.PlateNumber || raw.plate_number || raw.Plate || raw.LicensePlate || raw.plate || null;
+          }
+          if (!mapped.device_number_masked) {
+            mapped.device_number_masked = raw.TransponderID || raw.transponder_id || raw.Transponder || raw.TagID || raw.tag_id || null;
+          }
+          if (!mapped.driver_name_raw) {
+            mapped.driver_name_raw = raw.DriverName || raw.driver_name || raw.Driver || null;
+          }
+          if (!mapped.unit_number_raw) {
+            mapped.unit_number_raw = raw.UnitNumber || raw.unit_number || raw.VehicleID || raw.vehicle_id || null;
+          }
           return mapped;
         })
       : rows;
