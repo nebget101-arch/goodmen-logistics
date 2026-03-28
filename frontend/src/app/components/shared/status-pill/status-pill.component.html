@@ -1,1 +1,1 @@
-<span class="status-pill" [ngClass]="cssClass">{{ label }}</span>
+<span class="status-pill" [ngClass]="[cssClass, compact ? 'status-pill--compact' : '']" [attr.title]="compact ? label : null">{{ displayLabel }}</span>
