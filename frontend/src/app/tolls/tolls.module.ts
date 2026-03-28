@@ -13,6 +13,7 @@ import { TollsAccountsComponent } from './tolls-accounts/tolls-accounts.componen
 import { TollsDevicesComponent } from './tolls-devices/tolls-devices.component';
 import { TollsExceptionsComponent } from './tolls-exceptions/tolls-exceptions.component';
 import { DeviceDialogComponent } from './tolls-devices/device-dialog/device-dialog.component';
+import { ManualTollDialogComponent } from './tolls-transactions/manual-toll-dialog/manual-toll-dialog.component';
 
 @NgModule({
   declarations: [
@@ -25,6 +26,7 @@ import { DeviceDialogComponent } from './tolls-devices/device-dialog/device-dial
     TollsDevicesComponent,
     TollsExceptionsComponent,
     DeviceDialogComponent,
+    ManualTollDialogComponent,
   ],
   imports: [
     CommonModule,

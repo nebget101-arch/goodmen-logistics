@@ -1,4 +1,14 @@
-<section class="placeholder">
-  <h3>Toll Transactions</h3>
-  <p>Phase 1 skeleton ready. Grid, filters, assignment, and posting workflow will be implemented in next phases.</p>
+<section class="transactions-section">
+  <div class="section-header">
+    <h3 class="section-title">Toll Transactions</h3>
+    <button class="btn-add" (click)="openAddTollDialog()">
+      + Add Manual Toll
+    </button>
+  </div>
+
+  <div *ngIf="successMsg" class="success-banner">{{ successMsg }}</div>
+
+  <div class="placeholder">
+    <p>Phase 1 skeleton ready. Grid, filters, assignment, and posting workflow will be implemented in next phases.</p>
+  </div>
 </section>
