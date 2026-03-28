@@ -202,10 +202,15 @@ export interface CreateTollTransactionPayload {
   transaction_date: string;
   provider_name: string;
   plaza_name: string;
-  plate_number: string;
+  plate_number_raw?: string | null;
   amount: number;
   entry_point?: string;
   exit_point?: string;
-  vehicle_class?: string;
-  source: 'invoice_upload';
+  city?: string | null;
+  state?: string | null;
+  truck_id?: string | null;
+  driver_id?: string | null;
+  matched_status?: string;
+  notes?: string | null;
+  source: string;
 }
