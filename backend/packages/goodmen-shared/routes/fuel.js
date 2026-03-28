@@ -262,18 +262,38 @@ router.post('/import/ai-preprocess', upload.single('file'), async (req, res) => 
       return obj;
     });
 
-    // Call AI service
+    // Call AI service with timeout
     const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
-    const response = await fetch(`${aiServiceUrl}/api/ai/fuel/preprocess`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        headers,
-        sampleRows,
-        totalRows: rows.length,
-        providerName,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+
+    let response;
+    try {
+      response = await fetch(`${aiServiceUrl}/api/ai/fuel/preprocess`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          headers,
+          sampleRows,
+          totalRows: rows.length,
+          providerName,
+        }),
+        signal: controller.signal,
+      });
+    } catch (fetchErr) {
+      if (fetchErr.name === 'AbortError') {
+        dtLogger.error('fuel_ai_preprocess_timeout', { aiServiceUrl });
+        return sendError(res, 504, 'AI service timeout');
+      }
+      // Connection refused, DNS failure, etc.
+      dtLogger.error('fuel_ai_preprocess_unreachable', {
+        aiServiceUrl,
+        error: fetchErr.message,
+      });
+      return sendError(res, 502, 'AI service unreachable');
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
