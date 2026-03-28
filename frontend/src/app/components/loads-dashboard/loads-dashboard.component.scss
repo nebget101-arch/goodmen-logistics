@@ -571,6 +571,14 @@
     background: rgba(148, 163, 184, 0.15);
   }
 
+  .attachment-chip--download {
+    cursor: pointer;
+  }
+  .attachment-chip--download:hover ::ng-deep .attachment-chip {
+    text-decoration: underline;
+    filter: brightness(1.2);
+  }
+
   .link {
     color: var(--primary-color);
     cursor: pointer;
