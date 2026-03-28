@@ -11,32 +11,166 @@
   <thead>
     <tr>
       <th>Device</th>
-      <th>Account</th>
       <th>Plate</th>
-      <th>Truck</th>
-      <th>Driver</th>
-      <th>Start</th>
-      <th>End</th>
+      <th>Assigned Truck</th>
+      <th>Resolved Driver</th>
+      <th>Account</th>
       <th>Status</th>
       <th></th>
     </tr>
   </thead>
   <tbody>
     <tr *ngIf="rows.length === 0">
-      <td colspan="9" class="empty-row">No devices found. Click "Add Device" to create one.</td>
+      <td colspan="7" class="empty-row">No devices found. Click "Add Device" to create one.</td>
     </tr>
     <tr *ngFor="let row of rows">
       <td>{{ row.device_number_masked || '---' }}</td>
-      <td>{{ getAccountName(row.toll_account_id) }}</td>
       <td>{{ row.plate_number || '---' }}</td>
-      <td>{{ row.truck_id || '---' }}</td>
-      <td>{{ row.driver_id || '---' }}</td>
-      <td>{{ row.effective_start_date ? (row.effective_start_date | date:'mediumDate') : '---' }}</td>
-      <td>{{ row.effective_end_date ? (row.effective_end_date | date:'mediumDate') : '---' }}</td>
+      <td>
+        <ng-container *ngIf="row.truck_id; else assignMapTruck">
+          {{ truckDisplay(row.truck_id) }}
+        </ng-container>
+        <ng-template #assignMapTruck>
+          <ng-container *ngIf="assignmentMap[row.id]?.truck_id; else noTruck">
+            {{ truckDisplay(assignmentMap[row.id].truck_id || '') }}
+          </ng-container>
+          <ng-template #noTruck>—</ng-template>
+        </ng-template>
+      </td>
+      <td>
+        <ng-container *ngIf="driverOverrideMap[row.id]; else noOverride">
+          {{ driverDisplay(driverOverrideMap[row.id]) }}
+          <span class="badge-override">Override</span>
+        </ng-container>
+        <ng-template #noOverride>
+          <ng-container *ngIf="row.driver_id; else assignMapDriver">
+            {{ driverDisplay(row.driver_id) }}
+          </ng-container>
+          <ng-template #assignMapDriver>
+            <ng-container *ngIf="assignmentMap[row.id]?.driver_id; else noDriver">
+              {{ driverDisplay(assignmentMap[row.id].driver_id || '') }}
+            </ng-container>
+            <ng-template #noDriver>—</ng-template>
+          </ng-template>
+        </ng-template>
+      </td>
+      <td>{{ getAccountName(row.toll_account_id) }}</td>
       <td>{{ row.status }}</td>
       <td>
-        <button class="btn-edit" (click)="openEditDialog(row)">Edit</button>
+        <div class="actions-cell">
+          <button class="btn-icon" (click)="openEditDialog(row)" title="Edit Device">
+            <span class="material-symbols-outlined">edit</span>
+          </button>
+          <ng-container *ngIf="!assignmentMap[row.id]; else hasAssignment">
+            <button class="btn-icon btn-assign" (click)="openAssignTruck(row)" title="Assign Truck">
+              <span class="material-symbols-outlined">local_shipping</span>
+            </button>
+          </ng-container>
+          <ng-template #hasAssignment>
+            <button class="btn-icon" (click)="openAssignTruck(row)" title="Reassign Truck">
+              <span class="material-symbols-outlined">swap_horiz</span>
+            </button>
+            <button class="btn-icon btn-danger" (click)="removeTruck(row)" title="Remove Truck">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </ng-template>
+          <button class="btn-icon" (click)="openDriverOverride(row)" title="Override Driver">
+            <span class="material-symbols-outlined">person</span>
+          </button>
+          <button class="btn-icon" (click)="openHistory(row)" title="Assignment History">
+            <span class="material-symbols-outlined">history</span>
+          </button>
+        </div>
       </td>
     </tr>
   </tbody>
 </table>
+
+<!-- Assign / Reassign Truck Modal -->
+<div class="modal-overlay" *ngIf="showAssignTruckDialog" (click)="closeAssignTruck()"></div>
+<div class="assign-modal" *ngIf="showAssignTruckDialog">
+  <div class="modal-header">
+    <h3>{{ assignmentMap[assigningDevice?.id || ''] ? 'Reassign Truck' : 'Assign Truck' }} — {{ assigningDevice?.device_number_masked }}</h3>
+    <button class="close-btn" (click)="closeAssignTruck()"><span class="material-symbols-outlined">close</span></button>
+  </div>
+  <form [formGroup]="assignTruckForm" (ngSubmit)="saveAssignTruck()" class="modal-form">
+    <label>
+      Truck (Unit #)
+      <select formControlName="truck_id">
+        <option value="">-- Select Truck --</option>
+        <option *ngFor="let t of trucks" [value]="t.id">{{ t.unit_number }}{{ t.plate_number ? ' · ' + t.plate_number : '' }}</option>
+      </select>
+    </label>
+    <label>
+      Notes (optional)
+      <input type="text" formControlName="notes" />
+    </label>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" (click)="closeAssignTruck()" [disabled]="savingAssign">Cancel</button>
+      <button type="submit" class="btn-save" [disabled]="savingAssign || assignTruckForm.invalid">
+        {{ savingAssign ? 'Saving...' : (assignmentMap[assigningDevice?.id || ''] ? 'Reassign' : 'Assign') }}
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Driver Override Modal -->
+<div class="modal-overlay" *ngIf="showDriverOverride" (click)="closeDriverOverride()"></div>
+<div class="assign-modal" *ngIf="showDriverOverride">
+  <div class="modal-header">
+    <h3>Override Driver — {{ overrideDevice?.device_number_masked }}</h3>
+    <button class="close-btn" (click)="closeDriverOverride()"><span class="material-symbols-outlined">close</span></button>
+  </div>
+  <div class="modal-form">
+    <label>
+      Driver
+      <select [(ngModel)]="selectedOverrideDriverId">
+        <option value="">-- None (clear override) --</option>
+        <option *ngFor="let d of drivers" [value]="d.id">{{ d.first_name }} {{ d.last_name }}</option>
+      </select>
+    </label>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" (click)="closeDriverOverride()">Cancel</button>
+      <button type="button" class="btn-save" (click)="saveDriverOverride()" [disabled]="savingOverride">
+        {{ savingOverride ? 'Saving...' : 'Save Override' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Assignment History Modal -->
+<div class="modal-overlay" *ngIf="showHistory" (click)="closeHistory()"></div>
+<div class="assign-modal modal-wide" *ngIf="showHistory">
+  <div class="modal-header">
+    <h3>Assignment History — {{ historyDevice?.device_number_masked }}</h3>
+    <button class="close-btn" (click)="closeHistory()"><span class="material-symbols-outlined">close</span></button>
+  </div>
+  <div class="history-body">
+    <div *ngIf="historyLoading" class="loading-text">Loading...</div>
+    <div *ngIf="!historyLoading && historyRows.length === 0" class="empty-text">No assignment history.</div>
+    <table *ngIf="!historyLoading && historyRows.length > 0" class="history-table">
+      <thead>
+        <tr>
+          <th>Truck</th>
+          <th>Driver Override</th>
+          <th>Plate</th>
+          <th>Assigned</th>
+          <th>Removed</th>
+          <th>Status</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let h of historyRows">
+          <td>{{ truckDisplay(h.truck_id || '') || '—' }}</td>
+          <td>{{ h.driver_override_id ? driverDisplay(h.driver_override_id) : '—' }}</td>
+          <td>{{ h.plate_number || '—' }}</td>
+          <td>{{ h.assigned_at | date:'mediumDate' }}</td>
+          <td>{{ h.removed_at ? (h.removed_at | date:'mediumDate') : '—' }}</td>
+          <td><span [class]="h.status === 'active' ? 'status-active' : 'status-removed'">{{ h.status }}</span></td>
+          <td>{{ h.notes || '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
