@@ -208,13 +208,54 @@ function applyMapping(rawRow, columnMap) {
   return normalized;
 }
 
+// ─── Non-fuel product patterns (Money Code, cash advance, etc.) ──────────────
+const NON_FUEL_PATTERNS = [
+  /money\s*code/i,
+  /cash\s*advance/i,
+  /\batm\b/i,
+  /money\s*order/i,
+  /\bcash\b/i,
+  /\bfee\b/i,
+  /service\s*charge/i,
+  /\brebate\b/i,
+  /\brefund\b/i,
+];
+
+/**
+ * Detect whether a row represents a non-fuel transaction (Money Code, cash advance, etc.)
+ * Checks product_type and vendor_name fields.
+ * Returns the matched pattern reason string, or null if the row is valid fuel data.
+ */
+function isMoneyCode(row) {
+  const fieldsToCheck = [
+    row.product_type || '',
+    row.vendor_name || '',
+  ];
+  for (const field of fieldsToCheck) {
+    const text = field.toString().trim();
+    if (!text) continue;
+    for (const pattern of NON_FUEL_PATTERNS) {
+      if (pattern.test(text)) {
+        return `Non-fuel product detected: "${text}"`;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Validate a single normalized row.
- * Returns { errors: string[], warnings: string[] }
+ * Returns { errors: string[], warnings: string[], skipReason: string|null }
  */
 function validateRow(row, existingExternalIds = new Set()) {
   const errors = [];
   const warnings = [];
+
+  // ─── Money Code / non-fuel skip check (before other validation) ─────────────
+  const skipReason = isMoneyCode(row);
+  if (skipReason) {
+    return { errors: [], warnings: [], skipReason };
+  }
 
   // ─── Required fields ────────────────────────────────────────────────────────
   if (!row.transaction_date) {
@@ -278,7 +319,7 @@ function validateRow(row, existingExternalIds = new Set()) {
     warnings.push(`Duplicate external transaction ID: "${row.external_transaction_id}"`);
   }
 
-  return { errors, warnings };
+  return { errors, warnings, skipReason: null };
 }
 
 // ─── Multi-product column patterns for row splitting ─────────────────────────
@@ -372,6 +413,7 @@ module.exports = {
   buildAutoMapping,
   applyMapping,
   validateRow,
+  isMoneyCode,
   normalizeRow,
   PROVIDER_TEMPLATES
 };

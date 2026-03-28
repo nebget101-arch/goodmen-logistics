@@ -8,7 +8,7 @@
 
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
-const { parseFileBuffer, buildAutoMapping, applyMapping, validateRow, normalizeRow } = require('./fuel-parser');
+const { parseFileBuffer, buildAutoMapping, applyMapping, validateRow, isMoneyCode, normalizeRow } = require('./fuel-parser');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -206,6 +206,7 @@ async function stageBatch({
   let successCount = 0;
   let warningCount = 0;
   let failedCount = 0;
+  let skippedCount = 0;
 
   const rowInserts = [];
 
@@ -214,6 +215,24 @@ async function stageBatch({
   for (let i = 0; i < rawRows.length; i++) {
     const rawRow = rawRows[i];
     const mapped = applyMapping(rawRow, columnMap);
+
+    // ─── Money Code / non-fuel skip (before splitting) ────────────────────────
+    const skipReason = isMoneyCode(mapped);
+    if (skipReason) {
+      skippedCount++;
+      expandedRowNum++;
+      rowInserts.push({
+        batch_id: batchId,
+        row_number: expandedRowNum,
+        raw_payload: JSON.stringify(rawRow),
+        normalized_payload: JSON.stringify(mapped),
+        validation_errors: JSON.stringify([]),
+        warnings: JSON.stringify([skipReason]),
+        match_result: null,
+        resolution_status: 'skipped'
+      });
+      continue;
+    }
 
     // Normalize: split multi-product rows into separate batch rows
     const splitResults = normalizeRow(mapped, rawRow, i + 1);
@@ -279,12 +298,13 @@ async function stageBatch({
     total_rows: expandedRowNum,
     success_rows: successCount,
     warning_rows: warningCount,
-    failed_rows: failedCount
+    failed_rows: failedCount,
+    skipped_rows: skippedCount
   });
 
-  dtLogger.info('fuel_batch_staged', { batchId, tenantId, rawRows: rawRows.length, expandedRows: expandedRowNum, success: successCount, warning: warningCount, failed: failedCount });
+  dtLogger.info('fuel_batch_staged', { batchId, tenantId, rawRows: rawRows.length, expandedRows: expandedRowNum, success: successCount, warning: warningCount, failed: failedCount, skipped: skippedCount });
 
-  return { batchId, totalRows: expandedRowNum, successCount, warningCount, failedCount };
+  return { batchId, totalRows: expandedRowNum, successCount, warningCount, failedCount, skippedCount };
 }
 
 /**
@@ -394,6 +414,18 @@ async function commitBatch({ batchId, tenantId, operatingEntityId = null, import
       }
     }
 
+    // ─── Missing card number exception ────────────────────────────────────────
+    if (!normalized.card_number_masked) {
+      await knex('fuel_transaction_exceptions').insert({
+        fuel_transaction_id: txn.id,
+        tenant_id: tenantId,
+        exception_type: 'missing_card_number',
+        exception_message: buildExceptionMessage('missing_card_number', normalized),
+        resolution_status: 'open'
+      });
+      exceptions++;
+    }
+
     imported++;
   }
 
@@ -416,6 +448,7 @@ function buildExceptionMessage(type, normalized) {
   if (type === 'unmatched_truck') return `Could not match truck unit "${normalized.unit_number_raw}" to any vehicle in the system`;
   if (type === 'unmatched_driver') return `Could not match driver "${normalized.driver_name_raw}" to any driver record`;
   if (type === 'unmatched_card') return `No fuel card account matched for this transaction`;
+  if (type === 'missing_card_number') return `Transaction has no card number – card-based matching unavailable`;
   return `Unresolved exception: ${type}`;
 }
 
