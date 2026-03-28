@@ -829,22 +829,140 @@ router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), uplo
 });
 
 // PATCH /api/loads/:id/approve-draft (admin, dispatch only; DRAFT -> DISPATCHED)
+// Accepts optional body with load fields (rate, broker, stops, driver, notes, etc.)
+// to persist form changes AND transition status in a single transaction.
 router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const client = await getClient();
   try {
-    const result = await query('SELECT id, status FROM loads WHERE id = $1', [req.params.id]);
-    if (!result.rows.length) return res.status(404).json({ success: false, error: 'Load not found' });
+    await client.query('BEGIN');
+
+    const result = await client.query('SELECT id, status FROM loads WHERE id = $1', [req.params.id]);
+    if (!result.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Load not found' });
+    }
     if (normalizeEnum(result.rows[0].status) !== 'DRAFT') {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, error: 'Only draft loads can be approved' });
     }
-    await query(
+
+    const body = req.body || {};
+    const hasBody = Object.keys(body).length > 0;
+
+    // If body contains load fields, apply them before transitioning status
+    if (hasBody) {
+      const updates = [];
+      const values = [];
+      let idx = 1;
+
+      const fieldMap = {
+        loadNumber: 'load_number',
+        dispatcherUserId: 'dispatcher_user_id',
+        driverId: 'driver_id',
+        truckId: 'truck_id',
+        trailerId: 'trailer_id',
+        brokerId: 'broker_id',
+        brokerName: 'broker_name',
+        poNumber: 'po_number',
+        rate: 'rate',
+        notes: 'notes',
+        completedDate: 'completed_date'
+      };
+
+      Object.keys(fieldMap).forEach(key => {
+        if (body[key] !== undefined) {
+          updates.push(`${fieldMap[key]} = $${idx}`);
+          values.push(normalizeNullable(body[key]));
+          idx += 1;
+        }
+      });
+
+      if (updates.length > 0) {
+        values.push(req.params.id);
+        await client.query(
+          `UPDATE loads SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${idx}`,
+          values
+        );
+      }
+
+      // Handle stops update
+      const stopsInput = Array.isArray(body.stops) ? body.stops : (body.pickup || body.delivery ? buildStopsFromBody(body) : null);
+      if (stopsInput) {
+        const stopErrors = validateStops(stopsInput, true);
+        if (stopErrors.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, error: 'Invalid stops', details: stopErrors });
+        }
+
+        const pickups = stopsInput.filter((s) => normalizeEnum(s.stopType || s.stop_type) === 'PICKUP');
+        const deliveries = stopsInput.filter((s) => normalizeEnum(s.stopType || s.stop_type) === 'DELIVERY');
+        const firstPickup = pickups[0];
+        const lastDelivery = deliveries.length ? deliveries[deliveries.length - 1] : null;
+        const loadPickupDate = firstPickup ? (firstPickup.date || firstPickup.stopDate || firstPickup.stop_date || null) : null;
+        const loadDeliveryDate = lastDelivery ? (lastDelivery.date || lastDelivery.stopDate || lastDelivery.stop_date || null) : null;
+
+        await client.query('DELETE FROM load_stops WHERE load_id = $1', [req.params.id]);
+        for (const stop of stopsInput) {
+          const stopType = normalizeEnum(stop.stopType || stop.stop_type);
+          const stopDate = stop.date || stop.stopDate || stop.stop_date;
+          await client.query(
+            `INSERT INTO load_stops (
+              load_id, stop_type, stop_date, city, state, zip, address1, address2, sequence
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [
+              req.params.id,
+              stopType,
+              normalizeNullable(stopDate),
+              normalizeNullable(stop.city),
+              normalizeNullable(stop.state),
+              normalizeNullable(stop.zip),
+              normalizeNullable(stop.address1),
+              normalizeNullable(stop.address2),
+              normalizeNullable(stop.sequence) || 1
+            ]
+          );
+        }
+
+        if (loadPickupDate != null || loadDeliveryDate != null) {
+          const loadDateUpdates = [];
+          const loadDateValues = [];
+          let loadDateIdx = 1;
+          if (loadPickupDate != null) {
+            loadDateUpdates.push(`pickup_date = $${loadDateIdx}`);
+            loadDateValues.push(normalizeNullable(loadPickupDate));
+            loadDateIdx += 1;
+          }
+          if (loadDeliveryDate != null) {
+            loadDateUpdates.push(`delivery_date = $${loadDateIdx}`);
+            loadDateValues.push(normalizeNullable(loadDeliveryDate));
+            loadDateIdx += 1;
+          }
+          if (loadDateUpdates.length > 0) {
+            loadDateValues.push(req.params.id);
+            await client.query(
+              `UPDATE loads SET ${loadDateUpdates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${loadDateIdx}`,
+              loadDateValues
+            );
+          }
+        }
+      }
+    }
+
+    // Transition status to DISPATCHED
+    await client.query(
       `UPDATE loads SET status = 'DISPATCHED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [req.params.id]
     );
-    const data = await getLoadDetail(query, req.params.id);
+
+    await client.query('COMMIT');
+    const data = await getLoadDetail(client, req.params.id);
     res.json({ success: true, data });
   } catch (error) {
-    dtLogger.error('loads_approve_draft_failed', error, { loadId: req.params.id });
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_approve_draft_failed', error, { loadId: req.params.id, body: req.body });
     res.status(500).json({ success: false, error: 'Failed to approve draft' });
+  } finally {
+    client.release();
   }
 });
 
