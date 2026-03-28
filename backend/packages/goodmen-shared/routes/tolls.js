@@ -628,11 +628,12 @@ router.post('/import/upload', upload.single('file'), async (req, res) => {
         tenant_id: tid,
         operating_entity_id: operatingEntityId(req),
         toll_account_id: accountId,
+        provider_name: 'Unknown',
         source_file_name: req.file.originalname,
         import_status: 'uploaded',
         total_rows: rows.length,
         started_at: new Date(),
-        created_by: req.user?.id || null
+        imported_by_user_id: req.user?.id || null
       })
       .returning('*');
 
