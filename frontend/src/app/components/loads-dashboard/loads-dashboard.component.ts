@@ -329,12 +329,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return o && d ? `${o} → ${d}` : '';
   }
 
-  /** Driver position = from loads API (position before picking up this load), else fallback to last delivery. */
+  /** Driver position = from loads API (position before picking up this load), else previous delivery, else fallback to last delivery stop. */
   get driverPositionDisplay(): string {
     const load = this.editingLoadDetail;
     const city = (load?.driver_position_city || '').toString().trim();
     const state = (load?.driver_position_state || '').toString().trim();
     if (city || state) return [city || '--', state].filter(Boolean).join(', ');
+    const prevCity = (load?.prev_delivery_city || '').toString().trim();
+    const prevState = (load?.prev_delivery_state || '').toString().trim();
+    if (prevCity || prevState) {
+      const location = [prevCity || '--', prevState].filter(Boolean).join(', ');
+      return `Last delivery: ${location}`;
+    }
     const stops = this.sortedStops || [];
     if (!stops.length) return '--';
     const lastDelivery = [...stops].reverse().find(

@@ -68,10 +68,12 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
   const deliveryZip = (lastDelivery?.zip || '').toString().trim() || null;
 
   let prevZip = null;
+  let prevCity = null;
+  let prevState = null;
   if (loadRow?.driver_id) {
     try {
       const prevResult = await exec(
-        `SELECT s.zip
+        `SELECT s.zip, s.city, s.state
          FROM loads l
          JOIN load_stops s ON s.load_id = l.id
          WHERE l.driver_id = $1
@@ -82,6 +84,8 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
         [loadRow.driver_id, loadId]
       );
       prevZip = (prevResult.rows[0]?.zip || '').toString().trim() || null;
+      prevCity = (prevResult.rows[0]?.city || '').toString().trim() || null;
+      prevState = (prevResult.rows[0]?.state || '').toString().trim() || null;
     } catch (err) {
       console.error('computeTripMetrics prevZip lookup failed', err.message || err);
       prevZip = null;
@@ -104,6 +108,8 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
 
   return {
     prev_zip: prevZip,
+    prev_delivery_city: prevCity,
+    prev_delivery_state: prevState,
     pickup_zip: pickupZip,
     delivery_zip: deliveryZip,
     empty_miles: emptyMiles,
