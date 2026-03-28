@@ -38,7 +38,10 @@ function applyTenantFilter(qb, req, column = 'tenant_id') {
 
 function applyEntityFilter(qb, req, column = 'operating_entity_id') {
 	if (req.context?.operatingEntityId) {
-		qb.andWhere(column, req.context.operatingEntityId);
+		qb.andWhere(function () {
+			this.where(column, req.context.operatingEntityId)
+				.orWhereNull(column);
+		});
 	}
 }
 
