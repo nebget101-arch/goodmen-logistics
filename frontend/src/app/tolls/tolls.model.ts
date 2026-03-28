@@ -52,6 +52,7 @@ export interface TollTransaction {
   truck_id?: string;
   driver_id?: string;
   load_id?: string;
+  load_number?: string;
   unit_number_raw?: string;
   driver_name_raw?: string;
   device_number_masked?: string;
