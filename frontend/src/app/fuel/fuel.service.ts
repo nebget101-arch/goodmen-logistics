@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
-  FuelCardAccount, FuelMappingProfile, FuelImportBatch, FuelImportBatchRow,
+  FuelCardAccount, FuelCard, FuelMappingProfile, FuelImportBatch, FuelImportBatchRow,
   FuelTransaction, FuelException, FuelOverview, ProviderTemplate,
   ImportPreviewResult, StageResult, AiPreprocessResult, CardDriverAssignment
 } from './fuel.model';
@@ -42,6 +42,19 @@ export class FuelService {
 
   revokeDriver(cardId: string, notes?: string): Observable<{ revoked: boolean }> {
     return this.http.post<{ revoked: boolean }>(`${this.base}/cards/${cardId}/revoke-driver`, { notes });
+  }
+
+  // ─── Cards (under Account) ─────────────────────────────────────────────────
+  getAccountCards(accountId: string): Observable<FuelCard[]> {
+    return this.http.get<FuelCard[]>(`${this.base}/accounts/${accountId}/cards`);
+  }
+
+  createAccountCard(accountId: string, card: Partial<FuelCard>): Observable<FuelCard> {
+    return this.http.post<FuelCard>(`${this.base}/accounts/${accountId}/cards`, card);
+  }
+
+  updateFuelCard(cardId: string, patch: Partial<FuelCard>): Observable<FuelCard> {
+    return this.http.patch<FuelCard>(`${this.base}/accounts/cards/${cardId}`, patch);
   }
 
   // ─── Mapping Profiles ─────────────────────────────────────────────────────────
