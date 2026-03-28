@@ -70,9 +70,27 @@ export interface TollTransaction {
   notes?: string;
   created_at: string;
   updated_at: string;
-  // Joined
   truck_display?: string;
   driver_display?: string;
+}
+
+export interface TollException {
+  id: string;
+  tenant_id: string;
+  toll_transaction_id: string;
+  exception_type: string;
+  exception_message?: string;
+  resolution_status: 'open' | 'resolved' | 'ignored';
+  resolved_by?: string;
+  resolved_at?: string;
+  resolution_notes?: string;
+  created_at: string;
+  transaction_date?: string;
+  provider_name?: string;
+  plaza_name?: string;
+  amount?: number;
+  unit_number_raw?: string;
+  driver_name_raw?: string;
 }
 
 export interface TollOverview {

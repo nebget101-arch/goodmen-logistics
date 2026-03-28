@@ -5,6 +5,7 @@ import { environment } from '../../environments/environment';
 import {
   TollAccount,
   TollDevice,
+  TollException,
   TollImportBatch,
   TollOverview,
   TollTransaction,
@@ -44,6 +45,18 @@ export class TollsService {
 
   updateDevice(id: string, payload: Partial<TollDevice>): Observable<TollDevice> {
     return this.http.patch<TollDevice>(`${this.base}/devices/${id}`, payload);
+  }
+
+  getExceptions(filters: { limit?: number; offset?: number; status?: string } = {}): Observable<{ rows: TollException[]; total: number }> {
+    let params = new HttpParams();
+    if (filters.limit) params = params.set('limit', filters.limit);
+    if (filters.offset) params = params.set('offset', filters.offset);
+    if (filters.status) params = params.set('status', filters.status);
+    return this.http.get<{ rows: TollException[]; total: number }>(`${this.base}/exceptions`, { params });
+  }
+
+  resolveException(id: string, payload: { resolution_status: string; resolution_notes?: string; truck_id?: string; driver_id?: string }): Observable<TollException> {
+    return this.http.patch<TollException>(`${this.base}/exceptions/${id}`, payload);
   }
 
   getImportBatches(limit = 50, offset = 0): Observable<{ rows: TollImportBatch[]; total: number }> {
