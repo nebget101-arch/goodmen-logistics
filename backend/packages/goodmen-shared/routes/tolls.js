@@ -7,6 +7,7 @@
 
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
 
@@ -306,6 +307,88 @@ router.get('/transactions', async (req, res) => {
   } catch (error) {
     dtLogger.error('tolls_transactions_list_failed', error);
     res.status(500).json({ error: 'Failed to fetch toll transactions' });
+  }
+});
+
+// ─── Manual Toll Transaction Entry (FN-427) ──────────────────────────────────
+function buildDedupeHash(tenantId, provider, externalId, date, amount) {
+  const raw = [tenantId, provider || '', externalId || '', date || '', String(amount || 0)].join('|');
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+router.post('/transactions', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+
+    const {
+      transaction_date, provider_name, plaza_name, entry_location, exit_location,
+      city, state, amount, truck_id, driver_id, load_id, notes,
+      external_transaction_id, device_number_masked, plate_number_raw,
+      unit_number_raw, driver_name_raw
+    } = req.body || {};
+
+    if (!transaction_date) return res.status(400).json({ error: 'transaction_date is required' });
+    if (!provider_name) return res.status(400).json({ error: 'provider_name is required' });
+    if (amount === undefined || amount === null) return res.status(400).json({ error: 'amount is required' });
+
+    // Validate truck_id / driver_id references
+    if (truck_id) {
+      const truck = await knex('vehicles').where({ id: truck_id, tenant_id: tid }).first('id');
+      if (!truck) return res.status(400).json({ error: `truck_id "${truck_id}" does not exist for this tenant` });
+    }
+    if (driver_id) {
+      const driver = await knex('drivers').where({ id: driver_id, tenant_id: tid }).first('id');
+      if (!driver) return res.status(400).json({ error: `driver_id "${driver_id}" does not exist for this tenant` });
+    }
+
+    // Generate dedup hash
+    const dedupeHash = buildDedupeHash(tid, provider_name, external_transaction_id, transaction_date, amount);
+
+    // Check for duplicate
+    const existing = await knex('toll_transactions')
+      .where({ tenant_id: tid, dedupe_hash: dedupeHash })
+      .first('id');
+    if (existing) {
+      return res.status(409).json({ error: 'Duplicate transaction detected', existingId: existing.id });
+    }
+
+    const userId = req.user?.id || null;
+
+    const [row] = await knex('toll_transactions')
+      .insert({
+        tenant_id: tid,
+        operating_entity_id: operatingEntityId(req),
+        provider_name,
+        external_transaction_id: external_transaction_id || null,
+        transaction_date,
+        truck_id: truck_id || null,
+        driver_id: driver_id || null,
+        load_id: load_id || null,
+        unit_number_raw: unit_number_raw || null,
+        driver_name_raw: driver_name_raw || null,
+        device_number_masked: device_number_masked || null,
+        plate_number_raw: plate_number_raw || null,
+        plaza_name: plaza_name || null,
+        entry_location: entry_location || null,
+        exit_location: exit_location || null,
+        city: city || null,
+        state: state ? state.toUpperCase().slice(0, 2) : null,
+        amount: parseFloat(amount) || 0,
+        currency: 'USD',
+        matched_status: truck_id && driver_id ? 'matched' : (truck_id || driver_id ? 'partial' : 'unmatched'),
+        validation_status: 'valid',
+        settlement_link_status: 'none',
+        is_manual: true,
+        dedupe_hash: dedupeHash,
+        created_by: userId,
+      })
+      .returning('*');
+
+    res.status(201).json(row);
+  } catch (error) {
+    dtLogger.error('tolls_transaction_create_failed', error);
+    res.status(500).json({ error: 'Failed to create toll transaction' });
   }
 });
 
