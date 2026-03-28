@@ -42,6 +42,26 @@ export interface TollImportBatch {
   completed_at?: string;
 }
 
+export interface TollException {
+  id: string;
+  tenant_id: string;
+  toll_transaction_id: string;
+  exception_type: string;
+  exception_message?: string;
+  resolution_status: 'open' | 'resolved' | 'ignored';
+  resolved_by?: string;
+  resolved_at?: string;
+  resolution_notes?: string;
+  created_at: string;
+  // Joined from toll_transactions
+  transaction_date?: string;
+  provider_name?: string;
+  plaza_name?: string;
+  amount?: number;
+  unit_number_raw?: string;
+  driver_name_raw?: string;
+}
+
 export interface TollOverview {
   success: boolean;
   cards: {
