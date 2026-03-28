@@ -420,7 +420,7 @@ router.get('/transactions', async (req, res) => {
       date_from, date_to,
       provider, truck_id, driver_id,
       matched_status, settlement_link_status,
-      batch_id
+      batch_id, product_type, category
     } = req.query;
 
     let q = knex('fuel_transactions as ft')
@@ -444,6 +444,8 @@ router.get('/transactions', async (req, res) => {
     if (matched_status) q = q.where('ft.matched_status', matched_status);
     if (settlement_link_status) q = q.where('ft.settlement_link_status', settlement_link_status);
     if (batch_id) q = q.where('ft.source_batch_id', batch_id);
+    if (product_type) q = q.where('ft.product_type', product_type);
+    if (category) q = q.where('ft.category', category);
 
     const total = await applyOperatingEntityFilter(
       knex('fuel_transactions').where('tenant_id', tid),
@@ -457,6 +459,8 @@ router.get('/transactions', async (req, res) => {
         if (driver_id) qb.where('driver_id', driver_id);
         if (matched_status) qb.where('matched_status', matched_status);
         if (batch_id) qb.where('source_batch_id', batch_id);
+        if (product_type) qb.where('product_type', product_type);
+        if (category) qb.where('category', category);
       })
       .count('* as n').then(([r]) => Number(r.n));
 

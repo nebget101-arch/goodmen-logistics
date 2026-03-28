@@ -18,6 +18,7 @@ export class FuelTransactionsComponent implements OnInit {
   dateTo = '';
   provider = '';
   matchedStatus = '';
+  productType = '';
   search = '';
 
   pageSize = 50;
@@ -43,6 +44,7 @@ export class FuelTransactionsComponent implements OnInit {
       date_to: this.dateTo || undefined,
       provider: this.provider || undefined,
       matched_status: this.matchedStatus || undefined,
+      product_type: this.productType || undefined,
     }).subscribe({
       next: (res) => { this.rows = res.rows; this.total = res.total; this.loading = false; },
       error: (err) => { this.error = err.error?.error || 'Failed to load transactions'; this.loading = false; }
@@ -50,7 +52,7 @@ export class FuelTransactionsComponent implements OnInit {
   }
 
   applyFilters(): void { this.pageOffset = 0; this.load(); }
-  clearFilters(): void { this.dateFrom = ''; this.dateTo = ''; this.provider = ''; this.matchedStatus = ''; this.pageOffset = 0; this.load(); }
+  clearFilters(): void { this.dateFrom = ''; this.dateTo = ''; this.provider = ''; this.matchedStatus = ''; this.productType = ''; this.pageOffset = 0; this.load(); }
 
   get pageNumber(): number { return Math.floor(this.pageOffset / this.pageSize) + 1; }
   get totalPages(): number { return Math.ceil(this.total / this.pageSize); }
@@ -79,7 +81,7 @@ export class FuelTransactionsComponent implements OnInit {
   }
 
   exportCsv(): void {
-    const headers = ['Date','Provider','Card','Truck','Driver','Vendor','City','ST','Gallons','Amount','PPG','Odometer','Matched','Settlement','Source'];
+    const headers = ['Date','Provider','Card','Truck','Driver','Vendor','City','ST','Gallons','Amount','PPG','Odometer','Product Type','Category','Matched','Settlement','Source'];
     const lines = [headers.join(',')];
     for (const r of this.rows) {
       lines.push([
@@ -87,7 +89,8 @@ export class FuelTransactionsComponent implements OnInit {
         r.truck_display || r.unit_number_raw || '', r.driver_display || r.driver_name_raw || '',
         r.vendor_name || '', r.city || '', r.state || '',
         r.gallons, r.amount, r.price_per_gallon || '',
-        r.odometer || '', r.matched_status, r.settlement_link_status, r.source_batch_id || 'manual'
+        r.odometer || '', r.product_type || '', r.category || '',
+        r.matched_status, r.settlement_link_status, r.source_batch_id || 'manual'
       ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });

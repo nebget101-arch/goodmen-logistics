@@ -106,12 +106,16 @@ async function isDuplicateTransaction(tenantId, normalized) {
 
   const gallons = toDecimal(normalized.gallons);
   const amount = toDecimal(normalized.amount);
+  const productType = normalized.product_type || 'diesel';
 
   const dupeQuery = knex('fuel_transactions')
     .where({ tenant_id: tenantId })
     .whereRaw('transaction_date = ?', [date.toISOString().slice(0, 10)])
     .whereRaw('ABS(gallons::numeric - ?) < 0.01', [gallons || 0])
     .whereRaw('ABS(amount::numeric - ?) < 0.01', [amount || 0]);
+
+  // Include product_type so split rows (same date/amount, different product) aren't flagged as dupes
+  dupeQuery.whereRaw('COALESCE(product_type, ?) = ?', ['diesel', productType]);
 
   if (normalized.vendor_name) {
     dupeQuery.whereRaw('LOWER(vendor_name) = LOWER(?)', [normalized.vendor_name]);
@@ -121,10 +125,11 @@ async function isDuplicateTransaction(tenantId, normalized) {
     dupeQuery.whereRaw(`card_number_masked LIKE ?`, [`%${last4}`]);
   }
 
-  // Also check by external_transaction_id (faster/stricter)
+  // Also check by external_transaction_id + product_type (compound check for split rows)
   if (normalized.external_transaction_id) {
     const extExists = await knex('fuel_transactions')
       .where({ tenant_id: tenantId, external_transaction_id: normalized.external_transaction_id })
+      .whereRaw('COALESCE(product_type, ?) = ?', ['diesel', productType])
       .first('id');
     if (extExists) return true;
   }
@@ -345,7 +350,9 @@ async function commitBatch({ batchId, tenantId, operatingEntityId = null, import
       price_per_gallon: ppg,
       currency: 'USD',
       odometer: toInt(normalized.odometer),
-      product_type: normalized.product_type || null,
+      product_type: normalized.product_type || 'diesel',
+      category: normalized.category || 'fuel',
+      source_transaction_id: normalized.source_transaction_id || null,
       matched_status: matchedStatus,
       validation_status: 'valid',
       settlement_link_status: 'none',
