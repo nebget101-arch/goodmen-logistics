@@ -9,6 +9,25 @@ const express = require('express');
 const router = express.Router();
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
+const multer = require('multer');
+const crypto = require('crypto');
+const { parseFileBuffer } = require('../services/fuel-parser');
+
+// ─── File upload (memory storage – max 10 MB) ─────────────────────────────────
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = (file.originalname || '').split('.').pop().toLowerCase();
+    const allowed = ['text/csv', 'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/plain'];
+    if (allowed.includes(file.mimetype) || ['csv', 'xlsx', 'xls', 'txt'].includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV and Excel files are accepted'));
+    }
+  }
+});
 
 function tenantId(req) {
   return req.context?.tenantId || req.user?.tenantId || null;
@@ -257,6 +276,293 @@ async function listImportBatches(req, res) {
 router.get('/import', listImportBatches);
 router.get('/history', listImportBatches);
 router.get('/import/batches', listImportBatches);
+
+// ─── Import – Upload CSV (FN-431) ─────────────────────────────────────────────
+// Accepts CSV file, creates toll_import_batch, parses rows, returns headers + sample rows + batch_id
+router.post('/import/upload', upload.single('file'), async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const providerName = req.body.provider_name || 'generic';
+    const tollAccountId = req.body.toll_account_id || null;
+    const oeId = operatingEntityId(req);
+
+    // Parse the CSV
+    const { headers, rows } = parseFileBuffer(req.file.buffer, req.file.originalname);
+    if (!headers || headers.length === 0) {
+      return res.status(400).json({ error: 'Could not parse headers from file' });
+    }
+
+    // Create batch record
+    const [batch] = await knex('toll_import_batches')
+      .insert({
+        tenant_id: tid,
+        operating_entity_id: oeId,
+        toll_account_id: tollAccountId,
+        provider_name: providerName,
+        source_file_name: req.file.originalname,
+        import_status: 'pending',
+        total_rows: rows.length,
+        started_at: knex.fn.now()
+      })
+      .returning('*');
+
+    // Build sample rows as objects
+    const sampleRows = rows.slice(0, 10).map((row, idx) => {
+      const obj = { rowNumber: idx + 1 };
+      headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+      return obj;
+    });
+
+    res.json({
+      batchId: batch.id,
+      fileName: req.file.originalname,
+      headers,
+      sampleRows,
+      totalRows: rows.length
+    });
+  } catch (error) {
+    dtLogger.error('tolls_import_upload_failed', error);
+    res.status(500).json({ error: 'Import upload failed' });
+  }
+});
+
+// ─── Import – Commit (FN-431) ──────────────────────────────────────────────────
+// Accepts batch_id + column_map + validated rows, writes to toll_transactions
+router.post('/import/commit', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+    const { batch_id, rows: inputRows, column_map } = req.body;
+
+    if (!batch_id) return res.status(400).json({ error: 'batch_id is required' });
+    if (!inputRows || !Array.isArray(inputRows) || inputRows.length === 0) {
+      return res.status(400).json({ error: 'rows array is required' });
+    }
+
+    // Validate batch exists and belongs to tenant
+    const batch = await knex('toll_import_batches')
+      .where({ id: batch_id, tenant_id: tid })
+      .first();
+    if (!batch) return res.status(404).json({ error: 'Batch not found' });
+
+    const oeId = operatingEntityId(req);
+    let parsedMap;
+    try {
+      parsedMap = typeof column_map === 'string' ? JSON.parse(column_map) : (column_map || {});
+    } catch {
+      parsedMap = {};
+    }
+
+    // Load toll_devices for auto-matching
+    const devices = await knex('toll_devices').where({ tenant_id: tid }).select('id', 'device_number', 'plate_number', 'truck_id', 'driver_id');
+
+    let successCount = 0;
+    let duplicateCount = 0;
+    let errorCount = 0;
+    const exceptions = [];
+
+    await knex.transaction(async (trx) => {
+      for (let i = 0; i < inputRows.length; i++) {
+        const raw = inputRows[i];
+        const rowNum = i + 1;
+
+        try {
+          // Apply column mapping to get normalized fields
+          const normalized = {};
+          for (const [normalizedKey, rawKey] of Object.entries(parsedMap)) {
+            if (rawKey && raw[rawKey] !== undefined) {
+              normalized[normalizedKey] = raw[rawKey];
+            }
+          }
+
+          // Generate dedupe hash
+          const hashInput = [
+            tid,
+            normalized.transaction_date || '',
+            normalized.amount || '',
+            normalized.plaza_name || '',
+            normalized.device_number_masked || '',
+            normalized.entry_location || '',
+            normalized.exit_location || ''
+          ].join('|');
+          const dedupeHash = crypto.createHash('sha256').update(hashInput).digest('hex');
+
+          // Check for duplicate
+          const existing = await trx('toll_transactions')
+            .where({ tenant_id: tid, dedupe_hash: dedupeHash })
+            .first('id');
+
+          // Save batch row for audit
+          await trx('toll_import_batch_rows').insert({
+            batch_id,
+            row_number: rowNum,
+            raw_payload: JSON.stringify(raw),
+            normalized_payload: JSON.stringify(normalized),
+            dedupe_hash: dedupeHash,
+            resolution_status: existing ? 'duplicate' : 'valid'
+          });
+
+          if (existing) {
+            duplicateCount++;
+            continue;
+          }
+
+          // Auto-match: lookup device_number or plate_number
+          let matchedTruckId = null;
+          let matchedDriverId = null;
+          let matchedDeviceId = null;
+          const deviceNum = normalized.device_number_masked || '';
+          const plateNum = normalized.plate_number_raw || '';
+
+          if (deviceNum || plateNum) {
+            const device = devices.find(d =>
+              (deviceNum && d.device_number && d.device_number.toLowerCase() === deviceNum.toLowerCase()) ||
+              (plateNum && d.plate_number && d.plate_number.toLowerCase() === plateNum.toLowerCase())
+            );
+            if (device) {
+              matchedTruckId = device.truck_id;
+              matchedDriverId = device.driver_id;
+              matchedDeviceId = device.id;
+            }
+          }
+
+          // Parse amount
+          const amount = parseFloat(String(normalized.amount || '0').replace(/[^0-9.\-]/g, '')) || 0;
+
+          // Insert toll_transaction
+          const [txn] = await trx('toll_transactions')
+            .insert({
+              tenant_id: tid,
+              operating_entity_id: oeId,
+              provider_name: batch.provider_name,
+              toll_account_id: batch.toll_account_id,
+              toll_device_id: matchedDeviceId,
+              external_transaction_id: normalized.external_transaction_id || null,
+              transaction_date: normalized.transaction_date || new Date().toISOString().slice(0, 10),
+              posted_date: normalized.posted_date || null,
+              truck_id: matchedTruckId,
+              driver_id: matchedDriverId,
+              unit_number_raw: normalized.unit_number_raw || null,
+              driver_name_raw: normalized.driver_name_raw || null,
+              device_number_masked: deviceNum || null,
+              plate_number_raw: plateNum || null,
+              plaza_name: normalized.plaza_name || null,
+              entry_location: normalized.entry_location || null,
+              exit_location: normalized.exit_location || null,
+              city: normalized.city || null,
+              state: normalized.state || null,
+              amount,
+              matched_status: matchedTruckId ? 'matched' : 'unmatched',
+              validation_status: 'valid',
+              is_manual: false,
+              source_batch_id: batch_id,
+              source_row_number: rowNum,
+              dedupe_hash: dedupeHash
+            })
+            .returning('*');
+
+          // Create exception for unmatched rows
+          if (!matchedTruckId && (deviceNum || plateNum)) {
+            exceptions.push({
+              toll_transaction_id: txn.id,
+              tenant_id: tid,
+              exception_type: 'match_failed',
+              exception_message: `No matching device found for ${deviceNum || plateNum}`,
+              resolution_status: 'open'
+            });
+          }
+
+          successCount++;
+        } catch (rowErr) {
+          errorCount++;
+          dtLogger.warn('tolls_import_row_error', { rowNum, error: rowErr.message });
+        }
+      }
+
+      // Insert exceptions
+      if (exceptions.length > 0) {
+        await trx('toll_transaction_exceptions').insert(exceptions);
+      }
+
+      // Update batch counters
+      await trx('toll_import_batches')
+        .where({ id: batch_id })
+        .update({
+          import_status: 'completed',
+          success_rows: successCount,
+          failed_rows: errorCount,
+          total_rows: inputRows.length,
+          updated_at: knex.fn.now()
+        });
+    });
+
+    res.json({
+      batchId: batch_id,
+      totalRows: inputRows.length,
+      successCount,
+      duplicateCount,
+      errorCount,
+      exceptionsCreated: exceptions.length
+    });
+  } catch (error) {
+    dtLogger.error('tolls_import_commit_failed', error);
+    res.status(500).json({ error: 'Import commit failed' });
+  }
+});
+
+// ─── Mapping Profiles – List (FN-431) ──────────────────────────────────────────
+router.get('/import/mapping-profiles', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+    const rows = await knex('toll_import_mapping_profiles')
+      .where({ tenant_id: tid })
+      .orderBy('created_at', 'desc');
+    res.json({ rows });
+  } catch (error) {
+    dtLogger.error('tolls_mapping_profiles_list_failed', error);
+    res.status(500).json({ error: 'Failed to fetch mapping profiles' });
+  }
+});
+
+// ─── Mapping Profiles – Save (FN-431) ──────────────────────────────────────────
+router.post('/import/mapping-profiles', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res);
+    if (!tid) return;
+    const { profile_name, provider_name, column_map, is_default } = req.body;
+
+    if (!profile_name) return res.status(400).json({ error: 'profile_name is required' });
+    if (!column_map || typeof column_map !== 'object') {
+      return res.status(400).json({ error: 'column_map object is required' });
+    }
+
+    // If setting as default, unset existing defaults for this tenant
+    if (is_default) {
+      await knex('toll_import_mapping_profiles')
+        .where({ tenant_id: tid, is_default: true })
+        .update({ is_default: false });
+    }
+
+    const [profile] = await knex('toll_import_mapping_profiles')
+      .insert({
+        tenant_id: tid,
+        profile_name,
+        provider_name: provider_name || null,
+        column_map: JSON.stringify(column_map),
+        is_default: !!is_default
+      })
+      .returning('*');
+
+    res.status(201).json(profile);
+  } catch (error) {
+    dtLogger.error('tolls_mapping_profile_save_failed', error);
+    res.status(500).json({ error: 'Failed to save mapping profile' });
+  }
+});
 
 router.get('/transactions', async (req, res) => {
   try {
