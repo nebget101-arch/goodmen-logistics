@@ -7,6 +7,22 @@ import { Component, Input } from '@angular/core';
 })
 export class StatusPillComponent {
   @Input() status: string | null = '';
+  @Input() compact = false;
+
+  private static readonly abbreviations: Record<string, string> = {
+    DELIVERED: 'Del',
+    DISPATCHED: 'Disp',
+    FUNDED: 'Fund',
+    INVOICED: 'Inv',
+    PENDING: 'Pend',
+    CANCELLED: 'Canc',
+    CANCELED: 'Canc',
+    IN_TRANSIT: 'Transit',
+    EN_ROUTE: 'EnRte',
+    PICKED_UP: 'PU',
+    BOL_RECEIVED: 'BOL',
+    SENT_TO_FACTORING: 'Factor',
+  };
 
   get label(): string {
     const s = (this.status || '').toString().trim();
@@ -18,6 +34,17 @@ export class StatusPillComponent {
     const upper = s.toUpperCase().replace(/[\s-]+/g, '_');
     if (map[upper]) return map[upper];
     return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  get compactLabel(): string {
+    const s = (this.status || '').toString().trim();
+    if (!s) return '--';
+    const upper = s.toUpperCase().replace(/[\s-]+/g, '_');
+    return StatusPillComponent.abbreviations[upper] || this.label;
+  }
+
+  get displayLabel(): string {
+    return this.compact ? this.compactLabel : this.label;
   }
 
   get cssClass(): string {

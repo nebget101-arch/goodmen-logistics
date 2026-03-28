@@ -469,8 +469,8 @@
           <td>{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
           <td>${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
           <td>{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
-          <td><app-status-pill [status]="load.status"></app-status-pill></td>
-          <td><app-status-pill [status]="load.billing_status"></app-status-pill></td>
+          <td><app-status-pill [status]="load.status" [compact]="true"></app-status-pill></td>
+          <td><app-status-pill [status]="load.billing_status" [compact]="true"></app-status-pill></td>
           <td class="notes-cell">{{ load.notes || '--' }}</td>
           <td>
             <div class="attachment-chips attachment-chips--clickable" (click)="openEditForAttachments(load)" role="button" tabindex="0" (keydown.enter)="openEditForAttachments(load)" (keydown.space)="openEditForAttachments(load); $event.preventDefault()" title="Open attachments">
