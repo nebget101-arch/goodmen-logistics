@@ -860,9 +860,15 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
       const updates = [];
       const values = [];
       let idx = 1;
+      const billingStatus = body.billingStatus ? normalizeEnum(body.billingStatus) : null;
+      if (billingStatus && !BILLING_STATUSES.includes(billingStatus)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'Invalid billing status' });
+      }
 
       const fieldMap = {
         loadNumber: 'load_number',
+        billingStatus: 'billing_status',
         dispatcherUserId: 'dispatcher_user_id',
         driverId: 'driver_id',
         truckId: 'truck_id',
@@ -877,8 +883,9 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
 
       Object.keys(fieldMap).forEach(key => {
         if (body[key] !== undefined) {
+          const value = key === 'billingStatus' ? billingStatus : normalizeNullable(body[key]);
           updates.push(`${fieldMap[key]} = $${idx}`);
-          values.push(normalizeNullable(body[key]));
+          values.push(value);
           idx += 1;
         }
       });
