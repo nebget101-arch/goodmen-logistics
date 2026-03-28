@@ -111,6 +111,7 @@ export interface TollUploadResult {
   fileName: string;
   headers: string[];
   sampleRows: Record<string, string>[];
+  allRows: Record<string, string>[];
   totalRows: number;
 }
 

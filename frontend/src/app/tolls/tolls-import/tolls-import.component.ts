@@ -102,7 +102,7 @@ export class TollsImportComponent implements OnInit {
       .subscribe({
         next: (res) => {
           this.uploadResult = res;
-          this.allRows = res.sampleRows;
+          this.allRows = (res as any).allRows || res.sampleRows;
           this.normalizedFields.forEach(f => { this.columnMap[f.key] = ''; });
           this.uploadLoading = false;
           // Automatically trigger AI analysis

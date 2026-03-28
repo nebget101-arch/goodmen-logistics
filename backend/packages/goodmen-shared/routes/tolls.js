@@ -643,6 +643,7 @@ router.post('/import/upload', upload.single('file'), async (req, res) => {
       batchId: batch.id,
       headers,
       sampleRows,
+      allRows: rows,
       totalRows: rows.length
     });
   } catch (error) {
