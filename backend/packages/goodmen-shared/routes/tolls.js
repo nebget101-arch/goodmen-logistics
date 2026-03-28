@@ -1041,14 +1041,14 @@ router.post('/import/invoice-image', invoiceUpload.array('images', 10), async (r
             .where({ tenant_id: tid })
             .whereRaw('transaction_date = ?', [txn.transaction_date])
             .whereRaw('ABS(amount::numeric - ?) < 0.01', [txn.amount])
-            .whereRaw('UPPER(TRIM(license_plate)) = ?', [plate])
+            .whereRaw('UPPER(TRIM(plate_number_raw)) = ?', [plate])
             .first('id');
           isDuplicate = !!existing;
         }
 
         enriched.push({
           ...txn,
-          license_plate: plate || null,
+          plate_number_raw: plate || null,
           truck_id: matchedTruckId,
           driver_id: matchedDriverId,
           matched_status: matchedTruckId ? 'matched' : 'unmatched',
