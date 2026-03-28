@@ -18,7 +18,7 @@ app.use(
   })
 );
 
-app.use(bodyParser.json({ limit: '1mb' }));
+app.use(bodyParser.json({ limit: '20mb' }));
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
