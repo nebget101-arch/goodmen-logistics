@@ -42,16 +42,21 @@ export class InvoicePreviewDialogComponent {
     this.saving = true;
     this.error = '';
 
-    const payloads: CreateTollTransactionPayload[] = this.rows.map(r => ({
+    const payloads = this.rows.map(r => ({
       transaction_date: r.transaction_date,
       provider_name: r.provider_name,
       plaza_name: r.plaza_name,
-      plate_number: r.plate_number,
+      plate_number_raw: (r as any).plate_number_raw || r.plate_number || null,
       amount: r.amount,
       entry_point: r.entry_point,
       exit_point: r.exit_point,
-      vehicle_class: r.vehicle_class,
-      source: 'invoice_upload' as const,
+      city: (r as any).city || null,
+      state: (r as any).state || null,
+      truck_id: (r as any).truck_id || null,
+      driver_id: (r as any).driver_id || null,
+      matched_status: (r as any).matched_status || 'unmatched',
+      notes: (r as any).notes || null,
+      source: 'invoice_upload',
     }));
 
     try {
