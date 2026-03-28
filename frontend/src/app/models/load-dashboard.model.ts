@@ -104,6 +104,10 @@ export interface LoadDetail extends LoadListItem {
   loaded_miles?: number | null;
   empty_miles?: number | null;
   rate_per_mile?: number | null;
+  /** Previous load's last delivery city (for empty miles origin context). */
+  prev_delivery_city?: string | null;
+  /** Previous load's last delivery state (for empty miles origin context). */
+  prev_delivery_state?: string | null;
 }
 
 export interface LoadsListResponse {
