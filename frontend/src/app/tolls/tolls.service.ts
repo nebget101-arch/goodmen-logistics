@@ -43,9 +43,15 @@ export class TollsService {
     return this.http.get<{ rows: TollImportBatch[]; total: number }>(`${this.base}/import/batches`, { params });
   }
 
-  getTransactions(limit = 50, offset = 0): Observable<{ rows: TollTransaction[]; total: number }> {
-    const params = new HttpParams().set('limit', limit).set('offset', offset);
-    return this.http.get<{ rows: TollTransaction[]; total: number }>(`${this.base}/transactions`, { params });
+  getTransactions(filters: {
+    limit?: number; offset?: number;
+    date_from?: string; date_to?: string;
+    truck_id?: string; driver_id?: string;
+    batch_id?: string; status?: string;
+  } = {}): Observable<{ rows: TollTransaction[]; total: number }> {
+    let p = new HttpParams();
+    Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p = p.set(k, v.toString()); });
+    return this.http.get<{ rows: TollTransaction[]; total: number }>(`${this.base}/transactions`, { params: p });
   }
 
   createTransaction(payload: Partial<TollTransaction>): Observable<TollTransaction> {
