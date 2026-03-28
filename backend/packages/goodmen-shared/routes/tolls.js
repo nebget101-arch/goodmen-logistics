@@ -657,14 +657,29 @@ router.post('/import/commit', async (req, res) => {
     const tid = requireTenant(req, res);
     if (!tid) return;
 
-    const { batchId, rows } = req.body || {};
-    if (!batchId || !Array.isArray(rows) || rows.length === 0) {
+    const { batchId, batch_id, rows, column_map, columnMap } = req.body || {};
+    const resolvedBatchId = batchId || batch_id;
+    const colMap = column_map || columnMap || null;
+    if (!resolvedBatchId || !Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: 'batchId and a non-empty rows array are required' });
     }
 
+    // Apply column mapping if provided (raw CSV rows → normalized field names)
+    const mappedRows = colMap
+      ? rows.map(raw => {
+          const mapped = {};
+          for (const [normalizedKey, rawHeader] of Object.entries(colMap)) {
+            if (rawHeader && raw[rawHeader] !== undefined) {
+              mapped[normalizedKey] = raw[rawHeader];
+            }
+          }
+          return mapped;
+        })
+      : rows;
+
     // Verify batch belongs to tenant
     const batch = await knex('toll_import_batches')
-      .where({ id: batchId, tenant_id: tid })
+      .where({ id: resolvedBatchId, tenant_id: tid })
       .first();
     if (!batch) {
       return res.status(404).json({ error: 'Import batch not found' });
@@ -675,7 +690,7 @@ router.post('/import/commit', async (req, res) => {
     let errors = 0;
     let exceptions = 0;
 
-    for (const row of rows) {
+    for (const row of mappedRows) {
       try {
         // Generate dedupe hash
         const dedupeHash = computeDedupeHash(
@@ -729,7 +744,7 @@ router.post('/import/commit', async (req, res) => {
           .insert({
             tenant_id: tid,
             operating_entity_id: operatingEntityId(req) || null,
-            source_batch_id: batchId,
+            source_batch_id: resolvedBatchId,
             toll_account_id: batch.toll_account_id || null,
             provider_name: row.provider_name || row.provider || null,
             transaction_date: row.transaction_date || null,
@@ -752,7 +767,7 @@ router.post('/import/commit', async (req, res) => {
 
         // Create audit row
         await knex('toll_import_batch_rows').insert({
-          batch_id: batchId,
+          batch_id: resolvedBatchId,
           tenant_id: tid,
           row_number: imported + duplicates + errors + 1,
           raw_data: JSON.stringify(row),
@@ -783,7 +798,7 @@ router.post('/import/commit', async (req, res) => {
 
         // Still create audit row for failed rows
         await knex('toll_import_batch_rows').insert({
-          batch_id: batchId,
+          batch_id: resolvedBatchId,
           tenant_id: tid,
           row_number: imported + duplicates + errors,
           raw_data: JSON.stringify(row),
@@ -795,10 +810,10 @@ router.post('/import/commit', async (req, res) => {
 
     // Update batch counters and status
     await knex('toll_import_batches')
-      .where({ id: batchId })
+      .where({ id: resolvedBatchId })
       .update({
         import_status: 'completed',
-        total_rows: rows.length,
+        total_rows: mappedRows.length,
         success_rows: imported,
         failed_rows: errors,
         duplicate_rows: duplicates,
