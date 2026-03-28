@@ -113,7 +113,7 @@ export class TollsService {
   /** Upload invoice image(s) for AI extraction */
   uploadInvoiceImage(files: File[]): Observable<InvoiceExtractionResponse> {
     const formData = new FormData();
-    files.forEach(f => formData.append('invoices', f, f.name));
+    files.forEach(f => formData.append('images', f, f.name));
     return this.http.post<InvoiceExtractionResponse>(`${this.base}/import/invoice-image`, formData);
   }
 
