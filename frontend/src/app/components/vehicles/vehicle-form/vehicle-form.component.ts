@@ -434,6 +434,31 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     this.trailerForm.trailer_type_label = label;
   }
 
+  private static readonly MAKE_NORMALIZATION: Record<string, string> = {
+    'VOLVO TRUCK': 'Volvo',
+    'VOLVO': 'Volvo',
+    'FREIGHTLINER': 'Freightliner',
+    'DAIMLER TRUCKS NORTH AMERICA': 'Freightliner',
+    'KENWORTH': 'Kenworth',
+    'PETERBILT': 'Peterbilt',
+    'MACK': 'Mack',
+    'INTERNATIONAL': 'International',
+    'NAVISTAR INTERNATIONAL': 'International',
+    'NAVISTAR': 'International',
+    'WESTERN STAR': 'Western Star',
+    'WESTERN STAR TRUCKS': 'Western Star',
+  };
+
+  private normalizeMake(rawMake: string): string {
+    const upper = rawMake.toUpperCase().trim();
+    if (VehicleFormComponent.MAKE_NORMALIZATION[upper]) {
+      return VehicleFormComponent.MAKE_NORMALIZATION[upper];
+    }
+    const caseMatch = this.makes.find(m => m.toLowerCase() === rawMake.toLowerCase().trim());
+    if (caseMatch) return caseMatch;
+    return rawMake;
+  }
+
   private decodeVin(): void {
     const vin = (this.formData.vin || '').trim();
     if (vin.length !== 17) return;
@@ -443,7 +468,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     this.apiService.decodeVin(vin).subscribe({
       next: (decoded) => {
         const yearValue = Number(decoded?.year);
-        if (decoded?.make) this.formData.make = decoded.make;
+        if (decoded?.make) this.formData.make = this.normalizeMake(decoded.make);
         if (decoded?.model) this.formData.model = decoded.model;
         if (Number.isFinite(yearValue) && yearValue > 1900) this.formData.year = yearValue;
         this.vinDecoding = false;
