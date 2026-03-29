@@ -15,6 +15,8 @@ import { ComplianceDashboardComponent } from './compliance-dashboard/compliance-
 import { FmcsaDashboardComponent } from './fmcsa-dashboard/fmcsa-dashboard.component';
 import { FmcsaCarriersComponent } from './fmcsa-carriers/fmcsa-carriers.component';
 import { FmcsaCarrierDetailComponent } from './fmcsa-carrier-detail/fmcsa-carrier-detail.component';
+import { RiskDashboardComponent } from './risk-dashboard/risk-dashboard.component';
+import { DriverRiskTimelineComponent } from './driver-risk-timeline/driver-risk-timeline.component';
 
 const SAFETY_PERMS = [
   PERMISSIONS.SAFETY_INCIDENTS_VIEW,
@@ -48,6 +50,19 @@ const routes: Routes = [
   {
     path: 'fmcsa/carriers/:id',
     component: FmcsaCarrierDetailComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: SAFETY_PERMS },
+  },
+  // Driver Risk Scores
+  {
+    path: 'risk-scores',
+    component: RiskDashboardComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: SAFETY_PERMS },
+  },
+  {
+    path: 'risk-scores/:driverId',
+    component: DriverRiskTimelineComponent,
     canActivate: [AuthGuard, PermissionGuard],
     data: { anyPermission: SAFETY_PERMS },
   },
