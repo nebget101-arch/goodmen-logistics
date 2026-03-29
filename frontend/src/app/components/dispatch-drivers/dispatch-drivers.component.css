@@ -1124,3 +1124,85 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* FN-496: Equipment Owner auto-populate badge */
+.dispatch-drivers-dashboard .auto-populated-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.25);
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  color: #a5b4fc;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* FN-496: Equipment Owner change confirmation */
+.dispatch-drivers-dashboard .owner-change-dialog {
+  margin-top: 10px;
+  border-radius: 10px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  padding: 12px 14px;
+}
+.dispatch-drivers-dashboard .owner-change-dialog-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.dispatch-drivers-dashboard .owner-change-icon {
+  color: #fbbf24;
+  font-size: 22px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.dispatch-drivers-dashboard .owner-change-text {
+  flex: 1;
+  font-size: 13px;
+  color: #fef3c7;
+}
+.dispatch-drivers-dashboard .owner-change-text strong {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.dispatch-drivers-dashboard .owner-change-text p {
+  margin: 0;
+  color: rgba(254, 243, 199, 0.85);
+  line-height: 1.4;
+}
+.dispatch-drivers-dashboard .owner-change-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  align-items: center;
+}
+.dispatch-drivers-dashboard .btn-confirm-owner {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(234, 179, 8, 0.3);
+  border: 1px solid rgba(234, 179, 8, 0.6);
+  color: #fef3c7;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dispatch-drivers-dashboard .btn-confirm-owner:hover {
+  background: rgba(234, 179, 8, 0.45);
+}
+.dispatch-drivers-dashboard .btn-cancel-owner {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(203, 213, 225, 0.85);
+  font-size: 12px;
+  cursor: pointer;
+}
+.dispatch-drivers-dashboard .btn-cancel-owner:hover {
+  background: rgba(255, 255, 255, 0.12);
+}

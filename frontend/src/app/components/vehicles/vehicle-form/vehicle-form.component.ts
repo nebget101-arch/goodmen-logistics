@@ -20,6 +20,7 @@ interface VehicleFormData {
   oos_reason?: string;
   vehicle_type?: 'truck' | 'trailer';
   trailer_details?: TrailerDetails;
+  equipment_owner_name?: string;
 }
 
 interface TrailerDetails {
@@ -283,6 +284,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       this.formData.insurance_expiry = this.formData.insurance_expiry || '';
       this.formData.registration_expiry = this.formData.registration_expiry || '';
       this.formData.oos_reason = this.formData.oos_reason || '';
+      this.formData.equipment_owner_name = this.formData.equipment_owner_name || '';
       if (!this.formData.vehicle_type) {
         this.formData.vehicle_type = this.vehicleType;
       }
@@ -314,7 +316,8 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
         insurance_expiry: '',
         registration_expiry: '',
         oos_reason: '',
-        vehicle_type: this.vehicleType
+        vehicle_type: this.vehicleType,
+        equipment_owner_name: ''
       };
       this.trailerForm = this.getDefaultTrailerDetails();
       this.trailerTypeSearch = '';
@@ -588,7 +591,8 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       insurance_expiry: this.formData.insurance_expiry || null,
       registration_expiry: this.formData.registration_expiry || null,
       oos_reason: this.formData.oos_reason || '',
-      vehicle_type: this.formData.vehicle_type || this.vehicleType
+      vehicle_type: this.formData.vehicle_type || this.vehicleType,
+      equipment_owner_name: this.formData.equipment_owner_name || null
     };
 
     if (this.isTrailerMode) {

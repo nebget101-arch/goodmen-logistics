@@ -437,9 +437,28 @@
         </div>
 
         <!-- Status & OOS Reason -->
+        <!-- FN-496: Equipment Owner -->
+        <div class="form-section" *ngIf="!isTrailerMode">
+          <h3 class="section-title">Ownership</h3>
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="equipment_owner_name">Equipment Owner</label>
+              <input
+                id="equipment_owner_name"
+                class="form-input"
+                type="text"
+                [(ngModel)]="formData.equipment_owner_name"
+                name="equipment_owner_name"
+                placeholder="Owner company or person name (optional)"
+              />
+              <small class="field-hint">Name of the person or company that owns this truck. Used to auto-populate pay configuration.</small>
+            </div>
+          </div>
+        </div>
+
         <div class="form-section">
           <h3 class="section-title">Status</h3>
-          
+
           <div class="form-row">
             <!-- Status -->
             <div class="form-group">

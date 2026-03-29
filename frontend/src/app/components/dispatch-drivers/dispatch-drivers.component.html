@@ -279,6 +279,7 @@
                   inputId="truck"
                   [options]="truckSelectOptions"
                   [(ngModel)]="newDriver.truckId"
+                  (ngModelChange)="onTruckSelected($event)"
                   [allowEmpty]="true"
                   emptyLabel="-- Select truck --"
                   placeholder="Select truck"
@@ -355,8 +356,8 @@
               Recurring deductions
             </button>
             <button type="button" class="pay-tab chip-tab" [class.active]="payTab === 'payee'" (click)="setPayTab('payee')">
-              <span class="material-symbols-outlined">person_add</span>
-              Additional payee
+              <span class="material-symbols-outlined">business_center</span>
+              Equipment Owner
             </button>
             <button type="button" class="pay-tab chip-tab" [class.active]="payTab === 'notes'" (click)="setPayTab('notes')">
               <span class="material-symbols-outlined">note</span>
@@ -454,7 +455,10 @@
                   />
                 </div>
                 <div class="field">
-                  <label for="additionalPayeeRates">Additional payee (optional)</label>
+                  <label for="additionalPayeeRates">
+                    Equipment Owner
+                    <span *ngIf="equipmentOwnerAutoPopulated" class="auto-populated-badge" title="Auto-populated from assigned truck">auto</span>
+                  </label>
                   <div class="payee-search-wrapper">
                     <div class="payee-search-input-wrapper">
                       <input
@@ -466,25 +470,27 @@
                         (focus)="onAdditionalPayeeSearchFocus()"
                         (blur)="onAdditionalPayeeSearchBlur()"
                         (input)="onAdditionalPayeeSearchInput()"
-                        [disabled]="isCreatingEquipmentOwner"
+                        [disabled]="isCreatingEquipmentOwner || equipmentOwnerAutoPopulated"
+                        [style.cursor]="equipmentOwnerAutoPopulated ? 'not-allowed' : ''"
+                        [style.background-color]="equipmentOwnerAutoPopulated ? 'rgba(255,255,255,0.05)' : ''"
                       />
                       <button
                         type="button"
                         class="clear-payee-btn"
-                        *ngIf="selectedAdditionalPayeeId && !isCreatingEquipmentOwner"
+                        *ngIf="(selectedAdditionalPayeeId || equipmentOwnerAutoPopulated) && !isCreatingEquipmentOwner"
                         (click)="clearAdditionalPayeeSelection()"
                       >
                         <span class="material-symbols-outlined">close</span>
                       </button>
                     </div>
-                    
-                    <div class="payee-dropdown" *ngIf="showAdditionalPayeeDropdown && !isCreatingEquipmentOwner">
+
+                    <div class="payee-dropdown" *ngIf="showAdditionalPayeeDropdown && !isCreatingEquipmentOwner && !equipmentOwnerAutoPopulated">
                       <div class="payee-dropdown-item"
                            *ngFor="let payee of filteredAdditionalPayees"
                            (mousedown)="selectAdditionalPayee(payee)">
                         <span class="payee-name">{{ payee.name }}</span>
                       </div>
-                      
+
                       <div class="payee-dropdown-item create-new"
                            *ngIf="showCreateAdditionalPayee()"
                              (mousedown)="startCreatingEquipmentOwner()">
@@ -780,11 +786,11 @@
             </div>
           </div>
 
-          <!-- Tab: Additional payee -->
+          <!-- Tab: Equipment Owner -->
           <div class="pay-content" *ngIf="payTab === 'payee'">
             <div class="comp-block">
-              <h4 class="comp-section-title"><span class="material-symbols-outlined">person_add</span> Pay routing</h4>
-              <p class="comp-hint">When the driver is paid and an owner/external company is also paid on the same settlement.</p>
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">business_center</span> Equipment Owner</h4>
+              <p class="comp-hint">When the assigned truck is owned by an external party who is also paid on the same settlement.</p>
               <div class="comp-fields-grid">
                 <div class="field">
                   <label for="payableToPayee">Primary payable to</label>
@@ -799,7 +805,10 @@
                     />
                 </div>
                 <div class="field">
-                  <label for="additionalPayee">Additional payee</label>
+                  <label for="additionalPayee">
+                    Equipment Owner
+                    <span *ngIf="equipmentOwnerAutoPopulated" class="auto-populated-badge" title="Auto-populated from assigned truck">auto</span>
+                  </label>
                   <div class="payee-search-wrapper">
                     <div class="payee-search-input-wrapper">
                       <input
@@ -811,25 +820,27 @@
                         (focus)="onAdditionalPayeeSearchFocus()"
                         (blur)="onAdditionalPayeeSearchBlur()"
                         (input)="onAdditionalPayeeSearchInput()"
-                        [disabled]="isCreatingEquipmentOwner"
+                        [disabled]="isCreatingEquipmentOwner || equipmentOwnerAutoPopulated"
+                        [style.cursor]="equipmentOwnerAutoPopulated ? 'not-allowed' : ''"
+                        [style.background-color]="equipmentOwnerAutoPopulated ? 'rgba(255,255,255,0.05)' : ''"
                       />
                       <button
                         type="button"
                         class="clear-payee-btn"
-                        *ngIf="selectedAdditionalPayeeId"
+                        *ngIf="(selectedAdditionalPayeeId || equipmentOwnerAutoPopulated) && !isCreatingEquipmentOwner"
                         (click)="clearAdditionalPayeeSelection()"
                       >
                         <span class="material-symbols-outlined">close</span>
                       </button>
                     </div>
-                    
-                    <div class="payee-dropdown" *ngIf="showAdditionalPayeeDropdown && !isCreatingEquipmentOwner">
+
+                    <div class="payee-dropdown" *ngIf="showAdditionalPayeeDropdown && !isCreatingEquipmentOwner && !equipmentOwnerAutoPopulated">
                       <div class="payee-dropdown-item"
                            *ngFor="let payee of filteredAdditionalPayees"
                            (mousedown)="selectAdditionalPayee(payee)">
                         <span class="payee-name">{{ payee.name }}</span>
                       </div>
-                      
+
                       <div class="payee-dropdown-item create-new"
                            *ngIf="showCreateAdditionalPayee()"
                              (mousedown)="startCreatingEquipmentOwner()">
@@ -852,6 +863,21 @@
             <div class="comp-block">
               <h4 class="comp-section-title"><span class="material-symbols-outlined">note</span> Compensation notes</h4>
               <textarea class="form-input comp-notes" rows="4" placeholder="Audit notes, change history, or special terms…" [(ngModel)]="newDriver.compensationNotes"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- FN-496: Equipment Owner change confirmation dialog -->
+        <div class="owner-change-dialog" *ngIf="pendingOwnerChange">
+          <div class="owner-change-dialog-body">
+            <span class="material-symbols-outlined owner-change-icon">swap_horiz</span>
+            <div class="owner-change-text">
+              <strong>Equipment Owner will change</strong>
+              <p>The selected truck is owned by <strong>{{ pendingOwnerChange.ownerName }}</strong>, which differs from the current Equipment Owner. Update the pay configuration?</p>
+            </div>
+            <div class="owner-change-actions">
+              <button type="button" class="btn-confirm-owner" (click)="confirmOwnerChange()">Update Owner</button>
+              <button type="button" class="btn-cancel-owner" (click)="cancelOwnerChange()">Keep Current</button>
             </div>
           </div>
         </div>
