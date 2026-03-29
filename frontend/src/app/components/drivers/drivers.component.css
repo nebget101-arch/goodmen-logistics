@@ -2724,3 +2724,26 @@
   border-radius: 8px;
   margin-bottom: 16px;
 }
+.prehire-risk-empty,
+.prehire-risk-error {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px dashed rgba(71, 85, 105, 0.5);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.prehire-empty-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.prehire-empty-body p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-light, #94a3b8);
+}
+.risk-badge-empty {
+  color: var(--text-light, #94a3b8);
+  font-size: 12px;
+}
