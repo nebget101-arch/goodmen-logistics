@@ -1,0 +1,408 @@
+<!-- Page header -->
+<div class="page-header">
+  <div class="header-left">
+    <h1>
+      <span class="material-symbols-outlined">fact_check</span>
+      FMCSA Inspections
+    </h1>
+    <span class="header-sub" *ngIf="!loading">{{ total | number }} records</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-secondary" (click)="triggerRematch()" [disabled]="rematching">
+      <span class="material-symbols-outlined" [class.spinner-icon]="rematching">sync</span>
+      {{ rematching ? 'Rematching...' : 'Rematch Unmatched' }}
+    </button>
+  </div>
+</div>
+
+<!-- Summary cards -->
+<div class="kpi-row">
+  <div class="kpi-card">
+    <span class="kpi-icon material-symbols-outlined">fact_check</span>
+    <span class="kpi-label">Total Inspections</span>
+    <span class="kpi-value">{{ totalCount }}</span>
+  </div>
+  <div class="kpi-card kpi-warn">
+    <span class="kpi-icon material-symbols-outlined" style="color:#ef4444">report</span>
+    <span class="kpi-label">OOS Flagged</span>
+    <span class="kpi-value">{{ oosCount }}</span>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-icon material-symbols-outlined" style="color:#22c55e">check_circle</span>
+    <span class="kpi-label">Clean</span>
+    <span class="kpi-value">{{ cleanCount }}</span>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-icon material-symbols-outlined" style="color:#f59e0b">link_off</span>
+    <span class="kpi-label">Unmatched</span>
+    <span class="kpi-value">{{ unmatchedCount }}</span>
+  </div>
+</div>
+
+<!-- Filters bar -->
+<div class="filters-bar">
+  <div class="filter-group">
+    <label class="filter-label">From</label>
+    <input type="date" class="filter-input" [(ngModel)]="filterDateFrom" />
+  </div>
+  <div class="filter-group">
+    <label class="filter-label">To</label>
+    <input type="date" class="filter-input" [(ngModel)]="filterDateTo" />
+  </div>
+  <div class="filter-group">
+    <label class="filter-label">Match Status</label>
+    <select class="filter-select" [(ngModel)]="filterMatchStatus">
+      <option value="">All</option>
+      <option value="matched">Matched</option>
+      <option value="unmatched">Unmatched</option>
+      <option value="partial">Partial</option>
+      <option value="manual">Manual</option>
+    </select>
+  </div>
+  <div class="filter-group filter-oos">
+    <label class="oos-label">
+      <input type="checkbox" [(ngModel)]="filterOosOnly" />
+      OOS Only
+    </label>
+  </div>
+  <div class="filter-actions">
+    <button class="btn btn-primary" (click)="applyFilters()">
+      <span class="material-symbols-outlined">search</span>
+      Apply
+    </button>
+    <button class="btn btn-ghost" (click)="clearFilters()">Clear</button>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div class="alert-error" *ngIf="error">
+  <span class="material-symbols-outlined">error</span>
+  {{ error }}
+</div>
+
+<!-- Loading state -->
+<div class="loading-state" *ngIf="loading">
+  <span class="material-symbols-outlined spinner-icon">progress_activity</span>
+  Loading inspections...
+</div>
+
+<!-- Content split layout -->
+<div class="content-split" [class.has-detail]="selectedInspection" *ngIf="!loading">
+
+  <!-- Table column -->
+  <div class="table-col">
+    <div class="table-wrap">
+      <table class="inspections-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>State</th>
+            <th>Level</th>
+            <th>Vehicle</th>
+            <th>Driver</th>
+            <th class="col-center">Violations</th>
+            <th class="col-center">OOS</th>
+            <th>Match</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let row of rows"
+            (click)="selectRow(row)"
+            [class.selected]="selectedInspection?.id === row.id"
+            class="table-row"
+          >
+            <td class="col-date">{{ row.inspection_date | date:'MM/dd/yyyy' }}</td>
+            <td>{{ row.state || row.report_state || '—' }}</td>
+            <td>{{ row.level || '—' }}</td>
+            <td class="col-vehicle">
+              <span *ngIf="row.matched_vehicle_id">{{ vehicleDisplay(row.matched_vehicle_id) }}</span>
+              <span class="raw-text" *ngIf="!row.matched_vehicle_id">{{ row.plate_raw || row.vin_raw || '—' }}</span>
+            </td>
+            <td class="col-driver">
+              <span *ngIf="row.matched_driver_id">{{ driverName(row.matched_driver_id) }}</span>
+              <span class="raw-text" *ngIf="!row.matched_driver_id">{{ row.driver_name_raw || '—' }}</span>
+            </td>
+            <td class="col-center">
+              <span class="violation-count" [class.has-violations]="row.violation_count > 0">
+                {{ row.violation_count }}
+              </span>
+            </td>
+            <td class="col-center">
+              <span *ngIf="row.oos_vehicle || row.oos_driver" class="oos-flag">
+                <span class="material-symbols-outlined">warning</span>
+              </span>
+              <span *ngIf="!row.oos_vehicle && !row.oos_driver" class="oos-ok">—</span>
+            </td>
+            <td>
+              <span class="badge" [class]="matchStatusClass(row.match_status)">{{ row.match_status }}</span>
+            </td>
+            <td class="col-actions" (click)="$event.stopPropagation()">
+              <button
+                *ngIf="canMatch(row)"
+                class="btn-icon"
+                title="Match Driver / Vehicle"
+                (click)="openMatchModal(row)"
+              >
+                <span class="material-symbols-outlined">link</span>
+              </button>
+            </td>
+          </tr>
+          <tr *ngIf="rows.length === 0">
+            <td colspan="9" class="empty-state">No inspections found.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="total > limit">
+      <span class="pagination-info">
+        {{ offset + 1 }}–{{ offset + limit < total ? offset + limit : total }} of {{ total }}
+      </span>
+      <button class="btn btn-ghost btn-sm" (click)="prevPage()" [disabled]="offset === 0">
+        <span class="material-symbols-outlined">chevron_left</span>
+        Prev
+      </button>
+      <span class="pagination-page">Page {{ currentPage }} / {{ totalPages }}</span>
+      <button class="btn btn-ghost btn-sm" (click)="nextPage()" [disabled]="offset + limit >= total">
+        Next
+        <span class="material-symbols-outlined">chevron_right</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Detail panel -->
+  <div class="detail-panel" *ngIf="selectedInspection">
+    <div class="detail-header">
+      <h3>
+        <span class="material-symbols-outlined">info</span>
+        Inspection Detail
+      </h3>
+      <button class="close-btn" (click)="closeDetail()" title="Close">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <div class="detail-body">
+      <!-- Core fields -->
+      <div class="detail-section">
+        <div class="detail-row">
+          <span class="detail-label">Report #</span>
+          <span class="detail-value">{{ selectedInspection.report_number || '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Date</span>
+          <span class="detail-value">{{ selectedInspection.inspection_date | date:'mediumDate' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">State</span>
+          <span class="detail-value">{{ selectedInspection.state || selectedInspection.report_state || '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Level</span>
+          <span class="detail-value">{{ selectedInspection.level || '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Violations</span>
+          <span class="detail-value">{{ selectedInspection.violation_count }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">OOS Vehicle</span>
+          <span class="detail-value" [class.text-red]="selectedInspection.oos_vehicle">
+            {{ selectedInspection.oos_vehicle ? 'Yes' : 'No' }}
+          </span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">OOS Driver</span>
+          <span class="detail-value" [class.text-red]="selectedInspection.oos_driver">
+            {{ selectedInspection.oos_driver ? 'Yes' : 'No' }}
+          </span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Hazmat</span>
+          <span class="detail-value">{{ selectedInspection.hazmat_flag ? 'Yes' : 'No' }}</span>
+        </div>
+      </div>
+
+      <!-- Raw match data -->
+      <div class="detail-section">
+        <h4 class="section-title">Raw Match Data</h4>
+        <div class="detail-row">
+          <span class="detail-label">Driver (raw)</span>
+          <span class="detail-value raw-text">{{ selectedInspection.driver_name_raw || '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">License (raw)</span>
+          <span class="detail-value raw-text">{{ selectedInspection.license_raw || '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">VIN (raw)</span>
+          <span class="detail-value raw-text">{{ selectedInspection.vin_raw || '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Plate (raw)</span>
+          <span class="detail-value raw-text">{{ selectedInspection.plate_raw || '—' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Match Status</span>
+          <span class="badge" [class]="matchStatusClass(selectedInspection.match_status)">
+            {{ selectedInspection.match_status }}
+          </span>
+        </div>
+        <div class="detail-row" *ngIf="selectedInspection.match_confidence !== null">
+          <span class="detail-label">Confidence</span>
+          <span class="detail-value">{{ selectedInspection.match_confidence }}%</span>
+        </div>
+        <div class="detail-row" *ngIf="selectedInspection.matched_driver_id">
+          <span class="detail-label">Matched Driver</span>
+          <span class="detail-value">{{ driverName(selectedInspection.matched_driver_id) }}</span>
+        </div>
+        <div class="detail-row" *ngIf="selectedInspection.matched_vehicle_id">
+          <span class="detail-label">Matched Vehicle</span>
+          <span class="detail-value">{{ vehicleDisplay(selectedInspection.matched_vehicle_id) }}</span>
+        </div>
+      </div>
+
+      <!-- Loading detail -->
+      <div class="loading-state" *ngIf="detailLoading">
+        <span class="material-symbols-outlined spinner-icon">progress_activity</span>
+        Loading detail...
+      </div>
+
+      <!-- Facility info from detail -->
+      <ng-container *ngIf="detail && !detailLoading">
+        <div class="detail-section" *ngIf="detail.detail?.facility">
+          <div class="detail-row">
+            <span class="detail-label">Facility</span>
+            <span class="detail-value">{{ detail.detail!.facility }}</span>
+          </div>
+          <div class="detail-row" *ngIf="detail.detail!.start_time">
+            <span class="detail-label">Start Time</span>
+            <span class="detail-value">{{ detail.detail!.start_time }}</span>
+          </div>
+        </div>
+
+        <!-- Violations table -->
+        <div class="detail-section" *ngIf="detail.detail?.violations?.length">
+          <h4 class="section-title">Violations ({{ detail.detail!.violations.length }})</h4>
+          <table class="mini-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Description</th>
+                <th>BASIC</th>
+                <th>OOS</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let v of detail.detail!.violations">
+                <td class="code-cell">{{ v.vio_code }}</td>
+                <td>{{ v.description }}</td>
+                <td>{{ v.basic }}</td>
+                <td [class.text-red]="v.oos === 'Y'">{{ v.oos }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Vehicles table -->
+        <div class="detail-section" *ngIf="detail.detail?.vehicles?.length">
+          <h4 class="section-title">Vehicles ({{ detail.detail!.vehicles.length }})</h4>
+          <table class="mini-table">
+            <thead>
+              <tr>
+                <th>Unit</th>
+                <th>Type</th>
+                <th>Make</th>
+                <th>Plate</th>
+                <th>VIN</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let v of detail.detail!.vehicles">
+                <td>{{ v.unit }}</td>
+                <td>{{ v.type }}</td>
+                <td>{{ v.make }}</td>
+                <td>{{ v.plate_number }}</td>
+                <td class="vin-cell">{{ v.vin }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </ng-container>
+
+      <!-- Match button in detail panel -->
+      <div class="detail-match-action" *ngIf="canMatch(selectedInspection)">
+        <button class="btn btn-primary" (click)="openMatchModal(selectedInspection)">
+          <span class="material-symbols-outlined">link</span>
+          Match Vehicle / Driver
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Match modal overlay -->
+<div class="modal-overlay" *ngIf="showMatchModal" (click)="closeMatchModal()"></div>
+
+<!-- Match modal -->
+<div class="modal" *ngIf="showMatchModal">
+  <div class="modal-header">
+    <h3>
+      <span class="material-symbols-outlined">link</span>
+      Match Inspection
+    </h3>
+    <button class="close-btn" (click)="closeMatchModal()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <div class="modal-body" *ngIf="matchingInspection">
+    <div class="modal-info">
+      <span class="modal-report">Report: {{ matchingInspection.report_number || 'N/A' }}</span>
+      <span class="modal-date">{{ matchingInspection.inspection_date | date:'mediumDate' }}</span>
+    </div>
+
+    <div class="modal-raw">
+      <div *ngIf="matchingInspection.driver_name_raw" class="raw-hint">
+        Driver on record: <strong>{{ matchingInspection.driver_name_raw }}</strong>
+      </div>
+      <div *ngIf="matchingInspection.plate_raw || matchingInspection.vin_raw" class="raw-hint">
+        Vehicle on record: <strong>{{ matchingInspection.plate_raw || matchingInspection.vin_raw }}</strong>
+      </div>
+    </div>
+
+    <div class="form-field">
+      <label class="form-label">Vehicle</label>
+      <select class="form-select" [(ngModel)]="selectedMatchVehicleId">
+        <option value="">— Select vehicle —</option>
+        <option *ngFor="let v of vehicles" [value]="v.id">
+          {{ v.unit_number }}{{ v.plate_number ? ' · ' + v.plate_number : '' }}
+        </option>
+      </select>
+    </div>
+
+    <div class="form-field">
+      <label class="form-label">Driver</label>
+      <select class="form-select" [(ngModel)]="selectedMatchDriverId">
+        <option value="">— Select driver —</option>
+        <option *ngFor="let d of drivers" [value]="d.id">
+          {{ d.first_name }} {{ d.last_name }}
+        </option>
+      </select>
+    </div>
+  </div>
+
+  <div class="modal-actions">
+    <button class="btn btn-ghost" (click)="closeMatchModal()" [disabled]="savingMatch">Cancel</button>
+    <button class="btn btn-primary" (click)="saveMatch()" [disabled]="savingMatch || (!selectedMatchDriverId && !selectedMatchVehicleId)">
+      <span class="material-symbols-outlined" [class.spinner-icon]="savingMatch">
+        {{ savingMatch ? 'progress_activity' : 'save' }}
+      </span>
+      {{ savingMatch ? 'Saving...' : 'Save Match' }}
+    </button>
+  </div>
+</div>

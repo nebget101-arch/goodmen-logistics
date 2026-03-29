@@ -15,6 +15,7 @@ import { ComplianceDashboardComponent } from './compliance-dashboard/compliance-
 import { FmcsaDashboardComponent } from './fmcsa-dashboard/fmcsa-dashboard.component';
 import { FmcsaCarriersComponent } from './fmcsa-carriers/fmcsa-carriers.component';
 import { FmcsaCarrierDetailComponent } from './fmcsa-carrier-detail/fmcsa-carrier-detail.component';
+import { FmcsaInspectionsComponent } from './fmcsa-inspections/fmcsa-inspections.component';
 
 @NgModule({
   declarations: [
@@ -29,6 +30,7 @@ import { FmcsaCarrierDetailComponent } from './fmcsa-carrier-detail/fmcsa-carrie
     FmcsaDashboardComponent,
     FmcsaCarriersComponent,
     FmcsaCarrierDetailComponent,
+    FmcsaInspectionsComponent,
   ],
   imports: [
     CommonModule,
