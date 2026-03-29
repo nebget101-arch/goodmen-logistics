@@ -117,13 +117,53 @@ const REPORT_CONFIG: Record<ReportKey, ReportPageConfig> = {
   'profit-loss': {
     key: 'profit-loss',
     title: 'Profit & Loss',
-    subtitle: 'P&L statement-style report by period.',
+    subtitle: 'P&L with revenue, direct costs, gross margin, operating expenses, and net profit.',
     endpoint: 'profit-loss',
     columns: [
       { key: 'period', label: 'Period', type: 'date' },
       { key: 'revenue', label: 'Revenue', type: 'currency' },
-      { key: 'cost_of_operations', label: 'Cost of Operations', type: 'currency' },
-      { key: 'gross_profit', label: 'Gross Profit', type: 'currency' }
+      { key: 'direct_costs', label: 'Direct Costs', type: 'currency' },
+      { key: 'gross_margin', label: 'Gross Margin', type: 'currency' },
+      { key: 'operating_expenses', label: 'Operating Expenses', type: 'currency' },
+      { key: 'net_profit', label: 'Net Profit', type: 'currency' }
+    ]
+  },
+  'direct-load-profit': {
+    key: 'direct-load-profit',
+    title: 'Direct Load Profit',
+    subtitle: 'Per-load profitability: revenue minus driver pay, fuel, and tolls.',
+    endpoint: 'direct-load-profit',
+    columns: [
+      { key: 'load_number', label: 'Load #' },
+      { key: 'completed_date', label: 'Date', type: 'date' },
+      { key: 'driver_name', label: 'Driver' },
+      { key: 'truck', label: 'Truck' },
+      { key: 'rate', label: 'Rate', type: 'currency' },
+      { key: 'driver_pay', label: 'Driver Pay', type: 'currency' },
+      { key: 'fuel', label: 'Fuel', type: 'currency' },
+      { key: 'tolls', label: 'Tolls', type: 'currency' },
+      { key: 'direct_profit', label: 'Direct Profit', type: 'currency' },
+      { key: 'margin_pct', label: 'Margin %', type: 'percent' }
+    ]
+  },
+  'fully-loaded-profit': {
+    key: 'fully-loaded-profit',
+    title: 'Fully Loaded Profit',
+    subtitle: 'Direct load profit minus prorated period costs (insurance, ELD, maintenance). Group by load, truck, or driver.',
+    endpoint: 'fully-loaded-profit',
+    columns: [
+      { key: 'load_number', label: 'Load #' },
+      { key: 'completed_date', label: 'Date', type: 'date' },
+      { key: 'driver_name', label: 'Driver' },
+      { key: 'truck', label: 'Truck' },
+      { key: 'rate', label: 'Revenue', type: 'currency' },
+      { key: 'direct_profit', label: 'Direct Profit', type: 'currency' },
+      { key: 'insurance_allocation', label: 'Insurance Alloc', type: 'currency' },
+      { key: 'eld_allocation', label: 'ELD Alloc', type: 'currency' },
+      { key: 'maintenance_allocation', label: 'Maintenance Alloc', type: 'currency' },
+      { key: 'other_allocation', label: 'Other Alloc', type: 'currency' },
+      { key: 'fully_loaded_profit', label: 'Fully Loaded Profit', type: 'currency' },
+      { key: 'fully_loaded_margin_pct', label: 'Margin %', type: 'percent' }
     ]
   }
 };
