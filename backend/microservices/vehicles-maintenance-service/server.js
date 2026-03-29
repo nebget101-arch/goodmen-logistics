@@ -60,6 +60,7 @@ const maintenanceRouter = require('@goodmen/shared/routes/maintenance');
 const equipmentRouter = require('@goodmen/shared/routes/equipment');
 const workOrdersRouter = require('@goodmen/shared/routes/work-orders-hub');
 const partsRouter = require('@goodmen/shared/routes/parts');
+const idleTruckAlertsRouter = require('@goodmen/shared/routes/idle-truck-alerts');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
@@ -73,6 +74,7 @@ app.use('/api/maintenance', authMiddleware, tenantContextMiddleware, maintenance
 app.use('/api/equipment', authMiddleware, tenantContextMiddleware, equipmentRouter);
 app.use('/api/work-orders', authMiddleware, tenantContextMiddleware, workOrdersRouter);
 app.use('/api/parts', authMiddleware, tenantContextMiddleware, requirePartsPlan, partsRouter);
+app.use('/api/idle-truck-alerts', authMiddleware, tenantContextMiddleware, idleTruckAlertsRouter);
 
 /**
  * @openapi
