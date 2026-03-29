@@ -19,6 +19,9 @@ export interface SettlementRow {
   netDriver: number;
   netAdditionalPayee: number;
   updatedAt: string;
+  settlementType: 'driver' | 'equipment_owner' | '';
+  equipmentOwnerName: string;
+  carriedBalance: number;
 }
 
 @Component({
@@ -40,11 +43,18 @@ export class SettlementListComponent implements OnInit, OnDestroy {
     weekStart: string;
     driverId: string;
     status: string;
+    settlementType: string;
   } = {
     weekStart: '',
     driverId: '',
-    status: ''
+    status: '',
+    settlementType: ''
   };
+
+  readonly settlementTypeOptions = [
+    { value: 'driver', label: 'Driver' },
+    { value: 'equipment_owner', label: 'Equipment Owner' }
+  ];
 
   /** Backend uses: preparing | ready_for_review | approved | paid | void */
   statusSelectOptions = [
@@ -111,6 +121,7 @@ export class SettlementListComponent implements OnInit, OnDestroy {
     const params: any = { limit: 100 };
     if (this.filters.driverId) params.driver_id = this.filters.driverId;
     if (this.filters.status) params.settlement_status = this.filters.status;
+    if (this.filters.settlementType) params.settlement_type = this.filters.settlementType;
     this.apiService.listSettlements(params).subscribe({
       next: (rows: any) => {
         const list = Array.isArray(rows) ? rows : rows?.data ?? rows?.rows ?? [];
@@ -160,7 +171,10 @@ export class SettlementListComponent implements OnInit, OnDestroy {
       deductions: Number(s.total_deductions) || 0,
       netDriver: Number(s.net_pay_driver) || 0,
       netAdditionalPayee: Number(s.net_pay_additional_payee) || 0,
-      updatedAt: this.toDateOnly(s.updated_at || s.created_at)
+      updatedAt: this.toDateOnly(s.updated_at || s.created_at),
+      settlementType: (s.settlement_type || '') as 'driver' | 'equipment_owner' | '',
+      equipmentOwnerName: s.equipment_owner_name || '',
+      carriedBalance: Number(s.carried_balance) || 0
     };
   }
 
@@ -184,7 +198,7 @@ export class SettlementListComponent implements OnInit, OnDestroy {
   }
 
   clearFilters(): void {
-    this.filters = { weekStart: '', driverId: '', status: '' };
+    this.filters = { weekStart: '', driverId: '', status: '', settlementType: '' };
     this.loadSettlements();
   }
 
@@ -218,6 +232,22 @@ export class SettlementListComponent implements OnInit, OnDestroy {
       void: 'Void'
     };
     return m[status] ?? (status || '—');
+  }
+
+  openBalanceTransferQueue(): void {
+    this.router.navigate(['/settlements/balance-transfers']);
+  }
+
+  getTypeClass(type: string): string {
+    if (type === 'equipment_owner') return 'badge-eo';
+    if (type === 'driver') return 'badge-driver-type';
+    return 'badge-muted';
+  }
+
+  getTypeLabel(type: string): string {
+    if (type === 'equipment_owner') return 'Equip. Owner';
+    if (type === 'driver') return 'Driver';
+    return '—';
   }
 
   getDriverDisplayName(d: { id: string; firstName?: string; lastName?: string; name?: string }): string {

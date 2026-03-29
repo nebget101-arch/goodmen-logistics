@@ -817,3 +817,73 @@
     padding: 12px;
   }
 }
+
+/* V2 dual-settlement styles */
+.settlement-detail .v2-section {
+  border-left: 3px solid rgba(99, 102, 241, 0.4);
+}
+
+.settlement-detail .section-icon {
+  font-size: 18px;
+  vertical-align: middle;
+  margin-right: 6px;
+  opacity: 0.8;
+}
+
+.settlement-detail .pill-warn {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.settlement-detail .pill-danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.settlement-detail .line-amount-danger {
+  color: #f87171;
+  font-weight: 600;
+}
+
+.settlement-detail .metric-danger {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.settlement-detail .metric-danger-text {
+  color: #f87171;
+}
+
+.settlement-detail .rollover-notice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #f87171;
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+.settlement-detail .rollover-notice .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.settlement-detail .badge-driver-type {
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.settlement-detail .badge-eo {
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+}

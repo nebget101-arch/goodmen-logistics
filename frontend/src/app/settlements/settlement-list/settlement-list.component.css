@@ -219,6 +219,56 @@
   color: var(--text-light);
 }
 
+.settlements-list .badge-driver-type {
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.settlements-list .badge-eo {
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.settlements-list .cell-carried {
+  color: #f87171;
+}
+
+.settlements-list .carried-flag {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f87171;
+}
+
+.settlements-list .text-muted {
+  color: var(--text-light);
+}
+
+.settlements-list .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(30, 41, 59, 0.6);
+  color: #cbd5e1;
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.settlements-list .btn-secondary:hover {
+  border-color: rgba(148, 163, 184, 0.7);
+  background: rgba(30, 41, 59, 0.85);
+}
+
+.settlements-list .btn-secondary .material-symbols-outlined {
+  font-size: 18px;
+}
+
 .settlements-list .btn-sm {
   display: inline-flex;
   align-items: center;
