@@ -242,13 +242,14 @@
 
   <form [formGroup]="cardForm" (ngSubmit)="saveCard()" class="form-grid">
     <label>
-      Card Number (masked)
-      <input type="text" formControlName="card_number_masked" placeholder="****1234" />
+      Card Number
+      <input type="text" formControlName="card_number_full" placeholder="Enter full card number"
+             (input)="onCardNumberInput(cardForm.get('card_number_full')?.value || '')" />
     </label>
 
     <label>
-      Last 4 Digits
-      <input type="text" formControlName="card_number_last4" placeholder="1234" maxlength="4" />
+      Last 4 Digits <span class="field-hint">(auto-filled)</span>
+      <input type="text" formControlName="card_number_last4" placeholder="Auto" maxlength="4" readonly />
     </label>
 
     <label>
