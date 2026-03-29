@@ -56,7 +56,7 @@ router.get('/alerts', async (req, res) => {
       .modify((q) => { if (driver_id) q.where('a.driver_id', driver_id); })
       .orderBy('a.created_at', 'desc');
 
-    const [{ total }] = await query.clone().count('a.id as total');
+    const [{ total }] = await query.clone().clearOrder().count('a.id as total');
 
     const alerts = await query
       .select(
