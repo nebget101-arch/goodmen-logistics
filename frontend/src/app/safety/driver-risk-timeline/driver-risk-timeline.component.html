@@ -1,0 +1,227 @@
+<!-- Back button -->
+<div class="back-bar">
+  <button type="button" class="btn btn-ghost" (click)="back()">
+    <span class="material-symbols-outlined">arrow_back</span>
+    Fleet Risk Dashboard
+  </button>
+</div>
+
+<div *ngIf="loading" class="loading-state">
+  <span class="material-symbols-outlined spinner-icon">progress_activity</span>
+  Loading driver risk profile...
+</div>
+
+<div *ngIf="error" class="alert-error">
+  <span class="material-symbols-outlined">error_outline</span>
+  {{ error }}
+</div>
+
+<ng-container *ngIf="!loading && score">
+  <!-- Driver Score Header -->
+  <div class="score-header">
+    <div class="score-circle-wrap">
+      <div class="score-circle" [style.border-color]="scoreColor(score!.current?.score ?? null)">
+        <span class="score-number"
+          [style.color]="scoreColor(score!.current?.score ?? null)">
+          {{ score!.current?.score !== null ? score!.current!.score : '—' }}
+        </span>
+        <span class="score-label">Risk Score</span>
+      </div>
+    </div>
+
+    <div class="score-meta">
+      <div class="score-meta-row">
+        <span class="badge" [ngClass]="riskLevelClass(score!.current?.risk_level ?? null)">
+          {{ (score!.current?.risk_level | titlecase) || 'Unscored' }}
+        </span>
+        <span class="trend-chip" [ngClass]="trendClass(score!.current?.trend ?? null)">
+          <span class="material-symbols-outlined">{{ trendIcon(score!.current?.trend ?? null) }}</span>
+          {{ (score!.current?.trend | titlecase) || 'Unknown' }}
+        </span>
+      </div>
+      <p class="driver-id-label">Driver ID: {{ driverId }}</p>
+      <p class="calc-date" *ngIf="score!.current?.calculated_at">
+        Last calculated: {{ score!.current!.calculated_at | date:'medium' }}
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="recalculating"
+        (click)="recalculate()">
+        <span class="material-symbols-outlined" [class.spinner-icon]="recalculating">
+          {{ recalculating ? 'progress_activity' : 'refresh' }}
+        </span>
+        {{ recalculating ? 'Recalculating...' : 'Recalculate' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Score KPIs -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon" style="color: #38bdf8">speed</span>
+      <span class="kpi-label">Current Score</span>
+      <span class="kpi-value" [style.color]="scoreColor(score!.current?.score ?? null)">
+        {{ score!.current?.score !== null ? score!.current!.score : '—' }}
+      </span>
+      <span class="kpi-sub">0 = no risk, 100 = max risk</span>
+    </div>
+
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon" style="color: #38bdf8">shield</span>
+      <span class="kpi-label">Risk Level</span>
+      <span class="kpi-value kpi-value-badge">
+        <span class="badge" [ngClass]="riskLevelClass(score!.current?.risk_level ?? null)">
+          {{ (score!.current?.risk_level | titlecase) || '—' }}
+        </span>
+      </span>
+    </div>
+
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon" style="color: #38bdf8">trending_up</span>
+      <span class="kpi-label">Trend</span>
+      <span class="kpi-value kpi-value-trend" [ngClass]="trendClass(score!.current?.trend ?? null)">
+        <span class="material-symbols-outlined">{{ trendIcon(score!.current?.trend ?? null) }}</span>
+        {{ (score!.current?.trend | titlecase) || '—' }}
+      </span>
+    </div>
+
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon" style="color: #38bdf8">event_list</span>
+      <span class="kpi-label">Event Count</span>
+      <span class="kpi-value">{{ score!.current?.event_count ?? 0 }}</span>
+      <span class="kpi-sub">Risk events on record</span>
+    </div>
+  </div>
+
+  <!-- Category Scores -->
+  <div class="info-panel">
+    <h3>Category Score Breakdown</h3>
+    <div class="category-list">
+      <div class="category-row" *ngFor="let cat of categoryDefs">
+        <div class="cat-label-wrap">
+          <span class="cat-name">{{ cat.label }}</span>
+          <span class="cat-weight">({{ cat.weight }}%)</span>
+        </div>
+        <div class="cat-bar-wrap">
+          <div class="cat-bar-track">
+            <div
+              class="cat-bar-fill"
+              [style.width.%]="getCategoryScore(cat.key) ?? 0"
+              [style.background]="scoreColor(getCategoryScore(cat.key))">
+            </div>
+          </div>
+          <span class="cat-score"
+            [style.color]="scoreColor(getCategoryScore(cat.key))">
+            {{ getCategoryScore(cat.key) !== null ? getCategoryScore(cat.key) : '—' }}<span *ngIf="getCategoryScore(cat.key) !== null">/100</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Risk Events Timeline -->
+  <div class="info-panel">
+    <div class="events-header">
+      <h3>Risk Events Timeline</h3>
+      <span class="events-count" *ngIf="eventsTotal > 0">{{ eventsTotal }} total</span>
+    </div>
+
+    <div *ngIf="loadingEvents" class="loading-state loading-inline">
+      <span class="material-symbols-outlined spinner-icon">progress_activity</span>
+      Loading events...
+    </div>
+
+    <div *ngIf="!loadingEvents && events.length === 0" class="empty-state">
+      <span class="material-symbols-outlined empty-icon">event_available</span>
+      No risk events recorded for this driver.
+    </div>
+
+    <div class="timeline" *ngIf="!loadingEvents && events.length > 0">
+      <div class="timeline-item" *ngFor="let event of events" [class.resolved]="event.is_resolved">
+        <div class="timeline-dot" [ngClass]="severityClass(event.severity)"></div>
+        <div class="timeline-line"></div>
+
+        <div class="timeline-card">
+          <div class="timeline-card-header">
+            <span class="event-type-icon material-symbols-outlined">{{ eventTypeIcon(event.event_type) }}</span>
+            <div class="event-title-block">
+              <span class="event-title">{{ event.title }}</span>
+              <span class="event-date">{{ event.event_date | date:'mediumDate' }}</span>
+            </div>
+            <div class="event-badges">
+              <span class="badge badge-sm" [ngClass]="severityClass(event.severity)">
+                {{ event.severity | titlecase }}
+              </span>
+              <span class="badge badge-sm badge-resolved" *ngIf="event.is_resolved">Resolved</span>
+            </div>
+            <span class="score-delta" [ngClass]="scoreDeltaClass(event)" *ngIf="scoreDelta(event)">
+              {{ scoreDelta(event) }}
+            </span>
+          </div>
+
+          <p class="event-description" *ngIf="event.description">{{ event.description }}</p>
+
+          <div class="event-meta" *ngIf="event.weight_applied !== null || event.score_before !== null">
+            <span *ngIf="event.weight_applied !== null" class="meta-chip">
+              Weight: {{ event.weight_applied | number:'1.2-2' }}
+            </span>
+            <span *ngIf="event.recency_multiplier !== null" class="meta-chip">
+              Recency: {{ event.recency_multiplier | number:'1.2-2' }}x
+            </span>
+            <span *ngIf="event.score_before !== null && event.score_after !== null" class="meta-chip">
+              Score: {{ event.score_before | number:'1.1-1' }} &rarr; {{ event.score_after | number:'1.1-1' }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="totalPages > 1">
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        [disabled]="eventsPage === 1"
+        (click)="loadEvents(eventsPage - 1)">
+        <span class="material-symbols-outlined">chevron_left</span>
+        Prev
+      </button>
+
+      <button
+        *ngFor="let p of pageNumbers"
+        type="button"
+        class="btn btn-ghost btn-sm page-num"
+        [class.active]="p === eventsPage"
+        (click)="loadEvents(p)">
+        {{ p }}
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        [disabled]="eventsPage === totalPages"
+        (click)="loadEvents(eventsPage + 1)">
+        Next
+        <span class="material-symbols-outlined">chevron_right</span>
+      </button>
+    </div>
+  </div>
+</ng-container>
+
+<!-- No data state when no current score -->
+<ng-container *ngIf="!loading && !error && score && !score.current">
+  <div class="no-data-state">
+    <span class="material-symbols-outlined no-data-icon">assignment_late</span>
+    <p>No risk score calculated yet for driver <strong>{{ driverId }}</strong>.</p>
+    <button type="button" class="btn btn-primary" [disabled]="recalculating" (click)="recalculate()">
+      <span class="material-symbols-outlined" [class.spinner-icon]="recalculating">
+        {{ recalculating ? 'progress_activity' : 'calculate' }}
+      </span>
+      {{ recalculating ? 'Calculating...' : 'Calculate Now' }}
+    </button>
+  </div>
+</ng-container>
