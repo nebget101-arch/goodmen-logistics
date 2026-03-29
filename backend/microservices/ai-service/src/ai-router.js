@@ -9,6 +9,7 @@ const { handleFuelPreprocess } = require('./handlers/fuel-preprocess-handler');
 const { handleTollCsvNormalize } = require('./handlers/toll-csv-normalize-handler');
 const { handleTollInvoiceVision } = require('./handlers/toll-invoice-vision-handler');
 const { handleMvrVision } = require('./handlers/mvr-vision-handler');
+const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -38,6 +39,9 @@ function buildAiRouter(deps) {
   router.post('/safety/mvr-vision', (req, res) =>
     handleMvrVision(req, res, deps)
   );
+  router.post('/fmcsa/match-driver', (req, res) =>
+    handleFmcsaDriverMatch(req, res, deps)
+  );
 
   return router;
 }
@@ -45,4 +49,3 @@ function buildAiRouter(deps) {
 module.exports = {
   buildAiRouter
 };
-
