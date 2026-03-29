@@ -163,6 +163,10 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
 
   trailerSelectOptions: { value: string; label: string }[] = [];
 
+  // FN-496: Equipment Owner auto-population state
+  equipmentOwnerAutoPopulated = false;
+  pendingOwnerChange: { truckId: string; ownerName: string } | null = null;
+
   readonly expenseCategoryOptions = [
     { value: '', label: 'Manual / not expense-specific' },
     ...this.expenseKeys.map(e => ({ value: e.key, label: e.label }))
@@ -1274,6 +1278,54 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     this.selectedAdditionalPayeeName = '';
     this.additionalPayeeSearch = '';
     this.newDriver.additionalPayee = '';
+    this.filteredAdditionalPayees = [];
+    this.equipmentOwnerAutoPopulated = false;
+  }
+
+  // FN-496: auto-populate Equipment Owner when truck selection changes
+  onTruckSelected(truckId: string): void {
+    const truck = (this.trucks || []).find((t: any) => t.id === truckId);
+    const ownerName = (truck?.equipment_owner_name || '').trim();
+
+    if (!ownerName) {
+      // Truck has no equipment owner — clear auto-populated state but leave manual selection intact
+      this.equipmentOwnerAutoPopulated = false;
+      return;
+    }
+
+    const currentOwner = (this.additionalPayeeSearch || '').trim();
+    if (currentOwner && currentOwner !== ownerName) {
+      // Different owner — ask for confirmation
+      this.pendingOwnerChange = { truckId, ownerName };
+      return;
+    }
+
+    this.applyEquipmentOwnerFromTruck(ownerName);
+  }
+
+  confirmOwnerChange(): void {
+    if (!this.pendingOwnerChange) return;
+    this.applyEquipmentOwnerFromTruck(this.pendingOwnerChange.ownerName);
+    this.pendingOwnerChange = null;
+  }
+
+  cancelOwnerChange(): void {
+    // Revert truck selection to previous value
+    if (this.pendingOwnerChange) {
+      const prev = this.trucks.find(
+        (t: any) => (t.equipment_owner_name || '').trim() === (this.additionalPayeeSearch || '').trim()
+      );
+      this.newDriver.truckId = prev?.id || '';
+    }
+    this.pendingOwnerChange = null;
+  }
+
+  private applyEquipmentOwnerFromTruck(ownerName: string): void {
+    this.additionalPayeeSearch = ownerName;
+    this.newDriver.additionalPayee = ownerName;
+    this.selectedAdditionalPayeeId = '';
+    this.selectedAdditionalPayeeName = ownerName;
+    this.equipmentOwnerAutoPopulated = true;
     this.filteredAdditionalPayees = [];
   }
 

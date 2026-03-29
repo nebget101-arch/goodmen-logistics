@@ -540,3 +540,12 @@
 .vehicle-form-modal app-ai-select .mat-mdc-select-placeholder {
   text-align: center;
 }
+
+/* FN-496: Equipment Owner field hint */
+.vehicle-form-modal .field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.8);
+  line-height: 1.4;
+}

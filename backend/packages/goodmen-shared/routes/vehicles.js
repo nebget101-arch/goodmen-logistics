@@ -315,6 +315,13 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // FN-496: filter by equipment owner
+    const equipmentOwnerId = req.query.equipment_owner_id;
+    if (equipmentOwnerId && vehicleColumns.has('equipment_owner_id')) {
+      params.push(equipmentOwnerId);
+      sql += ` AND av.equipment_owner_id = $${params.length}`;
+    }
+
     sql += vehicleColumns.has('unit_number') ? ' ORDER BY av.unit_number' : ' ORDER BY 1';
     const result = await query(sql, params);
     const duration = Date.now() - startTime;
