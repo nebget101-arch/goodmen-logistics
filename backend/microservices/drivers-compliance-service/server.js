@@ -67,6 +67,7 @@ const publicRoadsideRouter = require('@goodmen/shared/routes/public-roadside');
 const consentsRouter = require('@goodmen/shared/routes/consents');
 const publicConsentsRouter = require('@goodmen/shared/routes/public-consents');
 const safetyRouter = require('@goodmen/shared/routes/safety');
+const safetyRiskEngineRouter = require('@goodmen/shared/routes/safety-risk-engine');
 const employerInvestigationsRouter = require('@goodmen/shared/routes/employer-investigations');
 const publicEmployerInvestigationsRouter = require('@goodmen/shared/routes/public-employer-investigations');
 const annualComplianceRouter = require('@goodmen/shared/routes/annual-compliance');
@@ -87,6 +88,7 @@ app.use('/api/onboarding', authMiddleware, tenantContextMiddleware, onboardingRo
 app.use('/api/employment', authMiddleware, tenantContextMiddleware, employmentApplicationRouter);
 app.use('/api/roadside', authMiddleware, tenantContextMiddleware, requireRoadsidePlan, roadsideRouter);
 app.use('/api/safety', authMiddleware, tenantContextMiddleware, safetyRouter);
+app.use('/api/safety/driver-risk-scores', authMiddleware, tenantContextMiddleware, safetyRiskEngineRouter);
 app.use('/api/consents', authMiddleware, tenantContextMiddleware, consentsRouter);
 app.use('/api/employer-investigations', authMiddleware, tenantContextMiddleware, employerInvestigationsRouter);
 app.use('/api/annual-compliance', authMiddleware, tenantContextMiddleware, annualComplianceRouter);

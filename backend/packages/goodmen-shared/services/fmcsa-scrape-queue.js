@@ -2,6 +2,8 @@
 
 const Queue = require('bull');
 const { scrapeAll, scrapeAllBasicDetails, scrapeInspectionDetail } = require('./fmcsa-safer-scraper');
+// FN-479: Fire-and-forget risk score recalculation after inspection data imported
+const { triggerRecalculation: triggerRiskRecalc } = require('../routes/safety-risk-engine');
 
 const LOG_PREFIX = '[fmcsa-queue]';
 
@@ -206,6 +208,19 @@ function createScrapeQueue(knex, redisUrl) {
         await incrementJobCount(scrapeJobId, 'failed_count');
       }
       throw dbErr;
+    }
+
+    // FN-479: Recalculate risk scores for drivers matched to inspections under this carrier
+    try {
+      const matchedDrivers = await knex('fmcsa_inspections')
+        .whereNotNull('driver_id')
+        .where('carrier_id', carrier.dot_number)
+        .distinct('tenant_id', 'driver_id');
+      for (const { tenant_id, driver_id } of matchedDrivers) {
+        triggerRiskRecalc(tenant_id, driver_id).catch(() => {});
+      }
+    } catch (riskErr) {
+      console.warn(`${LOG_PREFIX} risk recalc trigger failed:`, riskErr.message);
     }
 
     return { status: 'ok', dotNumber: carrier.dot_number };
