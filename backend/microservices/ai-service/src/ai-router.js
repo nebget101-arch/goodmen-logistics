@@ -10,6 +10,7 @@ const { handleTollCsvNormalize } = require('./handlers/toll-csv-normalize-handle
 const { handleTollInvoiceVision } = require('./handlers/toll-invoice-vision-handler');
 const { handleMvrVision } = require('./handlers/mvr-vision-handler');
 const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handler');
+const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -41,6 +42,9 @@ function buildAiRouter(deps) {
   );
   router.post('/fmcsa/match-driver', (req, res) =>
     handleFmcsaDriverMatch(req, res, deps)
+  );
+  router.post('/drivers/psp-vision', (req, res) =>
+    handlePspReportVision(req, res, deps)
   );
 
   return router;
