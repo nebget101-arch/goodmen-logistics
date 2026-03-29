@@ -15,6 +15,7 @@ import { ComplianceDashboardComponent } from './compliance-dashboard/compliance-
 import { FmcsaDashboardComponent } from './fmcsa-dashboard/fmcsa-dashboard.component';
 import { FmcsaCarriersComponent } from './fmcsa-carriers/fmcsa-carriers.component';
 import { FmcsaCarrierDetailComponent } from './fmcsa-carrier-detail/fmcsa-carrier-detail.component';
+import { FmcsaInspectionsComponent } from './fmcsa-inspections/fmcsa-inspections.component';
 import { RiskDashboardComponent } from './risk-dashboard/risk-dashboard.component';
 import { DriverRiskTimelineComponent } from './driver-risk-timeline/driver-risk-timeline.component';
 
@@ -50,6 +51,12 @@ const routes: Routes = [
   {
     path: 'fmcsa/carriers/:id',
     component: FmcsaCarrierDetailComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: SAFETY_PERMS },
+  },
+  {
+    path: 'fmcsa/inspections',
+    component: FmcsaInspectionsComponent,
     canActivate: [AuthGuard, PermissionGuard],
     data: { anyPermission: SAFETY_PERMS },
   },

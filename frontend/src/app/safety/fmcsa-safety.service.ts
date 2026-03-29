@@ -243,6 +243,42 @@ export interface InspectionDetailsResponse {
   inspection_details: InspectionDetail[];
 }
 
+// ─── FN-475: Inspection History Interfaces ───────────────────────────────────
+
+export interface FmcsaInspection {
+  id: string;
+  carrier_id: string | null;
+  report_number: string | null;
+  report_state: string | null;
+  inspection_date: string | null;
+  level: string | null;
+  state: string | null;
+  oos_vehicle: boolean;
+  oos_driver: boolean;
+  violation_count: number;
+  match_status: 'matched' | 'unmatched' | 'manual' | 'partial';
+  match_method: string | null;
+  match_confidence: number | null;
+  matched_driver_id: string | null;
+  matched_vehicle_id: string | null;
+  vin_raw: string | null;
+  plate_raw: string | null;
+  driver_name_raw: string | null;
+  license_raw: string | null;
+  hazmat_flag: boolean;
+  created_at: string;
+}
+
+export interface FmcsaInspectionDetail {
+  inspection: FmcsaInspection;
+  detail: {
+    violations: Array<{ vio_code: string; description: string; oos: string; basic: string; unit: string; }>;
+    vehicles: Array<{ unit: string; type: string; make: string; plate_number: string; vin: string; }>;
+    facility: string | null;
+    start_time: string | null;
+  } | null;
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 @Injectable({ providedIn: 'root' })
@@ -324,5 +360,29 @@ export class FmcsaSafetyService {
   getMyScoreHistory(dotNumber: string, limit = 30, offset = 0): Observable<SnapshotHistoryResponse> {
     const params = new HttpParams().set('limit', limit).set('offset', offset);
     return this.http.get<SnapshotHistoryResponse>(`${this.base}/my-scores/${dotNumber}/history`, { params });
+  }
+
+  // ─── FN-475: Inspection History ───────────────────────────────────────────
+
+  getInspections(filters: { match_status?: string; date_from?: string; date_to?: string; oos_only?: boolean; limit?: number; offset?: number } = {}): Observable<{ rows: FmcsaInspection[]; total: number }> {
+    let params = new HttpParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        params = params.set(k, String(v));
+      }
+    });
+    return this.http.get<{ rows: FmcsaInspection[]; total: number }>(`${this.base}/inspections`, { params });
+  }
+
+  getInspectionDetail(id: string): Observable<FmcsaInspectionDetail> {
+    return this.http.get<FmcsaInspectionDetail>(`${this.base}/inspections/${id}`);
+  }
+
+  matchInspection(id: string, payload: { driver_id?: string; vehicle_id?: string }): Observable<{ success: boolean }> {
+    return this.http.patch<{ success: boolean }>(`${this.base}/inspections/${id}/match`, payload);
+  }
+
+  rematchInspections(): Observable<{ success: boolean; matched: number }> {
+    return this.http.post<{ success: boolean; matched: number }>(`${this.base}/inspections/rematch`, {});
   }
 }
