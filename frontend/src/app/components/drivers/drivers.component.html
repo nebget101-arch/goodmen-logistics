@@ -99,12 +99,15 @@
             </span>
           </td>
           <td>
-            <ng-container *ngIf="driverRiskMap.get(driver.id) as badge">
+            <ng-container *ngIf="driverRiskMap.get(driver.id) as badge; else noRiskBadge">
               <span [class]="getRiskBadgeClass(badge.risk_level)"
                     [title]="getRiskBadgeTooltip(badge)">
                 {{ badge.score | number:'1.0-0' }}
               </span>
             </ng-container>
+            <ng-template #noRiskBadge>
+              <span *ngIf="riskBadgesLoaded" class="risk-badge-empty" title="No risk data available">&mdash;</span>
+            </ng-template>
           </td>
           <td>
             <div class="drivers-actions">
@@ -530,6 +533,38 @@
         <div class="prehire-risk-loading" *ngIf="preHireRiskLoading && !preHireRisk?.current">
           <span class="material-symbols-outlined" style="animation:spin 1s linear infinite; font-size:18px;">progress_activity</span>
           Loading risk assessment...
+        </div>
+        <!-- FN-505: empty state when no risk score exists -->
+        <div class="prehire-risk-empty" *ngIf="!preHireRiskLoading && !preHireRisk?.current && !preHireRiskError">
+          <div class="prehire-risk-header">
+            <span class="material-symbols-outlined">shield_person</span>
+            <h4>Pre-Hire Risk Assessment</h4>
+          </div>
+          <div class="prehire-empty-body">
+            <p>No risk assessment available for this driver.</p>
+            <button class="btn-reanalyze" type="button"
+                    (click)="recalculateRisk(selectedDriver.id)"
+                    [disabled]="preHireRiskLoading">
+              <span class="material-symbols-outlined" style="font-size:16px;">calculate</span>
+              Run Assessment
+            </button>
+          </div>
+        </div>
+        <!-- FN-505: error state -->
+        <div class="prehire-risk-error" *ngIf="!preHireRiskLoading && preHireRiskError">
+          <div class="prehire-risk-header">
+            <span class="material-symbols-outlined">shield_person</span>
+            <h4>Pre-Hire Risk Assessment</h4>
+          </div>
+          <div class="prehire-empty-body">
+            <p class="text-danger">{{ preHireRiskError }}</p>
+            <button class="btn-reanalyze" type="button"
+                    (click)="recalculateRisk(selectedDriver.id)"
+                    [disabled]="preHireRiskLoading">
+              <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+              Retry
+            </button>
+          </div>
         </div>
 
         <!-- Pre-Employment Clearance Gate (FN-214) -->

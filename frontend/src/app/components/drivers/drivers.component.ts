@@ -120,6 +120,8 @@ export class DriversComponent implements OnInit, OnDestroy {
 
   // FN-504: cross-module risk badges (driver_id → badge)
   driverRiskMap = new Map<string, DriverRiskBadge>();
+  riskBadgesLoaded = false;
+  riskBadgesError = '';
   // FN-504: pre-hire risk score card shown in DQF modal
   preHireRisk: DriverRiskScore | null = null;
   preHireRiskLoading = false;
@@ -500,14 +502,20 @@ export class DriversComponent implements OnInit, OnDestroy {
 
   // FN-504: load risk badges for all drivers in one fleet-summary call
   private loadRiskBadges(): void {
+    this.riskBadgesLoaded = false;
+    this.riskBadgesError = '';
     this.safetyRisk.getFleetSummary().subscribe({
       next: (summary) => {
         this.driverRiskMap.clear();
         for (const badge of (summary.all_scores || [])) {
           this.driverRiskMap.set(badge.driver_id, badge);
         }
+        this.riskBadgesLoaded = true;
       },
-      error: () => {} // badges are non-critical, fail silently
+      error: () => {
+        this.riskBadgesLoaded = true;
+        this.riskBadgesError = 'Unable to load risk data';
+      }
     });
   }
 
@@ -707,6 +715,7 @@ export class DriversComponent implements OnInit, OnDestroy {
       },
       error: () => {
         this.preHireRiskLoading = false;
+        this.preHireRiskError = 'Unable to load risk assessment';
       }
     });
   }
