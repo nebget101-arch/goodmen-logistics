@@ -1564,5 +1564,35 @@ export class ApiService {
   submitEmployerInvestigationResponse(tokenId: string, data: Record<string, unknown>): Observable<any> {
     return this.http.post(`${this.baseUrl}/public/employer-investigations/${encodeURIComponent(tokenId)}/respond`, data);
   }
+
+  // ── Idle Truck Alerts — FN-508 ──────────────────────────────────────────
+
+  listIdleTruckAlerts(filters?: { alert_type?: string; response_status?: string; vehicle_id?: string; limit?: number; offset?: number }): Observable<any> {
+    let url = `${this.baseUrl}/idle-truck-monitor/alerts`;
+    const params = new URLSearchParams();
+    if (filters?.alert_type) params.set('alert_type', filters.alert_type);
+    if (filters?.response_status) params.set('response_status', filters.response_status);
+    if (filters?.vehicle_id) params.set('vehicle_id', filters.vehicle_id);
+    if (filters?.limit != null) params.set('limit', String(filters.limit));
+    if (filters?.offset != null) params.set('offset', String(filters.offset));
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+    return this.http.get<any>(url);
+  }
+
+  respondToIdleTruckAlert(id: string, responseStatus: string, responseNotes?: string): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/idle-truck-monitor/alerts/${id}/respond`, {
+      response_status: responseStatus,
+      response_notes: responseNotes || null
+    });
+  }
+
+  getNotificationUnreadCount(): Observable<{ count: number }> {
+    return this.http.get<{ count: number }>(`${this.baseUrl}/notifications/unread-count`);
+  }
+
+  markAllNotificationsRead(): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/notifications/read-all`, {});
+  }
 }
 

@@ -73,6 +73,7 @@ import { InvestigationHistoryComponent } from './components/drivers/investigatio
 import { ConsentFormComponent } from './components/onboarding-packet/consent-form/consent-form.component';
 import { EmployerHistoryTieredComponent } from './components/onboarding-packet/employer-history-tiered/employer-history-tiered.component';
 import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
+import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 
 @NgModule({
   declarations: [
@@ -128,7 +129,8 @@ import { DisqualificationHistoryComponent } from './components/onboarding-packet
     InvestigationHistoryComponent,
     ConsentFormComponent,
     EmployerHistoryTieredComponent,
-    DisqualificationHistoryComponent
+    DisqualificationHistoryComponent,
+    IdleTruckAlertsComponent
   ],
   imports: [
     BrowserModule,

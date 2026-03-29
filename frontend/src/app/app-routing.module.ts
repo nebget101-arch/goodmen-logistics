@@ -40,6 +40,7 @@ import { PERMISSIONS } from './models/access-control.model';
 import { InternalTrialAdminGuard } from './guards/internal-trial-admin.guard';
 import { BillingAdminGuard } from './guards/billing-admin.guard';
 import { BillingComponent } from './billing/billing.component';
+import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
@@ -220,6 +221,12 @@ const routes: Routes = [
     }
   },
   { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
+  {
+    path: 'idle-truck-alerts',
+    component: IdleTruckAlertsComponent,
+    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
+    data: { planPath: '/settlements', anyPermission: [PERMISSIONS.SETTLEMENTS_VIEW, PERMISSIONS.SETTLEMENTS_EDIT] }
+  },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   { path: 'billing', component: BillingComponent, canActivate: [AuthGuard, BillingAdminGuard] },
   {
