@@ -21,7 +21,7 @@ export class TollsDevicesComponent implements OnInit {
   error = '';
   successMsg = '';
 
-  drivers: { id: string; first_name: string; last_name: string }[] = [];
+  drivers: { id: string; first_name: string; last_name: string; truck_id?: string }[] = [];
   trucks: { id: string; unit_number: string; plate_number?: string }[] = [];
   assignmentMap: Record<string, TollDeviceAssignment> = {};
   driverOverrideMap: Record<string, string> = {};
@@ -50,6 +50,8 @@ export class TollsDevicesComponent implements OnInit {
   ) {
     this.assignTruckForm = this.fb.group({
       truck_id: ['', Validators.required],
+      plate_number: [''],
+      driver_id: [''],
       notes: ['']
     });
   }
@@ -114,10 +116,11 @@ export class TollsDevicesComponent implements OnInit {
     this.api.getDrivers().subscribe({
       next: (res) => {
         const raw = Array.isArray(res) ? res : (res?.drivers || []);
-        this.drivers = raw.map((d: { id: string; first_name: string; last_name: string }) => ({
+        this.drivers = raw.map((d: { id: string; first_name: string; last_name: string; truck_id?: string }) => ({
           id: d.id,
           first_name: d.first_name,
-          last_name: d.last_name
+          last_name: d.last_name,
+          truck_id: d.truck_id
         }));
         this.cdr.markForCheck();
       },
@@ -191,8 +194,17 @@ export class TollsDevicesComponent implements OnInit {
 
   openAssignTruck(device: TollDevice): void {
     this.assigningDevice = device;
-    this.assignTruckForm.reset({ truck_id: '', notes: '' });
+    this.assignTruckForm.reset({ truck_id: '', plate_number: '', driver_id: '', notes: '' });
     this.showAssignTruckDialog = true;
+  }
+
+  onTruckSelected(truckId: string): void {
+    const truck = this.trucks.find(t => t.id === truckId);
+    const driver = this.drivers.find(d => d.truck_id === truckId);
+    this.assignTruckForm.patchValue({
+      plate_number: truck?.plate_number || '',
+      driver_id: driver?.id || ''
+    });
   }
 
   closeAssignTruck(): void {
@@ -204,17 +216,41 @@ export class TollsDevicesComponent implements OnInit {
   saveAssignTruck(): void {
     if (this.assignTruckForm.invalid || !this.assigningDevice) return;
     const device = this.assigningDevice;
-    const { truck_id, notes } = this.assignTruckForm.value as { truck_id: string; notes: string };
+    const { truck_id, plate_number, driver_id, notes } = this.assignTruckForm.value as { truck_id: string; plate_number: string; driver_id: string; notes: string };
     this.savingAssign = true;
-    this.tolls.assignVehicle(device.id, { truck_id, notes: notes || undefined }).subscribe({
+    this.tolls.assignVehicle(device.id, { truck_id, plate_number: plate_number || undefined, notes: notes || undefined }).subscribe({
       next: () => {
-        this.savingAssign = false;
-        this.showAssignTruckDialog = false;
-        this.assigningDevice = null;
-        this.successMsg = 'Truck assigned successfully.';
-        this.loadDevices();
-        setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 4000);
-        this.cdr.markForCheck();
+        if (driver_id) {
+          this.tolls.assignDriver(device.id, driver_id).subscribe({
+            next: () => {
+              this.savingAssign = false;
+              this.showAssignTruckDialog = false;
+              this.assigningDevice = null;
+              this.successMsg = 'Truck assigned successfully.';
+              this.loadDevices();
+              setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 4000);
+              this.cdr.markForCheck();
+            },
+            error: () => {
+              // vehicle assigned successfully, driver override failed — still show success
+              this.savingAssign = false;
+              this.showAssignTruckDialog = false;
+              this.assigningDevice = null;
+              this.successMsg = 'Truck assigned successfully.';
+              this.loadDevices();
+              setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 4000);
+              this.cdr.markForCheck();
+            }
+          });
+        } else {
+          this.savingAssign = false;
+          this.showAssignTruckDialog = false;
+          this.assigningDevice = null;
+          this.successMsg = 'Truck assigned successfully.';
+          this.loadDevices();
+          setTimeout(() => { this.successMsg = ''; this.cdr.markForCheck(); }, 4000);
+          this.cdr.markForCheck();
+        }
       },
       error: (err) => {
         this.savingAssign = false;
