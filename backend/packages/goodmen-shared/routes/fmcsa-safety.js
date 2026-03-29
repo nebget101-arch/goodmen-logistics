@@ -904,32 +904,44 @@ router.post('/inspections/ingest', requireRole(['admin', 'safety']), async (req,
 });
 
 // GET /inspections — List inspections with filters
+// Deduplicates by report_number (same inspection appears per BASIC category)
 router.get('/inspections', requireRole(['admin', 'safety', 'dispatcher']), async (req, res) => {
   try {
     const { carrier_id, match_status, date_from, date_to, limit = 50, offset = 0 } = req.query;
 
-    let q = knex('fmcsa_inspection_history as h')
-      .leftJoin('fmcsa_inspection_details as d', 'h.report_number', 'd.report_number')
-      .select(
-        'h.*',
-        'd.level',
-        'd.vehicles as detail_vehicles',
-        'd.violations as detail_violations'
-      )
-      .orderBy('h.inspection_date', 'desc');
-    if (carrier_id) q = q.where('h.carrier_id', carrier_id);
-    if (match_status) q = q.where('h.match_status', match_status);
-    if (date_from) q = q.where('h.inspection_date', '>=', date_from);
-    if (date_to) q = q.where('h.inspection_date', '<=', date_to);
+    // Deduplicate: pick one row per report_number using DISTINCT ON
+    let q = knex.raw(`
+      SELECT DISTINCT ON (h.report_number)
+        h.*,
+        d.level,
+        d.vehicles AS detail_vehicles,
+        d.violations AS detail_violations
+      FROM fmcsa_inspection_history h
+      LEFT JOIN fmcsa_inspection_details d ON h.report_number = d.report_number
+      WHERE 1=1
+        ${carrier_id ? 'AND h.carrier_id = ?' : ''}
+        ${match_status ? 'AND h.match_status = ?' : ''}
+        ${date_from ? 'AND h.inspection_date >= ?' : ''}
+        ${date_to ? 'AND h.inspection_date <= ?' : ''}
+      ORDER BY h.report_number, h.created_at DESC
+    `, [carrier_id, match_status, date_from, date_to].filter(Boolean));
 
-    const countQuery = knex('fmcsa_inspection_history as h').count('* as total');
-    if (carrier_id) countQuery.where('h.carrier_id', carrier_id);
-    if (match_status) countQuery.where('h.match_status', match_status);
-    if (date_from) countQuery.where('h.inspection_date', '>=', date_from);
-    if (date_to) countQuery.where('h.inspection_date', '<=', date_to);
+    // Wrap in a subquery for sorting + pagination
+    const paginatedRows = await knex.raw(`
+      SELECT * FROM (${q.toString()}) AS deduped
+      ORDER BY inspection_date DESC
+      LIMIT ? OFFSET ?
+    `, [Number(limit), Number(offset)]);
 
-    const rows = await q.limit(Number(limit)).offset(Number(offset));
-    const { total } = await countQuery.first();
+    let countQ = knex('fmcsa_inspection_history').countDistinct('report_number as total');
+    if (carrier_id) countQ = countQ.where('carrier_id', carrier_id);
+    if (match_status) countQ = countQ.where('match_status', match_status);
+    if (date_from) countQ = countQ.where('inspection_date', '>=', date_from);
+    if (date_to) countQ = countQ.where('inspection_date', '<=', date_to);
+    const countResult = await countQ.first();
+
+    const rows = paginatedRows.rows || [];
+    const total = Number(countResult?.total || 0);
 
     // Enrich rows with computed fields from detail data
     const enriched = rows.map(row => {
@@ -937,8 +949,16 @@ router.get('/inspections', requireRole(['admin', 'safety', 'dispatcher']), async
       const vehicles = parseJsonSafe(row.detail_vehicles) || [];
       const truck = vehicles.find(v => /truck/i.test(v.type)) || vehicles[0];
 
+      // Format date as YYYY-MM-DD to avoid timezone shift in the browser
+      let dateStr = null;
+      if (row.inspection_date) {
+        const d = new Date(row.inspection_date);
+        dateStr = d.toISOString().split('T')[0];
+      }
+
       return {
         ...row,
+        inspection_date: dateStr,
         level: row.level || null,
         violation_count: violations.length,
         vehicle_display: truck
@@ -956,7 +976,7 @@ router.get('/inspections', requireRole(['admin', 'safety', 'dispatcher']), async
       };
     });
 
-    res.json({ rows: enriched, total: Number(total) });
+    res.json({ rows: enriched, total });
   } catch (err) {
     dtLogger.error('fmcsa_inspections_list_error', err);
     sendError(res, 500, 'Failed to list inspections');
