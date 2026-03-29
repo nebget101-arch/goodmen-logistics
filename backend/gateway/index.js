@@ -266,6 +266,8 @@ app.use('/api/settlements', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/expense-payment-categories', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/expense-categories', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/reference', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/idle-truck-monitor', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/notifications', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/inventory', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/adjustments', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/cycle-counts', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
