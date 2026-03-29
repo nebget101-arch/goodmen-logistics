@@ -39,6 +39,7 @@
           <th>DQF Complete</th>
           <th>Clearinghouse</th>
           <th>Status</th>
+          <th>Risk</th>
           <th>Actions</th>
         </tr>
         <tr class="header-filters drivers-header-filters">
@@ -63,6 +64,7 @@
           <th>
             <app-ai-select [(ngModel)]="driverFilters.status" [options]="driverStatusOptions" [allowEmpty]="true" emptyLabel="All" placeholder="Status"></app-ai-select>
           </th>
+          <th></th>
           <th></th>
         </tr>
       </thead>
@@ -95,6 +97,14 @@
             <span [class]="'badge ' + getStatusBadge(driver.status)">
               {{ driver.status }}
             </span>
+          </td>
+          <td>
+            <ng-container *ngIf="driverRiskMap.get(driver.id) as badge">
+              <span [class]="getRiskBadgeClass(badge.risk_level)"
+                    [title]="getRiskBadgeTooltip(badge)">
+                {{ badge.score | number:'1.0-0' }}
+              </span>
+            </ng-container>
           </td>
           <td>
             <div class="drivers-actions">
@@ -466,11 +476,69 @@
           <h3>
             <span class="material-symbols-outlined">checklist</span>
             DQF Checklist: {{selectedDriver.firstName}} {{selectedDriver.lastName}}
+            <ng-container *ngIf="driverRiskMap.get(selectedDriver.id) as badge">
+              <span [class]="getRiskBadgeClass(badge.risk_level)"
+                    [title]="getRiskBadgeTooltip(badge)"
+                    style="margin-left:10px; vertical-align: middle;">
+                {{ badge.score | number:'1.0-0' }}
+              </span>
+            </ng-container>
           </h3>
           <p class="dqf-modal-subtitle">49 CFR 391.51 - Required Documents for Driver Qualification File</p>
         </div>
       </div>
       <div class="dqf-modal-body">
+
+        <!-- FN-504: Pre-Hire Risk Assessment Card -->
+        <div class="prehire-risk-card" *ngIf="preHireRisk?.current">
+          <div class="prehire-risk-header">
+            <span class="material-symbols-outlined">shield_person</span>
+            <h4>Pre-Hire Risk Assessment</h4>
+            <ng-container *ngIf="getHireRecommendation(preHireRisk!.current!.risk_level) as rec">
+              <span [class]="'hire-rec-badge ' + rec.cls">{{ rec.label }}</span>
+            </ng-container>
+            <button class="btn-reanalyze" type="button"
+                    (click)="recalculateRisk(selectedDriver.id)"
+                    [disabled]="preHireRiskLoading"
+                    title="Re-analyze with latest documents">
+              <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+              {{ preHireRiskLoading ? 'Calculating...' : 'Re-analyze' }}
+            </button>
+          </div>
+          <div class="prehire-risk-body">
+            <div class="prehire-score-block">
+              <div [class]="'prehire-score-circle ' + preHireRisk!.current!.risk_level">
+                {{ preHireRisk!.current!.score | number:'1.0-0' }}
+              </div>
+              <div class="prehire-score-meta">
+                <span class="prehire-level-label">{{ preHireRisk!.current!.risk_level | titlecase }}</span>
+                <span class="prehire-trend">{{ preHireRisk!.current!.trend }}</span>
+                <span class="prehire-event-count">{{ preHireRisk!.current!.event_count }} events</span>
+              </div>
+            </div>
+            <div class="prehire-categories" *ngIf="preHireRisk!.current!.category_scores">
+              <div class="prehire-cat-item" *ngFor="let cat of [
+                {key:'mvr', label:'MVR'},
+                {key:'psp', label:'PSP'},
+                {key:'fmcsa', label:'FMCSA'},
+                {key:'incidents', label:'Incidents'}
+              ]">
+                <ng-container *ngIf="preHireRisk!.current!.category_scores![cat.key] != null">
+                  <span class="prehire-cat-label">{{ cat.label }}</span>
+                  <div class="prehire-cat-bar">
+                    <div class="prehire-cat-fill" [style.width.%]="preHireRisk!.current!.category_scores![cat.key]"></div>
+                  </div>
+                  <span class="prehire-cat-val">{{ preHireRisk!.current!.category_scores![cat.key] | number:'1.0-0' }}</span>
+                </ng-container>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="prehire-risk-loading" *ngIf="preHireRiskLoading && !preHireRisk?.current">
+          <span class="material-symbols-outlined" style="animation:spin 1s linear infinite; font-size:18px;">progress_activity</span>
+          Loading risk assessment...
+        </div>
+
         <!-- Pre-Employment Clearance Gate (FN-214) -->
         <app-pre-employment-gate
           *ngIf="selectedDriver"

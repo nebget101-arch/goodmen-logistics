@@ -6,6 +6,7 @@ import { ApiService } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AccessControlService } from '../../services/access-control.service';
+import { SafetyRiskService, DriverRiskBadge, DriverRiskScore } from '../../safety/safety-risk.service';
 import {
   DrugAlcoholTest,
   DrugTestType,
@@ -116,6 +117,13 @@ export class DriversComponent implements OnInit, OnDestroy {
   presetFilter: '' | 'med-certs' | 'clearinghouse' | 'dqf-low' = '';
   highlightDriverId: string | null = null;
   activeOperatingEntityName = '';
+
+  // FN-504: cross-module risk badges (driver_id → badge)
+  driverRiskMap = new Map<string, DriverRiskBadge>();
+  // FN-504: pre-hire risk score card shown in DQF modal
+  preHireRisk: DriverRiskScore | null = null;
+  preHireRiskLoading = false;
+  preHireRiskError = '';
 
   driverSafetyLoading = false;
   driverSafetyError = '';
@@ -245,7 +253,8 @@ export class DriversComponent implements OnInit, OnDestroy {
     private onboardingModal: OnboardingModalService,
     private route: ActivatedRoute,
     private operatingEntityContext: OperatingEntityContextService,
-    private access: AccessControlService
+    private access: AccessControlService,
+    private safetyRisk: SafetyRiskService
   ) { }
 
   ngOnInit(): void {
@@ -480,11 +489,25 @@ export class DriversComponent implements OnInit, OnDestroy {
       next: (data) => {
         this.drivers = data;
         this.loading = false;
+        this.loadRiskBadges();
       },
       error: (error) => {
         console.error('Error loading drivers:', error);
         this.loading = false;
       }
+    });
+  }
+
+  // FN-504: load risk badges for all drivers in one fleet-summary call
+  private loadRiskBadges(): void {
+    this.safetyRisk.getFleetSummary().subscribe({
+      next: (summary) => {
+        this.driverRiskMap.clear();
+        for (const badge of (summary.all_scores || [])) {
+          this.driverRiskMap.set(badge.driver_id, badge);
+        }
+      },
+      error: () => {} // badges are non-critical, fail silently
     });
   }
 
@@ -669,6 +692,54 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.loadDrugAlcoholTests(driver.id);
     this.loadPrehireDocuments(driver.id);
     this.loadMvrData(driver.id);
+    this.loadPreHireRisk(driver.id);
+  }
+
+  // FN-504: load risk score for the pre-hire assessment card
+  loadPreHireRisk(driverId: string): void {
+    this.preHireRisk = null;
+    this.preHireRiskLoading = true;
+    this.preHireRiskError = '';
+    this.safetyRisk.getDriverScore(driverId).subscribe({
+      next: (data) => {
+        this.preHireRisk = data;
+        this.preHireRiskLoading = false;
+      },
+      error: () => {
+        this.preHireRiskLoading = false;
+      }
+    });
+  }
+
+  recalculateRisk(driverId: string): void {
+    this.preHireRiskLoading = true;
+    this.safetyRisk.recalculate(driverId).subscribe({
+      next: () => this.loadPreHireRisk(driverId),
+      error: () => { this.preHireRiskLoading = false; }
+    });
+  }
+
+  // FN-504: helper to derive hire recommendation from risk level
+  getHireRecommendation(level: string | null): { label: string; cls: string } {
+    if (level === 'low') return { label: 'Recommended', cls: 'hire-rec' };
+    if (level === 'medium') return { label: 'Conditional', cls: 'hire-cond' };
+    if (level === 'high') return { label: 'Conditional — Review Required', cls: 'hire-cond' };
+    if (level === 'critical') return { label: 'Not Recommended', cls: 'hire-deny' };
+    return { label: 'Pending Assessment', cls: 'hire-pending' };
+  }
+
+  getRiskBadgeClass(level: string | null | undefined): string {
+    if (level === 'low') return 'risk-badge risk-low';
+    if (level === 'medium') return 'risk-badge risk-medium';
+    if (level === 'high') return 'risk-badge risk-high';
+    if (level === 'critical') return 'risk-badge risk-critical';
+    return '';
+  }
+
+  getRiskBadgeTooltip(badge: DriverRiskBadge | undefined): string {
+    if (!badge) return '';
+    const level = badge.risk_level ? badge.risk_level.charAt(0).toUpperCase() + badge.risk_level.slice(1) : '';
+    return `Risk Level: ${level}`;
   }
 
   /** Load pre-hire documents for a driver (FN-237) */

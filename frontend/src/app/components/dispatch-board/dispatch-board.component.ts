@@ -6,6 +6,7 @@ import { ApiService } from '../../services/api.service';
 import { LoadListItem } from '../../models/load-dashboard.model';
 import { ReferenceDataService, StatusCode } from '../../services/reference-data.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { SafetyRiskService, DriverRiskBadge } from '../../safety/safety-risk.service';
 
 interface DriverRow {
   id: string | null;
@@ -102,6 +103,8 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
 
   private readonly STORAGE_KEY = 'fleetneuron_dispatch_filters';
   activeOperatingEntityName = '';
+  // FN-504: risk badges for driver rows
+  driverRiskMap = new Map<string, DriverRiskBadge>();
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
 
@@ -111,7 +114,8 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
     private router: Router,
     private cdr: ChangeDetectorRef,
     private referenceDataService: ReferenceDataService,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private safetyRisk: SafetyRiskService
   ) {}
 
   get days(): DayColumn[] {
@@ -661,6 +665,17 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
           type: 'driver' as const
         }));
         this.drivers.push({ id: null, name: 'Unassigned Loads', type: 'unassigned' });
+        // FN-504: load risk badges for driver rows
+        this.safetyRisk.getFleetSummary().subscribe({
+          next: (summary) => {
+            this.driverRiskMap.clear();
+            for (const b of (summary.all_scores || [])) {
+              this.driverRiskMap.set(b.driver_id, b);
+            }
+            this.cdr.markForCheck();
+          },
+          error: () => {}
+        });
         this.loadsService.listLoads(loadFilters).subscribe({
           next: (res) => {
             const allLoads = (res?.data || []) as (LoadListItem & { driver_id?: string; driverId?: string; driver_name?: string })[];
@@ -686,6 +701,20 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
         this.unassignedLoads = [];
       }
     });
+  }
+
+  // FN-504: risk badge helpers
+  getRiskBadgeClass(level: string | null | undefined): string {
+    if (level === 'low') return 'risk-badge risk-low';
+    if (level === 'medium') return 'risk-badge risk-medium';
+    if (level === 'high') return 'risk-badge risk-high';
+    if (level === 'critical') return 'risk-badge risk-critical';
+    return '';
+  }
+
+  getRiskBadgeTooltip(badge: DriverRiskBadge): string {
+    const level = badge.risk_level ? badge.risk_level.charAt(0).toUpperCase() + badge.risk_level.slice(1) : '';
+    return `Risk Level: ${level}`;
   }
 
   private resolveDriverIdByName(driverName: string | null | undefined): string | null {

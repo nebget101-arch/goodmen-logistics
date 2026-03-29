@@ -17,12 +17,21 @@ export interface HighRiskDriver {
   calculated_at: string;
 }
 
+// FN-504: lightweight badge entry for all scored drivers
+export interface DriverRiskBadge {
+  driver_id: string;
+  score: number;
+  risk_level: RiskLevel;
+  trend: RiskTrend;
+}
+
 export interface FleetRiskSummary {
   total_drivers_scored: number;
   by_level: { low: number; medium: number; high: number; critical: number };
   by_trend: { improving: number; stable: number; worsening: number };
   average_score: number;
   high_risk_drivers: HighRiskDriver[];
+  all_scores?: DriverRiskBadge[];
 }
 
 export interface CategoryScores {

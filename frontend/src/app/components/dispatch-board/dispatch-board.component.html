@@ -96,6 +96,12 @@
             <span class="material-symbols-outlined driver-icon">person</span>
             <div class="driver-info">
               <span class="driver-name">{{ driver.name }} (Drv)</span>
+              <ng-container *ngIf="driver.id && driverRiskMap.get(driver.id) as badge">
+                <span [class]="getRiskBadgeClass(badge.risk_level)"
+                      [title]="getRiskBadgeTooltip(badge)">
+                  {{ badge.score | number:'1.0-0' }}
+                </span>
+              </ng-container>
               <span class="driver-id" *ngIf="driver.unitNumber || driver.id">{{ driver.unitNumber || (driver.id | slice:0:8) }}</span>
               <span class="driver-phone" *ngIf="driver.phone">{{ driver.phone }}</span>
             </div>

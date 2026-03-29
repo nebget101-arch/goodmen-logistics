@@ -869,3 +869,24 @@
 .btn-primary:hover {
   filter: brightness(1.1);
 }
+
+/* ── FN-504: Risk Badges ─────────────────────────────────────────────────────*/
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: default;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.risk-badge.risk-low      { background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.4); }
+.risk-badge.risk-medium   { background: rgba(234,179,8,0.2);  color: #fbbf24; border: 1px solid rgba(234,179,8,0.4); }
+.risk-badge.risk-high     { background: rgba(249,115,22,0.2); color: #fb923c; border: 1px solid rgba(249,115,22,0.4); }
+.risk-badge.risk-critical { background: rgba(239,68,68,0.2);  color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
