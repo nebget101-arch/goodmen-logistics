@@ -117,18 +117,46 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   ];
 
   readonly responsibilityOptions: { value: string; label: string }[] = [
-    { value: '', label: '—' },
-    { value: 'company', label: 'Company' },
+    { value: '', label: '---' },
     { value: 'driver', label: 'Driver' },
-    { value: 'owner', label: 'Owner' },
+    { value: 'equipment_owner', label: 'Equipment Owner' },
     { value: 'shared', label: 'Shared' }
   ];
 
+  /** FN-497: simplified compensation types — only Driver and Owner Operator */
   readonly driverTypeOptions = [
-    { value: 'company', label: 'Company' },
-    { value: 'owner_operator', label: 'Owner Operator' },
-    { value: 'hired_driver', label: 'Hired Driver' }
+    { value: 'driver', label: 'Driver' },
+    { value: 'owner_operator', label: 'Owner Operator' }
   ];
+
+  /** FN-497: variable expense categories (percentage sliders when Shared) */
+  readonly variableExpenseKeys: { key: string; label: string }[] = [
+    { key: 'fuel', label: 'Fuel' },
+    { key: 'tolls', label: 'Tolls' },
+    { key: 'repairs', label: 'Repairs' }
+  ];
+
+  /** FN-497: fixed expense categories (dollar inputs when Shared) */
+  readonly fixedExpenseKeys: { key: string; label: string }[] = [
+    { key: 'insurance', label: 'Insurance' },
+    { key: 'eld', label: 'ELD' },
+    { key: 'trailerRent', label: 'Trailer Rent' }
+  ];
+
+  /** FN-497: per-category percentage overrides when split_type = shared */
+  sharedExpensePercentages: Record<string, number> = {
+    fuel: 50, tolls: 50, repairs: 50
+  };
+
+  /** FN-497: per-category fixed dollar amounts when split_type = shared */
+  sharedExpenseFixedAmounts: Record<string, { driver: number; owner: number }> = {
+    insurance: { driver: 0, owner: 0 },
+    eld: { driver: 0, owner: 0 },
+    trailerRent: { driver: 0, owner: 0 }
+  };
+
+  /** FN-497: overall split type for expense responsibility */
+  expenseSplitType: string = '';
 
   readonly driverStatusOptions = [
     { value: 'active', label: 'Active' },
@@ -492,10 +520,14 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       this.newDriver.payBasis = 'percentage';
       this.newDriver.payModel = 'percentage';
       this.newDriver.payRate = null;
-    }
-    if (this.newDriver.driverType === 'hired_driver') {
-      this.newDriver.payBasis = this.newDriver.payBasis || 'per_mile';
-      this.newDriver.payModel = this.newDriver.payModel || 'per_mile';
+      // FN-497: Owner Operator expenses deduct at 100% — force equipment_owner
+      this.expenseSplitType = 'equipment_owner';
+      for (const e of this.expenseKeys) {
+        this.expenseResponsibility = { ...this.expenseResponsibility, [e.key]: 'equipment_owner' };
+      }
+    } else {
+      // FN-497: Driver type — reset expense split to empty for user selection
+      this.expenseSplitType = '';
     }
   }
 
@@ -519,14 +551,41 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
 
   getDriverTypeLabel(type: string): string {
     const t = (type || '').toString();
-    if (t === 'owner_operator') return 'Owner operator';
-    if (t === 'hired_driver') return 'Hired driver';
-    return 'Company';
+    if (t === 'owner_operator') return 'Owner Operator';
+    if (t === 'company_driver' || t === 'company' || t === 'driver') return 'Driver';
+    return 'Driver';
+  }
+
+  /** FN-497: handle expense split type change */
+  onExpenseSplitTypeChange(splitType: string): void {
+    this.expenseSplitType = splitType;
+    if (splitType === 'driver') {
+      for (const e of this.expenseKeys) {
+        this.expenseResponsibility = { ...this.expenseResponsibility, [e.key]: 'driver' };
+      }
+    } else if (splitType === 'equipment_owner') {
+      for (const e of this.expenseKeys) {
+        this.expenseResponsibility = { ...this.expenseResponsibility, [e.key]: 'equipment_owner' };
+      }
+    }
+    // When 'shared', keep per-category config as-is for user to adjust
+  }
+
+  /** FN-497: check if expense section should be visible */
+  get showExpenseSection(): boolean {
+    return this.newDriver.payModel === 'percentage';
   }
 
   resetForm(): void {
     this.payTab = 'rates';
     this.expenseResponsibility = { fuel: '', insurance: '', eld: '', trailerRent: '', tolls: '', repairs: '' };
+    this.expenseSplitType = '';
+    this.sharedExpensePercentages = { fuel: 50, tolls: 50, repairs: 50 };
+    this.sharedExpenseFixedAmounts = {
+      insurance: { driver: 0, owner: 0 },
+      eld: { driver: 0, owner: 0 },
+      trailerRent: { driver: 0, owner: 0 }
+    };
     this.newDriver = {
       firstName: '',
       lastName: '',
@@ -535,7 +594,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       status: 'applicant',
       applicationDate: '',
       dateOfBirth: '',
-      driverType: 'company',
+      driverType: 'driver',
       payBasis: 'per_mile',
       payRate: null,
       payPercentage: null,
@@ -1390,7 +1449,10 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     this.existingDriverId = null;
 
     const payload: any = { ...this.newDriver };
-    if (payload.driverType === 'hired_driver') payload.driverType = 'owner_operator';
+    // FN-497: normalize legacy 'company' type to 'driver'; 'hired_driver' no longer exists
+    if (payload.driverType === 'company' || payload.driverType === 'company_driver') {
+      payload.driverType = 'driver';
+    }
     const pm = (this.newDriver.payModel || this.newDriver.payBasis || 'per_mile').toString();
     if (pm === 'flat_weekly' && this.newDriver.flatWeeklyAmount != null) {
       payload.payBasis = 'flatpay';

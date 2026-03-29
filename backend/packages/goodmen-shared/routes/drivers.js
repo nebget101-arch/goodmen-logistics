@@ -628,7 +628,7 @@ router.post('/', async (req, res) => {
     // Auto-create compensation profile if pay info provided
     if (payBasis || payRate || payPercentage) {
       const payBasisLower = (payBasis || '').toString().toLowerCase();
-      const profileType = (driverType || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'company_driver';
+      const profileType = (driverType || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'driver';
       let payModel = 'per_mile';
       let centsPerMile = null;
       let percentageRate = null;
@@ -912,7 +912,7 @@ router.put('/:id', async (req, res) => {
     if (hasPayUpdate && result.rows.length > 0) {
       const updatedDriver = result.rows[0];
       const payBasisLower = (updatedDriver.pay_basis || '').toString().toLowerCase();
-      const profileType = (updatedDriver.driver_type || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'company_driver';
+      const profileType = (updatedDriver.driver_type || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'driver';
       let payModel = 'per_mile';
       let centsPerMile = null;
       let percentageRate = null;

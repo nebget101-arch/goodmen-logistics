@@ -369,14 +369,11 @@
             <div class="comp-block">
               <h4 class="comp-section-title"><span class="material-symbols-outlined">badge</span> Compensation type</h4>
               <div class="chip-group">
-                <button type="button" class="chip" [class.active]="newDriver.driverType === 'company'" (click)="newDriver.driverType = 'company'; onDriverTypeChange()">
-                  Company driver
+                <button type="button" class="chip" [class.active]="newDriver.driverType === 'driver'" (click)="newDriver.driverType = 'driver'; onDriverTypeChange()">
+                  Driver
                 </button>
                 <button type="button" class="chip" [class.active]="newDriver.driverType === 'owner_operator'" (click)="newDriver.driverType = 'owner_operator'; onDriverTypeChange()">
-                  Owner operator
-                </button>
-                <button type="button" class="chip" [class.active]="newDriver.driverType === 'hired_driver'" (click)="newDriver.driverType = 'hired_driver'; onDriverTypeChange()">
-                  Hired driver for owner
+                  Owner Operator
                 </button>
               </div>
             </div>
@@ -421,21 +418,102 @@
               </div>
             </div>
 
-            <div class="comp-block">
+            <!-- FN-497: Expense responsibility — only visible when pay model = percentage -->
+            <div class="comp-block" *ngIf="showExpenseSection">
               <h4 class="comp-section-title"><span class="material-symbols-outlined">account_balance</span> Expense responsibility</h4>
-              <p class="comp-hint">Who bears each cost: Company, Driver, Owner, or Shared.</p>
-              <div class="expense-matrix">
-                <div class="expense-row" *ngFor="let e of expenseKeys">
-                  <span class="expense-label">{{ e.label }}</span>
-                  <app-ai-select
-                    [options]="responsibilityOptions"
-                    [ngModel]="expenseResponsibility[e.key]"
-                    (ngModelChange)="setExpenseResponsibility(e.key, $event)"
-                    [name]="'expense-' + e.key"
-                    placeholder="Select"
-                  ></app-ai-select>
+
+              <!-- Owner Operator: auto-set to 100% Equipment Owner -->
+              <p class="comp-hint" *ngIf="newDriver.driverType === 'owner_operator'">
+                Owner Operator: all expenses deducted at 100% from the Owner Operator.
+              </p>
+
+              <!-- Driver type: choose who bears expenses -->
+              <ng-container *ngIf="newDriver.driverType !== 'owner_operator'">
+                <p class="comp-hint">Who bears each expense category.</p>
+                <div class="chip-group" style="margin-bottom: 14px;">
+                  <button type="button" class="chip" [class.active]="expenseSplitType === 'driver'" (click)="onExpenseSplitTypeChange('driver')">
+                    Driver
+                  </button>
+                  <button type="button" class="chip" [class.active]="expenseSplitType === 'equipment_owner'" (click)="onExpenseSplitTypeChange('equipment_owner')">
+                    Equipment Owner
+                  </button>
+                  <button type="button" class="chip" [class.active]="expenseSplitType === 'shared'" (click)="onExpenseSplitTypeChange('shared')">
+                    Shared
+                  </button>
                 </div>
-              </div>
+
+                <!-- Shared: per-category config panel -->
+                <div class="shared-expense-config" *ngIf="expenseSplitType === 'shared'">
+                  <!-- Variable expenses: percentage sliders -->
+                  <div class="shared-config-section">
+                    <h5 class="shared-config-heading">Variable expenses (percentage split)</h5>
+                    <div class="shared-config-grid">
+                      <div class="shared-config-row" *ngFor="let e of variableExpenseKeys">
+                        <span class="expense-label">{{ e.label }}</span>
+                        <div class="slider-wrapper">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            class="expense-slider"
+                            [ngModel]="sharedExpensePercentages[e.key]"
+                            (ngModelChange)="sharedExpensePercentages[e.key] = $event"
+                            [name]="'shared-pct-' + e.key"
+                          />
+                          <span class="slider-value">Driver {{ sharedExpensePercentages[e.key] }}% / Owner {{ 100 - sharedExpensePercentages[e.key] }}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Fixed expenses: dollar inputs -->
+                  <div class="shared-config-section">
+                    <h5 class="shared-config-heading">Fixed expenses (dollar amounts)</h5>
+                    <div class="shared-config-grid">
+                      <div class="shared-config-row" *ngFor="let e of fixedExpenseKeys">
+                        <span class="expense-label">{{ e.label }}</span>
+                        <div class="fixed-inputs-wrapper">
+                          <div class="fixed-input-group">
+                            <label class="fixed-input-label">Driver $</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              class="form-input fixed-dollar-input"
+                              [ngModel]="sharedExpenseFixedAmounts[e.key].driver"
+                              (ngModelChange)="sharedExpenseFixedAmounts[e.key] = { driver: $event, owner: sharedExpenseFixedAmounts[e.key].owner }"
+                              [name]="'shared-driver-fixed-' + e.key"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div class="fixed-input-group">
+                            <label class="fixed-input-label">Owner $</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              class="form-input fixed-dollar-input"
+                              [ngModel]="sharedExpenseFixedAmounts[e.key].owner"
+                              (ngModelChange)="sharedExpenseFixedAmounts[e.key] = { driver: sharedExpenseFixedAmounts[e.key].driver, owner: $event }"
+                              [name]="'shared-owner-fixed-' + e.key"
+                              placeholder="0.00"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Non-shared: simple per-category matrix -->
+                <div class="expense-matrix" *ngIf="expenseSplitType && expenseSplitType !== 'shared'">
+                  <div class="expense-row" *ngFor="let e of expenseKeys">
+                    <span class="expense-label">{{ e.label }}</span>
+                    <span class="expense-assigned-label">{{ expenseSplitType === 'driver' ? 'Driver' : 'Equipment Owner' }}</span>
+                  </div>
+                </div>
+              </ng-container>
             </div>
 
             <div class="comp-block">
