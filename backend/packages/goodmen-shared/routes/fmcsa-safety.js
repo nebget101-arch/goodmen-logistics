@@ -809,6 +809,179 @@ router.get('/my-scores/:dotNumber/basic-details', canView, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FN-474: Inspection Storage & Fleet Matching endpoints
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const { matchInspection, createRiskEvent, rematchInspections } = require('../services/fmcsa-matching-service');
+
+// POST /inspections/ingest — Batch store inspections with dedup by report_number
+router.post('/inspections/ingest', requireRole(['admin', 'safety']), async (req, res) => {
+  try {
+    const { inspections, carrier_id } = req.body || {};
+    if (!Array.isArray(inspections) || inspections.length === 0) {
+      return sendError(res, 400, 'inspections array is required');
+    }
+    if (!carrier_id) return sendError(res, 400, 'carrier_id is required');
+
+    let ingested = 0;
+    let duplicates = 0;
+    let matched = 0;
+
+    for (const insp of inspections) {
+      const reportNumber = (insp.report_number || '').toString().trim();
+      if (!reportNumber) { duplicates++; continue; }
+
+      // Dedup by report_number
+      const existing = await knex('fmcsa_inspection_history')
+        .where({ carrier_id, report_number: reportNumber })
+        .first('id');
+      if (existing) { duplicates++; continue; }
+
+      const [row] = await knex('fmcsa_inspection_history').insert({
+        carrier_id,
+        inspection_date: insp.inspection_date || null,
+        report_number: reportNumber,
+        report_state: insp.report_state || null,
+        plate_number: insp.plate_number || null,
+        vehicle_type: insp.vehicle_type || null,
+        driver_name: insp.driver_name || null,
+        driver_license_number: insp.driver_license_number || null,
+        driver_license_state: insp.driver_license_state || null,
+        severity_weight: insp.severity_weight || null,
+        time_weight: insp.time_weight || null,
+        driver_oos: insp.driver_oos || false,
+        vehicle_oos: insp.vehicle_oos || false,
+        hazmat_oos: insp.hazmat_oos || false,
+        vehicles: JSON.stringify(insp.vehicles || []),
+        violations: JSON.stringify(insp.violations || []),
+        match_status: 'unmatched'
+      }).returning('*');
+
+      // Auto-match using tenant context if available
+      const tenantId = req.context?.tenantId;
+      if (tenantId) {
+        const matchResult = await matchInspection(tenantId, row);
+        if (matchResult.matched) {
+          await knex('fmcsa_inspection_history').where({ id: row.id }).update({
+            match_status: 'matched',
+            match_method: matchResult.method,
+            match_confidence: matchResult.confidence,
+            matched_driver_id: matchResult.driverId,
+            matched_vehicle_id: matchResult.vehicleId,
+            matched_at: new Date()
+          });
+          await createRiskEvent(tenantId, row, matchResult);
+          matched++;
+        }
+      }
+
+      ingested++;
+    }
+
+    res.json({ success: true, ingested, duplicates, matched });
+  } catch (err) {
+    dtLogger.error('fmcsa_inspections_ingest_error', err);
+    sendError(res, 500, 'Failed to ingest inspections');
+  }
+});
+
+// GET /inspections — List inspections with filters
+router.get('/inspections', requireRole(['admin', 'safety', 'dispatcher']), async (req, res) => {
+  try {
+    const { carrier_id, match_status, date_from, date_to, limit = 50, offset = 0 } = req.query;
+
+    let q = knex('fmcsa_inspection_history').orderBy('inspection_date', 'desc');
+    if (carrier_id) q = q.where('carrier_id', carrier_id);
+    if (match_status) q = q.where('match_status', match_status);
+    if (date_from) q = q.where('inspection_date', '>=', date_from);
+    if (date_to) q = q.where('inspection_date', '<=', date_to);
+
+    const countQuery = q.clone().clearOrder().count('* as total').first();
+    const rows = await q.limit(Number(limit)).offset(Number(offset));
+    const { total } = await countQuery;
+
+    res.json({ rows, total: Number(total) });
+  } catch (err) {
+    dtLogger.error('fmcsa_inspections_list_error', err);
+    sendError(res, 500, 'Failed to list inspections');
+  }
+});
+
+// GET /inspections/:id — Single inspection detail
+router.get('/inspections/:id', requireRole(['admin', 'safety', 'dispatcher']), async (req, res) => {
+  try {
+    const row = await knex('fmcsa_inspection_history').where({ id: req.params.id }).first();
+    if (!row) return sendError(res, 404, 'Inspection not found');
+
+    // Also fetch detailed report if available
+    const detail = await knex('fmcsa_inspection_details')
+      .where({ report_number: row.report_number })
+      .first();
+
+    res.json({ inspection: row, detail: detail || null });
+  } catch (err) {
+    dtLogger.error('fmcsa_inspection_detail_error', err);
+    sendError(res, 500, 'Failed to fetch inspection');
+  }
+});
+
+// PATCH /inspections/:id/match — Manual match
+router.patch('/inspections/:id/match', requireRole(['admin', 'safety']), async (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId;
+    if (!tenantId) return sendError(res, 400, 'Tenant context required');
+
+    const { driver_id, vehicle_id } = req.body || {};
+    if (!driver_id && !vehicle_id) return sendError(res, 400, 'driver_id or vehicle_id required');
+
+    const insp = await knex('fmcsa_inspection_history').where({ id: req.params.id }).first();
+    if (!insp) return sendError(res, 404, 'Inspection not found');
+
+    await knex('fmcsa_inspection_history').where({ id: insp.id }).update({
+      match_status: 'manual',
+      match_method: 'manual',
+      match_confidence: 1.0,
+      matched_driver_id: driver_id || insp.matched_driver_id,
+      matched_vehicle_id: vehicle_id || insp.matched_vehicle_id,
+      matched_by_user_id: req.user?.id || null,
+      matched_at: new Date()
+    });
+
+    // Create risk event for manual match
+    if (driver_id) {
+      await createRiskEvent(tenantId, insp, {
+        driverId: driver_id,
+        vehicleId: vehicle_id || insp.matched_vehicle_id,
+        method: 'manual',
+        confidence: 1.0
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    dtLogger.error('fmcsa_inspection_match_error', err);
+    sendError(res, 500, 'Failed to match inspection');
+  }
+});
+
+// POST /inspections/rematch — Re-run matching for unmatched inspections
+router.post('/inspections/rematch', requireRole(['admin', 'safety']), async (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId;
+    if (!tenantId) return sendError(res, 400, 'Tenant context required');
+
+    const { carrier_id } = req.body || {};
+    if (!carrier_id) return sendError(res, 400, 'carrier_id required');
+
+    const result = await rematchInspections(tenantId, carrier_id);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    dtLogger.error('fmcsa_inspections_rematch_error', err);
+    sendError(res, 500, 'Failed to rematch inspections');
+  }
+});
+
 // Export router and initQueue
 router.initQueue = initQueue;
 module.exports = router;
