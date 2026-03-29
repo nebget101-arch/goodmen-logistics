@@ -108,6 +108,12 @@ function sendError(res, status, message) {
   return res.status(status).json({ error: message });
 }
 
+function parseJsonSafe(val) {
+  if (!val) return null;
+  if (typeof val === 'object') return val;
+  try { return JSON.parse(val); } catch { return null; }
+}
+
 const DOT_RE = /^\d{1,8}$/;
 
 /**
@@ -902,17 +908,55 @@ router.get('/inspections', requireRole(['admin', 'safety', 'dispatcher']), async
   try {
     const { carrier_id, match_status, date_from, date_to, limit = 50, offset = 0 } = req.query;
 
-    let q = knex('fmcsa_inspection_history').orderBy('inspection_date', 'desc');
-    if (carrier_id) q = q.where('carrier_id', carrier_id);
-    if (match_status) q = q.where('match_status', match_status);
-    if (date_from) q = q.where('inspection_date', '>=', date_from);
-    if (date_to) q = q.where('inspection_date', '<=', date_to);
+    let q = knex('fmcsa_inspection_history as h')
+      .leftJoin('fmcsa_inspection_details as d', 'h.report_number', 'd.report_number')
+      .select(
+        'h.*',
+        'd.level',
+        'd.vehicles as detail_vehicles',
+        'd.violations as detail_violations'
+      )
+      .orderBy('h.inspection_date', 'desc');
+    if (carrier_id) q = q.where('h.carrier_id', carrier_id);
+    if (match_status) q = q.where('h.match_status', match_status);
+    if (date_from) q = q.where('h.inspection_date', '>=', date_from);
+    if (date_to) q = q.where('h.inspection_date', '<=', date_to);
 
-    const countQuery = q.clone().clearOrder().count('* as total').first();
+    const countQuery = knex('fmcsa_inspection_history as h').count('* as total');
+    if (carrier_id) countQuery.where('h.carrier_id', carrier_id);
+    if (match_status) countQuery.where('h.match_status', match_status);
+    if (date_from) countQuery.where('h.inspection_date', '>=', date_from);
+    if (date_to) countQuery.where('h.inspection_date', '<=', date_to);
+
     const rows = await q.limit(Number(limit)).offset(Number(offset));
-    const { total } = await countQuery;
+    const { total } = await countQuery.first();
 
-    res.json({ rows, total: Number(total) });
+    // Enrich rows with computed fields from detail data
+    const enriched = rows.map(row => {
+      const violations = parseJsonSafe(row.detail_violations) || parseJsonSafe(row.violations) || [];
+      const vehicles = parseJsonSafe(row.detail_vehicles) || [];
+      const truck = vehicles.find(v => /truck/i.test(v.type)) || vehicles[0];
+
+      return {
+        ...row,
+        level: row.level || null,
+        violation_count: violations.length,
+        vehicle_display: truck
+          ? `${truck.plate_number || ''} ${truck.make || ''}`.trim() || null
+          : row.plate_number || null,
+        vehicle_vin: truck?.vin || null,
+        plate_raw: truck?.plate_number || row.plate_number || null,
+        vin_raw: truck?.vin || null,
+        driver_name_raw: row.driver_name || null,
+        oos_vehicle: row.vehicle_oos || violations.some(v => v.oos === 'Y' && /truck|trailer/i.test(v.unit || '')),
+        oos_driver: row.driver_oos || violations.some(v => v.oos === 'Y' && /driver/i.test(v.unit || '')),
+        // Clean up join artifacts
+        detail_vehicles: undefined,
+        detail_violations: undefined,
+      };
+    });
+
+    res.json({ rows: enriched, total: Number(total) });
   } catch (err) {
     dtLogger.error('fmcsa_inspections_list_error', err);
     sendError(res, 500, 'Failed to list inspections');
