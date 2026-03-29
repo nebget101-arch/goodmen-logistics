@@ -3,6 +3,7 @@ const router = express.Router();
 const { query, getClient } = require('../internal/db');
 const { transformRows, transformRow, toSnakeCase } = require('../utils/case-converter');
 const dtLogger = require('../utils/logger');
+const { syncTollDeviceDrivers } = require('../services/toll-device-driver-sync');
 const authMiddleware = require('../middleware/auth-middleware');
 const tenantContextMiddleware = require('../middleware/tenant-context-middleware');
 const { loadUserRbac } = require('../middleware/rbac-middleware');
@@ -678,6 +679,19 @@ router.post('/', async (req, res) => {
       );
     }
 
+    // FN-488: Sync toll device drivers when new driver is assigned to a truck
+    if (truckId) {
+      const tenantIdVal = req.context?.tenantId || null;
+      if (tenantIdVal) {
+        await syncTollDeviceDrivers({
+          client,
+          tenantId: tenantIdVal,
+          truckId,
+          newDriverId: driverId
+        });
+      }
+    }
+
     await client.query('COMMIT');
 
     const duration = Date.now() - startTime;
@@ -779,6 +793,17 @@ router.put('/:id', async (req, res) => {
     }
 
     await client.query('BEGIN');
+
+    // FN-488: Capture old truck_id before update for toll device driver sync
+    let oldTruckId = null;
+    const hasTruckUpdate = body.truckId !== undefined || body.truck_id !== undefined;
+    if (hasTruckUpdate) {
+      const oldRow = await client.query(
+        'SELECT truck_id FROM drivers WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, req.context?.tenantId || null]
+      );
+      oldTruckId = oldRow.rows[0]?.truck_id || null;
+    }
 
     // Handle CDL license updates (normalized)
     const rawCdlState = body.cdlState || body.cdl_state;
@@ -947,6 +972,34 @@ router.put('/:id', async (req, res) => {
           effectiveStart
         ]
       );
+    }
+
+    // FN-488: Sync toll device drivers when truck assignment changes
+    if (hasTruckUpdate && result.rows.length > 0) {
+      const newTruckId = result.rows[0].truck_id;
+      const tenantIdVal = req.context?.tenantId || null;
+
+      if (tenantIdVal) {
+        // Clear old truck's auto-resolved devices (driver left)
+        if (oldTruckId && oldTruckId !== newTruckId) {
+          await syncTollDeviceDrivers({
+            client,
+            tenantId: tenantIdVal,
+            truckId: oldTruckId,
+            newDriverId: null
+          });
+        }
+
+        // Set new truck's auto-resolved devices to this driver
+        if (newTruckId) {
+          await syncTollDeviceDrivers({
+            client,
+            tenantId: tenantIdVal,
+            truckId: newTruckId,
+            newDriverId: req.params.id
+          });
+        }
+      }
     }
 
     await client.query('COMMIT');

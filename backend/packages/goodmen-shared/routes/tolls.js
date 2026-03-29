@@ -1388,10 +1388,20 @@ router.post('/devices/:deviceId/assign-vehicle', async (req, res) => {
         notes: notes || null
       });
 
-      // Update toll_devices.truck_id
+      // Auto-resolve driver from truck (active driver assigned to this truck)
+      const activeDriver = await trx('drivers')
+        .where({ truck_id, tenant_id: tid, status: 'active' })
+        .first('id');
+
+      // Update toll_devices.truck_id + auto-resolved driver + clear override flag
       await trx('toll_devices')
         .where({ id: deviceId, tenant_id: tid })
-        .update({ truck_id, updated_at: now });
+        .update({
+          truck_id,
+          driver_id: activeDriver ? activeDriver.id : null,
+          is_driver_override: false,
+          updated_at: now
+        });
     });
 
     const updatedDevice = await knex('toll_devices').where({ id: deviceId }).first();
@@ -1437,10 +1447,18 @@ router.post('/devices/:deviceId/remove-vehicle', async (req, res) => {
           updated_at: now
         });
 
-      // Clear toll_devices.truck_id
+      // Clear toll_devices.truck_id; clear driver_id only if not manually overridden
+      const deviceRow = await trx('toll_devices')
+        .where({ id: deviceId, tenant_id: tid })
+        .first('is_driver_override');
+
+      const driverUpdate = (deviceRow && deviceRow.is_driver_override)
+        ? {} // keep manual driver override
+        : { driver_id: null, is_driver_override: false };
+
       await trx('toll_devices')
         .where({ id: deviceId, tenant_id: tid })
-        .update({ truck_id: null, updated_at: now });
+        .update({ truck_id: null, ...driverUpdate, updated_at: now });
     });
 
     const updatedDevice = await knex('toll_devices').where({ id: deviceId }).first();
@@ -1481,7 +1499,7 @@ router.post('/devices/:deviceId/assign-driver', async (req, res) => {
     const now = new Date();
     await knex('toll_devices')
       .where({ id: deviceId, tenant_id: tid })
-      .update({ driver_id, notes: notes || undefined, updated_at: now });
+      .update({ driver_id, is_driver_override: true, notes: notes || undefined, updated_at: now });
 
     const updatedDevice = await knex('toll_devices').where({ id: deviceId }).first();
     res.json({ success: true, device: updatedDevice });
