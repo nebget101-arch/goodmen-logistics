@@ -12,7 +12,7 @@
  * Trigger: POST /api/idle-truck-monitor/run  (or external Render cron job)
  */
 
-const { sendEmail } = require('./notification-service');
+const { sendEmail, sendInAppNotificationsToUsers } = require('./notification-service');
 
 const IDLE_WEEK_1_DAYS = 7;
 const IDLE_WEEK_2_DAYS = 14;
@@ -136,35 +136,62 @@ async function getUsersByRole(knex, tenantId, roles) {
 }
 
 /**
- * Send email notifications for an idle truck alert.
+ * Send email + in-app notifications for an idle truck alert. — FN-507
  */
-async function sendAlertEmails(knex, alertRecord, vehicle, alertType, idleDays, accruedTotal) {
+async function sendAlertNotifications(knex, alertRecord, vehicle, alertType, idleDays, accruedTotal) {
   const { tenantId, driverId } = alertRecord;
   const truckLabel = vehicle.truck_number || vehicle.vehicle_id;
   const driverLabel = [vehicle.first_name, vehicle.last_name].filter(Boolean).join(' ') || driverId;
 
-  const subject = alertType === 'week_1_idle'
+  const emailSubject = alertType === 'week_1_idle'
     ? `[Fleet Alert] Idle Truck: ${truckLabel} — ${idleDays} days idle`
     : `[Fleet Alert — URGENT] ${truckLabel} idle ${idleDays} days, no response`;
 
-  const bodyText = alertType === 'week_1_idle'
+  const emailBody = alertType === 'week_1_idle'
     ? `Truck ${truckLabel} (Driver: ${driverLabel}) has had no loads for ${idleDays} days.\n\nAccrued deductions while idle: $${accruedTotal.toFixed(2)}/period\n\nPlease review and assign a load or take action to reduce costs.`
     : `Truck ${truckLabel} (Driver: ${driverLabel}) has been idle for ${idleDays} days with no response to the week-1 alert.\n\nRecommended actions:\n• Remove truck from active insurance\n• Mark truck as inactive\n• Transfer or terminate driver assignment\n\nAccrued deductions: $${accruedTotal.toFixed(2)}/period`;
+
+  const inAppTitle = alertType === 'week_1_idle'
+    ? `Idle Truck: ${truckLabel} — ${idleDays} days without a load`
+    : `URGENT: ${truckLabel} idle ${idleDays} days — no response to week-1 alert`;
+
+  const inAppBody = alertType === 'week_1_idle'
+    ? `Driver ${driverLabel} has accrued $${accruedTotal.toFixed(2)} in deductions while idle. Assign a load or take action.`
+    : `Recommended: remove from insurance, mark inactive, or transfer/terminate driver assignment. Accrued: $${accruedTotal.toFixed(2)}.`;
 
   const targetRoles = alertType === 'week_1_idle'
     ? ['admin', 'manager', 'dispatcher', 'accounting']
     : ['admin'];
 
-  const users = await getUsersByRole(knex, tenantId, targetRoles);
-  const results = [];
+  const inAppType = alertType === 'week_1_idle' ? 'idle_truck_week1' : 'idle_truck_week2';
+  const notifMeta = {
+    vehicle_id: vehicle.vehicle_id,
+    driver_id: driverId,
+    truck_number: vehicle.truck_number,
+    idle_days: idleDays,
+    accrued_deductions: accruedTotal
+  };
 
+  const users = await getUsersByRole(knex, tenantId, targetRoles);
+  const emailResults = [];
+
+  // Email (only users with an email address)
   for (const user of users) {
     if (!user.email) continue;
-    const result = await sendEmail({ to: user.email, subject, text: bodyText });
-    results.push({ userId: user.id, email: user.email, ...result });
+    const result = await sendEmail({ to: user.email, subject: emailSubject, text: emailBody });
+    emailResults.push({ userId: user.id, email: user.email, ...result });
   }
 
-  return results;
+  // In-app notification bell
+  await sendInAppNotificationsToUsers(knex, users, {
+    type: inAppType,
+    title: inAppTitle,
+    body: inAppBody,
+    meta: notifMeta,
+    tenantId
+  }).catch(() => {}); // non-fatal
+
+  return emailResults;
 }
 
 /**
@@ -255,7 +282,7 @@ async function runIdleTruckCheck(knex, userId = null) {
 
           if (alert) {
             stats.week1Created++;
-            await sendAlertEmails(knex, { tenantId: tenant_id, driverId: driver_id }, vehicle, 'week_1_idle', idleDays, accruedTotal).catch(() => {});
+            await sendAlertNotifications(knex, { tenantId: tenant_id, driverId: driver_id }, vehicle, 'week_1_idle', idleDays, accruedTotal).catch(() => {});
           }
         }
         continue;
@@ -297,7 +324,7 @@ async function runIdleTruckCheck(knex, userId = null) {
 
           if (alert) {
             stats.week2Created++;
-            await sendAlertEmails(knex, { tenantId: tenant_id, driverId: driver_id }, vehicle, 'week_2_no_response', idleDays, accruedTotal).catch(() => {});
+            await sendAlertNotifications(knex, { tenantId: tenant_id, driverId: driver_id }, vehicle, 'week_2_no_response', idleDays, accruedTotal).catch(() => {});
           }
         }
       }
