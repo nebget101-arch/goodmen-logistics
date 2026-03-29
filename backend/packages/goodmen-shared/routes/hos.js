@@ -3,6 +3,8 @@ const router = express.Router();
 const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
 const auth = require('./auth-middleware');
+// FN-479: Fire-and-forget risk score recalculation after HOS violations
+const { triggerRecalculation: triggerRiskRecalc } = require('./safety-risk-engine');
 
 // Protect all hos routes: admin, safety
 router.use(auth(['admin', 'safety']));
@@ -174,7 +176,13 @@ router.post('/', async (req, res) => {
     dtLogger.trackDatabase('INSERT', 'hos_records', duration, true, { recordId: result.rows[0].id });
     dtLogger.trackEvent('hos.created', { recordId: result.rows[0].id, driverId });
     dtLogger.trackRequest('POST', '/api/hos', 201, duration);
-    
+
+    // FN-479: fire-and-forget risk score recalculation when HOS violations present
+    if (violations && violations.length > 0 && driverId) {
+      const tid = req.context?.tenantId || req.user?.tenantId;
+      if (tid) triggerRiskRecalc(tid, driverId).catch(() => {});
+    }
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     const duration = Date.now() - startTime;
