@@ -508,7 +508,7 @@ router.post('/drivers/:driverId/compensation-profiles', requireRole(settlementRo
     const [row] = await knex('driver_compensation_profiles')
       .insert({
         driver_id: req.params.driverId,
-        profile_type: body.profile_type || 'company_driver',
+        profile_type: body.profile_type || 'driver',
         pay_model: body.pay_model || 'per_mile',
         percentage_rate: body.percentage_rate ?? null,
         cents_per_mile: body.cents_per_mile ?? null,
@@ -746,6 +746,11 @@ router.post('/drivers/:driverId/expense-responsibility', requireRole(settlementR
         trailer_rent_responsibility: body.trailer_rent_responsibility ?? null,
         toll_responsibility: body.toll_responsibility ?? null,
         repairs_responsibility: body.repairs_responsibility ?? null,
+        // FN-497: shared expense split config columns
+        split_type: body.split_type ?? null,
+        driver_percentage: body.driver_percentage ?? null,
+        driver_fixed_amount: body.driver_fixed_amount ?? null,
+        owner_fixed_amount: body.owner_fixed_amount ?? null,
         custom_rules: body.custom_rules != null ? JSON.stringify(body.custom_rules) : knex.raw("'{}'::jsonb"),
         effective_start_date: body.effective_start_date || new Date().toISOString().slice(0, 10),
         effective_end_date: body.effective_end_date ?? null
