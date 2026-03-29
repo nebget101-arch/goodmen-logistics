@@ -96,9 +96,20 @@
   <form [formGroup]="assignTruckForm" (ngSubmit)="saveAssignTruck()" class="modal-form">
     <label>
       Truck (Unit #)
-      <select formControlName="truck_id">
+      <select formControlName="truck_id" (change)="onTruckSelected(assignTruckForm.get('truck_id')?.value)">
         <option value="">-- Select Truck --</option>
         <option *ngFor="let t of trucks" [value]="t.id">{{ t.unit_number }}{{ t.plate_number ? ' · ' + t.plate_number : '' }}</option>
+      </select>
+    </label>
+    <label>
+      Plate Number
+      <input type="text" formControlName="plate_number" placeholder="Auto-filled from truck" />
+    </label>
+    <label>
+      Driver (auto-resolved)
+      <select formControlName="driver_id">
+        <option value="">-- None --</option>
+        <option *ngFor="let d of drivers" [value]="d.id">{{ d.first_name }} {{ d.last_name }}</option>
       </select>
     </label>
     <label>
