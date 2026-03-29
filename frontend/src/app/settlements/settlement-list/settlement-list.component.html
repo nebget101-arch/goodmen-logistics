@@ -6,6 +6,10 @@
       <p class="subtitle" *ngIf="activeOperatingEntityName">Company: {{ activeOperatingEntityName }}</p>
     </div>
     <div class="header-actions">
+      <button type="button" class="btn-secondary" (click)="openBalanceTransferQueue()">
+        <span class="material-symbols-outlined">swap_horiz</span>
+        Balance transfers
+      </button>
       <button type="button" class="btn-primary" (click)="createNew()">
         <span class="material-symbols-outlined">receipt_long</span>
         New settlement
@@ -25,20 +29,30 @@
         <thead>
           <tr>
             <th scope="col">Settlement #</th>
+            <th scope="col">Type</th>
             <th scope="col">Period</th>
             <th scope="col">Driver</th>
-            <th scope="col">Payable to</th>
-            <th scope="col">Additional payee</th>
+            <th scope="col">Equipment Owner</th>
             <th scope="col">Status</th>
             <th scope="col">Gross</th>
             <th scope="col">Deductions</th>
-            <th scope="col">Net driver</th>
-            <th scope="col">Net additional</th>
+            <th scope="col">Net pay</th>
+            <th scope="col">Carried</th>
             <th scope="col">Updated</th>
             <th scope="col">Actions</th>
           </tr>
           <tr class="header-filters">
             <th></th>
+            <th>
+              <app-ai-select
+                [options]="settlementTypeOptions"
+                [ngModel]="filters.settlementType"
+                (ngModelChange)="filters.settlementType = $event; loadSettlements()"
+                [allowEmpty]="true"
+                emptyLabel="All"
+                placeholder="All"
+              ></app-ai-select>
+            </th>
             <th>
               <input type="week" [(ngModel)]="filters.weekStart" (change)="loadSettlements()" placeholder="Week" />
             </th>
@@ -52,7 +66,6 @@
                 placeholder="All"
               ></app-ai-select>
             </th>
-            <th></th>
             <th></th>
             <th>
               <app-ai-select
@@ -75,15 +88,21 @@
         <tbody>
           <tr *ngFor="let s of settlements">
             <td><span class="cell-settlement-num">{{ s.settlementNumber }}</span></td>
+            <td>
+              <span class="badge" [ngClass]="getTypeClass(s.settlementType)" *ngIf="s.settlementType; else noType">{{ getTypeLabel(s.settlementType) }}</span>
+              <ng-template #noType><span class="text-muted">—</span></ng-template>
+            </td>
             <td>{{ s.periodStart }} – {{ s.periodEnd }}</td>
             <td>{{ s.driverName }}</td>
-            <td>{{ s.payableTo }}</td>
-            <td>{{ s.additionalPayee || '—' }}</td>
+            <td>{{ s.equipmentOwnerName || '—' }}</td>
             <td><span class="badge" [ngClass]="getStatusClass(s.status)">{{ getStatusLabel(s.status) }}</span></td>
             <td class="cell-amount">${{ s.gross | number:'1.2-2' }}</td>
             <td class="cell-amount">${{ s.deductions | number:'1.2-2' }}</td>
             <td class="cell-amount">${{ s.netDriver | number:'1.2-2' }}</td>
-            <td class="cell-amount">${{ s.netAdditionalPayee | number:'1.2-2' }}</td>
+            <td class="cell-amount" [class.cell-carried]="s.carriedBalance > 0">
+              <span *ngIf="s.carriedBalance > 0" class="carried-flag">↑ ${{ s.carriedBalance | number:'1.2-2' }}</span>
+              <span *ngIf="s.carriedBalance === 0">—</span>
+            </td>
             <td>{{ s.updatedAt || '—' }}</td>
             <td>
               <button type="button" class="btn-sm btn-outline" (click)="openSettlement(s.id)" aria-label="View settlement">

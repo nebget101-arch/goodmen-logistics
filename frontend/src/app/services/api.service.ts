@@ -377,6 +377,33 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/settlements/draft`, payload);
   }
 
+  generateDualSettlements(payload: { payroll_period_id: string; driver_id: string; date_basis?: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/generate-dual`, payload);
+  }
+
+  listBalanceTransfers(filters?: { status?: string; target_equipment_owner_id?: string; source_driver_id?: string }): Observable<any[]> {
+    let url = `${this.baseUrl}/settlements/balance-transfers`;
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.target_equipment_owner_id) params.set('target_equipment_owner_id', filters.target_equipment_owner_id);
+    if (filters?.source_driver_id) params.set('source_driver_id', filters.source_driver_id);
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+    return this.http.get<any[]>(url);
+  }
+
+  createBalanceTransfer(payload: { source_driver_id?: string; source_settlement_id?: string; target_equipment_owner_id?: string; amount: number; reason: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/balance-transfers`, payload);
+  }
+
+  approveBalanceTransfer(id: string, reviewNotes?: string): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/settlements/balance-transfers/${id}/approve`, { review_notes: reviewNotes || null });
+  }
+
+  rejectBalanceTransfer(id: string, reviewNotes?: string): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/settlements/balance-transfers/${id}/reject`, { review_notes: reviewNotes || null });
+  }
+
   createEquipmentOwner(payload: {
     name: string;
     email?: string;

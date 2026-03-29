@@ -58,9 +58,23 @@
             <div class="label">Settlement #</div>
             <div class="value">{{ getSettlementNumberDisplay() }}</div>
           </div>
+          <div class="summary-item" *ngIf="isV2Settlement()">
+            <div class="label">Type</div>
+            <div class="value">
+              <span class="badge" [ngClass]="getSettlementTypeClass()">{{ getSettlementTypeLabel() }}</span>
+            </div>
+          </div>
           <div class="summary-item">
             <div class="label">Driver</div>
             <div class="value">{{ getDriverName() }}</div>
+          </div>
+          <div class="summary-item" *ngIf="isV2Settlement() && settlement.truck_id">
+            <div class="label">Truck</div>
+            <div class="value">{{ settlement.truck_id }}</div>
+          </div>
+          <div class="summary-item" *ngIf="isV2Settlement() && settlement.equipment_owner_name">
+            <div class="label">Equipment Owner</div>
+            <div class="value">{{ settlement.equipment_owner_name }}</div>
           </div>
           <div class="summary-item">
             <div class="label">Payroll period</div>
@@ -102,13 +116,21 @@
             <div class="metric-label">Total deductions</div>
             <div class="metric-value">${{ settlement.total_deductions | number:'1.2-2' }}</div>
           </div>
-          <div class="metric-card metric-good">
-            <div class="metric-label">Net driver pay</div>
+          <div class="metric-card" [ngClass]="hasNegativeNet() ? 'metric-danger' : 'metric-good'">
+            <div class="metric-label">Net pay</div>
             <div class="metric-value">${{ settlement.net_pay_driver | number:'1.2-2' }}</div>
+            <div class="rollover-notice" *ngIf="hasNegativeNet()">
+              <span class="material-symbols-outlined">arrow_upward</span>
+              ${{ getCarriedBalance() | number:'1.2-2' }} carried forward
+            </div>
           </div>
-          <div class="metric-card metric-good">
+          <div class="metric-card metric-good" *ngIf="!isV2Settlement()">
             <div class="metric-label">Net additional payee</div>
             <div class="metric-value">${{ settlement.net_pay_additional_payee | number:'1.2-2' }}</div>
+          </div>
+          <div class="metric-card" *ngIf="isV2Settlement() && getCarriedBalance() > 0">
+            <div class="metric-label">Carried balance</div>
+            <div class="metric-value metric-danger-text">${{ getCarriedBalance() | number:'1.2-2' }}</div>
           </div>
         </div>
       </section>
@@ -377,6 +399,86 @@
         </table>
       </div>
       <div class="empty-state" *ngIf="manualAdjustments.length === 0">No manual adjustments.</div>
+    </section>
+
+    <!-- V2: Fuel Expenses -->
+    <section class="detail-card v2-section" *ngIf="isV2Settlement() && fuelAdjustments.length">
+      <div class="section-header">
+        <h2>
+          <span class="material-symbols-outlined section-icon">local_gas_station</span>
+          Fuel expenses
+        </h2>
+        <span class="pill pill-warn">${{ getTotalFor(fuelAdjustments) | number:'1.2-2' }}</span>
+      </div>
+      <ul class="line-items">
+        <li *ngFor="let x of fuelAdjustments">
+          <div>
+            <div class="line-title">{{ x.description || 'Fuel' }}</div>
+            <div class="line-sub">{{ dateOnly(x.occurrence_date) }} • {{ x.charge_party || 'driver' }}</div>
+          </div>
+          <div class="line-amount">${{ x.amount | number:'1.2-2' }}</div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- V2: Toll Expenses -->
+    <section class="detail-card v2-section" *ngIf="isV2Settlement() && tollAdjustments.length">
+      <div class="section-header">
+        <h2>
+          <span class="material-symbols-outlined section-icon">toll</span>
+          Toll expenses
+        </h2>
+        <span class="pill pill-warn">${{ getTotalFor(tollAdjustments) | number:'1.2-2' }}</span>
+      </div>
+      <ul class="line-items">
+        <li *ngFor="let x of tollAdjustments">
+          <div>
+            <div class="line-title">{{ x.description || 'Toll' }}</div>
+            <div class="line-sub">{{ dateOnly(x.occurrence_date) }} • {{ x.charge_party || 'driver' }}</div>
+          </div>
+          <div class="line-amount">${{ x.amount | number:'1.2-2' }}</div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- V2: Carried Balance -->
+    <section class="detail-card v2-section" *ngIf="isV2Settlement() && carriedBalanceAdjs.length">
+      <div class="section-header">
+        <h2>
+          <span class="material-symbols-outlined section-icon">history</span>
+          Carried balance
+        </h2>
+        <span class="pill pill-danger">${{ getTotalFor(carriedBalanceAdjs) | number:'1.2-2' }}</span>
+      </div>
+      <ul class="line-items">
+        <li *ngFor="let x of carriedBalanceAdjs">
+          <div>
+            <div class="line-title">{{ x.description || 'Carried balance from prior period' }}</div>
+            <div class="line-sub">Rolled forward from prior settlement</div>
+          </div>
+          <div class="line-amount line-amount-danger">${{ x.amount | number:'1.2-2' }}</div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- V2: Balance Transfers (EO only) -->
+    <section class="detail-card v2-section" *ngIf="isEoSettlement() && balanceTransferAdjs.length">
+      <div class="section-header">
+        <h2>
+          <span class="material-symbols-outlined section-icon">swap_horiz</span>
+          Balance transfers (driver quit)
+        </h2>
+        <span class="pill pill-danger">${{ getTotalFor(balanceTransferAdjs) | number:'1.2-2' }}</span>
+      </div>
+      <ul class="line-items">
+        <li *ngFor="let x of balanceTransferAdjs">
+          <div>
+            <div class="line-title">{{ x.description || 'Balance transfer' }}</div>
+            <div class="line-sub">Applied from approved transfer</div>
+          </div>
+          <div class="line-amount line-amount-danger">${{ x.amount | number:'1.2-2' }}</div>
+        </li>
+      </ul>
     </section>
 
     <section class="detail-card">

@@ -1,0 +1,129 @@
+<div class="btq-page">
+  <div class="header">
+    <div>
+      <h1>Balance Transfer Queue</h1>
+      <p class="subtitle">Driver quit / termination negative balance transfers pending accounting approval</p>
+    </div>
+    <div class="header-actions">
+      <app-ai-select
+        [options]="statusOptions"
+        [ngModel]="statusFilter"
+        (ngModelChange)="statusFilter = $event; loadTransfers()"
+        [allowEmpty]="true"
+        emptyLabel="All statuses"
+        placeholder="Filter by status"
+      ></app-ai-select>
+    </div>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+  <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
+
+  <div *ngIf="loading" class="loading-wrap">
+    <div class="spinner"></div>
+    <span>Loading transfers…</span>
+  </div>
+
+  <div class="table-card" *ngIf="!loading">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Reason</th>
+          <th>Amount</th>
+          <th>Source driver</th>
+          <th>Target EO</th>
+          <th>Requested</th>
+          <th>Status</th>
+          <th>Review notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let t of transfers">
+          <td>
+            <span class="reason-pill">{{ getReasonLabel(t.reason) }}</span>
+          </td>
+          <td class="cell-amount">${{ t.amount | number:'1.2-2' }}</td>
+          <td class="cell-id">{{ t.sourceDriverId || '—' }}</td>
+          <td class="cell-id">{{ t.targetEquipmentOwnerId || '—' }}</td>
+          <td>{{ t.requestedAt || '—' }}</td>
+          <td>
+            <span class="badge" [ngClass]="getStatusClass(t.status)">{{ getStatusLabel(t.status) }}</span>
+          </td>
+          <td class="cell-notes">{{ t.reviewNotes || '—' }}</td>
+          <td class="cell-actions">
+            <button
+              type="button"
+              class="btn-sm btn-approve"
+              *ngIf="t.status === 'pending_approval'"
+              (click)="openApprove(t)"
+              [disabled]="saving"
+            >
+              <span class="material-symbols-outlined">check_circle</span>
+              Approve
+            </button>
+            <button
+              type="button"
+              class="btn-sm btn-reject"
+              *ngIf="t.status === 'pending_approval' || t.status === 'approved'"
+              (click)="openReject(t)"
+              [disabled]="saving"
+            >
+              <span class="material-symbols-outlined">cancel</span>
+              Reject
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="empty-state" *ngIf="!loading && transfers.length === 0">
+      <span class="material-symbols-outlined empty-icon">swap_horiz</span>
+      <p>No balance transfers match your filters.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Review Modal -->
+<div class="modal-overlay" *ngIf="showReviewModal" (click)="cancelReview()">
+  <div class="modal-card" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>
+        <span class="material-symbols-outlined">{{ reviewAction === 'approve' ? 'check_circle' : 'cancel' }}</span>
+        {{ reviewAction === 'approve' ? 'Approve' : 'Reject' }} transfer
+      </h2>
+    </div>
+    <div class="modal-body" *ngIf="reviewingTransfer">
+      <div class="transfer-summary">
+        <div class="summary-row">
+          <span class="label">Amount</span>
+          <span class="value amount-value">${{ reviewingTransfer.amount | number:'1.2-2' }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="label">Reason</span>
+          <span class="value">{{ getReasonLabel(reviewingTransfer.reason) }}</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Review notes (optional)</label>
+        <textarea
+          class="form-textarea"
+          [(ngModel)]="reviewNotes"
+          placeholder="Add a note for the accounting record..."
+          rows="3"
+        ></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary" (click)="cancelReview()" [disabled]="saving">Cancel</button>
+      <button
+        type="button"
+        [ngClass]="reviewAction === 'approve' ? 'btn-approve-lg' : 'btn-reject-lg'"
+        (click)="confirmReview()"
+        [disabled]="saving"
+      >
+        <span class="material-symbols-outlined">{{ reviewAction === 'approve' ? 'check_circle' : 'cancel' }}</span>
+        {{ reviewAction === 'approve' ? 'Confirm approve' : 'Confirm reject' }}
+      </button>
+    </div>
+  </div>
+</div>

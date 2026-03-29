@@ -39,6 +39,12 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   manualAdjustments: any[] = [];
   scheduledDeductionWarning = '';
 
+  // V2 dual-settlement fields
+  fuelAdjustments: any[] = [];
+  tollAdjustments: any[] = [];
+  carriedBalanceAdjs: any[] = [];
+  balanceTransferAdjs: any[] = [];
+
   // Categories for dropdowns
   expenseCategories: ExpensePaymentCategory[] = [];
   revenueCategories: ExpensePaymentCategory[] = [];
@@ -170,6 +176,10 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
     this.scheduledDeductions = [];
     this.variableDeductions = [];
     this.manualAdjustments = [];
+    this.fuelAdjustments = [];
+    this.tollAdjustments = [];
+    this.carriedBalanceAdjs = [];
+    this.balanceTransferAdjs = [];
 
     forkJoin({
       settlementRes: this.apiService.getSettlement(id),
@@ -260,28 +270,35 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   }
 
   buildBuckets(groups?: { scheduled?: any[]; variable?: any[]; manual?: any[] } | null): void {
+    const adjustments = Array.isArray(this.adjustmentItems) ? this.adjustmentItems : [];
+
     if (groups?.scheduled || groups?.variable || groups?.manual) {
       this.scheduledDeductions = Array.isArray(groups?.scheduled) ? groups.scheduled : [];
       this.variableDeductions = Array.isArray(groups?.variable) ? groups.variable : [];
       this.manualAdjustments = Array.isArray(groups?.manual) ? groups.manual : [];
-      return;
+    } else {
+      this.scheduledDeductions = adjustments.filter((a) => {
+        const source = (a.source_type || '').toLowerCase();
+        return source === 'scheduled_rule' || source === 'scheduled';
+      });
+
+      this.variableDeductions = adjustments.filter((a) => {
+        const source = (a.source_type || '').toLowerCase();
+        return (source.startsWith('imported_') || source === 'variable') &&
+          source !== 'imported_fuel' && source !== 'imported_toll';
+      });
+
+      this.manualAdjustments = adjustments.filter((a) => {
+        const source = (a.source_type || 'manual').toLowerCase();
+        return source === 'manual' || source === '';
+      });
     }
 
-    const adjustments = Array.isArray(this.adjustmentItems) ? this.adjustmentItems : [];
-    this.scheduledDeductions = adjustments.filter((a) => {
-      const source = (a.source_type || '').toLowerCase();
-      return source === 'scheduled_rule' || source === 'scheduled';
-    });
-
-    this.variableDeductions = adjustments.filter((a) => {
-      const source = (a.source_type || '').toLowerCase();
-      return source.startsWith('imported_') || source === 'variable';
-    });
-
-    this.manualAdjustments = adjustments.filter((a) => {
-      const source = (a.source_type || 'manual').toLowerCase();
-      return source === 'manual' || source === '';
-    });
+    // V2-specific buckets (always derived from raw adjustments)
+    this.fuelAdjustments = adjustments.filter((a) => (a.source_type || '').toLowerCase() === 'imported_fuel');
+    this.tollAdjustments = adjustments.filter((a) => (a.source_type || '').toLowerCase() === 'imported_toll');
+    this.carriedBalanceAdjs = adjustments.filter((a) => (a.source_type || '').toLowerCase() === 'carried_balance');
+    this.balanceTransferAdjs = adjustments.filter((a) => (a.source_type || '').toLowerCase() === 'balance_transfer');
   }
 
   isLocked(): boolean {
@@ -711,6 +728,36 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
 
   getDataSourceLabel(): string {
     return this.dataSourceMode === 'fallback' ? 'Fallback enriched payload' : 'Normalized settlement contract';
+  }
+
+  isV2Settlement(): boolean {
+    return !!(this.settlement?.settlement_type);
+  }
+
+  isEoSettlement(): boolean {
+    return (this.settlement?.settlement_type || '') === 'equipment_owner';
+  }
+
+  getSettlementTypeLabel(): string {
+    const t = (this.settlement?.settlement_type || '').toLowerCase();
+    if (t === 'equipment_owner') return 'Equipment Owner';
+    if (t === 'driver') return 'Driver';
+    return '';
+  }
+
+  getSettlementTypeClass(): string {
+    const t = (this.settlement?.settlement_type || '').toLowerCase();
+    if (t === 'equipment_owner') return 'badge-eo';
+    if (t === 'driver') return 'badge-driver-type';
+    return '';
+  }
+
+  getCarriedBalance(): number {
+    return Number(this.settlement?.carried_balance) || 0;
+  }
+
+  hasNegativeNet(): boolean {
+    return this.getCarriedBalance() > 0 && Number(this.settlement?.net_pay_driver) === 0;
   }
 
   private logAdditionalPayeeDiagnostics(detail: any, payeeAssignmentRes: any | null): void {
