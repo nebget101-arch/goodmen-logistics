@@ -9,6 +9,9 @@
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
 
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+const AI_MATCH_TIMEOUT_MS = 15000;
+
 // ─── Match by VIN (highest confidence) ──────────────────────────────────────
 async function matchByVin(tenantId, inspection) {
   const vehicles = inspection.vehicles || [];
@@ -97,6 +100,91 @@ async function matchDriverByName(tenantId, inspection) {
   return null;
 }
 
+// ─── Match driver by AI fuzzy name (FN-476) ─────────────────────────────────
+async function matchDriverByAi(tenantId, inspection) {
+  const driverName = (inspection.driver_name || inspection.driver_name_raw || '').toString().trim();
+  if (!driverName || driverName.length < 3) return null;
+
+  // Fetch fleet drivers for this tenant
+  const fleetDrivers = await knex('drivers')
+    .where({ tenant_id: tenantId })
+    .select('id', 'first_name', 'last_name');
+
+  if (!fleetDrivers.length) return null;
+
+  // Also try to get CDL numbers for additional context
+  const driverIds = fleetDrivers.map((d) => d.id);
+  const licenses = await knex('driver_licenses')
+    .whereIn('driver_id', driverIds)
+    .select('driver_id', 'license_number');
+
+  const licenseMap = {};
+  for (const lic of licenses) {
+    licenseMap[lic.driver_id] = lic.license_number;
+  }
+
+  const driversPayload = fleetDrivers.map((d) => ({
+    id: d.id,
+    first_name: d.first_name,
+    last_name: d.last_name,
+    cdl_number: licenseMap[d.id] || null,
+  }));
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), AI_MATCH_TIMEOUT_MS);
+
+    const response = await fetch(`${AI_SERVICE_URL}/api/ai/fmcsa/match-driver`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fmcsaDriverName: driverName,
+        fleetDrivers: driversPayload,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      dtLogger.warn('fmcsa_ai_match_http_error', { status: response.status, driverName });
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data.success || !data.match) {
+      return {
+        driverId: null,
+        method: 'ai_fuzzy',
+        confidence: 0,
+        detail: `AI fuzzy: no match for "${driverName}"`,
+        matchDetails: data,
+      };
+    }
+
+    return {
+      driverId: data.match.driverId,
+      method: 'ai_fuzzy',
+      confidence: data.match.confidence,
+      detail: `AI fuzzy: ${data.match.reasoning}`,
+      matchDetails: {
+        status: data.status,
+        match: data.match,
+        candidates: data.candidates,
+        meta: data.meta,
+      },
+    };
+  } catch (err) {
+    // Log but don't fail the matching chain — AI is a best-effort fallback
+    dtLogger.warn('fmcsa_ai_match_error', {
+      error: err.message,
+      driverName,
+      isTimeout: err.name === 'AbortError',
+    });
+    return null;
+  }
+}
+
 // ─── Cross-validate vehicle-driver assignment ───────────────────────────────
 async function crossValidateAssignment(tenantId, vehicleId, driverId) {
   if (!vehicleId || !driverId) return null;
@@ -134,7 +222,7 @@ async function matchInspection(tenantId, inspection) {
     }
   }
 
-  // Step 2: Match driver (CDL → name)
+  // Step 2: Match driver (CDL → name → AI fuzzy)
   const cdlMatch = await matchDriverByCdl(tenantId, inspection);
   if (cdlMatch) {
     result.driverId = cdlMatch.driverId;
@@ -148,6 +236,19 @@ async function matchInspection(tenantId, inspection) {
       result.driverMethod = nameMatch.method;
       result.confidence = Math.max(result.confidence, nameMatch.confidence);
       result.details.push(nameMatch.detail);
+    } else {
+      // FN-476: AI fuzzy name matching as final fallback
+      const aiMatch = await matchDriverByAi(tenantId, inspection);
+      if (aiMatch && aiMatch.driverId && aiMatch.confidence >= 0.5) {
+        result.driverId = aiMatch.driverId;
+        result.driverMethod = aiMatch.method;
+        result.confidence = Math.max(result.confidence, aiMatch.confidence);
+        result.details.push(aiMatch.detail);
+        result.matchDetails = aiMatch.matchDetails;
+      } else if (aiMatch?.matchDetails) {
+        // Store AI details even when no match, for debugging
+        result.matchDetails = aiMatch.matchDetails;
+      }
     }
   }
 
@@ -166,7 +267,8 @@ async function matchInspection(tenantId, inspection) {
     method,
     confidence: result.confidence,
     matched: !!(result.vehicleId || result.driverId),
-    details: result.details
+    details: result.details,
+    matchDetails: result.matchDetails || null,
   };
 }
 
@@ -223,20 +325,26 @@ async function rematchInspections(tenantId, carrierId) {
   for (const insp of unmatched) {
     const result = await matchInspection(tenantId, insp);
     if (result.matched) {
-      await knex('fmcsa_inspection_history').where({ id: insp.id }).update({
+      const updateData = {
         match_status: 'matched',
         match_method: result.method,
         match_confidence: result.confidence,
         matched_driver_id: result.driverId,
         matched_vehicle_id: result.vehicleId,
-        matched_at: new Date()
-      });
+        matched_at: new Date(),
+      };
+      if (result.matchDetails) {
+        updateData.match_details = JSON.stringify(result.matchDetails);
+      }
+      await knex('fmcsa_inspection_history').where({ id: insp.id }).update(updateData);
       await createRiskEvent(tenantId, insp, result);
       matched++;
     } else {
-      await knex('fmcsa_inspection_history').where({ id: insp.id }).update({
-        match_status: 'failed'
-      });
+      const failUpdate = { match_status: 'failed' };
+      if (result.matchDetails) {
+        failUpdate.match_details = JSON.stringify(result.matchDetails);
+      }
+      await knex('fmcsa_inspection_history').where({ id: insp.id }).update(failUpdate);
       failed++;
     }
   }
@@ -252,5 +360,6 @@ module.exports = {
   matchByVin,
   matchByPlate,
   matchDriverByCdl,
-  matchDriverByName
+  matchDriverByName,
+  matchDriverByAi,
 };
