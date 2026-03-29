@@ -813,6 +813,17 @@ router.get('/my-scores/:dotNumber/basic-details', canView, async (req, res) => {
 // FN-474: Inspection Storage & Fleet Matching endpoints
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Role-based middleware for inspection routes (same pattern as cycle-counts, receiving, etc.)
+function requireRole(allowedRoles) {
+  return (req, res, next) => {
+    const userRole = req.user?.role || 'technician';
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({ error: `Insufficient permissions. Required role: ${allowedRoles.join(' or ')}` });
+    }
+    next();
+  };
+}
+
 const { matchInspection, createRiskEvent, rematchInspections } = require('../services/fmcsa-matching-service');
 
 // POST /inspections/ingest — Batch store inspections with dedup by report_number
