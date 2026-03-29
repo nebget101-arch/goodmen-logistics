@@ -85,6 +85,9 @@
             <th scope="col">Scope</th>
             <th scope="col">Amount</th>
             <th scope="col">Frequency</th>
+            <th scope="col">Applies when</th>
+            <th scope="col">Responsibility</th>
+            <th scope="col">Split</th>
             <th scope="col">Start date</th>
             <th scope="col">End date</th>
             <th scope="col">Status</th>
@@ -101,6 +104,9 @@
             <th></th>
             <th></th>
             <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
             <th>
               <app-ai-select [options]="enabledFilterOptions" [(ngModel)]="filters.enabled" (ngModelChange)="loadDeductions()" [allowEmpty]="true" emptyLabel="All" placeholder="All"></app-ai-select>
             </th>
@@ -109,7 +115,7 @@
         </thead>
         <tbody>
           <tr *ngIf="deductions.length === 0">
-            <td colspan="10" class="text-center">No deductions found</td>
+            <td colspan="13" class="text-center">No deductions found</td>
           </tr>
           <tr *ngFor="let d of deductions">
             <td>
@@ -121,6 +127,9 @@
             <td><span class="badge badge-secondary">{{ d.rule_scope }}</span></td>
             <td class="cell-amount">{{ formatAmount(d) }}</td>
             <td>{{ getFrequencyLabel(d.frequency) }}</td>
+            <td>{{ getAppliesWhenLabel(d.applies_when) }}</td>
+            <td>{{ getExpenseResponsibilityLabel(d.expense_responsibility) }}</td>
+            <td>{{ formatSplitConfig(d) }}</td>
             <td>{{ d.start_date }}</td>
             <td>{{ d.end_date || 'Ongoing' }}</td>
             <td>
@@ -206,6 +215,36 @@
           <label for="source_type">Expense type</label>
           <app-ai-select inputId="source_type" [options]="expenseTypeOptions" [(ngModel)]="formData.source_type" placeholder="Select expense type..." [allowEmpty]="true" emptyLabel="Select expense type..."></app-ai-select>
         </div>
+
+        <div class="form-group">
+          <label for="expense_responsibility">Expense responsibility</label>
+          <app-ai-select inputId="expense_responsibility" [options]="expenseResponsibilityOptions" [(ngModel)]="formData.expense_responsibility" placeholder="Select..." [allowEmpty]="true" emptyLabel="Not set"></app-ai-select>
+        </div>
+
+        <ng-container *ngIf="formData.expense_responsibility === 'shared'">
+          <div class="form-group">
+            <label for="split_type">Split type *</label>
+            <app-ai-select inputId="split_type" [options]="splitTypeOptions" [(ngModel)]="formData.split_type" placeholder="Select split type"></app-ai-select>
+          </div>
+
+          <div class="form-group">
+            <label for="driver_share">Driver share {{ formData.split_type === 'percentage' ? '(%)' : '($)' }}</label>
+            <div class="input-group">
+              <span class="input-addon" *ngIf="formData.split_type === 'fixed_amount'">$</span>
+              <input id="driver_share" type="number" class="form-input" [(ngModel)]="formData.driver_share" step="0.01" min="0" />
+              <span class="input-addon" *ngIf="formData.split_type === 'percentage'">%</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="owner_share">Owner share {{ formData.split_type === 'percentage' ? '(%)' : '($)' }}</label>
+            <div class="input-group">
+              <span class="input-addon" *ngIf="formData.split_type === 'fixed_amount'">$</span>
+              <input id="owner_share" type="number" class="form-input" [(ngModel)]="formData.owner_share" step="0.01" min="0" />
+              <span class="input-addon" *ngIf="formData.split_type === 'percentage'">%</span>
+            </div>
+          </div>
+        </ng-container>
 
         <div class="form-group">
           <app-ai-date-picker inputId="start_date" label="Start date *" [(ngModel)]="formData.start_date" name="schedDedStart" placeholder="MM/DD/YYYY"></app-ai-date-picker>

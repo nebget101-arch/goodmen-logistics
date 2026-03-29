@@ -810,6 +810,25 @@ router.post('/recurring-deductions', requireRole(settlementRoles), async (req, r
     if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
 
     const body = req.body;
+
+    // Validate sharing splits when expense_responsibility is 'shared'
+    if (body.expense_responsibility === 'shared') {
+      if (!body.split_type) {
+        return res.status(400).json({ error: 'split_type is required when expense_responsibility is shared' });
+      }
+      const driverShare = Number(body.driver_share ?? 0);
+      const ownerShare = Number(body.owner_share ?? 0);
+      if (body.split_type === 'percentage' && Math.abs(driverShare + ownerShare - 100) > 0.01) {
+        return res.status(400).json({ error: 'Percentage splits must sum to 100%' });
+      }
+      if (body.split_type === 'fixed_amount') {
+        const totalAmount = Number(body.amount ?? 0);
+        if (totalAmount > 0 && Math.abs(driverShare + ownerShare - totalAmount) > 0.01) {
+          return res.status(400).json({ error: 'Fixed amount splits must sum to the total deduction amount' });
+        }
+      }
+    }
+
     const [row] = await knex('recurring_deduction_rules')
       .insert({
         driver_id: body.driver_id ?? null,
@@ -824,6 +843,10 @@ router.post('/recurring-deductions', requireRole(settlementRoles), async (req, r
         end_date: body.end_date ?? null,
         source_type: body.source_type ?? null,
         applies_when: body.applies_when ?? 'always',
+        expense_responsibility: body.expense_responsibility ?? null,
+        split_type: body.expense_responsibility === 'shared' ? (body.split_type || null) : null,
+        driver_share: body.expense_responsibility === 'shared' ? (body.driver_share ?? null) : null,
+        owner_share: body.expense_responsibility === 'shared' ? (body.owner_share ?? null) : null,
         tenant_id: tenantId,
         enabled: body.enabled !== false
       })
@@ -840,6 +863,31 @@ router.patch('/recurring-deductions/:id', requireRole(settlementRoles), async (r
     if (!tenantId) return res.status(403).json({ error: 'Forbidden: tenant context missing' });
 
     const body = req.body;
+
+    // For validation, resolve the effective expense_responsibility (from body or existing row)
+    let effectiveExpResp = body.expense_responsibility;
+    if (effectiveExpResp === undefined) {
+      const existing = await knex('recurring_deduction_rules').where({ id: req.params.id, tenant_id: tenantId }).first();
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      effectiveExpResp = existing.expense_responsibility;
+    }
+
+    // Validate sharing splits when expense_responsibility is 'shared'
+    if (effectiveExpResp === 'shared' && (body.split_type !== undefined || body.driver_share !== undefined || body.owner_share !== undefined)) {
+      const splitType = body.split_type;
+      const driverShare = Number(body.driver_share ?? 0);
+      const ownerShare = Number(body.owner_share ?? 0);
+      if (splitType === 'percentage' && Math.abs(driverShare + ownerShare - 100) > 0.01) {
+        return res.status(400).json({ error: 'Percentage splits must sum to 100%' });
+      }
+      if (splitType === 'fixed_amount') {
+        const totalAmount = Number(body.amount ?? 0);
+        if (totalAmount > 0 && Math.abs(driverShare + ownerShare - totalAmount) > 0.01) {
+          return res.status(400).json({ error: 'Fixed amount splits must sum to the total deduction amount' });
+        }
+      }
+    }
+
     const updates = { updated_at: knex.fn.now() };
     if (body.driver_id !== undefined) updates.driver_id = body.driver_id || null;
     if (body.payee_id !== undefined) updates.payee_id = body.payee_id || null;
@@ -854,6 +902,19 @@ router.patch('/recurring-deductions/:id', requireRole(settlementRoles), async (r
     if (body.end_date !== undefined) updates.end_date = body.end_date;
     if (body.source_type !== undefined) updates.source_type = body.source_type ?? null;
     if (body.applies_when !== undefined) updates.applies_when = body.applies_when ?? 'always';
+    if (body.expense_responsibility !== undefined) {
+      updates.expense_responsibility = body.expense_responsibility ?? null;
+      // Clear split fields if not shared
+      if (body.expense_responsibility !== 'shared') {
+        updates.split_type = null;
+        updates.driver_share = null;
+        updates.owner_share = null;
+      }
+    }
+    if (body.split_type !== undefined) updates.split_type = body.split_type ?? null;
+    if (body.driver_share !== undefined) updates.driver_share = body.driver_share ?? null;
+    if (body.owner_share !== undefined) updates.owner_share = body.owner_share ?? null;
+
     const [row] = await knex('recurring_deduction_rules')
       .where({ id: req.params.id, tenant_id: tenantId })
       .update(updates)
