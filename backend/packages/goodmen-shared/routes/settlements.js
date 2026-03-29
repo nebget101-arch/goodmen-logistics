@@ -1539,4 +1539,145 @@ router.post('/imported-expense-items/:id/apply-to-settlement', requireRole(settl
   }
 });
 
+// ==========================================================================
+// Settlement Engine V2 — FN-499
+// ==========================================================================
+const {
+  generateDualSettlements,
+  createBalanceTransfer,
+  approveBalanceTransfer,
+  rejectBalanceTransfer,
+  listBalanceTransfers
+} = require('../services/settlement-engine-v2');
+
+/**
+ * POST /generate-dual
+ * Generate Driver + EO settlements for a driver in a payroll period.
+ * Body: { payroll_period_id, driver_id, date_basis? }
+ */
+router.post('/generate-dual', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const { payroll_period_id, driver_id, date_basis = 'pickup' } = req.body;
+    if (!payroll_period_id) return res.status(400).json({ error: 'payroll_period_id is required' });
+    if (!driver_id) return res.status(400).json({ error: 'driver_id is required' });
+
+    const context = {
+      tenantId: req.tenantContext?.tenantId,
+      operatingEntityId: req.tenantContext?.operatingEntityId
+    };
+
+    const result = await generateDualSettlements(
+      payroll_period_id,
+      driver_id,
+      date_basis,
+      req.user?.id,
+      knex,
+      context
+    );
+
+    res.status(201).json({
+      success: true,
+      driverSettlement: result.driverSettlement,
+      eoSettlement: result.eoSettlement
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /balance-transfers
+ * List balance transfers. Query: status, target_equipment_owner_id, source_driver_id
+ */
+router.get('/balance-transfers', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const context = {
+      tenantId: req.tenantContext?.tenantId,
+      operatingEntityId: req.tenantContext?.operatingEntityId
+    };
+    const filters = {
+      status: req.query.status || null,
+      targetEquipmentOwnerId: req.query.target_equipment_owner_id || null,
+      sourceDriverId: req.query.source_driver_id || null
+    };
+    const rows = await listBalanceTransfers(filters, knex, context);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /balance-transfers
+ * Create a pending balance transfer.
+ * Body: { source_driver_id, source_settlement_id, target_equipment_owner_id, amount, reason }
+ */
+router.post('/balance-transfers', requireRole(settlementRoles), async (req, res) => {
+  try {
+    const context = {
+      tenantId: req.tenantContext?.tenantId,
+      operatingEntityId: req.tenantContext?.operatingEntityId
+    };
+    const transfer = await createBalanceTransfer(req.body, req.user?.id, knex, context);
+    res.status(201).json(transfer);
+  } catch (err) {
+    res.status(err.message.includes('required') || err.message.includes('must') ? 400 : 500)
+      .json({ error: err.message });
+  }
+});
+
+/**
+ * PATCH /balance-transfers/:id/approve
+ * Approve a pending balance transfer.
+ * Body: { review_notes? }
+ */
+router.patch('/balance-transfers/:id/approve', requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const context = {
+      tenantId: req.tenantContext?.tenantId,
+      operatingEntityId: req.tenantContext?.operatingEntityId
+    };
+    const updated = await approveBalanceTransfer(
+      req.params.id,
+      req.user?.id,
+      req.body?.review_notes || null,
+      knex,
+      context
+    );
+    res.json(updated);
+  } catch (err) {
+    const status = err.message.includes('not found') ? 404
+      : err.message.includes('Cannot') ? 422
+        : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+/**
+ * PATCH /balance-transfers/:id/reject
+ * Reject a pending or approved balance transfer.
+ * Body: { review_notes? }
+ */
+router.patch('/balance-transfers/:id/reject', requireRole(['admin', 'manager']), async (req, res) => {
+  try {
+    const context = {
+      tenantId: req.tenantContext?.tenantId,
+      operatingEntityId: req.tenantContext?.operatingEntityId
+    };
+    const updated = await rejectBalanceTransfer(
+      req.params.id,
+      req.user?.id,
+      req.body?.review_notes || null,
+      knex,
+      context
+    );
+    res.json(updated);
+  } catch (err) {
+    const status = err.message.includes('not found') ? 404
+      : err.message.includes('Cannot') ? 422
+        : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
 module.exports = router;
