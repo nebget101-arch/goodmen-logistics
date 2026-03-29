@@ -2546,3 +2546,181 @@
   background: rgba(255, 255, 255, 0.05);
   border-color: var(--text-light, #94a3b8);
 }
+
+/* ── FN-504: Risk Badges ─────────────────────────────────────────────────────*/
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  padding: 2px 7px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: default;
+}
+.risk-badge.risk-low      { background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.4); }
+.risk-badge.risk-medium   { background: rgba(234,179,8,0.2);  color: #fbbf24; border: 1px solid rgba(234,179,8,0.4); }
+.risk-badge.risk-high     { background: rgba(249,115,22,0.2); color: #fb923c; border: 1px solid rgba(249,115,22,0.4); }
+.risk-badge.risk-critical { background: rgba(239,68,68,0.2);  color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+
+/* ── FN-504: Pre-Hire Risk Assessment Card ───────────────────────────────────*/
+
+.prehire-risk-card {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.prehire-risk-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(15, 23, 42, 0.5);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.4);
+}
+
+.prehire-risk-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  flex: 1;
+}
+
+.prehire-risk-header .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--accent-color, #38bdf8);
+}
+
+.hire-rec-badge {
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.hire-rec-badge.hire-rec     { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+.hire-rec-badge.hire-cond    { background: rgba(234,179,8,0.15);  color: #fbbf24; border: 1px solid rgba(234,179,8,0.3); }
+.hire-rec-badge.hire-deny    { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+.hire-rec-badge.hire-pending { background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
+
+.btn-reanalyze {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: rgba(56,189,248,0.1);
+  border: 1px solid rgba(56,189,248,0.3);
+  border-radius: 6px;
+  color: #38bdf8;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-reanalyze:hover:not(:disabled) { background: rgba(56,189,248,0.2); }
+.btn-reanalyze:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.prehire-risk-body {
+  display: flex;
+  gap: 20px;
+  padding: 14px 16px;
+}
+
+.prehire-score-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.prehire-score-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  border: 3px solid;
+}
+.prehire-score-circle.low      { color: #34d399; border-color: #34d399; background: rgba(16,185,129,0.1); }
+.prehire-score-circle.medium   { color: #fbbf24; border-color: #fbbf24; background: rgba(234,179,8,0.1); }
+.prehire-score-circle.high     { color: #fb923c; border-color: #fb923c; background: rgba(249,115,22,0.1); }
+.prehire-score-circle.critical { color: #f87171; border-color: #f87171; background: rgba(239,68,68,0.1); }
+
+.prehire-score-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.prehire-level-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  text-transform: capitalize;
+}
+.prehire-trend,
+.prehire-event-count {
+  font-size: 11px;
+  color: var(--text-light, #94a3b8);
+  text-transform: capitalize;
+}
+
+.prehire-categories {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+}
+
+.prehire-cat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.prehire-cat-label {
+  font-size: 11px;
+  color: var(--text-light, #94a3b8);
+  width: 50px;
+  flex-shrink: 0;
+}
+.prehire-cat-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(71,85,105,0.4);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.prehire-cat-fill {
+  height: 100%;
+  background: var(--accent-color, #38bdf8);
+  border-radius: 3px;
+  max-width: 100%;
+}
+.prehire-cat-val {
+  font-size: 11px;
+  color: var(--text-primary, #f1f5f9);
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.prehire-risk-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text-light, #94a3b8);
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}

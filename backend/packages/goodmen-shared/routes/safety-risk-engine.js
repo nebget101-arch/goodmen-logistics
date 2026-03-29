@@ -345,6 +345,13 @@ router.get('/fleet-summary', canView, async (req, res) => {
           trend: r.trend,
           calculated_at: r.calculated_at,
         })),
+      // FN-504: all scored drivers for cross-module risk badges
+      all_scores: rows.map((r) => ({
+        driver_id: r.driver_id,
+        score: parseFloat(r.score),
+        risk_level: r.risk_level,
+        trend: r.trend,
+      })),
     };
 
     res.json(summary);
