@@ -8,6 +8,7 @@ const { handleCustomersAnalysis } = require('./handlers/customers-analysis-handl
 const { handleFuelPreprocess } = require('./handlers/fuel-preprocess-handler');
 const { handleTollCsvNormalize } = require('./handlers/toll-csv-normalize-handler');
 const { handleTollInvoiceVision } = require('./handlers/toll-invoice-vision-handler');
+const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -33,6 +34,9 @@ function buildAiRouter(deps) {
   );
   router.post('/tolls/invoice-vision', (req, res) =>
     handleTollInvoiceVision(req, res, deps)
+  );
+  router.post('/drivers/psp-vision', (req, res) =>
+    handlePspReportVision(req, res, deps)
   );
 
   return router;
