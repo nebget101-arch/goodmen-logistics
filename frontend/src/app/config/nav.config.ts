@@ -71,6 +71,14 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    sectionLabel: 'Fleet Management',
+    sectionIcon: 'local_shipping',
+    tab: 'settlements',
+    children: [
+      { path: '/idle-truck-alerts', label: 'Idle Truck Alerts', tab: 'settlements' },
+    ],
+  },
+  {
     sectionLabel: 'Accounting',
     sectionIcon: 'account_balance',
     tabs: ['invoices', 'settlements', 'lease_financing'],
