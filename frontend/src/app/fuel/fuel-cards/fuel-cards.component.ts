@@ -329,7 +329,7 @@ export class FuelCardsComponent implements OnInit {
       return;
     }
     const { card_number_masked, card_number_last4, status, notes } = this.cardForm.value as {
-      card_number_full: string; card_number_masked: string; card_number_last4: string; status: string; notes: string;
+      card_number_full: string; card_number_masked: string; card_number_last4: string; status: 'active' | 'inactive' | 'lost' | 'stolen'; notes: string;
     };
     const payload = { card_number_masked, card_number_last4, status, notes };
     this.savingCard = true;
