@@ -103,6 +103,8 @@
 .form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus { border-color: rgba(56, 189, 248, 0.5); }
 .form-grid option { background: #1e293b; color: #f1f5f9; }
 .full-row { grid-column: 1 / -1; }
+.field-hint { font-size: 11px; color: #64748b; font-weight: 400; margin-left: 4px; }
+.form-grid input[readonly] { opacity: 0.6; cursor: default; }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 

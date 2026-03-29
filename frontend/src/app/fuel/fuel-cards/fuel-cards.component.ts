@@ -95,8 +95,9 @@ export class FuelCardsComponent implements OnInit {
     });
 
     this.cardForm = this.fb.group({
-      card_number_masked: ['', [Validators.required]],
-      card_number_last4: ['', [Validators.maxLength(4)]],
+      card_number_full: ['', [Validators.required, Validators.minLength(4)]],
+      card_number_masked: [''],
+      card_number_last4: [''],
       status: ['active'],
       notes: ['']
     });
@@ -116,15 +117,18 @@ export class FuelCardsComponent implements OnInit {
   loadDrivers(): void {
     this.api.getDrivers().subscribe({
       next: (result: unknown) => {
-        const raw = result as { drivers?: DriverRow[] } | DriverRow[];
+        const raw = result as { drivers?: DriverRow[]; rows?: DriverRow[]; data?: DriverRow[] } | DriverRow[];
         if (Array.isArray(raw)) {
           this.drivers = raw;
         } else {
-          this.drivers = raw.drivers ?? [];
+          this.drivers = raw.drivers ?? raw.rows ?? raw.data ?? [];
         }
         this.cdr.markForCheck();
       },
-      error: () => { /* non-critical */ }
+      error: () => {
+        this.drivers = [];
+        this.cdr.markForCheck();
+      }
     });
   }
 
@@ -291,8 +295,19 @@ export class FuelCardsComponent implements OnInit {
   }
 
   // ─── Card modal ────────────────────────────────────────────────────────────
+  onCardNumberInput(value: string): void {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length >= 4) {
+      const last4 = digits.slice(-4);
+      this.cardForm.patchValue({ card_number_last4: last4, card_number_masked: `****${last4}` });
+    } else {
+      this.cardForm.patchValue({ card_number_last4: '', card_number_masked: '' });
+    }
+  }
+
   openCreateCard(): void {
     this.cardForm.reset({
+      card_number_full: '',
       card_number_masked: '',
       card_number_last4: '',
       status: 'active',
@@ -313,7 +328,10 @@ export class FuelCardsComponent implements OnInit {
       this.cardForm.markAllAsTouched();
       return;
     }
-    const payload = this.cardForm.value;
+    const { card_number_masked, card_number_last4, status, notes } = this.cardForm.value as {
+      card_number_full: string; card_number_masked: string; card_number_last4: string; status: string; notes: string;
+    };
+    const payload = { card_number_masked, card_number_last4, status, notes };
     this.savingCard = true;
     this.fuel.createAccountCard(this.selectedAccount.id, payload).subscribe({
       next: () => { this.savingCard = false; this.showCardModal = false; this.loadCards(); this.cdr.markForCheck(); },
