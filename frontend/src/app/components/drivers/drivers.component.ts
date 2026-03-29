@@ -742,6 +742,20 @@ export class DriversComponent implements OnInit, OnDestroy {
     return `Risk Level: ${level}`;
   }
 
+  // FN-504: typed helper to avoid string-indexing CategoryScores in template (TS7053)
+  getCategoryScoreRows(scores: import('../../safety/safety-risk.service').CategoryScores | null | undefined): { label: string; value: number }[] {
+    if (!scores) return [];
+    const cats: { key: keyof import('../../safety/safety-risk.service').CategoryScores; label: string }[] = [
+      { key: 'mvr', label: 'MVR' },
+      { key: 'psp', label: 'PSP' },
+      { key: 'fmcsa', label: 'FMCSA' },
+      { key: 'incidents', label: 'Incidents' }
+    ];
+    return cats
+      .filter(c => scores[c.key] != null)
+      .map(c => ({ label: c.label, value: scores[c.key] as number }));
+  }
+
   /** Load pre-hire documents for a driver (FN-237) */
   loadPrehireDocuments(driverId: string): void {
     this.prehireDocumentsLoading = true;

@@ -516,20 +516,13 @@
                 <span class="prehire-event-count">{{ preHireRisk!.current!.event_count }} events</span>
               </div>
             </div>
-            <div class="prehire-categories" *ngIf="preHireRisk!.current!.category_scores">
-              <div class="prehire-cat-item" *ngFor="let cat of [
-                {key:'mvr', label:'MVR'},
-                {key:'psp', label:'PSP'},
-                {key:'fmcsa', label:'FMCSA'},
-                {key:'incidents', label:'Incidents'}
-              ]">
-                <ng-container *ngIf="preHireRisk!.current!.category_scores![cat.key] != null">
-                  <span class="prehire-cat-label">{{ cat.label }}</span>
-                  <div class="prehire-cat-bar">
-                    <div class="prehire-cat-fill" [style.width.%]="preHireRisk!.current!.category_scores![cat.key]"></div>
-                  </div>
-                  <span class="prehire-cat-val">{{ preHireRisk!.current!.category_scores![cat.key] | number:'1.0-0' }}</span>
-                </ng-container>
+            <div class="prehire-categories" *ngIf="getCategoryScoreRows(preHireRisk!.current!.category_scores).length">
+              <div class="prehire-cat-item" *ngFor="let cat of getCategoryScoreRows(preHireRisk!.current!.category_scores)">
+                <span class="prehire-cat-label">{{ cat.label }}</span>
+                <div class="prehire-cat-bar">
+                  <div class="prehire-cat-fill" [style.width.%]="cat.value"></div>
+                </div>
+                <span class="prehire-cat-val">{{ cat.value | number:'1.0-0' }}</span>
               </div>
             </div>
           </div>
