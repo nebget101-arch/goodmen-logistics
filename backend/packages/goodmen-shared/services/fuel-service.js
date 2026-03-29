@@ -8,7 +8,7 @@
 
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
-const { parseFileBuffer, buildAutoMapping, applyMapping, validateRow } = require('./fuel-parser');
+const { parseFileBuffer, buildAutoMapping, applyMapping, validateRow, isMoneyCode, normalizeRow } = require('./fuel-parser');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -106,12 +106,16 @@ async function isDuplicateTransaction(tenantId, normalized) {
 
   const gallons = toDecimal(normalized.gallons);
   const amount = toDecimal(normalized.amount);
+  const productType = normalized.product_type || 'diesel';
 
   const dupeQuery = knex('fuel_transactions')
     .where({ tenant_id: tenantId })
     .whereRaw('transaction_date = ?', [date.toISOString().slice(0, 10)])
     .whereRaw('ABS(gallons::numeric - ?) < 0.01', [gallons || 0])
     .whereRaw('ABS(amount::numeric - ?) < 0.01', [amount || 0]);
+
+  // Include product_type so split rows (same date/amount, different product) aren't flagged as dupes
+  dupeQuery.whereRaw('COALESCE(product_type, ?) = ?', ['diesel', productType]);
 
   if (normalized.vendor_name) {
     dupeQuery.whereRaw('LOWER(vendor_name) = LOWER(?)', [normalized.vendor_name]);
@@ -121,10 +125,11 @@ async function isDuplicateTransaction(tenantId, normalized) {
     dupeQuery.whereRaw(`card_number_masked LIKE ?`, [`%${last4}`]);
   }
 
-  // Also check by external_transaction_id (faster/stricter)
+  // Also check by external_transaction_id + product_type (compound check for split rows)
   if (normalized.external_transaction_id) {
     const extExists = await knex('fuel_transactions')
       .where({ tenant_id: tenantId, external_transaction_id: normalized.external_transaction_id })
+      .whereRaw('COALESCE(product_type, ?) = ?', ['diesel', productType])
       .first('id');
     if (extExists) return true;
   }
@@ -206,51 +211,84 @@ async function stageBatch({
   let successCount = 0;
   let warningCount = 0;
   let failedCount = 0;
+  let skippedCount = 0;
 
   const rowInserts = [];
 
+  let expandedRowNum = 0;
+
   for (let i = 0; i < rawRows.length; i++) {
     const rawRow = rawRows[i];
-    const normalized = applyMapping(rawRow, columnMap);
-    const { errors, warnings } = validateRow(normalized, seenExtIds);
+    const mapped = applyMapping(rawRow, columnMap);
 
-    if (normalized.external_transaction_id) {
-      if (seenExtIds.has(normalized.external_transaction_id)) {
-        warnings.push(`Duplicate external ID within this file: "${normalized.external_transaction_id}"`);
+    // ─── Money Code / non-fuel skip (before splitting) ────────────────────────
+    const skipReason = isMoneyCode(mapped);
+    if (skipReason) {
+      skippedCount++;
+      expandedRowNum++;
+      rowInserts.push({
+        batch_id: batchId,
+        row_number: expandedRowNum,
+        raw_payload: JSON.stringify(rawRow),
+        normalized_payload: JSON.stringify(mapped),
+        validation_errors: JSON.stringify([]),
+        warnings: JSON.stringify([skipReason]),
+        match_result: null,
+        resolution_status: 'skipped'
+      });
+      continue;
+    }
+
+    // Normalize: split multi-product rows into separate batch rows
+    const splitResults = normalizeRow(mapped, rawRow, i + 1);
+
+    for (const { normalized, source_transaction_id } of splitResults) {
+      expandedRowNum++;
+      const { errors, warnings } = validateRow(normalized, seenExtIds);
+
+      // Duplicate detection uses source_transaction_id + product_type for split rows
+      const dupeKey = source_transaction_id && normalized.product_type
+        ? `${source_transaction_id}::${normalized.product_type}`
+        : normalized.external_transaction_id || null;
+
+      if (dupeKey) {
+        if (seenExtIds.has(dupeKey)) {
+          warnings.push(`Duplicate transaction within this file: "${dupeKey}"`);
+        } else {
+          seenExtIds.add(dupeKey);
+        }
+      }
+
+      // Check DB-level duplicates
+      if (errors.length === 0) {
+        const isDupe = await isDuplicateTransaction(tenantId, normalized);
+        if (isDupe) {
+          warnings.push('Possible duplicate – a matching transaction already exists in the database');
+        }
+      }
+
+      let resolutionStatus = 'valid';
+      if (errors.length > 0) {
+        resolutionStatus = 'failed';
+        failedCount++;
+      } else if (warnings.length > 0) {
+        resolutionStatus = 'warning';
+        warningCount++;
       } else {
-        seenExtIds.add(normalized.external_transaction_id);
+        successCount++;
       }
-    }
 
-    // Check DB-level duplicates
-    if (errors.length === 0) {
-      const isDupe = await isDuplicateTransaction(tenantId, normalized);
-      if (isDupe) {
-        warnings.push('Possible duplicate – a matching transaction already exists in the database');
-      }
+      rowInserts.push({
+        batch_id: batchId,
+        row_number: expandedRowNum,
+        raw_payload: JSON.stringify(rawRow),
+        normalized_payload: JSON.stringify({ ...normalized, source_transaction_id }),
+        validation_errors: JSON.stringify(errors),
+        warnings: JSON.stringify(warnings),
+        match_result: null,
+        resolution_status: resolutionStatus
+      });
     }
-
-    let resolutionStatus = 'valid';
-    if (errors.length > 0) {
-      resolutionStatus = 'failed';
-      failedCount++;
-    } else if (warnings.length > 0) {
-      resolutionStatus = 'warning';
-      warningCount++;
-    } else {
-      successCount++;
-    }
-
-    rowInserts.push({
-      batch_id: batchId,
-      row_number: i + 1,
-      raw_payload: JSON.stringify(rawRow),
-      normalized_payload: JSON.stringify(normalized),
-      validation_errors: JSON.stringify(errors),
-      warnings: JSON.stringify(warnings),
-      match_result: null,
-      resolution_status: resolutionStatus
-    });
   }
 
   // Bulk insert batch rows in chunks to avoid parameter limits
@@ -259,17 +297,22 @@ async function stageBatch({
     await knex('fuel_import_batch_rows').insert(rowInserts.slice(i, i + CHUNK));
   }
 
-  // Update batch summary
+  // Update batch summary (total_rows reflects expanded/split row count)
+  const splitRows = expandedRowNum - rawRows.length;
   await knex('fuel_import_batches').where({ id: batchId }).update({
     import_status: 'validated',
+    raw_rows: rawRows.length,
+    total_rows: expandedRowNum,
+    split_rows: splitRows > 0 ? splitRows : 0,
     success_rows: successCount,
     warning_rows: warningCount,
-    failed_rows: failedCount
+    failed_rows: failedCount,
+    skipped_rows: skippedCount
   });
 
-  dtLogger.info('fuel_batch_staged', { batchId, tenantId, total: rawRows.length, success: successCount, warning: warningCount, failed: failedCount });
+  dtLogger.info('fuel_batch_staged', { batchId, tenantId, rawRows: rawRows.length, expandedRows: expandedRowNum, splitRows: splitRows > 0 ? splitRows : 0, success: successCount, warning: warningCount, failed: failedCount, skipped: skippedCount });
 
-  return { batchId, totalRows: rawRows.length, successCount, warningCount, failedCount };
+  return { batchId, rawRows: rawRows.length, totalRows: expandedRowNum, splitRows: splitRows > 0 ? splitRows : 0, successCount, warningCount, failedCount, skippedCount };
 }
 
 /**
@@ -307,8 +350,25 @@ async function commitBatch({ batchId, tenantId, operatingEntityId = null, import
 
     // ─── Entity matching ────────────────────────────────────────────────────────
     const truckId = await findTruckByUnit(tenantId, normalized.unit_number_raw);
-    const driverId = await findDriverByName(tenantId, normalized.driver_name_raw);
+    let driverId = await findDriverByName(tenantId, normalized.driver_name_raw);
     const cardId = await findFuelCard(tenantId, normalized.card_number_masked, batch.provider_name);
+
+    // ─── Card-driver assignment lookup (FN-461) ──────────────────────────────
+    let driverCardMismatch = false;
+    if (cardId) {
+      const activeAssignment = await knex('fuel_card_driver_assignments')
+        .where({ fuel_card_account_id: cardId, tenant_id: tenantId, status: 'active' })
+        .first('driver_id');
+
+      if (activeAssignment) {
+        // If CSV driver name matched a different driver, flag mismatch
+        if (driverId && driverId !== activeAssignment.driver_id) {
+          driverCardMismatch = true;
+        }
+        // Card-driver assignment overrides CSV driver name match
+        driverId = activeAssignment.driver_id;
+      }
+    }
 
     const matchedParts = [];
     if (truckId) matchedParts.push('truck');
@@ -345,7 +405,9 @@ async function commitBatch({ batchId, tenantId, operatingEntityId = null, import
       price_per_gallon: ppg,
       currency: 'USD',
       odometer: toInt(normalized.odometer),
-      product_type: normalized.product_type || null,
+      product_type: normalized.product_type || 'diesel',
+      category: normalized.category || 'fuel',
+      source_transaction_id: normalized.source_transaction_id || null,
       matched_status: matchedStatus,
       validation_status: 'valid',
       settlement_link_status: 'none',
@@ -379,6 +441,30 @@ async function commitBatch({ batchId, tenantId, operatingEntityId = null, import
       }
     }
 
+    // ─── Driver-card mismatch exception (FN-461) ────────────────────────────
+    if (driverCardMismatch) {
+      await knex('fuel_transaction_exceptions').insert({
+        fuel_transaction_id: txn.id,
+        tenant_id: tenantId,
+        exception_type: 'driver_card_mismatch',
+        exception_message: buildExceptionMessage('driver_card_mismatch', normalized),
+        resolution_status: 'open'
+      });
+      exceptions++;
+    }
+
+    // ─── Missing card number exception ────────────────────────────────────────
+    if (!normalized.card_number_masked) {
+      await knex('fuel_transaction_exceptions').insert({
+        fuel_transaction_id: txn.id,
+        tenant_id: tenantId,
+        exception_type: 'missing_card_number',
+        exception_message: buildExceptionMessage('missing_card_number', normalized),
+        resolution_status: 'open'
+      });
+      exceptions++;
+    }
+
     imported++;
   }
 
@@ -401,6 +487,10 @@ function buildExceptionMessage(type, normalized) {
   if (type === 'unmatched_truck') return `Could not match truck unit "${normalized.unit_number_raw}" to any vehicle in the system`;
   if (type === 'unmatched_driver') return `Could not match driver "${normalized.driver_name_raw}" to any driver record`;
   if (type === 'unmatched_card') return `No fuel card account matched for this transaction`;
+  if (type === 'missing_card_number') return `Transaction has no card number – card-based matching unavailable`;
+  if (type === 'driver_card_mismatch') return `CSV driver "${normalized.driver_name_raw}" differs from the driver assigned to this fuel card – using card assignment`;
+  if (type === 'money_code_skip') return `Non-fuel transaction (money code / cash advance) — skipped from import`;
+  if (type === 'low_confidence_mapping') return `AI column mapping confidence below threshold — review for accuracy`;
   return `Unresolved exception: ${type}`;
 }
 

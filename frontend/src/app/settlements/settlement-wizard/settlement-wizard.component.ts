@@ -40,6 +40,21 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
   creatingPeriod = false;
   activeOperatingEntityName = '';
 
+  dateBasisOptions = [
+    { value: 'pickup', label: 'Pickup date' },
+    { value: 'delivery', label: 'Delivery date' }
+  ];
+
+  payrollPeriodOptions: { value: string; label: string }[] = [];
+  driverOptions: { value: string; label: string }[] = [];
+
+  private rebuildPayrollPeriodOptions(): void {
+    this.payrollPeriodOptions = this.payrollPeriods.map(p => ({
+      value: p.id,
+      label: `${p.period_start} \u2013 ${p.period_end} (${p.status})`
+    }));
+  }
+
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
 
@@ -102,6 +117,7 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         const list = Array.isArray(res) ? res : res?.data ?? res?.rows ?? [];
         this.payrollPeriods = list.filter((p: any) => ['draft', 'open'].includes((p.status || '').toLowerCase()));
+        this.rebuildPayrollPeriodOptions();
         if (this.payrollPeriods.length === 1 && !this.payrollPeriodId) {
           this.payrollPeriodId = this.payrollPeriods[0].id;
           this.onPeriodSelect();
@@ -115,6 +131,10 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         const list = res?.data ?? res?.rows ?? res ?? [];
         this.drivers = Array.isArray(list) ? list : [];
+        this.driverOptions = this.drivers.map(d => ({
+          value: d.id,
+          label: this.getDriverDisplayName(d)
+        }));
       }
     });
   }
@@ -146,6 +166,7 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: (row: any) => {
         this.payrollPeriods = [{ id: row.id, period_start: row.period_start, period_end: row.period_end, status: row.status }, ...this.payrollPeriods];
+        this.rebuildPayrollPeriodOptions();
         this.payrollPeriodId = row.id;
         this.periodStart = row.period_start;
         this.periodEnd = row.period_end;

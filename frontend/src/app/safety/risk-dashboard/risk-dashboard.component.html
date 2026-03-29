@@ -1,0 +1,188 @@
+<div class="page-header">
+  <span class="material-symbols-outlined page-icon">security</span>
+  <div class="page-header-text">
+    <h2>Fleet Risk Dashboard</h2>
+    <p>Driver composite risk scores and fleet-wide trends</p>
+  </div>
+  <button type="button" class="btn btn-outline" (click)="loadSummary()" [disabled]="loading">
+    <span class="material-symbols-outlined" [class.spinner-icon]="loading">refresh</span>
+    Refresh
+  </button>
+</div>
+
+<div *ngIf="loading" class="loading-state">
+  <span class="material-symbols-outlined spinner-icon">progress_activity</span>
+  Loading fleet risk data...
+</div>
+
+<div *ngIf="error" class="alert-error">
+  <span class="material-symbols-outlined">error_outline</span>
+  {{ error }}
+</div>
+
+<ng-container *ngIf="!loading && summary">
+  <!-- KPI Cards -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon" style="color: #38bdf8">groups</span>
+      <span class="kpi-label">Total Scored</span>
+      <span class="kpi-value">{{ summary!.total_drivers_scored }}</span>
+      <span class="kpi-sub">Drivers with risk scores</span>
+    </div>
+
+    <div class="kpi-card">
+      <span class="material-symbols-outlined kpi-icon" style="color: #38bdf8">analytics</span>
+      <span class="kpi-label">Avg Score</span>
+      <span class="kpi-value" [ngClass]="riskLevelClass(
+        summary!.average_score <= 25 ? 'low' :
+        summary!.average_score <= 50 ? 'medium' :
+        summary!.average_score <= 75 ? 'high' : 'critical')">
+        {{ summary!.average_score | number:'1.0-1' }}
+      </span>
+      <span class="kpi-sub">Fleet average composite</span>
+    </div>
+
+    <div class="kpi-card" [class.kpi-warn]="summary!.by_trend.worsening > 0">
+      <span class="material-symbols-outlined kpi-icon"
+        [style.color]="summary!.by_trend.worsening > 0 ? '#ef4444' : '#38bdf8'">trending_down</span>
+      <span class="kpi-label">Worsening</span>
+      <span class="kpi-value"
+        [style.color]="summary!.by_trend.worsening > 0 ? '#ef4444' : '#f1f5f9'">
+        {{ summary!.by_trend.worsening }}
+      </span>
+      <span class="kpi-sub">Drivers trending up in risk</span>
+    </div>
+
+    <div class="kpi-card" [class.kpi-warn]="totalHighCritical > 0">
+      <span class="material-symbols-outlined kpi-icon"
+        [style.color]="totalHighCritical > 0 ? '#ef4444' : '#38bdf8'">warning</span>
+      <span class="kpi-label">High / Critical</span>
+      <span class="kpi-value"
+        [style.color]="totalHighCritical > 0 ? '#ef4444' : '#f1f5f9'">
+        {{ totalHighCritical }}
+      </span>
+      <span class="kpi-sub">
+        {{ summary!.by_level.critical }} critical &middot; {{ summary!.by_level.high }} high
+      </span>
+    </div>
+  </div>
+
+  <!-- Risk Distribution Bar -->
+  <div class="info-panel dist-panel">
+    <h3>Risk Level Distribution</h3>
+    <div class="dist-bar-wrap">
+      <div class="dist-bar">
+        <div
+          *ngIf="summary!.by_level.low > 0"
+          class="dist-seg dist-low"
+          [style.flex]="summary!.by_level.low"
+          [title]="'Low: ' + summary!.by_level.low">
+        </div>
+        <div
+          *ngIf="summary!.by_level.medium > 0"
+          class="dist-seg dist-medium"
+          [style.flex]="summary!.by_level.medium"
+          [title]="'Medium: ' + summary!.by_level.medium">
+        </div>
+        <div
+          *ngIf="summary!.by_level.high > 0"
+          class="dist-seg dist-high"
+          [style.flex]="summary!.by_level.high"
+          [title]="'High: ' + summary!.by_level.high">
+        </div>
+        <div
+          *ngIf="summary!.by_level.critical > 0"
+          class="dist-seg dist-critical"
+          [style.flex]="summary!.by_level.critical"
+          [title]="'Critical: ' + summary!.by_level.critical">
+        </div>
+        <div
+          *ngIf="summary!.total_drivers_scored === 0"
+          class="dist-seg dist-empty"
+          style="flex: 1">
+        </div>
+      </div>
+      <div class="dist-legend">
+        <span class="legend-item">
+          <span class="legend-dot legend-dot-low"></span>
+          Low ({{ summary!.by_level.low }})
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot legend-dot-medium"></span>
+          Medium ({{ summary!.by_level.medium }})
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot legend-dot-high"></span>
+          High ({{ summary!.by_level.high }})
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot legend-dot-critical"></span>
+          Critical ({{ summary!.by_level.critical }})
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- High Risk Drivers Table -->
+  <div class="info-panel">
+    <h3>High-Risk Drivers</h3>
+
+    <div *ngIf="summary!.high_risk_drivers.length === 0" class="empty-state">
+      <span class="material-symbols-outlined empty-icon">check_circle</span>
+      <span>No high-risk drivers flagged at this time.</span>
+    </div>
+
+    <div *ngIf="summary!.high_risk_drivers.length > 0" class="table-scroll">
+      <table class="risk-table">
+        <thead>
+          <tr>
+            <th>Driver</th>
+            <th class="col-center">Score</th>
+            <th class="col-center">Risk Level</th>
+            <th class="col-center">Trend</th>
+            <th>Last Updated</th>
+            <th class="col-center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let driver of summary!.high_risk_drivers">
+            <td>
+              <span class="driver-name">{{ driver.name }}</span>
+              <span class="driver-id">ID: {{ driver.driver_id }}</span>
+            </td>
+            <td class="col-center">
+              <span class="score-pill" [ngClass]="riskLevelClass(driver.risk_level)">
+                {{ driver.score }}
+              </span>
+            </td>
+            <td class="col-center">
+              <span class="badge" [ngClass]="riskLevelClass(driver.risk_level)">
+                {{ driver.risk_level | titlecase }}
+              </span>
+            </td>
+            <td class="col-center">
+              <span class="trend-icon" [ngClass]="trendClass(driver.trend)">
+                <span class="material-symbols-outlined">{{ trendIcon(driver.trend) }}</span>
+                <span class="trend-label">{{ driver.trend | titlecase }}</span>
+              </span>
+            </td>
+            <td class="date-cell">{{ driver.calculated_at | date:'mediumDate' }}</td>
+            <td class="col-center">
+              <button type="button" class="btn btn-sm btn-primary" (click)="navigateToDriver(driver.driver_id)">
+                View
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</ng-container>
+
+<!-- Empty state when scored = 0 but no error -->
+<div *ngIf="!loading && !error && summary && summary.total_drivers_scored === 0 && summary.high_risk_drivers.length === 0"
+     class="no-data-state">
+  <span class="material-symbols-outlined no-data-icon">security</span>
+  <p>No driver risk scores have been calculated yet.</p>
+  <p class="no-data-sub">Risk scores are calculated automatically when risk events are logged for drivers.</p>
+</div>

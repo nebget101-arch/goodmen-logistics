@@ -38,12 +38,7 @@
       <p class="step-hint">Select an existing payroll period or create a new one.</p>
       <div class="field">
         <label for="wizardPeriod">Payroll period</label>
-        <select id="wizardPeriod" class="form-select" [(ngModel)]="payrollPeriodId" (change)="onPeriodSelect()">
-          <option value="">Select period</option>
-          <option *ngFor="let p of payrollPeriods" [value]="p.id">
-            {{ p.period_start }} – {{ p.period_end }} ({{ p.status }})
-          </option>
-        </select>
+        <app-ai-select inputId="wizardPeriod" [options]="payrollPeriodOptions" [(ngModel)]="payrollPeriodId" (ngModelChange)="onPeriodSelect()" placeholder="Select period" [allowEmpty]="true" emptyLabel="Select period"></app-ai-select>
       </div>
       <div class="create-period-block">
         <p class="step-hint">Or create a new period:</p>
@@ -70,12 +65,7 @@
       <p class="step-hint">Choose the driver for this settlement.</p>
       <div class="field">
         <label for="wizardDriver">Driver</label>
-        <select id="wizardDriver" class="form-select" [(ngModel)]="driverId" (change)="onDriverChange()">
-          <option value="">Select driver</option>
-          <option *ngFor="let d of drivers" [value]="d.id">
-            {{ getDriverDisplayName(d) }}
-          </option>
-        </select>
+        <app-ai-select inputId="wizardDriver" [options]="driverOptions" [(ngModel)]="driverId" (ngModelChange)="onDriverChange()" placeholder="Select driver" [allowEmpty]="true" emptyLabel="Select driver"></app-ai-select>
       </div>
     </div>
 
@@ -88,10 +78,7 @@
       <p class="step-hint">Choose which date (pickup or delivery) is used to include loads in this period.</p>
       <div class="field">
         <label for="dateBasis">Date basis</label>
-        <select id="dateBasis" class="form-select" [(ngModel)]="dateBasis">
-          <option value="pickup">Pickup date</option>
-          <option value="delivery">Delivery date</option>
-        </select>
+        <app-ai-select inputId="dateBasis" [options]="dateBasisOptions" [(ngModel)]="dateBasis" placeholder="Select date basis"></app-ai-select>
       </div>
     </div>
 

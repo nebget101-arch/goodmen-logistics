@@ -63,20 +63,26 @@ async function handleDqfIntegration(driverId, testType, testResult, userId, resu
   await upsertRequirementStatus(driverId, 'pre_employment_drug_test_submitted', 'complete', null);
   await logStatusChange(driverId, 'pre_employment_drug_test_submitted', null, 'complete', userId, 'Pre-employment drug test created');
 
-  // Mark the scheduled requirement as in_progress
-  await upsertRequirementStatus(driverId, 'pre_employment_drug_test_scheduled', 'in_progress', null);
-  await logStatusChange(driverId, 'pre_employment_drug_test_scheduled', null, 'in_progress', userId, 'Test record created');
+  // Mark the scheduled requirement as complete (test has been created/scheduled)
+  await upsertRequirementStatus(driverId, 'pre_employment_drug_test_scheduled', 'complete', null);
+  await logStatusChange(driverId, 'pre_employment_drug_test_scheduled', null, 'complete', userId, 'Pre-employment drug test scheduled/created');
+
+  // Mark result_received as complete when a result_received_date is provided (regardless of result value)
+  if (resultReceivedDate && !testResult) {
+    await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'complete', resultDocumentId || null, resultReceivedDate);
+    await logStatusChange(driverId, 'pre_employment_drug_test_result_received', null, 'complete', userId, 'Pre-employment result received date recorded');
+  }
 
   if (testResult) {
     const upperResult = testResult.toUpperCase();
     const completionDate = resultReceivedDate || null;
 
-    if (upperResult === 'NEGATIVE') {
-      // FN-223/FN-225: Negative result → complete both result_received and completed
-      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'complete', resultDocumentId || null, completionDate);
-      await logStatusChange(driverId, 'pre_employment_drug_test_result_received', null, 'complete', userId, 'Negative pre-employment result received');
+    // Result received is always complete when we have a result (the result WAS received)
+    await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'complete', resultDocumentId || null, completionDate);
+    await logStatusChange(driverId, 'pre_employment_drug_test_result_received', null, 'complete', userId, `Pre-employment result received: ${testResult}`);
 
-      // FN-225: Only mark completed with evidence doc when we have both negative result AND document
+    if (upperResult === 'NEGATIVE') {
+      // FN-223/FN-225: Negative result → also mark completed
       if (resultDocumentId) {
         await upsertRequirementStatus(driverId, 'pre_employment_drug_test_completed', 'complete', resultDocumentId, completionDate);
         await logStatusChange(driverId, 'pre_employment_drug_test_completed', null, 'complete', userId, 'Negative pre-employment result recorded with evidence document');
@@ -84,14 +90,9 @@ async function handleDqfIntegration(driverId, testType, testResult, userId, resu
         await upsertRequirementStatus(driverId, 'pre_employment_drug_test_completed', 'complete', null, completionDate);
         await logStatusChange(driverId, 'pre_employment_drug_test_completed', null, 'complete', userId, 'Negative pre-employment result recorded');
       }
-    } else {
-      // FN-223: Non-negative result → mark result_received as review_required
-      await upsertRequirementStatus(driverId, 'pre_employment_drug_test_result_received', 'review_required', resultDocumentId || null, completionDate);
-      await logStatusChange(
-        driverId, 'pre_employment_drug_test_result_received', null, 'review_required', userId,
-        `Insufficient result: ${testResult}. Review required.`
-      );
     }
+    // Non-negative results: result_received is still complete (result WAS received),
+    // but pre_employment_drug_test_completed stays incomplete (driver didn't pass)
   }
 
   await computeAndUpdateDqfCompleteness(driverId);

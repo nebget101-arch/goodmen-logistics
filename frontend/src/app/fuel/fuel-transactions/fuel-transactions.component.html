@@ -16,52 +16,6 @@
     </div>
   </div>
 
-  <!-- Filter Bar -->
-  <div class="filter-bar">
-    <div class="filter-group">
-      <label for="fuelTxnDateFrom">From</label>
-      <app-ai-date-picker
-        inputId="fuelTxnDateFrom"
-        [inline]="true"
-        class="filter-input"
-        [(ngModel)]="dateFrom"
-        (ngModelChange)="applyFilters()"
-        name="fuelTxnDateFrom"
-        ariaLabel="Filter from date"
-        placeholder="From"
-      ></app-ai-date-picker>
-    </div>
-    <div class="filter-group">
-      <label for="fuelTxnDateTo">To</label>
-      <app-ai-date-picker
-        inputId="fuelTxnDateTo"
-        [inline]="true"
-        class="filter-input"
-        [(ngModel)]="dateTo"
-        (ngModelChange)="applyFilters()"
-        name="fuelTxnDateTo"
-        ariaLabel="Filter to date"
-        placeholder="To"
-      ></app-ai-date-picker>
-    </div>
-    <div class="filter-group">
-      <label>Provider</label>
-      <input type="text" [(ngModel)]="provider" placeholder="EFS, Comdata…" class="filter-input" (keyup.enter)="applyFilters()" />
-    </div>
-    <div class="filter-group">
-      <label>Matched</label>
-      <select [(ngModel)]="matchedStatus" (change)="applyFilters()" class="filter-input">
-        <option value="">All</option>
-        <option value="matched">Matched</option>
-        <option value="partial">Partial</option>
-        <option value="unmatched">Unmatched</option>
-        <option value="manual">Manual</option>
-      </select>
-    </div>
-    <button class="btn-ghost btn-sm" (click)="clearFilters()">
-      <span class="material-symbols-outlined">filter_alt_off</span>
-    </button>
-  </div>
 
   <!-- Error -->
   <div class="error-banner" *ngIf="error">
@@ -89,14 +43,84 @@
           <th class="num-col">Gallons</th>
           <th class="num-col">Amount</th>
           <th class="num-col">PPG</th>
+          <th>Product</th>
+          <th>Category</th>
           <th>Matched</th>
           <th>Settlement</th>
           <th>Actions</th>
         </tr>
+        <tr class="header-filters">
+          <!-- Date: from / to -->
+          <th>
+            <div class="date-range-filter">
+              <input type="date" [(ngModel)]="dateFrom" (change)="applyFilters()" placeholder="From" />
+              <input type="date" [(ngModel)]="dateTo" (change)="applyFilters()" placeholder="To" />
+            </div>
+          </th>
+          <!-- Provider -->
+          <th>
+            <input type="text" [(ngModel)]="provider" placeholder="EFS, Comdata…" (keyup.enter)="applyFilters()" />
+          </th>
+          <!-- Card -->
+          <th></th>
+          <!-- Truck -->
+          <th></th>
+          <!-- Driver -->
+          <th></th>
+          <!-- Vendor -->
+          <th></th>
+          <!-- Location -->
+          <th></th>
+          <!-- Gallons -->
+          <th></th>
+          <!-- Amount -->
+          <th></th>
+          <!-- PPG -->
+          <th></th>
+          <!-- Product Type -->
+          <th>
+            <select [(ngModel)]="productType" (change)="applyFilters()">
+              <option value="">All</option>
+              <option value="diesel">Diesel</option>
+              <option value="def">DEF</option>
+              <option value="reefer">Reefer</option>
+            </select>
+          </th>
+          <!-- Category -->
+          <th>
+            <select [(ngModel)]="categoryFilter" (change)="applyFilters()">
+              <option value="">All</option>
+              <option value="fuel">Fuel</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="advance">Advance</option>
+            </select>
+          </th>
+          <!-- Matched -->
+          <th>
+            <select [(ngModel)]="matchedStatus" (change)="applyFilters()">
+              <option value="">All</option>
+              <option value="matched">Matched</option>
+              <option value="partial">Partial</option>
+              <option value="unmatched">Unmatched</option>
+              <option value="manual">Manual</option>
+            </select>
+          </th>
+          <!-- Settlement -->
+          <th></th>
+          <!-- Actions -->
+          <th>
+            <button class="btn-ghost btn-sm" (click)="clearFilters()" title="Clear filters">
+              <span class="material-symbols-outlined">filter_alt_off</span>
+            </button>
+          </th>
+        </tr>
       </thead>
       <tbody>
         <tr *ngFor="let txn of rows" (click)="openDrawer(txn)" class="txn-row">
-          <td class="date-cell">{{ txn.transaction_date }}</td>
+          <td class="date-cell">
+            {{ txn.transaction_date }}
+            <span *ngIf="txn.source_transaction_id" class="split-badge" title="Split row — grouped by source transaction">S</span>
+          </td>
           <td class="provider-cell">{{ txn.provider_name }}</td>
           <td class="card-cell">{{ txn.card_number_masked || '—' }}</td>
           <td class="unit-cell">
@@ -119,6 +143,11 @@
           <td class="num-col">
             <span *ngIf="txn.price_per_gallon">${{ txn.price_per_gallon | number:'1.3-3' }}</span>
             <span *ngIf="!txn.price_per_gallon" class="empty-dash">—</span>
+          </td>
+          <td class="product-cell">{{ txn.product_type || '—' }}</td>
+          <td class="category-cell">
+            <span *ngIf="txn.category">{{ txn.category }}</span>
+            <span *ngIf="!txn.category" class="empty-dash">—</span>
           </td>
           <td (click)="$event.stopPropagation()">
             <span class="pill" [ngClass]="matchClass(txn.matched_status)">{{ txn.matched_status }}</span>
@@ -214,6 +243,16 @@
       <div class="detail-section">
         <div class="detail-label">Odometer</div>
         <div class="detail-value">{{ drawerTxn!.odometer | number }}</div>
+      </div>
+    </div>
+    <div class="detail-row-2">
+      <div class="detail-section" *ngIf="drawerTxn!.product_type">
+        <div class="detail-label">Product Type</div>
+        <div class="detail-value">{{ drawerTxn!.product_type }}</div>
+      </div>
+      <div class="detail-section" *ngIf="drawerTxn!.category">
+        <div class="detail-label">Category</div>
+        <div class="detail-value">{{ drawerTxn!.category }}</div>
       </div>
     </div>
     <div class="detail-section">

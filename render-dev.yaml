@@ -330,6 +330,8 @@ services:
         value: auto
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
+      - key: AI_SERVICE_URL
+        value: https://fleetneuron-ai-service-dev.onrender.com
       - key: NODE_ENV
         value: production
       - key: PORT

@@ -12,6 +12,12 @@ import { SafetyClaimsComponent } from './safety-claims/safety-claims.component';
 import { SafetyTasksComponent } from './safety-tasks/safety-tasks.component';
 import { SafetyReportsComponent } from './safety-reports/safety-reports.component';
 import { ComplianceDashboardComponent } from './compliance-dashboard/compliance-dashboard.component';
+import { FmcsaDashboardComponent } from './fmcsa-dashboard/fmcsa-dashboard.component';
+import { FmcsaCarriersComponent } from './fmcsa-carriers/fmcsa-carriers.component';
+import { FmcsaCarrierDetailComponent } from './fmcsa-carrier-detail/fmcsa-carrier-detail.component';
+import { FmcsaInspectionsComponent } from './fmcsa-inspections/fmcsa-inspections.component';
+import { RiskDashboardComponent } from './risk-dashboard/risk-dashboard.component';
+import { DriverRiskTimelineComponent } from './driver-risk-timeline/driver-risk-timeline.component';
 
 @NgModule({
   declarations: [
@@ -23,6 +29,12 @@ import { ComplianceDashboardComponent } from './compliance-dashboard/compliance-
     SafetyTasksComponent,
     SafetyReportsComponent,
     ComplianceDashboardComponent,
+    FmcsaDashboardComponent,
+    FmcsaCarriersComponent,
+    FmcsaCarrierDetailComponent,
+    FmcsaInspectionsComponent,
+    RiskDashboardComponent,
+    DriverRiskTimelineComponent,
   ],
   imports: [
     CommonModule,

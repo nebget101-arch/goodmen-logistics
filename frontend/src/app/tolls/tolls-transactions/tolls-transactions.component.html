@@ -1,4 +1,187 @@
-<section class="placeholder">
-  <h3>Toll Transactions</h3>
-  <p>Phase 1 skeleton ready. Grid, filters, assignment, and posting workflow will be implemented in next phases.</p>
-</section>
+<div class="txn-page">
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <h3><span class="material-symbols-outlined">toll</span> Toll Transactions</h3>
+      <span class="total-badge" *ngIf="!loading">{{ total | number }} records</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn-upload" (click)="triggerFileInput()" [disabled]="uploading">
+        <span class="material-icons btn-icon">photo_camera</span>
+        <span *ngIf="!uploading">Upload Toll Invoice</span>
+        <span *ngIf="uploading" class="uploading-label">
+          <span class="spinner"></span>
+          Extracting...
+        </span>
+      </button>
+      <input #invoiceFileInput type="file" [accept]="acceptedTypes" multiple hidden (change)="onFilesSelected($event)" />
+      <button class="btn-primary" (click)="openDialog()">
+        <span class="material-symbols-outlined">add</span> Add Manual Toll
+      </button>
+    </div>
+  </div>
+
+  <!-- Error / Success -->
+  <div class="alert alert-error" *ngIf="error">{{ error }}</div>
+  <div class="alert alert-success" *ngIf="saveSuccess">{{ saveSuccess }}</div>
+  <div class="success-banner" *ngIf="successMessage"><span class="material-icons">check_circle</span> {{ successMessage }}</div>
+  <div class="error-banner" *ngIf="uploadError"><span class="material-icons">error</span> {{ uploadError }}</div>
+
+  <!-- Loading -->
+  <div class="loading-state" *ngIf="loading">
+    <div class="spinner"></div>
+    <span>Loading transactions...</span>
+  </div>
+
+  <!-- Filters -->
+  <div class="filter-row" *ngIf="!loading">
+    <input type="date" [(ngModel)]="dateFrom" (change)="applyFilters()" placeholder="From" />
+    <input type="date" [(ngModel)]="dateTo" (change)="applyFilters()" placeholder="To" />
+    <button class="btn-ghost btn-sm" (click)="clearFilters()" title="Clear filters">
+      <span class="material-symbols-outlined">filter_alt_off</span>
+    </button>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap" *ngIf="!loading && rows.length > 0">
+    <table class="txn-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Provider</th>
+          <th>Plaza / Location</th>
+          <th>Truck</th>
+          <th>Driver</th>
+          <th class="num-col">Amount</th>
+          <th>Status</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let txn of rows" class="txn-row">
+          <td>{{ txn.transaction_date }}</td>
+          <td>{{ txn.provider_name }}</td>
+          <td>
+            <span *ngIf="txn.plaza_name">{{ txn.plaza_name }}</span>
+            <span *ngIf="!txn.plaza_name && (txn.city || txn.state)">{{ txn.city }}{{ txn.city && txn.state ? ', ' : '' }}{{ txn.state }}</span>
+            <span *ngIf="!txn.plaza_name && !txn.city && !txn.state" class="empty-dash">—</span>
+          </td>
+          <td>{{ txn.truck_display || txn.unit_number_raw || '—' }}</td>
+          <td>{{ txn.driver_display || txn.driver_name_raw || '—' }}</td>
+          <td class="num-col amt-cell">{{ fmtCurrency(txn.amount) }}</td>
+          <td>
+            <span class="pill" [ngClass]="matchClass(txn.matched_status)">{{ txn.matched_status }}</span>
+          </td>
+          <td>
+            <span class="source-badge" [class.manual]="txn.is_manual">{{ txn.is_manual ? 'Manual' : 'Import' }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Empty -->
+  <div class="empty-state" *ngIf="!loading && rows.length === 0">
+    <span class="material-symbols-outlined empty-icon">toll</span>
+    <p>No toll transactions found.</p>
+    <button class="btn-primary" (click)="openDialog()">Add Manual Toll</button>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" *ngIf="!loading && total > pageSize">
+    <button class="btn-ghost btn-sm" (click)="prevPage()" [disabled]="pageOffset === 0">
+      <span class="material-symbols-outlined">chevron_left</span>
+    </button>
+    <span class="page-info">Page {{ pageNumber }} of {{ totalPages }}</span>
+    <button class="btn-ghost btn-sm" (click)="nextPage()" [disabled]="pageOffset + pageSize >= total">
+      <span class="material-symbols-outlined">chevron_right</span>
+    </button>
+  </div>
+</div>
+
+<!-- ─── Manual Toll Entry Dialog ─── -->
+<div class="dialog-overlay" *ngIf="showDialog" (click)="closeDialog()"></div>
+<div class="dialog" *ngIf="showDialog">
+  <div class="dialog-header">
+    <h3>Add Manual Toll</h3>
+    <button class="close-btn" (click)="closeDialog()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+  <div class="dialog-body">
+    <div class="alert alert-error" *ngIf="saveError">{{ saveError }}</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date *</label>
+        <input type="date" [(ngModel)]="form['transaction_date']" />
+      </div>
+      <div class="form-group">
+        <label>Provider *</label>
+        <input type="text" [(ngModel)]="form['provider_name']" placeholder="EZPass, Bestpass..." />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Plaza Name</label>
+        <input type="text" [(ngModel)]="form['plaza_name']" placeholder="Toll plaza name" />
+      </div>
+      <div class="form-group">
+        <label>Amount *</label>
+        <input type="number" step="0.01" [(ngModel)]="form['amount']" placeholder="0.00" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Entry Location</label>
+        <input type="text" [(ngModel)]="form['entry_location']" placeholder="Entry point" />
+      </div>
+      <div class="form-group">
+        <label>Exit Location</label>
+        <input type="text" [(ngModel)]="form['exit_location']" placeholder="Exit point" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>City</label>
+        <input type="text" [(ngModel)]="form['city']" placeholder="City" />
+      </div>
+      <div class="form-group">
+        <label>State</label>
+        <input type="text" [(ngModel)]="form['state']" placeholder="ST" maxlength="2" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Truck</label>
+        <select [(ngModel)]="form['truck_id']">
+          <option value="">— Select Truck —</option>
+          <option *ngFor="let t of trucks" [value]="t.id">{{ t.unit_number || t.license_plate || t.id }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Driver</label>
+        <select [(ngModel)]="form['driver_id']">
+          <option value="">— Select Driver —</option>
+          <option *ngFor="let d of drivers" [value]="d.id">{{ d.first_name }} {{ d.last_name }}</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group full-width">
+      <label>Notes</label>
+      <textarea [(ngModel)]="form['notes']" rows="3" placeholder="Optional notes..."></textarea>
+    </div>
+  </div>
+  <div class="dialog-footer">
+    <button class="btn-ghost" (click)="closeDialog()" [disabled]="saving">Cancel</button>
+    <button class="btn-primary" (click)="saveTransaction()" [disabled]="saving">
+      <span *ngIf="saving" class="spinner-sm"></span>
+      {{ saving ? 'Saving...' : 'Save Transaction' }}
+    </button>
+  </div>
+</div>

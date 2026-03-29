@@ -14,6 +14,16 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// ─── Database initialization ─────────────────────────────────────────────────
+const knexConfig = require('@goodmen/database/knexfile');
+const knex = require('knex')(knexConfig[process.env.NODE_ENV || 'development'] || knexConfig.development);
+const { setDatabase } = require('@goodmen/shared/internal/db');
+setDatabase({ knex });
+
+// ─── Auth middleware (needed for FMCSA safety routes) ────────────────────────
+const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
+const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
+
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -47,11 +57,34 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const scanBridgeRouter = require('@goodmen/shared/routes/scan-bridge');
 const fmcsaRouter = require('@goodmen/shared/routes/fmcsa');
+const fmcsaSafetyRouter = require('@goodmen/shared/routes/fmcsa-safety');
 
 app.use('/api/scan-bridge', scanBridgeRouter);
 app.use('/api/fmcsa', fmcsaRouter);
+app.use('/api/fmcsa/safety', authMiddleware, tenantContextMiddleware, fmcsaSafetyRouter);
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// ─── Bull Queue initialization ───────────────────────────────────────────────
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+let scrapeQueueInstance = null;
+
+async function initScrapeQueue() {
+  if (!process.env.REDIS_URL) {
+    console.warn('[integrations] REDIS_URL not set — FMCSA scrape queue disabled. Dashboard API still works.');
+    return;
+  }
+  try {
+    const { createScrapeQueue } = require('@goodmen/shared/services/fmcsa-scrape-queue');
+    scrapeQueueInstance = createScrapeQueue(knex, REDIS_URL);
+    fmcsaSafetyRouter.initQueue(scrapeQueueInstance);
+    scrapeQueueInstance.initScheduler();
+    console.log('[integrations] FMCSA scrape queue initialized with daily scheduler');
+  } catch (err) {
+    console.error('[integrations] Failed to initialize scrape queue:', err.message);
+    console.error('[integrations] FMCSA scraping will be unavailable. Ensure Redis is running.');
+  }
+}
 
 /**
  * @openapi
@@ -68,10 +101,21 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'goodmen-integrations-service',
+    scrapeQueue: scrapeQueueInstance ? 'connected' : 'unavailable',
     timestamp: new Date().toISOString()
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🔌 Integrations service running on http://localhost:${PORT}`);
+  await initScrapeQueue();
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  if (scrapeQueueInstance) {
+    await scrapeQueueInstance.shutdown();
+  }
+  await knex.destroy();
+  process.exit(0);
 });

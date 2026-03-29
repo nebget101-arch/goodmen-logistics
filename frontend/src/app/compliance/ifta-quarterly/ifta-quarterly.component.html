@@ -28,12 +28,7 @@
     <div class="controls-grid">
       <div class="field">
         <label for="iftaQuarterSelect">Quarter</label>
-        <select id="iftaQuarterSelect" [(ngModel)]="quarter">
-          <option [ngValue]="1">Q1</option>
-          <option [ngValue]="2">Q2</option>
-          <option [ngValue]="3">Q3</option>
-          <option [ngValue]="4">Q4</option>
-        </select>
+        <app-ai-select inputId="iftaQuarterSelect" [(ngModel)]="quarter" [options]="quarterOptions" placeholder="Quarter"></app-ai-select>
       </div>
       <div class="field">
         <label for="iftaTaxYearInput">Tax year</label>
@@ -45,10 +40,7 @@
       </div>
       <div class="field grow">
         <label for="iftaQuarterExistingSelect">Load existing</label>
-        <select id="iftaQuarterExistingSelect" [(ngModel)]="selectedQuarterId" (ngModelChange)="selectQuarter($event)">
-          <option [ngValue]="''">Select a quarter...</option>
-          <option *ngFor="let q of quarters" [ngValue]="q.id">Q{{ q.quarter }} {{ q.tax_year }} • {{ q.filing_entity_name || 'Entity' }} • {{ q.status }}</option>
-        </select>
+        <app-ai-select inputId="iftaQuarterExistingSelect" [(ngModel)]="selectedQuarterId" (ngModelChange)="selectQuarter($event)" [options]="existingQuarterOptions" [allowEmpty]="true" emptyLabel="Select a quarter..." placeholder="Existing quarter"></app-ai-select>
       </div>
     </div>
     <div class="control-actions">

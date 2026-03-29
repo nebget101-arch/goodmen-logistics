@@ -1,4 +1,257 @@
-<section class="placeholder">
-  <h3>Toll Import Wizard</h3>
-  <p>Phase 1 scaffold complete. Upload, preview, map, validate, and commit steps are queued for Phase 2/3.</p>
+<!-- ─── Progress Rail ──────────────────────────────────────────────────────── -->
+<div class="wizard-progress">
+  <div *ngFor="let s of steps; let i = index"
+       class="step-dot"
+       [class.active]="s === currentStep"
+       [class.completed]="i < stepIndex"
+       (click)="goToStep(s)">
+    <span class="dot">{{ i + 1 }}</span>
+    <span class="label">{{ stepLabels[s] }}</span>
+  </div>
+</div>
+
+<!-- ─── Step 1: Upload ───────────────────────────────────────────────────────── -->
+<section *ngIf="currentStep === 'upload'" class="wizard-panel">
+  <h3>Upload Toll CSV</h3>
+
+  <div class="form-row" *ngIf="accounts.length">
+    <label>Toll Account (optional)</label>
+    <select [(ngModel)]="selectedAccountId" class="form-control">
+      <option value="">— None —</option>
+      <option *ngFor="let a of accounts" [value]="a.id">{{ a.display_name }} ({{ a.provider_name }})</option>
+    </select>
+  </div>
+
+  <div class="drop-zone"
+       [class.drag-over]="dragOver"
+       (dragover)="onDragOver($event)"
+       (dragleave)="onDragLeave()"
+       (drop)="onDrop($event)">
+    <ng-container *ngIf="!selectedFile">
+      <span class="material-symbols-outlined icon-lg">upload_file</span>
+      <p>Drag & drop your CSV or Excel file here</p>
+      <label class="browse-btn">
+        Browse Files
+        <input type="file" accept=".csv,.xlsx,.xls,.txt" (change)="onFileChange($event)" hidden>
+      </label>
+      <small>CSV, XLSX &middot; Max 10 MB</small>
+    </ng-container>
+    <ng-container *ngIf="selectedFile">
+      <span class="material-symbols-outlined icon-lg success">check_circle</span>
+      <p class="file-name">{{ selectedFile.name }}</p>
+      <small>{{ formatFileSize(selectedFile.size) }}</small>
+      <label class="browse-btn secondary">
+        Change File
+        <input type="file" accept=".csv,.xlsx,.xls,.txt" (change)="onFileChange($event)" hidden>
+      </label>
+    </ng-container>
+  </div>
+
+  <div class="error-banner" *ngIf="uploadError">{{ uploadError }}</div>
+
+  <div class="wizard-footer">
+    <button class="btn btn-primary" [disabled]="!selectedFile || uploadLoading" (click)="doUpload()">
+      <span *ngIf="uploadLoading" class="spinner"></span>
+      {{ uploadLoading ? 'Uploading...' : 'Upload & Parse' }}
+    </button>
+  </div>
+</section>
+
+<!-- ─── Step 2: AI Analysis ───────────────────────────────────────────────────── -->
+<section *ngIf="currentStep === 'ai_analyze'" class="wizard-panel">
+  <h3>AI Column Detection</h3>
+
+  <!-- Loading state -->
+  <div class="ai-loading" *ngIf="aiLoading">
+    <span class="spinner spinner-lg"></span>
+    <p>AI is analyzing your CSV format...</p>
+    <small>Detecting column mappings automatically</small>
+  </div>
+
+  <!-- AI Results -->
+  <ng-container *ngIf="!aiLoading && aiResult?.success">
+    <!-- Overall confidence banner -->
+    <div class="confidence-banner"
+         [class.high]="getConfidenceLevel(aiResult!.overallConfidence) === 'high'"
+         [class.medium]="getConfidenceLevel(aiResult!.overallConfidence) === 'medium'"
+         [class.low]="getConfidenceLevel(aiResult!.overallConfidence) === 'low'">
+      <span class="material-symbols-outlined">psychology</span>
+      <span>Overall confidence: <strong>{{ getConfidenceLabel(aiResult!.overallConfidence) }}</strong></span>
+    </div>
+
+    <!-- AI mapping table -->
+    <div class="ai-map-table" *ngIf="aiMappedFields.length">
+      <div class="ai-map-row" *ngFor="let m of aiMappedFields">
+        <span class="ai-field-label">{{ m.label }}</span>
+        <span class="material-symbols-outlined arrow">arrow_forward</span>
+        <span class="ai-raw-header">{{ m.rawHeader }}</span>
+        <span class="confidence-badge"
+              [class.high]="getConfidenceLevel(m.confidence) === 'high'"
+              [class.medium]="getConfidenceLevel(m.confidence) === 'medium'"
+              [class.low]="getConfidenceLevel(m.confidence) === 'low'">
+          {{ getConfidenceLabel(m.confidence) }}
+        </span>
+      </div>
+    </div>
+
+    <p class="hint" *ngIf="!aiMappedFields.length">No column mappings detected. Please map manually.</p>
+  </ng-container>
+
+  <!-- Error / fallback -->
+  <div class="warn-banner" *ngIf="!aiLoading && aiError">
+    {{ aiError }}
+  </div>
+
+  <div class="wizard-footer" *ngIf="!aiLoading">
+    <button class="btn btn-ghost" (click)="skipAiMapping()">Skip to Manual Mapping</button>
+    <button class="btn btn-primary" *ngIf="aiResult?.success && aiMappedFields.length" (click)="acceptAiMapping()">
+      Accept AI Mapping
+    </button>
+    <button class="btn btn-primary" *ngIf="!aiResult?.success || !aiMappedFields.length" (click)="skipAiMapping()">
+      Map Manually
+    </button>
+  </div>
+</section>
+
+<!-- ─── Step 3: Map Columns ──────────────────────────────────────────────────── -->
+<section *ngIf="currentStep === 'map'" class="wizard-panel">
+  <h3>Map Columns</h3>
+  <p class="hint">Map your CSV columns to toll transaction fields. AI-detected mappings are pre-filled.</p>
+
+  <!-- Profile load/save -->
+  <div class="profile-row">
+    <select [(ngModel)]="selectedProfileId" class="form-control profile-select" (ngModelChange)="applyProfile()">
+      <option value="">— Load Profile —</option>
+      <option *ngFor="let p of profiles" [value]="p.id">{{ p.profile_name }}</option>
+    </select>
+    <input [(ngModel)]="saveProfileName" placeholder="Save as..." class="form-control profile-input">
+    <button class="btn btn-sm" [disabled]="!saveProfileName.trim()" (click)="saveProfile()">Save</button>
+  </div>
+
+  <div class="map-grid">
+    <div class="map-row" *ngFor="let f of normalizedFields">
+      <div class="field-label">
+        {{ f.label }}
+        <span class="badge" [class.required]="f.required">{{ f.required ? 'Required' : 'Optional' }}</span>
+      </div>
+      <span class="material-symbols-outlined arrow">arrow_forward</span>
+      <select [(ngModel)]="columnMap[f.key]" class="form-control">
+        <option value="">— Skip —</option>
+        <option *ngFor="let h of headerOptions" [value]="h.value">{{ h.label }}</option>
+      </select>
+      <span class="material-symbols-outlined status-icon"
+            [class.mapped]="columnMap[f.key]"
+            [class.error]="f.required && !columnMap[f.key]">
+        {{ columnMap[f.key] ? 'check_circle' : (f.required ? 'error' : 'remove') }}
+      </span>
+      <span class="confidence-badge inline"
+            *ngIf="getFieldConfidence(f.key) as fc"
+            [class.high]="getConfidenceLevel(fc.confidence) === 'high'"
+            [class.medium]="getConfidenceLevel(fc.confidence) === 'medium'"
+            [class.low]="getConfidenceLevel(fc.confidence) === 'low'">
+        AI {{ getConfidenceLabel(fc.confidence) }}
+      </span>
+    </div>
+  </div>
+
+  <div class="warn-banner" *ngIf="requiredUnmapped.length">
+    Unmapped required fields: {{ requiredUnmapped.join(', ') }}
+  </div>
+
+  <div class="wizard-footer">
+    <button class="btn btn-ghost" (click)="goBack()">Back</button>
+    <button class="btn btn-primary" [disabled]="!canProceedFromMap" (click)="goToPreview()">Preview Rows</button>
+  </div>
+</section>
+
+<!-- ─── Step 3: Preview ──────────────────────────────────────────────────────── -->
+<section *ngIf="currentStep === 'preview'" class="wizard-panel">
+  <h3>Preview Mapped Data</h3>
+
+  <div class="summary-chips">
+    <span class="chip">{{ uploadResult?.totalRows || 0 }} rows</span>
+    <span class="chip">{{ mappedFields.length }} mapped fields</span>
+    <span class="chip">{{ uploadResult?.fileName }}</span>
+  </div>
+
+  <div class="preview-table-wrap">
+    <table class="preview-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th *ngFor="let f of mappedFields">{{ f.label }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of allRows; let i = index">
+          <td>{{ i + 1 }}</td>
+          <td *ngFor="let f of mappedFields">{{ getMappedValue(row, f.key) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="wizard-footer">
+    <button class="btn btn-ghost" (click)="goBack()">Back</button>
+    <button class="btn btn-primary" (click)="goToCommit()">Proceed to Import</button>
+  </div>
+</section>
+
+<!-- ─── Step 4: Commit ───────────────────────────────────────────────────────── -->
+<section *ngIf="currentStep === 'commit'" class="wizard-panel">
+  <h3>Confirm Import</h3>
+
+  <div class="confirm-box">
+    <div class="confirm-row">
+      <span>File</span>
+      <strong>{{ uploadResult?.fileName }}</strong>
+    </div>
+    <div class="confirm-row">
+      <span>Rows to import</span>
+      <strong class="amber">{{ uploadResult?.totalRows }}</strong>
+    </div>
+    <div class="confirm-row" *ngIf="selectedAccountId">
+      <span>Toll Account</span>
+      <strong>{{ getAccountName(selectedAccountId) }}</strong>
+    </div>
+  </div>
+
+  <div class="error-banner" *ngIf="commitError">{{ commitError }}</div>
+
+  <div class="wizard-footer">
+    <button class="btn btn-ghost" (click)="goBack()">Back</button>
+    <button class="btn btn-primary btn-amber" [disabled]="commitLoading" (click)="doCommit()">
+      <span *ngIf="commitLoading" class="spinner"></span>
+      {{ commitLoading ? 'Importing...' : 'Import Now' }}
+    </button>
+  </div>
+</section>
+
+<!-- ─── Step 5: Result ───────────────────────────────────────────────────────── -->
+<section *ngIf="currentStep === 'result'" class="wizard-panel result-panel">
+  <span class="material-symbols-outlined icon-xl success">check_circle</span>
+  <h3>Import Complete!</h3>
+
+  <div class="result-grid" *ngIf="commitResult">
+    <div class="result-card success">
+      <span class="big-num">{{ commitResult.imported }}</span>
+      <span>Imported</span>
+    </div>
+    <div class="result-card warn">
+      <span class="big-num">{{ commitResult.duplicates }}</span>
+      <span>Duplicates</span>
+    </div>
+    <div class="result-card error">
+      <span class="big-num">{{ commitResult.errors }}</span>
+      <span>Errors</span>
+    </div>
+    <div class="result-card muted" *ngIf="commitResult.exceptions">
+      <span class="big-num">{{ commitResult.exceptions }}</span>
+      <span>Exceptions</span>
+    </div>
+  </div>
+
+  <div class="wizard-footer">
+    <button class="btn btn-ghost" (click)="startOver()">Import Another</button>
+  </div>
 </section>

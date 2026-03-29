@@ -1,4 +1,112 @@
-<section class="placeholder">
-  <h3>Toll Exceptions</h3>
-  <p>Phase 1 scaffold complete. Exception queue resolution and reprocess actions are planned next.</p>
-</section>
+<!-- Filters -->
+<div class="filters-row">
+  <label class="filter-field">
+    Status
+    <select [(ngModel)]="filterStatus" (change)="applyFilter()">
+      <option *ngFor="let opt of statusOptions" [value]="opt.value">{{ opt.label }}</option>
+    </select>
+  </label>
+</div>
+
+<div *ngIf="loading" class="loading-msg">Loading exceptions...</div>
+<div *ngIf="error" class="error">{{ error }}</div>
+
+<div class="table-wrap" *ngIf="!loading && !error">
+  <table class="exc-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Provider</th>
+        <th>Plaza</th>
+        <th>Amount</th>
+        <th>Truck (raw)</th>
+        <th>Driver (raw)</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let exc of rows">
+        <td>{{ formatDate(exc.transaction_date) }}</td>
+        <td>{{ exc.provider_name || '--' }}</td>
+        <td>{{ exc.plaza_name || '--' }}</td>
+        <td class="amount-cell">{{ formatCurrency(exc.amount) }}</td>
+        <td>{{ exc.unit_number_raw || '--' }}</td>
+        <td>{{ exc.driver_name_raw || '--' }}</td>
+        <td><span class="type-badge">{{ exc.exception_type }}</span></td>
+        <td>
+          <span class="status-badge" [ngClass]="'status-' + exc.resolution_status">{{ exc.resolution_status }}</span>
+        </td>
+        <td>
+          <button
+            *ngIf="exc.resolution_status === 'open'"
+            type="button"
+            class="btn btn-sm btn-primary"
+            (click)="openResolve(exc)"
+          >Resolve</button>
+        </td>
+      </tr>
+      <tr *ngIf="rows.length === 0">
+        <td colspan="9" class="empty">No exceptions found.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination" *ngIf="!loading && total > 0">
+  <span class="page-info">{{ (page - 1) * pageSize + 1 }}–{{ page * pageSize < total ? page * pageSize : total }} of {{ total }}</span>
+  <button type="button" class="btn-icon" [disabled]="page <= 1" (click)="prevPage()">
+    <span class="material-symbols-outlined">chevron_left</span>
+  </button>
+  <span class="page-num">{{ page }} / {{ maxPage }}</span>
+  <button type="button" class="btn-icon" [disabled]="page >= maxPage" (click)="nextPage()">
+    <span class="material-symbols-outlined">chevron_right</span>
+  </button>
+</div>
+
+<!-- Toast -->
+<div *ngIf="toast" class="toast" [class.toast-error]="toastType === 'error'" [class.toast-success]="toastType === 'success'">
+  {{ toast }}
+</div>
+
+<!-- Resolution Dialog -->
+<div class="dialog-backdrop" *ngIf="showResolveDialog" (click)="closeResolveDialog()">
+  <div class="dialog" (click)="$event.stopPropagation()">
+    <div class="dialog-header">
+      <h3>Resolve Exception</h3>
+      <button type="button" class="btn-icon dialog-close" (click)="closeResolveDialog()">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div class="dialog-body" *ngIf="resolvingException">
+      <div class="detail-row">
+        <span class="detail-label">Type:</span>
+        <span>{{ resolvingException.exception_type }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Message:</span>
+        <span>{{ resolvingException.exception_message || '--' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Date:</span>
+        <span>{{ formatDate(resolvingException.transaction_date) }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Amount:</span>
+        <span>{{ formatCurrency(resolvingException.amount) }}</span>
+      </div>
+      <label class="form-label">
+        Resolution Notes
+        <textarea [(ngModel)]="resolveNotes" rows="3" placeholder="Describe resolution action..."></textarea>
+      </label>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-secondary" (click)="resolve('ignored')" [disabled]="saving">Discard</button>
+      <button type="button" class="btn btn-primary" (click)="resolve('resolved')" [disabled]="saving">
+        {{ saving ? 'Saving...' : 'Resolve' }}
+      </button>
+    </div>
+  </div>
+</div>

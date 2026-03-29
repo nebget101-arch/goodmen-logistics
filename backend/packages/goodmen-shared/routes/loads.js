@@ -68,20 +68,30 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
   const deliveryZip = (lastDelivery?.zip || '').toString().trim() || null;
 
   let prevZip = null;
+  let prevCity = null;
+  let prevState = null;
   if (loadRow?.driver_id) {
     try {
+      // Find the effective date of the current load (earliest pickup stop or load created_at)
+      const currentLoadDate = firstPickup?.stop_date || loadRow.pickup_date || loadRow.created_at || null;
+
       const prevResult = await exec(
-        `SELECT s.zip
+        `SELECT s.zip, s.city, s.state
          FROM loads l
          JOIN load_stops s ON s.load_id = l.id
          WHERE l.driver_id = $1
            AND l.id <> $2
            AND s.stop_type = 'DELIVERY'
-         ORDER BY COALESCE(s.stop_date, l.delivery_date, l.completed_date, l.created_at) DESC
+           AND COALESCE(s.stop_date, l.completed_date, l.created_at) <=
+               COALESCE($3::date, l.created_at)
+         ORDER BY COALESCE(s.stop_date, l.completed_date, l.created_at) DESC,
+                  l.created_at DESC
          LIMIT 1`,
-        [loadRow.driver_id, loadId]
+        [loadRow.driver_id, loadId, currentLoadDate]
       );
       prevZip = (prevResult.rows[0]?.zip || '').toString().trim() || null;
+      prevCity = (prevResult.rows[0]?.city || '').toString().trim() || null;
+      prevState = (prevResult.rows[0]?.state || '').toString().trim() || null;
     } catch (err) {
       console.error('computeTripMetrics prevZip lookup failed', err.message || err);
       prevZip = null;
@@ -104,6 +114,8 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
 
   return {
     prev_zip: prevZip,
+    prev_delivery_city: prevCity,
+    prev_delivery_state: prevState,
     pickup_zip: pickupZip,
     delivery_zip: deliveryZip,
     empty_miles: emptyMiles,
@@ -285,8 +297,8 @@ async function getLoadDetail(clientOrQuery, loadId, context = null) {
   const deliveries = stopsRows.filter((s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'DELIVERY');
   const firstPickup = pickups[0];
   const lastDelivery = deliveries.length ? deliveries[deliveries.length - 1] : null;
-  const pickupDate = firstPickup?.stop_date ?? loadRow.pickup_date ?? null;
-  const deliveryDate = lastDelivery?.stop_date ?? loadRow.delivery_date ?? null;
+  const pickupDate = firstPickup?.stop_date ?? null;
+  const deliveryDate = lastDelivery?.stop_date ?? null;
   return {
     ...loadRow,
     ...tripMetrics,
@@ -392,15 +404,15 @@ router.get('/', async (req, res) => {
       params.push(dateTo);
       const idxTo = params.length;
       where.push(`(
-        (COALESCE(pickup.stop_date, l.pickup_date)::date >= $${idxFrom} AND COALESCE(pickup.stop_date, l.pickup_date)::date <= $${idxTo})
-        OR (COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date >= $${idxFrom} AND COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date <= $${idxTo})
+        (pickup.stop_date::date >= $${idxFrom} AND pickup.stop_date::date <= $${idxTo})
+        OR (COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${idxFrom} AND COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${idxTo})
       )`);
     } else if (dateFrom) {
       params.push(dateFrom);
-      where.push(`(COALESCE(pickup.stop_date, l.pickup_date)::date >= $${params.length} OR COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date >= $${params.length})`);
+      where.push(`(pickup.stop_date::date >= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${params.length})`);
     } else if (dateTo) {
       params.push(dateTo);
-      where.push(`(COALESCE(pickup.stop_date, l.pickup_date)::date <= $${params.length} OR COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)::date <= $${params.length})`);
+      where.push(`(pickup.stop_date::date <= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${params.length})`);
     }
 
     const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -441,10 +453,10 @@ router.get('/', async (req, res) => {
     params.push(offset);
     const sortMap = {
       load_number: 'l.load_number',
-      pickup_date: 'COALESCE(pickup.stop_date, l.pickup_date)',
+      pickup_date: 'pickup.stop_date',
       rate: 'l.rate',
       // Sort "Completed" by delivery date when present, then completed_date, then created_at
-      completed_date: 'COALESCE(delivery.stop_date, l.delivery_date, l.completed_date, l.created_at)',
+      completed_date: 'COALESCE(delivery.stop_date, l.completed_date, l.created_at)',
       created_at: 'l.created_at'
     };
     const orderBy = sortMap[sortBy] || 'l.created_at';
@@ -460,8 +472,8 @@ router.get('/', async (req, res) => {
         UPPER(l.billing_status::text) as billing_status,
         l.rate,
         l.completed_date,
-        COALESCE(pickup.stop_date, l.pickup_date) as pickup_date,
-        COALESCE(delivery.stop_date, l.delivery_date) as delivery_date,
+        pickup.stop_date as pickup_date,
+        delivery.stop_date as delivery_date,
         pickup.city as pickup_city,
         pickup.state as pickup_state,
         pickup.zip as pickup_zip,
@@ -576,9 +588,8 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
         tenant_id, operating_entity_id,
         load_number, status, billing_status, dispatcher_user_id,
         driver_id, truck_id, trailer_id, broker_id, broker_name,
-        po_number, rate, notes, completed_date,
-        pickup_location, delivery_location, pickup_date, delivery_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        po_number, rate, notes, completed_date
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
       RETURNING *`,
       [
         tenantId,
@@ -595,11 +606,7 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
         normalizeNullable(body.poNumber),
         normalizeNullable(body.rate) || 0,
         normalizeNullable(body.notes),
-        normalizeNullable(body.completedDate),
-        pickupLocation,
-        deliveryLocation,
-        normalizeNullable(pickupDate),
-        normalizeNullable(deliveryDate)
+        normalizeNullable(body.completedDate)
       ]
     );
 
@@ -613,7 +620,7 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
         [
           loadId,
           stopType,
-          normalizeNullable(stop.date || stop.stopDate),
+          normalizeNullable(stop.date || stop.stopDate || stop.stop_date),
           normalizeNullable(stop.city),
           normalizeNullable(stop.state),
           normalizeNullable(stop.zip),
@@ -741,17 +748,15 @@ async function processSingleRateConfirmation(file, req, dispatcherUserId) {
         tenant_id, operating_entity_id,
         load_number, status, billing_status, dispatcher_user_id,
         driver_id, truck_id, trailer_id, broker_id, broker_name,
-        po_number, rate, notes, completed_date,
-        pickup_location, delivery_location, pickup_date, delivery_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        po_number, rate, notes, completed_date
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
       RETURNING *`,
       [
         req.context?.tenantId || null,
         req.context?.operatingEntityId || null,
         loadNumber, 'DRAFT', 'PENDING', dispatcherUserId,
         null, null, null, brokerId, finalBrokerName,
-        poValue, data.rate || 0, null, null,
-        pickupLocation, deliveryLocation, normalizeNullable(pickupDate), normalizeNullable(deliveryDate)
+        poValue, data.rate || 0, null, null
       ]
     );
     loadId = insertResult.rows[0].id;
@@ -836,22 +841,147 @@ router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), uplo
 });
 
 // PATCH /api/loads/:id/approve-draft (admin, dispatch only; DRAFT -> DISPATCHED)
+// Accepts optional body with load fields (rate, broker, stops, driver, notes, etc.)
+// to persist form changes AND transition status in a single transaction.
 router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const client = await getClient();
   try {
-    const result = await query('SELECT id, status FROM loads WHERE id = $1', [req.params.id]);
-    if (!result.rows.length) return res.status(404).json({ success: false, error: 'Load not found' });
+    await client.query('BEGIN');
+
+    const result = await client.query('SELECT id, status FROM loads WHERE id = $1', [req.params.id]);
+    if (!result.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Load not found' });
+    }
     if (normalizeEnum(result.rows[0].status) !== 'DRAFT') {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, error: 'Only draft loads can be approved' });
     }
-    await query(
+
+    const body = req.body || {};
+    const hasBody = Object.keys(body).length > 0;
+
+    // If body contains load fields, apply them before transitioning status
+    if (hasBody) {
+      const updates = [];
+      const values = [];
+      let idx = 1;
+      const billingStatus = body.billingStatus ? normalizeEnum(body.billingStatus) : null;
+      if (billingStatus && !BILLING_STATUSES.includes(billingStatus)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'Invalid billing status' });
+      }
+
+      const fieldMap = {
+        loadNumber: 'load_number',
+        billingStatus: 'billing_status',
+        dispatcherUserId: 'dispatcher_user_id',
+        driverId: 'driver_id',
+        truckId: 'truck_id',
+        trailerId: 'trailer_id',
+        brokerId: 'broker_id',
+        brokerName: 'broker_name',
+        poNumber: 'po_number',
+        rate: 'rate',
+        notes: 'notes',
+        completedDate: 'completed_date'
+      };
+
+      Object.keys(fieldMap).forEach(key => {
+        if (body[key] !== undefined) {
+          const value = key === 'billingStatus' ? billingStatus : normalizeNullable(body[key]);
+          updates.push(`${fieldMap[key]} = $${idx}`);
+          values.push(value);
+          idx += 1;
+        }
+      });
+
+      if (updates.length > 0) {
+        values.push(req.params.id);
+        await client.query(
+          `UPDATE loads SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${idx}`,
+          values
+        );
+      }
+
+      // Handle stops update
+      const stopsInput = Array.isArray(body.stops) ? body.stops : (body.pickup || body.delivery ? buildStopsFromBody(body) : null);
+      if (stopsInput) {
+        const stopErrors = validateStops(stopsInput, true);
+        if (stopErrors.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ success: false, error: 'Invalid stops', details: stopErrors });
+        }
+
+        const pickups = stopsInput.filter((s) => normalizeEnum(s.stopType || s.stop_type) === 'PICKUP');
+        const deliveries = stopsInput.filter((s) => normalizeEnum(s.stopType || s.stop_type) === 'DELIVERY');
+        const firstPickup = pickups[0];
+        const lastDelivery = deliveries.length ? deliveries[deliveries.length - 1] : null;
+        const loadPickupDate = firstPickup ? (firstPickup.date || firstPickup.stopDate || firstPickup.stop_date || null) : null;
+        const loadDeliveryDate = lastDelivery ? (lastDelivery.date || lastDelivery.stopDate || lastDelivery.stop_date || null) : null;
+
+        await client.query('DELETE FROM load_stops WHERE load_id = $1', [req.params.id]);
+        for (const stop of stopsInput) {
+          const stopType = normalizeEnum(stop.stopType || stop.stop_type);
+          const stopDate = stop.date || stop.stopDate || stop.stop_date;
+          await client.query(
+            `INSERT INTO load_stops (
+              load_id, stop_type, stop_date, city, state, zip, address1, address2, sequence
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [
+              req.params.id,
+              stopType,
+              normalizeNullable(stopDate),
+              normalizeNullable(stop.city),
+              normalizeNullable(stop.state),
+              normalizeNullable(stop.zip),
+              normalizeNullable(stop.address1),
+              normalizeNullable(stop.address2),
+              normalizeNullable(stop.sequence) || 1
+            ]
+          );
+        }
+
+        if (loadPickupDate != null || loadDeliveryDate != null) {
+          const loadDateUpdates = [];
+          const loadDateValues = [];
+          let loadDateIdx = 1;
+          if (loadPickupDate != null) {
+            loadDateUpdates.push(`pickup_date = $${loadDateIdx}`);
+            loadDateValues.push(normalizeNullable(loadPickupDate));
+            loadDateIdx += 1;
+          }
+          if (loadDeliveryDate != null) {
+            loadDateUpdates.push(`delivery_date = $${loadDateIdx}`);
+            loadDateValues.push(normalizeNullable(loadDeliveryDate));
+            loadDateIdx += 1;
+          }
+          if (loadDateUpdates.length > 0) {
+            loadDateValues.push(req.params.id);
+            await client.query(
+              `UPDATE loads SET ${loadDateUpdates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${loadDateIdx}`,
+              loadDateValues
+            );
+          }
+        }
+      }
+    }
+
+    // Transition status to DISPATCHED
+    await client.query(
       `UPDATE loads SET status = 'DISPATCHED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [req.params.id]
     );
-    const data = await getLoadDetail(query, req.params.id);
+
+    await client.query('COMMIT');
+    const data = await getLoadDetail(client, req.params.id);
     res.json({ success: true, data });
   } catch (error) {
-    dtLogger.error('loads_approve_draft_failed', error, { loadId: req.params.id });
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_approve_draft_failed', error, { loadId: req.params.id, body: req.body });
     res.status(500).json({ success: false, error: 'Failed to approve draft' });
+  } finally {
+    client.release();
   }
 });
 
@@ -979,29 +1109,16 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
           ]
         );
       }
-      if (loadPickupDate != null || loadDeliveryDate != null) {
-        const loadDateUpdates = [];
-        const loadDateValues = [];
-        let loadDateIdx = 1;
-        if (loadPickupDate != null) {
-          loadDateUpdates.push(`pickup_date = $${loadDateIdx}`);
-          loadDateValues.push(normalizeNullable(loadPickupDate));
-          loadDateIdx += 1;
-        }
-        if (loadDeliveryDate != null) {
-          loadDateUpdates.push(`delivery_date = $${loadDateIdx}`);
-          loadDateValues.push(normalizeNullable(loadDeliveryDate));
-          loadDateIdx += 1;
-        }
-        if (loadDateUpdates.length > 0) {
-          loadDateValues.push(req.params.id);
-          const whereParam = loadDateIdx;
-          await client.query(
-            `UPDATE loads SET ${loadDateUpdates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${whereParam} AND tenant_id = $${whereParam + 1} AND operating_entity_id = $${whereParam + 2}`,
-            [...loadDateValues, req.context?.tenantId || null, req.context?.operatingEntityId || null]
-          );
-        }
-      }
+      // Pickup/delivery dates are stored in load_stops — no denormalized columns on loads table
+    }
+
+    // Auto-set completed_date when status transitions to DELIVERED or COMPLETED (if not already set)
+    if (status && ['DELIVERED', 'COMPLETED'].includes(status)) {
+      await client.query(
+        `UPDATE loads SET completed_date = COALESCE(completed_date, delivery_date, CURRENT_DATE), updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND completed_date IS NULL`,
+        [req.params.id]
+      );
     }
 
     await client.query('COMMIT');

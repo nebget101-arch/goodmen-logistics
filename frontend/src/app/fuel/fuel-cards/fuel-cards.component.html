@@ -1,7 +1,10 @@
-<div class="cards-page">
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ACCOUNTS VIEW (primary)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="cards-page" *ngIf="viewMode === 'accounts'">
   <div class="page-header">
     <h1><span class="material-symbols-outlined">credit_card</span> Fuel Card Accounts</h1>
-    <button class="btn-primary" (click)="openCreate()">
+    <button class="btn-primary" (click)="openCreateAccount()">
       <span class="material-symbols-outlined">add</span> Add Account
     </button>
   </div>
@@ -11,40 +14,42 @@
   </div>
 
   <div class="loading-state" *ngIf="loading">
-    <div class="spinner"></div> Loading fuel cards…
+    <div class="spinner"></div> Loading accounts…
   </div>
 
-  <div class="table-wrap" *ngIf="!loading && cards.length > 0">
+  <div class="table-wrap" *ngIf="!loading && accounts.length > 0">
     <table class="cards-table">
       <thead>
         <tr>
-          <th>Display Name</th>
-          <th>Provider</th>
-          <th>Account</th>
-          <th>Import Method</th>
+          <th>Provider Name</th>
+          <th>Account Number</th>
+          <th># Cards</th>
+          <th># Assigned Drivers</th>
           <th>Status</th>
-          <th>Created</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let card of cards">
+        <tr *ngFor="let account of accounts" class="account-row" (click)="selectAccount(account)">
           <td>
-            <div class="title-cell">{{ card.display_name }}</div>
-            <div class="notes" *ngIf="card.notes">{{ card.notes }}</div>
+            <div class="title-cell">{{ account.display_name }}</div>
+            <div class="provider-sub">{{ account.provider_name }}</div>
           </td>
-          <td>{{ card.provider_name }}</td>
-          <td>{{ card.account_number_masked || '—' }}</td>
-          <td class="mono">{{ card.import_method }}</td>
+          <td class="mono">{{ account.account_number_masked || '----' }}</td>
           <td>
-            <span class="pill" [ngClass]="statusClass(card.status)">{{ card.status }}</span>
+            <span class="badge-count">{{ activeCardCount(account) }}</span>
           </td>
-          <td class="date-cell">{{ card.created_at | date:'medium' }}</td>
+          <td>
+            <span class="badge-count badge-drivers">{{ assignedDriverCountMap[account.id] || 0 }}</span>
+          </td>
+          <td>
+            <span class="pill" [ngClass]="statusClass(account.status)">{{ account.status }}</span>
+          </td>
           <td class="actions-cell">
-            <button class="action-btn" (click)="openEdit(card)">
+            <button class="action-btn" (click)="editAccountEvent(account, $event)" title="Edit Account">
               <span class="material-symbols-outlined">edit</span>
             </button>
-            <button class="action-btn danger" *ngIf="card.status === 'active'" (click)="deactivate(card)">
+            <button class="action-btn danger" *ngIf="account.status === 'active'" (click)="deactivateAccount(account, $event)" title="Deactivate">
               <span class="material-symbols-outlined">block</span>
             </button>
           </td>
@@ -53,24 +58,136 @@
     </table>
   </div>
 
-  <div class="empty-state" *ngIf="!loading && cards.length === 0">
+  <div class="empty-state" *ngIf="!loading && accounts.length === 0">
     <span class="material-symbols-outlined empty-icon">credit_card</span>
     <p>No fuel card accounts yet.</p>
-    <button class="btn-primary" (click)="openCreate()">Add first account</button>
+    <button class="btn-primary" (click)="openCreateAccount()">Add first account</button>
   </div>
 </div>
 
-<!-- Modal -->
-<div class="modal-overlay" *ngIf="showModal" (click)="closeModal()"></div>
-<div class="modal" *ngIf="showModal">
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     CARD DETAIL VIEW (under selected account)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="cards-page" *ngIf="viewMode === 'cards'">
+  <!-- Breadcrumb -->
+  <div class="breadcrumb">
+    <button class="breadcrumb-link" (click)="backToAccounts()">
+      <span class="material-symbols-outlined">arrow_back</span> Fuel Cards
+    </button>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">{{ selectedAccount?.display_name }}</span>
+  </div>
+
+  <div class="page-header">
+    <h1>
+      <span class="material-symbols-outlined">credit_card</span>
+      {{ selectedAccount?.display_name }}
+      <span class="header-sub">{{ selectedAccount?.provider_name }}</span>
+    </h1>
+    <button class="btn-primary" (click)="openCreateCard()">
+      <span class="material-symbols-outlined">add</span> Add Card
+    </button>
+  </div>
+
+  <!-- Account summary bar -->
+  <div class="summary-bar" *ngIf="selectedAccount">
+    <div class="summary-item">
+      <span class="summary-label">Account #</span>
+      <span class="summary-value mono">{{ selectedAccount.account_number_masked || '----' }}</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-label">Import Method</span>
+      <span class="summary-value">{{ selectedAccount.import_method }}</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-label">Total Cards</span>
+      <span class="summary-value">{{ cards.length }}</span>
+    </div>
+    <div class="summary-item">
+      <span class="summary-label">Status</span>
+      <span class="pill" [ngClass]="statusClass(selectedAccount.status)">{{ selectedAccount.status }}</span>
+    </div>
+  </div>
+
+  <div class="error-banner" *ngIf="error">
+    <span class="material-symbols-outlined">error</span> {{ error }}
+  </div>
+
+  <div class="loading-state" *ngIf="cardsLoading">
+    <div class="spinner"></div> Loading cards…
+  </div>
+
+  <div class="table-wrap" *ngIf="!cardsLoading && cards.length > 0">
+    <table class="cards-table">
+      <thead>
+        <tr>
+          <th>Card Number</th>
+          <th>Last 4</th>
+          <th>Assigned Driver</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let card of cards">
+          <td class="mono">{{ card.card_number_masked }}</td>
+          <td class="mono last4-cell">{{ card.card_number_last4 || '—' }}</td>
+          <td class="driver-cell">
+            <ng-container *ngIf="cardAssignmentMap[card.id]; else noDriver">
+              {{ driverName(cardAssignmentMap[card.id].driver_id) }}
+            </ng-container>
+            <ng-template #noDriver><span class="muted">Unassigned</span></ng-template>
+          </td>
+          <td>
+            <span class="pill" [ngClass]="statusClass(card.status)">{{ card.status }}</span>
+          </td>
+          <td class="date-cell">{{ card.created_at | date:'mediumDate' }}</td>
+          <td class="actions-cell">
+            <!-- Assign / Reassign / Revoke -->
+            <ng-container *ngIf="!cardAssignmentMap[card.id]">
+              <button class="action-btn assign-btn" (click)="openAssignDialog(card)" title="Assign Driver">
+                <span class="material-symbols-outlined">person_add</span>
+              </button>
+            </ng-container>
+            <ng-container *ngIf="cardAssignmentMap[card.id]">
+              <button class="action-btn" (click)="openAssignDialog(card)" title="Reassign Driver">
+                <span class="material-symbols-outlined">swap_horiz</span>
+              </button>
+              <button class="action-btn danger" (click)="revokeAssignment(card)" title="Revoke Assignment">
+                <span class="material-symbols-outlined">person_remove</span>
+              </button>
+            </ng-container>
+            <!-- History -->
+            <button class="action-btn" (click)="openHistory(card)" title="Assignment History">
+              <span class="material-symbols-outlined">history</span>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" *ngIf="!cardsLoading && cards.length === 0">
+    <span class="material-symbols-outlined empty-icon">sim_card</span>
+    <p>No cards under this account yet.</p>
+    <button class="btn-primary" (click)="openCreateCard()">Add first card</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     CREATE / EDIT ACCOUNT MODAL
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" *ngIf="showAccountModal" (click)="closeAccountModal()"></div>
+<div class="modal" *ngIf="showAccountModal">
   <div class="modal-header">
-    <h3>{{ editing ? 'Edit Fuel Card Account' : 'Add Fuel Card Account' }}</h3>
-    <button class="close-btn" (click)="closeModal()">
+    <h3>{{ editingAccount ? 'Edit Fuel Card Account' : 'Add Fuel Card Account' }}</h3>
+    <button class="close-btn" (click)="closeAccountModal()">
       <span class="material-symbols-outlined">close</span>
     </button>
   </div>
 
-  <form [formGroup]="form" (ngSubmit)="save()" class="form-grid">
+  <form [formGroup]="accountForm" (ngSubmit)="saveAccount()" class="form-grid">
     <label>
       Provider Name
       <input type="text" formControlName="provider_name" />
@@ -88,19 +205,12 @@
 
     <label>
       Import Method
-      <select formControlName="import_method">
-        <option value="csv_upload">CSV Upload</option>
-        <option value="api">API</option>
-        <option value="manual">Manual</option>
-      </select>
+      <app-ai-select formControlName="import_method" [options]="importMethodOptions" placeholder="Import Method"></app-ai-select>
     </label>
 
     <label>
       Status
-      <select formControlName="status">
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </select>
+      <app-ai-select formControlName="status" [options]="cardStatusOptions" placeholder="Status"></app-ai-select>
     </label>
 
     <label class="full-row">
@@ -109,11 +219,143 @@
     </label>
 
     <div class="modal-actions full-row">
-      <button type="button" class="btn-ghost" (click)="closeModal()" [disabled]="saving">Cancel</button>
-      <button type="submit" class="btn-primary" [disabled]="saving">
-        <span *ngIf="saving" class="spinner-sm"></span>
-        <span *ngIf="!saving">{{ editing ? 'Save Changes' : 'Create Account' }}</span>
+      <button type="button" class="btn-ghost" (click)="closeAccountModal()" [disabled]="savingAccount">Cancel</button>
+      <button type="submit" class="btn-primary" [disabled]="savingAccount">
+        <span *ngIf="savingAccount" class="spinner-sm"></span>
+        <span *ngIf="!savingAccount">{{ editingAccount ? 'Save Changes' : 'Create Account' }}</span>
       </button>
     </div>
   </form>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ADD CARD MODAL
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" *ngIf="showCardModal" (click)="closeCardModal()"></div>
+<div class="modal" *ngIf="showCardModal">
+  <div class="modal-header">
+    <h3>Add Card — {{ selectedAccount?.display_name }}</h3>
+    <button class="close-btn" (click)="closeCardModal()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <form [formGroup]="cardForm" (ngSubmit)="saveCard()" class="form-grid">
+    <label>
+      Card Number
+      <input type="text" formControlName="card_number_full" placeholder="Enter full card number"
+             (input)="onCardNumberInput(cardForm.get('card_number_full')?.value || '')" />
+    </label>
+
+    <label>
+      Last 4 Digits <span class="field-hint">(auto-filled)</span>
+      <input type="text" formControlName="card_number_last4" placeholder="Auto" maxlength="4" readonly />
+    </label>
+
+    <label>
+      Status
+      <app-ai-select formControlName="status" [options]="cardStatusSelectOptions" placeholder="Status"></app-ai-select>
+    </label>
+
+    <label class="full-row">
+      Notes
+      <textarea rows="3" formControlName="notes"></textarea>
+    </label>
+
+    <div class="modal-actions full-row">
+      <button type="button" class="btn-ghost" (click)="closeCardModal()" [disabled]="savingCard">Cancel</button>
+      <button type="submit" class="btn-primary" [disabled]="savingCard">
+        <span *ngIf="savingCard" class="spinner-sm"></span>
+        <span *ngIf="!savingCard">Create Card</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ASSIGN / REASSIGN DRIVER DIALOG
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" *ngIf="showAssignDialog" (click)="closeAssignDialog()"></div>
+<div class="modal" *ngIf="showAssignDialog">
+  <div class="modal-header">
+    <h3>
+      {{ cardAssignmentMap[assigningCard?.id || ''] ? 'Reassign Driver' : 'Assign Driver' }}
+      — Card ****{{ assigningCard?.card_number_last4 || '' }}
+    </h3>
+    <button class="close-btn" (click)="closeAssignDialog()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <form [formGroup]="assignForm" (ngSubmit)="saveAssignment()" class="form-grid">
+    <label class="full-row">
+      Driver
+      <select formControlName="driver_id">
+        <option value="">-- Select Driver --</option>
+        <option *ngFor="let d of drivers" [value]="d.id">{{ d.first_name }} {{ d.last_name }}</option>
+      </select>
+    </label>
+
+    <label class="full-row">
+      Notes (optional)
+      <input type="text" formControlName="notes" placeholder="Optional notes…" />
+    </label>
+
+    <div class="modal-actions full-row">
+      <button type="button" class="btn-ghost" (click)="closeAssignDialog()" [disabled]="savingAssign">Cancel</button>
+      <button type="submit" class="btn-primary" [disabled]="savingAssign || assignForm.invalid">
+        <span *ngIf="savingAssign" class="spinner-sm"></span>
+        <span *ngIf="!savingAssign">{{ cardAssignmentMap[assigningCard?.id || ''] ? 'Reassign' : 'Assign' }}</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ASSIGNMENT HISTORY PANEL
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" *ngIf="showHistoryPanel" (click)="closeHistory()"></div>
+<div class="modal modal-wide" *ngIf="showHistoryPanel">
+  <div class="modal-header">
+    <h3>Assignment History — Card ****{{ historyCard?.card_number_last4 || '' }}</h3>
+    <button class="close-btn" (click)="closeHistory()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <div class="history-body">
+    <div class="loading-state" *ngIf="historyLoading">
+      <div class="spinner"></div> Loading history…
+    </div>
+
+    <div class="empty-state" *ngIf="!historyLoading && historyRows.length === 0">
+      <span class="material-symbols-outlined empty-icon">history</span>
+      <p>No assignment history for this card.</p>
+    </div>
+
+    <table class="history-table" *ngIf="!historyLoading && historyRows.length > 0">
+      <thead>
+        <tr>
+          <th>Driver</th>
+          <th>Assigned</th>
+          <th>Revoked</th>
+          <th>Status</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of historyRows">
+          <td class="driver-cell">{{ driverName(row.driver_id) }}</td>
+          <td>{{ row.assigned_at | date:'medium' }}</td>
+          <td>{{ row.revoked_at ? (row.revoked_at | date:'medium') : '—' }}</td>
+          <td>
+            <span class="pill" [ngClass]="row.status === 'active' ? 'pill-green' : 'pill-neutral'">
+              {{ row.status }}
+            </span>
+          </td>
+          <td>{{ row.notes || '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </div>

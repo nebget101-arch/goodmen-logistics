@@ -3,6 +3,7 @@ import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../services/api.service';
 import { Load } from '../../models/load.model';
 import { HttpClient } from '@angular/common/http';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
 @Component({
   selector: 'app-loads',
@@ -24,11 +25,38 @@ export class LoadsComponent implements OnInit {
   drivers: any[] = [];
   driverSearch: string = '';
 
-  get filteredDrivers() {
-    if (!this.driverSearch) return this.drivers;
-    return this.drivers.filter(d =>
-      (d.firstName + ' ' + d.lastName).toLowerCase().includes(this.driverSearch.toLowerCase())
-    );
+  loadStatusOptions: AiSelectOption[] = [
+    { value: 'new', label: 'New' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'tonu', label: 'TONU' },
+    { value: 'delivered', label: 'Delivered' },
+    { value: 'completed', label: 'Completed' }
+  ];
+
+  billingStatusOptions: AiSelectOption[] = [
+    { value: 'pending', label: 'Pending' },
+    { value: 'funded', label: 'Funded' },
+    { value: 'invoiced', label: 'Invoiced' }
+  ];
+
+  editLoadStatusOptions: AiSelectOption[] = [
+    { value: 'pending', label: 'Pending' },
+    { value: 'in-transit', label: 'In Transit' },
+    { value: 'completed', label: 'Completed' }
+  ];
+
+  driverSelectOptions: AiSelectOption[] = [];
+
+  rebuildDriverSelectOptions(): void {
+    const filtered = !this.driverSearch
+      ? this.drivers
+      : this.drivers.filter(d =>
+          (d.firstName + ' ' + d.lastName).toLowerCase().includes(this.driverSearch.toLowerCase())
+        );
+    this.driverSelectOptions = filtered.map(d => ({
+      value: d.id,
+      label: `${d.firstName} ${d.lastName}`
+    }));
   }
 
   constructor(private apiService: ApiService, private http: HttpClient) { }
@@ -62,9 +90,11 @@ export class LoadsComponent implements OnInit {
     this.apiService.getDrivers().subscribe({
       next: (data) => {
         this.drivers = data;
+        this.rebuildDriverSelectOptions();
       },
       error: (err) => {
         this.drivers = [];
+        this.rebuildDriverSelectOptions();
       }
     });
   }

@@ -46,7 +46,6 @@ export class EquipmentOwnersComponent implements OnInit {
   };
 
   readonly settlementTemplateTypes = [
-    { value: '', label: 'Select template type' },
     { value: 'standard', label: 'Standard' },
     { value: 'owner_operator', label: 'Owner Operator' },
     { value: 'leased_owner', label: 'Leased Owner' }

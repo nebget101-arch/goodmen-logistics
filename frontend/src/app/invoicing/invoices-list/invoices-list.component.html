@@ -31,115 +31,13 @@
   <section class="panel ai-panel">
     <div class="panel-header">
       <h2>
-        <span class="material-symbols-outlined">tune</span>
-        Filters
-      </h2>
-    </div>
-
-    <div class="filters-grid">
-      <div class="filter-field">
-        <label for="searchInvoice">
-          <span class="material-symbols-outlined">search</span>
-          Search
-        </label>
-        <input id="searchInvoice" class="form-input" placeholder="Invoice # or customer" [(ngModel)]="filters.search" (input)="loadInvoices()" />
-      </div>
-
-      <div class="filter-field">
-        <label for="filterStatus">
-          <span class="material-symbols-outlined">pending_actions</span>
-          Status
-        </label>
-        <app-ai-select
-          inputId="filterStatus"
-          class="form-select"
-          [options]="statusSelectOptions"
-          [ngModel]="filters.status"
-          (ngModelChange)="filters.status = $event; loadInvoices()"
-          [allowEmpty]="true"
-          emptyLabel="All Statuses"
-        ></app-ai-select>
-      </div>
-
-      <div class="filter-field">
-        <label for="filterCustomer">
-          <span class="material-symbols-outlined">person</span>
-          Customer
-        </label>
-        <app-ai-select
-          inputId="filterCustomer"
-          class="form-select"
-          [options]="customerSelectOptions"
-          [ngModel]="filters.customerId"
-          (ngModelChange)="filters.customerId = $event; loadInvoices()"
-          [allowEmpty]="true"
-          emptyLabel="All Customers"
-        ></app-ai-select>
-      </div>
-
-      <div class="filter-field">
-        <label for="filterLocation">
-          <span class="material-symbols-outlined">place</span>
-          Location
-        </label>
-        <app-ai-select
-          inputId="filterLocation"
-          class="form-select"
-          [options]="locationSelectOptions"
-          [ngModel]="filters.locationId"
-          (ngModelChange)="filters.locationId = $event; loadInvoices()"
-          [allowEmpty]="true"
-          emptyLabel="All Locations"
-        ></app-ai-select>
-      </div>
-
-      <div class="filter-field">
-        <label for="filterDateFrom">
-          <span class="material-symbols-outlined">calendar_today</span>
-          From
-        </label>
-        <app-ai-date-picker
-          inputId="filterDateFrom"
-          class="form-input"
-          [(ngModel)]="filters.dateFrom"
-          (ngModelChange)="loadInvoices()"
-          name="invoiceFilterDateFrom"
-          ariaLabel="Invoice filter from date"
-          placeholder="From"
-        ></app-ai-date-picker>
-      </div>
-
-      <div class="filter-field">
-        <label for="filterDateTo">
-          <span class="material-symbols-outlined">calendar_today</span>
-          To
-        </label>
-        <app-ai-date-picker
-          inputId="filterDateTo"
-          class="form-input"
-          [(ngModel)]="filters.dateTo"
-          (ngModelChange)="loadInvoices()"
-          name="invoiceFilterDateTo"
-          ariaLabel="Invoice filter to date"
-          placeholder="To"
-        ></app-ai-date-picker>
-      </div>
-
-      <div class="filter-actions">
-        <button type="button" class="btn btn-secondary" (click)="clearFilters()">
-          <span class="material-symbols-outlined">clear</span>
-          Clear
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <section class="panel ai-panel">
-    <div class="panel-header">
-      <h2>
         <span class="material-symbols-outlined">table_chart</span>
         Invoice List
       </h2>
+      <button type="button" class="btn btn-secondary btn-clear-filters" (click)="clearFilters()">
+        <span class="material-symbols-outlined">clear</span>
+        Clear
+      </button>
     </div>
 
     <div *ngIf="loading" class="loading ai-loading">
@@ -161,6 +59,39 @@
             <th scope="col">Paid</th>
             <th scope="col">Balance</th>
             <th scope="col">Actions</th>
+          </tr>
+          <tr class="header-filters">
+            <th>
+              <input type="text" placeholder="Search" [(ngModel)]="filters.search" (input)="loadInvoices()" />
+            </th>
+            <th>
+              <select [(ngModel)]="filters.customerId" (ngModelChange)="loadInvoices()">
+                <option value="">All</option>
+                <option *ngFor="let opt of customerSelectOptions" [value]="opt.value">{{ opt.label }}</option>
+              </select>
+            </th>
+            <th>
+              <select [(ngModel)]="filters.locationId" (ngModelChange)="loadInvoices()">
+                <option value="">All</option>
+                <option *ngFor="let opt of locationSelectOptions" [value]="opt.value">{{ opt.label }}</option>
+              </select>
+            </th>
+            <th>
+              <input type="date" [(ngModel)]="filters.dateFrom" (ngModelChange)="loadInvoices()" placeholder="From" />
+            </th>
+            <th>
+              <input type="date" [(ngModel)]="filters.dateTo" (ngModelChange)="loadInvoices()" placeholder="To" />
+            </th>
+            <th>
+              <select [(ngModel)]="filters.status" (ngModelChange)="loadInvoices()">
+                <option value="">All</option>
+                <option *ngFor="let opt of statusSelectOptions" [value]="opt.value">{{ opt.label }}</option>
+              </select>
+            </th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
           </tr>
         </thead>
         <tbody>

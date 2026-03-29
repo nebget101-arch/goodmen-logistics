@@ -1,5 +1,8 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { MatDialogModule } from '@angular/material/dialog';
+import { SharedModule } from '../shared/shared.module';
 
 import { TollsRoutingModule } from './tolls-routing.module';
 import { TollsShellComponent } from './tolls-shell/tolls-shell.component';
@@ -10,6 +13,9 @@ import { TollsHistoryComponent } from './tolls-history/tolls-history.component';
 import { TollsAccountsComponent } from './tolls-accounts/tolls-accounts.component';
 import { TollsDevicesComponent } from './tolls-devices/tolls-devices.component';
 import { TollsExceptionsComponent } from './tolls-exceptions/tolls-exceptions.component';
+import { DeviceDialogComponent } from './tolls-devices/device-dialog/device-dialog.component';
+import { ManualTollDialogComponent } from './tolls-transactions/manual-toll-dialog/manual-toll-dialog.component';
+import { InvoicePreviewDialogComponent } from './tolls-transactions/invoice-preview-dialog/invoice-preview-dialog.component';
 
 @NgModule({
   declarations: [
@@ -21,9 +27,16 @@ import { TollsExceptionsComponent } from './tolls-exceptions/tolls-exceptions.co
     TollsAccountsComponent,
     TollsDevicesComponent,
     TollsExceptionsComponent,
+    DeviceDialogComponent,
+    ManualTollDialogComponent,
+    InvoicePreviewDialogComponent,
   ],
   imports: [
     CommonModule,
+    FormsModule,
+    ReactiveFormsModule,
+    MatDialogModule,
+    SharedModule,
     TollsRoutingModule,
   ]
 })

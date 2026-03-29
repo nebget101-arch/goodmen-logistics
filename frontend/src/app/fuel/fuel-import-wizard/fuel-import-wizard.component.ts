@@ -1,9 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FuelService } from '../fuel.service';
-import { FuelCardAccount, ImportPreviewResult, ProviderTemplate, FUEL_NORMALIZED_FIELDS, StageResult } from '../fuel.model';
+import {
+  FuelCardAccount, ImportPreviewResult, ProviderTemplate,
+  FUEL_NORMALIZED_FIELDS, StageResult, AiPreprocessData
+} from '../fuel.model';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
-export type WizardStep = 'provider' | 'upload' | 'preview' | 'map' | 'validate' | 'import' | 'result';
+export type WizardStep = 'provider' | 'upload' | 'ai_analysis' | 'preview' | 'map' | 'validate' | 'import' | 'result';
 
 @Component({
   selector: 'app-fuel-import-wizard',
@@ -11,15 +15,16 @@ export type WizardStep = 'provider' | 'upload' | 'preview' | 'map' | 'validate' 
   styleUrls: ['./fuel-import-wizard.component.css']
 })
 export class FuelImportWizardComponent implements OnInit {
-  steps: WizardStep[] = ['provider', 'upload', 'preview', 'map', 'validate', 'import', 'result'];
+  steps: WizardStep[] = ['provider', 'upload', 'ai_analysis', 'preview', 'map', 'validate', 'import', 'result'];
   stepLabels: Record<WizardStep, string> = {
     provider: '1. Provider',
     upload: '2. Upload',
-    preview: '3. Preview',
-    map: '4. Map',
-    validate: '5. Validate',
-    import: '6. Import',
-    result: '7. Result'
+    ai_analysis: '3. AI Analysis',
+    preview: '4. Preview',
+    map: '5. Map',
+    validate: '6. Validate',
+    import: '7. Import',
+    result: '8. Result'
   };
   currentStep: WizardStep = 'provider';
 
@@ -32,7 +37,13 @@ export class FuelImportWizardComponent implements OnInit {
   selectedFile: File | null = null;
   dragOver = false;
 
-  // Step 3/4 — Preview + Map
+  // Step 3 — AI Analysis
+  aiPreprocessData: AiPreprocessData | null = null;
+  aiLoading = false;
+  aiError: string | null = null;
+  showFlaggedRows = false;
+
+  // Step 4/5 — Preview + Map
   previewResult: ImportPreviewResult | null = null;
   previewLoading = false;
   previewError = '';
@@ -43,16 +54,19 @@ export class FuelImportWizardComponent implements OnInit {
   cards: FuelCardAccount[] = [];
   selectedCardId = '';
 
-  // Step 5 — Validate (stage)
+  cardSelectOptions: AiSelectOption[] = [];
+  headerOptions: AiSelectOption[] = [];
+
+  // Step 6 — Validate (stage)
   stageResult: StageResult | null = null;
   stageLoading = false;
   stageError = '';
   importWarnings = false;
 
-  // Step 6 — Import (commit)
+  // Step 7 — Import (commit)
   commitLoading = false;
   commitError = '';
-  commitResult: any = null;
+  commitResult: { imported: number; exceptions: number; skipped: number } | null = null;
 
   constructor(private fuel: FuelService, private router: Router) {}
 
@@ -62,7 +76,13 @@ export class FuelImportWizardComponent implements OnInit {
       error: () => {}
     });
     this.fuel.getCards().subscribe({
-      next: (cards) => { this.cards = cards.filter(c => c.status === 'active'); },
+      next: (cards) => {
+        this.cards = cards.filter(c => c.status === 'active');
+        this.cardSelectOptions = this.cards.map(c => ({
+          value: c.id,
+          label: `${c.display_name} (${c.provider_name})`
+        }));
+      },
       error: () => {}
     });
   }
@@ -113,6 +133,7 @@ export class FuelImportWizardComponent implements OnInit {
     this.previewError = '';
     this.columnMap = {};
     this.previewResult = null;
+    this.headerOptions = [];
   }
 
   nextFromUpload(): void {
@@ -122,9 +143,12 @@ export class FuelImportWizardComponent implements OnInit {
     this.fuel.previewImport(this.selectedFile, this.selectedProviderKey).subscribe({
       next: (res) => {
         this.previewResult = res;
+        this.headerOptions = (res.headers || []).map((h: string) => ({ value: h, label: h }));
         this.columnMap = { ...res.autoMapping } as Record<string, string>;
         this.previewLoading = false;
-        this.currentStep = 'preview';
+        // Trigger AI analysis step
+        this.currentStep = 'ai_analysis';
+        this.runAiPreprocess();
       },
       error: (err) => {
         this.previewError = err.error?.error || 'Preview failed. Check the file format and try again.';
@@ -133,10 +157,74 @@ export class FuelImportWizardComponent implements OnInit {
     });
   }
 
-  // ── Step 3 — Preview (summary) ───────────────────────────────────────────────
+  // ── Step 3 — AI Analysis ──────────────────────────────────────────────────────
+  runAiPreprocess(): void {
+    if (!this.selectedFile) return;
+    this.aiLoading = true;
+    this.aiError = null;
+    this.aiPreprocessData = null;
+    this.showFlaggedRows = false;
+    this.fuel.aiPreprocess(this.selectedFile, this.selectedProviderKey, this.selectedProviderName).subscribe({
+      next: (res) => {
+        this.aiPreprocessData = res.data;
+        this.aiLoading = false;
+      },
+      error: (err) => {
+        this.aiError = err.error?.error || 'AI analysis failed. You can proceed with manual mapping.';
+        this.aiLoading = false;
+      }
+    });
+  }
+
+  acceptAiMapping(): void {
+    if (!this.aiPreprocessData) return;
+    // Copy AI column mapping to the wizard's manual column map
+    const aiMap = this.aiPreprocessData.columnMapping;
+    for (const normalizedField of Object.keys(aiMap)) {
+      const mapping = aiMap[normalizedField];
+      if (mapping.rawHeader) {
+        this.columnMap[normalizedField] = mapping.rawHeader;
+      }
+    }
+    this.currentStep = 'preview';
+  }
+
+  skipAiMapping(): void {
+    this.currentStep = 'preview';
+  }
+
+  getConfidenceClass(confidence: number): string {
+    if (confidence >= 0.8) return 'confidence-high';
+    if (confidence >= 0.5) return 'confidence-medium';
+    return 'confidence-low';
+  }
+
+  getConfidenceLabel(confidence: number): string {
+    return `${Math.round(confidence * 100)}%`;
+  }
+
+  getSplitStrategyLabel(type: string): string {
+    switch (type) {
+      case 'multi_column': return 'Multi-Column Split';
+      case 'description_parse': return 'Description Parsing';
+      case 'none': return 'No Split Needed';
+      default: return type;
+    }
+  }
+
+  get aiMappingEntries(): { field: string; rawHeader: string | null; confidence: number }[] {
+    if (!this.aiPreprocessData) return [];
+    return Object.entries(this.aiPreprocessData.columnMapping).map(([field, mapping]) => ({
+      field,
+      rawHeader: mapping.rawHeader,
+      confidence: mapping.confidence
+    }));
+  }
+
+  // ── Step 4 — Preview (summary) ───────────────────────────────────────────────
   nextFromPreview(): void { this.currentStep = 'map'; }
 
-  // ── Step 4 — Column Map ──────────────────────────────────────────────────────
+  // ── Step 5 — Column Map ──────────────────────────────────────────────────────
   getFieldDef(key: string) { return this.normalizedFields.find(f => f.key === key); }
 
   get requiredUnmapped(): string[] {
@@ -160,7 +248,7 @@ export class FuelImportWizardComponent implements OnInit {
     });
   }
 
-  // ── Step 5 — Validate ────────────────────────────────────────────────────────
+  // ── Step 6 — Validate ────────────────────────────────────────────────────────
   get hasErrors(): boolean { return (this.stageResult?.failedCount ?? 0) > 0; }
   get hasWarnings(): boolean { return (this.stageResult?.warningCount ?? 0) > 0; }
 
@@ -169,7 +257,7 @@ export class FuelImportWizardComponent implements OnInit {
     this.currentStep = 'import';
   }
 
-  // ── Step 6 — Import ──────────────────────────────────────────────────────────
+  // ── Step 7 — Import ──────────────────────────────────────────────────────────
   doCommit(): void {
     if (!this.stageResult) return;
     this.commitLoading = true;
@@ -192,6 +280,11 @@ export class FuelImportWizardComponent implements OnInit {
     this.currentStep = 'provider';
     this.selectedFile = null;
     this.previewResult = null;
+    this.headerOptions = [];
+    this.aiPreprocessData = null;
+    this.aiLoading = false;
+    this.aiError = null;
+    this.showFlaggedRows = false;
     this.stageResult = null;
     this.commitResult = null;
     this.columnMap = {};

@@ -3,9 +3,9 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
-  FuelCardAccount, FuelMappingProfile, FuelImportBatch, FuelImportBatchRow,
+  FuelCardAccount, FuelCard, FuelMappingProfile, FuelImportBatch, FuelImportBatchRow,
   FuelTransaction, FuelException, FuelOverview, ProviderTemplate,
-  ImportPreviewResult, StageResult
+  ImportPreviewResult, StageResult, AiPreprocessResult, CardDriverAssignment
 } from './fuel.model';
 
 @Injectable({ providedIn: 'root' })
@@ -32,6 +32,31 @@ export class FuelService {
     return this.http.patch<FuelCardAccount>(`${this.base}/cards/${id}`, patch);
   }
 
+  getCardAssignments(cardId: string): Observable<CardDriverAssignment[]> {
+    return this.http.get<CardDriverAssignment[]>(`${this.base}/cards/${cardId}/assignments`);
+  }
+
+  assignDriver(cardId: string, driverId: string, notes?: string): Observable<CardDriverAssignment> {
+    return this.http.post<CardDriverAssignment>(`${this.base}/cards/${cardId}/assign-driver`, { driver_id: driverId, notes });
+  }
+
+  revokeDriver(cardId: string, notes?: string): Observable<{ revoked: boolean }> {
+    return this.http.post<{ revoked: boolean }>(`${this.base}/cards/${cardId}/revoke-driver`, { notes });
+  }
+
+  // ─── Cards (under Account) ─────────────────────────────────────────────────
+  getAccountCards(accountId: string): Observable<FuelCard[]> {
+    return this.http.get<FuelCard[]>(`${this.base}/accounts/${accountId}/cards`);
+  }
+
+  createAccountCard(accountId: string, card: Partial<FuelCard>): Observable<FuelCard> {
+    return this.http.post<FuelCard>(`${this.base}/accounts/${accountId}/cards`, card);
+  }
+
+  updateFuelCard(cardId: string, patch: Partial<FuelCard>): Observable<FuelCard> {
+    return this.http.patch<FuelCard>(`${this.base}/accounts/cards/${cardId}`, patch);
+  }
+
   // ─── Mapping Profiles ─────────────────────────────────────────────────────────
   getMappingProfiles(): Observable<FuelMappingProfile[]> {
     return this.http.get<FuelMappingProfile[]>(`${this.base}/mapping-profiles`);
@@ -51,6 +76,14 @@ export class FuelService {
     fd.append('file', file);
     fd.append('provider_key', providerKey);
     return this.http.post<ImportPreviewResult>(`${this.base}/import/preview`, fd);
+  }
+
+  aiPreprocess(file: File, providerKey: string, providerName: string): Observable<AiPreprocessResult> {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('provider_key', providerKey);
+    fd.append('provider_name', providerName);
+    return this.http.post<AiPreprocessResult>(`${this.base}/import/ai-preprocess`, fd);
   }
 
   stageImport(file: File, providerName: string, columnMap: Record<string, string | null>, cardAccountId?: string): Observable<StageResult> {
@@ -85,6 +118,7 @@ export class FuelService {
     date_from?: string; date_to?: string;
     provider?: string; truck_id?: string; driver_id?: string;
     matched_status?: string; batch_id?: string;
+    product_type?: string; category?: string;
   } = {}): Observable<{ rows: FuelTransaction[]; total: number }> {
     let p = new HttpParams();
     Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p = p.set(k, v.toString()); });

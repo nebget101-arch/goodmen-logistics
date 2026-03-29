@@ -195,6 +195,56 @@
   color: #93c5fd;
 }
 
+.customers-dashboard .card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.customers-dashboard .btn-clear-filters {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: transparent;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.customers-dashboard .btn-clear-filters:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.customers-dashboard .header-filters th {
+  padding: 4px 6px;
+}
+
+.customers-dashboard .header-filters input,
+.customers-dashboard .header-filters select {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 6px;
+  color: #e2e8f0;
+  box-sizing: border-box;
+}
+
+.customers-dashboard .header-filters input:focus,
+.customers-dashboard .header-filters select:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.95);
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+}
+
+.customers-dashboard .header-filters select option {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
 .customers-dashboard .filters.customers-filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

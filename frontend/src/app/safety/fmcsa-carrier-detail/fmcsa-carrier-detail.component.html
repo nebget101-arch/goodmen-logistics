@@ -1,0 +1,448 @@
+<div *ngIf="loading" class="loading-state">Loading carrier details...</div>
+<div *ngIf="error" class="alert-error">{{ error }}</div>
+
+<ng-container *ngIf="!loading && carrier">
+  <div class="detail-container">
+
+    <!-- ─── Header ──────────────────────────────────────────────────────────── -->
+    <div class="detail-header">
+      <button type="button" class="back-btn" (click)="goBack()">
+        <span class="material-symbols-outlined">arrow_back</span> FMCSA
+      </button>
+      <div class="header-title-area">
+        <h2>{{ carrier.legal_name }}</h2>
+        <span class="dot-badge">DOT {{ carrier.dot_number }}</span>
+        <span
+          *ngIf="carrier.safety_rating"
+          class="safety-rating-badge"
+          [ngClass]="getSafetyRatingClass(carrier.safety_rating)">
+          {{ carrier.safety_rating }}
+        </span>
+      </div>
+      <button
+        *ngIf="canScrape()"
+        type="button"
+        class="btn btn-primary"
+        [disabled]="scrapingBasic"
+        (click)="scrapeBasicDetails()">
+        <span class="material-symbols-outlined spinner-icon" *ngIf="scrapingBasic">progress_activity</span>
+        <span class="material-symbols-outlined" *ngIf="!scrapingBasic">sync</span>
+        {{ scrapingBasic ? 'Scraping...' : 'Scrape Details' }}
+      </button>
+    </div>
+
+    <!-- ─── Carrier Info Card ───────────────────────────────────────────────── -->
+    <div class="section-card">
+      <h3 class="section-title">Carrier Information</h3>
+      <div class="info-grid">
+        <div class="info-col">
+          <div class="info-row">
+            <span class="info-label">DOT Number</span>
+            <span class="info-value">{{ carrier.dot_number }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">MC Number</span>
+            <span class="info-value">{{ carrier.mc_number || 'N/A' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">USDOT Status</span>
+            <span class="info-value">
+              <span class="status-indicator" [ngClass]="getUsdotStatusClass()">
+                {{ getUsdotStatus() }}
+              </span>
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Operating Authority</span>
+            <span class="info-value">
+              <span class="status-indicator" [ngClass]="getOperatingAuthorityClass()">
+                {{ cleanOperatingStatus(carrier.operating_status) }}
+              </span>
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Safety Rating</span>
+            <span class="info-value">{{ carrier.safety_rating || 'Not Rated' }}</span>
+          </div>
+        </div>
+        <div class="info-col">
+          <div class="info-row">
+            <span class="info-label">Total Drivers</span>
+            <span class="info-value">{{ carrier.total_drivers !== null ? carrier.total_drivers : 'N/A' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Total Power Units</span>
+            <span class="info-value">{{ carrier.total_power_units !== null ? carrier.total_power_units : 'N/A' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">DBA Name</span>
+            <span class="info-value">{{ carrier.dba_name || 'N/A' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Last Scraped</span>
+            <span class="info-value">{{ formatDate(carrier.scraped_at) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Carrier Operations Section ──────────────────────────────────────── -->
+    <div class="section-card" *ngIf="latestSnapshot && (latestSnapshot.operation_classification || latestSnapshot.carrier_operation || latestSnapshot.cargo_carried)">
+      <h3 class="section-title">Carrier Operations</h3>
+      <div class="info-grid">
+        <div class="info-col">
+          <div class="info-row" *ngIf="latestSnapshot.operation_classification">
+            <span class="info-label">Operation Classification</span>
+            <span class="info-value">{{ latestSnapshot.operation_classification }}</span>
+          </div>
+          <div class="info-row" *ngIf="latestSnapshot.carrier_operation">
+            <span class="info-label">Carrier Operation</span>
+            <span class="info-value">{{ latestSnapshot.carrier_operation }}</span>
+          </div>
+        </div>
+        <div class="info-col" *ngIf="getCargoList().length > 0">
+          <div class="info-row">
+            <span class="info-label">Cargo Carried</span>
+            <span class="info-value cargo-list">
+              <span class="cargo-tag" *ngFor="let cargo of getCargoList()">{{ cargo }}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── US Inspections Section ────────────────────────────────────────────── -->
+    <div class="section-card" *ngIf="latestSnapshot">
+      <h3 class="section-title">US Inspections (24-Month)</h3>
+      <div class="table-wrapper">
+        <table class="history-table inspections-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Vehicle</th>
+              <th>Driver</th>
+              <th>Hazmat</th>
+              <th>IEP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="row-label">Inspections</td>
+              <td>{{ latestSnapshot.vehicle_inspections ?? 0 }}</td>
+              <td>{{ latestSnapshot.driver_inspections ?? 0 }}</td>
+              <td>{{ latestSnapshot.hazmat_inspections ?? 0 }}</td>
+              <td>{{ latestSnapshot.iep_inspections ?? 0 }}</td>
+            </tr>
+            <tr>
+              <td class="row-label">Out of Service</td>
+              <td>{{ latestSnapshot.vehicle_oos ?? 0 }}</td>
+              <td>{{ latestSnapshot.driver_oos ?? 0 }}</td>
+              <td>{{ latestSnapshot.hazmat_oos ?? 0 }}</td>
+              <td>N/A</td>
+            </tr>
+            <tr>
+              <td class="row-label">OOS Rate</td>
+              <td>
+                <span class="oos-rate"
+                  [ngClass]="isOosAboveAverage(latestSnapshot.vehicle_oos_rate, latestSnapshot.vehicle_oos_national_avg) ? 'oos-above' : 'oos-below'">
+                  {{ formatOosRate(latestSnapshot.vehicle_oos_rate) }}
+                </span>
+              </td>
+              <td>
+                <span class="oos-rate"
+                  [ngClass]="isOosAboveAverage(latestSnapshot.driver_oos_rate, latestSnapshot.driver_oos_national_avg) ? 'oos-above' : 'oos-below'">
+                  {{ formatOosRate(latestSnapshot.driver_oos_rate) }}
+                </span>
+              </td>
+              <td>
+                <span class="oos-rate"
+                  [ngClass]="isOosAboveAverage(latestSnapshot.hazmat_oos_rate, latestSnapshot.hazmat_oos_national_avg) ? 'oos-above' : 'oos-below'">
+                  {{ formatOosRate(latestSnapshot.hazmat_oos_rate) }}
+                </span>
+              </td>
+              <td>N/A</td>
+            </tr>
+            <tr>
+              <td class="row-label">Nat'l Average</td>
+              <td>{{ formatNationalAvg(latestSnapshot.vehicle_oos_national_avg) }}</td>
+              <td>{{ formatNationalAvg(latestSnapshot.driver_oos_national_avg) }}</td>
+              <td>{{ formatNationalAvg(latestSnapshot.hazmat_oos_national_avg) }}</td>
+              <td>N/A</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ─── US Crashes Section ────────────────────────────────────────────────── -->
+    <div class="section-card" *ngIf="latestSnapshot">
+      <h3 class="section-title">US Crashes (24-Month)</h3>
+      <div class="crash-grid">
+        <div class="crash-stat">
+          <span class="crash-count crash-fatal">{{ latestSnapshot.crashes_fatal ?? 0 }}</span>
+          <span class="crash-label">Fatal</span>
+        </div>
+        <div class="crash-stat">
+          <span class="crash-count crash-injury">{{ latestSnapshot.crashes_injury ?? 0 }}</span>
+          <span class="crash-label">Injury</span>
+        </div>
+        <div class="crash-stat">
+          <span class="crash-count crash-tow">{{ latestSnapshot.crashes_tow ?? 0 }}</span>
+          <span class="crash-label">Tow</span>
+        </div>
+        <div class="crash-stat">
+          <span class="crash-count crash-total">{{ latestSnapshot.crashes_total ?? 0 }}</span>
+          <span class="crash-label">Total</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── BASIC Details Section ────────────────────────────────────────────── -->
+    <div class="section-card" *ngIf="filteredBasicDetails.length > 0">
+      <h3 class="section-title">SMS BASIC Details</h3>
+
+      <!-- BASIC category tabs -->
+      <div class="basic-tabs">
+        <button
+          *ngFor="let detail of filteredBasicDetails"
+          type="button"
+          class="basic-tab"
+          [class.active]="selectedBasic?.basic_name === detail.basic_name"
+          [style.border-bottom-color]="selectedBasic?.basic_name === detail.basic_name ? getBasicColor(detail.basic_name) : 'transparent'"
+          (click)="selectBasic(detail)">
+          {{ getBasicDisplayName(detail.basic_name) }}
+          <span class="basic-tab-measure" *ngIf="detail.measure_value !== null">
+            {{ detail.measure_value }}
+          </span>
+        </button>
+      </div>
+
+      <!-- Selected BASIC detail -->
+      <ng-container *ngIf="selectedBasic">
+        <!-- Overview row -->
+        <div class="basic-overview">
+          <div class="basic-stat">
+            <span class="basic-stat-label">Measure</span>
+            <span class="basic-stat-value">{{ selectedBasic.measure_value !== null ? selectedBasic.measure_value : 'N/A' }}</span>
+          </div>
+          <div class="basic-stat">
+            <span class="basic-stat-label">Percentile</span>
+            <span class="basic-stat-value" [ngClass]="getMeasureClass(selectedBasic.percentile, selectedBasic.threshold)">
+              {{ selectedBasic.percentile !== null ? selectedBasic.percentile + '%' : 'N/A' }}
+            </span>
+          </div>
+          <div class="basic-stat">
+            <span class="basic-stat-label">Threshold</span>
+            <span class="basic-stat-value">{{ selectedBasic.threshold !== null ? selectedBasic.threshold + '%' : 'N/A' }}</span>
+          </div>
+          <div class="basic-stat">
+            <span class="basic-stat-label">Acute/Critical</span>
+            <span class="basic-stat-value" [ngClass]="selectedBasic.acute_critical_violations > 0 ? 'score-danger' : 'score-good'">
+              {{ selectedBasic.acute_critical_violations }}
+            </span>
+          </div>
+        </div>
+
+        <div class="basic-meta" *ngIf="selectedBasic.safety_event_group">
+          <span class="info-label">Safety Event Group</span>
+          <span class="info-value">{{ selectedBasic.safety_event_group }}</span>
+        </div>
+        <div class="basic-meta" *ngIf="selectedBasic.record_period">
+          <span class="info-label">Record Period</span>
+          <span class="info-value">{{ selectedBasic.record_period }}</span>
+        </div>
+
+        <!-- Inspections (before Violations) -->
+        <div class="basic-subsection" *ngIf="selectedBasic.inspections && selectedBasic.inspections.length > 0">
+          <h4 class="subsection-title">Inspection History ({{ selectedBasic.inspections.length }})</h4>
+          <div class="table-wrapper">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Date</th>
+                  <th>Report #</th>
+                  <th>State</th>
+                  <th>Vehicle</th>
+                  <th class="num-col">SW</th>
+                  <th class="num-col">TiW</th>
+                  <th class="num-col">TotW</th>
+                </tr>
+              </thead>
+              <tbody>
+                <ng-container *ngFor="let insp of selectedBasic.inspections">
+                  <tr class="insp-row" [class.insp-expanded]="selectedInspection?.report_number === insp.report_number"
+                      (click)="selectInspection(getInspectionDetailByReport(insp.report_number) || null)">
+                    <td class="expand-cell">
+                      <span class="material-symbols-outlined" *ngIf="getInspectionDetailByReport(insp.report_number)">
+                        {{ selectedInspection?.report_number === insp.report_number ? 'expand_less' : 'expand_more' }}
+                      </span>
+                    </td>
+                    <td class="date-cell">{{ formatDate(insp.inspection_date) }}</td>
+                    <td>{{ insp.report_number }}</td>
+                    <td>{{ insp.report_state }}</td>
+                    <td>{{ insp.plate_number }} {{ insp.plate_state }} - {{ insp.vehicle_type }}</td>
+                    <td class="num-col">{{ insp.severity_weight }}</td>
+                    <td class="num-col">{{ insp.time_weight }}</td>
+                    <td class="num-col">{{ insp.total_weight }}</td>
+                  </tr>
+
+                  <!-- Expanded inspection detail -->
+                  <tr *ngIf="selectedInspection?.report_number === insp.report_number" class="insp-detail-row">
+                    <td colspan="8">
+                      <div class="insp-detail-card">
+                        <!-- Time/Location -->
+                        <div class="insp-detail-grid">
+                          <div class="insp-detail-section">
+                            <h5>Time / Location</h5>
+                            <div class="insp-info-row"><span class="info-label">Level</span><span class="info-value">{{ selectedInspection!.level }}</span></div>
+                            <div class="insp-info-row"><span class="info-label">Facility</span><span class="info-value">{{ selectedInspection!.facility }}</span></div>
+                            <div class="insp-info-row"><span class="info-label">Time</span><span class="info-value">{{ selectedInspection!.start_time }} - {{ selectedInspection!.end_time }}</span></div>
+                            <div class="insp-info-row"><span class="info-label">Post Crash</span><span class="info-value">{{ selectedInspection!.post_crash }}</span></div>
+                            <div class="insp-info-row"><span class="info-label">Hazmat Placard</span><span class="info-value">{{ selectedInspection!.hazmat_placard }}</span></div>
+                          </div>
+
+                          <!-- Vehicles -->
+                          <div class="insp-detail-section" *ngIf="selectedInspection!.vehicles?.length">
+                            <h5>Vehicles ({{ selectedInspection!.vehicles.length }})</h5>
+                            <div class="insp-vehicle" *ngFor="let v of selectedInspection!.vehicles">
+                              <span class="vehicle-unit">Unit {{ v.unit }}</span>
+                              <span class="info-value">{{ v.type }} — {{ v.make }}</span>
+                              <span class="info-value">{{ v.plate_state }} {{ v.plate_number }}</span>
+                              <span class="info-value vin-text">VIN: {{ v.vin }}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Violations -->
+                        <div *ngIf="selectedInspection!.violations?.length" class="insp-violations-section">
+                          <h5>Carrier Violations ({{ selectedInspection!.violations.length }})</h5>
+                          <div class="table-wrapper">
+                            <table class="history-table insp-viol-table">
+                              <thead>
+                                <tr>
+                                  <th>Code</th>
+                                  <th>Section</th>
+                                  <th>Unit</th>
+                                  <th>OOS</th>
+                                  <th>Description</th>
+                                  <th>In SMS</th>
+                                  <th>BASIC</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr *ngFor="let v of selectedInspection!.violations">
+                                  <td><code class="viol-code">{{ v.vio_code }}</code></td>
+                                  <td>{{ v.section }}</td>
+                                  <td>{{ v.unit }}</td>
+                                  <td>
+                                    <span [ngClass]="v.oos === 'Yes' ? 'oos-yes' : 'oos-no'">{{ v.oos }}</span>
+                                  </td>
+                                  <td class="viol-desc">{{ v.description }}</td>
+                                  <td>{{ v.included_in_sms }}</td>
+                                  <td class="no-wrap">{{ v.basic }}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </ng-container>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Violations -->
+        <div class="basic-subsection" *ngIf="selectedBasic.violations && selectedBasic.violations.length > 0">
+          <h4 class="subsection-title">Violation Summary ({{ selectedBasic.violations.length }})</h4>
+          <div class="table-wrapper">
+            <table class="history-table violations-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Description</th>
+                  <th class="num-col"># Violations</th>
+                  <th class="num-col"># OOS</th>
+                  <th class="num-col">Severity</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let v of selectedBasic.violations">
+                  <td><code class="viol-code">{{ v.violation_code }}</code></td>
+                  <td class="viol-desc">{{ v.description }}</td>
+                  <td class="num-col">{{ v.violation_count }}</td>
+                  <td class="num-col">{{ v.oos_violation_count }}</td>
+                  <td class="num-col">
+                    <span class="severity-badge">{{ v.severity_weight }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- No data state -->
+        <div class="empty-hint" *ngIf="selectedBasic.violations.length === 0 && selectedBasic.inspections.length === 0 && selectedBasic.measure_value === null">
+          <span class="material-symbols-outlined">info</span>
+          No detailed data available for this BASIC category
+        </div>
+      </ng-container>
+    </div>
+
+    <div class="section-card" *ngIf="filteredBasicDetails.length === 0 && !basicLoading && !loading">
+      <h3 class="section-title">SMS BASIC Details</h3>
+      <div class="empty-hint">
+        <span class="material-symbols-outlined">info</span>
+        No BASIC detail data yet. Click "Scrape Details" to fetch violation and inspection data.
+      </div>
+    </div>
+
+    <!-- ─── Snapshot History Table ──────────────────────────────────────────── -->
+    <div class="section-card" *ngIf="history.length > 0">
+      <h3 class="section-title">Snapshot History</h3>
+      <div class="table-wrapper">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Unsafe Driving</th>
+              <th>HOS</th>
+              <th>Vehicle Maint.</th>
+              <th>Ctrl Substances</th>
+              <th>Driver Fitness</th>
+              <th>Crash</th>
+              <th>Hazmat</th>
+              <th>Safety Rating</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let snap of pagedHistory">
+              <td class="date-cell">{{ formatDate(snap.scraped_at) }}</td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.unsafe_driving_score)">{{ formatScore(snap.unsafe_driving_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.hos_compliance_score)">{{ formatScore(snap.hos_compliance_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.vehicle_maintenance_score)">{{ formatScore(snap.vehicle_maintenance_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.controlled_substances_score)">{{ formatScore(snap.controlled_substances_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.driver_fitness_score)">{{ formatScore(snap.driver_fitness_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.crash_indicator_score)">{{ formatScore(snap.crash_indicator_score) }}</span></td>
+              <td><span class="score-cell" [ngClass]="getScoreClass(snap.hazmat_score)">{{ formatScore(snap.hazmat_score) }}</span></td>
+              <td>{{ snap.safety_rating || 'N/A' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" *ngIf="totalHistoryPages > 1">
+        <button type="button" class="btn btn-sm btn-secondary" [disabled]="historyPage === 0" (click)="prevPage()">
+          <span class="material-symbols-outlined">chevron_left</span> Prev
+        </button>
+        <span class="page-info">Page {{ historyPage + 1 }} of {{ totalHistoryPages }}</span>
+        <button type="button" class="btn btn-sm btn-secondary" [disabled]="historyPage >= totalHistoryPages - 1" (click)="nextPage()">
+          Next <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</ng-container>

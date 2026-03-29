@@ -28,6 +28,20 @@ export interface TollDevice {
   updated_at: string;
 }
 
+export interface TollDeviceAssignment {
+  id: string;
+  toll_device_id: string;
+  truck_id?: string;
+  driver_id?: string;
+  plate_number?: string;
+  unit_number?: string;
+  driver_override_id?: string;
+  assigned_at: string;
+  removed_at?: string;
+  status: 'active' | 'removed';
+  notes?: string;
+}
+
 export interface TollImportBatch {
   id: string;
   tenant_id: string;
@@ -42,6 +56,59 @@ export interface TollImportBatch {
   completed_at?: string;
 }
 
+export interface TollTransaction {
+  id: string;
+  tenant_id: string;
+  provider_name: string;
+  external_transaction_id?: string;
+  transaction_date: string;
+  posted_date?: string;
+  truck_id?: string;
+  driver_id?: string;
+  load_id?: string;
+  load_number?: string;
+  unit_number_raw?: string;
+  driver_name_raw?: string;
+  device_number_masked?: string;
+  plate_number_raw?: string;
+  plaza_name?: string;
+  entry_location?: string;
+  exit_location?: string;
+  city?: string;
+  state?: string;
+  amount: number;
+  currency: string;
+  matched_status: string;
+  validation_status: string;
+  settlement_link_status: string;
+  is_manual: boolean;
+  source?: 'manual' | 'import' | 'invoice_upload';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  truck_display?: string;
+  driver_display?: string;
+}
+
+export interface TollException {
+  id: string;
+  tenant_id: string;
+  toll_transaction_id: string;
+  exception_type: string;
+  exception_message?: string;
+  resolution_status: 'open' | 'resolved' | 'ignored';
+  resolved_by?: string;
+  resolved_at?: string;
+  resolution_notes?: string;
+  created_at: string;
+  transaction_date?: string;
+  provider_name?: string;
+  plaza_name?: string;
+  amount?: number;
+  unit_number_raw?: string;
+  driver_name_raw?: string;
+}
+
 export interface TollOverview {
   success: boolean;
   cards: {
@@ -51,4 +118,112 @@ export interface TollOverview {
     openExceptions: number;
   };
   lastBatch: Partial<TollImportBatch> | null;
+}
+
+export interface TollUploadResult {
+  batchId: string;
+  fileName: string;
+  headers: string[];
+  sampleRows: Record<string, string>[];
+  allRows: Record<string, string>[];
+  totalRows: number;
+}
+
+export interface TollCommitResult {
+  imported: number;
+  duplicates: number;
+  errors: number;
+  exceptions: number;
+}
+
+export interface TollMappingProfile {
+  id: string;
+  tenant_id: string;
+  profile_name: string;
+  provider_name?: string;
+  column_map: Record<string, string>;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface TollAiColumnMapping {
+  rawHeader: string | null;
+  confidence: number;
+}
+
+export interface TollAiNormalizeResult {
+  success: boolean;
+  columnMapping: Record<string, TollAiColumnMapping>;
+  overallConfidence: number;
+  meta?: {
+    model: string;
+    processingTimeMs: number;
+  };
+}
+
+/** Normalized field keys used in toll column mapping */
+export const TOLL_NORMALIZED_FIELDS: { key: string; label: string; required: boolean }[] = [
+  { key: 'transaction_date', label: 'Transaction Date', required: true },
+  { key: 'amount', label: 'Amount', required: true },
+  { key: 'plaza_name', label: 'Plaza / Agency', required: false },
+  { key: 'entry_location', label: 'Entry Location', required: false },
+  { key: 'exit_location', label: 'Exit Location', required: false },
+  { key: 'device_number_masked', label: 'Transponder #', required: false },
+  { key: 'plate_number_raw', label: 'Plate Number', required: false },
+  { key: 'unit_number_raw', label: 'Truck Unit', required: false },
+  { key: 'driver_name_raw', label: 'Driver Name', required: false },
+  { key: 'city', label: 'City', required: false },
+  { key: 'state', label: 'State', required: false },
+  { key: 'posted_date', label: 'Posted Date', required: false },
+  { key: 'external_transaction_id', label: 'External Transaction ID', required: false },
+];
+
+/** A single extracted transaction row returned by the AI invoice parser */
+export interface ExtractedTollTransaction {
+  transaction_date: string;
+  provider_name: string;
+  plaza_name: string;
+  plate_number: string;
+  amount: number;
+  entry_point?: string;
+  exit_point?: string;
+  vehicle_class?: string;
+  /** Set by the AI if plate was not matched to a known vehicle */
+  plate_unmatched?: boolean;
+  /** Set by the AI if a similar existing transaction was found */
+  possible_duplicate?: boolean;
+}
+
+/** A single file result from the invoice extraction endpoint */
+export interface InvoiceFileResult {
+  file: string;
+  invoiceMeta?: Record<string, unknown>;
+  confidence?: number;
+  warnings?: string[];
+  error?: string;
+  transactions: ExtractedTollTransaction[];
+}
+
+/** Response from POST /api/tolls/import/invoice-image */
+export interface InvoiceExtractionResponse {
+  success: boolean;
+  results: InvoiceFileResult[];
+}
+
+/** Payload for creating a single toll transaction */
+export interface CreateTollTransactionPayload {
+  transaction_date: string;
+  provider_name: string;
+  plaza_name: string;
+  plate_number_raw?: string | null;
+  amount: number;
+  entry_point?: string;
+  exit_point?: string;
+  city?: string | null;
+  state?: string | null;
+  truck_id?: string | null;
+  driver_id?: string | null;
+  matched_status?: string;
+  notes?: string | null;
+  source: string;
 }

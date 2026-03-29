@@ -7,6 +7,12 @@
   font-weight: 600;
   text-transform: capitalize;
   border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.status-pill--compact {
+  padding: 2px 6px;
+  font-size: 11px;
 }
 
 .pill-success {

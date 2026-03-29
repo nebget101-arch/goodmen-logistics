@@ -12,27 +12,6 @@
     </div>
   </div>
 
-  <div class="filters-bar">
-    <div class="filter-group">
-      <label for="filter-driver">Driver</label>
-      <select id="filter-driver" class="form-select" [(ngModel)]="filters.driverId" (change)="loadDeductions()">
-        <option value="">All drivers</option>
-        <option *ngFor="let d of drivers" [value]="d.id">{{ d.firstName }} {{ d.lastName }}</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <label for="filter-enabled">Status</label>
-      <select id="filter-enabled" class="form-select" [(ngModel)]="filters.enabled" (change)="loadDeductions()">
-        <option value="">All</option>
-        <option value="true">Active</option>
-        <option value="false">Inactive</option>
-      </select>
-    </div>
-    <div class="filter-group filter-actions">
-      <button type="button" class="btn-secondary" (click)="clearFilters()">Clear filters</button>
-    </div>
-  </div>
-
   <div class="backfill-card">
     <div class="backfill-header">
       <h3>Bulk backfill past settlements</h3>
@@ -41,10 +20,7 @@
     <div class="backfill-grid">
       <div class="filter-group">
         <label for="bf-driver">Driver (optional)</label>
-        <select id="bf-driver" class="form-select" [(ngModel)]="backfillForm.driver_id" (ngModelChange)="onBackfillCriteriaChange()">
-          <option value="">All drivers</option>
-          <option *ngFor="let d of drivers" [value]="d.id">{{ d.firstName }} {{ d.lastName }}</option>
-        </select>
+        <app-ai-select inputId="bf-driver" [options]="driverOptions" [(ngModel)]="backfillForm.driver_id" (ngModelChange)="onBackfillCriteriaChange()" placeholder="All drivers" [allowEmpty]="true" emptyLabel="All drivers"></app-ai-select>
       </div>
       <div class="filter-group">
         <label for="bf-start">Start date</label>
@@ -114,6 +90,22 @@
             <th scope="col">Status</th>
             <th scope="col">Actions</th>
           </tr>
+          <tr class="header-filters">
+            <th></th>
+            <th>
+              <app-ai-select [options]="driverOptions" [(ngModel)]="filters.driverId" (ngModelChange)="loadDeductions()" [allowEmpty]="true" emptyLabel="All" placeholder="All"></app-ai-select>
+            </th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th>
+              <app-ai-select [options]="enabledFilterOptions" [(ngModel)]="filters.enabled" (ngModelChange)="loadDeductions()" [allowEmpty]="true" emptyLabel="All" placeholder="All"></app-ai-select>
+            </th>
+            <th></th>
+          </tr>
         </thead>
         <tbody>
           <tr *ngIf="deductions.length === 0">
@@ -173,32 +165,22 @@
 
         <div class="form-group">
           <label for="rule_scope">Deduction scope *</label>
-          <select id="rule_scope" class="form-select" [(ngModel)]="formData.rule_scope">
-            <option *ngFor="let opt of ruleScopeOptions" [value]="opt.value">{{ opt.label }}</option>
-          </select>
+          <app-ai-select inputId="rule_scope" [options]="ruleScopeOptions" [(ngModel)]="formData.rule_scope" placeholder="Select scope"></app-ai-select>
         </div>
 
         <div class="form-group" *ngIf="formData.rule_scope === 'driver'">
           <label for="driver_id">Driver</label>
-          <select id="driver_id" class="form-select" [(ngModel)]="formData.driver_id">
-            <option [ngValue]="null">Select driver...</option>
-            <option *ngFor="let d of drivers" [value]="d.id">{{ d.firstName }} {{ d.lastName }}</option>
-          </select>
+          <app-ai-select inputId="driver_id" [options]="driverOptions" [(ngModel)]="formData.driver_id" placeholder="Select driver..." [allowEmpty]="true" emptyLabel="Select driver..."></app-ai-select>
         </div>
 
         <div class="form-group" *ngIf="formData.rule_scope === 'payee'">
           <label for="payee_id">Payee</label>
-          <select id="payee_id" class="form-select" [(ngModel)]="formData.payee_id">
-            <option [ngValue]="null">Select payee...</option>
-            <option *ngFor="let p of payees" [value]="p.id">{{ p.name }}</option>
-          </select>
+          <app-ai-select inputId="payee_id" [options]="payeeOptions" [(ngModel)]="formData.payee_id" placeholder="Select payee..." [allowEmpty]="true" emptyLabel="Select payee..."></app-ai-select>
         </div>
 
         <div class="form-group">
           <label for="amount_type">Amount type *</label>
-          <select id="amount_type" class="form-select" [(ngModel)]="formData.amount_type">
-            <option *ngFor="let opt of amountTypeOptions" [value]="opt.value">{{ opt.label }}</option>
-          </select>
+          <app-ai-select inputId="amount_type" [options]="amountTypeOptions" [(ngModel)]="formData.amount_type" placeholder="Select type"></app-ai-select>
         </div>
 
         <div class="form-group">
@@ -212,24 +194,17 @@
 
         <div class="form-group">
           <label for="frequency">Frequency *</label>
-          <select id="frequency" class="form-select" [(ngModel)]="formData.frequency">
-            <option *ngFor="let opt of frequencyOptions" [value]="opt.value">{{ opt.label }}</option>
-          </select>
+          <app-ai-select inputId="frequency" [options]="frequencyOptions" [(ngModel)]="formData.frequency" placeholder="Select frequency"></app-ai-select>
         </div>
 
         <div class="form-group">
           <label for="applies_when">Applies when</label>
-          <select id="applies_when" class="form-select" [(ngModel)]="formData.applies_when">
-            <option *ngFor="let opt of appliesWhenOptions" [value]="opt.value">{{ opt.label }}</option>
-          </select>
+          <app-ai-select inputId="applies_when" [options]="appliesWhenOptions" [(ngModel)]="formData.applies_when" placeholder="Select condition"></app-ai-select>
         </div>
 
         <div class="form-group" *ngIf="formData.applies_when === 'specific_expense'">
           <label for="source_type">Expense type</label>
-          <select id="source_type" class="form-select" [(ngModel)]="formData.source_type">
-            <option [ngValue]="null">Select expense type...</option>
-            <option *ngFor="let opt of expenseTypeOptions" [value]="opt.value">{{ opt.label }}</option>
-          </select>
+          <app-ai-select inputId="source_type" [options]="expenseTypeOptions" [(ngModel)]="formData.source_type" placeholder="Select expense type..." [allowEmpty]="true" emptyLabel="Select expense type..."></app-ai-select>
         </div>
 
         <div class="form-group">

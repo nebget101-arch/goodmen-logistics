@@ -65,52 +65,49 @@
   <div *ngIf="errorMessage" class="alert alert-error">{{ errorMessage }}</div>
   <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
 
-  <div class="summary-bar" *ngIf="!loading">
-    <div class="summary-total">
-      <span class="summary-label">Gross Amount</span>
-      <span class="summary-value">${{ summaryTotals.totalGross | number:'1.0-2' }}</span>
+  <div class="status-summary-bar" *ngIf="!loading">
+    <div class="status-summary-bar__header">
+      <div class="status-summary-bar__period">
+        <button
+          type="button"
+          class="period-chip"
+          *ngFor="let opt of grossPeriodOptions"
+          [class.active]="grossPeriod === opt.value"
+          (click)="setGrossPeriod(opt.value)"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+      <div class="status-summary-bar__total">
+        TOTAL: ${{ summaryTotals.totalGross | number:'1.0-2' }}
+      </div>
     </div>
-    <div class="summary-group gross-period-group">
-      <span class="label">Period</span>
+    <div class="status-summary-bar__track">
+      <div
+        *ngFor="let seg of statusBarSegments"
+        class="status-summary-bar__segment"
+        [style.width.%]="seg.pct"
+        [style.background]="seg.color"
+        [title]="seg.label + ': $' + (seg.amount | number:'1.0-2')"
+        (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
+        [class.active]="filters.status === seg.status"
+      >
+        <span class="segment-label" *ngIf="seg.pct > 8">{{ seg.label }}</span>
+        <span class="segment-value" *ngIf="seg.pct > 5">${{ seg.amount | number:'1.0-0' }}</span>
+      </div>
+    </div>
+    <div class="status-summary-bar__legend">
       <button
         type="button"
-        class="chip"
-        *ngFor="let opt of grossPeriodOptions"
-        [class.active]="grossPeriod === opt.value"
-        (click)="setGrossPeriod(opt.value)"
+        class="legend-item"
+        *ngFor="let seg of statusBarSegments"
+        [class.active]="filters.status === seg.status"
+        (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
       >
-        {{ opt.label }}
+        <span class="legend-dot" [style.background]="seg.color"></span>
+        <span class="legend-label">{{ seg.label }}</span>
+        <span class="legend-value">${{ seg.amount | number:'1.0-2' }}</span>
       </button>
-    </div>
-    <div class="summary-groups">
-      <div class="summary-group">
-        <span class="label">By status</span>
-        <button
-          type="button"
-          class="chip"
-          *ngFor="let s of statusOptions"
-          [class.muted]="!summaryTotals.byStatus[s]"
-          [class.active]="filters.status === s"
-          (click)="setStatusFilter(filters.status === s ? '' : s)"
-        >
-          <span class="chip-label">{{ getStatusLabel(s) }}</span>
-          <span class="chip-value">${{ (summaryTotals.byStatus[s] || 0) | number:'1.0-2' }}</span>
-        </button>
-      </div>
-      <div class="summary-group">
-        <span class="label">By billing</span>
-        <button
-          type="button"
-          class="chip"
-          *ngFor="let b of billingOptions"
-          [class.muted]="!summaryTotals.byBilling[b]"
-          [class.active]="filters.billingStatus === b"
-          (click)="setBillingFilter(filters.billingStatus === b ? '' : b)"
-        >
-          <span class="chip-label">{{ getBillingLabel(b) }}</span>
-          <span class="chip-value">${{ (summaryTotals.byBilling[b] || 0) | number:'1.0-2' }}</span>
-        </button>
-      </div>
     </div>
   </div>
 
@@ -327,6 +324,21 @@
 
   <div class="table-card">
     <table class="table" *ngIf="!loading">
+      <colgroup>
+        <col style="width: 6%">   <!-- Load # -->
+        <col style="width: 7%">   <!-- Date -->
+        <col style="width: 8%">   <!-- Driver -->
+        <col style="width: 12%">  <!-- Broker -->
+        <col style="width: 7%">   <!-- PO # -->
+        <col style="width: 11%">  <!-- Pickup -->
+        <col style="width: 11%">  <!-- Delivery -->
+        <col style="width: 5%">   <!-- Rate -->
+        <col style="width: 8%">   <!-- Completed -->
+        <col style="width: 6%">   <!-- Status -->
+        <col style="width: 6%">   <!-- Billing -->
+        <col style="width: 8%">   <!-- Attachments -->
+        <col style="width: 5%">   <!-- Actions -->
+      </colgroup>
       <thead>
         <tr>
           <th (click)="toggleSort('load_number')">Load #</th>
@@ -340,7 +352,6 @@
           <th (click)="toggleSort('completed_date')">Completed</th>
           <th>Status</th>
           <th>Billing</th>
-          <th>Notes</th>
           <th>Attachments</th>
           <th>Actions</th>
         </tr>
@@ -361,10 +372,11 @@
           </th>
           <!-- Driver -->
           <th>
-            <select [(ngModel)]="filters.driverId" (change)="onFilterChange()">
-              <option value="">All Drivers</option>
-              <option *ngFor="let d of drivers" [value]="d.id">{{ d.name }}</option>
-            </select>
+            <input
+              type="text"
+              placeholder="Driver"
+              [(ngModel)]="headerFilters.driver"
+            />
           </th>
           <!-- Broker -->
           <th>
@@ -406,42 +418,35 @@
               [(ngModel)]="headerFilters.rate"
             />
           </th>
-          <!-- Completed (left blank for now) -->
-          <th></th>
+          <!-- Completed -->
+          <th>
+            <app-inline-date-filter
+              [(value)]="headerFilters.completed"
+            ></app-inline-date-filter>
+          </th>
           <!-- Status -->
-          <th>
-            <select [(ngModel)]="filters.status" (change)="onFilterChange()">
-              <option value="">All</option>
-              <option *ngFor="let s of statusOptions" [value]="s">{{ getStatusLabel(s) }}</option>
-            </select>
-          </th>
-          <!-- Billing -->
-          <th>
-            <select [(ngModel)]="filters.billingStatus" (change)="onFilterChange()">
-              <option value="">All</option>
-              <option *ngFor="let b of billingOptions" [value]="b">{{ getBillingLabel(b) }}</option>
-            </select>
-          </th>
-          <!-- Notes -->
           <th>
             <input
               type="text"
-              placeholder="Notes"
-              [(ngModel)]="headerFilters.notes"
+              placeholder="Status"
+              [(ngModel)]="headerFilters.status"
+            />
+          </th>
+          <!-- Billing -->
+          <th>
+            <input
+              type="text"
+              placeholder="Billing"
+              [(ngModel)]="headerFilters.billingStatus"
             />
           </th>
           <!-- Attachments -->
           <th>
-            <select [(ngModel)]="headerFilters.attachmentType">
-              <option value="">All</option>
-              <option value="RATE_CONFIRMATION">Rate Conf</option>
-              <option value="BOL">BOL</option>
-              <option value="LUMPER">Lumper</option>
-              <option value="PROOF_OF_DELIVERY">POD</option>
-              <option value="ROADSIDE_MAINTENANCE_RECEIPT">Roadside Receipt</option>
-              <option value="OTHER">Other</option>
-              <option value="CONFIRMATION">Confirmation</option>
-            </select>
+            <input
+              type="text"
+              placeholder="Attach."
+              [(ngModel)]="headerFilters.attachmentType"
+            />
           </th>
           <!-- Actions -->
           <th></th>
@@ -449,23 +454,31 @@
       </thead>
       <tbody>
         <tr *ngFor="let load of filteredLoads" [ngClass]="rowClass(load)">
-          <td>
+          <td [title]="load.load_number || ''">
             <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
           </td>
-          <td>{{ formatDateLocal(load.pickup_date) || '--' }}</td>
-          <td>{{ load.driver_name || '--' }}</td>
-          <td>{{ load.broker_name || '--' }}</td>
-          <td>{{ load.po_number || '--' }}</td>
-          <td>{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
-          <td>{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
-          <td>${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
-          <td>{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
-          <td><app-status-pill [status]="load.status"></app-status-pill></td>
-          <td><app-status-pill [status]="load.billing_status"></app-status-pill></td>
-          <td class="notes-cell">{{ load.notes || '--' }}</td>
+          <td [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
+          <td [title]="load.driver_name || '--'">{{ load.driver_name || '--' }}</td>
+          <td [title]="load.broker_name || '--'">{{ load.broker_name || '--' }}</td>
+          <td [title]="load.po_number || '--'">{{ load.po_number || '--' }}</td>
+          <td [title]="(load.pickup_city || '--') + ', ' + (load.pickup_state || '')">{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
+          <td [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
+          <td [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
+          <td [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
+          <td [title]="load.status || ''"><app-status-pill [status]="load.status"></app-status-pill></td>
+          <td [title]="load.billing_status || ''"><app-status-pill [status]="load.billing_status"></app-status-pill></td>
           <td>
-            <div class="attachment-chips attachment-chips--clickable" (click)="openEditForAttachments(load)" role="button" tabindex="0" (keydown.enter)="openEditForAttachments(load)" (keydown.space)="openEditForAttachments(load); $event.preventDefault()" title="Open attachments">
-              <app-attachment-chip *ngFor="let type of (load.attachment_types || [])" [type]="type"></app-attachment-chip>
+            <div class="attachment-chips">
+              <app-attachment-chip
+                *ngFor="let type of (load.attachment_types || [])"
+                [type]="type"
+                class="attachment-chip--download"
+                role="button"
+                tabindex="0"
+                [title]="'Download ' + type"
+                (click)="downloadAttachmentByType(load, type); $event.stopPropagation()"
+                (keydown.enter)="downloadAttachmentByType(load, type); $event.stopPropagation()"
+              ></app-attachment-chip>
             </div>
           </td>
           <td>
@@ -548,6 +561,98 @@
         </div>
       </div>
       <div class="draft-review__right" [class.draft-review__right--full]="!editingLoadDetail || !isDraftLoad(editingLoadDetail)">
+
+      <!-- Inline Edit Stop panel (draft review only) -->
+      <div class="edit-stop-inline" *ngIf="isDraftEditStopInline">
+        <div class="edit-stop-inline__header">
+          <button type="button" class="edit-stop-inline__back" (click)="closeEditStopModal()">
+            <span class="material-symbols-outlined">arrow_back</span>
+            Back
+          </button>
+          <h3>Edit Stop</h3>
+        </div>
+        <form [formGroup]="editStopForm" (ngSubmit)="saveEditStop()" class="edit-stop-inline__body">
+          <div class="new-stop-form">
+            <div class="new-stop-field">
+              <label>Stop type</label>
+              <div class="radio-group">
+                <label class="radio-option"><input type="radio" formControlName="stopType" value="PICKUP" (change)="onEditStopTypeChange('PICKUP')"> <span>Pickup</span></label>
+                <label class="radio-option"><input type="radio" formControlName="stopType" value="DELIVERY" (change)="onEditStopTypeChange('DELIVERY')"> <span>Delivery</span></label>
+                <label class="radio-option"><input type="radio" formControlName="stopType" value="OTHER" (change)="onEditStopTypeChange('OTHER')"> <span>Other</span></label>
+              </div>
+            </div>
+            <div class="new-stop-field" *ngIf="sortedStops.length">
+              <label>Order (after)</label>
+              <select formControlName="orderAfterIndex">
+                <option [value]="-1">Driver position: {{ driverPositionDisplay }}</option>
+                <option *ngFor="let stop of sortedStops; let i = index" [value]="i">
+                  #{{ i + 1 }} {{ stop.stop_type }}: {{ stop.city || '--' }}, {{ stop.state || '' }}
+                </option>
+              </select>
+            </div>
+            <div class="new-stop-field">
+              <label>Appointment</label>
+              <div class="radio-group">
+                <label class="radio-option"><input type="radio" formControlName="appointmentType" value="FCFS"> <span>FCFS</span></label>
+                <label class="radio-option"><input type="radio" formControlName="appointmentType" value="Appt"> <span>Appt</span></label>
+              </div>
+            </div>
+            <div class="new-stop-row">
+              <div class="new-stop-field">
+                <label>Date *</label>
+                <app-ai-date-picker formControlName="stopDate" [inline]="true" ariaLabel="Stop date"></app-ai-date-picker>
+              </div>
+              <div class="new-stop-field" *ngIf="editStopForm.get('appointmentType')?.value === 'Appt'">
+                <label>Appt time</label>
+                <input type="time" formControlName="apptTime" placeholder="08:30 AM">
+              </div>
+            </div>
+            <div class="new-stop-field">
+              <label>Company</label>
+              <input formControlName="company" placeholder="Search by name or MC number">
+            </div>
+            <div class="new-stop-field">
+              <label>Street</label>
+              <input formControlName="address1" placeholder="Street address">
+            </div>
+            <div class="new-stop-row">
+              <div class="new-stop-field">
+                <label>City *</label>
+                <input formControlName="city" placeholder="City">
+              </div>
+              <div class="new-stop-field">
+                <label>State *</label>
+                <input formControlName="state" placeholder="State">
+              </div>
+              <div class="new-stop-field">
+                <label>Zip</label>
+                <input formControlName="zip" placeholder="Zip" (blur)="lookupZipForEditStop()">
+              </div>
+            </div>
+            <div class="new-stop-field">
+              <label>Phone</label>
+              <input formControlName="phone" type="tel" placeholder="Phone">
+            </div>
+            <div class="new-stop-field">
+              <label>Notes</label>
+              <textarea formControlName="notes" rows="3" placeholder="Notes"></textarea>
+            </div>
+          </div>
+          <div *ngIf="editStopError" class="alert alert-error">{{ editStopError }}</div>
+          <div class="edit-stop-inline__footer">
+            <button type="button" class="link link-danger" (click)="removeEditStop()" [disabled]="savingEditStop">Remove Stop</button>
+            <div class="edit-stop-actions">
+              <button class="btn btn-secondary" type="button" (click)="closeEditStopModal()" [disabled]="savingEditStop">Cancel</button>
+              <button class="btn btn-primary" type="submit" [disabled]="savingEditStop">
+                {{ savingEditStop ? 'Saving...' : 'Save' }}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Normal form view (hidden when inline edit stop is open in draft mode) -->
+      <div class="draft-review__normal" [hidden]="isDraftEditStopInline">
       <!-- Edit header: top row = Load | Trip info | Driver & Broker (3 cols); below = Trip stops full width -->
       <div class="edit-load-header" *ngIf="editingLoadDetail">
         <div class="edit-load-header__row">
@@ -1055,7 +1160,8 @@
           </ng-container>
         </div>
       </form>
-      </div>
+      </div> <!-- /.draft-review__normal -->
+      </div> <!-- /.draft-review__right -->
     </div>
   </div>
 
@@ -1290,8 +1396,8 @@
     </div>
   </div>
 
-  <!-- Edit Stop modal -->
-  <div class="modal-backdrop" *ngIf="showEditStopModal" (click)="closeEditStopModal()">
+  <!-- Edit Stop modal (non-draft loads only; draft loads use inline panel) -->
+  <div class="modal-backdrop" *ngIf="showEditStopModal && !isDraftEditStopInline" (click)="closeEditStopModal()">
     <div class="modal edit-stop-modal" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h3>Edit Stop</h3>
@@ -1378,51 +1484,95 @@
     </div>
   </div>
 
-  <!-- Bulk Upload Rate Confirmations modal -->
+  <!-- Bulk Upload Rate Confirmations modal — AI themed -->
   <div class="modal-backdrop" *ngIf="showBulkUploadModal">
-    <div class="modal" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h3>Bulk Upload Rate Confirmations</h3>
-        <button class="close" type="button" (click)="closeBulkUploadModal()">×</button>
+    <div class="modal bulk-ai-modal" (click)="$event.stopPropagation()">
+      <div class="bulk-ai-header">
+        <div class="bulk-ai-header-left">
+          <span class="bulk-ai-hero-pill">
+            <span class="material-symbols-outlined">auto_awesome</span> AI Batch Processing
+          </span>
+          <h3>
+            <span class="material-symbols-outlined bulk-ai-title-icon">neurology</span>
+            Bulk Upload Rate Confirmations
+          </h3>
+        </div>
+        <button class="bulk-ai-close" type="button" (click)="closeBulkUploadModal()">
+          <span class="material-symbols-outlined">close</span>
+        </button>
       </div>
-      <div class="modal-body">
-        <p>Upload up to 10 rate confirmation PDFs. You can add files from different folders in multiple steps. We'll extract load data with AI, match brokers in our database, and create draft loads at the top of the loads page for you to validate and approve.</p>
-        <div class="bulk-file-list" *ngIf="bulkPdfFiles.length">
-          <div class="bulk-file-list-header">
-            <span>{{ bulkPdfFiles.length }} file(s) (max 10)</span>
+      <div class="bulk-ai-body">
+        <p class="bulk-ai-desc">
+          Upload up to 10 rate confirmation PDFs. Our
+          <span class="bulk-ai-cyan">AI</span> will
+          <span class="bulk-ai-cyan">extract</span> load data, match brokers, and create draft loads for you to validate.
+        </p>
+
+        <!-- File list -->
+        <div class="bulk-ai-file-list" *ngIf="bulkPdfFiles.length">
+          <div class="bulk-ai-file-list-header">
+            <span class="bulk-ai-file-count">{{ bulkPdfFiles.length }}/10</span>
+            <span>files queued</span>
           </div>
-          <ul class="bulk-file-items">
-            <li *ngFor="let f of bulkPdfFiles; let i = index" class="bulk-file-item">
-              <span class="bulk-file-name">{{ f.name }}</span>
-              <button type="button" class="bulk-file-remove" (click)="removeBulkFile(i)" title="Remove" [disabled]="bulkUploading">
+          <ul class="bulk-ai-file-items">
+            <li *ngFor="let f of bulkPdfFiles; let i = index" class="bulk-ai-file-item">
+              <span class="material-symbols-outlined bulk-ai-file-icon">description</span>
+              <span class="bulk-ai-file-name">{{ f.name }}</span>
+              <button type="button" class="bulk-ai-file-remove" (click)="removeBulkFile(i)" title="Remove" [disabled]="bulkUploading">
                 <span class="material-symbols-outlined">close</span>
               </button>
             </li>
           </ul>
         </div>
+
+        <!-- Dropzone -->
         <div
-          class="dropzone"
+          class="bulk-ai-dropzone"
           (drop)="onBulkDrop($event)"
           (dragover)="allowDrop($event)"
+          *ngIf="bulkPdfFiles.length < 10"
         >
-          <p *ngIf="bulkPdfFiles.length === 0">Drag and drop PDFs here or click to upload (max 10)</p>
-          <p *ngIf="bulkPdfFiles.length && bulkPdfFiles.length < 10">Add more PDFs ({{ bulkPdfFiles.length }}/10)</p>
-          <p *ngIf="bulkPdfFiles.length >= 10" class="muted">Maximum 10 files. Remove one above to add more.</p>
+          <span class="material-symbols-outlined bulk-ai-dropzone-icon" *ngIf="bulkPdfFiles.length === 0">cloud_upload</span>
+          <span class="material-symbols-outlined bulk-ai-dropzone-icon" *ngIf="bulkPdfFiles.length > 0">add_circle</span>
+          <p *ngIf="bulkPdfFiles.length === 0">Drag & drop PDFs here or click to upload</p>
+          <p *ngIf="bulkPdfFiles.length > 0">Add more PDFs</p>
           <input #bulkFileInput type="file" accept="application/pdf" multiple (change)="onBulkFilesSelected($any($event.target).files, bulkFileInput)">
         </div>
-        <div *ngIf="bulkError" class="alert alert-error">{{ bulkError }}</div>
-        <div *ngIf="bulkResults.length" class="bulk-results">
-          <h4>Results</h4>
-          <ul>
-            <li *ngFor="let r of bulkResults">
-              <span *ngIf="r.success" class="bulk-result-ok">✓ {{ r.filename }} → Load #{{ r.data?.load_number || '--' }}</span>
-              <span *ngIf="!r.success" class="bulk-result-err">✗ {{ r.filename }}: {{ r.error || 'Failed' }}</span>
-            </li>
-          </ul>
+        <p class="bulk-ai-max-notice" *ngIf="bulkPdfFiles.length >= 10">Maximum 10 files reached. Remove a file to add more.</p>
+
+        <!-- Error -->
+        <div *ngIf="bulkError" class="bulk-ai-error">
+          <span class="material-symbols-outlined">error</span> {{ bulkError }}
+        </div>
+
+        <!-- Processing state -->
+        <div *ngIf="bulkUploading" class="bulk-ai-processing">
+          <div class="bulk-ai-processing-header">
+            <span class="material-symbols-outlined bulk-ai-pulse">neurology</span>
+            <span>AI is processing your documents...</span>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div *ngIf="bulkResults.length" class="bulk-ai-results">
+          <h4>
+            <span class="material-symbols-outlined">checklist</span> Results
+          </h4>
+          <div *ngFor="let r of bulkResults" class="bulk-ai-result-row">
+            <span *ngIf="r.success" class="bulk-ai-result-pill bulk-ai-result-ok">
+              <span class="material-symbols-outlined">check_circle</span>
+              {{ r.filename }} → Load #{{ r.data?.load_number || '--' }}
+            </span>
+            <span *ngIf="!r.success" class="bulk-ai-result-pill bulk-ai-result-err">
+              <span class="material-symbols-outlined">cancel</span>
+              {{ r.filename }}: {{ r.error || 'Failed' }}
+            </span>
+          </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" type="button" (click)="runBulkUpload()" [disabled]="bulkPdfFiles.length === 0 || bulkUploading">
+      <div class="bulk-ai-footer">
+        <button class="bulk-ai-btn" type="button" (click)="runBulkUpload()" [disabled]="bulkPdfFiles.length === 0 || bulkUploading">
+          <span class="material-symbols-outlined">auto_awesome</span>
           {{ bulkUploading ? 'Processing...' : 'Upload & Extract' }}
         </button>
         <button class="btn btn-secondary" type="button" (click)="closeBulkUploadModal()" [disabled]="bulkUploading">Close</button>
@@ -1432,28 +1582,48 @@
 
   <!-- Auto-create placeholder -->
   <div class="modal-backdrop" *ngIf="showAutoModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Auto-Create from PDF</h3>
-        <button class="close" (click)="closeAutoModal()">×</button>
+    <div class="modal ai-modal">
+      <div class="modal-header ai-modal-header">
+        <div class="ai-modal-title-group">
+          <span class="ai-hero-pill"><span class="material-symbols-outlined">auto_awesome</span> AI-Powered</span>
+          <h3><span class="material-symbols-outlined ai-title-icon">neurology</span> Auto-Create from PDF</h3>
+          <p class="ai-modal-subtitle">Upload a rate confirmation or similar PDF. Our AI will extract load details for you to review before saving.</p>
+        </div>
+        <button class="ai-close-btn" (click)="closeAutoModal()"><span class="material-symbols-outlined">close</span></button>
       </div>
       <div class="modal-body">
-        <p>Upload a rate confirmation or similar PDF. We&apos;ll try to extract load details for you, and you can review before saving.</p>
-        <div class="dropzone">
-          <p *ngIf="!autoPdfFile">Drag and drop PDF here or click to upload</p>
-          <p *ngIf="autoPdfFile"><strong>Selected file:</strong> {{ autoPdfFile.name }}</p>
-          <input type="file" accept="application/pdf" (change)="onAutoFileSelected($any($event.target).files)">
+        <div class="ai-dropzone" [class.ai-dropzone--has-file]="autoPdfFile" [class.ai-dropzone--extracting]="autoExtracting">
+          <div class="ai-dropzone-content" *ngIf="!autoPdfFile && !autoExtracting">
+            <span class="material-symbols-outlined ai-dropzone-icon">cloud_upload</span>
+            <p class="ai-dropzone-text">Drag and drop your PDF here</p>
+            <p class="ai-dropzone-hint">or click to browse files</p>
+            <input type="file" accept="application/pdf" (change)="onAutoFileSelected($any($event.target).files)" class="ai-dropzone-input">
+          </div>
+          <div class="ai-dropzone-content" *ngIf="autoPdfFile && !autoExtracting">
+            <span class="material-symbols-outlined ai-file-icon">description</span>
+            <p class="ai-dropzone-filename">{{ autoPdfFile.name }}</p>
+            <p class="ai-dropzone-hint">Ready for AI extraction</p>
+            <input type="file" accept="application/pdf" (change)="onAutoFileSelected($any($event.target).files)" class="ai-dropzone-input">
+          </div>
+          <div class="ai-dropzone-content ai-extracting-state" *ngIf="autoExtracting">
+            <span class="material-symbols-outlined ai-brain-pulse">neurology</span>
+            <p class="ai-extracting-text">AI is analyzing your document...</p>
+            <div class="ai-progress-bar"><div class="ai-progress-bar-fill"></div></div>
+          </div>
         </div>
-        <div *ngIf="autoError" class="alert alert-error">{{ autoError }}</div>
-        <p *ngIf="autoExtraction?.warning" class="alert alert-warning">
-          {{ autoExtraction?.warning }}
-        </p>
+        <div *ngIf="autoError" class="ai-alert ai-alert-error">
+          <span class="material-symbols-outlined">error</span> {{ autoError }}
+        </div>
+        <div *ngIf="autoExtraction?.warning" class="ai-alert ai-alert-warning">
+          <span class="material-symbols-outlined">warning</span> {{ autoExtraction?.warning }}
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-primary" type="button" (click)="runAutoExtraction()" [disabled]="!autoPdfFile || autoExtracting">
+        <button class="ai-btn-primary" type="button" (click)="runAutoExtraction()" [disabled]="!autoPdfFile || autoExtracting">
+          <span class="material-symbols-outlined">auto_awesome</span>
           {{ autoExtracting ? 'Extracting...' : 'Run Extraction' }}
         </button>
-        <button class="btn btn-secondary" type="button" (click)="closeAutoModal()">Close</button>
+        <button class="ai-btn-secondary" type="button" (click)="closeAutoModal()">Close</button>
       </div>
     </div>
   </div>

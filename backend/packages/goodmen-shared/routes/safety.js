@@ -44,6 +44,9 @@ const dtLogger = require('../utils/logger');
 const { uploadBuffer } = require('../storage/r2-storage');
 const { loadUserRbac, requireAnyPermission } = require('../middleware/rbac-middleware');
 
+// FN-479: Fire-and-forget risk score recalculation after incident changes
+const { triggerRecalculation: triggerRiskRecalc } = require('./safety-risk-engine');
+
 const SAFETY_ANY_PERMISSION = [
   'safety.incidents.view',
   'safety.incidents.create',
@@ -336,6 +339,9 @@ router.post('/incidents', canCreateIncidents, async (req, res) => {
     const [row] = await knex('safety_incidents').insert(payload).returning('*');
     await logAudit(row.id, null, uid, userName(req), 'created', null, null, incidentNumber);
 
+    // FN-479: fire-and-forget risk score recalculation
+    if (row.driver_id) triggerRiskRecalc(tid, row.driver_id).catch(() => {});
+
     res.status(201).json(row);
   } catch (err) {
     dtLogger.error('safety_incident_create_error', err);
@@ -381,6 +387,10 @@ router.patch('/incidents/:id', canEditIncidents, async (req, res) => {
         await logAudit(req.params.id, null, uid, userName(req), 'updated', field, existing[field], updates[field]);
       }
     }
+
+    // FN-479: fire-and-forget risk score recalculation
+    const dId = updated.driver_id || existing.driver_id;
+    if (dId) triggerRiskRecalc(tid, dId).catch(() => {});
 
     res.json(updated);
   } catch (err) {

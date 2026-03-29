@@ -6,30 +6,6 @@
     </div>
   </div>
 
-  <!-- Filters -->
-  <div class="filters-row">
-    <app-ai-select
-      class="filter-select"
-      [options]="statusSelectOptions"
-      [ngModel]="filters.status"
-      (ngModelChange)="filters.status = $event; applyFilters()"
-      [allowEmpty]="true"
-      emptyLabel="All Statuses"
-    ></app-ai-select>
-    <app-ai-select
-      class="filter-select"
-      [options]="claimTypeSelectOptions"
-      [ngModel]="filters.claim_type"
-      (ngModelChange)="filters.claim_type = $event; applyFilters()"
-      [allowEmpty]="true"
-      emptyLabel="All Claim Types"
-    ></app-ai-select>
-    <label class="checkbox-chip">
-      <input type="checkbox" [(ngModel)]="filters.overdue_only" (change)="applyFilters()"> Overdue follow-up only
-    </label>
-    <button type="button" class="btn btn-sm btn-ghost" (click)="clearFilters()">Clear</button>
-  </div>
-
   <div *ngIf="loading" class="loading-state">Loading claims…</div>
   <div *ngIf="error" class="alert-error">{{ error }}</div>
 
@@ -48,6 +24,43 @@
           <th>Net Loss</th>
           <th>Follow-up</th>
           <th></th>
+        </tr>
+        <tr class="header-filters">
+          <th></th>
+          <th></th>
+          <th>
+            <app-ai-select
+              [options]="statusSelectOptions"
+              [ngModel]="filters.status"
+              (ngModelChange)="filters.status = $event; applyFilters()"
+              [allowEmpty]="true"
+              emptyLabel="All Statuses"
+            ></app-ai-select>
+          </th>
+          <th>
+            <app-ai-select
+              [options]="claimTypeSelectOptions"
+              [ngModel]="filters.claim_type"
+              (ngModelChange)="filters.claim_type = $event; applyFilters()"
+              [allowEmpty]="true"
+              emptyLabel="All Types"
+            ></app-ai-select>
+          </th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th>
+            <label class="header-checkbox">
+              <input type="checkbox" [(ngModel)]="filters.overdue_only" (change)="applyFilters()"> Overdue
+            </label>
+          </th>
+          <th>
+            <button type="button" class="clear-filters-btn" (click)="clearFilters()" title="Clear filters">
+              <span class="material-symbols-outlined">filter_list_off</span>
+            </button>
+          </th>
         </tr>
       </thead>
       <tbody>

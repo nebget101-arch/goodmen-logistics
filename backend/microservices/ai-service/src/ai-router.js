@@ -5,6 +5,12 @@ const { handleWorkOrderTriage } = require('./handlers/work-order-triage-handler'
 const { handleInventoryRecommendations } = require('./handlers/inventory-recommendations-handler');
 const { handlePartsAnalysis } = require('./handlers/parts-analysis-handler');
 const { handleCustomersAnalysis } = require('./handlers/customers-analysis-handler');
+const { handleFuelPreprocess } = require('./handlers/fuel-preprocess-handler');
+const { handleTollCsvNormalize } = require('./handlers/toll-csv-normalize-handler');
+const { handleTollInvoiceVision } = require('./handlers/toll-invoice-vision-handler');
+const { handleMvrVision } = require('./handlers/mvr-vision-handler');
+const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handler');
+const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -22,6 +28,24 @@ function buildAiRouter(deps) {
   router.post('/shop-clients/analysis', (req, res) =>
     handleCustomersAnalysis(req, res, deps)
   );
+  router.post('/fuel/preprocess', (req, res) =>
+    handleFuelPreprocess(req, res, deps)
+  );
+  router.post('/tolls/csv-normalize', (req, res) =>
+    handleTollCsvNormalize(req, res, deps)
+  );
+  router.post('/tolls/invoice-vision', (req, res) =>
+    handleTollInvoiceVision(req, res, deps)
+  );
+  router.post('/safety/mvr-vision', (req, res) =>
+    handleMvrVision(req, res, deps)
+  );
+  router.post('/fmcsa/match-driver', (req, res) =>
+    handleFmcsaDriverMatch(req, res, deps)
+  );
+  router.post('/drivers/psp-vision', (req, res) =>
+    handlePspReportVision(req, res, deps)
+  );
 
   return router;
 }
@@ -29,4 +53,3 @@ function buildAiRouter(deps) {
 module.exports = {
   buildAiRouter
 };
-

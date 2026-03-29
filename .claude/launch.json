@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "Frontend (Angular)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start"],
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "export NVM_DIR=\"$HOME/.nvm\" && . \"$NVM_DIR/nvm.sh\" && npm run start"],
       "port": 4200,
       "cwd": "frontend"
     },

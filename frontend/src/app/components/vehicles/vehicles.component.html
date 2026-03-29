@@ -170,7 +170,7 @@
               [attr.aria-label]="'View details for vehicle ' + vehicle.unit_number">
             <td data-label="Unit #">
               <strong>{{ vehicle.unit_number }}</strong>
-              <small class="vin-suffix">({{ vehicle.vin.slice(-4) }})</small>
+              <small class="vin-suffix">({{ (vehicle.vin || '').slice(-4) }})</small>
             </td>
             <td data-label="Vehicle Details">
               <div class="vehicle-details">

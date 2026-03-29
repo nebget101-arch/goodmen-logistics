@@ -3,29 +3,35 @@
 .page-header h2 { margin: 0 0 4px; font-size: 1.4rem; }
 .page-sub { margin: 0; color: #64748b; font-size: .84rem; }
 
-.filters-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
-.filter-select {
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(148,163,184,.2);
-  color: #e2e8f0;
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: .85rem;
-  min-width: 150px;
+thead .header-filters th {
+  padding: 4px 6px 8px;
 }
-
-.checkbox-chip {
+thead .header-filters th app-ai-select {
+  font-size: 11px;
+}
+.header-checkbox {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(148,163,184,.15);
+  gap: 4px;
+  font-size: 11px;
   color: #94a3b8;
-  border-radius: 20px;
-  padding: 8px 12px;
-  font-size: .82rem;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.checkbox-chip input { accent-color: #ef4444; }
+.header-checkbox input { accent-color: #ef4444; }
+.clear-filters-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color .15s;
+}
+.clear-filters-btn:hover { color: #94a3b8; }
 
 .loading-state { color: #94a3b8; padding: 20px 0; }
 .alert-error { background: rgba(239,68,68,.15); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }

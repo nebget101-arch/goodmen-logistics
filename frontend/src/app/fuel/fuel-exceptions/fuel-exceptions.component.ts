@@ -82,9 +82,37 @@ export class FuelExceptionsComponent implements OnInit {
   }
 
   typeClass(type: string): string {
+    if (type === 'driver_card_mismatch') return 'type-mismatch';
     if (type.includes('driver')) return 'type-driver';
     if (type.includes('truck')) return 'type-truck';
     if (type.includes('card')) return 'type-card';
     return 'type-other';
+  }
+
+  isMismatch(row: FuelException): boolean {
+    return row.exception_type === 'driver_card_mismatch';
+  }
+
+  resolveMismatch(row: FuelException, action: 'keep_assigned' | 'use_transaction' | 'ignore'): void {
+    this.resolvingId = row.id;
+    let payload: { driver_id?: string; resolution_notes?: string; ignore?: boolean } = {};
+
+    if (action === 'keep_assigned') {
+      payload = { resolution_notes: 'Kept assigned driver from card assignment' };
+    } else if (action === 'use_transaction') {
+      payload = { resolution_notes: 'Overridden to use driver from transaction data' };
+    } else {
+      payload = { ignore: true, resolution_notes: 'Mismatch ignored' };
+    }
+
+    this.fuel.resolveException(row.id, payload).subscribe({
+      next: () => { this.resolvingId = null; this.selected.delete(row.id); this.load(); },
+      error: (err) => { this.error = err.error?.error || 'Failed to resolve mismatch'; this.resolvingId = null; }
+    });
+  }
+
+  typeLabel(type: string): string {
+    if (type === 'driver_card_mismatch') return 'driver / card mismatch';
+    return type.replace(/_/g, ' ');
   }
 }

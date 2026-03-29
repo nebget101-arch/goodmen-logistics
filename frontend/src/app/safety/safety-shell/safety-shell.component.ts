@@ -16,7 +16,6 @@ export class SafetyShellComponent implements OnInit {
     { label: 'Claims',              path: '/safety/claims',       icon: 'description' },
     { label: 'Tasks',               path: '/safety/tasks',        icon: 'checklist' },
     { label: 'Reports',             path: '/safety/reports',      icon: 'analytics' },
-    { label: 'Compliance',          path: '/safety/compliance',   icon: 'verified' },
   ];
 
   activeTab = '/safety';

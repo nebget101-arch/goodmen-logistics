@@ -8,6 +8,7 @@ import { OperatingEntityContextService } from './services/operating-entity-conte
 import { ReferenceDataService } from './services/reference-data.service';
 import { NAV_TOP_LINKS, NAV_SECTIONS, NavSection, NavLink } from './config/nav.config';
 import { PERMISSIONS } from './models/access-control.model';
+import { AiSelectOption } from './shared/ai-select/ai-select.component';
 
 @Component({
   selector: 'app-root',
@@ -54,6 +55,27 @@ export class AppComponent implements OnInit {
 
   isLoggedIn(): boolean {
     return !!localStorage.getItem('token');
+  }
+
+  operatingEntityOptions: AiSelectOption[] = [];
+  operatingEntityOptionsMobile: AiSelectOption[] = [];
+
+  rebuildOperatingEntityOptions(): void {
+    const entities = this.operatingEntityContext.snapshot.accessibleOperatingEntities;
+    const prefix: AiSelectOption[] = this.showAllEntitiesOption()
+      ? [{ value: 'all', label: 'All Entities' }]
+      : [];
+    this.operatingEntityOptions = [
+      ...prefix,
+      ...entities.map(e => ({
+        value: e.id,
+        label: e.name + (e.mcNumber ? ' \u00b7 MC ' + e.mcNumber : '')
+      }))
+    ];
+    this.operatingEntityOptionsMobile = [
+      ...prefix,
+      ...entities.map(e => ({ value: e.id, label: e.name }))
+    ];
   }
 
   showAllEntitiesOption(): boolean {
@@ -231,6 +253,7 @@ export class AppComponent implements OnInit {
       });
     }
     this.operatingEntityContext.bootstrapFromSessionIfNeeded(this.isLoggedIn());
+    this.operatingEntityContext.context$().subscribe(() => this.rebuildOperatingEntityOptions());
   }
 
   toggleSidebar(): void {

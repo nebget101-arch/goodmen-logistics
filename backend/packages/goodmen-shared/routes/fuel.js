@@ -13,6 +13,7 @@
  *   POST   /api/fuel/mapping-profiles
  *   DELETE /api/fuel/mapping-profiles/:id
  *   POST   /api/fuel/import/preview
+ *   POST   /api/fuel/import/ai-preprocess
  *   POST   /api/fuel/import/stage
  *   POST   /api/fuel/import/commit/:batchId
  *   GET    /api/fuel/import/batches
@@ -26,6 +27,13 @@
  *   POST   /api/fuel/exceptions/bulk-resolve
  *   POST   /api/fuel/reprocess-unmatched
  *   GET    /api/fuel/overview
+ *   GET    /api/fuel/cards/:cardId/assignments
+ *   POST   /api/fuel/cards/:cardId/assign-driver
+ *   POST   /api/fuel/cards/:cardId/revoke-driver
+ *   GET    /api/fuel/driver-assignments
+ *   GET    /api/fuel/accounts/:accountId/cards
+ *   POST   /api/fuel/accounts/:accountId/cards
+ *   PATCH  /api/fuel/accounts/cards/:cardId
  */
 
 const express = require('express');
@@ -99,11 +107,26 @@ router.get('/providers/templates', (_req, res) => {
 router.get('/cards', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
+
+    const cardCountSub = knex('fuel_cards')
+      .where('fuel_cards.fuel_card_account_id', knex.raw('fuel_card_accounts.id'))
+      .count('* as cnt')
+      .as('card_count');
+
     const rows = await applyOperatingEntityFilter(
-      knex('fuel_card_accounts').where({ tenant_id: tid }),
-      req
+      knex('fuel_card_accounts')
+        .where({ 'fuel_card_accounts.tenant_id': tid })
+        .select('fuel_card_accounts.*', cardCountSub),
+      req,
+      'fuel_card_accounts.operating_entity_id'
     )
-      .orderBy('created_at', 'desc');
+      .orderBy('fuel_card_accounts.created_at', 'desc');
+
+    // Coerce card_count from string to integer
+    for (const row of rows) {
+      row.card_count = parseInt(row.card_count, 10) || 0;
+    }
+
     res.json(rows);
   } catch (err) {
     dtLogger.error('fuel_cards_list_error', err);
@@ -159,6 +182,245 @@ router.patch('/cards/:id', async (req, res) => {
   } catch (err) {
     dtLogger.error('fuel_card_patch_error', err);
     sendError(res, 500, 'Failed to update fuel card account');
+  }
+});
+
+// ─── Fuel Card ↔ Driver Assignments ──────────────────────────────────────────
+
+/**
+ * GET /cards/:cardId/assignments
+ * List all assignments (active + revoked) for a fuel card.
+ */
+router.get('/cards/:cardId/assignments', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { cardId } = req.params;
+
+    const rows = await knex('fuel_card_driver_assignments as a')
+      .leftJoin('drivers as d', 'd.id', 'a.driver_id')
+      .where({ 'a.tenant_id': tid, 'a.fuel_card_account_id': cardId })
+      .select(
+        'a.*',
+        knex.raw("COALESCE(d.first_name || ' ' || d.last_name, NULL) AS driver_name")
+      )
+      .orderBy('a.assigned_date', 'desc');
+
+    res.json(rows);
+  } catch (err) {
+    dtLogger.error('fuel_card_assignments_list_error', err);
+    sendError(res, 500, 'Failed to fetch card assignments');
+  }
+});
+
+/**
+ * POST /cards/:cardId/assign-driver
+ * Assign a driver to a fuel card. Auto-revokes any existing active assignment.
+ */
+router.post('/cards/:cardId/assign-driver', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { cardId } = req.params;
+    const { driverId, cardNumberLast4, notes } = req.body;
+
+    if (!driverId) return sendError(res, 400, 'driverId is required');
+
+    // Verify the card exists and belongs to this tenant
+    const card = await knex('fuel_card_accounts')
+      .where({ id: cardId, tenant_id: tid })
+      .first('id');
+    if (!card) return sendError(res, 404, 'Fuel card account not found');
+
+    // Verify the driver exists and belongs to this tenant
+    const driver = await knex('drivers')
+      .where({ id: driverId, tenant_id: tid })
+      .first('id');
+    if (!driver) return sendError(res, 404, 'Driver not found');
+
+    const uid = userId(req);
+
+    // Auto-revoke any existing active assignment for this card
+    await knex('fuel_card_driver_assignments')
+      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' })
+      .update({
+        status: 'revoked',
+        revoked_date: new Date(),
+        revoked_by: uid,
+        updated_at: new Date()
+      });
+
+    // Create new active assignment
+    const [row] = await knex('fuel_card_driver_assignments').insert({
+      tenant_id: tid,
+      fuel_card_account_id: cardId,
+      driver_id: driverId,
+      card_number_last4: cardNumberLast4 || null,
+      status: 'active',
+      assigned_date: new Date(),
+      assigned_by: uid,
+      notes: notes || null
+    }).returning('*');
+
+    res.status(201).json(row);
+  } catch (err) {
+    dtLogger.error('fuel_card_assign_driver_error', err);
+    sendError(res, 500, 'Failed to assign driver to card');
+  }
+});
+
+/**
+ * POST /cards/:cardId/revoke-driver
+ * Revoke the active driver assignment for a fuel card.
+ */
+router.post('/cards/:cardId/revoke-driver', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { cardId } = req.params;
+    const { notes } = req.body;
+
+    const active = await knex('fuel_card_driver_assignments')
+      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' })
+      .first();
+
+    if (!active) return sendError(res, 404, 'No active assignment found for this card');
+
+    const [row] = await knex('fuel_card_driver_assignments')
+      .where({ id: active.id })
+      .update({
+        status: 'revoked',
+        revoked_date: new Date(),
+        revoked_by: userId(req),
+        notes: notes || active.notes,
+        updated_at: new Date()
+      })
+      .returning('*');
+
+    res.json(row);
+  } catch (err) {
+    dtLogger.error('fuel_card_revoke_driver_error', err);
+    sendError(res, 500, 'Failed to revoke card assignment');
+  }
+});
+
+/**
+ * GET /driver-assignments?driver_id=<uuid>
+ * List all card assignments for a specific driver.
+ */
+router.get('/driver-assignments', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { driver_id } = req.query;
+
+    if (!driver_id) return sendError(res, 400, 'driver_id query param is required');
+
+    const rows = await knex('fuel_card_driver_assignments as a')
+      .leftJoin('fuel_card_accounts as c', 'c.id', 'a.fuel_card_account_id')
+      .where({ 'a.tenant_id': tid, 'a.driver_id': driver_id })
+      .select(
+        'a.*',
+        'c.display_name as card_display_name',
+        'c.provider_name as card_provider_name',
+        'c.account_number_masked as card_account_number_masked'
+      )
+      .orderBy('a.assigned_date', 'desc');
+
+    res.json(rows);
+  } catch (err) {
+    dtLogger.error('fuel_driver_assignments_list_error', err);
+    sendError(res, 500, 'Failed to fetch driver assignments');
+  }
+});
+
+// ─── Fuel Cards (under Account) ──────────────────────────────────────────────
+
+/**
+ * GET /accounts/:accountId/cards
+ * List all cards belonging to a fuel card account (tenant-scoped).
+ */
+router.get('/accounts/:accountId/cards', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { accountId } = req.params;
+
+    // Verify account belongs to tenant
+    const account = await knex('fuel_card_accounts')
+      .where({ id: accountId, tenant_id: tid })
+      .first('id');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
+
+    const rows = await knex('fuel_cards')
+      .where({ fuel_card_account_id: accountId, tenant_id: tid })
+      .orderBy('created_at', 'desc');
+
+    res.json(rows);
+  } catch (err) {
+    dtLogger.error('fuel_account_cards_list_error', err);
+    sendError(res, 500, 'Failed to fetch cards for account');
+  }
+});
+
+/**
+ * POST /accounts/:accountId/cards
+ * Create a new card under a fuel card account.
+ * Body: { card_number_masked, card_number_last4?, status?, notes? }
+ */
+router.post('/accounts/:accountId/cards', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const { accountId } = req.params;
+    const { card_number_masked, card_number_last4, status, notes } = req.body;
+
+    if (!card_number_masked) return sendError(res, 400, 'card_number_masked is required');
+
+    // Verify account belongs to tenant
+    const account = await knex('fuel_card_accounts')
+      .where({ id: accountId, tenant_id: tid })
+      .first('id');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
+
+    const [row] = await knex('fuel_cards').insert({
+      tenant_id: tid,
+      fuel_card_account_id: accountId,
+      card_number_masked,
+      card_number_last4: card_number_last4 || null,
+      status: status || 'active',
+      notes: notes || null,
+    }).returning('*');
+
+    res.status(201).json(row);
+  } catch (err) {
+    // Handle unique constraint violation (duplicate card number per tenant)
+    if (err.code === '23505' && err.constraint === 'uq_fc_tenant_card_number') {
+      return sendError(res, 409, 'A card with this number already exists for this tenant');
+    }
+    dtLogger.error('fuel_account_card_create_error', err);
+    sendError(res, 500, 'Failed to create fuel card');
+  }
+});
+
+/**
+ * PATCH /accounts/cards/:cardId
+ * Update a fuel card's fields (status, notes, card_number_last4).
+ */
+router.patch('/accounts/cards/:cardId', async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const allowed = ['card_number_last4', 'status', 'notes'];
+    const patch = {};
+    for (const f of allowed) {
+      if (req.body[f] !== undefined) patch[f] = req.body[f];
+    }
+    if (Object.keys(patch).length === 0) return sendError(res, 400, 'No valid fields to update');
+    patch.updated_at = new Date();
+
+    const [row] = await knex('fuel_cards')
+      .where({ id: req.params.cardId, tenant_id: tid })
+      .update(patch)
+      .returning('*');
+    if (!row) return sendError(res, 404, 'Fuel card not found');
+    res.json(row);
+  } catch (err) {
+    dtLogger.error('fuel_card_patch_error', err);
+    sendError(res, 500, 'Failed to update fuel card');
   }
 });
 
@@ -234,6 +496,81 @@ router.post('/import/preview', upload.single('file'), async (req, res) => {
   } catch (err) {
     dtLogger.error('fuel_import_preview_error', err);
     sendError(res, 400, err.message || 'Preview failed');
+  }
+});
+
+// ─── Import – AI Preprocess (FN-406) ─────────────────────────────────────────
+// Accepts file + provider, parses headers/sample rows, sends to AI service for
+// column mapping inference, product type detection, and row split proposals.
+router.post('/import/ai-preprocess', upload.single('file'), async (req, res) => {
+  try {
+    requireTenant(req, res);
+    if (!req.file) return sendError(res, 400, 'No file uploaded');
+
+    const providerKey = req.body.provider_key || 'generic';
+    const providerName = req.body.provider_name || providerKey;
+
+    // Parse file to get headers + all rows
+    const { headers, rows } = parseFileBuffer(req.file.buffer, req.file.originalname);
+    if (!headers || headers.length === 0) {
+      return sendError(res, 400, 'Could not parse headers from file');
+    }
+
+    // Build sample rows as objects (header → value)
+    const sampleRows = rows.slice(0, 20).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+      return obj;
+    });
+
+    // Call AI service with timeout
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+
+    let response;
+    try {
+      response = await fetch(`${aiServiceUrl}/api/ai/fuel/preprocess`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          headers,
+          sampleRows,
+          totalRows: rows.length,
+          providerName,
+        }),
+        signal: controller.signal,
+      });
+    } catch (fetchErr) {
+      if (fetchErr.name === 'AbortError') {
+        dtLogger.error('fuel_ai_preprocess_timeout', { aiServiceUrl });
+        return sendError(res, 504, 'AI service timeout');
+      }
+      // Connection refused, DNS failure, etc.
+      dtLogger.error('fuel_ai_preprocess_unreachable', {
+        aiServiceUrl,
+        error: fetchErr.message,
+      });
+      return sendError(res, 502, 'AI service unreachable');
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      dtLogger.error('fuel_ai_preprocess_error', {
+        status: response.status,
+        body: errorBody,
+      });
+      return sendError(res, response.status === 400 ? 400 : 502,
+        errorBody.error || 'AI preprocessing failed');
+    }
+
+    const aiResult = await response.json();
+    res.json(aiResult);
+  } catch (err) {
+    dtLogger.error('fuel_ai_preprocess_error', err);
+    sendError(res, 500, err.message || 'AI preprocessing failed');
   }
 });
 
@@ -344,9 +681,16 @@ router.get('/import/batches/:id', async (req, res) => {
     ).first();
     if (!batch) return sendError(res, 404, 'Batch not found');
 
-    const batchRows = await knex('fuel_import_batch_rows')
+    let batchRowsQuery = knex('fuel_import_batch_rows')
       .where({ batch_id: batch.id })
       .orderBy('row_number', 'asc');
+
+    // Optional filter by resolution_status (e.g., ?resolution_status=skipped)
+    if (req.query.resolution_status) {
+      batchRowsQuery = batchRowsQuery.where('resolution_status', req.query.resolution_status);
+    }
+
+    const batchRows = await batchRowsQuery;
 
     res.json({ batch, rows: batchRows });
   } catch (err) {
@@ -364,7 +708,7 @@ router.get('/transactions', async (req, res) => {
       date_from, date_to,
       provider, truck_id, driver_id,
       matched_status, settlement_link_status,
-      batch_id
+      batch_id, product_type, category
     } = req.query;
 
     let q = knex('fuel_transactions as ft')
@@ -388,6 +732,8 @@ router.get('/transactions', async (req, res) => {
     if (matched_status) q = q.where('ft.matched_status', matched_status);
     if (settlement_link_status) q = q.where('ft.settlement_link_status', settlement_link_status);
     if (batch_id) q = q.where('ft.source_batch_id', batch_id);
+    if (product_type) q = q.where('ft.product_type', product_type);
+    if (category) q = q.where('ft.category', category);
 
     const total = await applyOperatingEntityFilter(
       knex('fuel_transactions').where('tenant_id', tid),
@@ -401,6 +747,8 @@ router.get('/transactions', async (req, res) => {
         if (driver_id) qb.where('driver_id', driver_id);
         if (matched_status) qb.where('matched_status', matched_status);
         if (batch_id) qb.where('source_batch_id', batch_id);
+        if (product_type) qb.where('product_type', product_type);
+        if (category) qb.where('category', category);
       })
       .count('* as n').then(([r]) => Number(r.n));
 
@@ -517,7 +865,7 @@ router.delete('/transactions/:id', async (req, res) => {
 router.get('/exceptions', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
-    const { limit = 50, offset = 0, status } = req.query;
+    const { limit = 50, offset = 0, status, exception_type } = req.query;
 
     let q = knex('fuel_transaction_exceptions as e')
       .join('fuel_transactions as ft', 'ft.id', 'e.fuel_transaction_id')
@@ -532,6 +880,7 @@ router.get('/exceptions', async (req, res) => {
     applyOperatingEntityFilter(q, req, 'ft.operating_entity_id');
 
     if (status) q = q.where('e.resolution_status', status);
+    if (exception_type) q = q.where('e.exception_type', exception_type);
 
     const rows = await q.limit(Number(limit)).offset(Number(offset));
     const [{ total }] = await knex('fuel_transaction_exceptions as e')
@@ -541,6 +890,7 @@ router.get('/exceptions', async (req, res) => {
         applyOperatingEntityFilter(qb, req, 'ft.operating_entity_id');
       })
       .modify((qb) => { if (status) qb.where('resolution_status', status); })
+      .modify((qb) => { if (exception_type) qb.where('exception_type', exception_type); })
       .count('* as total');
 
     res.json({ rows, total: Number(total) });
@@ -671,6 +1021,18 @@ router.get('/overview', async (req, res) => {
       .modify((qb) => applyOperatingEntityFilter(qb, req, 'ft.operating_entity_id'))
       .count('* as count');
 
+    // Product type breakdown (30 days)
+    const byProductType = await knex('fuel_transactions')
+      .where({ tenant_id: tid })
+      .modify((qb) => applyOperatingEntityFilter(qb, req))
+      .where('transaction_date', '>=', monthAgo.toISOString().slice(0, 10))
+      .groupByRaw('COALESCE(product_type, \'diesel\')')
+      .select(knex.raw('COALESCE(product_type, \'diesel\') as product_type'))
+      .sum('gallons as gallons')
+      .sum('amount as amount')
+      .count('* as count')
+      .orderBy('amount', 'desc');
+
     const lastBatch = await knex('fuel_import_batches')
       .where({ tenant_id: tid })
       .modify((qb) => applyOperatingEntityFilter(qb, req))
@@ -691,6 +1053,7 @@ router.get('/overview', async (req, res) => {
       },
       topVendors: topVendors.map((v) => ({ name: v.vendor_name, total: parseFloat(v.total), count: Number(v.count) })),
       byState: byState.map((s) => ({ state: s.state, gallons: parseFloat(s.gallons), amount: parseFloat(s.amount) })),
+      byProductType: byProductType.map((p) => ({ productType: p.product_type, gallons: parseFloat(p.gallons), amount: parseFloat(p.amount), count: Number(p.count) })),
       unmatchedTransactions: Number(unmatchedCount.count) || 0,
       openExceptions: Number(exceptionsOpen.count) || 0,
       lastBatch: lastBatch || null

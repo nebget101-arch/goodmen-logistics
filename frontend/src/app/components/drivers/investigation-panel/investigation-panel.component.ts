@@ -1,9 +1,22 @@
 import { Component, Input, OnInit, OnChanges, SimpleChanges, EventEmitter, Output } from '@angular/core';
 import {
   EmployerInvestigationService,
+  EmployerResponse,
   InvestigationStatus,
   PastEmployerInvestigation
 } from '../../../services/employer-investigation.service';
+
+/** Pre-computed view data for each employer — avoids method calls in templates. */
+interface EmployerCachedView {
+  latestResponse: EmployerResponse | null;
+  hasDocument: boolean;
+  isNew: boolean;
+  deadlineClass: string;
+  deadlineLabel: string;
+  inquirySentFormatted: string;
+  followUpSentFormatted: string;
+  responseReceivedFormatted: string;
+}
 
 @Component({
   selector: 'app-investigation-panel',
@@ -41,6 +54,11 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
     complete: 'Complete'
   };
 
+  /** Cached view data keyed by employer id — rebuilt after every data change. */
+  employerViews: Map<string, EmployerCachedView> = new Map();
+
+  downloadingDocId: string | null = null;
+
   constructor(private investigationService: EmployerInvestigationService) {}
 
   ngOnInit(): void {
@@ -70,6 +88,7 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
               totalCount: status.totalCount ?? 0
             }
           : null;
+        this.rebuildEmployerViews();
         this.loading = false;
       },
       error: (err) => {
@@ -100,6 +119,7 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
     this.investigationService.initiateInvestigation(this.driverId).subscribe({
       next: (status) => {
         this.investigationStatus = status;
+        this.rebuildEmployerViews();
         this.actionInProgress = null;
         this.historyUpdated.emit();
       },
@@ -183,29 +203,7 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
     });
   }
 
-  getDaysRemaining(deadline: string): number {
-    if (!deadline) return 0;
-    const deadlineDate = new Date(deadline);
-    const now = new Date();
-    const diffMs = deadlineDate.getTime() - now.getTime();
-    return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  }
-
-  getDeadlineClass(deadline: string): string {
-    const days = this.getDaysRemaining(deadline);
-    if (days < 0) return 'deadline-overdue';
-    if (days <= 3) return 'deadline-critical';
-    if (days <= 7) return 'deadline-warning';
-    return 'deadline-ok';
-  }
-
-  getDeadlineLabel(deadline: string): string {
-    const days = this.getDaysRemaining(deadline);
-    if (days < 0) return 'OVERDUE';
-    if (days === 0) return 'Due today';
-    if (days === 1) return '1 day remaining';
-    return `${days} days remaining`;
-  }
+  // --- Pure methods safe for template use (no new object creation) ---
 
   getStepIndex(status: PastEmployerInvestigation['status']): number {
     if (status === 'no_response_documented') return 3;
@@ -225,6 +223,94 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
     return status === 'response_received' || status === 'no_response_documented' || status === 'complete';
   }
 
+  // --- Click handler (not a binding — safe) ---
+
+  downloadResponse(employer: PastEmployerInvestigation): void {
+    const view = this.employerViews.get(employer.id);
+    if (!view?.latestResponse?.documentId) return;
+
+    this.downloadingDocId = view.latestResponse.documentId;
+    this.investigationService.downloadResponseDocument(view.latestResponse.documentId).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `response-${employer.employerName.replace(/\s+/g, '-')}.pdf`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.downloadingDocId = null;
+      },
+      error: (err) => {
+        console.error('Error downloading response document:', err);
+        alert('Failed to download response document.');
+        this.downloadingDocId = null;
+      }
+    });
+  }
+
+  // --- Private helpers (never called from template) ---
+
+  private formatTimestamp(ts: string | null): string {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  private computeDeadlineClass(deadline: string): string {
+    const days = this.computeDaysRemaining(deadline);
+    if (days < 0) return 'deadline-overdue';
+    if (days <= 3) return 'deadline-critical';
+    if (days <= 7) return 'deadline-warning';
+    return 'deadline-ok';
+  }
+
+  private computeDeadlineLabel(deadline: string): string {
+    const days = this.computeDaysRemaining(deadline);
+    if (days < 0) return 'OVERDUE';
+    if (days === 0) return 'Due today';
+    if (days === 1) return '1 day remaining';
+    return `${days} days remaining`;
+  }
+
+  private computeDaysRemaining(deadline: string): number {
+    if (!deadline) return 0;
+    const deadlineDate = new Date(deadline);
+    const now = new Date();
+    const diffMs = deadlineDate.getTime() - now.getTime();
+    return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  }
+
+  /**
+   * Rebuild the cached view Map from current investigationStatus.
+   * Called once after API load and after each employer update.
+   * NEVER call from template — this is the single point of computation.
+   */
+  private rebuildEmployerViews(): void {
+    this.employerViews = new Map();
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    for (const emp of this.investigationStatus?.pastEmployers ?? []) {
+      const responses = emp.responses ?? [];
+      const latest = responses.length ? responses[0] : null;
+      const isNew = emp.responseReceivedAt
+        ? new Date(emp.responseReceivedAt) > threeDaysAgo
+        : false;
+
+      this.employerViews.set(emp.id, {
+        latestResponse: latest,
+        hasDocument: !!latest?.documentId,
+        isNew,
+        deadlineClass: this.computeDeadlineClass(emp.deadline),
+        deadlineLabel: this.computeDeadlineLabel(emp.deadline),
+        inquirySentFormatted: this.formatTimestamp(emp.inquirySentAt),
+        followUpSentFormatted: this.formatTimestamp(emp.followUpSentAt),
+        responseReceivedFormatted: this.formatTimestamp(emp.responseReceivedAt)
+      });
+    }
+  }
+
   private updateEmployer(updated: PastEmployerInvestigation): void {
     if (!this.investigationStatus) return;
     const idx = this.investigationStatus.pastEmployers.findIndex(e => e.id === updated.id);
@@ -234,5 +320,6 @@ export class InvestigationPanelComponent implements OnInit, OnChanges {
     // Recalculate completed count
     this.investigationStatus.completedCount = this.investigationStatus.pastEmployers
       .filter(e => this.isTerminalStatus(e.status)).length;
+    this.rebuildEmployerViews();
   }
 }

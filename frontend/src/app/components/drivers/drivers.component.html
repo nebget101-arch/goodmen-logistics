@@ -6,6 +6,10 @@
       <p class="subtitle" *ngIf="activeOperatingEntityName">Current company context: {{ activeOperatingEntityName }} (driver roster remains tenant-wide).</p>
     </div>
     <div class="header-actions">
+      <button *ngIf="canManageDrivers" class="btn btn-outline" (click)="showInviteModal = true">
+        <span class="material-symbols-outlined">send</span>
+        Send Application Link
+      </button>
       <button *ngIf="canManageDrivers" class="btn btn-primary" (click)="toggleAddForm()">
         <span class="material-symbols-outlined">verified_user</span>
         Add Driver
@@ -54,18 +58,10 @@
             <input type="text" placeholder="Min %" [(ngModel)]="driverFilters.dqfMin" />
           </th>
           <th>
-            <select [(ngModel)]="driverFilters.clearinghouseStatus">
-              <option value="">All</option>
-              <option value="eligible">eligible</option>
-              <option value="query-pending">query-pending</option>
-            </select>
+            <app-ai-select [(ngModel)]="driverFilters.clearinghouseStatus" [options]="clearinghouseStatusOptions" [allowEmpty]="true" emptyLabel="All" placeholder="Clearinghouse"></app-ai-select>
           </th>
           <th>
-            <select [(ngModel)]="driverFilters.status">
-              <option value="">All</option>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
+            <app-ai-select [(ngModel)]="driverFilters.status" [options]="driverStatusOptions" [allowEmpty]="true" emptyLabel="All" placeholder="Status"></app-ai-select>
           </th>
           <th></th>
         </tr>
@@ -197,14 +193,50 @@
               />
             </div>
             <div class="dqf-field">
-              <label for="address">Address</label>
+              <label for="streetAddress">Street Address</label>
               <input
-                id="address"
+                id="streetAddress"
                 type="text"
-                [(ngModel)]="newDriver.address"
+                [(ngModel)]="newDriver.streetAddress"
                 class="form-input"
                 placeholder="123 Main St"
               />
+            </div>
+            <div class="dqf-field-row" style="display: flex; gap: 8px;">
+              <div class="dqf-field" style="flex: 2;">
+                <label for="city">City</label>
+                <input
+                  id="city"
+                  type="text"
+                  [(ngModel)]="newDriver.city"
+                  class="form-input"
+                  placeholder="City"
+                />
+              </div>
+              <div class="dqf-field" style="flex: 1;">
+                <label for="state">State</label>
+                <input
+                  id="state"
+                  type="text"
+                  [(ngModel)]="newDriver.state"
+                  class="form-input"
+                  maxlength="2"
+                  placeholder="ST"
+                  style="text-transform: uppercase;"
+                />
+              </div>
+              <div class="dqf-field" style="flex: 1;">
+                <label for="zipCode">Zip Code</label>
+                <input
+                  id="zipCode"
+                  type="text"
+                  [(ngModel)]="newDriver.zipCode"
+                  class="form-input"
+                  maxlength="10"
+                  placeholder="12345"
+                  (blur)="onZipCodeBlur('new')"
+                />
+              </div>
             </div>
             <div class="dqf-field">
               <label for="newDriverZipcode">Zip Code</label>
@@ -303,16 +335,13 @@
             </div>
             <div class="dqf-field">
               <label for="cdlClass">CDL Class *</label>
-              <select
-                id="cdlClass"
+              <app-ai-select
+                inputId="cdlClass"
                 [(ngModel)]="newDriver.cdlClass"
                 class="form-input"
-                required
-              >
-                <option value="A">Class A</option>
-                <option value="B">Class B</option>
-                <option value="C">Class C</option>
-              </select>
+                [options]="cdlClassOptions"
+                placeholder="Select CDL class"
+              ></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="cdlExpiry">CDL Expiry</label>
@@ -372,8 +401,22 @@
               <input id="editEmail" type="email" [(ngModel)]="editingDriver.email" class="form-input" />
             </div>
             <div class="dqf-field">
-              <label for="editAddress">Address</label>
-              <input id="editAddress" type="text" [(ngModel)]="editingDriver.address" class="form-input" placeholder="123 Main St, City, ST 12345" />
+              <label for="editStreetAddress">Street Address</label>
+              <input id="editStreetAddress" type="text" [(ngModel)]="editingDriver.streetAddress" class="form-input" placeholder="123 Main St" />
+            </div>
+            <div class="dqf-field-row" style="display: flex; gap: 8px;">
+              <div class="dqf-field" style="flex: 2;">
+                <label for="editCity">City</label>
+                <input id="editCity" type="text" [(ngModel)]="editingDriver.city" class="form-input" placeholder="City" />
+              </div>
+              <div class="dqf-field" style="flex: 1;">
+                <label for="editState">State</label>
+                <input id="editState" type="text" [(ngModel)]="editingDriver.state" class="form-input" maxlength="2" placeholder="ST" style="text-transform: uppercase;" />
+              </div>
+              <div class="dqf-field" style="flex: 1;">
+                <label for="editZipCode">Zip Code</label>
+                <input id="editZipCode" type="text" [(ngModel)]="editingDriver.zipCode" class="form-input" maxlength="10" placeholder="12345" (blur)="onZipCodeBlur('edit')" />
+              </div>
             </div>
             <div class="dqf-field">
               <label for="editDob">Date of Birth</label>
@@ -418,11 +461,7 @@
             </div>
             <div class="dqf-field">
               <label for="editCdlClass">CDL Class *</label>
-              <select id="editCdlClass" [(ngModel)]="editingDriver.cdlClass" class="form-input">
-                <option value="A">Class A</option>
-                <option value="B">Class B</option>
-                <option value="C">Class C</option>
-              </select>
+              <app-ai-select inputId="editCdlClass" [(ngModel)]="editingDriver.cdlClass" class="form-input" [options]="cdlClassOptions" placeholder="CDL Class"></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="editCdlExpiry">CDL Expiry</label>
@@ -518,10 +557,7 @@
 
           <!-- Filters -->
           <div class="da-filters">
-            <select [(ngModel)]="drugTestTypeFilter" class="da-filter-select">
-              <option value="">All Test Types</option>
-              <option *ngFor="let tt of drugTestTypes" [value]="tt">{{ drugTestTypeLabels[tt] }}</option>
-            </select>
+            <app-ai-select [(ngModel)]="drugTestTypeFilter" class="da-filter-select" [options]="drugTestTypeOptions" [allowEmpty]="true" emptyLabel="All Test Types" placeholder="Test Type"></app-ai-select>
             <label class="da-filter-check">
               <input type="checkbox" [ngModel]="drugTestClearinghouseFilter === 'pending'"
                      (ngModelChange)="drugTestClearinghouseFilter = $event ? 'pending' : ''">
@@ -585,15 +621,11 @@
               <div>
                 <div class="dqf-field">
                   <label>Test Type *</label>
-                  <select [(ngModel)]="activeDrugTestForm.test_type" class="form-input" required>
-                    <option *ngFor="let tt of drugTestTypes" [value]="tt">{{ drugTestTypeLabels[tt] }}</option>
-                  </select>
+                  <app-ai-select [(ngModel)]="activeDrugTestForm.test_type" class="form-input" [options]="drugTestTypeOptions" placeholder="Test Type"></app-ai-select>
                 </div>
                 <div class="dqf-field">
                   <label>Substance Type *</label>
-                  <select [(ngModel)]="activeDrugTestForm.substance_type" class="form-input" required>
-                    <option *ngFor="let st of substanceTypes" [value]="st">{{ substanceTypeLabels[st] }}</option>
-                  </select>
+                  <app-ai-select [(ngModel)]="activeDrugTestForm.substance_type" class="form-input" [options]="substanceTypeOptions" placeholder="Substance Type"></app-ai-select>
                 </div>
                 <div class="dqf-field" *ngIf="showPanelDetails()">
                   <label>Panel Details (5-Panel)</label>
@@ -607,10 +639,7 @@
                 </div>
                 <div class="dqf-field">
                   <label>Result</label>
-                  <select [(ngModel)]="activeDrugTestForm.result" class="form-input">
-                    <option [ngValue]="undefined">-- Select --</option>
-                    <option *ngFor="let r of drugTestResults" [value]="r">{{ drugTestResultLabels[r] }}</option>
-                  </select>
+                  <app-ai-select [(ngModel)]="activeDrugTestForm.result" class="form-input" [options]="drugTestResultOptions" [allowEmpty]="true" emptyLabel="-- Select --" placeholder="Result"></app-ai-select>
                 </div>
                 <div class="dqf-field">
                   <label>CCF Number</label>
@@ -803,7 +832,7 @@
                   (click)="setActiveDqfTab(cat.key)">
             <span class="dqf-tab-label">{{ cat.label }}</span>
             <span class="dqf-tab-badge"
-                  [ngClass]="getCategoryCompletionPct(cat) === 100 ? 'badge-complete' : 'badge-incomplete'">
+                  [ngClass]="getCategoryBadgeClass(cat)">
               {{ getCategoryCompletionCount(cat) }}
             </span>
           </button>
@@ -811,16 +840,20 @@
 
         <!-- FN-258: Tab Content Panels -->
         <div *ngFor="let cat of dqfCategories" class="dqf-tab-panel" [class.active]="activeDqfTab === cat.key">
-            <div *ngFor="let req of cat.requirements" class="dqf-req-row" [ngClass]="'dqf-status-' + req.status">
+            <div *ngFor="let req of cat.requirements" class="dqf-req-row" [ngClass]="'dqf-status-' + getEffectiveStatus(req)">
               <div class="dqf-req-main">
-                <!-- Status chip -->
-                <span class="dqf-status-chip" [ngClass]="getStatusChipClass(req.status)">
-                  {{ getStatusChipLabel(req.status) }}
+                <!-- Status chip (FN-320: use urgency-based class when urgency present) -->
+                <span class="dqf-status-chip"
+                      [ngClass]="req.urgency ? getUrgencyChipClass(req) : getStatusChipClass(getEffectiveStatus(req))">
+                  {{ req.urgency ? getUrgencyLabel(req) : getStatusChipLabel(getEffectiveStatus(req)) }}
                 </span>
                 <!-- Requirement info -->
                 <div class="dqf-req-info">
                   <span class="dqf-req-label">{{ getDqfReqLabel(req) }}</span>
                   <span class="dqf-req-cfr" *ngIf="getCfrReference(req.key)">{{ getCfrReference(req.key) }}</span>
+                  <span *ngIf="req.due_date" class="dqf-due-date">
+                    Due: {{ req.due_date }}
+                  </span>
                   <span class="dqf-req-meta" *ngIf="req.completion_date">
                     Completed {{ req.completion_date | date:'shortDate' }}
                   </span>
@@ -857,11 +890,60 @@
                     </button>
                     <span class="dqf-pull-error" *ngIf="autoPullEmpAppError">{{ autoPullEmpAppError }}</span>
                   </ng-container>
+                  <!-- FN-264: MVR upload + extracted data display for mvr_data_received -->
+                  <ng-container *ngIf="req.key === 'mvr_data_received' && req.status !== 'complete'">
+                    <label class="dqf-upload-btn" [class.uploading]="mvrUploadProgress">
+                      <span class="material-symbols-outlined" style="font-size:15px;">upload_file</span>
+                      {{ mvrUploadProgress ? 'Uploading...' : 'Upload MVR Report' }}
+                      <input type="file" (change)="uploadMvrReport(selectedDriver.id, $event)"
+                             accept=".pdf" style="display:none;">
+                    </label>
+                  </ng-container>
+                  <ng-container *ngIf="req.key === 'mvr_data_received' && req.status === 'complete' && mvrData">
+                    <div class="mvr-summary-card">
+                      <div class="mvr-summary-row">
+                        <span class="mvr-summary-label">License Status</span>
+                        <span class="mvr-summary-value">{{ mvrData.license_status || 'N/A' }}</span>
+                      </div>
+                      <div class="mvr-summary-row">
+                        <span class="mvr-summary-label">License Class</span>
+                        <span class="mvr-summary-value">{{ mvrData.license_class || 'N/A' }}</span>
+                      </div>
+                      <div class="mvr-summary-row">
+                        <span class="mvr-summary-label">Violations</span>
+                        <span class="mvr-summary-value"
+                              [ngClass]="(mvrData.violations_count || 0) > 0 ? 'mvr-violation-count' : 'mvr-clean-count'">
+                          {{ mvrData.violations_count ?? 0 }}
+                        </span>
+                      </div>
+                      <div class="mvr-summary-row">
+                        <span class="mvr-summary-label">Accidents</span>
+                        <span class="mvr-summary-value"
+                              [ngClass]="(mvrData.accidents_count || 0) > 0 ? 'mvr-accident-count' : 'mvr-clean-count'">
+                          {{ mvrData.accidents_count ?? 0 }}
+                        </span>
+                      </div>
+                      <div class="mvr-summary-row">
+                        <span class="mvr-summary-label">Points Total</span>
+                        <span class="mvr-summary-value">{{ mvrData.points_total ?? 0 }}</span>
+                      </div>
+                      <div class="mvr-summary-row">
+                        <span class="mvr-summary-label">Report Date</span>
+                        <span class="mvr-summary-value">{{ mvrData.report_date ? (mvrData.report_date | date:'shortDate') : 'N/A' }}</span>
+                      </div>
+                      <a *ngIf="mvrData.document_id"
+                         class="mvr-download-link"
+                         href="#" (click)="downloadEvidenceDoc(mvrData.document_id); $event.preventDefault()">
+                        <span class="material-symbols-outlined" style="font-size:14px;">download</span>
+                        Download MVR Report
+                      </a>
+                    </div>
+                  </ng-container>
                   <!-- Status buttons for manual status requirements -->
-                  <ng-container *ngIf="!isDqfDocumentReq(req.key) && req.key !== 'employment_application_submitted'">
+                  <ng-container *ngIf="!isDqfDocumentReq(req.key) && req.key !== 'employment_application_submitted' && req.key !== 'mvr_data_received'">
                     <!-- FN-223: Inline date picker for clearinghouse items -->
                     <ng-container *ngIf="requiresDateCapture(req.key) && req.status !== 'complete'">
-                      <input type="date" class="dqf-date-input" [(ngModel)]="dqfDateInputs[req.key]" [name]="'dqfDate_'+req.key" />
+                      <app-ai-date-picker [inline]="true" [(ngModel)]="dqfDateInputs[req.key]" [name]="'dqfDate_'+req.key" placeholder="Select date" ariaLabel="Requirement date"></app-ai-date-picker>
                       <button class="dqf-status-btn"
                               [class.active]="updateingRequirementKey === req.key"
                               [disabled]="!dqfDateInputs[req.key]"
@@ -915,44 +997,9 @@
                 </div>
               </div>
             </div>
+            <!-- FN-263: Pre-Hire Documents list hidden — documents now tracked via DQF requirement rows with upload/download -->
+            <!-- <ng-container *ngIf="cat.key === 'pre_hire'"> ... </ng-container> -->
         </div><!-- /dqf-tab-panel (FN-258) -->
-
-        <!-- Pre-Hire Documents (FN-237) -->
-        <section class="prehire-docs-section">
-          <div class="prehire-docs-header">
-            <h4>
-              <span class="material-symbols-outlined">folder_open</span>
-              Pre-Hire Documents
-            </h4>
-          </div>
-
-          <div *ngIf="prehireDocumentsLoading" class="dqf-loading">
-            <span class="material-symbols-outlined" style="animation: spin 1s linear infinite; font-size:20px;">progress_activity</span>
-            Loading pre-hire documents...
-          </div>
-
-          <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length > 0" class="prehire-docs-list">
-            <div *ngFor="let doc of prehireDocuments" class="prehire-doc-row">
-              <div class="prehire-doc-status">
-                <span class="material-symbols-outlined prehire-doc-check">check_circle</span>
-              </div>
-              <div class="prehire-doc-info">
-                <span class="prehire-doc-name">{{ getPrehireDocLabel(doc.doc_type) }}</span>
-                <span class="prehire-doc-date" *ngIf="doc.created_at">Signed {{ doc.created_at | date:'mediumDate' }}</span>
-              </div>
-              <div class="prehire-doc-actions">
-                <a class="prehire-download-btn" [href]="getPrehireDocDownloadUrl(doc)" target="_blank" rel="noopener">
-                  <span class="material-symbols-outlined" style="font-size:15px;">download</span>
-                  Download
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <div *ngIf="!prehireDocumentsLoading && prehireDocuments.length === 0" class="prehire-docs-empty">
-            No pre-hire documents on file. Documents appear here once the driver signs their onboarding packet.
-          </div>
-        </section>
 
         <!-- Legacy Checklist (shown only if no dynamic requirements) -->
         <ng-container *ngIf="dqfRequirements.length === 0">
@@ -1110,6 +1157,52 @@
         </button>
         <button class="btn btn-primary" type="button" (click)="saveDQFForm()" [disabled]="saving">
           {{ saving ? 'Saving...' : 'Update DQF Status' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Send Application Link Modal -->
+  <div class="modal-overlay" *ngIf="showInviteModal" (click)="closeInviteModal()">
+    <div class="modal-content invite-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Send Application Link</h3>
+        <button class="modal-close" (click)="closeInviteModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="invite-description">Send an onboarding application link to a new driver via email.</p>
+
+        <div *ngIf="inviteSuccess" class="invite-success-msg">
+          Application link sent to {{ inviteSuccess }}
+        </div>
+        <div *ngIf="inviteError" class="invite-error-msg">
+          {{ inviteError }}
+        </div>
+
+        <div class="dqf-field" *ngIf="!inviteSuccess">
+          <label for="inviteFirstName">First Name *</label>
+          <input id="inviteFirstName" type="text" [(ngModel)]="inviteForm.firstName" class="form-input" placeholder="First name" />
+        </div>
+        <div class="dqf-field" *ngIf="!inviteSuccess">
+          <label for="inviteLastName">Last Name *</label>
+          <input id="inviteLastName" type="text" [(ngModel)]="inviteForm.lastName" class="form-input" placeholder="Last name" />
+        </div>
+        <div class="dqf-field" *ngIf="!inviteSuccess">
+          <label for="inviteEmail">Email *</label>
+          <input id="inviteEmail" type="email" [(ngModel)]="inviteForm.email" class="form-input" placeholder="driver@example.com" />
+        </div>
+        <div class="dqf-field" *ngIf="!inviteSuccess">
+          <label for="invitePhone">Phone (optional)</label>
+          <input id="invitePhone" type="tel" [(ngModel)]="inviteForm.phone" class="form-input" placeholder="+1 555-123-4567" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" (click)="closeInviteModal()">
+          {{ inviteSuccess ? 'Close' : 'Cancel' }}
+        </button>
+        <button *ngIf="!inviteSuccess" class="btn btn-primary" (click)="sendInvite()" [disabled]="inviteSending">
+          <span *ngIf="inviteSending" class="spinner-small"></span>
+          {{ inviteSending ? 'Sending...' : 'Send Invite' }}
         </button>
       </div>
     </div>
