@@ -1,8 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { FuelService } from '../fuel.service';
-import { FuelCardAccount, CardDriverAssignment } from '../fuel.model';
+import { FuelCardAccount, FuelCard, CardDriverAssignment } from '../fuel.model';
 import { ApiService } from '../../services/api.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
@@ -12,21 +12,36 @@ interface DriverRow {
   last_name: string;
 }
 
+type ViewMode = 'accounts' | 'cards';
+
 @Component({
   selector: 'app-fuel-cards',
   templateUrl: './fuel-cards.component.html',
-  styleUrls: ['./fuel-cards.component.css']
+  styleUrls: ['./fuel-cards.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FuelCardsComponent implements OnInit {
   loading = false;
   error = '';
-  cards: FuelCardAccount[] = [];
 
-  // ─── Create/Edit modal ────────────────────────────────────────────────────
-  showModal = false;
-  editing: FuelCardAccount | null = null;
-  saving = false;
-  form: FormGroup;
+  // ─── View mode ─────────────────────────────────────────────────────────────
+  viewMode: ViewMode = 'accounts';
+
+  // ─── Accounts (primary view) ───────────────────────────────────────────────
+  accounts: FuelCardAccount[] = [];
+  assignedDriverCountMap: Record<string, number> = {};
+
+  // ─── Cards (detail view under selected account) ────────────────────────────
+  selectedAccount: FuelCardAccount | null = null;
+  cards: FuelCard[] = [];
+  cardsLoading = false;
+  cardAssignmentMap: Record<string, CardDriverAssignment> = {};
+
+  // ─── Create/Edit Account modal ─────────────────────────────────────────────
+  showAccountModal = false;
+  editingAccount: FuelCardAccount | null = null;
+  savingAccount = false;
+  accountForm: FormGroup;
 
   importMethodOptions: AiSelectOption[] = [
     { value: 'csv_upload', label: 'CSV Upload' },
@@ -39,32 +54,50 @@ export class FuelCardsComponent implements OnInit {
     { value: 'inactive', label: 'Inactive' }
   ];
 
-  // ─── Assignment state ─────────────────────────────────────────────────────
-  drivers: DriverRow[] = [];
-  assignedDriverMap: Record<string, CardDriverAssignment> = {};
+  // ─── Create Card modal ────────────────────────────────────────────────────
+  showCardModal = false;
+  savingCard = false;
+  cardForm: FormGroup;
 
+  cardStatusSelectOptions: AiSelectOption[] = [
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' },
+    { value: 'lost', label: 'Lost' },
+    { value: 'stolen', label: 'Stolen' }
+  ];
+
+  // ─── Driver assignment ─────────────────────────────────────────────────────
+  drivers: DriverRow[] = [];
   showAssignDialog = false;
-  assigningCard: FuelCardAccount | null = null;
+  assigningCard: FuelCard | null = null;
   assignForm: FormGroup;
   savingAssign = false;
 
-  // ─── History panel ────────────────────────────────────────────────────────
+  // ─── History panel ─────────────────────────────────────────────────────────
   showHistoryPanel = false;
-  historyCard: FuelCardAccount | null = null;
+  historyCard: FuelCard | null = null;
   historyRows: CardDriverAssignment[] = [];
   historyLoading = false;
 
   constructor(
     private fuel: FuelService,
     private api: ApiService,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private cdr: ChangeDetectorRef
   ) {
-    this.form = this.fb.group({
+    this.accountForm = this.fb.group({
       provider_name: ['', [Validators.required]],
       display_name: ['', [Validators.required]],
       account_number_masked: [''],
       import_method: ['csv_upload', [Validators.required]],
       status: ['active', [Validators.required]],
+      notes: ['']
+    });
+
+    this.cardForm = this.fb.group({
+      card_number_masked: ['', [Validators.required]],
+      card_number_last4: ['', [Validators.maxLength(4)]],
+      status: ['active'],
       notes: ['']
     });
 
@@ -76,10 +109,10 @@ export class FuelCardsComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadDrivers();
-    this.load();
+    this.loadAccounts();
   }
 
-  // ─── Drivers ──────────────────────────────────────────────────────────────
+  // ─── Drivers ───────────────────────────────────────────────────────────────
   loadDrivers(): void {
     this.api.getDrivers().subscribe({
       next: (result: unknown) => {
@@ -89,8 +122,9 @@ export class FuelCardsComponent implements OnInit {
         } else {
           this.drivers = raw.drivers ?? [];
         }
+        this.cdr.markForCheck();
       },
-      error: () => { /* non-critical — silently fail */ }
+      error: () => { /* non-critical */ }
     });
   }
 
@@ -99,42 +133,96 @@ export class FuelCardsComponent implements OnInit {
     return d ? `${d.first_name} ${d.last_name}` : id;
   }
 
-  // ─── Load cards + assignments ─────────────────────────────────────────────
-  load(): void {
+  // ─── Load accounts ─────────────────────────────────────────────────────────
+  loadAccounts(): void {
     this.loading = true;
     this.error = '';
     this.fuel.getCards().subscribe({
-      next: (cards) => {
-        this.cards = cards;
+      next: (accounts) => {
+        this.accounts = accounts;
         this.loading = false;
-        this.loadAssignments();
+        this.loadAssignedDriverCounts();
+        this.cdr.markForCheck();
       },
-      error: (err) => { this.error = err.error?.error || 'Failed to load fuel cards'; this.loading = false; }
+      error: (err) => {
+        this.error = err.error?.error || 'Failed to load fuel card accounts';
+        this.loading = false;
+        this.cdr.markForCheck();
+      }
     });
   }
 
-  loadAssignments(): void {
-    if (this.cards.length === 0) { return; }
-    const requests = this.cards.map(c => this.fuel.getCardAssignments(c.id));
+  loadAssignedDriverCounts(): void {
+    if (this.accounts.length === 0) return;
+    const requests = this.accounts.map(a => this.fuel.getCardAssignments(a.id));
     forkJoin(requests).subscribe({
       next: (results) => {
-        const map: Record<string, CardDriverAssignment> = {};
-        results.forEach((assignments) => {
-          const active = assignments.find(a => a.status === 'active');
-          if (active) {
-            map[active.fuel_card_account_id] = active;
-          }
+        const map: Record<string, number> = {};
+        results.forEach((assignments, idx) => {
+          map[this.accounts[idx].id] = assignments.filter(a => a.status === 'active').length;
         });
-        this.assignedDriverMap = map;
+        this.assignedDriverCountMap = map;
+        this.cdr.markForCheck();
       },
       error: () => { /* non-critical */ }
     });
   }
 
-  // ─── Create / Edit card modal ─────────────────────────────────────────────
-  openCreate(): void {
-    this.editing = null;
-    this.form.reset({
+  // ─── Navigate to card detail ───────────────────────────────────────────────
+  selectAccount(account: FuelCardAccount): void {
+    this.selectedAccount = account;
+    this.viewMode = 'cards';
+    this.loadCards();
+  }
+
+  backToAccounts(): void {
+    this.viewMode = 'accounts';
+    this.selectedAccount = null;
+    this.cards = [];
+    this.cardAssignmentMap = {};
+    this.loadAccounts();
+  }
+
+  loadCards(): void {
+    if (!this.selectedAccount) return;
+    this.cardsLoading = true;
+    this.error = '';
+    this.fuel.getAccountCards(this.selectedAccount.id).subscribe({
+      next: (cards) => {
+        this.cards = cards;
+        this.cardsLoading = false;
+        this.loadCardAssignments();
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        this.error = err.error?.error || 'Failed to load cards';
+        this.cardsLoading = false;
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  loadCardAssignments(): void {
+    if (!this.selectedAccount || this.cards.length === 0) return;
+    this.fuel.getCardAssignments(this.selectedAccount.id).subscribe({
+      next: (assignments) => {
+        const map: Record<string, CardDriverAssignment> = {};
+        assignments.forEach(a => {
+          if (a.status === 'active' && a.fuel_card_id) {
+            map[a.fuel_card_id] = a;
+          }
+        });
+        this.cardAssignmentMap = map;
+        this.cdr.markForCheck();
+      },
+      error: () => { /* non-critical */ }
+    });
+  }
+
+  // ─── Account modal ─────────────────────────────────────────────────────────
+  openCreateAccount(): void {
+    this.editingAccount = null;
+    this.accountForm.reset({
       provider_name: '',
       display_name: '',
       account_number_masked: '',
@@ -142,116 +230,173 @@ export class FuelCardsComponent implements OnInit {
       status: 'active',
       notes: ''
     });
-    this.showModal = true;
+    this.showAccountModal = true;
+    this.cdr.markForCheck();
   }
 
-  openEdit(card: FuelCardAccount): void {
-    this.editing = card;
-    this.form.reset({
-      provider_name: card.provider_name,
-      display_name: card.display_name,
-      account_number_masked: card.account_number_masked || '',
-      import_method: card.import_method,
-      status: card.status,
-      notes: card.notes || ''
+  openEditAccount(account: FuelCardAccount): void {
+    this.editingAccount = account;
+    this.accountForm.reset({
+      provider_name: account.provider_name,
+      display_name: account.display_name,
+      account_number_masked: account.account_number_masked || '',
+      import_method: account.import_method,
+      status: account.status,
+      notes: account.notes || ''
     });
-    this.showModal = true;
+    this.showAccountModal = true;
+    this.cdr.markForCheck();
   }
 
-  closeModal(): void {
-    if (this.saving) return;
-    this.showModal = false;
+  closeAccountModal(): void {
+    if (this.savingAccount) return;
+    this.showAccountModal = false;
+    this.cdr.markForCheck();
   }
 
-  save(): void {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
+  saveAccount(): void {
+    if (this.accountForm.invalid) {
+      this.accountForm.markAllAsTouched();
       return;
     }
+    const payload = this.accountForm.value;
+    this.savingAccount = true;
 
-    const payload = this.form.value;
-    this.saving = true;
-
-    if (this.editing) {
-      this.fuel.updateCard(this.editing.id, payload).subscribe({
-        next: () => { this.saving = false; this.showModal = false; this.load(); },
-        error: (err) => { this.saving = false; this.error = err.error?.error || 'Failed to update card'; }
+    if (this.editingAccount) {
+      this.fuel.updateCard(this.editingAccount.id, payload).subscribe({
+        next: () => { this.savingAccount = false; this.showAccountModal = false; this.loadAccounts(); this.cdr.markForCheck(); },
+        error: (err) => { this.savingAccount = false; this.error = err.error?.error || 'Failed to update account'; this.cdr.markForCheck(); }
       });
       return;
     }
 
     this.fuel.createCard(payload).subscribe({
-      next: () => { this.saving = false; this.showModal = false; this.load(); },
-      error: (err) => { this.saving = false; this.error = err.error?.error || 'Failed to create card'; }
+      next: () => { this.savingAccount = false; this.showAccountModal = false; this.loadAccounts(); this.cdr.markForCheck(); },
+      error: (err) => { this.savingAccount = false; this.error = err.error?.error || 'Failed to create account'; this.cdr.markForCheck(); }
     });
   }
 
-  deactivate(card: FuelCardAccount): void {
-    if (!confirm(`Deactivate ${card.display_name}?`)) return;
-    this.fuel.updateCard(card.id, { status: 'inactive' }).subscribe({
-      next: () => this.load(),
-      error: (err) => { this.error = err.error?.error || 'Failed to deactivate card'; }
+  deactivateAccount(account: FuelCardAccount, event: Event): void {
+    event.stopPropagation();
+    if (!confirm(`Deactivate ${account.display_name}?`)) return;
+    this.fuel.updateCard(account.id, { status: 'inactive' }).subscribe({
+      next: () => this.loadAccounts(),
+      error: (err) => { this.error = err.error?.error || 'Failed to deactivate account'; this.cdr.markForCheck(); }
     });
   }
 
+  editAccountEvent(account: FuelCardAccount, event: Event): void {
+    event.stopPropagation();
+    this.openEditAccount(account);
+  }
+
+  // ─── Card modal ────────────────────────────────────────────────────────────
+  openCreateCard(): void {
+    this.cardForm.reset({
+      card_number_masked: '',
+      card_number_last4: '',
+      status: 'active',
+      notes: ''
+    });
+    this.showCardModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeCardModal(): void {
+    if (this.savingCard) return;
+    this.showCardModal = false;
+    this.cdr.markForCheck();
+  }
+
+  saveCard(): void {
+    if (this.cardForm.invalid || !this.selectedAccount) {
+      this.cardForm.markAllAsTouched();
+      return;
+    }
+    const payload = this.cardForm.value;
+    this.savingCard = true;
+    this.fuel.createAccountCard(this.selectedAccount.id, payload).subscribe({
+      next: () => { this.savingCard = false; this.showCardModal = false; this.loadCards(); this.cdr.markForCheck(); },
+      error: (err) => { this.savingCard = false; this.error = err.error?.error || 'Failed to create card'; this.cdr.markForCheck(); }
+    });
+  }
+
+  // ─── Card status helpers ───────────────────────────────────────────────────
   statusClass(status: string): string {
-    if (status === 'active') return 'pill-green';
-    if (status === 'inactive') return 'pill-red';
-    return 'pill-neutral';
+    switch (status) {
+      case 'active': return 'pill-green';
+      case 'inactive': return 'pill-red';
+      case 'lost':
+      case 'stolen': return 'pill-orange';
+      default: return 'pill-neutral';
+    }
   }
 
-  // ─── Assignment dialog ────────────────────────────────────────────────────
-  openAssignDialog(card: FuelCardAccount): void {
+  activeCardCount(account: FuelCardAccount): number {
+    // card_count from the backend represents total cards; if not available fall back to 0
+    return account.card_count ?? 0;
+  }
+
+  // ─── Assignment dialog (cards view) ────────────────────────────────────────
+  openAssignDialog(card: FuelCard): void {
     this.assigningCard = card;
     this.assignForm.reset({ driver_id: '', notes: '' });
     this.showAssignDialog = true;
+    this.cdr.markForCheck();
   }
 
   closeAssignDialog(): void {
     if (this.savingAssign) return;
     this.showAssignDialog = false;
+    this.cdr.markForCheck();
   }
 
   saveAssignment(): void {
-    if (this.assignForm.invalid || !this.assigningCard) {
+    if (this.assignForm.invalid || !this.assigningCard || !this.selectedAccount) {
       this.assignForm.markAllAsTouched();
       return;
     }
     const { driver_id, notes } = this.assignForm.value as { driver_id: string; notes: string };
     this.savingAssign = true;
-    this.fuel.assignDriver(this.assigningCard.id, driver_id, notes || undefined).subscribe({
+    this.fuel.assignDriver(this.selectedAccount.id, driver_id, notes || undefined).subscribe({
       next: () => {
         this.savingAssign = false;
         this.showAssignDialog = false;
-        this.loadAssignments();
+        this.loadCardAssignments();
+        this.cdr.markForCheck();
       },
       error: (err) => {
         this.savingAssign = false;
         this.error = err.error?.error || 'Failed to assign driver';
+        this.cdr.markForCheck();
       }
     });
   }
 
-  revokeAssignment(card: FuelCardAccount): void {
-    if (!confirm(`Revoke driver assignment for ${card.display_name}?`)) return;
-    this.fuel.revokeDriver(card.id).subscribe({
-      next: () => this.loadAssignments(),
-      error: (err) => { this.error = err.error?.error || 'Failed to revoke assignment'; }
+  revokeAssignment(card: FuelCard): void {
+    if (!this.selectedAccount) return;
+    if (!confirm(`Revoke driver assignment for card ****${card.card_number_last4 || ''}?`)) return;
+    this.fuel.revokeDriver(this.selectedAccount.id).subscribe({
+      next: () => { this.loadCardAssignments(); },
+      error: (err) => { this.error = err.error?.error || 'Failed to revoke assignment'; this.cdr.markForCheck(); }
     });
   }
 
-  // ─── History panel ────────────────────────────────────────────────────────
-  openHistory(card: FuelCardAccount): void {
+  // ─── History panel ─────────────────────────────────────────────────────────
+  openHistory(card: FuelCard): void {
+    if (!this.selectedAccount) return;
     this.historyCard = card;
     this.historyLoading = true;
     this.showHistoryPanel = true;
-    this.fuel.getCardAssignments(card.id).subscribe({
-      next: (rows) => { this.historyRows = rows; this.historyLoading = false; },
-      error: () => { this.historyRows = []; this.historyLoading = false; }
+    this.cdr.markForCheck();
+    this.fuel.getCardAssignments(this.selectedAccount.id).subscribe({
+      next: (rows) => { this.historyRows = rows; this.historyLoading = false; this.cdr.markForCheck(); },
+      error: () => { this.historyRows = []; this.historyLoading = false; this.cdr.markForCheck(); }
     });
   }
 
   closeHistory(): void {
     this.showHistoryPanel = false;
+    this.cdr.markForCheck();
   }
 }

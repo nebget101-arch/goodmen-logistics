@@ -18,6 +18,8 @@ export interface FuelCardAccount {
   notes?: string;
   created_at: string;
   updated_at: string;
+  /** Populated by backend subquery — number of fuel_cards under this account */
+  card_count?: number;
 }
 
 export interface FuelMappingProfile {
@@ -196,9 +198,22 @@ export interface AiPreprocessResult {
   };
 }
 
+export interface FuelCard {
+  id: string;
+  tenant_id: string;
+  fuel_card_account_id: string;
+  card_number_masked: string;
+  card_number_last4?: string;
+  status: 'active' | 'inactive' | 'lost' | 'stolen';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CardDriverAssignment {
   id: string;
   fuel_card_account_id: string;
+  fuel_card_id?: string;
   driver_id: string;
   card_number_last4?: string;
   assigned_at: string;
