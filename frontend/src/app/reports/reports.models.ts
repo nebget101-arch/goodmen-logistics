@@ -8,15 +8,19 @@ export type ReportKey =
   | 'expenses'
   | 'gross-profit'
   | 'gross-profit-per-load'
-  | 'profit-loss';
+  | 'profit-loss'
+  | 'direct-load-profit'
+  | 'fully-loaded-profit';
 
 export interface ReportFilters {
   startDate?: string;
   endDate?: string;
   dispatcherId?: string;
   driverId?: string;
+  truckId?: string;
   status?: string;
   period?: 'day' | 'week' | 'month';
+  groupBy?: 'load' | 'truck' | 'driver';
   limit?: number;
   offset?: number;
   // legacy keys

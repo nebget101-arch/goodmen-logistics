@@ -1083,8 +1083,10 @@ function parseV2Filters(req) {
 		endDate: req.query.endDate || now.toISOString().slice(0, 10),
 		dispatcherId: req.query.dispatcherId || null,
 		driverId: req.query.driverId || null,
+		truckId: req.query.truckId || null,
 		status: req.query.status || null,
 		period: ['day', 'week', 'month'].includes((req.query.period || '').toLowerCase()) ? req.query.period.toLowerCase() : 'week',
+		groupBy: ['load', 'truck', 'driver'].includes((req.query.groupBy || '').toLowerCase()) ? req.query.groupBy.toLowerCase() : 'load',
 		limit: Math.min(parseInt(req.query.limit || '200', 10) || 200, 1000),
 		offset: Math.max(parseInt(req.query.offset || '0', 10) || 0, 0)
 	};
@@ -1673,36 +1675,349 @@ async function buildGrossProfitPerLoad(req, filters) {
 
 async function buildProfitLoss(req, filters) {
 	const allMode = isAllOperatingEntitiesMode(req);
+
+	// Revenue by period
 	const totalRevenue = await buildTotalRevenue(req, filters);
-	const expenses = await buildExpenses(req, filters);
+	const revenueTotal = Number(totalRevenue.cards?.[0]?.value || 0);
+
+	// Direct costs from loads: driver pay + fuel + tolls
+	const directParams = [filters.startDate, filters.endDate];
+	const directClauses = ['l.completed_date BETWEEN ? AND ?'];
+	directClauses.push(...applyContextSql('l', req, directParams));
+	const directCostRows = (await db.raw(`
+		SELECT
+			COALESCE(SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END), 0)::numeric AS driver_pay,
+			COALESCE((SELECT SUM(ft.amount) FROM fuel_transactions ft
+				WHERE ft.tenant_id = l.tenant_id
+				AND ft.transaction_date BETWEEN ? AND ?), 0)::numeric AS fuel,
+			COALESCE((SELECT SUM(tt.amount) FROM toll_transactions tt
+				WHERE tt.tenant_id = l.tenant_id
+				AND tt.transaction_date BETWEEN ? AND ?), 0)::numeric AS tolls
+		FROM loads l
+		LEFT JOIN settlement_adjustment_items sai
+			ON sai.source_reference_type = 'load'
+			AND sai.source_reference_id::text = l.id::text
+		WHERE ${directClauses.join(' AND ')}
+	`, [...directParams, filters.startDate, filters.endDate, filters.startDate, filters.endDate])).rows;
+
+	const driverPayTotal = Number(directCostRows[0]?.driver_pay || 0);
+	const fuelTotal = Number(directCostRows[0]?.fuel || 0);
+	const tollsTotal = Number(directCostRows[0]?.tolls || 0);
+	const directCostTotal = driverPayTotal + fuelTotal + tollsTotal;
+	const grossMargin = revenueTotal - directCostTotal;
+
+	// Operating expenses: maintenance (work_orders) + overhead (non-load settlement adjustments)
+	const maintParams = [filters.startDate, filters.endDate];
+	const maintClauses = ['wo.completed_at BETWEEN ? AND ?'];
+	if (req.context?.tenantId) { maintParams.push(req.context.tenantId); maintClauses.push('wo.tenant_id = ?'); }
+	const maintRows = (await db.raw(`
+		SELECT COALESCE(SUM(wo.total_amount), 0)::numeric AS total
+		FROM work_orders wo
+		WHERE ${maintClauses.join(' AND ')} AND wo.status = 'COMPLETED'
+	`, maintParams)).rows;
+	const maintenanceTotal = Number(maintRows[0]?.total || 0);
+
+	const adjParams = [filters.startDate, filters.endDate];
+	const adjClauses = ['pp.period_end BETWEEN ? AND ?'];
+	if (req.context?.tenantId) { adjParams.push(req.context.tenantId); adjClauses.push('s.tenant_id = ?'); }
+	const adjRows = (await db.raw(`
+		SELECT COALESCE(SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END), 0)::numeric AS total
+		FROM settlement_adjustment_items sai
+		JOIN settlements s ON s.id = sai.settlement_id
+		JOIN payroll_periods pp ON pp.id = s.payroll_period_id
+		WHERE ${adjClauses.join(' AND ')}
+		  AND (sai.source_reference_type IS NULL OR sai.source_reference_type != 'load')
+	`, adjParams)).rows;
+	const overheadTotal = Number(adjRows[0]?.total || 0);
+	const operatingExpenses = maintenanceTotal + overheadTotal;
+	const netProfit = grossMargin - operatingExpenses;
+
+	// Build period rows from revenue data
 	const byEntity = await buildOperatingEntityFinancialSummary(req, filters);
 	const rows = allMode && byEntity.length
 		? byEntity.map((r) => ({
 			operating_entity_name: r.operating_entity_name,
 			period: null,
 			revenue: Number(r.revenue || 0),
-			cost_of_operations: Number(r.expenses || 0),
-			gross_profit: Number(r.gross_profit || 0)
+			direct_costs: Number(r.expenses || 0),
+			gross_margin: Number(r.gross_profit || 0),
+			operating_expenses: 0,
+			net_profit: Number(r.gross_profit || 0)
 		}))
 		: totalRevenue.data.map((r) => ({
 			operating_entity_name: r.operating_entity_name,
 			period: r.period,
 			revenue: Number(r.total_revenue || 0),
-			cost_of_operations: 0,
-			gross_profit: Number(r.total_revenue || 0)
+			direct_costs: 0,
+			gross_margin: Number(r.total_revenue || 0),
+			operating_expenses: 0,
+			net_profit: Number(r.total_revenue || 0)
 		}));
-	const revenueTotal = Number(totalRevenue.cards?.[0]?.value || 0);
-	const costTotal = Number(expenses.cards?.[0]?.value || 0);
+
 	const payload = {
 		success: true,
 		data: rows,
+		summary: {
+			driver_pay: driverPayTotal,
+			fuel: fuelTotal,
+			tolls: tollsTotal,
+			maintenance: maintenanceTotal,
+			overhead: overheadTotal
+		},
 		cards: [
 			{ key: 'revenue', label: 'Revenue', value: revenueTotal },
-			{ key: 'cost_of_operations', label: 'Cost of Operations', value: costTotal },
-			{ key: 'gross_profit', label: 'Gross Profit', value: revenueTotal - costTotal }
+			{ key: 'direct_costs', label: 'Direct Costs', value: directCostTotal },
+			{ key: 'gross_margin', label: 'Gross Margin', value: grossMargin },
+			{ key: 'operating_expenses', label: 'Operating Expenses', value: operatingExpenses },
+			{ key: 'net_profit', label: 'Net Profit', value: netProfit }
 		]
 	};
-	return allMode ? withOperatingEntitySummary(payload, rows, 'gross_profit') : payload;
+	return allMode ? withOperatingEntitySummary(payload, rows, 'net_profit') : payload;
+}
+
+/**
+ * Direct Load Profit — per-load: Rate - (fuel + tolls + driver pay attributed to that load).
+ * Filters: date range, driverId, truckId.
+ */
+async function buildDirectLoadProfit(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
+	const params = [filters.startDate, filters.endDate];
+	const clauses = ['l.completed_date BETWEEN ? AND ?'];
+	clauses.push(...applyContextSql('l', req, params));
+	if (filters.driverId) {
+		params.push(filters.driverId);
+		clauses.push('l.driver_id = ?');
+	}
+	if (filters.truckId) {
+		params.push(filters.truckId);
+		clauses.push('l.truck_id = ?');
+	}
+
+	const rows = (await db.raw(`
+		WITH load_costs AS (
+			SELECT
+				${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
+				l.id,
+				l.load_number,
+				l.completed_date,
+				CONCAT(d.first_name, ' ', d.last_name) AS driver_name,
+				COALESCE(v.unit_number, '') AS truck,
+				COALESCE(l.rate, 0)::numeric AS rate,
+				COALESCE((
+					SELECT SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END)
+					FROM settlement_adjustment_items sai
+					WHERE sai.source_reference_type = 'load'
+					  AND sai.source_reference_id::text = l.id::text
+				), 0)::numeric AS driver_pay,
+				COALESCE((
+					SELECT SUM(ft.amount) FROM fuel_transactions ft WHERE ft.load_id = l.id
+				), 0)::numeric AS fuel,
+				COALESCE((
+					SELECT SUM(tt.amount) FROM toll_transactions tt WHERE tt.load_id = l.id
+				), 0)::numeric AS tolls
+			FROM loads l
+			LEFT JOIN drivers d ON d.id = l.driver_id
+			LEFT JOIN vehicles v ON v.id = l.truck_id
+			${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id' : ''}
+			WHERE ${clauses.join(' AND ')}
+		)
+		SELECT
+			${allMode ? 'operating_entity_name,' : ''}
+			id, load_number, completed_date, driver_name, truck, rate, driver_pay, fuel, tolls,
+			(rate - driver_pay - fuel - tolls)::numeric AS direct_profit,
+			CASE WHEN rate > 0 THEN ROUND(((rate - driver_pay - fuel - tolls) / rate * 100)::numeric, 2) ELSE 0 END AS margin_pct
+		FROM load_costs
+		ORDER BY completed_date DESC
+		LIMIT ${filters.limit} OFFSET ${filters.offset}
+	`, params)).rows;
+
+	const totals = rows.reduce((acc, r) => {
+		acc.rate += Number(r.rate || 0);
+		acc.driver_pay += Number(r.driver_pay || 0);
+		acc.fuel += Number(r.fuel || 0);
+		acc.tolls += Number(r.tolls || 0);
+		acc.direct_profit += Number(r.direct_profit || 0);
+		return acc;
+	}, { rate: 0, driver_pay: 0, fuel: 0, tolls: 0, direct_profit: 0 });
+
+	const payload = {
+		success: true,
+		data: rows,
+		summary: { totals },
+		cards: [
+			{ key: 'rate', label: 'Total Revenue', value: totals.rate },
+			{ key: 'driver_pay', label: 'Driver Pay', value: totals.driver_pay },
+			{ key: 'fuel', label: 'Fuel', value: totals.fuel },
+			{ key: 'tolls', label: 'Tolls', value: totals.tolls },
+			{ key: 'direct_profit', label: 'Direct Profit', value: totals.direct_profit }
+		]
+	};
+	return allMode ? withOperatingEntitySummary(payload, rows, 'direct_profit') : payload;
+}
+
+/**
+ * Fully Loaded Profit — Direct Load Profit minus prorated period costs
+ * (insurance, ELD, maintenance). Supports groupBy: load | truck | driver.
+ */
+async function buildFullyLoadedProfit(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
+
+	// Step 1: get per-load direct profit rows
+	const directResult = await buildDirectLoadProfit(req, filters);
+	const directRows = directResult.data || [];
+	const loadCount = directRows.length || 1;
+
+	// Step 2: get period maintenance cost (work_orders completed in range)
+	const maintParams = [filters.startDate, filters.endDate];
+	const maintClauses = ['wo.completed_at BETWEEN ? AND ?'];
+	if (req.context?.tenantId) {
+		maintParams.push(req.context.tenantId);
+		maintClauses.push('wo.tenant_id = ?');
+	}
+	const maintRows = (await db.raw(`
+		SELECT COALESCE(SUM(wo.total_amount), 0)::numeric AS total
+		FROM work_orders wo
+		WHERE ${maintClauses.join(' AND ')} AND wo.status = 'COMPLETED'
+	`, maintParams)).rows;
+	const maintenanceTotal = Number(maintRows[0]?.total || 0);
+
+	// Step 3: get period non-load settlement adjustment costs (insurance, ELD, other overhead)
+	const adjParams = [filters.startDate, filters.endDate];
+	const adjClauses = ['pp.period_end BETWEEN ? AND ?'];
+	if (req.context?.tenantId) {
+		adjParams.push(req.context.tenantId);
+		adjClauses.push('s.tenant_id = ?');
+	}
+	const adjRows = (await db.raw(`
+		SELECT
+			COALESCE(SUM(CASE WHEN LOWER(COALESCE(epc.name, gec.name, '')) LIKE '%insurance%'
+				THEN CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END ELSE 0 END), 0)::numeric AS insurance_total,
+			COALESCE(SUM(CASE WHEN LOWER(COALESCE(epc.name, gec.name, '')) LIKE '%eld%'
+				THEN CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END ELSE 0 END), 0)::numeric AS eld_total,
+			COALESCE(SUM(CASE
+				WHEN sai.source_reference_type IS NULL OR sai.source_reference_type != 'load'
+				THEN CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END
+				ELSE 0 END), 0)::numeric AS other_overhead
+		FROM settlement_adjustment_items sai
+		LEFT JOIN expense_payment_categories epc ON epc.id = sai.category_id
+		LEFT JOIN global_expense_categories gec ON gec.id = sai.category_id
+		JOIN settlements s ON s.id = sai.settlement_id
+		JOIN payroll_periods pp ON pp.id = s.payroll_period_id
+		WHERE ${adjClauses.join(' AND ')}
+		  AND (sai.source_reference_type IS NULL OR sai.source_reference_type != 'load')
+	`, adjParams)).rows;
+
+	const insuranceTotal = Number(adjRows[0]?.insurance_total || 0);
+	const eldTotal = Number(adjRows[0]?.eld_total || 0);
+	const otherTotal = Number(adjRows[0]?.other_overhead || 0) - insuranceTotal - eldTotal;
+
+	// Per-load allocations
+	const insurancePerLoad = insuranceTotal / loadCount;
+	const eldPerLoad = eldTotal / loadCount;
+	const maintenancePerLoad = maintenanceTotal / loadCount;
+	const otherPerLoad = Math.max(otherTotal, 0) / loadCount;
+
+	const groupBy = filters.groupBy || 'load';
+
+	let rows;
+	if (groupBy === 'truck') {
+		const grouped = {};
+		for (const r of directRows) {
+			const key = r.truck || 'Unknown';
+			if (!grouped[key]) grouped[key] = { truck: key, rate: 0, driver_pay: 0, fuel: 0, tolls: 0, direct_profit: 0, load_count: 0 };
+			grouped[key].rate += Number(r.rate || 0);
+			grouped[key].driver_pay += Number(r.driver_pay || 0);
+			grouped[key].fuel += Number(r.fuel || 0);
+			grouped[key].tolls += Number(r.tolls || 0);
+			grouped[key].direct_profit += Number(r.direct_profit || 0);
+			grouped[key].load_count += 1;
+		}
+		rows = Object.values(grouped).map((g) => {
+			const insAlloc = insurancePerLoad * g.load_count;
+			const eldAlloc = eldPerLoad * g.load_count;
+			const maintAlloc = maintenancePerLoad * g.load_count;
+			const otherAlloc = otherPerLoad * g.load_count;
+			const fullyLoadedProfit = g.direct_profit - insAlloc - eldAlloc - maintAlloc - otherAlloc;
+			return {
+				group_label: g.truck,
+				load_count: g.load_count,
+				rate: g.rate,
+				direct_profit: g.direct_profit,
+				insurance_allocation: +insAlloc.toFixed(2),
+				eld_allocation: +eldAlloc.toFixed(2),
+				maintenance_allocation: +maintAlloc.toFixed(2),
+				other_allocation: +otherAlloc.toFixed(2),
+				fully_loaded_profit: +fullyLoadedProfit.toFixed(2),
+				fully_loaded_margin_pct: g.rate > 0 ? +(fullyLoadedProfit / g.rate * 100).toFixed(2) : 0
+			};
+		});
+	} else if (groupBy === 'driver') {
+		const grouped = {};
+		for (const r of directRows) {
+			const key = r.driver_name || 'Unknown';
+			if (!grouped[key]) grouped[key] = { driver_name: key, rate: 0, driver_pay: 0, fuel: 0, tolls: 0, direct_profit: 0, load_count: 0 };
+			grouped[key].rate += Number(r.rate || 0);
+			grouped[key].direct_profit += Number(r.direct_profit || 0);
+			grouped[key].load_count += 1;
+		}
+		rows = Object.values(grouped).map((g) => {
+			const insAlloc = insurancePerLoad * g.load_count;
+			const eldAlloc = eldPerLoad * g.load_count;
+			const maintAlloc = maintenancePerLoad * g.load_count;
+			const otherAlloc = otherPerLoad * g.load_count;
+			const fullyLoadedProfit = g.direct_profit - insAlloc - eldAlloc - maintAlloc - otherAlloc;
+			return {
+				group_label: g.driver_name,
+				load_count: g.load_count,
+				rate: g.rate,
+				direct_profit: g.direct_profit,
+				insurance_allocation: +insAlloc.toFixed(2),
+				eld_allocation: +eldAlloc.toFixed(2),
+				maintenance_allocation: +maintAlloc.toFixed(2),
+				other_allocation: +otherAlloc.toFixed(2),
+				fully_loaded_profit: +fullyLoadedProfit.toFixed(2),
+				fully_loaded_margin_pct: g.rate > 0 ? +(fullyLoadedProfit / g.rate * 100).toFixed(2) : 0
+			};
+		});
+	} else {
+		// Per-load grouping (default)
+		rows = directRows.map((r) => {
+			const fullyLoadedProfit = Number(r.direct_profit || 0) - insurancePerLoad - eldPerLoad - maintenancePerLoad - otherPerLoad;
+			return {
+				load_number: r.load_number,
+				completed_date: r.completed_date,
+				driver_name: r.driver_name,
+				truck: r.truck,
+				rate: Number(r.rate || 0),
+				direct_profit: Number(r.direct_profit || 0),
+				insurance_allocation: +insurancePerLoad.toFixed(2),
+				eld_allocation: +eldPerLoad.toFixed(2),
+				maintenance_allocation: +maintenancePerLoad.toFixed(2),
+				other_allocation: +otherPerLoad.toFixed(2),
+				fully_loaded_profit: +fullyLoadedProfit.toFixed(2),
+				fully_loaded_margin_pct: Number(r.rate || 0) > 0 ? +(fullyLoadedProfit / Number(r.rate) * 100).toFixed(2) : 0
+			};
+		});
+	}
+
+	const totalFullyLoaded = rows.reduce((sum, r) => sum + Number(r.fully_loaded_profit || 0), 0);
+	const totalRate = rows.reduce((sum, r) => sum + Number(r.rate || 0), 0);
+
+	return {
+		success: true,
+		data: rows,
+		summary: {
+			period_costs: { insurance: insuranceTotal, eld: eldTotal, maintenance: maintenanceTotal, other: Math.max(otherTotal, 0) },
+			per_load_allocations: { insurance: +insurancePerLoad.toFixed(2), eld: +eldPerLoad.toFixed(2), maintenance: +maintenancePerLoad.toFixed(2), other: +otherPerLoad.toFixed(2) }
+		},
+		cards: [
+			{ key: 'rate', label: 'Total Revenue', value: totalRate },
+			{ key: 'insurance', label: 'Insurance (period)', value: insuranceTotal },
+			{ key: 'eld', label: 'ELD (period)', value: eldTotal },
+			{ key: 'maintenance', label: 'Maintenance (period)', value: maintenanceTotal },
+			{ key: 'fully_loaded_profit', label: 'Fully Loaded Profit', value: totalFullyLoaded }
+		]
+	};
 }
 
 const v2Builders = {
@@ -1715,7 +2030,9 @@ const v2Builders = {
 	expenses: buildExpenses,
 	'gross-profit': buildGrossProfit,
 	'gross-profit-per-load': buildGrossProfitPerLoad,
-	'profit-loss': buildProfitLoss
+	'profit-loss': buildProfitLoss,
+	'direct-load-profit': buildDirectLoadProfit,
+	'fully-loaded-profit': buildFullyLoadedProfit
 };
 
 for (const [key, builder] of Object.entries(v2Builders)) {

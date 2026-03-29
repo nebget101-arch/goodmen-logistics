@@ -27,7 +27,9 @@ export class ReportsShellComponent implements OnInit, OnDestroy {
     { key: 'expenses', label: 'Expenses', path: '/reports/expenses' },
     { key: 'gross-profit', label: 'Gross Profit', path: '/reports/gross-profit' },
     { key: 'gross-profit-per-load', label: 'Gross Profit per Load', path: '/reports/gross-profit-per-load' },
-    { key: 'profit-loss', label: 'Profit & Loss', path: '/reports/profit-loss' }
+    { key: 'profit-loss', label: 'Profit & Loss', path: '/reports/profit-loss' },
+    { key: 'direct-load-profit', label: 'Direct Load Profit', path: '/reports/direct-load-profit' },
+    { key: 'fully-loaded-profit', label: 'Fully Loaded Profit', path: '/reports/fully-loaded-profit' }
   ];
 
   filters: ReportFilters = {};
@@ -86,7 +88,9 @@ export class ReportsShellComponent implements OnInit, OnDestroy {
     'expenses':               'trending_down',
     'gross-profit':           'trending_up',
     'gross-profit-per-load':  'local_shipping',
-    'profit-loss':            'balance'
+    'profit-loss':            'balance',
+    'direct-load-profit':     'receipt_long',
+    'fully-loaded-profit':    'account_balance_wallet'
   };
 
   navIcon(key: string): string {
