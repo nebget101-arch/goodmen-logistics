@@ -188,10 +188,11 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
       debounceTime(300),
       filter(({ query }) => query.length >= 3),
       switchMap(({ key, query }) =>
-        this.http.get<AddressSuggestion[]>(`${environment.apiUrl}/address/autocomplete`, { params: { q: query } }).pipe(
-          catchError(() => of([] as AddressSuggestion[]))
+        this.http.get<{ success: boolean; data: AddressSuggestion[] }>(`${environment.apiUrl}/address/autocomplete`, { params: { q: query } }).pipe(
+          catchError(() => of({ success: false, data: [] as AddressSuggestion[] }))
         ).pipe(
-          switchMap(results => {
+          switchMap(response => {
+            const results = response.data || [];
             this.addressSuggestions[key] = results;
             this.activeAutocompleteKey = results.length > 0 ? key : null;
             return of(null);
