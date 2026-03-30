@@ -558,11 +558,32 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
       if (this.applicationId) {
         await this.api.submit(this.applicationId).toPromise();
         this.submitted = true;
+        this.storeSessionDataForConsentForms();
       }
     } catch (e: any) {
       alert('Submission failed: ' + (e?.error?.error || e?.message || 'Unknown error'));
     } finally {
       this.submitting = false;
+    }
+  }
+
+  private storeSessionDataForConsentForms(): void {
+    try {
+      const applicant = this.form.get('applicant')?.value || {};
+      const licenses = this.form.get('licenses') as FormArray;
+      const firstLicense = licenses?.length > 0 ? licenses.at(0).value : {};
+
+      const sessionData = {
+        fullName: `${applicant.firstName || ''} ${applicant.middleName || ''} ${applicant.lastName || ''}`.replace(/\s+/g, ' ').trim(),
+        dateOfBirth: applicant.dateOfBirth || '',
+        ssnLast4: (this.ssnRawValue || '').slice(-4),
+        driversLicenseNumber: firstLicense.licenseNumber || '',
+        stateOfIssue: firstLicense.state || ''
+      };
+
+      sessionStorage.setItem('fn_onboarding_applicant', JSON.stringify(sessionData));
+    } catch {
+      // Silently ignore if sessionStorage is unavailable
     }
   }
 }

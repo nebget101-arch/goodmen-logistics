@@ -98,7 +98,23 @@ export class ConsentFormComponent implements OnInit {
   constructor(private consentService: ConsentService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
+    this.prefillFromSession();
     this.loadConsentTemplate();
+  }
+
+  private prefillFromSession(): void {
+    try {
+      const raw = sessionStorage.getItem('fn_onboarding_applicant');
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data.fullName) this.capturedFullName = data.fullName;
+      if (data.dateOfBirth) this.capturedDateOfBirth = data.dateOfBirth;
+      if (data.ssnLast4) this.capturedSsnLast4 = data.ssnLast4;
+      if (data.driversLicenseNumber) this.capturedDriversLicenseNumber = data.driversLicenseNumber;
+      if (data.stateOfIssue) this.capturedStateOfIssue = data.stateOfIssue;
+    } catch {
+      // Silently ignore if sessionStorage is unavailable or data is malformed
+    }
   }
 
   loadConsentTemplate(): void {
