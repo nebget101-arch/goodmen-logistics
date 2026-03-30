@@ -373,6 +373,25 @@ export class ApiService {
     });
   }
 
+  /**
+   * Loads eligible for a settlement period (driver-scoped). Prefer this over GET /loads for settlement UI.
+   * Backend: GET /api/settlements/eligible-loads
+   */
+  getEligibleSettlementLoads(
+    driverId: string,
+    periodStart: string,
+    periodEnd: string,
+    dateBasis: 'pickup' | 'delivery' = 'pickup'
+  ): Observable<any> {
+    const p = new URLSearchParams({
+      driver_id: driverId,
+      period_start: periodStart,
+      period_end: periodEnd,
+      date_basis: dateBasis || 'pickup'
+    });
+    return this.http.get(`${this.baseUrl}/settlements/eligible-loads?${p.toString()}`);
+  }
+
   createSettlementDraft(payload: { payroll_period_id: string; driver_id: string; date_basis?: string }): Observable<any> {
     return this.http.post(`${this.baseUrl}/settlements/draft`, payload);
   }
