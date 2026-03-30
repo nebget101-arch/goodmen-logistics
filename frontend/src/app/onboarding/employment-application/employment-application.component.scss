@@ -552,3 +552,41 @@ select.ea-input {
     padding: 16px 10px;
   }
 }
+
+/* Address Autocomplete */
+.ea-autocomplete-wrap {
+  position: relative;
+}
+
+.ea-autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #1e293b;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  margin-top: 2px;
+}
+
+.ea-autocomplete-item {
+  padding: 10px 14px;
+  font-size: 0.875rem;
+  color: #cbd5e1;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.15s;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: rgba(56, 189, 248, 0.12);
+    color: #f1f5f9;
+  }
+}
