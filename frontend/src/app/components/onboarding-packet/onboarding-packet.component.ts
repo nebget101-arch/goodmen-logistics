@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { ConsentService } from '../../services/consent.service';
@@ -202,7 +202,7 @@ export interface ConsentKeyConfig {
   templateUrl: './onboarding-packet.component.html',
   styleUrls: ['./onboarding-packet.component.css']
 })
-export class OnboardingPacketComponent implements OnInit {
+export class OnboardingPacketComponent implements OnInit, OnDestroy {
   packetId: string | null;
   token: string | null;
 
@@ -505,6 +505,9 @@ export class OnboardingPacketComponent implements OnInit {
     this.reviewMode = false;
   }
 
+  // FN-524: tracks the auto-navigation timer so we can cancel it if needed
+  private autoNavTimer: ReturnType<typeof setTimeout> | null = null;
+
   submitEmploymentApplication(): void {
     if (!this.packetId || !this.token) return;
     this.saving = true;
@@ -517,7 +520,8 @@ export class OnboardingPacketComponent implements OnInit {
           this.saving = false;
           this.submittedEmployment = true;
           this.reviewMode = false;
-          this.saveSuccess = 'Employment application submitted successfully. Your DQF employment checklist item will be updated automatically.';
+          // FN-524: Show success message then auto-navigate to consent forms after 2.5 s
+          this.saveSuccess = 'Application submitted successfully! Taking you to consent forms…';
           const idx = this.sections.findIndex((s) => s.section_key === 'employment_application');
           if (idx >= 0) {
             this.sections = this.sections.map((s, i) =>
@@ -526,6 +530,11 @@ export class OnboardingPacketComponent implements OnInit {
           } else {
             this.sections = [...this.sections, { section_key: 'employment_application', status: 'completed', completed_at: new Date().toISOString() }];
           }
+          // FN-524: Auto-navigate to consent_forms after 2.5 s; fallback to showing success state
+          this.autoNavTimer = setTimeout(() => {
+            this.autoNavTimer = null;
+            this.setStep('consent_forms');
+          }, 2500);
         },
         error: (err) => {
           this.saving = false;
@@ -805,4 +814,12 @@ export class OnboardingPacketComponent implements OnInit {
   }
 
   removeLicense(i: number): void { this.employment.licenses?.splice(i, 1); }
+
+  // FN-524: Cancel auto-navigation timer on destroy to avoid memory leaks
+  ngOnDestroy(): void {
+    if (this.autoNavTimer !== null) {
+      clearTimeout(this.autoNavTimer);
+      this.autoNavTimer = null;
+    }
+  }
 }
