@@ -1,11 +1,21 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
+import { Subject, Subscription, of } from 'rxjs';
+import { debounceTime, switchMap, catchError, filter } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import { ConsentService } from '../../services/consent.service';
 import { SeoService } from '../../services/seo.service';
 import { SEO_PUBLIC } from '../../services/seo-public-presets';
 import { EmployerHistoryData } from './employer-history-tiered/employer-history-tiered.component';
 import { DisqualificationData } from './disqualification-history/disqualification-history.component';
+
+interface AddressSuggestion {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
 
 export interface PreviousAddress {
   street?: string;
@@ -286,6 +296,12 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
   // FN-269: File preview state — file is selected but not yet uploaded
   pendingFiles: Map<string, { file: File; previewUrl: string | null }> = new Map();
 
+  // FN-534: Address autocomplete state
+  addressSuggestions: { [key: string]: AddressSuggestion[] } = {};
+  activeAutocompleteKey: string | null = null;
+  private addressInput$ = new Subject<{ key: string; query: string }>();
+  private autocompleteSub?: Subscription;
+
   get requiredDocsCount(): number {
     return this.documentTypes.filter(d => d.required).length;
   }
@@ -302,7 +318,9 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private apiService: ApiService,
     private consentService: ConsentService,
-    private seo: SeoService
+    private seo: SeoService,
+    private http: HttpClient,
+    private elRef: ElementRef
   ) {
     this.packetId = this.route.snapshot.paramMap.get('packetId');
     this.token = this.route.snapshot.queryParamMap.get('token');
@@ -312,6 +330,23 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
     const path = this.packetId ? `/onboard/${this.packetId}` : SEO_PUBLIC.driverOnboarding.path;
     this.seo.apply({ ...SEO_PUBLIC.driverOnboarding, path });
     this.loadPacket();
+
+    // FN-534: Address autocomplete pipeline
+    this.autocompleteSub = this.addressInput$.pipe(
+      debounceTime(300),
+      filter(({ query }) => query.length >= 3),
+      switchMap(({ key, query }) =>
+        this.http.get<AddressSuggestion[]>('/api/address/autocomplete', { params: { q: query } }).pipe(
+          catchError(() => of([] as AddressSuggestion[]))
+        ).pipe(
+          switchMap(results => {
+            this.addressSuggestions = { ...this.addressSuggestions, [key]: results };
+            this.activeAutocompleteKey = results.length > 0 ? key : null;
+            return of(null);
+          })
+        )
+      )
+    ).subscribe();
   }
 
   loadPacket(): void {
@@ -328,6 +363,7 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
         this.hydrateFromSections();
         this.loadConsentStatuses();
         this.loadUploadedDocuments();
+        this.prefillLicenseFromDriver();
       },
       error: (err) => {
         this.loading = false;
@@ -815,11 +851,113 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
 
   removeLicense(i: number): void { this.employment.licenses?.splice(i, 1); }
 
+  // === FN-533: License Prefill (public endpoint) ===
+  private prefillLicenseFromDriver(): void {
+    if (!this.packetId || !this.token) return;
+
+    this.http.get<{ licenseNumber?: string; licenseState?: string }>(
+      `/public/onboarding/${this.packetId}/license`,
+      { params: { token: this.token } }
+    ).subscribe({
+      next: (data) => {
+        if (!data) return;
+        const licenses = this.employment.licenses;
+        if (!licenses || licenses.length === 0) return;
+        const first = licenses[0];
+
+        // Only patch if the field is currently empty (don't override user input)
+        if (data.licenseNumber && !first.licenseNumber) {
+          first.licenseNumber = data.licenseNumber;
+        }
+        if (data.licenseState && !first.state) {
+          first.state = data.licenseState;
+        }
+      },
+      error: () => {
+        // Silently skip — section remains blank for manual entry
+      }
+    });
+  }
+
+  // === FN-534: Address Autocomplete ===
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event): void {
+    if (!this.elRef.nativeElement.contains(event.target)) {
+      this.dismissAutocomplete();
+    }
+  }
+
+  onAddressInput(key: string, event: Event): void {
+    const query = (event.target as HTMLInputElement).value;
+    if (query.length < 3) {
+      this.addressSuggestions = { ...this.addressSuggestions, [key]: [] };
+      if (this.activeAutocompleteKey === key) this.activeAutocompleteKey = null;
+      return;
+    }
+    this.addressInput$.next({ key, query });
+  }
+
+  selectAddressSuggestion(
+    key: string,
+    suggestion: AddressSuggestion,
+    target: { street: string; city: string; state: string; zip: string },
+    fieldMap: { street: string; city: string; state: string; zip: string }
+  ): void {
+    (target as Record<string, string>)[fieldMap.street] = suggestion.street;
+    (target as Record<string, string>)[fieldMap.city] = suggestion.city;
+    (target as Record<string, string>)[fieldMap.state] = suggestion.state;
+    (target as Record<string, string>)[fieldMap.zip] = suggestion.zip;
+    this.addressSuggestions = { ...this.addressSuggestions, [key]: [] };
+    this.activeAutocompleteKey = null;
+  }
+
+  selectCurrentAddressSuggestion(suggestion: AddressSuggestion): void {
+    this.employment.addressStreet = suggestion.street;
+    this.employment.addressCity = suggestion.city;
+    this.employment.addressState = suggestion.state;
+    this.employment.addressZip = suggestion.zip;
+    this.addressSuggestions = { ...this.addressSuggestions, currentAddress: [] };
+    this.activeAutocompleteKey = null;
+  }
+
+  selectPreviousAddressSuggestion(suggestion: AddressSuggestion, addr: PreviousAddress): void {
+    addr.street = suggestion.street;
+    addr.city = suggestion.city;
+    addr.state = suggestion.state;
+    addr.zip = suggestion.zip;
+    this.addressSuggestions = {};
+    this.activeAutocompleteKey = null;
+  }
+
+  selectEmployerAddressSuggestion(suggestion: AddressSuggestion, emp: EmployerEntry): void {
+    emp.streetAddress = suggestion.street;
+    emp.city = suggestion.city;
+    emp.state = suggestion.state;
+    emp.zipCode = suggestion.zip;
+    this.addressSuggestions = {};
+    this.activeAutocompleteKey = null;
+  }
+
+  onAddressKeydown(key: string, event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.addressSuggestions = { ...this.addressSuggestions, [key]: [] };
+      this.activeAutocompleteKey = null;
+    }
+  }
+
+  dismissAutocomplete(): void {
+    this.activeAutocompleteKey = null;
+    this.addressSuggestions = {};
+  }
+
   // FN-524: Cancel auto-navigation timer on destroy to avoid memory leaks
   ngOnDestroy(): void {
     if (this.autoNavTimer !== null) {
       clearTimeout(this.autoNavTimer);
       this.autoNavTimer = null;
+    }
+    if (this.autocompleteSub) {
+      this.autocompleteSub.unsubscribe();
     }
   }
 }
