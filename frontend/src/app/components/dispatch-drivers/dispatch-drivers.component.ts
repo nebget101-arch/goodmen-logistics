@@ -314,6 +314,8 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     coDriverId: '',
     truckId: '',
     trailerId: '',
+    truckUnitNumber: '',
+    trailerUnitNumber: '',
     fuelCardNumber: ''
   };
 
@@ -442,7 +444,13 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   loadVehicles(): void {
     this.apiService.getVehicles().subscribe({
       next: (all) => {
-        const list = all || [];
+        const list = Array.isArray(all)
+          ? all
+          : Array.isArray(all?.data)
+            ? all.data
+            : Array.isArray(all?.rows)
+              ? all.rows
+              : [];
         this.trucks = list.filter((v: any) => {
           const t = (v.vehicle_type || v.vehicleType || '').toString().toLowerCase();
           // Treat anything that is not explicitly 'trailer' as a truck for now
@@ -452,22 +460,54 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
           const t = (v.vehicle_type || v.vehicleType || '').toString().toLowerCase();
           return t === 'trailer';
         });
-        this.truckSelectOptions = this.trucks.map(t => ({
-          value: t.id,
-          label: [t.unit_number, t.make, t.model].filter(Boolean).join(' - ') || t.id
+        const truckLabel = (t: any) =>
+          [t.unit_number ?? t.unitNumber, t.make, t.model].filter(Boolean).join(' - ') ||
+          String(t.id ?? '');
+        const trailerLabel = truckLabel;
+        this.truckSelectOptions = this.trucks.map((t) => ({
+          value: this.normalizeId(t.id),
+          label: truckLabel(t)
         }));
-        this.trailerSelectOptions = this.trailers.map(t => ({
-          value: t.id,
-          label: [t.unit_number, t.make, t.model].filter(Boolean).join(' - ') || t.id
+        this.trailerSelectOptions = this.trailers.map((t) => ({
+          value: this.normalizeId(t.id),
+          label: trailerLabel(t)
         }));
+        this.ensureTruckTrailerOptionsForForm();
       },
       error: (err) => {
         console.error('Error loading vehicles for drivers page', err);
         this.trucks = [];
         this.trailers = [];
+        this.truckSelectOptions = [];
         this.trailerSelectOptions = [];
       }
     });
+  }
+
+  /**
+   * If the driver's assigned truck/trailer is missing from the API list (e.g. ID type mismatch),
+   * inject options so mat-select can display the selection and unit label.
+   */
+  private ensureTruckTrailerOptionsForForm(): void {
+    if (!this.showNewModal) return;
+    const tid = this.normalizeId(this.newDriver?.truckId);
+    if (tid) {
+      const exists = this.truckSelectOptions.some((o) => this.normalizeId(o.value) === tid);
+      if (!exists) {
+        const label =
+          [this.newDriver?.truckUnitNumber, 'Truck'].filter(Boolean).join(' — ') || tid;
+        this.truckSelectOptions = [...this.truckSelectOptions, { value: tid, label }];
+      }
+    }
+    const trid = this.normalizeId(this.newDriver?.trailerId);
+    if (trid) {
+      const exists = this.trailerSelectOptions.some((o) => this.normalizeId(o.value) === trid);
+      if (!exists) {
+        const label =
+          [this.newDriver?.trailerUnitNumber, 'Trailer'].filter(Boolean).join(' — ') || trid;
+        this.trailerSelectOptions = [...this.trailerSelectOptions, { value: trid, label }];
+      }
+    }
   }
 
   private normalizeId(value: any): string {
@@ -624,6 +664,8 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       coDriverId: '',
       truckId: '',
       trailerId: '',
+      truckUnitNumber: '',
+      trailerUnitNumber: '',
       fuelCardNumber: ''
     };
     this.primaryPayeeSearch = '';
@@ -731,12 +773,32 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     this.recurringDeductions = [];
     this.resetRecurringDeductionDraft();
     this.showNewModal = true;
+    this.ensureTruckTrailerOptionsForForm();
     // Defer API call so the modal renders first (avoids change-detection thrash with expense selects)
     const driverId = driver.id;
+    const rowUnitFallback = {
+      truckUnitNumber: driver.truckUnitNumber || driver.truck_unit_number || '',
+      trailerUnitNumber: driver.trailerUnitNumber || driver.trailer_unit_number || ''
+    };
     setTimeout(() => {
       this.apiService.getDriver(driverId).subscribe({
         next: (detail) => {
-          this.newDriver = this.buildDriverFromSource(detail);
+          this.newDriver = {
+            ...this.buildDriverFromSource(detail),
+            truckUnitNumber:
+              detail.truckUnitNumber ||
+              detail.truck_unit_number ||
+              rowUnitFallback.truckUnitNumber ||
+              this.newDriver.truckUnitNumber ||
+              '',
+            trailerUnitNumber:
+              detail.trailerUnitNumber ||
+              detail.trailer_unit_number ||
+              rowUnitFallback.trailerUnitNumber ||
+              this.newDriver.trailerUnitNumber ||
+              ''
+          };
+          this.ensureTruckTrailerOptionsForForm();
           this.primaryPayeeSearch = this.newDriver.payableTo || '';
           this.additionalPayeeSearch = this.newDriver.additionalPayee || '';
           this.selectedPrimaryPayeeId = detail?.primaryPayeeId || '';
@@ -1217,10 +1279,12 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       effectiveStart: source.effectiveStart || this.normalizeDate(source.effectiveStart) || '',
       effectiveEnd: source.effectiveEnd || this.normalizeDate(source.effectiveEnd) || '',
       compensationNotes: source.compensationNotes || '',
-      coDriverId: source.coDriverId || '',
-      truckId: source.truckId || '',
-      trailerId: source.trailerId || '',
-      fuelCardNumber: source.fuelCardNumber || ''
+      coDriverId: source.coDriverId || source.co_driver_id || '',
+      truckId: this.normalizeId(source.truckId ?? source.truck_id ?? ''),
+      trailerId: this.normalizeId(source.trailerId ?? source.trailer_id ?? ''),
+      truckUnitNumber: source.truckUnitNumber || source.truck_unit_number || '',
+      trailerUnitNumber: source.trailerUnitNumber || source.trailer_unit_number || '',
+      fuelCardNumber: source.fuelCardNumber || source.fuel_card_number || ''
     };
   }
 
@@ -1342,8 +1406,17 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   }
 
   // FN-496: auto-populate Equipment Owner when truck selection changes
-  onTruckSelected(truckId: string): void {
-    const truck = (this.trucks || []).find((t: any) => t.id === truckId);
+  onTruckSelected(truckId: string | null): void {
+    const tid = this.normalizeId(truckId);
+    const truck = tid
+      ? (this.trucks || []).find((t: any) => this.normalizeId(t.id) === tid)
+      : undefined;
+    if (!tid) {
+      this.newDriver.truckUnitNumber = '';
+    } else {
+      const unit = truck?.unit_number ?? truck?.unitNumber;
+      if (unit != null && unit !== '') this.newDriver.truckUnitNumber = String(unit);
+    }
     const ownerName = (truck?.equipment_owner_name || '').trim();
 
     if (!ownerName) {
@@ -1362,6 +1435,17 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     this.applyEquipmentOwnerFromTruck(ownerName);
   }
 
+  onTrailerSelected(trailerId: string | null): void {
+    const id = this.normalizeId(trailerId);
+    if (!id) {
+      this.newDriver.trailerUnitNumber = '';
+      return;
+    }
+    const tr = (this.trailers || []).find((t: any) => this.normalizeId(t.id) === id);
+    const unit = tr?.unit_number ?? tr?.unitNumber;
+    if (unit != null && unit !== '') this.newDriver.trailerUnitNumber = String(unit);
+  }
+
   confirmOwnerChange(): void {
     if (!this.pendingOwnerChange) return;
     this.applyEquipmentOwnerFromTruck(this.pendingOwnerChange.ownerName);
@@ -1374,7 +1458,9 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       const prev = this.trucks.find(
         (t: any) => (t.equipment_owner_name || '').trim() === (this.additionalPayeeSearch || '').trim()
       );
-      this.newDriver.truckId = prev?.id || '';
+      this.newDriver.truckId = this.normalizeId(prev?.id);
+      const u = prev?.unit_number ?? prev?.unitNumber;
+      this.newDriver.truckUnitNumber = u != null && u !== '' ? String(u) : '';
     }
     this.pendingOwnerChange = null;
   }
@@ -1501,6 +1587,8 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     this.existingDriverId = null;
 
     const payload: any = { ...this.newDriver };
+    delete payload.truckUnitNumber;
+    delete payload.trailerUnitNumber;
     // FN-497: normalize legacy 'company' type to 'driver'; 'hired_driver' no longer exists
     if (payload.driverType === 'company' || payload.driverType === 'company_driver') {
       payload.driverType = 'driver';

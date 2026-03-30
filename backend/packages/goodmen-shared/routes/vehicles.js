@@ -308,10 +308,31 @@ router.get('/', async (req, res) => {
 
     if (req.context?.operatingEntityId && hasOperatingEntityId) {
       params.push(req.context.operatingEntityId);
+      const oeParam = params.length;
+      // Include vehicles tagged to this OE, tenant-wide trailers (existing behavior), and any
+      // truck/trailer currently assigned to a driver in this OE (fixes empty dropdowns when
+      // equipment rows have null or stale operating_entity_id but drivers still show units).
       if (hasVehicleType) {
-        sql += ` AND (av.operating_entity_id = $${params.length} OR LOWER(COALESCE(av.vehicle_type, '')) = 'trailer')`;
+        sql += ` AND (
+      av.operating_entity_id = $${oeParam}
+      OR LOWER(COALESCE(av.vehicle_type, '')) = 'trailer'
+      OR EXISTS (
+        SELECT 1 FROM drivers d
+        WHERE d.tenant_id = av.tenant_id
+          AND d.operating_entity_id = $${oeParam}
+          AND d.truck_id = av.id
+      )
+    )`;
       } else {
-        sql += ` AND av.operating_entity_id = $${params.length}`;
+        sql += ` AND (
+      av.operating_entity_id = $${oeParam}
+      OR EXISTS (
+        SELECT 1 FROM drivers d
+        WHERE d.tenant_id = av.tenant_id
+          AND d.operating_entity_id = $${oeParam}
+          AND (d.truck_id = av.id OR d.trailer_id = av.id)
+      )
+    )`;
       }
     }
 
