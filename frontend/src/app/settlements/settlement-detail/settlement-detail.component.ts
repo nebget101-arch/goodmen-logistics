@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { ExpensePaymentCategoriesService, ExpensePaymentCategory } from '../../services/expense-payment-categories.service';
-import { Subject, forkJoin, of, takeUntil } from 'rxjs';
+import { Subject, forkJoin, of, takeUntil, switchMap, timeout } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
@@ -181,10 +181,26 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
     this.carriedBalanceAdjs = [];
     this.balanceTransferAdjs = [];
 
-    forkJoin({
-      settlementRes: this.apiService.getSettlement(id),
-      loadsRes: this.apiService.getLoads().pipe(catchError(() => of([])))
-    }).subscribe({
+    // Do not call GET /loads (unbounded); it can hang the UI on large fleets. Use eligible-loads for this driver/period.
+    this.apiService.getSettlement(id).pipe(
+      switchMap((settlementRes) => {
+        const settlement = settlementRes?.settlement || settlementRes;
+        const driverId = settlement?.driver_id || settlementRes?.driver?.id || null;
+        const periodStart =
+          settlementRes?.period?.period_start || settlement?.period_start || '';
+        const periodEnd =
+          settlementRes?.period?.period_end || settlement?.period_end || settlement?.date || '';
+        const dateBasis = (settlement?.date_basis === 'delivery' ? 'delivery' : 'pickup') as 'pickup' | 'delivery';
+        const loads$ =
+          driverId && periodStart && periodEnd
+            ? this.apiService.getEligibleSettlementLoads(driverId, periodStart, periodEnd, dateBasis).pipe(
+                timeout(60000),
+                catchError(() => of([]))
+              )
+            : of([]);
+        return forkJoin({ settlementRes: of(settlementRes), loadsRes: loads$ });
+      })
+    ).subscribe({
       next: ({ settlementRes, loadsRes }) => {
         const settlement = settlementRes?.settlement || settlementRes;
         this.settlement = settlement || null;
