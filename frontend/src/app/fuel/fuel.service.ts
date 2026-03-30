@@ -36,8 +36,17 @@ export class FuelService {
     return this.http.get<CardDriverAssignment[]>(`${this.base}/cards/${cardId}/assignments`);
   }
 
-  assignDriver(cardId: string, driverId: string, notes?: string): Observable<CardDriverAssignment> {
-    return this.http.post<CardDriverAssignment>(`${this.base}/cards/${cardId}/assign-driver`, { driver_id: driverId, notes });
+  /** Backend expects camelCase `driverId` (and optional `cardNumberLast4` for per-card tracking). */
+  assignDriver(
+    accountId: string,
+    driverId: string,
+    notes?: string,
+    cardNumberLast4?: string
+  ): Observable<CardDriverAssignment> {
+    const body: { driverId: string; notes?: string; cardNumberLast4?: string } = { driverId };
+    if (notes) body.notes = notes;
+    if (cardNumberLast4) body.cardNumberLast4 = cardNumberLast4;
+    return this.http.post<CardDriverAssignment>(`${this.base}/cards/${accountId}/assign-driver`, body);
   }
 
   revokeDriver(cardId: string, notes?: string): Observable<{ revoked: boolean }> {

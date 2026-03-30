@@ -6,10 +6,13 @@ import { FuelCardAccount, FuelCard, CardDriverAssignment } from '../fuel.model';
 import { ApiService } from '../../services/api.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
+/** Matches GET /api/drivers (camelCase from transformRows). */
 interface DriverRow {
   id: string;
-  first_name: string;
-  last_name: string;
+  firstName?: string;
+  lastName?: string;
+  first_name?: string;
+  last_name?: string;
 }
 
 type ViewMode = 'accounts' | 'cards';
@@ -132,9 +135,23 @@ export class FuelCardsComponent implements OnInit {
     });
   }
 
-  driverName(id: string): string {
+  driverOptionLabel(d: DriverRow): string {
+    const fn = d.firstName ?? d.first_name ?? '';
+    const ln = d.lastName ?? d.last_name ?? '';
+    const label = `${fn} ${ln}`.trim();
+    return label || d.id;
+  }
+
+  /** Display name for a driver id; API list uses camelCase; assignments may include driver_name from API. */
+  driverDisplayName(id: string, assignment?: CardDriverAssignment): string {
+    const joined = assignment?.driver_name?.trim();
+    if (joined) return joined;
     const d = this.drivers.find(dr => dr.id === id);
-    return d ? `${d.first_name} ${d.last_name}` : id;
+    if (!d) return id;
+    const fn = d.firstName ?? d.first_name ?? '';
+    const ln = d.lastName ?? d.last_name ?? '';
+    const label = `${fn} ${ln}`.trim();
+    return label || id;
   }
 
   // ─── Load accounts ─────────────────────────────────────────────────────────
@@ -211,9 +228,23 @@ export class FuelCardsComponent implements OnInit {
     this.fuel.getCardAssignments(this.selectedAccount.id).subscribe({
       next: (assignments) => {
         const map: Record<string, CardDriverAssignment> = {};
-        assignments.forEach(a => {
-          if (a.status === 'active' && a.fuel_card_id) {
+        const active = assignments.filter(a => a.status === 'active');
+        active.forEach(a => {
+          if (a.fuel_card_id) {
             map[a.fuel_card_id] = a;
+          }
+        });
+        // Rows often have no fuel_card_id (account-level assignment); match last4 or mirror to all cards.
+        active.forEach(a => {
+          if (a.fuel_card_id) return;
+          const last4 = a.card_number_last4;
+          if (last4) {
+            const card = this.cards.find(c => c.card_number_last4 === last4);
+            if (card) map[card.id] = a;
+          } else {
+            for (const c of this.cards) {
+              map[c.id] = a;
+            }
           }
         });
         this.cardAssignmentMap = map;
@@ -376,7 +407,8 @@ export class FuelCardsComponent implements OnInit {
     }
     const { driver_id, notes } = this.assignForm.value as { driver_id: string; notes: string };
     this.savingAssign = true;
-    this.fuel.assignDriver(this.selectedAccount.id, driver_id, notes || undefined).subscribe({
+    const last4 = this.assigningCard?.card_number_last4 || undefined;
+    this.fuel.assignDriver(this.selectedAccount.id, driver_id, notes || undefined, last4).subscribe({
       next: () => {
         this.savingAssign = false;
         this.showAssignDialog = false;
