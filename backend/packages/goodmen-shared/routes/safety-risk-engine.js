@@ -132,10 +132,11 @@ async function calculateCompositeScore(tid, driverId) {
   let hosRows = [];
   const hasHosTable = await knex.schema.hasTable('hos_records');
   if (hasHosTable) {
+    // violations is text[] in schema (baseline hos_records); never compare to jsonb (FN-513).
     hosRows = await knex('hos_records')
       .where({ driver_id: driverId })
       .where('record_date', '>=', cutoff)
-      .whereRaw("violations IS NOT NULL AND violations != '[]'::jsonb")
+      .whereRaw('violations IS NOT NULL AND cardinality(violations) > 0')
       .select('id', 'record_date', 'violations');
   }
 
