@@ -1427,8 +1427,8 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
 
     const currentOwner = (this.additionalPayeeSearch || '').trim();
     if (currentOwner && currentOwner !== ownerName) {
-      // Different owner — ask for confirmation
-      this.pendingOwnerChange = { truckId, ownerName };
+      // Different owner — ask for confirmation (use normalized id — parameter may be null)
+      this.pendingOwnerChange = { truckId: tid, ownerName };
       return;
     }
 
