@@ -167,7 +167,19 @@
                   </div>
                 </div>
                 <div class="onboard-grid-2">
-                  <div class="onboard-field onboard-field-full"><label>Street *</label><input class="form-input" [(ngModel)]="employment.addressStreet" name="eaStreet" placeholder="Street address" required /></div>
+                  <div class="onboard-field onboard-field-full address-autocomplete-wrapper">
+                    <label>Street *</label>
+                    <input class="form-input" [(ngModel)]="employment.addressStreet" name="eaStreet" placeholder="Street address" required
+                      (input)="onAddressInput('currentAddress', $event)"
+                      (keydown)="onAddressKeydown('currentAddress', $event)" />
+                    <div class="address-suggestions" *ngIf="activeAutocompleteKey === 'currentAddress' && addressSuggestions['currentAddress']?.length">
+                      <button type="button" class="address-suggestion-item"
+                        *ngFor="let s of addressSuggestions['currentAddress']"
+                        (click)="selectCurrentAddressSuggestion(s)">
+                        {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
+                      </button>
+                    </div>
+                  </div>
                   <div class="onboard-field"><label>City *</label><input class="form-input" [(ngModel)]="employment.addressCity" name="eaCity" placeholder="City" required /></div>
                   <div class="onboard-field"><label>State *</label>
                     <select class="form-input" [(ngModel)]="employment.addressState" name="eaState" required>
@@ -192,7 +204,19 @@
                     <button type="button" class="btn-icon-remove" (click)="removePreviousAddress(i)"><span class="material-symbols-outlined">close</span></button>
                   </div>
                   <div class="onboard-grid-2">
-                    <div class="onboard-field onboard-field-full"><label>Street *</label><input class="form-input" [(ngModel)]="addr.street" [name]="'prevStreet'+i" placeholder="Street address" /></div>
+                    <div class="onboard-field onboard-field-full address-autocomplete-wrapper">
+                      <label>Street *</label>
+                      <input class="form-input" [(ngModel)]="addr.street" [name]="'prevStreet'+i" placeholder="Street address"
+                        (input)="onAddressInput('prevAddr'+i, $event)"
+                        (keydown)="onAddressKeydown('prevAddr'+i, $event)" />
+                      <div class="address-suggestions" *ngIf="activeAutocompleteKey === 'prevAddr'+i && addressSuggestions['prevAddr'+i]?.length">
+                        <button type="button" class="address-suggestion-item"
+                          *ngFor="let s of addressSuggestions['prevAddr'+i]"
+                          (click)="selectPreviousAddressSuggestion(s, addr)">
+                          {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
+                        </button>
+                      </div>
+                    </div>
                     <div class="onboard-field"><label>City *</label><input class="form-input" [(ngModel)]="addr.city" [name]="'prevCity'+i" placeholder="City" /></div>
                     <div class="onboard-field"><label>State *</label>
                       <select class="form-input" [(ngModel)]="addr.state" [name]="'prevState'+i">
@@ -266,7 +290,19 @@
                 <h4 class="onboard-sub-title">Current / Most Recent Employer</h4>
                 <div class="onboard-grid-2">
                   <div class="onboard-field onboard-field-full"><label>Employer Name *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.employerName" name="ceEmpName" placeholder="Company name" required /></div>
-                  <div class="onboard-field onboard-field-full"><label>Street Address *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.streetAddress" name="ceStreet" placeholder="Street address" required /></div>
+                  <div class="onboard-field onboard-field-full address-autocomplete-wrapper">
+                    <label>Street Address *</label>
+                    <input class="form-input" [(ngModel)]="employment.currentEmployer!.streetAddress" name="ceStreet" placeholder="Street address" required
+                      (input)="onAddressInput('currentEmployer', $event)"
+                      (keydown)="onAddressKeydown('currentEmployer', $event)" />
+                    <div class="address-suggestions" *ngIf="activeAutocompleteKey === 'currentEmployer' && addressSuggestions['currentEmployer']?.length">
+                      <button type="button" class="address-suggestion-item"
+                        *ngFor="let s of addressSuggestions['currentEmployer']"
+                        (click)="selectEmployerAddressSuggestion(s, employment.currentEmployer!)">
+                        {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
+                      </button>
+                    </div>
+                  </div>
                   <div class="onboard-field"><label>City *</label><input class="form-input" [(ngModel)]="employment.currentEmployer!.city" name="ceCity" placeholder="City" required /></div>
                   <div class="onboard-field"><label>State *</label>
                     <select class="form-input" [(ngModel)]="employment.currentEmployer!.state" name="ceState" required>
@@ -304,7 +340,19 @@
                   </div>
                   <div class="onboard-grid-2">
                     <div class="onboard-field onboard-field-full"><label>Employer Name *</label><input class="form-input" [(ngModel)]="emp.employerName" [name]="'peEmpName'+i" placeholder="Company name" /></div>
-                    <div class="onboard-field onboard-field-full"><label>Street Address *</label><input class="form-input" [(ngModel)]="emp.streetAddress" [name]="'peStreet'+i" placeholder="Street address" /></div>
+                    <div class="onboard-field onboard-field-full address-autocomplete-wrapper">
+                      <label>Street Address *</label>
+                      <input class="form-input" [(ngModel)]="emp.streetAddress" [name]="'peStreet'+i" placeholder="Street address"
+                        (input)="onAddressInput('prevEmp'+i, $event)"
+                        (keydown)="onAddressKeydown('prevEmp'+i, $event)" />
+                      <div class="address-suggestions" *ngIf="activeAutocompleteKey === 'prevEmp'+i && addressSuggestions['prevEmp'+i]?.length">
+                        <button type="button" class="address-suggestion-item"
+                          *ngFor="let s of addressSuggestions['prevEmp'+i]"
+                          (click)="selectEmployerAddressSuggestion(s, emp)">
+                          {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
+                        </button>
+                      </div>
+                    </div>
                     <div class="onboard-field"><label>City *</label><input class="form-input" [(ngModel)]="emp.city" [name]="'peCity'+i" placeholder="City" /></div>
                     <div class="onboard-field"><label>State *</label>
                       <select class="form-input" [(ngModel)]="emp.state" [name]="'peState'+i">
