@@ -135,7 +135,7 @@
           <td class="mono last4-cell">{{ card.card_number_last4 || '—' }}</td>
           <td class="driver-cell">
             <ng-container *ngIf="cardAssignmentMap[card.id]; else noDriver">
-              {{ driverName(cardAssignmentMap[card.id].driver_id) }}
+              {{ driverDisplayName(cardAssignmentMap[card.id].driver_id, cardAssignmentMap[card.id]) }}
             </ng-container>
             <ng-template #noDriver><span class="muted">Unassigned</span></ng-template>
           </td>
@@ -292,7 +292,7 @@
       Driver
       <select formControlName="driver_id">
         <option value="">-- Select Driver --</option>
-        <option *ngFor="let d of drivers" [value]="d.id">{{ d.first_name }} {{ d.last_name }}</option>
+        <option *ngFor="let d of drivers" [value]="d.id">{{ driverOptionLabel(d) }}</option>
       </select>
     </label>
 
@@ -345,7 +345,7 @@
       </thead>
       <tbody>
         <tr *ngFor="let row of historyRows">
-          <td class="driver-cell">{{ driverName(row.driver_id) }}</td>
+          <td class="driver-cell">{{ driverDisplayName(row.driver_id, row) }}</td>
           <td>{{ row.assigned_at | date:'medium' }}</td>
           <td>{{ row.revoked_at ? (row.revoked_at | date:'medium') : '—' }}</td>
           <td>
