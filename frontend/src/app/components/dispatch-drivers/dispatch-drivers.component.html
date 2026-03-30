@@ -291,6 +291,7 @@
                   inputId="trailer"
                   [options]="trailerSelectOptions"
                   [(ngModel)]="newDriver.trailerId"
+                  (ngModelChange)="onTrailerSelected($event)"
                   [allowEmpty]="true"
                   emptyLabel="-- Select trailer --"
                   placeholder="Select trailer"
