@@ -92,9 +92,18 @@
           </div>
         </div>
         <div class="ea-grid-2">
-          <div class="ea-field ea-field-full">
+          <div class="ea-field ea-field-full ea-autocomplete-wrap">
             <label>Street <span class="req">*</span></label>
-            <input formControlName="street" class="ea-input" placeholder="Street address" />
+            <input formControlName="street" class="ea-input" placeholder="Start typing an address..."
+                   (input)="onAddressInput('currentAddress', $event)"
+                   (keydown)="onAddressKeydown('currentAddress', $event)"
+                   autocomplete="off" />
+            <div class="ea-autocomplete-dropdown" *ngIf="activeAutocompleteKey === 'currentAddress' && addressSuggestions['currentAddress']?.length">
+              <div class="ea-autocomplete-item" *ngFor="let s of addressSuggestions['currentAddress']"
+                   (mousedown)="selectSuggestion('currentAddress', s, form.get('currentAddress'), { street: 'street', city: 'city', state: 'state', zip: 'zip' })">
+                {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
+              </div>
+            </div>
           </div>
           <div class="ea-field">
             <label>City <span class="req">*</span></label>
@@ -232,9 +241,18 @@
               <label>Employer Name <span class="req">*</span></label>
               <input formControlName="employerName" class="ea-input" placeholder="Company name" />
             </div>
-            <div class="ea-field ea-field-full">
+            <div class="ea-field ea-field-full ea-autocomplete-wrap">
               <label>Street Address <span class="req">*</span></label>
-              <input formControlName="streetAddress" class="ea-input" placeholder="Street address" />
+              <input formControlName="streetAddress" class="ea-input" placeholder="Start typing an address..."
+                     (input)="onAddressInput('currentEmployer', $event)"
+                     (keydown)="onAddressKeydown('currentEmployer', $event)"
+                     autocomplete="off" />
+              <div class="ea-autocomplete-dropdown" *ngIf="activeAutocompleteKey === 'currentEmployer' && addressSuggestions['currentEmployer']?.length">
+                <div class="ea-autocomplete-item" *ngFor="let s of addressSuggestions['currentEmployer']"
+                     (mousedown)="selectSuggestion('currentEmployer', s, form.get('currentEmployer'), { street: 'streetAddress', city: 'city', state: 'state', zip: 'zipCode' })">
+                  {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
+                </div>
+              </div>
             </div>
             <div class="ea-field">
               <label>City <span class="req">*</span></label>

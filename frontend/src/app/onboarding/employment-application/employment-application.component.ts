@@ -1,10 +1,19 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, HostListener } from '@angular/core';
 import { FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
-import { Subscription, timer } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { Subject, Subscription, timer, of } from 'rxjs';
+import { debounceTime, switchMap, catchError, filter } from 'rxjs/operators';
 import { ActivatedRoute } from '@angular/router';
 import { EmploymentApplicationService } from '../../services/employment-application.service';
 import { ApiService } from '../../services/api.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+
+interface AddressSuggestion {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
 
 @Component({
   selector: 'app-employment-application',
@@ -39,6 +48,12 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
   totalEmployerYears = 0;
   needMoreEmployers = true;
 
+  // Address autocomplete state
+  addressSuggestions: { [key: string]: AddressSuggestion[] } = {};
+  activeAutocompleteKey: string | null = null;
+  private addressInput$ = new Subject<{ key: string; query: string }>();
+  private autocompleteSub?: Subscription;
+
   // US States for dropdowns
   usStates = [
     'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS',
@@ -48,10 +63,12 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
 
   constructor(
     private fb: FormBuilder,
+    private http: HttpClient,
     private api: EmploymentApplicationService,
     private apiService: ApiService,
     private route: ActivatedRoute,
-    private oeContext: OperatingEntityContextService
+    private oeContext: OperatingEntityContextService,
+    private elRef: ElementRef
   ) {}
 
   ngOnInit() {
@@ -159,12 +176,71 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     // Watch current employer from date for dynamic previous employers
     this.form.get('currentEmployer.fromDate')?.valueChanges.subscribe(() => this.recalcEmployerYears());
 
+    // Address autocomplete pipeline
+    this.autocompleteSub = this.addressInput$.pipe(
+      debounceTime(300),
+      filter(({ query }) => query.length >= 3),
+      switchMap(({ key, query }) =>
+        this.http.get<AddressSuggestion[]>('/api/address/autocomplete', { params: { q: query } }).pipe(
+          catchError(() => of([] as AddressSuggestion[]))
+        ).pipe(
+          switchMap(results => {
+            this.addressSuggestions[key] = results;
+            this.activeAutocompleteKey = results.length > 0 ? key : null;
+            return of(null);
+          })
+        )
+      )
+    ).subscribe();
+
     // Autosave every 20s
     this.autosaveSub = timer(20000, 20000).subscribe(() => this.autosave());
   }
 
   ngOnDestroy() {
     if (this.autosaveSub) this.autosaveSub.unsubscribe();
+    if (this.autocompleteSub) this.autocompleteSub.unsubscribe();
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event) {
+    if (!this.elRef.nativeElement.contains(event.target)) {
+      this.dismissAutocomplete();
+    }
+  }
+
+  // === Address Autocomplete ===
+  onAddressInput(key: string, event: Event) {
+    const query = (event.target as HTMLInputElement).value;
+    if (query.length < 3) {
+      this.addressSuggestions[key] = [];
+      if (this.activeAutocompleteKey === key) this.activeAutocompleteKey = null;
+      return;
+    }
+    this.addressInput$.next({ key, query });
+  }
+
+  selectSuggestion(key: string, suggestion: AddressSuggestion, formGroup: FormGroup, fieldMap: { street: string; city: string; state: string; zip: string }) {
+    formGroup.patchValue({
+      [fieldMap.street]: suggestion.street,
+      [fieldMap.city]: suggestion.city,
+      [fieldMap.state]: suggestion.state,
+      [fieldMap.zip]: suggestion.zip
+    });
+    this.addressSuggestions[key] = [];
+    this.activeAutocompleteKey = null;
+  }
+
+  onAddressKeydown(key: string, event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      this.addressSuggestions[key] = [];
+      this.activeAutocompleteKey = null;
+    }
+  }
+
+  dismissAutocomplete() {
+    this.activeAutocompleteKey = null;
+    this.addressSuggestions = {};
   }
 
   // === Form Array Getters ===
