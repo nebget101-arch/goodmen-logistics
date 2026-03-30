@@ -303,28 +303,36 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
   }
 
   // === SSN Masking ===
+  // FN-531: [value]="getSsnDisplay()" was removed from the template — Angular's one-way
+  // property binding resets input.value on every CD cycle, fighting the browser and causing
+  // each keypress to appear to wipe the field. We now own the DOM value entirely here.
   onSsnInput(event: Event) {
     const input = event.target as HTMLInputElement;
     const raw = input.value;
 
     // Each '*' in the display represents a preserved hidden digit from ssnRawValue.
-    // Extracting /\D/g would strip '*' too — losing those stored digits.
-    // Instead: count '*' chars (= number of preserved prefix digits to keep),
-    // then extract only actual visible digit chars (not '*' or '-').
+    // Count '*' chars (= number of masked prefix digits to keep), then extract only
+    // the visible (non-mask, non-dash) digit chars typed by the user.
     const maskCount = (raw.match(/\*/g) ?? []).length;
     const visibleDigits = raw.replace(/[^\d]/g, '');
 
     if (maskCount > 0) {
-      // Preserve the first `maskCount` raw digits; append the visible (unmasked) digits
+      // Preserve the first `maskCount` raw digits; append newly-typed visible digits
       const preservedPrefix = this.ssnRawValue.slice(0, maskCount);
       this.ssnRawValue = (preservedPrefix + visibleDigits).slice(0, 9);
     } else {
-      // No masking chars — user cleared the field or pasted plain digits
+      // No mask chars — user cleared the field or pasted plain digits
       this.ssnRawValue = visibleDigits.slice(0, 9);
     }
 
     // Store sanitised value in form control
     this.form.get('applicant.ssn')?.setValue(this.ssnRawValue, { emitEvent: false });
+
+    // FN-531: Imperatively update the input display value so Angular CD never touches it.
+    // Place cursor at end — standard behaviour for a masked SSN field.
+    const display = this.getSsnDisplay();
+    input.value = display;
+    input.setSelectionRange(display.length, display.length);
   }
 
   getSsnDisplay(): string {

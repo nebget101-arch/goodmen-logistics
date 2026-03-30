@@ -69,7 +69,9 @@
           </div>
           <div class="ea-field">
             <label for="eaSSN">Social Security Number <span class="req">*</span></label>
-            <input id="eaSSN" class="ea-input" [value]="getSsnDisplay()" (input)="onSsnInput($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" />
+            <!-- FN-531: [value] binding removed — Angular CD was overwriting user input every cycle.
+                 Display is now managed imperatively inside onSsnInput() to avoid the conflict. -->
+            <input id="eaSSN" class="ea-input" (input)="onSsnInput($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" />
           </div>
           <div class="ea-field">
             <label for="eaPosition">Position Applied For <span class="req">*</span></label>
