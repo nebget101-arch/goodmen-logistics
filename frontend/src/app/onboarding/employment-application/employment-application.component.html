@@ -100,7 +100,7 @@
                    autocomplete="off" />
             <div class="ea-autocomplete-dropdown" *ngIf="activeAutocompleteKey === 'currentAddress' && addressSuggestions['currentAddress']?.length">
               <div class="ea-autocomplete-item" *ngFor="let s of addressSuggestions['currentAddress']"
-                   (mousedown)="selectSuggestion('currentAddress', s, form.get('currentAddress'), { street: 'street', city: 'city', state: 'state', zip: 'zip' })">
+                   (mousedown)="selectSuggestion('currentAddress', s, $any(form.get('currentAddress')), { street: 'street', city: 'city', state: 'state', zip: 'zip' })">
                 {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
               </div>
             </div>
@@ -249,7 +249,7 @@
                      autocomplete="off" />
               <div class="ea-autocomplete-dropdown" *ngIf="activeAutocompleteKey === 'currentEmployer' && addressSuggestions['currentEmployer']?.length">
                 <div class="ea-autocomplete-item" *ngFor="let s of addressSuggestions['currentEmployer']"
-                     (mousedown)="selectSuggestion('currentEmployer', s, form.get('currentEmployer'), { street: 'streetAddress', city: 'city', state: 'state', zip: 'zipCode' })">
+                     (mousedown)="selectSuggestion('currentEmployer', s, $any(form.get('currentEmployer')), { street: 'streetAddress', city: 'city', state: 'state', zip: 'zipCode' })">
                   {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
                 </div>
               </div>
