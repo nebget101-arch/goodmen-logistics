@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, ElementRef, HostListener } from '@angular
 import { FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Subject, Subscription, timer, of } from 'rxjs';
-import { debounceTime, switchMap, catchError, filter } from 'rxjs/operators';
+import { debounceTime, switchMap, catchError, filter, take } from 'rxjs/operators';
 import { ActivatedRoute } from '@angular/router';
 import { EmploymentApplicationService } from '../../services/employment-application.service';
 import { ApiService } from '../../services/api.service';
@@ -166,6 +166,9 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     // Add one default license row
     this.addLicense();
 
+    // Pre-populate first license entry from driver's most recent license
+    this.prefillLicenseFromDriver();
+
     // Load employer info from operating entity / tenant
     this.loadEmployerInfo();
 
@@ -269,6 +272,34 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     } catch {
       // If service not available, leave blank
     }
+  }
+
+  // === License Pre-fill ===
+  private prefillLicenseFromDriver(): void {
+    if (!this.driverId) return;
+
+    this.apiService.getDriver(this.driverId).pipe(take(1)).subscribe({
+      next: (driver: Record<string, unknown>) => {
+        if (!driver) return;
+
+        const firstLicense = this.licenses.at(0) as FormGroup | undefined;
+        if (!firstLicense) return;
+
+        // Only patch fields that the user hasn't already typed into
+        const cdlNumber = driver['cdlNumber'] as string | undefined;
+        const cdlState = driver['cdlState'] as string | undefined;
+
+        if (cdlNumber && !firstLicense.get('licenseNumber')?.value) {
+          firstLicense.get('licenseNumber')?.setValue(cdlNumber);
+        }
+        if (cdlState && !firstLicense.get('state')?.value) {
+          firstLicense.get('state')?.setValue(cdlState);
+        }
+      },
+      error: () => {
+        // Silently skip — section remains blank for manual entry
+      }
+    });
   }
 
   // === SSN Masking ===
