@@ -28,6 +28,8 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
   submitted = false;
   applicationId: string | null = null;
   driverId: string | null = null;
+  private packetId: string | null = null;
+  private packetToken: string | null = null;
 
   // Employer info from tenant/operating entity
   employerName = '';
@@ -72,6 +74,8 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.driverId = this.route.snapshot.paramMap.get('driverId') || this.route.snapshot.queryParamMap.get('driverId');
+    this.packetId = this.route.snapshot.queryParamMap.get('packetId');
+    this.packetToken = this.route.snapshot.queryParamMap.get('token');
 
     this.form = this.fb.group({
       applicant: this.fb.group({
@@ -274,26 +278,25 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     }
   }
 
-  // === License Pre-fill ===
+  // === License Pre-fill (FN-532: use public endpoint, not auth-protected) ===
   private prefillLicenseFromDriver(): void {
-    if (!this.driverId) return;
+    if (!this.packetId || !this.packetToken) return;
 
-    this.apiService.getDriver(this.driverId).pipe(take(1)).subscribe({
-      next: (driver: Record<string, unknown>) => {
-        if (!driver) return;
+    this.http.get<{ licenseNumber?: string; licenseState?: string }>(
+      `/public/onboarding/${this.packetId}/license`,
+      { params: { token: this.packetToken } }
+    ).pipe(take(1)).subscribe({
+      next: (data) => {
+        if (!data) return;
 
         const firstLicense = this.licenses.at(0) as FormGroup | undefined;
         if (!firstLicense) return;
 
-        // Only patch fields that the user hasn't already typed into
-        const cdlNumber = driver['cdlNumber'] as string | undefined;
-        const cdlState = driver['cdlState'] as string | undefined;
-
-        if (cdlNumber && !firstLicense.get('licenseNumber')?.value) {
-          firstLicense.get('licenseNumber')?.setValue(cdlNumber);
+        if (data.licenseNumber && !firstLicense.get('licenseNumber')?.value) {
+          firstLicense.get('licenseNumber')?.setValue(data.licenseNumber);
         }
-        if (cdlState && !firstLicense.get('state')?.value) {
-          firstLicense.get('state')?.setValue(cdlState);
+        if (data.licenseState && !firstLicense.get('state')?.value) {
+          firstLicense.get('state')?.setValue(data.licenseState);
         }
       },
       error: () => {
