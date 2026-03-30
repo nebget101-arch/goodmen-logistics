@@ -7,6 +7,7 @@ import { ApiService } from '../../services/api.service';
 import { ConsentService } from '../../services/consent.service';
 import { SeoService } from '../../services/seo.service';
 import { SEO_PUBLIC } from '../../services/seo-public-presets';
+import { environment } from '../../../environments/environment';
 import { EmployerHistoryData } from './employer-history-tiered/employer-history-tiered.component';
 import { DisqualificationData } from './disqualification-history/disqualification-history.component';
 
@@ -336,7 +337,7 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
       debounceTime(300),
       filter(({ query }) => query.length >= 3),
       switchMap(({ key, query }) =>
-        this.http.get<AddressSuggestion[]>('/api/address/autocomplete', { params: { q: query } }).pipe(
+        this.http.get<AddressSuggestion[]>(`${environment.apiUrl}/address/autocomplete`, { params: { q: query } }).pipe(
           catchError(() => of([] as AddressSuggestion[]))
         ).pipe(
           switchMap(results => {
@@ -855,8 +856,9 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
   private prefillLicenseFromDriver(): void {
     if (!this.packetId || !this.token) return;
 
+    const publicBase = environment.apiUrl.replace(/\/api\/?$/, '/public/onboarding');
     this.http.get<{ licenseNumber?: string; licenseState?: string }>(
-      `/public/onboarding/${this.packetId}/license`,
+      `${publicBase}/${this.packetId}/license`,
       { params: { token: this.token } }
     ).subscribe({
       next: (data) => {

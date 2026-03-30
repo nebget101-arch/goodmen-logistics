@@ -7,6 +7,7 @@ import { ActivatedRoute } from '@angular/router';
 import { EmploymentApplicationService } from '../../services/employment-application.service';
 import { ApiService } from '../../services/api.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { environment } from '../../../environments/environment';
 
 interface AddressSuggestion {
   street: string;
@@ -187,7 +188,7 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
       debounceTime(300),
       filter(({ query }) => query.length >= 3),
       switchMap(({ key, query }) =>
-        this.http.get<AddressSuggestion[]>('/api/address/autocomplete', { params: { q: query } }).pipe(
+        this.http.get<AddressSuggestion[]>(`${environment.apiUrl}/address/autocomplete`, { params: { q: query } }).pipe(
           catchError(() => of([] as AddressSuggestion[]))
         ).pipe(
           switchMap(results => {
@@ -282,8 +283,9 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
   private prefillLicenseFromDriver(): void {
     if (!this.packetId || !this.packetToken) return;
 
+    const publicBase = environment.apiUrl.replace(/\/api\/?$/, '/public/onboarding');
     this.http.get<{ licenseNumber?: string; licenseState?: string }>(
-      `/public/onboarding/${this.packetId}/license`,
+      `${publicBase}/${this.packetId}/license`,
       { params: { token: this.packetToken } }
     ).pipe(take(1)).subscribe({
       next: (data) => {
