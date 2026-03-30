@@ -29,7 +29,6 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
 
   // SSN masking
   ssnRawValue = '';
-  ssnMasked = '';
 
   // Dynamic address tracking
   totalResidencyYears = 0;
@@ -199,24 +198,26 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
   // === SSN Masking ===
   onSsnInput(event: Event) {
     const input = event.target as HTMLInputElement;
-    // Strip non-digits
-    const digits = input.value.replace(/\D/g, '').slice(0, 9);
-    this.ssnRawValue = digits;
+    const raw = input.value;
 
-    // Format as XXX-XX-XXXX
-    let formatted = '';
-    if (digits.length > 5) {
-      formatted = `***-**-${digits.slice(5)}`;
-    } else if (digits.length > 3) {
-      formatted = `***-${digits.slice(3, 5).replace(/./g, '*')}-${digits.slice(5)}`;
+    // Each '*' in the display represents a preserved hidden digit from ssnRawValue.
+    // Extracting /\D/g would strip '*' too — losing those stored digits.
+    // Instead: count '*' chars (= number of preserved prefix digits to keep),
+    // then extract only actual visible digit chars (not '*' or '-').
+    const maskCount = (raw.match(/\*/g) ?? []).length;
+    const visibleDigits = raw.replace(/[^\d]/g, '');
+
+    if (maskCount > 0) {
+      // Preserve the first `maskCount` raw digits; append the visible (unmasked) digits
+      const preservedPrefix = this.ssnRawValue.slice(0, maskCount);
+      this.ssnRawValue = (preservedPrefix + visibleDigits).slice(0, 9);
     } else {
-      formatted = digits.replace(/./g, '*');
+      // No masking chars — user cleared the field or pasted plain digits
+      this.ssnRawValue = visibleDigits.slice(0, 9);
     }
 
-    // Show masked version
-    this.ssnMasked = formatted;
-    // Store full SSN in form (will be masked on display but stored fully)
-    this.form.get('applicant.ssn')?.setValue(digits, { emitEvent: false });
+    // Store sanitised value in form control
+    this.form.get('applicant.ssn')?.setValue(this.ssnRawValue, { emitEvent: false });
   }
 
   getSsnDisplay(): string {
