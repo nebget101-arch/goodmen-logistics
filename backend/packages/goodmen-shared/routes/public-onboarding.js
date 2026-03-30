@@ -1136,6 +1136,70 @@ router.get('/:packetId/documents', rateLimited, async (req, res) => {
   }
 });
 
+// FN-528: GET /public/onboarding/:packetId/license?token=...
+// Returns most recent license data (ssnLast4, dateOfBirth, licenseNumber, licenseState)
+// for pre-populating the employment application license history section.
+router.get('/:packetId/license', rateLimited, async (req, res) => {
+  const start = Date.now();
+  try {
+    const { packetId } = req.params;
+    const { token } = req.query;
+
+    const { packet, error, status } = await loadPacketWithToken(packetId, token);
+    if (error) {
+      return res.status(status || 400).json({ message: error });
+    }
+
+    const driverRes = await safeOptionalQuery(
+      `SELECT id, cdl_number, cdl_state, cdl_class, cdl_expiry, date_of_birth
+       FROM drivers WHERE id = $1`,
+      [packet.driver_id]
+    );
+
+    const licenseRes = await safeOptionalQuery(
+      `SELECT cdl_number, cdl_state, cdl_class, cdl_expiry, endorsements
+       FROM driver_licenses
+       WHERE driver_id = $1
+       ORDER BY created_at DESC NULLS LAST
+       LIMIT 1`,
+      [packet.driver_id]
+    );
+
+    const latestAppRes = await safeOptionalQuery(
+      `SELECT applicant_snapshot
+       FROM employment_applications
+       WHERE driver_id = $1
+       ORDER BY created_at DESC NULLS LAST
+       LIMIT 1`,
+      [packet.driver_id]
+    );
+
+    const driver = driverRes.rows[0] || null;
+    const license = licenseRes.rows[0] || null;
+    const latestApp = latestAppRes.rows[0] || null;
+
+    const prefill = buildEmploymentPrefill({ driver, license, latestApp });
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('GET', `/public/onboarding/${packetId}/license`, 200, duration, {
+      driverId: packet.driver_id
+    });
+
+    return res.json({
+      ssnLast4: prefill.ssnLast4 || null,
+      dateOfBirth: prefill.dateOfBirth || null,
+      licenseNumber: prefill.licenseNumber || null,
+      licenseState: prefill.licenseState || null
+    });
+  } catch (err) {
+    const duration = Date.now() - start;
+    dtLogger.error('public_driver_license_prefill_failed', err, { params: req.params });
+    dtLogger.trackRequest('GET', `/public/onboarding/${req.params.packetId}/license`, 500, duration);
+    console.error('Error in public onboarding license prefill:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // FN-250: DELETE /public/onboarding/:packetId/documents/:documentId?token=...
 // Soft-delete an onboarding document
 router.delete('/:packetId/documents/:documentId', rateLimited, async (req, res) => {
