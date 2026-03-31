@@ -42,10 +42,17 @@ router.get('/', async (req, res) => {
       params.push(req.context.operatingEntityId);
       const oeParam = params.length;
       if (type === 'trailer') {
-        sql += ` AND (av.operating_entity_id = $${oeParam} OR LOWER(COALESCE(av.vehicle_type, '')) = 'trailer')`;
-      } else {
+        // Include trailers with NULL operating_entity_id (fleet-wide trailers not scoped to a specific OE)
         sql += ` AND (
-      av.operating_entity_id = $${oeParam}
+      av.operating_entity_id IS NULL
+      OR av.operating_entity_id = $${oeParam}
+      OR LOWER(COALESCE(av.vehicle_type, '')) = 'trailer'
+    )`;
+      } else {
+        // Include fleet trucks with NULL operating_entity_id (created before multi-entity setup)
+        sql += ` AND (
+      av.operating_entity_id IS NULL
+      OR av.operating_entity_id = $${oeParam}
       OR av.vehicle_source = 'shop_client'
       OR EXISTS (
         SELECT 1 FROM drivers d
@@ -61,13 +68,15 @@ router.get('/', async (req, res) => {
     // Even if there is no equipment, return an empty array (no error)
     res.json({ success: true, data: result.rows || [] });
   } catch (error) {
-    // If schema is not fully migrated (e.g. all_vehicles view missing), treat as "no data"
     const message = (error && error.message) ? String(error.message) : '';
     const code = error && error.code ? String(error.code) : '';
+    // Always log so DB-level errors (missing view, missing column) are visible in server logs
+    console.error('[equipment] query error — code=%s message=%s', code, message, error);
+    // If schema is not fully migrated (e.g. all_vehicles view missing or stale), return empty
+    // rather than a 500 so the UI doesn't hard-fail. The log above will surface the root cause.
     if (code === '42P01' || message.includes('does not exist') || message.includes('all_vehicles')) {
       return res.json({ success: true, data: [] });
     }
-    console.error('Error fetching equipment:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch equipment' });
   }
 });
