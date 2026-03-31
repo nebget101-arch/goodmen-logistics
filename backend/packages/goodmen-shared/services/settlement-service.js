@@ -14,10 +14,12 @@ const {
   sanitizeSettlementNumberToken
 } = require('./settlement-numbering');
 const {
+  ELIGIBLE_SETTLEMENT_LOAD_STATUSES
+} = require('./settlement-load-status');
+const {
   applyLeaseDeductionForSettlement
 } = require('./lease-financing-service');
 
-const DELIVERED_STATUSES = ['DELIVERED'];
 const SETTLEMENT_NUMBER_PREFIX = 'STL';
 let payeesColumnSetCache = null;
 
@@ -340,7 +342,7 @@ async function getAlreadySettledLoadIds(knex, driverId) {
 }
 
 /**
- * Eligible loads: driver_id match, status delivered, pickup/delivery date in range, not already settled.
+ * Eligible loads: driver_id match, terminal status, pickup/delivery date in range, not already settled.
  * dateBasis: 'pickup' | 'delivery'
  */
 async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, dateBasis = 'pickup', context = null) {
@@ -356,7 +358,7 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
       'l.delivery_date as delivery_date_direct'
     )
     .where('l.driver_id', driverId)
-    .whereIn('l.status', DELIVERED_STATUSES)
+    .whereIn('l.status', ELIGIBLE_SETTLEMENT_LOAD_STATUSES)
     .whereNotNull('l.rate')
     .modify((q) => {
       applyTenantFilter(q, context, 'l.tenant_id');
