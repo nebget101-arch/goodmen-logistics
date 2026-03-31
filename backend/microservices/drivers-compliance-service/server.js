@@ -119,6 +119,12 @@ app.get('/health', (req, res) => {
   res.json(healthStatus);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  try {
+    await knex.migrate.latest();
+    console.log('✅ Database migrations applied');
+  } catch (err) {
+    console.error('⚠️  Migration error (non-fatal):', err.message);
+  }
   console.log(`🧑‍✈️ Drivers compliance service running on http://localhost:${PORT}`);
 });
