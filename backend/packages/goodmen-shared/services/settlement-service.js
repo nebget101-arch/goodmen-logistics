@@ -400,6 +400,136 @@ async function generateSettlementNumberWithContext(knex, driver, period) {
 }
 
 /**
+ * FN-578: Consume unlinked fuel transactions for a settlement.
+ * Queries fuel_transactions where driver_id matches and settlement_link_status = 'none',
+ * checks expense_responsibility_profiles for fuel_responsibility setting,
+ * creates settlement_adjustment_items and links fuel transactions.
+ *
+ * Note: fuel_transactions does not have a settlement_adjustment_item_id column
+ * (unlike toll_transactions), so only settlement_id and settlement_link_status are updated.
+ *
+ * @param {object} knex - Knex instance
+ * @param {string} settlementId - Settlement UUID
+ * @param {string} driverId - Driver UUID
+ * @param {string} periodStart - Period start date (YYYY-MM-DD)
+ * @param {string} periodEnd - Period end date (YYYY-MM-DD)
+ * @param {string|null} userId - User performing the action
+ * @param {string|null} tenantId - Tenant UUID
+ */
+async function consumeFuelForSettlement(knex, settlementId, driverId, periodStart, periodEnd, userId, tenantId) {
+  // 1. Get unlinked fuel transactions for the driver in the period
+  let fuelQuery = knex('fuel_transactions')
+    .where({
+      driver_id: driverId,
+      settlement_link_status: 'none'
+    })
+    .where('transaction_date', '>=', periodStart)
+    .where('transaction_date', '<=', periodEnd);
+
+  if (tenantId) {
+    fuelQuery = fuelQuery.where('tenant_id', tenantId);
+  }
+
+  const fuels = await fuelQuery.orderBy('transaction_date', 'asc');
+  if (!fuels.length) return [];
+
+  // 2. Get the driver's expense responsibility profile
+  const asOf = toDateOnly(periodEnd) || toDateOnly(new Date());
+  const expenseProfile = await knex('expense_responsibility_profiles')
+    .where({ driver_id: driverId })
+    .whereRaw('effective_start_date <= ?', [asOf])
+    .where(function () {
+      this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [asOf]);
+    })
+    // FN-569: deterministic sort — most-recently created wins on same date
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
+    .first();
+
+  const fuelResponsibility = expenseProfile?.fuel_responsibility || 'company';
+
+  // 3. If company pays, skip — no deduction from driver or owner
+  if (fuelResponsibility === 'company') return [];
+
+  // 4. Determine driver share percentage
+  let driverSharePct = 1.0; // 100% for 'driver' responsibility
+  if (fuelResponsibility === 'shared') {
+    const customRules = expenseProfile?.custom_rules || {};
+    // Primary: explicit fuel_split_percentage key (0-100 = driver's share)
+    // Fallback: custom_rules.percentages.fuel (stored by FN-567 sharedExpensePercentages)
+    const splitPct = Number(customRules.fuel_split_percentage ?? customRules.percentages?.fuel);
+    driverSharePct = (!Number.isNaN(splitPct) && splitPct >= 0 && splitPct <= 100)
+      ? splitPct / 100
+      : 0.5; // Default 50/50 if not configured
+  } else if (fuelResponsibility === 'owner') {
+    // Owner-only: driver share is 0 — adjustment goes to owner
+    driverSharePct = 0;
+  }
+
+  // 5. Determine charge_party
+  const chargeParty = fuelResponsibility === 'shared'
+    ? 'shared'
+    : fuelResponsibility === 'owner'
+      ? 'owner'
+      : 'driver';
+
+  // 6. Create adjustment items and link fuel transactions
+  const createdAdjustments = [];
+  for (const fuel of fuels) {
+    const fuelAmount = Number(fuel.amount) || 0;
+    if (fuelAmount === 0) continue;
+
+    // For owner responsibility, the full amount is charged to the owner;
+    // for driver/shared use driverSharePct of the transaction amount.
+    const deductionAmount = fuelResponsibility === 'owner'
+      ? Math.round(fuelAmount * 100) / 100
+      : Math.round(fuelAmount * driverSharePct * 100) / 100;
+
+    if (deductionAmount === 0) continue;
+
+    const description = [
+      'Fuel',
+      fuel.vendor_name || fuel.provider_name || '',
+      fuel.location_name ? `(${fuel.location_name})` : '',
+      fuel.transaction_date ? `${toDateOnly(fuel.transaction_date)}` : ''
+    ].filter(Boolean).join(' — ');
+
+    const [adj] = await knex('settlement_adjustment_items')
+      .insert({
+        settlement_id: settlementId,
+        item_type: 'deduction',
+        source_type: 'imported_fuel',
+        description,
+        amount: deductionAmount,
+        charge_party: chargeParty,
+        apply_to: 'primary_payee',
+        source_reference_id: fuel.id,
+        source_reference_type: 'fuel_transaction',
+        occurrence_date: fuel.transaction_date,
+        status: 'applied',
+        created_by: userId
+      })
+      .returning('*');
+
+    // Link the fuel transaction to this settlement
+    // Note: fuel_transactions has no settlement_adjustment_item_id column
+    await knex('fuel_transactions')
+      .where({ id: fuel.id })
+      .update({
+        settlement_id: settlementId,
+        settlement_link_status: 'linked',
+        updated_at: knex.fn.now()
+      });
+
+    createdAdjustments.push(adj);
+  }
+
+  return createdAdjustments;
+}
+
+/**
  * Consume unlinked toll transactions for a settlement.
  * Queries toll_transactions where driver_id matches and settlement_link_status = 'none',
  * checks expense_responsibility_profiles for toll_responsibility setting,
@@ -682,6 +812,17 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
         created_by: userId
       });
     }
+
+    // FN-578: Auto-consume unlinked fuel transactions for the period
+    await consumeFuelForSettlement(
+      knex,
+      settlement.id,
+      driverId,
+      period.period_start,
+      period.period_end,
+      userId,
+      tenantId
+    );
 
     // Auto-consume unlinked toll transactions for the period
     await consumeTollsForSettlement(
@@ -1114,6 +1255,25 @@ async function voidSettlement(knex, settlementId) {
   const settlement = await knex('settlements').where({ id: settlementId }).first();
   if (!settlement) throw new Error('Settlement not found');
   await knex('settlements').where({ id: settlementId }).update({ settlement_status: 'void' });
+
+  // FN-578: Reset linked fuel and toll transactions so they can be re-used in a new settlement
+  await knex('fuel_transactions')
+    .where({ settlement_id: settlementId, settlement_link_status: 'linked' })
+    .update({
+      settlement_id: null,
+      settlement_link_status: 'none',
+      updated_at: knex.fn.now()
+    });
+
+  await knex('toll_transactions')
+    .where({ settlement_id: settlementId, settlement_link_status: 'linked' })
+    .update({
+      settlement_id: null,
+      settlement_adjustment_item_id: null,
+      settlement_link_status: 'none',
+      updated_at: knex.fn.now()
+    });
+
   return knex('settlements').where({ id: settlementId }).first();
 }
 
@@ -1160,6 +1320,7 @@ module.exports = {
   getAlreadySettledLoadIds,
   createDraftSettlement,
   recalcAndUpdateSettlement,
+  consumeFuelForSettlement,
   consumeTollsForSettlement,
   addLoadToSettlement,
   removeLoadFromSettlement,
