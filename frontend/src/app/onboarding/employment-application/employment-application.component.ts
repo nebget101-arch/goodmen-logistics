@@ -164,12 +164,20 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
         applicantPrintedName: ['', Validators.required],
         applicantSignature: ['', Validators.required],
         signatureDate: [new Date().toISOString().slice(0, 10), Validators.required],
-        certificationAccepted: [false, Validators.requiredTrue]
+        certificationAccepted: [false, Validators.requiredTrue],
+        // FN-535: Auto-populated from form data above; editable by driver
+        dateOfBirth: [''],
+        ssnLast4: [''],
+        driversLicenseNumber: [''],
+        stateOfIssue: ['']
       })
     });
 
     // Add one default license row
     this.addLicense();
+
+    // FN-535: Reactively sync certification section from applicant + license fields
+    this.setupCertificationSync();
 
     // Pre-populate first license entry from driver's most recent license
     this.prefillLicenseFromDriver();
@@ -280,6 +288,42 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     }
   }
 
+  // === FN-535: Certification Auto-Population ===
+  // Reactively mirrors applicant + license data into the certification section
+  // so drivers don't have to re-type information already entered above.
+  private setupCertificationSync(): void {
+    const cert = this.form.get('certification');
+    if (!cert) return;
+
+    const buildFullName = () => {
+      const a = this.form.get('applicant')?.value || {};
+      return [a.firstName, a.middleName, a.lastName].filter(Boolean).join(' ');
+    };
+
+    // Sync full name to applicantPrintedName and applicantSignature
+    ['applicant.firstName', 'applicant.middleName', 'applicant.lastName'].forEach(field => {
+      this.form.get(field)?.valueChanges.subscribe(() => {
+        const name = buildFullName();
+        cert.get('applicantPrintedName')?.setValue(name, { emitEvent: false });
+        cert.get('applicantSignature')?.setValue(name, { emitEvent: false });
+      });
+    });
+
+    // Sync DOB
+    this.form.get('applicant.dateOfBirth')?.valueChanges.subscribe(dob => {
+      cert.get('dateOfBirth')?.setValue(dob || '', { emitEvent: false });
+    });
+
+    // Sync license number + state from first license row (added in addLicense())
+    const firstLicense = this.licenses.at(0) as FormGroup | undefined;
+    firstLicense?.get('licenseNumber')?.valueChanges.subscribe(val => {
+      cert.get('driversLicenseNumber')?.setValue(val || '', { emitEvent: false });
+    });
+    firstLicense?.get('state')?.valueChanges.subscribe(val => {
+      cert.get('stateOfIssue')?.setValue(val || '', { emitEvent: false });
+    });
+  }
+
   // === License Pre-fill (FN-532: use public endpoint, not auth-protected) ===
   private prefillLicenseFromDriver(): void {
     if (!this.packetId || !this.packetToken) return;
@@ -333,6 +377,12 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
 
     // Store sanitised value in form control
     this.form.get('applicant.ssn')?.setValue(this.ssnRawValue, { emitEvent: false });
+
+    // FN-535: Keep certification.ssnLast4 in sync
+    this.form.get('certification.ssnLast4')?.setValue(
+      this.ssnRawValue.length >= 4 ? this.ssnRawValue.slice(-4) : '',
+      { emitEvent: false }
+    );
 
     // FN-531: Imperatively update the input display value so Angular CD never touches it.
     // Place cursor at end — standard behaviour for a masked SSN field.
