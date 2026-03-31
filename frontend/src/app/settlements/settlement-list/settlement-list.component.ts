@@ -157,9 +157,11 @@ export class SettlementListComponent implements OnInit, OnDestroy {
   private mapSettlementRow(s: any): SettlementRow {
     const driver = this.drivers.find((d) => d.id === s.driver_id);
     const driverName = driver ? this.getDriverDisplayName(driver) : (s.driver_id || '—');
+    const id = s?.id != null ? String(s.id) : '';
     return {
-      id: this.toSafeString(s.id),
-      settlementNumber: this.toSafeString(s.settlement_number) || this.toSafeString(s.id),
+      // Preserve UUIDs exactly; scientific-notation cleanup is only for numeric display values.
+      id,
+      settlementNumber: this.toSafeString(s.settlement_number) || id,
       periodStart: this.toDateOnly(s.period_start),
       periodEnd: this.toDateOnly(s.period_end),
       driverId: s.driver_id || '',
