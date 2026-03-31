@@ -209,6 +209,9 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
       )
     ).subscribe();
 
+    // FN-548: Load existing draft so form state survives page reloads
+    this.loadExistingDraft();
+
     // Autosave every 20s
     this.autosaveSub = timer(20000, 20000).subscribe(() => this.autosave());
   }
@@ -286,6 +289,79 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     } catch {
       // If service not available, leave blank
     }
+  }
+
+  // === FN-548: Load Existing Draft ===
+  // On page reload, fetch the most recent draft for this driver and restore form state.
+  private loadExistingDraft(): void {
+    if (!this.driverId) return;
+
+    this.api.getByDriver(this.driverId).pipe(take(1)).subscribe({
+      next: (apps: Array<{ id: string; status: string; applicant_snapshot: Record<string, unknown> }>) => {
+        if (!apps || !apps.length) return;
+        // Pick the most recent draft (backend returns ordered by created_at desc)
+        const draft = apps.find((a: { status: string }) => a.status === 'draft') || apps[0];
+        if (!draft || draft.status === 'submitted_completed') {
+          // Already submitted — mark as submitted so the form stays read-only
+          this.submitted = true;
+          return;
+        }
+        this.applicationId = draft.id;
+        this.restoreFormFromDraft(draft);
+      },
+      error: () => {
+        // Silently ignore — form starts empty for manual entry
+      }
+    });
+  }
+
+  private restoreFormFromDraft(draft: Record<string, unknown>): void {
+    const snapshot = (draft['applicant_snapshot'] || {}) as Record<string, unknown>;
+
+    // Restore applicant info
+    const applicant = this.form.get('applicant');
+    if (applicant && snapshot) {
+      applicant.patchValue({
+        firstName: snapshot['firstName'] || '',
+        middleName: snapshot['middleName'] || '',
+        lastName: snapshot['lastName'] || '',
+        phone: snapshot['phone'] || '',
+        email: snapshot['email'] || '',
+        dateOfBirth: snapshot['dateOfBirth'] || '',
+        ssn: snapshot['ssn'] ? '***masked***' : '',
+        positionAppliedFor: snapshot['positionAppliedFor'] || '',
+        dateOfApplication: snapshot['dateOfApplication'] || ''
+      }, { emitEvent: false });
+
+      // Restore raw SSN for masking display
+      if (snapshot['ssn']) {
+        this.ssnRawValue = snapshot['ssn'] as string;
+        applicant.get('ssn')?.setValue(this.ssnRawValue, { emitEvent: false });
+      }
+    }
+
+    // Restore work authorization
+    const wa = snapshot['workAuthorization'] as Record<string, unknown> | null;
+    if (wa) {
+      this.form.get('workAuthorization')?.patchValue(wa, { emitEvent: false });
+    }
+
+    // Restore drug/alcohol
+    const da = snapshot['drugAlcohol'] as Record<string, unknown> | null;
+    if (da) {
+      this.form.get('drugAlcohol')?.patchValue(da, { emitEvent: false });
+    }
+
+    // Restore accidents/violations flags
+    if (snapshot['hasAccidents']) {
+      this.form.get('hasAccidents')?.setValue(snapshot['hasAccidents'], { emitEvent: false });
+    }
+    if (snapshot['hasViolations']) {
+      this.form.get('hasViolations')?.setValue(snapshot['hasViolations'], { emitEvent: false });
+    }
+
+    // Re-sync certification fields after restoring form data
+    this.syncCertificationNow();
   }
 
   // === FN-535: Certification Auto-Population ===
@@ -608,6 +684,7 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
   buildPayload() {
     const v = this.form.value;
     return {
+      operatingEntityId: this.oeContext.getSelectedOperatingEntityId(),
       applicantSnapshot: {
         ...v.applicant,
         ssn: this.ssnRawValue // store full SSN

@@ -180,6 +180,11 @@ async function updateDraft(applicationId, payload, userId, context = null) {
       applicant_snapshot: JSON.stringify(applicantSnapshot)
     };
 
+    // FN-548: Persist operating_entity_id if provided and not already set
+    if (context?.operatingEntityId && !app.operating_entity_id) {
+      patch.operating_entity_id = context.operatingEntityId;
+    }
+
     // FN-215: new columns — only overwrite when explicitly provided
     if (payload.has_been_disqualified != null) {
       patch.has_been_disqualified = payload.has_been_disqualified;
