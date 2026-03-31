@@ -126,9 +126,11 @@ function buildProxy(target, label) {
         ? `${proxyRes.headers.vary}, Origin`
         : 'Origin';
     },
+    proxyTimeout: 55000,
     onError: (err, req, res) => {
       // eslint-disable-next-line no-console
       console.error('[gateway] proxy error', err.message);
+      if (res.headersSent) return;
       res.status(502).json({
         error: 'Bad Gateway',
         message: 'Unable to reach the API. Please try again later.'
