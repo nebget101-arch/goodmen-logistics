@@ -101,6 +101,12 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     repairs: ''
   };
 
+  /** FN-561: raw expense responsibility profile row (includes driver_fixed_amount, owner_fixed_amount) */
+  expenseProfile: any = null;
+
+  /** FN-563: true when user has manually edited amount after auto-fill; prevents silent overwrite on Apply To change */
+  deductionAmountDirty = false;
+
   /**
    * Stable arrays for expense *ngFor (not getters).
    * Root cause of "edit stuck": after switching to [ngModel]/(ngModelChange) on the expense selects,
@@ -637,6 +643,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   resetForm(): void {
     this.payTab = 'rates';
     this.expenseResponsibility = { fuel: '', insurance: '', eld: '', trailerRent: '', tolls: '', repairs: '' };
+    this.expenseProfile = null;
     this.expenseSplitType = '';
     this.sharedExpensePercentages = { fuel: 50, tolls: 50, repairs: 50 };
     this.sharedExpenseFixedAmounts = {
@@ -869,6 +876,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
           this.apiService.getExpenseResponsibility(driverId).subscribe({
             next: (expense) => {
               if (expense) {
+                this.expenseProfile = expense; // FN-561: store for deduction auto-fill
                 this.expenseResponsibility = {
                   fuel: expense.fuel_responsibility || '',
                   insurance: expense.insurance_responsibility || '',
@@ -912,6 +920,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       source_type: '',
       enabled: true
     };
+    this.deductionAmountDirty = false;
   }
 
   loadRecurringDeductions(driverId: string): void {
@@ -1038,6 +1047,71 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     const suggested = this.getSuggestedTargetsForSelectedCategory();
     if (suggested.length === 1) {
       this.newRecurringDeduction.target = suggested[0];
+    }
+
+    // FN-561: auto-fill amount for fixed expense categories from expense responsibility profile
+    const fixedCategories = new Set(['insurance', 'eld', 'trailerRent']);
+    if (fixedCategories.has(category) && this.expenseProfile) {
+      const isDriver = this.newRecurringDeduction.target === 'primary';
+      const autoAmount = isDriver
+        ? Number(this.expenseProfile.driver_fixed_amount) || 0
+        : Number(this.expenseProfile.owner_fixed_amount) || 0;
+      this.newRecurringDeduction.amount = autoAmount || null;
+      this.deductionAmountDirty = false; // FN-563: fresh auto-fill; user has not yet manually edited
+    }
+  }
+
+  /** FN-563: mark amount as manually edited so Apply To change won't silently overwrite it */
+  onDeductionAmountInput(): void {
+    this.deductionAmountDirty = true;
+  }
+
+  /** FN-563: when Apply To (target) changes, re-run configured amount auto-fill for the current category.
+   *  If user has manually edited the amount, confirm before resetting. */
+  onDeductionTargetChange(): void {
+    const category = this.newRecurringDeduction.expense_category;
+    if (!category || !this.expenseProfile) return;
+
+    const isDriver = this.newRecurringDeduction.target === 'primary';
+    const fixedCategories = new Set(['insurance', 'eld', 'trailerRent']);
+    const variableCategories = new Set(['fuel', 'tolls', 'repairs']);
+
+    let configuredAmount: number | null = null;
+    if (fixedCategories.has(category)) {
+      configuredAmount = isDriver
+        ? Number(this.expenseProfile.driver_fixed_amount) || 0
+        : Number(this.expenseProfile.owner_fixed_amount) || 0;
+    } else if (variableCategories.has(category)) {
+      // driver_percentage from profile; EO gets remainder (100 - driver%)
+      const driverPct = Number(this.expenseProfile.driver_percentage) || 0;
+      configuredAmount = isDriver ? driverPct : Math.max(0, 100 - driverPct);
+    }
+
+    if (configuredAmount === null) return;
+
+    if (this.deductionAmountDirty) {
+      if (confirm('Reset to configured amount?')) {
+        this.newRecurringDeduction.amount = configuredAmount || null;
+        this.deductionAmountDirty = false;
+      }
+      // else: keep user's override
+    } else {
+      this.newRecurringDeduction.amount = configuredAmount || null;
+    }
+
+    // Variable expense categories (Fuel, Tolls, Repairs) are always percentage-based splits.
+    // Auto-fill amount_type and amount from the configured expense responsibility percentages.
+    // NOTE (Settlement V2): Fuel and Tolls splits are auto-calculated by settlement-calculation.js
+    // from expense_responsibility_profiles, making these recurring deductions largely redundant
+    // for those two categories. Repairs remain the primary use case here.
+    const isVariable = this.variableExpenseKeys.some(v => v.key === category);
+    if (isVariable) {
+      this.newRecurringDeduction.amount_type = 'percentage';
+      const effectiveTarget = suggested.length === 1 ? suggested[0] : this.newRecurringDeduction.target;
+      const driverShare = this.sharedExpensePercentages[category] ?? 50;
+      this.newRecurringDeduction.amount = effectiveTarget === 'additional'
+        ? 100 - driverShare
+        : driverShare;
     }
   }
 
