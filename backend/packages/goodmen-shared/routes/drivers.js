@@ -362,9 +362,23 @@ router.get('/:id', async (req, res) => {
       [driverId, asOf]
     );
 
+    // FN-566: Fetch active compensation profile to return equipment_owner_percentage.
+    // The drivers table stores pay_basis/pay_rate/pay_percentage but NOT
+    // equipment_owner_percentage — that lives only on driver_compensation_profiles.
+    const compensationProfileResult = await query(
+      `SELECT percentage_rate, equipment_owner_percentage, profile_type, pay_model
+       FROM driver_compensation_profiles
+       WHERE driver_id = $1
+         AND is_active = true
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [driverId]
+    );
+
     const driver = transformRow(result.rows[0]);
     const assignment = payeeAssignmentResult.rows[0] || null;
     const expense = expenseResponsibilityResult.rows[0] || null;
+    const compProfile = compensationProfileResult.rows[0] || null;
 
     const response = {
       ...driver,
@@ -389,7 +403,13 @@ router.get('/:id', async (req, res) => {
       eldResponsibility: expense?.eld_responsibility || null,
       trailerRentResponsibility: expense?.trailer_rent_responsibility || null,
       tollResponsibility: expense?.toll_responsibility || null,
-      repairsResponsibility: expense?.repairs_responsibility || null
+      repairsResponsibility: expense?.repairs_responsibility || null,
+
+      // FN-566: Compensation profile fields — equipment_owner_percentage is not on the
+      // drivers table; it must be read from the active driver_compensation_profiles record.
+      equipmentOwnerPercentage: compProfile?.equipment_owner_percentage != null
+        ? Number(compProfile.equipment_owner_percentage)
+        : null
     };
 
     dtLogger.trackDatabase('SELECT', 'drivers', duration, true, { driverId });
