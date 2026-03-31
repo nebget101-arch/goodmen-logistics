@@ -167,7 +167,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   };
 
   sortBy: 'load_number' | 'pickup_date' | 'rate' | 'completed_date' = 'pickup_date';
-  sortDir: SortDir = 'asc';
+  /** Default: newest pickups first on initial page load / refresh. */
+  sortDir: SortDir = 'desc';
 
   // Summary totals for quick gross amount reporting on current page
   summaryTotals: {
