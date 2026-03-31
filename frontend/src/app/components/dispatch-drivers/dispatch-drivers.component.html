@@ -798,6 +798,7 @@
                         inputId="rdTarget"
                         [options]="deductionTargetOptions"
                         [(ngModel)]="newRecurringDeduction.target"
+                        (ngModelChange)="onDeductionTargetChange()"
                         placeholder="Select target"
                       ></app-ai-select>
                     </div>
@@ -819,7 +820,7 @@
 
                     <div class="field">
                       <label for="rdAmount">Amount</label>
-                      <input id="rdAmount" type="number" min="0" step="0.01" class="form-input" [(ngModel)]="newRecurringDeduction.amount" placeholder="0.00" />
+                      <input id="rdAmount" type="number" min="0" step="0.01" class="form-input" [(ngModel)]="newRecurringDeduction.amount" (input)="onDeductionAmountInput()" placeholder="0.00" />
                     </div>
 
                     <div class="field">

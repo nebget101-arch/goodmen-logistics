@@ -104,6 +104,9 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   /** FN-561: raw expense responsibility profile row (includes driver_fixed_amount, owner_fixed_amount) */
   expenseProfile: any = null;
 
+  /** FN-563: true when user has manually edited amount after auto-fill; prevents silent overwrite on Apply To change */
+  deductionAmountDirty = false;
+
   /**
    * Stable arrays for expense *ngFor (not getters).
    * Root cause of "edit stuck": after switching to [ngModel]/(ngModelChange) on the expense selects,
@@ -910,6 +913,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       source_type: '',
       enabled: true
     };
+    this.deductionAmountDirty = false;
   }
 
   loadRecurringDeductions(driverId: string): void {
@@ -1046,6 +1050,46 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
         ? Number(this.expenseProfile.driver_fixed_amount) || 0
         : Number(this.expenseProfile.owner_fixed_amount) || 0;
       this.newRecurringDeduction.amount = autoAmount || null;
+      this.deductionAmountDirty = false; // FN-563: fresh auto-fill; user has not yet manually edited
+    }
+  }
+
+  /** FN-563: mark amount as manually edited so Apply To change won't silently overwrite it */
+  onDeductionAmountInput(): void {
+    this.deductionAmountDirty = true;
+  }
+
+  /** FN-563: when Apply To (target) changes, re-run configured amount auto-fill for the current category.
+   *  If user has manually edited the amount, confirm before resetting. */
+  onDeductionTargetChange(): void {
+    const category = this.newRecurringDeduction.expense_category;
+    if (!category || !this.expenseProfile) return;
+
+    const isDriver = this.newRecurringDeduction.target === 'primary';
+    const fixedCategories = new Set(['insurance', 'eld', 'trailerRent']);
+    const variableCategories = new Set(['fuel', 'tolls', 'repairs']);
+
+    let configuredAmount: number | null = null;
+    if (fixedCategories.has(category)) {
+      configuredAmount = isDriver
+        ? Number(this.expenseProfile.driver_fixed_amount) || 0
+        : Number(this.expenseProfile.owner_fixed_amount) || 0;
+    } else if (variableCategories.has(category)) {
+      // driver_percentage from profile; EO gets remainder (100 - driver%)
+      const driverPct = Number(this.expenseProfile.driver_percentage) || 0;
+      configuredAmount = isDriver ? driverPct : Math.max(0, 100 - driverPct);
+    }
+
+    if (configuredAmount === null) return;
+
+    if (this.deductionAmountDirty) {
+      if (confirm('Reset to configured amount?')) {
+        this.newRecurringDeduction.amount = configuredAmount || null;
+        this.deductionAmountDirty = false;
+      }
+      // else: keep user's override
+    } else {
+      this.newRecurringDeduction.amount = configuredAmount || null;
     }
   }
 
