@@ -20,6 +20,10 @@ const {
   resolveEligibleLoadDate
 } = require('./settlement-load-dates');
 const {
+  normalizeRecurringDeductionPayeeIds,
+  resolveRecurringDeductionApplyTo
+} = require('./settlement-recurring-deductions');
+const {
   applyLeaseDeductionForSettlement
 } = require('./lease-financing-service');
 
@@ -217,7 +221,8 @@ function buildPaySnapshot(profile, driverRow) {
       percentage_rate: profile.percentage_rate,
       cents_per_mile: profile.cents_per_mile,
       flat_weekly_amount: profile.flat_weekly_amount,
-      flat_per_load_amount: profile.flat_per_load_amount
+      flat_per_load_amount: profile.flat_per_load_amount,
+      equipment_owner_percentage: profile.equipment_owner_percentage ?? null
     };
   }
 
@@ -228,7 +233,8 @@ function buildPaySnapshot(profile, driverRow) {
       percentage_rate: driverRow?.pay_percentage ?? 0,
       cents_per_mile: null,
       flat_weekly_amount: null,
-      flat_per_load_amount: null
+      flat_per_load_amount: null,
+      equipment_owner_percentage: null
     };
   }
   if (payBasis === 'flatpay' || payBasis === 'flat_weekly') {
@@ -237,7 +243,8 @@ function buildPaySnapshot(profile, driverRow) {
       percentage_rate: null,
       cents_per_mile: null,
       flat_weekly_amount: driverRow?.pay_rate ?? 0,
-      flat_per_load_amount: null
+      flat_per_load_amount: null,
+      equipment_owner_percentage: null
     };
   }
   if (payBasis === 'flat_per_load') {
@@ -246,7 +253,8 @@ function buildPaySnapshot(profile, driverRow) {
       percentage_rate: null,
       cents_per_mile: null,
       flat_weekly_amount: null,
-      flat_per_load_amount: driverRow?.pay_rate ?? 0
+      flat_per_load_amount: driverRow?.pay_rate ?? 0,
+      equipment_owner_percentage: null
     };
   }
 
@@ -255,7 +263,8 @@ function buildPaySnapshot(profile, driverRow) {
     percentage_rate: null,
     cents_per_mile: driverRow?.pay_rate ?? 0,
     flat_weekly_amount: null,
-    flat_per_load_amount: null
+    flat_per_load_amount: null,
+    equipment_owner_percentage: null
   };
 }
 
@@ -883,23 +892,19 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       driverId,
       period.period_start,
       period.period_end,
-      [primaryPayeeId, additionalPayeeId].filter(Boolean)
+      normalizeRecurringDeductionPayeeIds(
+        [primaryPayeeId, additionalPayeeId],
+        payeeAssignment
+      )
     );
     logTiming('recurring-deductions-resolved', { recurringCount: recurring.length });
     for (const rule of recurring) {
-      // Determine which payee the deduction applies to
-      let applyTo = 'primary_payee'; // default
-
-      if (rule.payee_id) {
-        // If payee_id is specified, check if it matches primary or additional payee
-        if (rule.payee_id === primaryPayeeId) {
-          applyTo = 'primary_payee';
-        } else if (rule.payee_id === additionalPayeeId) {
-          applyTo = 'additional_payee';
-        } else {
-          // Payee doesn't match this settlement, skip this rule
-          continue;
-        }
+      const applyTo = resolveRecurringDeductionApplyTo(rule, {
+        primaryPayeeId,
+        additionalPayeeId
+      });
+      if (!applyTo) {
+        continue;
       }
 
       await knex('settlement_adjustment_items').insert({
@@ -1031,23 +1036,19 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
       settlement.driver_id,
       period.period_start,
       period.period_end,
-      [effectivePrimaryPayeeId, effectiveAdditionalPayeeId].filter(Boolean)
+      normalizeRecurringDeductionPayeeIds(
+        [effectivePrimaryPayeeId, effectiveAdditionalPayeeId],
+        payeeAssignment
+      )
     );
 
     for (const rule of recurring) {
-      // Determine which payee the deduction applies to
-      let applyTo = 'primary_payee'; // default
-
-      if (rule.payee_id) {
-        // If payee_id is specified, check if it matches primary or additional payee
-        if (rule.payee_id === effectivePrimaryPayeeId) {
-          applyTo = 'primary_payee';
-        } else if (rule.payee_id === effectiveAdditionalPayeeId) {
-          applyTo = 'additional_payee';
-        } else {
-          // Payee doesn't match this settlement, skip this rule
-          continue;
-        }
+      const applyTo = resolveRecurringDeductionApplyTo(rule, {
+        primaryPayeeId: effectivePrimaryPayeeId,
+        additionalPayeeId: effectiveAdditionalPayeeId
+      });
+      if (!applyTo) {
+        continue;
       }
 
       const exclusionKey = `${rule.id}|${applyTo}`;

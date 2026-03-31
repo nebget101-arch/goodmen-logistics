@@ -27,6 +27,9 @@ const {
   getEligibleLoads,
   getRecurringDeductionsForPeriod
 } = require('../services/settlement-service');
+const {
+  normalizeRecurringDeductionPayeeIds
+} = require('../services/settlement-recurring-deductions');
 const { getClient } = require('../internal/db');
 
 async function getSettlementPdfContext(settlementId) {
@@ -1185,7 +1188,15 @@ router.get('/recurring-deductions/preview', requireRole(settlementRoles), async 
     if (!driver_id || !period_start || !period_end) {
       return res.status(400).json({ error: 'driver_id, period_start, period_end required' });
     }
-    const rows = await getRecurringDeductionsForPeriod(knex, driver_id, period_start, period_end);
+    let payeeAssignment = await getActivePayeeAssignment(knex, driver_id, period_end);
+    if (!payeeAssignment) {
+      payeeAssignment = await knex('driver_payee_assignments')
+        .where({ driver_id })
+        .orderBy('effective_start_date', 'desc')
+        .first();
+    }
+    const payeeIds = normalizeRecurringDeductionPayeeIds([], payeeAssignment);
+    const rows = await getRecurringDeductionsForPeriod(knex, driver_id, period_start, period_end, payeeIds);
     const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
     res.json({ rules: rows, totalDeductions: total });
   } catch (err) {
