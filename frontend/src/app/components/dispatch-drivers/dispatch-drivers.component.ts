@@ -833,6 +833,13 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
                 this.selectedAdditionalPayeeName = additionalPayee.name;
               }
 
+              if (assignment?.effective_start_date) {
+                this.newDriver.effectiveStart = assignment.effective_start_date;
+              }
+              if (assignment?.effective_end_date) {
+                this.newDriver.effectiveEnd = assignment.effective_end_date;
+              }
+
               this.loadRecurringDeductions(driverId);
             },
             error: (err) => {
