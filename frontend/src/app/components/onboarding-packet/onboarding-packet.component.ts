@@ -734,18 +734,28 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
   // === SSN Masking ===
   onSsnInput(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const digits = input.value.replace(/\D/g, '').slice(0, 9);
-    this.ssnRaw = digits;
-    this.employment.ssn = digits;
+    const raw = input.value;
 
-    // Auto-format with dashes and restore cursor position
-    const formatted = this.formatSsnWithDashes(digits);
-    const cursorPos = input.selectionStart || 0;
-    const prevLen = input.value.length;
-    input.value = this.ssnMasked ? this.getMaskedSsn(digits) : formatted;
-    const newLen = input.value.length;
-    const adjustedPos = cursorPos + (newLen - prevLen);
-    input.setSelectionRange(adjustedPos, adjustedPos);
+    // FN-531: Each mask char (•) represents a preserved hidden digit.
+    // Count mask chars to know how many prefix digits to keep from ssnRaw.
+    const maskCount = (raw.match(/\u2022/g) ?? []).length;
+    const visibleDigits = raw.replace(/[^\d]/g, '');
+
+    if (maskCount > 0) {
+      // Preserve the first `maskCount` raw digits; append newly-typed visible digits
+      const preservedPrefix = this.ssnRaw.slice(0, maskCount);
+      this.ssnRaw = (preservedPrefix + visibleDigits).slice(0, 9);
+    } else {
+      // No mask chars — user cleared the field or pasted plain digits
+      this.ssnRaw = visibleDigits.slice(0, 9);
+    }
+
+    this.employment.ssn = this.ssnRaw;
+
+    // FN-531: Imperatively update the input display value so Angular CD never touches it.
+    const display = this.getSsnDisplay();
+    input.value = display;
+    input.setSelectionRange(display.length, display.length);
   }
 
   toggleSsnVisibility(): void {
