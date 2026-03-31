@@ -405,28 +405,24 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     });
 
     // Sync license number + state from first license row
-    // Re-subscribe whenever licenses array changes (e.g., after draft restore)
-    const syncFirstLicense = () => {
-      const firstLicense = this.licenses.at(0) as FormGroup | undefined;
-      if (!firstLicense) return;
-      firstLicense.get('licenseNumber')?.valueChanges.subscribe(val => {
-        cert.get('driversLicenseNumber')?.setValue(val || '', { emitEvent: false });
-      });
-      firstLicense.get('state')?.valueChanges.subscribe(val => {
-        cert.get('stateOfIssue')?.setValue(val || '', { emitEvent: false });
-      });
-    };
-    syncFirstLicense();
-    this.licenses.valueChanges.subscribe(() => syncFirstLicense());
+    // Watch the entire licenses FormArray — whenever any value changes,
+    // sync first license's data to certification fields
+    this.licenses.valueChanges.subscribe((licArray: any[]) => {
+      if (licArray && licArray.length > 0) {
+        const first = licArray[0];
+        cert.get('driversLicenseNumber')?.setValue(first.licenseNumber || '', { emitEvent: false });
+        cert.get('stateOfIssue')?.setValue(first.state || '', { emitEvent: false });
+      }
+    });
 
-    // FN-546 fix 2: SSN Last 4 subscription was missing entirely — wire it now
+    // SSN Last 4 — subscribe to applicant.ssn changes AND handle emitEvent:false
+    // by also syncing directly in onSsnInput() (see line ~516)
     this.form.get('applicant.ssn')?.valueChanges.subscribe(() => {
       const last4 = this.ssnRawValue.slice(-4);
       cert.get('ssnLast4')?.setValue(last4 || '', { emitEvent: false });
     });
 
-    // FN-546 fix 1: do an immediate one-time sync so values already in the form
-    // populate certification without requiring the user to re-type them
+    // Immediate one-time sync so values already in the form populate cert
     this.syncCertificationNow();
   }
 
