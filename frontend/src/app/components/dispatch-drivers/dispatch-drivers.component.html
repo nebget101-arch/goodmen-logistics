@@ -818,7 +818,7 @@
                     </div>
 
                     <div class="field">
-                      <label for="rdAmount">Amount</label>
+                      <label for="rdAmount">{{ newRecurringDeduction.amount_type === 'percentage' ? 'Split %' : 'Amount' }}</label>
                       <input id="rdAmount" type="number" min="0" step="0.01" class="form-input" [(ngModel)]="newRecurringDeduction.amount" placeholder="0.00" />
                     </div>
 
