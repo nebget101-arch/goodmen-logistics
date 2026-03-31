@@ -255,6 +255,7 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
 
   ssnRaw = '';
   ssnMasked = true;
+  ssnFocused = false;
   totalResidencyYears = 0;
   needMoreAddresses = false;
   totalEmployerYears = 0;
@@ -734,28 +735,31 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
   // === SSN Masking ===
   onSsnInput(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const raw = input.value;
+    // Strip everything except digits
+    const digits = input.value.replace(/[^\d]/g, '').slice(0, 9);
+    this.ssnRaw = digits;
+    this.employment.ssn = digits;
 
-    // FN-531: Each mask char (•) represents a preserved hidden digit.
-    // Count mask chars to know how many prefix digits to keep from ssnRaw.
-    const maskCount = (raw.match(/\u2022/g) ?? []).length;
-    const visibleDigits = raw.replace(/[^\d]/g, '');
-
-    if (maskCount > 0) {
-      // Preserve the first `maskCount` raw digits; append newly-typed visible digits
-      const preservedPrefix = this.ssnRaw.slice(0, maskCount);
-      this.ssnRaw = (preservedPrefix + visibleDigits).slice(0, 9);
-    } else {
-      // No mask chars — user cleared the field or pasted plain digits
-      this.ssnRaw = visibleDigits.slice(0, 9);
-    }
-
-    this.employment.ssn = this.ssnRaw;
-
-    // FN-531: Imperatively update the input display value so Angular CD never touches it.
-    const display = this.getSsnDisplay();
+    // While focused: always show plain formatted digits (never mask)
+    const display = this.formatSsnWithDashes(digits);
     input.value = display;
     input.setSelectionRange(display.length, display.length);
+  }
+
+  onSsnFocus(event: Event): void {
+    this.ssnFocused = true;
+    const input = event.target as HTMLInputElement;
+    // On focus: show plain digits so user can type freely
+    const display = this.formatSsnWithDashes(this.ssnRaw);
+    input.value = display;
+    input.setSelectionRange(display.length, display.length);
+  }
+
+  onSsnBlur(event: Event): void {
+    this.ssnFocused = false;
+    const input = event.target as HTMLInputElement;
+    // On blur: show masked version if masking is on
+    input.value = this.getSsnDisplay();
   }
 
   toggleSsnVisibility(): void {
@@ -764,7 +768,7 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
 
   getSsnDisplay(): string {
     if (!this.ssnRaw) return '';
-    return this.ssnMasked
+    return (this.ssnMasked && !this.ssnFocused)
       ? this.getMaskedSsn(this.ssnRaw)
       : this.formatSsnWithDashes(this.ssnRaw);
   }

@@ -146,8 +146,8 @@
                   <div class="onboard-field">
                     <label>Social Security Number *</label>
                     <div class="ssn-input-wrapper">
-                      <!-- FN-531: Removed [value] binding — display managed imperatively in onSsnInput() -->
-                      <input class="form-input ssn-input" (input)="onSsnInput($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" inputmode="numeric" />
+                      <!-- FN-531: Show plain digits while focused, mask on blur -->
+                      <input class="form-input ssn-input" (input)="onSsnInput($event)" (focus)="onSsnFocus($event)" (blur)="onSsnBlur($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" inputmode="numeric" />
                       <button type="button" class="ssn-toggle-btn" (click)="toggleSsnVisibility()" [attr.aria-label]="ssnMasked ? 'Show SSN' : 'Hide SSN'">
                         <span class="material-symbols-outlined">{{ ssnMasked ? 'visibility' : 'visibility_off' }}</span>
                       </button>
