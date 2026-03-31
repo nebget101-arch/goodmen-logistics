@@ -101,6 +101,9 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     repairs: ''
   };
 
+  /** FN-561: raw expense responsibility profile row (includes driver_fixed_amount, owner_fixed_amount) */
+  expenseProfile: any = null;
+
   /**
    * Stable arrays for expense *ngFor (not getters).
    * Root cause of "edit stuck": after switching to [ngModel]/(ngModelChange) on the expense selects,
@@ -637,6 +640,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   resetForm(): void {
     this.payTab = 'rates';
     this.expenseResponsibility = { fuel: '', insurance: '', eld: '', trailerRent: '', tolls: '', repairs: '' };
+    this.expenseProfile = null;
     this.expenseSplitType = '';
     this.sharedExpensePercentages = { fuel: 50, tolls: 50, repairs: 50 };
     this.sharedExpenseFixedAmounts = {
@@ -862,6 +866,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
           this.apiService.getExpenseResponsibility(driverId).subscribe({
             next: (expense) => {
               if (expense) {
+                this.expenseProfile = expense; // FN-561: store for deduction auto-fill
                 this.expenseResponsibility = {
                   fuel: expense.fuel_responsibility || '',
                   insurance: expense.insurance_responsibility || '',
@@ -1031,6 +1036,16 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     const suggested = this.getSuggestedTargetsForSelectedCategory();
     if (suggested.length === 1) {
       this.newRecurringDeduction.target = suggested[0];
+    }
+
+    // FN-561: auto-fill amount for fixed expense categories from expense responsibility profile
+    const fixedCategories = new Set(['insurance', 'eld', 'trailerRent']);
+    if (fixedCategories.has(category) && this.expenseProfile) {
+      const isDriver = this.newRecurringDeduction.target === 'primary';
+      const autoAmount = isDriver
+        ? Number(this.expenseProfile.driver_fixed_amount) || 0
+        : Number(this.expenseProfile.owner_fixed_amount) || 0;
+      this.newRecurringDeduction.amount = autoAmount || null;
     }
   }
 
