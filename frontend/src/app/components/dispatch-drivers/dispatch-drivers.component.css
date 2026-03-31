@@ -485,6 +485,30 @@
   color: rgba(203, 213, 225, 0.9);
 }
 
+.dispatch-drivers-dashboard .comp-value-readonly {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  max-width: 200px;
+}
+
+.dispatch-drivers-dashboard .comp-calculated-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #38bdf8;
+  padding: 6px 0;
+}
+
+.dispatch-drivers-dashboard .comp-calculated-value.error {
+  color: #f87171;
+}
+
+.dispatch-drivers-dashboard .comp-validation-error {
+  font-size: 0.7rem;
+  color: #f87171;
+  margin-top: 2px;
+}
+
 .dispatch-drivers-dashboard .comp-fields-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -292,6 +292,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     payBasis: 'per_mile',
     payRate: null,
     payPercentage: null,
+    equipmentOwnerPercentage: null as number | null,
     payModel: 'per_mile',
     flatWeeklyAmount: null as number | null,
     flatPerLoadAmount: null as number | null,
@@ -564,6 +565,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       this.newDriver.payBasis = 'percentage';
       this.newDriver.payModel = 'percentage';
       this.newDriver.payRate = null;
+      this.newDriver.equipmentOwnerPercentage = null;
       // FN-497: Owner Operator expenses deduct at 100% — force equipment_owner
       this.expenseSplitType = 'equipment_owner';
       for (const e of this.expenseKeys) {
@@ -620,6 +622,18 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     return this.newDriver.payModel === 'percentage';
   }
 
+  get companyRetainsPercentage(): number {
+    const driver = Number(this.newDriver.payPercentage) || 0;
+    const eo = Number(this.newDriver.equipmentOwnerPercentage) || 0;
+    return Math.round((100 - driver - eo) * 100) / 100;
+  }
+
+  get percentageSumExceeds100(): boolean {
+    const driver = Number(this.newDriver.payPercentage) || 0;
+    const eo = Number(this.newDriver.equipmentOwnerPercentage) || 0;
+    return (driver + eo) > 100;
+  }
+
   resetForm(): void {
     this.payTab = 'rates';
     this.expenseResponsibility = { fuel: '', insurance: '', eld: '', trailerRent: '', tolls: '', repairs: '' };
@@ -642,6 +656,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       payBasis: 'per_mile',
       payRate: null,
       payPercentage: null,
+      equipmentOwnerPercentage: null,
       payModel: 'per_mile',
       flatWeeklyAmount: null,
       flatPerLoadAmount: null,
@@ -1260,6 +1275,7 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       payBasis: source.payBasis || 'per_mile',
       payRate: source.payRate ?? null,
       payPercentage: source.payPercentage ?? null,
+      equipmentOwnerPercentage: source.equipmentOwnerPercentage ?? source.equipment_owner_percentage ?? null,
       payModel: source.payModel || payModel,
       flatWeeklyAmount: source.flatWeeklyAmount ?? (basis === 'flatpay' && source.payRate != null ? Number(source.payRate) : null),
       flatPerLoadAmount: source.flatPerLoadAmount ?? null,
