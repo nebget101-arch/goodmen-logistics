@@ -92,7 +92,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   deletingDraft = false;
 
-  drivers: { id: string; name: string }[] = [];
+  drivers: { id: string; name: string; truckId?: string | null; trailerId?: string | null }[] = [];
   trucks: { id: string; label: string }[] = [];
   trailers: { id: string; label: string }[] = [];
   brokers: { id: string; name: string }[] = [];
@@ -591,7 +591,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       next: (data) => {
         this.drivers = (data || []).map((driver) => ({
           id: driver.id,
-          name: `${driver.firstName} ${driver.lastName}`.trim()
+          name: `${driver.firstName} ${driver.lastName}`.trim(),
+          truckId: driver.truckId || null,
+          trailerId: driver.trailerId || null
         }));
         this.driverFilterOptions = this.drivers.map(d => ({ value: d.id, label: d.name }));
       },
@@ -773,10 +775,22 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return this.trailers.filter((t) => t.label.toLowerCase().includes(q)).slice(0, 50);
   }
 
-  selectInlineDriver(driver: { id: string; name: string }): void {
+  selectInlineDriver(driver: { id: string; name: string; truckId?: string | null; trailerId?: string | null }): void {
     this.manualLoadForm.patchValue({ driverId: driver.id });
     this.driverSearch = driver.name;
     this.driverDropdownOpen = false;
+    // FN-545: auto-fill truck and trailer from driver's current dispatch assignment
+    const cached = this.drivers.find(d => d.id === driver.id);
+    if (cached?.truckId) {
+      this.manualLoadForm.patchValue({ truckId: cached.truckId });
+      const truck = this.trucks.find(t => t.id === cached.truckId);
+      if (truck) this.truckSearch = truck.label;
+    }
+    if (cached?.trailerId) {
+      this.manualLoadForm.patchValue({ trailerId: cached.trailerId });
+      const trailer = this.trailers.find(t => t.id === cached.trailerId);
+      if (trailer) this.trailerSearch = trailer.label;
+    }
   }
 
   selectInlineTruck(truck: { id: string; label: string }): void {
@@ -1818,8 +1832,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       deliveryState: delivery?.state || '',
       deliveryZip: delivery?.zip || '',
       driverId: detail.driver_id || '',
-      truckId: detail.truck_id || '',
-      trailerId: detail.trailer_id || '',
+      // FN-545: fall back to driver's assigned truck/trailer if load fields are blank
+      truckId: detail.truck_id || this.drivers.find(d => d.id === detail.driver_id)?.truckId || '',
+      trailerId: detail.trailer_id || this.drivers.find(d => d.id === detail.driver_id)?.trailerId || '',
       brokerId: detail.broker_id || '',
       brokerName: detail.broker_name || '',
       poNumber: detail.po_number || '',
@@ -1830,6 +1845,15 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.pickupStateEdited = false;
     this.deliveryCityEdited = false;
     this.deliveryStateEdited = false;
+    // FN-545: sync inline search labels for driver/truck/trailer
+    const driverObj = this.drivers.find(d => d.id === (detail.driver_id || ''));
+    this.driverSearch = driverObj ? driverObj.name : '';
+    const resolvedTruckId = detail.truck_id || driverObj?.truckId || '';
+    const truckObj = this.trucks.find(t => t.id === resolvedTruckId);
+    this.truckSearch = truckObj ? truckObj.label : '';
+    const resolvedTrailerId = detail.trailer_id || driverObj?.trailerId || '';
+    const trailerObj = this.trailers.find(t => t.id === resolvedTrailerId);
+    this.trailerSearch = trailerObj ? trailerObj.label : '';
   }
 
   resetManualForm(): void {

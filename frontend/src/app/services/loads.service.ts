@@ -29,6 +29,8 @@ export interface DriverOption {
   id: string;
   firstName: string;
   lastName: string;
+  truckId?: string | null;
+  trailerId?: string | null;
 }
 
 export interface EquipmentOption {
