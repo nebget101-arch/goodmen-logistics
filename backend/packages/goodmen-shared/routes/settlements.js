@@ -598,13 +598,20 @@ router.post('/drivers/:driverId/payee-assignments', requireRole(settlementRoles)
       if (!additionalPayee) return res.status(400).json({ error: 'Additional payee does not belong to this tenant' });
     }
 
+    // End-date any existing open assignment for this driver
+    const newStart = effective_start_date || new Date().toISOString().slice(0, 10);
+    await knex('driver_payee_assignments')
+      .where({ driver_id: req.params.driverId, tenant_id: tenantId })
+      .whereNull('effective_end_date')
+      .update({ effective_end_date: newStart, updated_at: knex.fn.now() });
+
     const [row] = await knex('driver_payee_assignments')
       .insert({
         driver_id: req.params.driverId,
         primary_payee_id: primary_payee_id,
         additional_payee_id: additional_payee_id ?? null,
         rule_type: rule_type || 'custom',
-        effective_start_date: effective_start_date || new Date().toISOString().slice(0, 10),
+        effective_start_date: newStart,
         effective_end_date: effective_end_date ?? null,
         tenant_id: tenantId
       })
@@ -668,13 +675,20 @@ router.post('/drivers/:driverId/payee-assignment/resolve', requireRole(settlemen
         });
       }
 
+      // End-date any existing open assignment for this driver before creating the new one
+      const newStart = effective_start_date || new Date().toISOString().slice(0, 10);
+      await trx('driver_payee_assignments')
+        .where({ driver_id: req.params.driverId, tenant_id: tenantId })
+        .whereNull('effective_end_date')
+        .update({ effective_end_date: newStart, updated_at: trx.fn.now() });
+
       const [assignment] = await trx('driver_payee_assignments')
         .insert({
           driver_id: req.params.driverId,
           primary_payee_id: primary.id,
           additional_payee_id: additional?.id || null,
           rule_type: rule_type || 'custom',
-          effective_start_date: effective_start_date || new Date().toISOString().slice(0, 10),
+          effective_start_date: newStart,
           effective_end_date: effective_end_date ?? null,
           tenant_id: tenantId
         })
