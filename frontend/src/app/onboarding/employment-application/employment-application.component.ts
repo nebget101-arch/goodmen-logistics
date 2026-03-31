@@ -322,6 +322,42 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     firstLicense?.get('state')?.valueChanges.subscribe(val => {
       cert.get('stateOfIssue')?.setValue(val || '', { emitEvent: false });
     });
+
+    // FN-546 fix 2: SSN Last 4 subscription was missing entirely — wire it now
+    this.form.get('applicant.ssn')?.valueChanges.subscribe(() => {
+      const last4 = this.ssnRawValue.slice(-4);
+      cert.get('ssnLast4')?.setValue(last4 || '', { emitEvent: false });
+    });
+
+    // FN-546 fix 1: do an immediate one-time sync so values already in the form
+    // populate certification without requiring the user to re-type them
+    this.syncCertificationNow();
+  }
+
+  // FN-546: one-time snapshot of current form values into the certification section
+  private syncCertificationNow(): void {
+    const cert = this.form.get('certification');
+    if (!cert) return;
+    const a = this.form.get('applicant')?.value || {};
+    const name = [a.firstName, a.middleName, a.lastName].filter(Boolean).join(' ');
+    if (name) {
+      cert.get('applicantPrintedName')?.setValue(name, { emitEvent: false });
+      cert.get('applicantSignature')?.setValue(name, { emitEvent: false });
+    }
+    if (a.dateOfBirth) {
+      cert.get('dateOfBirth')?.setValue(a.dateOfBirth, { emitEvent: false });
+    }
+    const last4 = this.ssnRawValue.slice(-4);
+    if (last4) {
+      cert.get('ssnLast4')?.setValue(last4, { emitEvent: false });
+    }
+    const lic = this.licenses.at(0) as FormGroup | undefined;
+    if (lic?.get('licenseNumber')?.value) {
+      cert.get('driversLicenseNumber')?.setValue(lic.get('licenseNumber')!.value, { emitEvent: false });
+    }
+    if (lic?.get('state')?.value) {
+      cert.get('stateOfIssue')?.setValue(lic.get('state')!.value, { emitEvent: false });
+    }
   }
 
   // === License Pre-fill (FN-532: use public endpoint, not auth-protected) ===
@@ -345,6 +381,8 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
         if (data.licenseState && !firstLicense.get('state')?.value) {
           firstLicense.get('state')?.setValue(data.licenseState);
         }
+        // FN-546: re-sync certification after license prefill so DL# and State populate
+        this.syncCertificationNow();
       },
       error: () => {
         // Silently skip — section remains blank for manual entry
