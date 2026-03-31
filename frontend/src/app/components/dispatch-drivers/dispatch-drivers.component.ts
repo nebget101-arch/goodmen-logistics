@@ -1730,8 +1730,9 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
         finalize(() => (this.saving = false))
       ).subscribe({
         next: (updated) => {
-          // Save payee assignment if payee fields were provided
+          // FN-570: both save independently — expense responsibility no longer depends on payee assignment success
           this.savePayeeAssignment(this.editingDriverId as string);
+          this.saveExpenseResponsibility(this.editingDriverId as string);
           this.loadDrivers();
           this.showNewModal = false;
           this.editingDriverId = null;
@@ -1749,7 +1750,9 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
         next: (driver) => {
           const createdDriverId = driver?.id || driver?.data?.id;
           if (createdDriverId) {
+            // FN-570: both save independently — expense responsibility no longer depends on payee assignment success
             this.savePayeeAssignment(createdDriverId);
+            this.saveExpenseResponsibility(createdDriverId);
           }
           // Reload list so new driver has joined truck/trailer data
           this.loadDrivers();
@@ -1807,8 +1810,6 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
     this.apiService.resolveDriverPayeeAssignment(driverId, payload).subscribe({
       next: () => {
         console.log('Payee assignment saved successfully');
-        // Also save expense responsibility if provided
-        this.saveExpenseResponsibility(driverId);
       },
       error: (err: any) => {
         console.error('Failed to save payee assignment:', err);
