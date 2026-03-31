@@ -505,6 +505,19 @@ router.get('/drivers/:driverId/compensation-profiles', requireRole(settlementRol
 router.post('/drivers/:driverId/compensation-profiles', requireRole(settlementRoles), async (req, res) => {
   try {
     const body = req.body;
+
+    // FN-573: Validate equipment_owner_percentage + percentage_rate <= 100
+    const eoPct = body.equipment_owner_percentage != null ? Number(body.equipment_owner_percentage) : null;
+    if (eoPct != null) {
+      if (!Number.isFinite(eoPct) || eoPct < 0 || eoPct > 100) {
+        return res.status(400).json({ error: 'equipment_owner_percentage must be between 0 and 100' });
+      }
+      const pctRate = Number(body.percentage_rate) || 0;
+      if (pctRate + eoPct > 100) {
+        return res.status(400).json({ error: 'percentage_rate + equipment_owner_percentage cannot exceed 100' });
+      }
+    }
+
     const [row] = await knex('driver_compensation_profiles')
       .insert({
         driver_id: req.params.driverId,
@@ -514,6 +527,8 @@ router.post('/drivers/:driverId/compensation-profiles', requireRole(settlementRo
         cents_per_mile: body.cents_per_mile ?? null,
         flat_weekly_amount: body.flat_weekly_amount ?? null,
         flat_per_load_amount: body.flat_per_load_amount ?? null,
+        // FN-573: persist equipment_owner_percentage on direct profile create
+        equipment_owner_percentage: eoPct,
         expense_sharing_enabled: body.expense_sharing_enabled === true,
         effective_start_date: body.effective_start_date || new Date().toISOString().slice(0, 10),
         effective_end_date: body.effective_end_date ?? null,
@@ -530,6 +545,23 @@ router.post('/drivers/:driverId/compensation-profiles', requireRole(settlementRo
 router.put('/compensation-profiles/:id', requireRole(settlementRoles), async (req, res) => {
   try {
     const body = req.body;
+
+    // FN-573: Validate equipment_owner_percentage + percentage_rate <= 100
+    if (body.equipment_owner_percentage !== undefined) {
+      const eoPct = body.equipment_owner_percentage != null ? Number(body.equipment_owner_percentage) : null;
+      if (eoPct != null) {
+        if (!Number.isFinite(eoPct) || eoPct < 0 || eoPct > 100) {
+          return res.status(400).json({ error: 'equipment_owner_percentage must be between 0 and 100' });
+        }
+        // Fetch the existing profile to get current percentage_rate if not supplied in body
+        const existing = await knex('driver_compensation_profiles').where({ id: req.params.id }).first();
+        const pctRate = Number(body.percentage_rate ?? existing?.percentage_rate) || 0;
+        if (pctRate + eoPct > 100) {
+          return res.status(400).json({ error: 'percentage_rate + equipment_owner_percentage cannot exceed 100' });
+        }
+      }
+    }
+
     const [row] = await knex('driver_compensation_profiles')
       .where({ id: req.params.id })
       .update({
@@ -539,6 +571,12 @@ router.put('/compensation-profiles/:id', requireRole(settlementRoles), async (re
         ...(body.cents_per_mile !== undefined && { cents_per_mile: body.cents_per_mile }),
         ...(body.flat_weekly_amount !== undefined && { flat_weekly_amount: body.flat_weekly_amount }),
         ...(body.flat_per_load_amount !== undefined && { flat_per_load_amount: body.flat_per_load_amount }),
+        // FN-573: persist equipment_owner_percentage on direct profile update
+        ...(body.equipment_owner_percentage !== undefined && {
+          equipment_owner_percentage: body.equipment_owner_percentage != null
+            ? Number(body.equipment_owner_percentage)
+            : null
+        }),
         ...(body.expense_sharing_enabled !== undefined && { expense_sharing_enabled: body.expense_sharing_enabled }),
         ...(body.effective_start_date != null && { effective_start_date: body.effective_start_date }),
         ...(body.effective_end_date !== undefined && { effective_end_date: body.effective_end_date }),
