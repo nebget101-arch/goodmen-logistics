@@ -368,6 +368,12 @@ router.get('/:id', async (req, res) => {
 
     const response = {
       ...driver,
+      // FN-539: truck_id and trailer_id are already included via SELECT d.* + transformRow()
+      // (snake_case → camelCase) as truckId / trailerId. Explicitly surfaced here so the
+      // contract is obvious to callers (e.g. load edit modal auto-fill in FN-538).
+      truckId: driver.truckId || null,
+      trailerId: driver.trailerId || null,
+
       // Payee assignment details (for edit form population)
       primaryPayeeId: assignment?.primary_payee_id || null,
       primaryPayee: assignment?.primary_payee_name || null,
