@@ -184,8 +184,8 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   ];
 
   readonly deductionTargetOptions = [
-    { value: 'primary', label: 'Primary payee' },
-    { value: 'additional', label: 'Additional payee' }
+    { value: 'primary', label: 'Driver' },
+    { value: 'additional', label: 'Equipment Owner' }
   ];
 
   readonly deductionAmountTypeOptions = [
@@ -1133,8 +1133,8 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
 
   getSuggestedTargetsLabel(): string {
     const targets = this.getSuggestedTargetsForSelectedCategory();
-    if (targets.length === 2) return 'Primary + Additional payee';
-    return targets[0] === 'additional' ? 'Additional payee only' : 'Primary payee only';
+    if (targets.length === 2) return 'Driver + Equipment Owner';
+    return targets[0] === 'additional' ? 'Equipment Owner only' : 'Driver only';
   }
 
   private mapExpenseCategoryToSourceType(category: string): string {
@@ -1166,8 +1166,8 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
   }
 
   getRecurringDeductionTargetLabel(deduction: any): string {
-    if (deduction?.rule_scope === 'payee') return 'Additional payee';
-    return 'Primary payee';
+    if (deduction?.rule_scope === 'payee') return 'Equipment Owner';
+    return 'Driver';
   }
 
   getDeductionFrequencyLabel(frequency: string): string {
