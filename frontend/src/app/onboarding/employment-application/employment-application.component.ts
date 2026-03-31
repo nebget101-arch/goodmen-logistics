@@ -360,6 +360,20 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
       this.form.get('hasViolations')?.setValue(snapshot['hasViolations'], { emitEvent: false });
     }
 
+    // Restore licenses from draft snapshot
+    const savedLicenses = (snapshot['licenses'] || draft['licenses'] || []) as any[];
+    if (Array.isArray(savedLicenses) && savedLicenses.length > 0) {
+      this.licenses.clear();
+      for (const lic of savedLicenses) {
+        this.licenses.push(this.fb.group({
+          state: [lic.state || '', Validators.required],
+          licenseNumber: [lic.licenseNumber || lic.license_number || '', Validators.required],
+          type: [lic.type || 'CDL-A', Validators.required],
+          expirationDate: [lic.expirationDate || lic.expiration_date || '', Validators.required]
+        }));
+      }
+    }
+
     // Re-sync certification fields after restoring form data
     this.syncCertificationNow();
   }
@@ -390,14 +404,20 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
       cert.get('dateOfBirth')?.setValue(dob || '', { emitEvent: false });
     });
 
-    // Sync license number + state from first license row (added in addLicense())
-    const firstLicense = this.licenses.at(0) as FormGroup | undefined;
-    firstLicense?.get('licenseNumber')?.valueChanges.subscribe(val => {
-      cert.get('driversLicenseNumber')?.setValue(val || '', { emitEvent: false });
-    });
-    firstLicense?.get('state')?.valueChanges.subscribe(val => {
-      cert.get('stateOfIssue')?.setValue(val || '', { emitEvent: false });
-    });
+    // Sync license number + state from first license row
+    // Re-subscribe whenever licenses array changes (e.g., after draft restore)
+    const syncFirstLicense = () => {
+      const firstLicense = this.licenses.at(0) as FormGroup | undefined;
+      if (!firstLicense) return;
+      firstLicense.get('licenseNumber')?.valueChanges.subscribe(val => {
+        cert.get('driversLicenseNumber')?.setValue(val || '', { emitEvent: false });
+      });
+      firstLicense.get('state')?.valueChanges.subscribe(val => {
+        cert.get('stateOfIssue')?.setValue(val || '', { emitEvent: false });
+      });
+    };
+    syncFirstLicense();
+    this.licenses.valueChanges.subscribe(() => syncFirstLicense());
 
     // FN-546 fix 2: SSN Last 4 subscription was missing entirely — wire it now
     this.form.get('applicant.ssn')?.valueChanges.subscribe(() => {
