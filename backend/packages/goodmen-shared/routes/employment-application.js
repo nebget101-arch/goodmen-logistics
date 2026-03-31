@@ -12,7 +12,9 @@ router.post('/applications', async (req, res) => {
   try {
     const driverId = req.body.driverId || req.context?.userId || req.user?.id;
     const userId = req.context?.userId || req.user?.id || null;
-    const row = await emService.createDraft(driverId, req.body, userId, req.context);
+    // FN-548: Merge operatingEntityId from request body into context so it persists on the application record
+    const context = { ...req.context, operatingEntityId: req.body.operatingEntityId || req.context?.operatingEntityId || null };
+    const row = await emService.createDraft(driverId, req.body, userId, context);
     res.json(row);
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -23,7 +25,9 @@ router.post('/applications', async (req, res) => {
 router.put('/applications/:id', async (req, res) => {
   try {
     const userId = req.context?.userId || req.user?.id || null;
-    const updated = await emService.updateDraft(req.params.id, req.body, userId, req.context);
+    // FN-548: Merge operatingEntityId from request body into context
+    const context = { ...req.context, operatingEntityId: req.body.operatingEntityId || req.context?.operatingEntityId || null };
+    const updated = await emService.updateDraft(req.params.id, req.body, userId, context);
     res.json(updated);
   } catch (e) {
     res.status(400).json({ error: e.message });
