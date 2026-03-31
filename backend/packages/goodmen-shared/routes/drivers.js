@@ -352,12 +352,14 @@ router.get('/:id', async (req, res) => {
     );
 
     const expenseResponsibilityResult = await query(
+      // FN-569: ORDER BY created_at DESC as tiebreaker — ensures most-recently saved
+      // row is returned when multiple rows share the same effective_start_date.
       `SELECT *
        FROM expense_responsibility_profiles
        WHERE driver_id = $1
          AND effective_start_date <= $2
          AND (effective_end_date IS NULL OR effective_end_date >= $2)
-       ORDER BY effective_start_date DESC
+       ORDER BY effective_start_date DESC, created_at DESC
        LIMIT 1`,
       [driverId, asOf]
     );

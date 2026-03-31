@@ -725,7 +725,12 @@ router.get('/drivers/:driverId/expense-responsibility', requireRole(settlementRo
       .where(function () {
         this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [d]);
       })
-      .orderBy('effective_start_date', 'desc')
+      // FN-569: secondary sort by created_at ensures deterministic result when
+      // multiple rows share the same effective_start_date (e.g. same-day saves).
+      .orderBy([
+        { column: 'effective_start_date', order: 'desc' },
+        { column: 'created_at', order: 'desc' }
+      ])
       .first();
     res.json(row || null);
   } catch (err) {
@@ -736,40 +741,55 @@ router.get('/drivers/:driverId/expense-responsibility', requireRole(settlementRo
 router.post('/drivers/:driverId/expense-responsibility', requireRole(settlementRoles), async (req, res) => {
   try {
     const body = req.body;
-    
-    // Look up active compensation profile for this driver
-    let compensationProfileId = body.compensation_profile_id;
-    if (!compensationProfileId) {
-      const driver = await knex('drivers')
-        .where({ id: req.params.driverId })
-        .select('id', 'pay_basis', 'pay_rate', 'pay_percentage', 'driver_type', 'hire_date')
-        .first();
-      const activeProfile = driver
-        ? await ensureActiveCompensationProfile(knex, driver, body.effective_start_date || new Date().toISOString().slice(0, 10))
-        : null;
-      compensationProfileId = activeProfile?.id || null;
-    }
-    
-    const [row] = await knex('expense_responsibility_profiles')
-      .insert({
-        driver_id: req.params.driverId,
-        compensation_profile_id: compensationProfileId,
-        fuel_responsibility: body.fuel_responsibility ?? null,
-        insurance_responsibility: body.insurance_responsibility ?? null,
-        eld_responsibility: body.eld_responsibility ?? null,
-        trailer_rent_responsibility: body.trailer_rent_responsibility ?? null,
-        toll_responsibility: body.toll_responsibility ?? null,
-        repairs_responsibility: body.repairs_responsibility ?? null,
-        // FN-497: shared expense split config columns
-        split_type: body.split_type ?? null,
-        driver_percentage: body.driver_percentage ?? null,
-        driver_fixed_amount: body.driver_fixed_amount ?? null,
-        owner_fixed_amount: body.owner_fixed_amount ?? null,
-        custom_rules: body.custom_rules != null ? JSON.stringify(body.custom_rules) : knex.raw("'{}'::jsonb"),
-        effective_start_date: body.effective_start_date || new Date().toISOString().slice(0, 10),
-        effective_end_date: body.effective_end_date ?? null
-      })
-      .returning('*');
+    const newStart = body.effective_start_date || new Date().toISOString().slice(0, 10);
+
+    const row = await knex.transaction(async (trx) => {
+      // Look up active compensation profile for this driver
+      let compensationProfileId = body.compensation_profile_id;
+      if (!compensationProfileId) {
+        const driver = await trx('drivers')
+          .where({ id: req.params.driverId })
+          .select('id', 'pay_basis', 'pay_rate', 'pay_percentage', 'driver_type', 'hire_date')
+          .first();
+        const activeProfile = driver
+          ? await ensureActiveCompensationProfile(trx, driver, newStart)
+          : null;
+        compensationProfileId = activeProfile?.id || null;
+      }
+
+      // FN-569: Close any existing open expense-responsibility record for this driver
+      // before inserting the new one (mirrors the payee-assignment/resolve pattern).
+      // Sets effective_end_date = newStart so only the newly inserted row is the
+      // "current" record going forward.
+      await trx('expense_responsibility_profiles')
+        .where({ driver_id: req.params.driverId })
+        .whereNull('effective_end_date')
+        .update({ effective_end_date: newStart, updated_at: trx.fn.now() });
+
+      const [inserted] = await trx('expense_responsibility_profiles')
+        .insert({
+          driver_id: req.params.driverId,
+          compensation_profile_id: compensationProfileId,
+          fuel_responsibility: body.fuel_responsibility ?? null,
+          insurance_responsibility: body.insurance_responsibility ?? null,
+          eld_responsibility: body.eld_responsibility ?? null,
+          trailer_rent_responsibility: body.trailer_rent_responsibility ?? null,
+          toll_responsibility: body.toll_responsibility ?? null,
+          repairs_responsibility: body.repairs_responsibility ?? null,
+          // FN-497: shared expense split config columns
+          split_type: body.split_type ?? null,
+          driver_percentage: body.driver_percentage ?? null,
+          driver_fixed_amount: body.driver_fixed_amount ?? null,
+          owner_fixed_amount: body.owner_fixed_amount ?? null,
+          custom_rules: body.custom_rules != null ? JSON.stringify(body.custom_rules) : trx.raw("'{}'::jsonb"),
+          effective_start_date: newStart,
+          effective_end_date: body.effective_end_date ?? null
+        })
+        .returning('*');
+
+      return inserted;
+    });
+
     res.status(201).json(row);
   } catch (err) {
     res.status(500).json({ error: err.message });
