@@ -406,8 +406,17 @@
                   <input id="perMile" type="number" step="0.01" class="form-input with-icon" placeholder="0.00" [(ngModel)]="newDriver.payRate" />
                 </div>
                 <div class="comp-value-field" *ngIf="newDriver.payModel === 'percentage'">
-                  <label for="payPercentage">Percentage (%)</label>
-                  <input id="payPercentage" type="number" step="0.01" class="form-input with-icon" placeholder="0" [(ngModel)]="newDriver.payPercentage" />
+                  <label for="payPercentage">Driver %</label>
+                  <input id="payPercentage" type="number" step="0.01" min="0" max="100" class="form-input with-icon" placeholder="0" [(ngModel)]="newDriver.payPercentage" />
+                </div>
+                <div class="comp-value-field" *ngIf="newDriver.payModel === 'percentage' && newDriver.driverType !== 'owner_operator'">
+                  <label for="eoPercentage">Equipment Owner %</label>
+                  <input id="eoPercentage" type="number" step="0.01" min="0" max="100" class="form-input with-icon" placeholder="0" [(ngModel)]="newDriver.equipmentOwnerPercentage" />
+                </div>
+                <div class="comp-value-field comp-value-readonly" *ngIf="newDriver.payModel === 'percentage'">
+                  <label>Company Retains</label>
+                  <span class="comp-calculated-value" [class.error]="percentageSumExceeds100">{{ companyRetainsPercentage }}%</span>
+                  <span class="comp-validation-error" *ngIf="percentageSumExceeds100">Driver % + EO % cannot exceed 100%</span>
                 </div>
                 <div class="comp-value-field" *ngIf="newDriver.payModel === 'flat_weekly'">
                   <label for="flatWeekly">Weekly amount ($)</label>
