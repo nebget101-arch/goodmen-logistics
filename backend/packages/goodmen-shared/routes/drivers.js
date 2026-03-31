@@ -982,8 +982,27 @@ router.put('/:id', async (req, res) => {
       }
 
       // FN-555: Validate percentage_rate + equipment_owner_percentage <= 100
+      // FN-566: Read existing active profile's EO% BEFORE superseding it, so we can
+      // preserve the value if the frontend didn't explicitly send one (timing/null issue).
+      const today = new Date().toISOString().slice(0, 10);
+      const existingProfileResult = await client.query(
+        `SELECT equipment_owner_percentage
+         FROM driver_compensation_profiles
+         WHERE driver_id = $1
+           AND status = 'active'
+           AND effective_start_date <= $2
+           AND (effective_end_date IS NULL OR effective_end_date >= $2)
+         ORDER BY effective_start_date DESC, created_at DESC
+         LIMIT 1`,
+        [req.params.id, today]
+      );
+      const existingEoPct = existingProfileResult.rows[0]?.equipment_owner_percentage != null
+        ? Number(existingProfileResult.rows[0].equipment_owner_percentage)
+        : null;
+
       const rawEoPct = body.equipmentOwnerPercentage ?? body.equipment_owner_percentage;
-      const eoPct = rawEoPct != null ? Number(rawEoPct) : null;
+      // Use the explicitly-sent value; fall back to the existing profile value to avoid wiping it
+      const eoPct = rawEoPct != null ? Number(rawEoPct) : existingEoPct;
       if (eoPct != null) {
         if (!Number.isFinite(eoPct) || eoPct < 0 || eoPct > 100) {
           await client.query('ROLLBACK');
@@ -997,7 +1016,6 @@ router.put('/:id', async (req, res) => {
       }
 
       // Close any existing active profile and create new one
-      const today = new Date().toISOString().slice(0, 10);
       await client.query(
         `UPDATE driver_compensation_profiles
          SET effective_end_date = $1, status = 'superseded', updated_at = NOW()
