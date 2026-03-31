@@ -365,14 +365,17 @@ router.get('/:id', async (req, res) => {
     // FN-566: Fetch active compensation profile to return equipment_owner_percentage.
     // The drivers table stores pay_basis/pay_rate/pay_percentage but NOT
     // equipment_owner_percentage — that lives only on driver_compensation_profiles.
+    // Use status = 'active' with date-range guard (same pattern as settlement-service.js).
     const compensationProfileResult = await query(
       `SELECT percentage_rate, equipment_owner_percentage, profile_type, pay_model
        FROM driver_compensation_profiles
        WHERE driver_id = $1
-         AND is_active = true
-       ORDER BY created_at DESC
+         AND status = 'active'
+         AND effective_start_date <= $2
+         AND (effective_end_date IS NULL OR effective_end_date >= $2)
+       ORDER BY effective_start_date DESC
        LIMIT 1`,
-      [driverId]
+      [driverId, asOf]
     );
 
     const driver = transformRow(result.rows[0]);
