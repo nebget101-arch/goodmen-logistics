@@ -463,6 +463,7 @@ router.post('/', async (req, res) => {
       payBasis,
       payRate,
       payPercentage,
+      equipmentOwnerPercentage,
       terminationDate,
       truckId,
       trailerId,
@@ -655,6 +656,20 @@ router.post('/', async (req, res) => {
         flatPerLoadAmount = payRate;
       }
 
+      // FN-555: Validate percentage_rate + equipment_owner_percentage <= 100
+      const eoPct = equipmentOwnerPercentage != null ? Number(equipmentOwnerPercentage) : null;
+      if (eoPct != null) {
+        if (!Number.isFinite(eoPct) || eoPct < 0 || eoPct > 100) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'equipment_owner_percentage must be between 0 and 100' });
+        }
+        const pctRate = Number(percentageRate) || 0;
+        if (pctRate + eoPct > 100) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'percentage_rate + equipment_owner_percentage cannot exceed 100' });
+        }
+      }
+
       const effectiveStart = hireDate || new Date().toISOString().slice(0, 10);
       await client.query(
         `INSERT INTO driver_compensation_profiles (
@@ -665,13 +680,14 @@ router.post('/', async (req, res) => {
           cents_per_mile,
           flat_weekly_amount,
           flat_per_load_amount,
+          equipment_owner_percentage,
           expense_sharing_enabled,
           effective_start_date,
           effective_end_date,
           status,
           notes
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, NULL, 'active', 'Auto-created from driver save')`,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9, NULL, 'active', 'Auto-created from driver save')`,
         [
           driverId,
           profileType,
@@ -680,6 +696,7 @@ router.post('/', async (req, res) => {
           centsPerMile,
           flatWeeklyAmount,
           flatPerLoadAmount,
+          eoPct,
           effectiveStart
         ]
       );
@@ -939,6 +956,21 @@ router.put('/:id', async (req, res) => {
         flatPerLoadAmount = updatedDriver.pay_rate;
       }
 
+      // FN-555: Validate percentage_rate + equipment_owner_percentage <= 100
+      const rawEoPct = body.equipmentOwnerPercentage ?? body.equipment_owner_percentage;
+      const eoPct = rawEoPct != null ? Number(rawEoPct) : null;
+      if (eoPct != null) {
+        if (!Number.isFinite(eoPct) || eoPct < 0 || eoPct > 100) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'equipment_owner_percentage must be between 0 and 100' });
+        }
+        const pctRate = Number(percentageRate) || 0;
+        if (pctRate + eoPct > 100) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'percentage_rate + equipment_owner_percentage cannot exceed 100' });
+        }
+      }
+
       // Close any existing active profile and create new one
       const today = new Date().toISOString().slice(0, 10);
       await client.query(
@@ -960,13 +992,14 @@ router.put('/:id', async (req, res) => {
           cents_per_mile,
           flat_weekly_amount,
           flat_per_load_amount,
+          equipment_owner_percentage,
           expense_sharing_enabled,
           effective_start_date,
           effective_end_date,
           status,
           notes
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, NULL, 'active', 'Auto-synced from driver update')`,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9, NULL, 'active', 'Auto-synced from driver update')`,
         [
           req.params.id,
           profileType,
@@ -975,6 +1008,7 @@ router.put('/:id', async (req, res) => {
           centsPerMile,
           flatWeeklyAmount,
           flatPerLoadAmount,
+          eoPct,
           effectiveStart
         ]
       );

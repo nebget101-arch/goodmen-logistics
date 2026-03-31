@@ -16,7 +16,7 @@
 /**
  * Compute driver pay for a single load given pay model snapshot.
  * If an additional payee exists, compute its pay from configured rate (% of gross).
- * @param {Object} opts - { payModel, centsPerMile, percentageRate, flatPerLoadAmount, gross, loadedMiles, hasAdditionalPayee, additionalPayeeRate }
+ * @param {Object} opts - { payModel, centsPerMile, percentageRate, flatPerLoadAmount, gross, loadedMiles, hasAdditionalPayee, additionalPayeeRate, equipmentOwnerPercentage }
  * @returns {{ driverPay: number, additionalPayeePay: number }}
  */
 function computeLoadPay(opts) {
@@ -28,7 +28,8 @@ function computeLoadPay(opts) {
     gross = 0,
     loadedMiles = 0,
     hasAdditionalPayee = false,
-    additionalPayeeRate = null
+    additionalPayeeRate = null,
+    equipmentOwnerPercentage = null
   } = opts;
 
   const grossNum = Number(gross) || 0;
@@ -55,15 +56,21 @@ function computeLoadPay(opts) {
   // Never allow per-load driver pay to exceed load gross.
   driverPay = Math.max(0, Math.min(driverPay, grossNum));
 
+  // FN-555: Prefer explicit equipment_owner_percentage from compensation profile.
+  // Falls back to additional_payee_rate, then remainder (legacy).
+  const eoPctNum = Number(equipmentOwnerPercentage);
+  const hasEoPct = Number.isFinite(eoPctNum) && eoPctNum > 0;
   const additionalRateNum = Number(additionalPayeeRate);
   const hasAdditionalRate = Number.isFinite(additionalRateNum) && additionalRateNum > 0;
   let additionalPayeePay = 0;
-  if (hasAdditionalPayee && hasAdditionalRate) {
+  if (hasAdditionalPayee && hasEoPct) {
+    additionalPayeePay = Math.max(0, (grossNum * eoPctNum) / 100);
+  } else if (hasAdditionalPayee && hasAdditionalRate) {
     additionalPayeePay = Math.max(0, (grossNum * additionalRateNum) / 100);
   } else if (hasAdditionalPayee) {
     // Backward-compatible fallback for environments where payee extension columns
-    // (e.g. additional_payee_rate) are not yet migrated: assign remainder to
-    // additional payee so split settlements still calculate.
+    // (e.g. additional_payee_rate, equipment_owner_percentage) are not yet migrated:
+    // assign remainder to additional payee so split settlements still calculate.
     additionalPayeePay = Math.max(0, grossNum - driverPay);
   }
 
