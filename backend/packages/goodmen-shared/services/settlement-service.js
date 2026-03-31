@@ -32,6 +32,34 @@ function normalizeStopType(value) {
   return (value || '').toString().trim().toUpperCase();
 }
 
+function toFiniteNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function estimateDrivingMilesFromCoordinates(fromCoords, toCoords) {
+  if (!fromCoords || !toCoords) return 0;
+
+  const fromLat = toFiniteNumber(fromCoords.latitude);
+  const fromLon = toFiniteNumber(fromCoords.longitude);
+  const toLat = toFiniteNumber(toCoords.latitude);
+  const toLon = toFiniteNumber(toCoords.longitude);
+  if ([fromLat, fromLon, toLat, toLon].some((value) => value === null)) return 0;
+
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const latDelta = toRadians(toLat - fromLat);
+  const lonDelta = toRadians(toLon - fromLon);
+  const startLat = toRadians(fromLat);
+  const endLat = toRadians(toLat);
+  const a = Math.sin(latDelta / 2) ** 2
+    + Math.cos(startLat) * Math.cos(endLat) * Math.sin(lonDelta / 2) ** 2;
+  const greatCircleMiles = 3958.7613 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  // Inflate straight-line distance slightly so settlement draft mileage stays useful
+  // without blocking on third-party routing APIs during draft generation.
+  return Math.round(greatCircleMiles * 1.18);
+}
+
 function toDateOnly(value) {
   if (!value) return null;
 
@@ -234,6 +262,67 @@ async function getLoadedMilesForLoad(client, loadId) {
   return getDrivingDistanceMiles(firstZip, lastZip);
 }
 
+async function getStopsForLoads(knex, loadIds) {
+  if (!Array.isArray(loadIds) || !loadIds.length) return new Map();
+
+  const rows = await knex('load_stops')
+    .select('load_id', 'stop_type', 'stop_date', 'zip', 'sequence')
+    .whereIn('load_id', loadIds)
+    .orderBy([
+      { column: 'load_id', order: 'asc' },
+      { column: 'sequence', order: 'asc' },
+      { column: 'created_at', order: 'asc' }
+    ]);
+
+  const byLoadId = new Map();
+  for (const row of rows) {
+    const key = String(row.load_id);
+    const existing = byLoadId.get(key) || [];
+    existing.push(row);
+    byLoadId.set(key, existing);
+  }
+  return byLoadId;
+}
+
+async function getZipCoordinateMap(knex, zips) {
+  const uniqueZips = Array.from(new Set(
+    (Array.isArray(zips) ? zips : [])
+      .map((zip) => (zip || '').toString().trim())
+      .filter(Boolean)
+  ));
+
+  if (!uniqueZips.length) return new Map();
+  let rows = [];
+  try {
+    rows = await knex('zip_codes')
+      .select('zip', 'latitude', 'longitude')
+      .whereIn('zip', uniqueZips);
+  } catch (err) {
+    return new Map();
+  }
+
+  const coordinateMap = new Map();
+  for (const row of rows) {
+    coordinateMap.set(String(row.zip).trim(), row);
+  }
+  return coordinateMap;
+}
+
+function getDraftLoadDatesAndZips(load, stops) {
+  const stopList = Array.isArray(stops) ? stops : [];
+  const pickups = stopList.filter((stop) => normalizeStopType(stop.stop_type) === 'PICKUP');
+  const deliveries = stopList.filter((stop) => normalizeStopType(stop.stop_type) === 'DELIVERY');
+  const firstPickup = pickups[0] || null;
+  const lastDelivery = deliveries.length ? deliveries[deliveries.length - 1] : null;
+
+  return {
+    pickupDate: firstPickup?.stop_date || load.pickup_date_direct || null,
+    deliveryDate: lastDelivery?.stop_date || load.delivery_date_direct || null,
+    pickupZip: firstPickup?.zip?.trim() || null,
+    deliveryZip: lastDelivery?.zip?.trim() || null
+  };
+}
+
 /** Load IDs already in a non-void settlement for the given driver (any period). */
 async function getAlreadySettledLoadIds(knex, driverId) {
   const rows = await knex('settlement_load_items as sli')
@@ -251,7 +340,6 @@ async function getAlreadySettledLoadIds(knex, driverId) {
  */
 async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, dateBasis = 'pickup', context = null) {
   const settledIds = await getAlreadySettledLoadIds(knex, driverId);
-  const dateCol = dateBasis === 'delivery' ? 'delivery_date' : 'pickup_date';
 
   const loads = await knex('loads as l')
     .select(
@@ -260,15 +348,7 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
       'l.rate',
       'l.driver_id',
       'l.pickup_date as pickup_date_direct',
-      'l.delivery_date as delivery_date_direct',
-      knex.raw(`(
-        SELECT MIN(s.stop_date) FROM load_stops s
-        WHERE s.load_id = l.id AND UPPER(TRIM(s.stop_type)) = 'PICKUP'
-      ) as pickup_date`),
-      knex.raw(`(
-        SELECT MAX(s.stop_date) FROM load_stops s
-        WHERE s.load_id = l.id AND UPPER(TRIM(s.stop_type)) = 'DELIVERY'
-      ) as delivery_date`)
+      'l.delivery_date as delivery_date_direct'
     )
     .where('l.driver_id', driverId)
     .whereIn('l.status', DELIVERED_STATUSES)
@@ -284,14 +364,32 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
   if (!periodStartStr || !periodEndStr) {
     throw new Error('Invalid period_start or period_end');
   }
+
+  const loadIds = loads.map((row) => row.id);
+  const stopsByLoadId = await getStopsForLoads(knex, loadIds);
+  const loadMetadata = new Map();
+  const relevantZips = new Set();
+
+  for (const row of loads) {
+    const metadata = getDraftLoadDatesAndZips(row, stopsByLoadId.get(String(row.id)) || []);
+    loadMetadata.set(String(row.id), metadata);
+    if (metadata.pickupZip) relevantZips.add(metadata.pickupZip);
+    if (metadata.deliveryZip) relevantZips.add(metadata.deliveryZip);
+  }
+
+  const zipCoordinateMap = await getZipCoordinateMap(knex, Array.from(relevantZips));
   const filtered = [];
   for (const row of loads) {
-    const pickupDate = row.pickup_date || row.pickup_date_direct || null;
-    const deliveryDate = row.delivery_date || row.delivery_date_direct || null;
+    const metadata = loadMetadata.get(String(row.id)) || {};
+    const pickupDate = metadata.pickupDate || null;
+    const deliveryDate = metadata.deliveryDate || null;
     const dateVal = dateBasis === 'delivery' ? deliveryDate : pickupDate;
     const d = toDateOnly(dateVal);
     if (d && d >= periodStartStr && d <= periodEndStr) {
-      const loadedMiles = await getLoadedMilesForLoad(client, row.id);
+      const loadedMiles = estimateDrivingMilesFromCoordinates(
+        zipCoordinateMap.get(metadata.pickupZip || ''),
+        zipCoordinateMap.get(metadata.deliveryZip || '')
+      );
       filtered.push({ ...row, pickup_date: pickupDate, delivery_date: deliveryDate, loaded_miles: loadedMiles });
     }
   }
@@ -644,6 +742,17 @@ async function consumeTollsForSettlement(knex, settlementId, driverId, periodSta
  */
 async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userId, knex, context = null) {
   const client = await getClient();
+  const startedAt = process.hrtime.bigint();
+  const logTiming = (stage, extra = {}) => {
+    const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    console.log('[Settlement Create][Timing]', {
+      payrollPeriodId,
+      driverId,
+      stage,
+      elapsedMs: Number(elapsedMs.toFixed(1)),
+      ...extra
+    });
+  };
   try {
     const tenantId = context?.tenantId || null;
     const operatingEntityId = context?.operatingEntityId || null;
@@ -718,6 +827,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       dateBasis,
       context
     );
+    logTiming('eligible-loads-resolved', { eligibleLoadCount: eligibleLoads.length });
 
     const profileSnapshot = {
       ...buildPaySnapshot(profile, driver),
@@ -782,6 +892,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       period.period_end,
       [primaryPayeeId, additionalPayeeId].filter(Boolean)
     );
+    logTiming('recurring-deductions-resolved', { recurringCount: recurring.length });
     for (const rule of recurring) {
       // Determine which payee the deduction applies to
       let applyTo = 'primary_payee'; // default
@@ -823,6 +934,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       userId,
       tenantId
     );
+    logTiming('fuel-consumed');
 
     // Auto-consume unlinked toll transactions for the period
     await consumeTollsForSettlement(
@@ -834,8 +946,10 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       userId,
       tenantId
     );
+    logTiming('tolls-consumed');
 
     await recalcAndUpdateSettlement(knex, settlement.id);
+    logTiming('settlement-recalculated');
     return knex('settlements').where({ id: settlement.id }).first();
   } finally {
     client.release();
