@@ -628,7 +628,8 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
         gross,
         loadedMiles: load.loaded_miles || 0,
         hasAdditionalPayee: !!additionalPayeeId,
-        additionalPayeeRate: profileSnapshot.additional_payee_rate
+        additionalPayeeRate: profileSnapshot.additional_payee_rate,
+        equipmentOwnerPercentage: profileSnapshot.equipment_owner_percentage
       });
       await knex('settlement_load_items').insert({
         settlement_id: settlement.id,
@@ -879,7 +880,8 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
       gross: Number(item.gross_amount) || 0,
       loadedMiles: Number(item.loaded_miles) || 0,
       hasAdditionalPayee,
-      additionalPayeeRate: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate
+      additionalPayeeRate: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate,
+      equipmentOwnerPercentage: itemSnapshot.equipment_owner_percentage ?? profileSnapshot.equipment_owner_percentage
     });
 
     console.log('[Settlement Recalc] load pay', {
@@ -954,7 +956,8 @@ async function addLoadToSettlement(knex, settlementId, loadId, userId) {
       gross,
       loadedMiles,
       hasAdditionalPayee: !!settlement.additional_payee_id,
-      additionalPayeeRate: snapshot.additional_payee_rate
+      additionalPayeeRate: snapshot.additional_payee_rate,
+      equipmentOwnerPercentage: snapshot.equipment_owner_percentage
     });
     const stops = await client.query(
       'SELECT stop_type, stop_date FROM load_stops WHERE load_id = $1 ORDER BY sequence',
