@@ -16,6 +16,7 @@ describe('computeLoadPay', () => {
   it('per_mile: driver pay = loaded_miles * cents_per_mile / 100', () => {
     const { driverPay } = computeLoadPay({
       payModel: 'per_mile',
+      gross: 1000,
       loadedMiles: 500,
       centsPerMile: 50
     });
@@ -34,6 +35,7 @@ describe('computeLoadPay', () => {
   it('flat_per_load: driver pay = flat_per_load_amount', () => {
     const { driverPay } = computeLoadPay({
       payModel: 'flat_per_load',
+      gross: 1000,
       flatPerLoadAmount: 450
     });
     assert.strictEqual(driverPay, 450);
@@ -50,6 +52,34 @@ describe('computeLoadPay', () => {
   it('unknown pay model returns 0', () => {
     const { driverPay } = computeLoadPay({ payModel: 'unknown', gross: 1000 });
     assert.strictEqual(driverPay, 0);
+  });
+
+  it('uses equipment owner percentage for additional payee subtotal when present', () => {
+    const { driverPay, additionalPayeePay } = computeLoadPay({
+      payModel: 'percentage',
+      gross: 2000,
+      percentageRate: 80,
+      hasAdditionalPayee: true,
+      equipmentOwnerPercentage: 20,
+      additionalPayeeRate: 5
+    });
+
+    assert.strictEqual(driverPay, 1600);
+    assert.strictEqual(additionalPayeePay, 400);
+  });
+
+  it('falls back to additional payee rate when equipment owner percentage is absent', () => {
+    const { driverPay, additionalPayeePay } = computeLoadPay({
+      payModel: 'percentage',
+      gross: 2000,
+      percentageRate: 80,
+      hasAdditionalPayee: true,
+      equipmentOwnerPercentage: null,
+      additionalPayeeRate: 5
+    });
+
+    assert.strictEqual(driverPay, 1600);
+    assert.strictEqual(additionalPayeePay, 100);
   });
 });
 
