@@ -255,6 +255,7 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
 
   ssnRaw = '';
   ssnMasked = true;
+  ssnFocused = false;
   totalResidencyYears = 0;
   needMoreAddresses = false;
   totalEmployerYears = 0;
@@ -734,18 +735,31 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
   // === SSN Masking ===
   onSsnInput(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const digits = input.value.replace(/\D/g, '').slice(0, 9);
+    // Strip everything except digits
+    const digits = input.value.replace(/[^\d]/g, '').slice(0, 9);
     this.ssnRaw = digits;
     this.employment.ssn = digits;
 
-    // Auto-format with dashes and restore cursor position
-    const formatted = this.formatSsnWithDashes(digits);
-    const cursorPos = input.selectionStart || 0;
-    const prevLen = input.value.length;
-    input.value = this.ssnMasked ? this.getMaskedSsn(digits) : formatted;
-    const newLen = input.value.length;
-    const adjustedPos = cursorPos + (newLen - prevLen);
-    input.setSelectionRange(adjustedPos, adjustedPos);
+    // While focused: always show plain formatted digits (never mask)
+    const display = this.formatSsnWithDashes(digits);
+    input.value = display;
+    input.setSelectionRange(display.length, display.length);
+  }
+
+  onSsnFocus(event: Event): void {
+    this.ssnFocused = true;
+    const input = event.target as HTMLInputElement;
+    // On focus: show plain digits so user can type freely
+    const display = this.formatSsnWithDashes(this.ssnRaw);
+    input.value = display;
+    input.setSelectionRange(display.length, display.length);
+  }
+
+  onSsnBlur(event: Event): void {
+    this.ssnFocused = false;
+    const input = event.target as HTMLInputElement;
+    // On blur: show masked version if masking is on
+    input.value = this.getSsnDisplay();
   }
 
   toggleSsnVisibility(): void {
@@ -754,7 +768,7 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
 
   getSsnDisplay(): string {
     if (!this.ssnRaw) return '';
-    return this.ssnMasked
+    return (this.ssnMasked && !this.ssnFocused)
       ? this.getMaskedSsn(this.ssnRaw)
       : this.formatSsnWithDashes(this.ssnRaw);
   }
