@@ -178,11 +178,64 @@ export class LoadsComponent implements OnInit {
   openEditModal(load: Load) {
     this.editLoad = { ...load };
     this.showEditModal = true;
+
+    // FN-538: If the load has a driver but truck/trailer are blank, auto-fill from driver's
+    // current dispatch assignment (truckUnitNumber / trailerUnitNumber from the drivers list).
+    if (load.driverId && (!load.truck || !load.trailer)) {
+      this.prefillTruckTrailerFromDriver(load.driverId, false);
+    }
   }
 
   closeEditModal() {
     this.showEditModal = false;
     this.editLoad = null;
+  }
+
+  // FN-538: Called when driver is selected in the edit modal.
+  // Always patches truck/trailer from the newly-selected driver (overwrite = true).
+  onEditDriverChange(driverId: string): void {
+    if (!this.editLoad) return;
+    // Update driver name from the cached drivers list
+    const driver = this.drivers.find(d => d.id === driverId);
+    if (driver) {
+      this.editLoad.driverName = `${driver.firstName} ${driver.lastName}`;
+    }
+    this.prefillTruckTrailerFromDriver(driverId, true);
+  }
+
+  // FN-538: Look up a driver's truck/trailer and optionally patch editLoad.
+  // overwrite=false: only fill if truck/trailer are currently blank.
+  // overwrite=true: always patch (called on driver change).
+  private prefillTruckTrailerFromDriver(driverId: string, overwrite: boolean): void {
+    if (!this.editLoad) return;
+
+    // First try the cached drivers list (no HTTP call needed)
+    const cached = this.drivers.find(d => d.id === driverId);
+    if (cached) {
+      if (overwrite || !this.editLoad.truck) {
+        this.editLoad.truck = cached.truckUnitNumber || '';
+      }
+      if (overwrite || !this.editLoad.trailer) {
+        this.editLoad.trailer = cached.trailerUnitNumber || '';
+      }
+      return;
+    }
+
+    // Fallback: fetch driver detail (truckId/trailerId confirmed present in FN-539)
+    this.apiService.getDriver(driverId).subscribe({
+      next: (driver: any) => {
+        if (!this.editLoad) return;
+        if (overwrite || !this.editLoad.truck) {
+          this.editLoad.truck = driver.truckUnitNumber || '';
+        }
+        if (overwrite || !this.editLoad.trailer) {
+          this.editLoad.trailer = driver.trailerUnitNumber || '';
+        }
+      },
+      error: () => {
+        // Silently skip — truck/trailer remain as-is
+      }
+    });
   }
 
   updateLoad() {
