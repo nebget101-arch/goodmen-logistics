@@ -17,6 +17,9 @@ const {
   ELIGIBLE_SETTLEMENT_LOAD_STATUSES
 } = require('./settlement-load-status');
 const {
+  resolveEligibleLoadDate
+} = require('./settlement-load-dates');
+const {
   applyLeaseDeductionForSettlement
 } = require('./lease-financing-service');
 
@@ -325,6 +328,8 @@ function getDraftLoadDatesAndZips(load, stops) {
   return {
     pickupDate: firstPickup?.stop_date || load.pickup_date_direct || null,
     deliveryDate: lastDelivery?.stop_date || load.delivery_date_direct || null,
+    completedDate: load.completed_date_direct || null,
+    createdAt: load.created_at_direct || null,
     pickupZip: firstPickup?.zip?.trim() || null,
     deliveryZip: lastDelivery?.zip?.trim() || null
   };
@@ -355,7 +360,9 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
       'l.rate',
       'l.driver_id',
       'l.pickup_date as pickup_date_direct',
-      'l.delivery_date as delivery_date_direct'
+      'l.delivery_date as delivery_date_direct',
+      'l.completed_date as completed_date_direct',
+      'l.created_at as created_at_direct'
     )
     .where('l.driver_id', driverId)
     .whereIn('l.status', ELIGIBLE_SETTLEMENT_LOAD_STATUSES)
@@ -390,7 +397,7 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
     const metadata = loadMetadata.get(String(row.id)) || {};
     const pickupDate = metadata.pickupDate || null;
     const deliveryDate = metadata.deliveryDate || null;
-    const dateVal = dateBasis === 'delivery' ? deliveryDate : pickupDate;
+    const dateVal = resolveEligibleLoadDate(dateBasis, metadata);
     const d = toDateOnly(dateVal);
     if (d && d >= periodStartStr && d <= periodEndStr) {
       const loadedMiles = estimateDrivingMilesFromCoordinates(
