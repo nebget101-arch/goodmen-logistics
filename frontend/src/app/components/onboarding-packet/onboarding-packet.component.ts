@@ -558,6 +558,8 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
           this.saving = false;
           this.submittedEmployment = true;
           this.reviewMode = false;
+          // FN-536: Store applicant data in session so consent forms can prefill capture fields
+          this.storeSessionDataForConsentForms();
           // FN-524: Show success message then auto-navigate to consent forms after 2.5 s
           this.saveSuccess = 'Application submitted successfully! Taking you to consent forms…';
           const idx = this.sections.findIndex((s) => s.section_key === 'employment_application');
@@ -579,6 +581,26 @@ export class OnboardingPacketComponent implements OnInit, OnDestroy {
           this.errorMessage = err?.error?.message || 'Failed to save employment application.';
         }
       });
+  }
+
+  /** FN-536: Write applicant data to sessionStorage so consent-form can prefill capture fields */
+  private storeSessionDataForConsentForms(): void {
+    try {
+      const emp = this.employment;
+      const firstLicense = (emp.licenses && emp.licenses.length > 0) ? emp.licenses[0] : {};
+
+      const sessionData = {
+        fullName: [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(' '),
+        dateOfBirth: emp.dateOfBirth || '',
+        ssnLast4: (this.ssnRaw || emp.ssn || '').slice(-4),
+        driversLicenseNumber: firstLicense.licenseNumber || emp.licenseNumber || '',
+        stateOfIssue: firstLicense.state || emp.licenseState || ''
+      };
+
+      sessionStorage.setItem('fn_onboarding_applicant', JSON.stringify(sessionData));
+    } catch {
+      // Silently ignore if sessionStorage is unavailable
+    }
   }
 
   // FN-270: Track submission state
