@@ -1053,6 +1053,23 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
         ? Number(this.expenseProfile.driver_fixed_amount) || 0
         : Number(this.expenseProfile.owner_fixed_amount) || 0;
       this.newRecurringDeduction.amount = autoAmount || null;
+      this.deductionAmountDirty = false;
+    }
+
+    // Variable expense categories (Fuel, Tolls, Repairs) are always percentage-based splits.
+    // Auto-fill amount_type and amount from the configured expense responsibility percentages.
+    // NOTE (Settlement V2): Fuel and Tolls splits are auto-calculated by settlement-calculation.js
+    // from expense_responsibility_profiles, making these recurring deductions largely redundant
+    // for those two categories. Repairs remain the primary use case here.
+    const isVariable = this.variableExpenseKeys.some(v => v.key === category);
+    if (isVariable) {
+      this.newRecurringDeduction.amount_type = 'percentage';
+      const effectiveTarget = suggested.length === 1 ? suggested[0] : this.newRecurringDeduction.target;
+      const driverShare = this.sharedExpensePercentages[category] ?? 50;
+      this.newRecurringDeduction.amount = effectiveTarget === 'additional'
+        ? 100 - driverShare
+        : driverShare;
+      this.deductionAmountDirty = false;
     }
   }
 
