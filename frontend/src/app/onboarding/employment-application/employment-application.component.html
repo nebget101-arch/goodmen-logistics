@@ -814,10 +814,27 @@
           <p>I certify this application is true and complete to the best of my knowledge.</p>
         </div>
 
+        <!-- FN-535: Auto-populated from Applicant Information + License History above; editable -->
         <div class="ea-grid-2" style="margin-top:16px;">
           <div class="ea-field">
-            <label>Applicant Printed Name <span class="req">*</span></label>
-            <input formControlName="applicantPrintedName" class="ea-input" placeholder="Full legal name" />
+            <label>Full Name <span class="req">*</span></label>
+            <input formControlName="applicantPrintedName" class="ea-input" placeholder="Auto-filled from applicant name" />
+          </div>
+          <div class="ea-field">
+            <label>Date of Birth</label>
+            <input type="date" formControlName="dateOfBirth" class="ea-input" />
+          </div>
+          <div class="ea-field">
+            <label>SSN Last 4</label>
+            <input formControlName="ssnLast4" class="ea-input" placeholder="Auto-filled from SSN" maxlength="4" />
+          </div>
+          <div class="ea-field">
+            <label>Driver's License Number</label>
+            <input formControlName="driversLicenseNumber" class="ea-input" placeholder="Auto-filled from License History" />
+          </div>
+          <div class="ea-field">
+            <label>State of Issue</label>
+            <input formControlName="stateOfIssue" class="ea-input" placeholder="Auto-filled from License History" />
           </div>
           <div class="ea-field">
             <label>Signature <span class="req">*</span></label>
