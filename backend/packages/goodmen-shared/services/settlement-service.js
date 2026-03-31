@@ -9,6 +9,11 @@ const {
   recalculateSettlementTotals
 } = require('./settlement-calculation');
 const {
+  buildUniqueSettlementNumber,
+  insertSettlementWithRetry,
+  sanitizeSettlementNumberToken
+} = require('./settlement-numbering');
+const {
   applyLeaseDeductionForSettlement
 } = require('./lease-financing-service');
 
@@ -464,37 +469,14 @@ async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, peri
     });
 }
 
-async function generateSettlementNumber(knex) {
-  const row = await knex('settlements')
-    .orderBy('created_at', 'desc')
-    .first();
-  const seq = row ? parseInt((row.settlement_number || '').replace(/\D/g, ''), 10) + 1 : 1;
-  return `${SETTLEMENT_NUMBER_PREFIX}-${Date.now().toString(36).toUpperCase()}-${seq}`;
-}
-
-function sanitizeSettlementToken(value, fallback = 'UNKNOWN') {
-  const raw = (value || '').toString().trim();
-  if (!raw) return fallback;
-  return raw
-    .replace(/[^a-zA-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .toUpperCase() || fallback;
-}
-
-async function generateSettlementNumberWithContext(knex, driver, period) {
-  const row = await knex('settlements')
-    .orderBy('created_at', 'desc')
-    .first();
-  const seq = row ? parseInt((row.settlement_number || '').replace(/\D/g, ''), 10) + 1 : 1;
-
+async function generateSettlementNumberWithContext(_knex, driver, period) {
   const driverName = [driver?.first_name, driver?.last_name].filter(Boolean).join('_') || 'DRIVER';
   const periodStart = toDateOnly(period?.period_start) || 'START';
   const periodEnd = toDateOnly(period?.period_end) || 'END';
-
-  const driverToken = sanitizeSettlementToken(driverName, 'DRIVER');
-  const periodToken = sanitizeSettlementToken(`${periodStart}_TO_${periodEnd}`, 'NO_PERIOD');
-
-  return `${SETTLEMENT_NUMBER_PREFIX}-${driverToken}-${periodToken}-${seq}`;
+  return buildUniqueSettlementNumber(SETTLEMENT_NUMBER_PREFIX, [
+    sanitizeSettlementNumberToken(driverName, 'DRIVER'),
+    sanitizeSettlementNumberToken(`${periodStart}_TO_${periodEnd}`, 'NO_PERIOD')
+  ]);
 }
 
 /**
@@ -834,10 +816,8 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       additional_payee_rate: additionalPayeeRate
     };
 
-    const settlementNumber = await generateSettlementNumberWithContext(knex, driver, period);
     const settlementDate = period.period_end;
-
-    const [settlement] = await knex('settlements').insert({
+    const settlementBasePayload = {
       tenant_id: tenantId,
       operating_entity_id: operatingEntityId,
       payroll_period_id: payrollPeriodId,
@@ -845,7 +825,6 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       compensation_profile_id: profile?.id ?? null,
       primary_payee_id: primaryPayeeId,
       additional_payee_id: additionalPayeeId,
-      settlement_number: settlementNumber,
       settlement_status: 'preparing',
       date: settlementDate,
       subtotal_gross: 0,
@@ -856,7 +835,12 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       net_pay_driver: 0,
       net_pay_additional_payee: 0,
       created_by: userId
-    }).returning('*');
+    };
+
+    const settlement = await insertSettlementWithRetry(knex, async () => ({
+      ...settlementBasePayload,
+      settlement_number: await generateSettlementNumberWithContext(knex, driver, period)
+    }));
 
     for (const load of eligibleLoads) {
       const gross = Number(load.rate) || 0;

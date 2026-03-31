@@ -15,6 +15,11 @@ const {
   getEligibleLoads,
   getRecurringDeductionsForPeriod
 } = require('./settlement-service');
+const {
+  buildUniqueSettlementNumber,
+  insertSettlementWithRetry,
+  sanitizeSettlementNumberToken
+} = require('./settlement-numbering');
 const { getClient } = require('../internal/db');
 
 // ---------------------------------------------------------------------------
@@ -43,13 +48,12 @@ function applyEntityFilter(qb, context, column = 'operating_entity_id') {
 const SETTLEMENT_NUMBER_PREFIX = 'STL2';
 
 async function generateV2Number(knex, driver, settlementType) {
-  const row = await knex('settlements').orderBy('created_at', 'desc').first();
-  const seq = row ? parseInt((row.settlement_number || '').replace(/\D/g, ''), 10) + 1 : 1;
   const driverName = [driver?.first_name, driver?.last_name]
-    .filter(Boolean).join('_')
-    .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase() || 'DRIVER';
-  const typeToken = (settlementType || 'driver').toUpperCase();
-  return `${SETTLEMENT_NUMBER_PREFIX}-${driverName}-${typeToken}-${seq}`;
+    .filter(Boolean).join('_');
+  return buildUniqueSettlementNumber(SETTLEMENT_NUMBER_PREFIX, [
+    sanitizeSettlementNumberToken(driverName, 'DRIVER'),
+    sanitizeSettlementNumberToken(settlementType || 'driver', 'DRIVER')
+  ]);
 }
 
 /**
@@ -386,17 +390,15 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     const driverRevenue = Math.max(0, driverRevenueRaw);
 
     // --- 10. Create DRIVER settlement ---
-    const driverSettlementNumber = await generateV2Number(knex, driver, 'driver');
     const driverFuelShare = isOwnerOperator ? totalFuel : totalFuel * driverPct;
     const driverTollShare = isOwnerOperator ? totalTolls : totalTolls * driverPct;
 
-    const [driverSettlement] = await knex('settlements').insert({
+    const driverSettlementBasePayload = {
       tenant_id: tenantId,
       operating_entity_id: operatingEntityId,
       payroll_period_id: payrollPeriodId,
       driver_id: driverId,
       compensation_profile_id: compProfile?.id ?? null,
-      settlement_number: driverSettlementNumber,
       settlement_status: 'preparing',
       settlement_type: 'driver',
       truck_id: truckId,
@@ -412,7 +414,12 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
       net_pay_driver: 0,
       net_pay_additional_payee: 0,
       created_by: userId
-    }).returning('*');
+    };
+
+    const driverSettlement = await insertSettlementWithRetry(knex, async () => ({
+      ...driverSettlementBasePayload,
+      settlement_number: await generateV2Number(knex, driver, 'driver')
+    }));
 
     // Load items for driver settlement
     for (const load of eligibleLoads) {
@@ -523,15 +530,12 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     const balanceTransfers = await getPendingBalanceTransfers(knex, equipmentOwnerId, tenantId);
     const totalTransfers = balanceTransfers.reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
-    const eoSettlementNumber = await generateV2Number(knex, driver, 'equipment_owner');
-
-    const [eoSettlement] = await knex('settlements').insert({
+    const eoSettlementBasePayload = {
       tenant_id: tenantId,
       operating_entity_id: operatingEntityId,
       payroll_period_id: payrollPeriodId,
       driver_id: driverId,
       compensation_profile_id: compProfile?.id ?? null,
-      settlement_number: eoSettlementNumber,
       settlement_status: 'preparing',
       settlement_type: 'equipment_owner',
       truck_id: truckId,
@@ -547,7 +551,12 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
       net_pay_driver: 0,
       net_pay_additional_payee: 0,
       created_by: userId
-    }).returning('*');
+    };
+
+    const eoSettlement = await insertSettlementWithRetry(knex, async () => ({
+      ...eoSettlementBasePayload,
+      settlement_number: await generateV2Number(knex, driver, 'equipment_owner')
+    }));
 
     // EO load items (owner's revenue share)
     for (const load of eligibleLoads) {
