@@ -885,6 +885,20 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
                   tolls: expense.toll_responsibility || '',
                   repairs: expense.repairs_responsibility || ''
                 };
+                // FN-567: restore split config so deduction auto-fill has per-category amounts
+                this.expenseSplitType = expense.split_type || '';
+                const rules = expense.custom_rules || {};
+                if (rules.percentages) {
+                  this.sharedExpensePercentages = { fuel: 50, tolls: 50, repairs: 50, ...rules.percentages };
+                }
+                if (rules.fixedAmounts) {
+                  this.sharedExpenseFixedAmounts = {
+                    insurance: { driver: 0, owner: 0 },
+                    eld: { driver: 0, owner: 0 },
+                    trailerRent: { driver: 0, owner: 0 },
+                    ...rules.fixedAmounts
+                  };
+                }
               }
             },
             error: () => {
@@ -1049,13 +1063,14 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       this.newRecurringDeduction.target = suggested[0];
     }
 
-    // FN-561: auto-fill amount for fixed expense categories from expense responsibility profile
+    // FN-561/FN-567: auto-fill amount for fixed expense categories from per-category config
     const fixedCategories = new Set(['insurance', 'eld', 'trailerRent']);
     if (fixedCategories.has(category) && this.expenseProfile) {
       const isDriver = this.newRecurringDeduction.target === 'primary';
-      const autoAmount = isDriver
-        ? Number(this.expenseProfile.driver_fixed_amount) || 0
-        : Number(this.expenseProfile.owner_fixed_amount) || 0;
+      const perCategory = this.sharedExpenseFixedAmounts[category];
+      const autoAmount = perCategory
+        ? (isDriver ? Number(perCategory.driver) || 0 : Number(perCategory.owner) || 0)
+        : 0;
       this.newRecurringDeduction.amount = autoAmount || null;
       this.deductionAmountDirty = false; // FN-563: fresh auto-fill; user has not yet manually edited
     }
@@ -1094,12 +1109,14 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
 
     let configuredAmount: number | null = null;
     if (fixedCategories.has(category)) {
-      configuredAmount = isDriver
-        ? Number(this.expenseProfile.driver_fixed_amount) || 0
-        : Number(this.expenseProfile.owner_fixed_amount) || 0;
+      // FN-567: read per-category amount from sharedExpenseFixedAmounts (populated from custom_rules on load)
+      const perCategory = this.sharedExpenseFixedAmounts[category];
+      configuredAmount = perCategory
+        ? (isDriver ? Number(perCategory.driver) || 0 : Number(perCategory.owner) || 0)
+        : 0;
     } else if (variableCategories.has(category)) {
-      // driver_percentage from profile; EO gets remainder (100 - driver%)
-      const driverPct = Number(this.expenseProfile.driver_percentage) || 0;
+      // FN-567: read per-category percentage from sharedExpensePercentages
+      const driverPct = this.sharedExpensePercentages[category] ?? 50;
       configuredAmount = isDriver ? driverPct : Math.max(0, 100 - driverPct);
     }
 
@@ -1814,7 +1831,15 @@ export class DispatchDriversComponent implements OnInit, OnDestroy {
       toll_responsibility: this.expenseResponsibility['tolls'] || null,
       repairs_responsibility: this.expenseResponsibility['repairs'] || null,
       effective_start_date: this.newDriver.effectiveStart || new Date().toISOString().slice(0, 10),
-      effective_end_date: this.newDriver.effectiveEnd || null
+      effective_end_date: this.newDriver.effectiveEnd || null,
+      // FN-567: persist split config so deduction auto-fill works after page reload
+      split_type: this.expenseSplitType || null,
+      driver_percentage: this.expenseSplitType === 'shared'
+        ? Math.round(((this.sharedExpensePercentages['fuel'] ?? 50) + (this.sharedExpensePercentages['tolls'] ?? 50) + (this.sharedExpensePercentages['repairs'] ?? 50)) / 3)
+        : null,
+      custom_rules: this.expenseSplitType === 'shared'
+        ? { percentages: { ...this.sharedExpensePercentages }, fixedAmounts: { ...this.sharedExpenseFixedAmounts } }
+        : null
     };
 
     this.apiService.saveExpenseResponsibility(driverId, payload).subscribe({
