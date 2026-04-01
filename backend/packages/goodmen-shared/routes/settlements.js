@@ -15,6 +15,9 @@ const {
   getSettlementPdfFileName
 } = require('../services/settlement-pdf.service');
 const {
+  sendSettlementEmailReport
+} = require('../services/settlement-email.service');
+const {
   createDraftSettlement,
   recalcAndUpdateSettlement,
   applyVariableExpenseToSettlement,
@@ -1624,26 +1627,50 @@ router.get('/settlements/:id/pdf/download', requireRole(settlementRoles), async 
 // ---------- Send settlement email (Phase 4) ----------
 router.post('/settlements/:id/send-email', requireRole(settlementRoles), async (req, res) => {
   try {
-    const settlement = await knex('settlements').where({ id: req.params.id }).first();
-    if (!settlement) return res.status(404).json({ error: 'Settlement not found' });
-    const { to_driver, to_additional_payee, cc_internal } = req.body;
-    const primaryPayee = await knex('payees').where({ id: settlement.primary_payee_id }).first();
-    const driver = await knex('drivers').where({ id: settlement.driver_id }).select('email').first();
-    const recipients = [];
-    if (to_driver !== false && driver?.email) recipients.push({ email: driver.email, role: 'driver' });
-    if (to_additional_payee && settlement.additional_payee_id) {
-      const addPayee = await knex('payees').where({ id: settlement.additional_payee_id }).first();
-      if (addPayee?.email) recipients.push({ email: addPayee.email, role: 'additional_payee' });
+    const payload = await getSettlementPdfContext(req.params.id);
+    if (!payload) return res.status(404).json({ error: 'Settlement not found' });
+
+    const pdfPayload = {
+      settlement: payload.settlement,
+      driver: payload.driver,
+      period: payload.period,
+      primaryPayee: payload.primaryPayee,
+      additionalPayee: payload.additionalPayee,
+      loadItems: payload.loadItems,
+      adjustmentItems: payload.adjustmentItems,
+      truck: payload.truck,
+      equipmentOwner: payload.equipmentOwner,
+      operatingEntity: payload.operatingEntity,
+      tenant: payload.tenant
+    };
+    const pdfBuffer = await buildSettlementPdf(pdfPayload);
+    const fileName = getSettlementPdfFileName(pdfPayload);
+
+    const emailResult = await sendSettlementEmailReport({
+      payload: pdfPayload,
+      options: req.body || {},
+      pdfBuffer,
+      fileName
+    });
+
+    if (!emailResult?.sent) {
+      const status = emailResult?.reason === 'no_recipients'
+        ? 400
+        : emailResult?.error && String(emailResult.error).toLowerCase().includes('not configured')
+          ? 503
+          : 502;
+      return res.status(status).json({
+        success: false,
+        error: emailResult?.error || 'Failed to send settlement email'
+      });
     }
-    if (primaryPayee?.email && !recipients.find((r) => r.email === primaryPayee.email)) {
-      recipients.push({ email: primaryPayee.email, role: 'primary_payee' });
-    }
-    // Placeholder: actual SendGrid/mail send would go here; return payload for UI to show "email sent" or integrate with existing email service
+
     res.json({
       success: true,
-      message: 'Email send requested',
-      recipients,
-      note: 'Configure SendGrid or mail service to send settlement PDF/link to recipients.'
+      message: 'Settlement email sent',
+      recipients: emailResult.recipients || [],
+      cc_recipients: emailResult.ccRecipients || [],
+      file_name: fileName
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
