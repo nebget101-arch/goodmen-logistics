@@ -7,6 +7,7 @@ const {
   resolveRecurringDeductionBackfillStartDate,
   resolveScheduledDeductionAmount,
   resolveVariableExpenseSplit,
+  resolveVariableExpenseShares,
   shouldApplyRecurringDeductionForSettlement,
   shouldApplyRecurringDeductionToSettlementSide,
   shouldIncludeRecurringDeductionRule,
@@ -306,6 +307,59 @@ describe('resolveVariableExpenseSplit', () => {
     assert.strictEqual(split.driverAmount, 0);
     assert.strictEqual(split.ownerAmount, 245);
     assert.strictEqual(split.chargeParty, 'owner');
+  });
+});
+
+describe('resolveVariableExpenseShares', () => {
+  it('uses custom fuel split percentages for paired settlements', () => {
+    const shares = resolveVariableExpenseShares(
+      'fuel',
+      {
+        fuel_responsibility: 'shared',
+        custom_rules: {
+          fuel_split_percentage: 50
+        }
+      },
+      915.89,
+      false
+    );
+
+    assert.strictEqual(shares.driverAmount, 457.95);
+    assert.strictEqual(shares.ownerAmount, 457.95);
+    assert.strictEqual(shares.chargeParty, 'shared');
+  });
+
+  it('routes owner-only variable expenses entirely to the owner side', () => {
+    const shares = resolveVariableExpenseShares(
+      'fuel',
+      {
+        fuel_responsibility: 'owner'
+      },
+      300,
+      false
+    );
+
+    assert.strictEqual(shares.driverAmount, 0);
+    assert.strictEqual(shares.ownerAmount, 300);
+    assert.strictEqual(shares.chargeParty, 'owner');
+  });
+
+  it('keeps owner-operator variable expenses on the driver settlement', () => {
+    const shares = resolveVariableExpenseShares(
+      'fuel',
+      {
+        fuel_responsibility: 'shared',
+        custom_rules: {
+          fuel_split_percentage: 50
+        }
+      },
+      915.89,
+      true
+    );
+
+    assert.strictEqual(shares.driverAmount, 915.89);
+    assert.strictEqual(shares.ownerAmount, 0);
+    assert.strictEqual(shares.chargeParty, 'driver');
   });
 });
 
