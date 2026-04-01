@@ -16,6 +16,8 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   settlementId: string | null = null;
   loading = false;
   saving = false;
+  downloadingPdf = false;
+  emailingSettlement = false;
   error = '';
   successMessage = '';
   activeOperatingEntityName = '';
@@ -140,6 +142,14 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
       });
   }
 
+  private updateEmailDefaults(): void {
+    this.emailOptions = {
+      to_driver: !this.isEoSettlement(),
+      to_additional_payee: this.isEoSettlement(),
+      cc_internal: false
+    };
+  }
+
   loadCategories(): void {
     forkJoin({
       expense: this.categoriesService.getFlatCategories('expense'),
@@ -247,6 +257,7 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
         });
 
         this.buildBuckets(settlementRes?.adjustment_groups || null);
+        this.updateEmailDefaults();
         const settlementPeriodEnd = this.period?.period_end || settlementRes?.period_end || this.settlement?.date || null;
         this.loadScheduledDeductionWarning(
           driverIdForFallback,
@@ -686,19 +697,19 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   }
 
   sendEmail(): void {
-    if (!this.settlementId || this.saving) return;
-    this.saving = true;
+    if (!this.settlementId || this.emailingSettlement) return;
+    this.emailingSettlement = true;
     this.error = '';
     this.successMessage = '';
     this.apiService.sendSettlementEmail(this.settlementId, this.emailOptions).subscribe({
       next: (res: any) => {
         const count = Array.isArray(res?.recipients) ? res.recipients.length : 0;
-        this.successMessage = `Email request sent (${count} recipient${count === 1 ? '' : 's'}).`;
-        this.saving = false;
+        this.successMessage = `${this.getEmailActionLabel()} requested (${count} recipient${count === 1 ? '' : 's'}).`;
+        this.emailingSettlement = false;
       },
       error: (err) => {
         this.error = err?.error?.error || err?.message || 'Failed to send settlement email';
-        this.saving = false;
+        this.emailingSettlement = false;
       }
     });
   }
@@ -729,14 +740,14 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   }
 
   downloadSettlementPdf(): void {
-    if (!this.settlementId || this.saving) return;
-    this.saving = true;
+    if (!this.settlementId || this.downloadingPdf) return;
+    this.downloadingPdf = true;
     this.error = '';
     this.successMessage = '';
 
     this.apiService.downloadSettlementPdfBlob(this.settlementId).subscribe({
       next: (blob: Blob) => {
-        const fileName = `${this.getSettlementNumberDisplay()}.pdf`;
+        const fileName = `${this.getSettlementExportName()}.pdf`;
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -745,14 +756,58 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
-        this.successMessage = 'Settlement PDF downloaded.';
-        this.saving = false;
+        this.successMessage = `${this.getPdfActionLabel()} downloaded.`;
+        this.downloadingPdf = false;
       },
       error: (err) => {
         this.error = err?.error?.error || err?.message || 'Failed to download settlement PDF';
-        this.saving = false;
+        this.downloadingPdf = false;
       }
     });
+  }
+
+  isActionBusy(): boolean {
+    return this.downloadingPdf || this.emailingSettlement;
+  }
+
+  getPdfActionLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner PDF' : 'Driver PDF';
+  }
+
+  getEmailActionLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner settlement email' : 'Driver settlement email';
+  }
+
+  getExportButtonLabel(): string {
+    return this.downloadingPdf ? 'Exporting…' : 'Export PDF';
+  }
+
+  getEmailButtonLabel(): string {
+    return this.emailingSettlement ? 'Sending…' : 'Email Settlement';
+  }
+
+  getSettlementExportName(): string {
+    const number = this.settlement?.settlement_number || this.getSettlementNumberDisplay();
+    const type = this.isEoSettlement() ? 'equipment-owner' : 'driver';
+    return `${number}-${type}`.replace(/[^a-zA-Z0-9._-]+/g, '-');
+  }
+
+  getEmailSectionTitle(): string {
+    return this.isEoSettlement() ? 'Email equipment owner settlement' : 'Email driver settlement';
+  }
+
+  getEmailPrimaryOptionLabel(): string {
+    return this.isEoSettlement() ? 'Send to equipment owner payee' : 'Send to driver';
+  }
+
+  getEmailSecondaryOptionLabel(): string {
+    return this.isEoSettlement() ? 'Send copy to driver reference' : 'Send to equipment owner';
+  }
+
+  getEmailHelpText(): string {
+    return this.isEoSettlement()
+      ? 'Choose who should receive the equipment owner settlement report and any internal copy.'
+      : 'Choose who should receive the driver settlement report and any internal copy.';
   }
 
   getDataSourceLabel(): string {
