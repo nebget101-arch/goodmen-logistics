@@ -1,8 +1,11 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
 const {
+  getExpenseResponsibilityFieldForSourceType,
   normalizeRecurringDeductionPayeeIds,
+  resolveSpecificExpenseResponsibility,
   resolveRecurringDeductionBackfillStartDate,
+  shouldApplyRecurringDeductionForSettlement,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
 } = require('./settlement-recurring-deductions');
@@ -140,6 +143,57 @@ describe('resolveRecurringDeductionBackfillStartDate', () => {
         }
       ),
       null
+    );
+  });
+});
+
+describe('specific expense helpers', () => {
+  it('maps source types to expense responsibility fields', () => {
+    assert.strictEqual(getExpenseResponsibilityFieldForSourceType('insurance'), 'insurance_responsibility');
+    assert.strictEqual(getExpenseResponsibilityFieldForSourceType('trailer_rent'), 'trailer_rent_responsibility');
+    assert.strictEqual(getExpenseResponsibilityFieldForSourceType('unknown'), null);
+  });
+
+  it('derives missing expense responsibility from the active expense profile', () => {
+    assert.strictEqual(
+      resolveSpecificExpenseResponsibility(
+        { applies_when: 'specific_expense', source_type: 'insurance', expense_responsibility: null },
+        { insurance_responsibility: 'shared' }
+      ),
+      'shared'
+    );
+  });
+
+  it('applies specific expense rules to the driver side for shared expense responsibility', () => {
+    assert.strictEqual(
+      shouldApplyRecurringDeductionForSettlement(
+        { applies_when: 'specific_expense', source_type: 'insurance', expense_responsibility: null },
+        'primary_payee',
+        { expenseProfile: { insurance_responsibility: 'shared' } }
+      ),
+      true
+    );
+  });
+
+  it('applies specific expense rules to the owner side for owner responsibility', () => {
+    assert.strictEqual(
+      shouldApplyRecurringDeductionForSettlement(
+        { applies_when: 'specific_expense', source_type: 'trailer_rent', expense_responsibility: null },
+        'additional_payee',
+        { expenseProfile: { trailer_rent_responsibility: 'owner' } }
+      ),
+      true
+    );
+  });
+
+  it('skips specific expense rules when the inferred responsibility does not match the settlement side', () => {
+    assert.strictEqual(
+      shouldApplyRecurringDeductionForSettlement(
+        { applies_when: 'specific_expense', source_type: 'insurance', expense_responsibility: null },
+        'primary_payee',
+        { expenseProfile: { insurance_responsibility: 'owner' } }
+      ),
+      false
     );
   });
 });

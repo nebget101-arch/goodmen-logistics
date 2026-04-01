@@ -20,8 +20,11 @@ const {
   resolveEligibleLoadDate
 } = require('./settlement-load-dates');
 const {
+  getExpenseResponsibilityFieldForSourceType,
   normalizeRecurringDeductionPayeeIds,
+  resolveSpecificExpenseResponsibility,
   resolveRecurringDeductionBackfillStartDate,
+  shouldApplyRecurringDeductionForSettlement,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
 } = require('./settlement-recurring-deductions');
@@ -212,6 +215,22 @@ async function getActivePayeeAssignment(knex, driverId, asOfDate) {
       this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [d]);
     })
     .orderBy('effective_start_date', 'desc')
+    .first();
+  return row || null;
+}
+
+async function getActiveExpenseResponsibilityProfile(knex, driverId, asOfDate) {
+  const d = toDateOnly(asOfDate) || toDateOnly(new Date());
+  const row = await knex('expense_responsibility_profiles')
+    .where({ driver_id: driverId })
+    .whereRaw('effective_start_date <= ?', [d])
+    .where(function () {
+      this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [d]);
+    })
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
     .first();
   return row || null;
 }
@@ -890,6 +909,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       });
     }
 
+    const expenseProfile = await getActiveExpenseResponsibilityProfile(knex, driverId, period.period_end);
     const recurring = await getRecurringDeductionsForPeriod(
       knex,
       driverId,
@@ -908,6 +928,23 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       });
       if (!applyTo) {
         continue;
+      }
+      if (!shouldApplyRecurringDeductionForSettlement(rule, applyTo, {
+        expenseProfile,
+        hasLoadItems: eligibleLoads.length > 0
+      })) {
+        continue;
+      }
+      const inferredExpenseResponsibility = resolveSpecificExpenseResponsibility(rule, expenseProfile);
+      const responsibilityField = getExpenseResponsibilityFieldForSourceType(rule.source_type);
+      if (inferredExpenseResponsibility && !rule.expense_responsibility && responsibilityField) {
+        await knex('recurring_deduction_rules')
+          .where({ id: rule.id })
+          .update({
+            expense_responsibility: inferredExpenseResponsibility,
+            updated_at: knex.fn.now()
+          });
+        rule.expense_responsibility = inferredExpenseResponsibility;
       }
 
       await knex('settlement_adjustment_items').insert({
@@ -1025,6 +1062,11 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
     : null;
 
   if (period) {
+    const expenseProfile = await getActiveExpenseResponsibilityProfile(
+      knex,
+      settlement.driver_id,
+      period.period_end || settlement.date || asOf
+    );
     const excludedScheduledRows = await knex('settlement_adjustment_items')
       .where({ settlement_id: settlementId, source_type: 'scheduled_rule_removed' })
       .select('source_reference_id', 'apply_to');
@@ -1070,6 +1112,23 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
       });
       if (!applyTo) {
         continue;
+      }
+      if (!shouldApplyRecurringDeductionForSettlement(rule, applyTo, {
+        expenseProfile,
+        hasLoadItems: false
+      })) {
+        continue;
+      }
+      const inferredExpenseResponsibility = resolveSpecificExpenseResponsibility(rule, expenseProfile);
+      const responsibilityField = getExpenseResponsibilityFieldForSourceType(rule.source_type);
+      if (inferredExpenseResponsibility && !rule.expense_responsibility && responsibilityField) {
+        await knex('recurring_deduction_rules')
+          .where({ id: rule.id })
+          .update({
+            expense_responsibility: inferredExpenseResponsibility,
+            updated_at: knex.fn.now()
+          });
+        rule.expense_responsibility = inferredExpenseResponsibility;
       }
 
       const exclusionKey = `${rule.id}|${applyTo}`;
