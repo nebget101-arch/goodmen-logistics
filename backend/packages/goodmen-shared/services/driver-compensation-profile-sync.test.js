@@ -3,7 +3,8 @@ const assert = require('node:assert');
 const {
   hasDriverCompensationUpdate,
   pickLatestEquipmentOwnerPercentage,
-  resolveCompensationProfileEffectiveStartDate
+  resolveCompensationProfileEffectiveStartDate,
+  mergeCompensationProfileWithFallback
 } = require('./driver-compensation-profile-sync');
 
 describe('hasDriverCompensationUpdate', () => {
@@ -63,5 +64,49 @@ describe('resolveCompensationProfileEffectiveStartDate', () => {
     );
 
     assert.strictEqual(effectiveStart, '2026-04-01');
+  });
+});
+
+describe('mergeCompensationProfileWithFallback', () => {
+  it('backfills missing EO percentage from the latest known profile', () => {
+    const merged = mergeCompensationProfileWithFallback(
+      {
+        id: 'period-profile',
+        pay_model: 'percentage',
+        percentage_rate: 44,
+        equipment_owner_percentage: null
+      },
+      {
+        id: 'latest-profile',
+        pay_model: 'percentage',
+        percentage_rate: 44,
+        equipment_owner_percentage: 44
+      },
+      { pay_percentage: 44 }
+    );
+
+    assert.strictEqual(merged.equipment_owner_percentage, 44);
+    assert.strictEqual(merged.percentage_rate, 44);
+  });
+
+  it('backfills missing percentage rate from the driver row for percentage pay', () => {
+    const merged = mergeCompensationProfileWithFallback(
+      {
+        id: 'period-profile',
+        pay_model: 'percentage',
+        percentage_rate: 0,
+        equipment_owner_percentage: null
+      },
+      {
+        id: 'latest-profile',
+        pay_model: 'percentage',
+        percentage_rate: null,
+        equipment_owner_percentage: 44
+      },
+      { pay_percentage: 44 }
+    );
+
+    assert.strictEqual(merged.percentage_rate, 44);
+    assert.strictEqual(merged.equipment_owner_percentage, 44);
   });
 });
