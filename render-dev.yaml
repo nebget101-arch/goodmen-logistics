@@ -407,9 +407,9 @@ services:
 
   - type: pserv
     name: signoz-clickhouse-dev
-    runtime: docker
-    branch: dev
-    dockerfilePath: infra/signoz/Dockerfile.clickhouse
+    runtime: image
+    image:
+      url: clickhouse/clickhouse-server:24.1
     plan: standard
     disk:
       name: clickhouse-data-dev
@@ -425,9 +425,9 @@ services:
 
   - type: web
     name: signoz-otel-collector-dev
-    runtime: docker
-    branch: dev
-    dockerfilePath: infra/signoz/Dockerfile.otel-collector
+    runtime: image
+    image:
+      url: signoz/signoz-otel-collector:0.102.12
     plan: starter
     envVars:
       - key: CLICKHOUSE_HOST
@@ -446,9 +446,9 @@ services:
 
   - type: web
     name: signoz-dashboard-dev
-    runtime: docker
-    branch: dev
-    dockerfilePath: infra/signoz/Dockerfile.query-service
+    runtime: image
+    image:
+      url: signoz/query-service:0.53.0
     plan: starter
     envVars:
       - key: CLICKHOUSE_HOST
