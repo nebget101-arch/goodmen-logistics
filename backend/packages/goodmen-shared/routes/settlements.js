@@ -1349,7 +1349,12 @@ router.get('/settlements/:id', requireRole(settlementRoles), async (req, res) =>
     const truck = settlement.truck_id
       ? await knex('vehicles')
         .where({ id: settlement.truck_id })
-        .select('id', 'unit_number', 'plate_number', 'equipment_owner_id')
+        .select(
+          'id',
+          'unit_number',
+          'equipment_owner_id',
+          knex.raw('license_plate as plate_number')
+        )
         .first()
       : null;
 
