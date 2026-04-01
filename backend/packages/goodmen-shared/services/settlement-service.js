@@ -129,7 +129,10 @@ async function getActiveCompensationProfile(knex, driverId, asOfDate) {
     .where(function () {
       this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [d]);
     })
-    .orderBy('effective_start_date', 'desc')
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
     .first();
   return row || null;
 }
@@ -214,7 +217,10 @@ async function getActivePayeeAssignment(knex, driverId, asOfDate) {
     .where(function () {
       this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [d]);
     })
-    .orderBy('effective_start_date', 'desc')
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
     .first();
   return row || null;
 }
@@ -1009,7 +1015,10 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
       // Fallback to latest profile
       profile = await knex('driver_compensation_profiles')
         .where({ driver_id: settlement.driver_id, status: 'active' })
-        .orderBy('effective_start_date', 'desc')
+        .orderBy([
+          { column: 'effective_start_date', order: 'desc' },
+          { column: 'created_at', order: 'desc' }
+        ])
         .first();
     }
     effectiveCompensationProfileId = profile?.id || null;
@@ -1020,7 +1029,10 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
   if (!payeeAssignment) {
     payeeAssignment = await knex('driver_payee_assignments')
       .where({ driver_id: settlement.driver_id })
-      .orderBy('effective_start_date', 'desc')
+      .orderBy([
+        { column: 'effective_start_date', order: 'desc' },
+        { column: 'created_at', order: 'desc' }
+      ])
       .first();
   }
   const effectivePrimaryPayeeId = settlement.primary_payee_id || payeeAssignment?.primary_payee_id || null;
