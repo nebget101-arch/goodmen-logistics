@@ -31,7 +31,7 @@
             <th scope="col">Settlement #</th>
             <th scope="col">Type</th>
             <th scope="col">Period</th>
-            <th scope="col">Driver</th>
+            <th scope="col">Payable To</th>
             <th scope="col">Equipment Owner</th>
             <th scope="col">Status</th>
             <th scope="col">Gross</th>
@@ -42,8 +42,8 @@
             <th scope="col">Actions</th>
           </tr>
           <tr class="header-filters">
-            <th></th>
-            <th>
+            <th scope="col"></th>
+            <th scope="col">
               <app-ai-select
                 [options]="settlementTypeOptions"
                 [ngModel]="filters.settlementType"
@@ -53,10 +53,10 @@
                 placeholder="All"
               ></app-ai-select>
             </th>
-            <th>
+            <th scope="col">
               <input type="week" [(ngModel)]="filters.weekStart" (change)="loadSettlements()" placeholder="Week" />
             </th>
-            <th>
+            <th scope="col">
               <app-ai-select
                 [options]="driverSelectOptions"
                 [ngModel]="filters.driverId"
@@ -66,8 +66,8 @@
                 placeholder="All"
               ></app-ai-select>
             </th>
-            <th></th>
-            <th>
+            <th scope="col"></th>
+            <th scope="col">
               <app-ai-select
                 [options]="statusSelectOptions"
                 [ngModel]="filters.status"
@@ -77,28 +77,33 @@
                 placeholder="All"
               ></app-ai-select>
             </th>
-            <th></th>
-            <th></th>
-            <th></th>
-            <th></th>
-            <th></th>
-            <th></th>
+            <th scope="col"></th>
+            <th scope="col"></th>
+            <th scope="col"></th>
+            <th scope="col"></th>
+            <th scope="col"></th>
+            <th scope="col"></th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let s of settlements">
             <td><span class="cell-settlement-num">{{ s.settlementNumber }}</span></td>
             <td>
-              <span class="badge" [ngClass]="getTypeClass(s.settlementType)" *ngIf="s.settlementType; else noType">{{ getTypeLabel(s.settlementType) }}</span>
-              <ng-template #noType><span class="text-muted">—</span></ng-template>
+              <span class="badge" [ngClass]="getTypeClass(s.settlementType)">{{ getTypeLabel(s.settlementType) }}</span>
             </td>
             <td>{{ s.periodStart }} – {{ s.periodEnd }}</td>
-            <td>{{ s.driverName }}</td>
+            <td>
+              <div>{{ getPayeeSummary(s) }}</div>
+              <div class="text-muted list-subtext">{{ s.driverName }}</div>
+            </td>
             <td>{{ s.equipmentOwnerName || '—' }}</td>
             <td><span class="badge" [ngClass]="getStatusClass(s.status)">{{ getStatusLabel(s.status) }}</span></td>
             <td class="cell-amount">${{ s.gross | number:'1.2-2' }}</td>
             <td class="cell-amount">${{ s.deductions | number:'1.2-2' }}</td>
-            <td class="cell-amount">${{ s.netDriver | number:'1.2-2' }}</td>
+            <td class="cell-amount">
+              <div>${{ getNetPayValue(s) | number:'1.2-2' }}</div>
+              <div class="text-muted list-subtext">{{ getNetPayLabel(s) }}</div>
+            </td>
             <td class="cell-amount" [class.cell-carried]="s.carriedBalance > 0">
               <span *ngIf="s.carriedBalance > 0" class="carried-flag">↑ ${{ s.carriedBalance | number:'1.2-2' }}</span>
               <span *ngIf="s.carriedBalance === 0">—</span>

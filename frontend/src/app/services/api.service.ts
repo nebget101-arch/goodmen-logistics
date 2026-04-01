@@ -242,12 +242,21 @@ export class ApiService {
   }
 
   // Settlements (payroll)
-  listSettlements(filters?: { driver_id?: string; payroll_period_id?: string; settlement_status?: string; settlement_number?: string; limit?: number; offset?: number }): Observable<any> {
+  listSettlements(filters?: {
+    driver_id?: string;
+    payroll_period_id?: string;
+    settlement_status?: string;
+    settlement_type?: string;
+    settlement_number?: string;
+    limit?: number;
+    offset?: number;
+  }): Observable<any> {
     let url = `${this.baseUrl}/settlements/settlements`;
     const params = new URLSearchParams();
     if (filters?.driver_id) params.set('driver_id', filters.driver_id);
     if (filters?.payroll_period_id) params.set('payroll_period_id', filters.payroll_period_id);
     if (filters?.settlement_status) params.set('settlement_status', filters.settlement_status);
+    if (filters?.settlement_type) params.set('settlement_type', filters.settlement_type);
     if (filters?.settlement_number) params.set('settlement_number', filters.settlement_number);
     if (filters?.limit != null) params.set('limit', String(filters.limit));
     if (filters?.offset != null) params.set('offset', String(filters.offset));
@@ -295,6 +304,10 @@ export class ApiService {
       period: src?.period || settlement?.period || null,
       primary_payee: src?.primary_payee || settlement?.primary_payee || null,
       additional_payee: src?.additional_payee || settlement?.additional_payee || null,
+      truck: src?.truck || settlement?.truck || null,
+      equipment_owner: src?.equipment_owner || settlement?.equipment_owner || null,
+      paired_settlement_id: src?.paired_settlement_id ?? settlement?.paired_settlement_id ?? null,
+      paired_settlement: src?.paired_settlement || settlement?.paired_settlement || null,
       adjustment_groups: adjustmentGroups
     };
 
