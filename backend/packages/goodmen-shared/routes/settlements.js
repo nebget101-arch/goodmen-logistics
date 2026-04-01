@@ -5,6 +5,7 @@
  */
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const authMiddleware = require('../middleware/auth-middleware');
 const tenantContextMiddleware = require('../middleware/tenant-context-middleware');
 const knex = require('../config/knex');
@@ -40,11 +41,64 @@ const {
 } = require('../services/settlement-recurring-deductions');
 const { getClient } = require('../internal/db');
 
+async function lookupZipLatLon(zip) {
+  const trimmed = (zip || '').toString().trim();
+  if (!trimmed) return null;
+  try {
+    const response = await axios.get(`https://api.zippopotam.us/us/${encodeURIComponent(trimmed)}`);
+    const place = response.data?.places?.[0];
+    if (!place) return null;
+    const lat = parseFloat(place.latitude);
+    const lon = parseFloat(place.longitude);
+    if (Number.isNaN(lat) || Number.isNaN(lon)) return null;
+    return { lat, lon };
+  } catch (_err) {
+    return null;
+  }
+}
+
+async function getDrivingDistanceMiles(fromZip, toZip) {
+  const from = await lookupZipLatLon(fromZip);
+  const to = await lookupZipLatLon(toZip);
+  if (!from || !to) return 0;
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false`;
+    const response = await axios.get(url);
+    const meters = response.data?.routes?.[0]?.distance;
+    if (typeof meters !== 'number' || meters <= 0) return 0;
+    return Math.round(meters / 1609.34);
+  } catch (_err) {
+    return 0;
+  }
+}
+
+async function hydrateSettlementLoadTripMetrics(loadItems) {
+  const items = Array.isArray(loadItems) ? loadItems : [];
+  if (!items.length) return items;
+
+  return Promise.all(items.map(async (item) => {
+    if (item?.empty_miles !== null && item?.empty_miles !== undefined && item?.empty_miles !== '') {
+      return item;
+    }
+
+    const pickupZip = (item?.pickup_zip || '').toString().trim();
+    const prevZip = (item?.prev_delivery_zip || '').toString().trim();
+    const emptyMiles = pickupZip && prevZip && pickupZip !== prevZip
+      ? await getDrivingDistanceMiles(prevZip, pickupZip)
+      : 0;
+
+    return {
+      ...item,
+      empty_miles: emptyMiles
+    };
+  }));
+}
+
 async function getSettlementPdfContext(settlementId) {
   const settlement = await knex('settlements').where({ id: settlementId }).first();
   if (!settlement) return null;
 
-  const loadItems = await knex('settlement_load_items as sli')
+  const rawLoadItems = await knex('settlement_load_items as sli')
     .join('loads as l', 'l.id', 'sli.load_id')
     .where('sli.settlement_id', settlementId)
     .select(
@@ -53,6 +107,14 @@ async function getSettlementPdfContext(settlementId) {
       'l.pickup_location',
       'l.delivery_location',
       'sli.loaded_miles',
+      knex.raw(`(
+        SELECT ls.zip
+        FROM load_stops ls
+        WHERE ls.load_id = l.id
+          AND ls.stop_type = 'PICKUP'
+        ORDER BY COALESCE(ls.sequence, 999999) ASC, ls.created_at ASC
+        LIMIT 1
+      ) as pickup_zip`),
       knex.raw(`(
         SELECT ls.city
         FROM load_stops ls
@@ -84,8 +146,31 @@ async function getSettlementPdfContext(settlementId) {
           AND ls.stop_type = 'DELIVERY'
         ORDER BY COALESCE(ls.sequence, -1) DESC, ls.created_at DESC
         LIMIT 1
-      ) as delivery_state`)
+      ) as delivery_state`),
+      knex.raw(`(
+        SELECT ls.zip
+        FROM load_stops ls
+        WHERE ls.load_id = l.id
+          AND ls.stop_type = 'DELIVERY'
+        ORDER BY COALESCE(ls.sequence, -1) DESC, ls.created_at DESC
+        LIMIT 1
+      ) as delivery_zip`),
+      knex.raw(`(
+        SELECT prev_stop.zip
+        FROM loads prev_load
+        JOIN load_stops prev_stop ON prev_stop.load_id = prev_load.id
+        WHERE prev_load.driver_id = l.driver_id
+          AND prev_load.id <> l.id
+          AND prev_stop.stop_type = 'DELIVERY'
+          AND COALESCE(prev_stop.stop_date, prev_load.completed_date, prev_load.created_at) <=
+              COALESCE(sli.pickup_date, l.created_at)
+        ORDER BY COALESCE(prev_stop.stop_date, prev_load.completed_date, prev_load.created_at) DESC,
+                 prev_load.created_at DESC
+        LIMIT 1
+      ) as prev_delivery_zip`)
     );
+
+  const loadItems = await hydrateSettlementLoadTripMetrics(rawLoadItems);
 
   const rawAdjustmentItems = await knex('settlement_adjustment_items')
     .where({ settlement_id: settlementId })

@@ -576,27 +576,32 @@ function getPreparedRow(fonts, columns, row, options = {}) {
 
 function drawTableHeader(state, columns) {
   const topY = state.y;
+  const size = 7;
+  const padding = 4;
+  const lineHeight = 8;
+  const headerLines = columns.map((column) => (
+    wrapTextToWidth(state.fonts.bold, column.label, size, column.width - padding * 2)
+  ));
+  const headerHeight = Math.max(...headerLines.map((lines) => lines.length), 1) * lineHeight + padding * 2;
   state.page.drawRectangle({
     x: LAYOUT.marginLeft,
-    y: topY - 20,
+    y: topY - headerHeight - 2,
     width: LAYOUT.contentWidth,
-    height: 18,
+    height: headerHeight,
     color: COLORS.accentSoft
   });
 
   let cursorX = LAYOUT.marginLeft;
-  for (const column of columns) {
-    state.page.drawText(column.label, {
-      x: cursorX + 4,
-      y: topY - 14,
-      size: 7,
-      font: state.fonts.bold,
+  columns.forEach((column, index) => {
+    drawWrappedLines(state.page, state.fonts.bold, headerLines[index], cursorX + padding, topY - 10, {
+      size,
+      lineHeight,
       color: COLORS.white
     });
     cursorX += column.width;
-  }
+  });
 
-  state.y = topY - 24;
+  state.y = topY - headerHeight - 6;
 }
 
 function drawTableRow(state, columns, preparedRow, index, options = {}) {
@@ -749,13 +754,13 @@ async function buildSettlementPdf(payload) {
     state,
     'Load Earnings',
     [
-      { label: 'Load', width: 48 },
-      { label: 'Dates', width: 84 },
-      { label: 'Load Details', width: 170 },
-      { label: 'Empty Miles', width: 52 },
-      { label: 'Loaded Miles', width: 56 },
-      { label: 'Gross Pay', width: 60 },
-      { label: getHighlightedPayLabel(payload), width: 70, bold: true }
+      { label: 'Load', width: 42 },
+      { label: 'Dates', width: 78 },
+      { label: 'Load Details', width: 156 },
+      { label: 'Empty Miles', width: 56 },
+      { label: 'Loaded Miles', width: 60 },
+      { label: 'Gross Pay', width: 56 },
+      { label: getHighlightedPayLabel(payload), width: 92, bold: true }
     ],
     buildLoadRows(payload),
     {
