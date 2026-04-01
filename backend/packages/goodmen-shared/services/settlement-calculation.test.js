@@ -81,6 +81,19 @@ describe('computeLoadPay', () => {
     assert.strictEqual(driverPay, 1600);
     assert.strictEqual(additionalPayeePay, 100);
   });
+
+  it('allows company-retained remainder when driver and EO percentages do not sum to 100', () => {
+    const { driverPay, additionalPayeePay } = computeLoadPay({
+      payModel: 'percentage',
+      gross: 1700,
+      percentageRate: 44,
+      hasAdditionalPayee: true,
+      equipmentOwnerPercentage: 44
+    });
+
+    assert.strictEqual(driverPay, 748);
+    assert.strictEqual(additionalPayeePay, 748);
+  });
 });
 
 describe('computeSubtotals', () => {
