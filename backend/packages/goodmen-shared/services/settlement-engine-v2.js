@@ -12,6 +12,7 @@
 
 const { recalculateSettlementTotals } = require('./settlement-calculation');
 const {
+  getActivePayeeAssignment,
   getEligibleLoads,
   getRecurringDeductionsForPeriod
 } = require('./settlement-service');
@@ -122,6 +123,51 @@ function resolveSplitRatios(expenseProfile) {
   // For fixed_amount, we still use driver_percentage as the split ratio (owner gets remainder)
   const driverPct = Number(expenseProfile.driver_percentage ?? 100) / 100;
   return { driverPct, ownerPct: Math.max(0, 1 - driverPct) };
+}
+
+async function resolveSettlementPayees(knex, driver, period, truck, tenantId) {
+  const payeeAssignment = await getActivePayeeAssignment(knex, driver.id, period.period_end);
+
+  let primaryPayeeId = payeeAssignment?.primary_payee_id || null;
+  const additionalPayeeId = payeeAssignment?.additional_payee_id || null;
+
+  if (!primaryPayeeId) {
+    const driverPayee = await knex('payees')
+      .where({ type: 'driver', is_active: true })
+      .modify((qb) => applyTenantFilter(qb, { tenantId }))
+      .first();
+    if (driverPayee) primaryPayeeId = driverPayee.id;
+  }
+
+  if (!primaryPayeeId) {
+    const payeeName = [driver.first_name, driver.last_name]
+      .filter(Boolean)
+      .join(' ')
+      .trim() || `Driver ${String(driver.id).slice(0, 8)}`;
+    const [newPayee] = await knex('payees')
+      .insert({
+        tenant_id: tenantId,
+        type: 'driver',
+        name: payeeName,
+        is_active: true
+      })
+      .returning('id');
+    primaryPayeeId = newPayee.id;
+
+    const effectiveStartDate = toDateOnly(period.period_start) || toDateOnly(new Date());
+    await knex('driver_payee_assignments').insert({
+      tenant_id: tenantId,
+      driver_id: driver.id,
+      primary_payee_id: primaryPayeeId,
+      rule_type: 'company_truck',
+      effective_start_date: effectiveStartDate
+    });
+  }
+
+  return {
+    driverPrimaryPayeeId: primaryPayeeId,
+    equipmentOwnerPrimaryPayeeId: additionalPayeeId || truck?.equipment_owner_id || null
+  };
 }
 
 /**
@@ -352,6 +398,10 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     const compProfile = await getCompensationProfile(knex, driverId, periodEnd);
     const expenseProfile = await getExpenseProfile(knex, driverId, periodEnd);
     const { driverPct, ownerPct } = resolveSplitRatios(expenseProfile);
+    const {
+      driverPrimaryPayeeId,
+      equipmentOwnerPrimaryPayeeId
+    } = await resolveSettlementPayees(knex, driver, period, truck, tenantId);
 
     // --- 5. Get eligible loads ---
     const eligibleLoads = await getEligibleLoads(knex, client, driverId, periodStart, periodEnd, dateBasis, context);
@@ -399,6 +449,7 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
       payroll_period_id: payrollPeriodId,
       driver_id: driverId,
       compensation_profile_id: compProfile?.id ?? null,
+      primary_payee_id: driverPrimaryPayeeId,
       settlement_status: 'preparing',
       settlement_type: 'driver',
       truck_id: truckId,
@@ -507,8 +558,15 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
 
     const driverRecalc = await recalcV2Settlement(knex, driverSettlement.id);
 
-    // If driver is OO, no EO settlement needed
-    if (isOwnerOperator) {
+    const shouldCreateEquipmentOwnerSettlement = Boolean(
+      !isOwnerOperator
+      && truckId
+      && equipmentOwnerId
+      && equipmentOwnerPrimaryPayeeId
+    );
+
+    // Match the legacy flow: OO drivers and trucks without owner-payee wiring stay single-settlement.
+    if (!shouldCreateEquipmentOwnerSettlement) {
       const finalDriver = await knex('settlements').where({ id: driverSettlement.id }).first();
       return { driverSettlement: finalDriver, eoSettlement: null };
     }
@@ -536,6 +594,7 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
       payroll_period_id: payrollPeriodId,
       driver_id: driverId,
       compensation_profile_id: compProfile?.id ?? null,
+      primary_payee_id: equipmentOwnerPrimaryPayeeId,
       settlement_status: 'preparing',
       settlement_type: 'equipment_owner',
       truck_id: truckId,
