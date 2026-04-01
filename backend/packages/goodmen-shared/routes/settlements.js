@@ -47,11 +47,81 @@ async function getSettlementPdfContext(settlementId) {
   const loadItems = await knex('settlement_load_items as sli')
     .join('loads as l', 'l.id', 'sli.load_id')
     .where('sli.settlement_id', settlementId)
-    .select('sli.*', 'l.load_number');
+    .select(
+      'sli.*',
+      'l.load_number',
+      'l.pickup_location',
+      'l.delivery_location',
+      knex.raw(`COALESCE(sli.loaded_miles, l.loaded_miles) as loaded_miles`),
+      knex.raw(`(
+        SELECT ls.city
+        FROM load_stops ls
+        WHERE ls.load_id = l.id
+          AND ls.stop_type = 'PICKUP'
+        ORDER BY COALESCE(ls.sequence, 999999) ASC, ls.created_at ASC
+        LIMIT 1
+      ) as pickup_city`),
+      knex.raw(`(
+        SELECT ls.state
+        FROM load_stops ls
+        WHERE ls.load_id = l.id
+          AND ls.stop_type = 'PICKUP'
+        ORDER BY COALESCE(ls.sequence, 999999) ASC, ls.created_at ASC
+        LIMIT 1
+      ) as pickup_state`),
+      knex.raw(`(
+        SELECT ls.city
+        FROM load_stops ls
+        WHERE ls.load_id = l.id
+          AND ls.stop_type = 'DELIVERY'
+        ORDER BY COALESCE(ls.sequence, -1) DESC, ls.created_at DESC
+        LIMIT 1
+      ) as delivery_city`),
+      knex.raw(`(
+        SELECT ls.state
+        FROM load_stops ls
+        WHERE ls.load_id = l.id
+          AND ls.stop_type = 'DELIVERY'
+        ORDER BY COALESCE(ls.sequence, -1) DESC, ls.created_at DESC
+        LIMIT 1
+      ) as delivery_state`)
+    );
 
-  const adjustmentItems = await knex('settlement_adjustment_items')
+  const rawAdjustmentItems = await knex('settlement_adjustment_items')
     .where({ settlement_id: settlementId })
     .orderBy('created_at', 'asc');
+
+  const fuelTransactionIds = rawAdjustmentItems
+    .filter((item) => item?.source_type === 'imported_fuel' && item?.source_reference_id)
+    .map((item) => String(item.source_reference_id));
+
+  let fuelTransactionsById = new Map();
+  if (fuelTransactionIds.length) {
+    const fuelTransactions = await knex('fuel_transactions')
+      .whereIn('id', fuelTransactionIds)
+      .select(
+        'id',
+        'transaction_date',
+        'location_name',
+        'vendor_name',
+        'city',
+        'state',
+        'product_type',
+        'gallons',
+        'amount'
+      );
+
+    fuelTransactionsById = new Map(
+      fuelTransactions.map((fuel) => [String(fuel.id), fuel])
+    );
+  }
+
+  const adjustmentItems = rawAdjustmentItems.map((item) => ({
+    ...item,
+    fuel_transaction: item?.source_type === 'imported_fuel' && item?.source_reference_id
+      ? fuelTransactionsById.get(String(item.source_reference_id)) || null
+      : null
+  }));
 
   const driver = await knex('drivers')
     .where({ id: settlement.driver_id })
