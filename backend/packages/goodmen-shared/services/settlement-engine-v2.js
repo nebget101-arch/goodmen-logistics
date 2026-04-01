@@ -167,7 +167,8 @@ async function resolveSettlementPayees(knex, driver, period, truck, tenantId) {
 
   return {
     driverPrimaryPayeeId: primaryPayeeId,
-    equipmentOwnerPrimaryPayeeId: additionalPayeeId || truck?.equipment_owner_id || null
+    equipmentOwnerPrimaryPayeeId: additionalPayeeId || truck?.equipment_owner_id || null,
+    equipmentOwnerId: truck?.equipment_owner_id || additionalPayeeId || null
   };
 }
 
@@ -423,8 +424,13 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     const { driverPct, ownerPct } = resolveSplitRatios(expenseProfile);
     const {
       driverPrimaryPayeeId,
-      equipmentOwnerPrimaryPayeeId
+      equipmentOwnerPrimaryPayeeId,
+      equipmentOwnerId: resolvedEquipmentOwnerId
     } = await resolveSettlementPayees(knex, driver, period, truck, tenantId);
+
+    // Legacy owner routing can exist through active payee assignment even when the truck
+    // record has no explicit equipment_owner_id yet.
+    equipmentOwnerId = equipmentOwnerId || resolvedEquipmentOwnerId;
 
     const grossTotal = eligibleLoads.reduce((s, l) => s + (Number(l.rate) || 0), 0);
 
