@@ -742,7 +742,11 @@ describe('Phase 3 protected route smoke tests', () => {
       'middleware/auth-middleware.js': authModuleMock,
       'config/knex.js': () => ({ where() { return this; }, first() { return Promise.resolve(null); }, join() { return this; }, leftJoin() { return this; }, select() { return this; }, orderBy() { return this; }, raw() { return ''; } }),
       'storage/r2-storage.js': { uploadBuffer: async () => ({ key: 'unused' }), getSignedDownloadUrl: async () => 'url' },
-      'utils/settlement-pdf.js': { buildSettlementPdf: async () => Buffer.from('pdf') },
+      'services/settlement-pdf.service.js': {
+        buildSettlementPdf: async () => Buffer.from('pdf'),
+        getSettlementDisplayNumber: () => 'STL-TEST',
+        getSettlementPdfFileName: () => 'STL-TEST.pdf'
+      },
       'services/settlement-service.js': settlementService,
       'internal/db.js': { async getClient() { return { release() {} }; } }
     });
@@ -770,6 +774,10 @@ describe('Phase 3 protected route smoke tests', () => {
         });
         assert.strictEqual(draft.status, 201);
         assert.strictEqual(settlementCalls.find((call) => call.method === 'draft').context.operatingEntityId, 'entity-1');
+
+        const settlementPdf = await requestJson(server, 'GET', '/settlements/entity-1/pdf');
+        assert.strictEqual(settlementPdf.status, 404);
+        assert.strictEqual(settlementPdf.body.error, 'Settlement not found');
       });
     } finally {
       loaded.restore();
