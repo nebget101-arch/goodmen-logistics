@@ -170,6 +170,54 @@ function resolveRecurringDeductionApplyTo(rule = {}, payeeContext = {}) {
   return null;
 }
 
+function resolveVariableExpenseSplit(expenseType, expenseProfile = {}, amount = 0) {
+  const normalizedType = String(expenseType || '').trim().toLowerCase();
+  const rawAmount = Number(amount) || 0;
+  const absoluteAmount = Math.round(Math.abs(rawAmount) * 100) / 100;
+
+  const responsibilityField = getExpenseResponsibilityFieldForSourceType(normalizedType);
+  const responsibility = normalizeRecurringResponsibility(
+    responsibilityField ? expenseProfile?.[responsibilityField] : null
+  ) || 'company';
+
+  let driverSharePct = 0;
+  let ownerSharePct = 0;
+
+  if (responsibility === 'driver') {
+    driverSharePct = 1;
+  } else if (responsibility === 'owner') {
+    ownerSharePct = 1;
+  } else if (responsibility === 'shared') {
+    const customRules = expenseProfile?.custom_rules || {};
+    const rawSplitPct = normalizedType === 'fuel'
+      ? Number(customRules.fuel_split_percentage ?? customRules.percentages?.fuel)
+      : Number(customRules.toll_split_percentage ?? customRules.percentages?.toll);
+    const normalizedSplitPct = (!Number.isNaN(rawSplitPct) && rawSplitPct >= 0 && rawSplitPct <= 100)
+      ? rawSplitPct / 100
+      : 0.5;
+    driverSharePct = normalizedSplitPct;
+    ownerSharePct = 1 - normalizedSplitPct;
+  }
+
+  const driverAmount = Math.round(absoluteAmount * driverSharePct * 100) / 100;
+  const ownerAmount = Math.round(absoluteAmount * ownerSharePct * 100) / 100;
+
+  return {
+    responsibility,
+    driverSharePct,
+    ownerSharePct,
+    driverAmount,
+    ownerAmount,
+    chargeParty: responsibility === 'shared'
+      ? 'shared'
+      : responsibility === 'owner'
+        ? 'owner'
+        : responsibility === 'driver'
+          ? 'driver'
+          : 'company'
+  };
+}
+
 module.exports = {
   getExpenseResponsibilityFieldForSourceType,
   normalizeRecurringDeductionPayeeIds,
@@ -177,5 +225,6 @@ module.exports = {
   resolveRecurringDeductionBackfillStartDate,
   shouldApplyRecurringDeductionForSettlement,
   shouldIncludeRecurringDeductionRule,
-  resolveRecurringDeductionApplyTo
+  resolveRecurringDeductionApplyTo,
+  resolveVariableExpenseSplit
 };

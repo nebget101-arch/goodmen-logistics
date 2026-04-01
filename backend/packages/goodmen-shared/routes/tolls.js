@@ -19,7 +19,7 @@ const XLSX = require('xlsx');
 const path = require('path');
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
-const { recalcAndUpdateSettlement } = require('../services/settlement-service');
+const { recalcAndUpdateSettlement, applyVariableExpenseToSettlement } = require('../services/settlement-service');
 
 // ─── File upload (memory storage – max 10 MB) ─────────────────────────────────
 const upload = multer({
@@ -945,75 +945,46 @@ router.post('/transactions/:id/post-to-settlement', async (req, res) => {
       return res.status(409).json({ error: 'Cannot post to a voided settlement' });
     }
 
-    const asOf = settlement.date || new Date().toISOString().slice(0, 10);
-    const expenseProfile = await knex('expense_responsibility_profiles')
-      .where({ driver_id: settlement.driver_id })
-      .whereRaw('effective_start_date <= ?', [asOf])
-      .where(function () {
-        this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [asOf]);
-      })
-      .orderBy('effective_start_date', 'desc')
-      .first();
-
-    const tollResponsibility = expenseProfile?.toll_responsibility || 'company';
-
-    let driverSharePct = 1.0;
-    let chargeParty = 'driver';
-
-    if (tollResponsibility === 'company') {
-      driverSharePct = 0;
-      chargeParty = 'company';
-    } else if (tollResponsibility === 'shared') {
-      chargeParty = 'shared';
-      const customRules = expenseProfile?.custom_rules || {};
-      const splitPct = Number(customRules.toll_split_percentage);
-      driverSharePct = (!Number.isNaN(splitPct) && splitPct >= 0 && splitPct <= 100)
-        ? splitPct / 100
-        : 0.5;
-    }
-
-    const tollAmount = Number(toll.amount) || 0;
-    const deductionAmount = Math.round(tollAmount * driverSharePct * 100) / 100;
-
     const description = [
       'Toll',
       toll.plaza_name || toll.provider_name || '',
       toll.transaction_date ? `(${String(toll.transaction_date).slice(0, 10)})` : ''
     ].filter(Boolean).join(' — ');
 
-    const [adj] = await knex('settlement_adjustment_items')
-      .insert({
-        settlement_id,
-        item_type: 'deduction',
-        source_type: 'imported_toll',
-        description,
-        amount: deductionAmount,
-        charge_party: chargeParty,
-        apply_to: 'primary_payee',
-        source_reference_id: toll.id,
-        source_reference_type: 'toll_transaction',
-        occurrence_date: toll.transaction_date,
-        status: 'applied',
-        created_by: req.user?.id ?? null
-      })
-      .returning('*');
+    const result = await applyVariableExpenseToSettlement(knex, settlement_id, {
+      expenseType: 'toll',
+      amount: Number(toll.amount) || 0,
+      description,
+      occurrenceDate: toll.transaction_date,
+      userId: req.user?.id ?? null,
+      sourceType: 'imported_toll',
+      sourceReferenceId: toll.id,
+      sourceReferenceType: 'toll_transaction'
+    });
+
+    if (!result.primaryAdjustment && !result.mirroredAdjustment) {
+      return res.status(409).json({ error: 'Toll transaction is not billable to the driver or equipment owner under the current responsibility profile' });
+    }
 
     await knex('toll_transactions')
       .where({ id: toll.id })
       .update({
-        settlement_id,
-        settlement_adjustment_item_id: adj.id,
+        settlement_id: result.primarySettlementId,
+        settlement_adjustment_item_id: result.primaryAdjustment?.id || null,
         settlement_link_status: 'linked',
         updated_at: knex.fn.now()
       });
 
-    await recalcAndUpdateSettlement(knex, settlement_id);
+    await recalcAndUpdateSettlement(knex, result.primarySettlementId);
+    if (result.mirroredAdjustment?.settlement_id && result.mirroredAdjustment.settlement_id !== result.primarySettlementId) {
+      await recalcAndUpdateSettlement(knex, result.mirroredAdjustment.settlement_id);
+    }
 
     res.json({
       success: true,
-      adjustment: adj,
+      adjustment: result.primaryAdjustment || result.mirroredAdjustment || null,
       toll_transaction_id: toll.id,
-      settlement_id
+      settlement_id: result.primarySettlementId
     });
   } catch (error) {
     dtLogger.error('toll_post_to_settlement_failed', error);
@@ -1058,6 +1029,20 @@ router.post('/transactions/:id/unlink-from-settlement', async (req, res) => {
         .delete();
     }
 
+    const linkedSettlement = settlementId
+      ? await knex('settlements').where({ id: settlementId }).first()
+      : null;
+    if (linkedSettlement?.paired_settlement_id) {
+      await knex('settlement_adjustment_items')
+        .where({
+          settlement_id: linkedSettlement.paired_settlement_id,
+          source_type: 'imported_toll',
+          source_reference_id: toll.id,
+          source_reference_type: 'toll_transaction'
+        })
+        .delete();
+    }
+
     await knex('toll_transactions')
       .where({ id: toll.id })
       .update({
@@ -1069,6 +1054,9 @@ router.post('/transactions/:id/unlink-from-settlement', async (req, res) => {
 
     if (settlement) {
       await recalcAndUpdateSettlement(knex, settlementId);
+      if (linkedSettlement?.paired_settlement_id) {
+        await recalcAndUpdateSettlement(knex, linkedSettlement.paired_settlement_id);
+      }
     }
 
     res.json({

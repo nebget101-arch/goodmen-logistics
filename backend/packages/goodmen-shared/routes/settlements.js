@@ -13,6 +13,7 @@ const { buildSettlementPdf } = require('../utils/settlement-pdf');
 const {
   createDraftSettlement,
   recalcAndUpdateSettlement,
+  applyVariableExpenseToSettlement,
   addLoadToSettlement,
   removeLoadFromSettlement,
   addAdjustment,
@@ -1673,28 +1674,34 @@ router.post('/imported-expense-items/:id/apply-to-settlement', requireRole(settl
     if (!settlement_id) return res.status(400).json({ error: 'settlement_id required' });
     const item = await knex('imported_expense_items').where({ id: req.params.id }).first();
     if (!item) return res.status(404).json({ error: 'Expense item not found' });
-    const [adj] = await knex('settlement_adjustment_items')
-      .insert({
-        settlement_id,
-        item_type: 'deduction',
-        source_type: 'imported_fuel',
-        description: item.description || 'Imported expense',
-        amount: Number(item.amount) || 0,
-        charge_party: 'driver',
-        apply_to: 'primary_payee',
-        source_reference_id: item.id,
-        source_reference_type: 'imported_expense_item',
-        occurrence_date: item.transaction_date,
-        status: 'applied',
-        created_by: req.user?.id ?? null
-      })
-      .returning('*');
+    const result = await applyVariableExpenseToSettlement(knex, settlement_id, {
+      expenseType: 'fuel',
+      amount: Number(item.amount) || 0,
+      description: item.description || 'Imported expense',
+      occurrenceDate: item.transaction_date,
+      userId: req.user?.id ?? null,
+      sourceType: 'imported_fuel',
+      sourceReferenceId: item.id,
+      sourceReferenceType: 'imported_expense_item'
+    });
+
+    const adj = result.primaryAdjustment || result.mirroredAdjustment;
+    if (!adj) {
+      return res.status(409).json({ error: 'Imported expense is not billable to driver or equipment owner under the current responsibility profile' });
+    }
+
     await knex('imported_expense_items').where({ id: req.params.id }).update({
       settlement_adjustment_item_id: adj.id,
       status: 'applied',
       updated_at: knex.fn.now()
     });
-    await recalcAndUpdateSettlement(knex, settlement_id);
+    await recalcAndUpdateSettlement(knex, result.primarySettlementId);
+    if (result.mirroredAdjustment) {
+      const mirroredSettlement = await knex('settlement_adjustment_items').where({ id: result.mirroredAdjustment.id }).first();
+      if (mirroredSettlement?.settlement_id && mirroredSettlement.settlement_id !== result.primarySettlementId) {
+        await recalcAndUpdateSettlement(knex, mirroredSettlement.settlement_id);
+      }
+    }
     res.json(adj);
   } catch (err) {
     res.status(500).json({ error: err.message });

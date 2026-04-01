@@ -24,6 +24,7 @@ const {
   normalizeRecurringDeductionPayeeIds,
   resolveSpecificExpenseResponsibility,
   resolveRecurringDeductionBackfillStartDate,
+  resolveVariableExpenseSplit,
   shouldApplyRecurringDeductionForSettlement,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
@@ -570,6 +571,148 @@ async function syncPairedSettlementIds(knex, firstSettlementId, secondSettlement
     .update({ paired_settlement_id: firstSettlementId, updated_at: knex.fn.now() });
 }
 
+async function resolveVariableExpenseSettlementTargets(knex, settlementId) {
+  const settlement = await knex('settlements').where({ id: settlementId }).first();
+  if (!settlement) throw new Error('Settlement not found');
+
+  const pairedSettlement = settlement.paired_settlement_id
+    ? await knex('settlements').where({ id: settlement.paired_settlement_id }).first()
+    : null;
+
+  if (!pairedSettlement) {
+    return {
+      selectedSettlement: settlement,
+      driverSettlement: settlement,
+      ownerSettlement: null,
+      hasPair: false
+    };
+  }
+
+  const driverSettlement = settlement.settlement_type === 'equipment_owner'
+    ? pairedSettlement
+    : settlement;
+  const ownerSettlement = settlement.settlement_type === 'equipment_owner'
+    ? settlement
+    : pairedSettlement;
+
+  return {
+    selectedSettlement: settlement,
+    driverSettlement,
+    ownerSettlement,
+    hasPair: driverSettlement?.settlement_type === 'driver' && ownerSettlement?.settlement_type === 'equipment_owner'
+  };
+}
+
+async function insertVariableExpenseAdjustment(knex, data) {
+  const [adjustment] = await knex('settlement_adjustment_items')
+    .insert(data)
+    .returning('*');
+  return adjustment;
+}
+
+async function applyVariableExpenseToSettlement(knex, settlementId, options = {}) {
+  const {
+    expenseType,
+    amount,
+    description,
+    occurrenceDate = null,
+    userId = null,
+    sourceType,
+    sourceReferenceId = null,
+    sourceReferenceType = null
+  } = options;
+
+  const targets = await resolveVariableExpenseSettlementTargets(knex, settlementId);
+  const asOf = toDateOnly(occurrenceDate)
+    || toDateOnly(targets.selectedSettlement?.date)
+    || toDateOnly(new Date());
+  const expenseProfile = await getActiveExpenseResponsibilityProfile(
+    knex,
+    targets.selectedSettlement.driver_id,
+    asOf
+  );
+  const split = resolveVariableExpenseSplit(expenseType, expenseProfile, amount);
+
+  if (split.responsibility === 'company') {
+    return {
+      split,
+      primarySettlementId: targets.driverSettlement.id,
+      primaryAdjustment: null,
+      mirroredAdjustment: null
+    };
+  }
+
+  const basePayload = {
+    item_type: 'deduction',
+    source_type: sourceType,
+    description,
+    occurrence_date: occurrenceDate,
+    status: 'applied',
+    created_by: userId,
+    source_reference_id: sourceReferenceId,
+    source_reference_type: sourceReferenceType
+  };
+
+  if (!targets.hasPair) {
+    const amountForSingleSettlement = split.responsibility === 'owner'
+      ? split.ownerAmount
+      : split.driverAmount;
+    if (!amountForSingleSettlement) {
+      return {
+        split,
+        primarySettlementId: targets.driverSettlement.id,
+        primaryAdjustment: null,
+        mirroredAdjustment: null
+      };
+    }
+
+    const primaryAdjustment = await insertVariableExpenseAdjustment(knex, {
+      ...basePayload,
+      settlement_id: targets.selectedSettlement.id,
+      amount: amountForSingleSettlement,
+      charge_party: split.chargeParty,
+      apply_to: 'primary_payee'
+    });
+
+    return {
+      split,
+      primarySettlementId: targets.selectedSettlement.id,
+      primaryAdjustment,
+      mirroredAdjustment: null
+    };
+  }
+
+  let primaryAdjustment = null;
+  let mirroredAdjustment = null;
+
+  if (split.driverAmount > 0) {
+    primaryAdjustment = await insertVariableExpenseAdjustment(knex, {
+      ...basePayload,
+      settlement_id: targets.driverSettlement.id,
+      amount: split.driverAmount,
+      charge_party: split.chargeParty,
+      apply_to: 'primary_payee'
+    });
+  }
+
+  if (split.ownerAmount > 0) {
+    mirroredAdjustment = await insertVariableExpenseAdjustment(knex, {
+      ...basePayload,
+      settlement_id: targets.ownerSettlement.id,
+      amount: split.ownerAmount,
+      charge_party: split.responsibility === 'shared' ? 'shared' : 'equipment_owner',
+      apply_to: 'primary_payee'
+    });
+  }
+
+  return {
+    split,
+    primarySettlementId: targets.driverSettlement.id,
+    primaryAdjustment,
+    mirroredAdjustment
+  };
+}
+
 /**
  * FN-578: Consume unlinked fuel transactions for a settlement.
  * Queries fuel_transactions where driver_id matches and settlement_link_status = 'none',
@@ -619,46 +762,14 @@ async function consumeFuelForSettlement(knex, settlementId, driverId, periodStar
     ])
     .first();
 
-  const fuelResponsibility = expenseProfile?.fuel_responsibility || 'company';
-
-  // 3. If company pays, skip — no deduction from driver or owner
-  if (fuelResponsibility === 'company') return [];
-
-  // 4. Determine driver share percentage
-  let driverSharePct = 1.0; // 100% for 'driver' responsibility
-  if (fuelResponsibility === 'shared') {
-    const customRules = expenseProfile?.custom_rules || {};
-    // Primary: explicit fuel_split_percentage key (0-100 = driver's share)
-    // Fallback: custom_rules.percentages.fuel (stored by FN-567 sharedExpensePercentages)
-    const splitPct = Number(customRules.fuel_split_percentage ?? customRules.percentages?.fuel);
-    driverSharePct = (!Number.isNaN(splitPct) && splitPct >= 0 && splitPct <= 100)
-      ? splitPct / 100
-      : 0.5; // Default 50/50 if not configured
-  } else if (fuelResponsibility === 'owner') {
-    // Owner-only: driver share is 0 — adjustment goes to owner
-    driverSharePct = 0;
-  }
-
-  // 5. Determine charge_party
-  const chargeParty = fuelResponsibility === 'shared'
-    ? 'shared'
-    : fuelResponsibility === 'owner'
-      ? 'owner'
-      : 'driver';
+  const defaultSplit = resolveVariableExpenseSplit('fuel', expenseProfile, 1);
+  if (defaultSplit.responsibility === 'company') return [];
 
   // 6. Create adjustment items and link fuel transactions
   const createdAdjustments = [];
   for (const fuel of fuels) {
     const fuelAmount = Number(fuel.amount) || 0;
     if (fuelAmount === 0) continue;
-
-    // For owner responsibility, the full amount is charged to the owner;
-    // for driver/shared use driverSharePct of the transaction amount.
-    const deductionAmount = fuelResponsibility === 'owner'
-      ? Math.round(fuelAmount * 100) / 100
-      : Math.round(fuelAmount * driverSharePct * 100) / 100;
-
-    if (deductionAmount === 0) continue;
 
     const description = [
       'Fuel',
@@ -667,34 +778,29 @@ async function consumeFuelForSettlement(knex, settlementId, driverId, periodStar
       fuel.transaction_date ? `${toDateOnly(fuel.transaction_date)}` : ''
     ].filter(Boolean).join(' — ');
 
-    const [adj] = await knex('settlement_adjustment_items')
-      .insert({
-        settlement_id: settlementId,
-        item_type: 'deduction',
-        source_type: 'imported_fuel',
-        description,
-        amount: deductionAmount,
-        charge_party: chargeParty,
-        apply_to: 'primary_payee',
-        source_reference_id: fuel.id,
-        source_reference_type: 'fuel_transaction',
-        occurrence_date: fuel.transaction_date,
-        status: 'applied',
-        created_by: userId
-      })
-      .returning('*');
+    const result = await applyVariableExpenseToSettlement(knex, settlementId, {
+      expenseType: 'fuel',
+      amount: fuelAmount,
+      description,
+      occurrenceDate: fuel.transaction_date,
+      userId,
+      sourceType: 'imported_fuel',
+      sourceReferenceId: fuel.id,
+      sourceReferenceType: 'fuel_transaction'
+    });
 
     // Link the fuel transaction to this settlement
     // Note: fuel_transactions has no settlement_adjustment_item_id column
     await knex('fuel_transactions')
       .where({ id: fuel.id })
       .update({
-        settlement_id: settlementId,
+        settlement_id: result.primarySettlementId,
         settlement_link_status: 'linked',
         updated_at: knex.fn.now()
       });
 
-    createdAdjustments.push(adj);
+    if (result.primaryAdjustment) createdAdjustments.push(result.primaryAdjustment);
+    if (result.mirroredAdjustment) createdAdjustments.push(result.mirroredAdjustment);
   }
 
   return createdAdjustments;
@@ -742,24 +848,8 @@ async function consumeTollsForSettlement(knex, settlementId, driverId, periodSta
     .orderBy('effective_start_date', 'desc')
     .first();
 
-  const tollResponsibility = expenseProfile?.toll_responsibility || 'company';
-
-  // 3. If company pays, skip — no deduction from driver
-  if (tollResponsibility === 'company') return [];
-
-  // 4. Determine split percentage for shared responsibility
-  let driverSharePct = 1.0; // 100% for 'driver' responsibility
-  if (tollResponsibility === 'shared') {
-    const customRules = expenseProfile?.custom_rules || {};
-    // custom_rules may contain toll_split_percentage (0-100)
-    const splitPct = Number(customRules.toll_split_percentage);
-    driverSharePct = (!Number.isNaN(splitPct) && splitPct >= 0 && splitPct <= 100)
-      ? splitPct / 100
-      : 0.5; // Default 50/50 if not configured
-  }
-
-  // 5. Determine charge_party
-  const chargeParty = tollResponsibility === 'shared' ? 'shared' : 'driver';
+  const defaultSplit = resolveVariableExpenseSplit('toll', expenseProfile, 1);
+  if (defaultSplit.responsibility === 'company') return [];
 
   // 6. Create adjustment items and link toll transactions
   const createdAdjustments = [];
@@ -767,43 +857,35 @@ async function consumeTollsForSettlement(knex, settlementId, driverId, periodSta
     const tollAmount = Number(toll.amount) || 0;
     if (tollAmount === 0) continue;
 
-    const deductionAmount = Math.round(tollAmount * driverSharePct * 100) / 100;
-    if (deductionAmount === 0) continue;
-
     const description = [
       'Toll',
       toll.plaza_name || toll.provider_name || '',
       toll.transaction_date ? `(${toDateOnly(toll.transaction_date)})` : ''
     ].filter(Boolean).join(' — ');
 
-    const [adj] = await knex('settlement_adjustment_items')
-      .insert({
-        settlement_id: settlementId,
-        item_type: 'deduction',
-        source_type: 'imported_toll',
-        description,
-        amount: deductionAmount,
-        charge_party: chargeParty,
-        apply_to: 'primary_payee',
-        source_reference_id: toll.id,
-        source_reference_type: 'toll_transaction',
-        occurrence_date: toll.transaction_date,
-        status: 'applied',
-        created_by: userId
-      })
-      .returning('*');
+    const result = await applyVariableExpenseToSettlement(knex, settlementId, {
+      expenseType: 'toll',
+      amount: tollAmount,
+      description,
+      occurrenceDate: toll.transaction_date,
+      userId,
+      sourceType: 'imported_toll',
+      sourceReferenceId: toll.id,
+      sourceReferenceType: 'toll_transaction'
+    });
 
     // Link the toll transaction to this settlement
     await knex('toll_transactions')
       .where({ id: toll.id })
       .update({
-        settlement_id: settlementId,
-        settlement_adjustment_item_id: adj.id,
+        settlement_id: result.primarySettlementId,
+        settlement_adjustment_item_id: result.primaryAdjustment?.id || null,
         settlement_link_status: 'linked',
         updated_at: knex.fn.now()
       });
 
-    createdAdjustments.push(adj);
+    if (result.primaryAdjustment) createdAdjustments.push(result.primaryAdjustment);
+    if (result.mirroredAdjustment) createdAdjustments.push(result.mirroredAdjustment);
   }
 
   return createdAdjustments;
@@ -1664,10 +1746,49 @@ async function removeAdjustment(knex, settlementId, adjustmentId) {
         updated_at: knex.fn.now()
       });
   } else {
+    if (
+      ['imported_fuel', 'imported_toll'].includes(adjustment.source_type)
+      && settlement.paired_settlement_id
+      && adjustment.source_reference_id
+    ) {
+      await knex('settlement_adjustment_items')
+        .where({ settlement_id: settlement.paired_settlement_id })
+        .andWhere({
+          source_type: adjustment.source_type,
+          source_reference_id: adjustment.source_reference_id,
+          source_reference_type: adjustment.source_reference_type
+        })
+        .del();
+
+      if (adjustment.source_reference_type === 'fuel_transaction') {
+        await knex('fuel_transactions')
+          .where({ id: adjustment.source_reference_id })
+          .update({
+            settlement_id: null,
+            settlement_link_status: 'none',
+            updated_at: knex.fn.now()
+          });
+      }
+
+      if (adjustment.source_reference_type === 'toll_transaction') {
+        await knex('toll_transactions')
+          .where({ id: adjustment.source_reference_id })
+          .update({
+            settlement_id: null,
+            settlement_adjustment_item_id: null,
+            settlement_link_status: 'none',
+            updated_at: knex.fn.now()
+          });
+      }
+    }
+
     await knex('settlement_adjustment_items').where({ id: adjustmentId, settlement_id: settlementId }).del();
   }
 
   await recalcAndUpdateSettlement(knex, settlementId);
+  if (settlement.paired_settlement_id) {
+    await recalcAndUpdateSettlement(knex, settlement.paired_settlement_id);
+  }
 }
 
 async function restoreScheduledAdjustment(knex, settlementId, adjustmentId) {
@@ -1800,6 +1921,7 @@ module.exports = {
   recalcAndUpdateSettlement,
   consumeFuelForSettlement,
   consumeTollsForSettlement,
+  applyVariableExpenseToSettlement,
   addLoadToSettlement,
   removeLoadFromSettlement,
   addAdjustment,
