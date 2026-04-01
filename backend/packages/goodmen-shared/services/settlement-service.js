@@ -34,6 +34,7 @@ const {
 
 const SETTLEMENT_NUMBER_PREFIX = 'STL';
 let payeesColumnSetCache = null;
+let settlementsColumnSetCache = null;
 
 function applyTenantFilter(qb, context, column = 'tenant_id') {
   if (context?.tenantId) {
@@ -106,6 +107,15 @@ async function getPayeesColumnSet(knex) {
     .where({ table_schema: 'public', table_name: 'payees' });
   payeesColumnSetCache = new Set(rows.map((row) => row.column_name));
   return payeesColumnSetCache;
+}
+
+async function getSettlementsColumnSet(knex) {
+  if (settlementsColumnSetCache) return settlementsColumnSetCache;
+  const rows = await knex('information_schema.columns')
+    .select('column_name')
+    .where({ table_schema: 'public', table_name: 'settlements' });
+  settlementsColumnSetCache = new Set(rows.map((row) => row.column_name));
+  return settlementsColumnSetCache;
 }
 
 async function getAdditionalPayeeRate(knex, payeeId) {
@@ -1483,6 +1493,8 @@ async function voidSettlement(knex, settlementId) {
 }
 
 async function listSettlements(knex, filters = {}, context = null) {
+  const settlementColumns = await getSettlementsColumnSet(knex);
+  const hasPairedSettlementId = settlementColumns.has('paired_settlement_id');
   let q = knex('settlements as s')
     .select(
       's.*',
@@ -1490,7 +1502,13 @@ async function listSettlements(knex, filters = {}, context = null) {
       'pp.period_end',
       'pp.status as period_status',
       knex.raw("concat_ws(' ', d.first_name, d.last_name) as driver_name"),
-      knex.raw("concat_ws(' ', d.first_name, d.last_name) as payable_to_name"),
+      knex.raw(`
+        CASE
+          WHEN COALESCE(s.settlement_type, 'driver') = 'equipment_owner'
+            THEN COALESCE(primary_payee.name, additional_payee.name, concat_ws(' ', d.first_name, d.last_name))
+          ELSE COALESCE(primary_payee.name, concat_ws(' ', d.first_name, d.last_name))
+        END as payable_to_name
+      `),
       'primary_payee.name as primary_payee_name',
       'additional_payee.name as additional_payee_name'
     )
@@ -1507,6 +1525,12 @@ async function listSettlements(knex, filters = {}, context = null) {
   if (filters.driver_id) q = q.where('s.driver_id', filters.driver_id);
   if (filters.payroll_period_id) q = q.where('s.payroll_period_id', filters.payroll_period_id);
   if (filters.settlement_status) q = q.where('s.settlement_status', filters.settlement_status);
+  if (filters.settlement_type) q = q.where('s.settlement_type', filters.settlement_type);
+  if (filters.truck_id) q = q.where('s.truck_id', filters.truck_id);
+  if (filters.equipment_owner_id) q = q.where('s.equipment_owner_id', filters.equipment_owner_id);
+  if (filters.paired_settlement_id && hasPairedSettlementId) {
+    q = q.where('s.paired_settlement_id', filters.paired_settlement_id);
+  }
   if (filters.settlement_number) q = q.where('s.settlement_number', 'ilike', `%${filters.settlement_number}%`);
 
   q = q.orderBy('s.created_at', 'desc');

@@ -145,6 +145,7 @@ function toPayeeDto(row) {
 }
 
 let payeesColumnSetCache = null;
+let settlementsColumnSetCache = null;
 
 async function getPayeesColumnSet() {
   if (payeesColumnSetCache) return payeesColumnSetCache;
@@ -155,8 +156,58 @@ async function getPayeesColumnSet() {
   return payeesColumnSetCache;
 }
 
+async function getSettlementsColumnSet() {
+  if (settlementsColumnSetCache) return settlementsColumnSetCache;
+  const rows = await knex('information_schema.columns')
+    .select('column_name')
+    .where({ table_schema: 'public', table_name: 'settlements' });
+  settlementsColumnSetCache = new Set(rows.map((r) => r.column_name));
+  return settlementsColumnSetCache;
+}
+
 function includeIfColumnExists(payload, columns, key, value) {
   if (columns.has(key)) payload[key] = value;
+}
+
+async function resolvePairedSettlement(settlement, context = null) {
+  if (!settlement) return null;
+
+  const settlementColumns = await getSettlementsColumnSet();
+  const hasPairedSettlementId = settlementColumns.has('paired_settlement_id');
+  if (hasPairedSettlementId && settlement.paired_settlement_id) {
+    return knex('settlements as s')
+      .modify((qb) => {
+        applyTenantFilter(qb, context?.tenantId, 's.tenant_id');
+        if (context?.operatingEntityId) {
+          qb.andWhere('s.operating_entity_id', context.operatingEntityId);
+        }
+      })
+      .where('s.id', settlement.paired_settlement_id)
+      .select('s.id', 's.settlement_number', 's.settlement_type', 's.settlement_status', 's.primary_payee_id')
+      .first();
+  }
+
+  if (!settlement.driver_id || !settlement.payroll_period_id || !settlement.truck_id || !settlement.settlement_type) {
+    return null;
+  }
+
+  const counterpartType = settlement.settlement_type === 'equipment_owner' ? 'driver' : 'equipment_owner';
+  return knex('settlements as s')
+    .modify((qb) => {
+      applyTenantFilter(qb, context?.tenantId, 's.tenant_id');
+      if (context?.operatingEntityId) {
+        qb.andWhere('s.operating_entity_id', context.operatingEntityId);
+      }
+    })
+    .where({
+      's.driver_id': settlement.driver_id,
+      's.payroll_period_id': settlement.payroll_period_id,
+      's.truck_id': settlement.truck_id,
+      's.settlement_type': counterpartType
+    })
+    .whereNot('s.id', settlement.id)
+    .select('s.id', 's.settlement_number', 's.settlement_type', 's.settlement_status', 's.primary_payee_id')
+    .first();
 }
 
 async function findOrCreatePayeeByName({ trx, tenantId, name, requestedType, email, phone }) {
@@ -1214,6 +1265,10 @@ router.get('/settlements', requireRole(settlementRoles), async (req, res) => {
       driver_id: req.query.driver_id,
       payroll_period_id: req.query.payroll_period_id,
       settlement_status: req.query.settlement_status,
+      settlement_type: req.query.settlement_type,
+      truck_id: req.query.truck_id,
+      equipment_owner_id: req.query.equipment_owner_id,
+      paired_settlement_id: req.query.paired_settlement_id,
       settlement_number: req.query.settlement_number,
       limit: req.query.limit,
       offset: req.query.offset
@@ -1252,6 +1307,8 @@ router.post('/settlements/draft', requireRole(settlementRoles), createDraftHandl
 
 router.get('/settlements/:id', requireRole(settlementRoles), async (req, res) => {
   try {
+    const settlementColumns = await getSettlementsColumnSet();
+    const hasPairedSettlementId = settlementColumns.has('paired_settlement_id');
     const settlement = await knex('settlements').where({ id: req.params.id }).first();
     if (!settlement) return res.status(404).json({ error: 'Settlement not found' });
 
@@ -1288,6 +1345,19 @@ router.get('/settlements/:id', requireRole(settlementRoles), async (req, res) =>
       .where({ id: settlement.payroll_period_id })
       .first();
 
+    const truck = settlement.truck_id
+      ? await knex('vehicles')
+        .where({ id: settlement.truck_id })
+        .select('id', 'unit_number', 'plate_number', 'equipment_owner_id')
+        .first()
+      : null;
+
+    const equipmentOwner = settlement.equipment_owner_id
+      ? await knex('payees')
+        .where({ id: settlement.equipment_owner_id })
+        .first()
+      : null;
+
     let primaryPayee = settlement.primary_payee_id
       ? await knex('payees').where({ id: settlement.primary_payee_id }).first()
       : null;
@@ -1319,10 +1389,16 @@ router.get('/settlements/:id', requireRole(settlementRoles), async (req, res) =>
       variable: adjustmentItems.filter((i) => !['scheduled_rule', 'scheduled_rule_removed', 'manual', null, undefined].includes(i.source_type))
     };
 
+    const pairedSettlement = await resolvePairedSettlement(settlement, req.context || null);
+
     res.json({
       ...settlement,
+      paired_settlement_id: hasPairedSettlementId ? settlement.paired_settlement_id || null : pairedSettlement?.id || null,
+      paired_settlement: pairedSettlement || null,
       driver: driver || null,
       period: period || null,
+      truck: truck || null,
+      equipment_owner: equipmentOwner || null,
       primary_payee: primaryPayee || null,
       additional_payee: additionalPayee || null,
       load_items: loadItems,
