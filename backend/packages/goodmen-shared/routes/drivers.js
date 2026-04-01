@@ -4,6 +4,7 @@ const { query, getClient } = require('../internal/db');
 const { transformRows, transformRow, toSnakeCase } = require('../utils/case-converter');
 const dtLogger = require('../utils/logger');
 const { syncTollDeviceDrivers } = require('../services/toll-device-driver-sync');
+const { hasDriverCompensationUpdate } = require('../services/driver-compensation-profile-sync');
 const authMiddleware = require('../middleware/auth-middleware');
 const tenantContextMiddleware = require('../middleware/tenant-context-middleware');
 const { loadUserRbac } = require('../middleware/rbac-middleware');
@@ -375,7 +376,7 @@ router.get('/:id', async (req, res) => {
          AND status = 'active'
          AND effective_start_date <= $2
          AND (effective_end_date IS NULL OR effective_end_date >= $2)
-       ORDER BY effective_start_date DESC
+       ORDER BY effective_start_date DESC, created_at DESC
        LIMIT 1`,
       [driverId, asOf]
     );
@@ -657,8 +658,8 @@ router.post('/', async (req, res) => {
       ]
     );
 
-    // Auto-create compensation profile if pay info provided
-    if (payBasis || payRate || payPercentage) {
+    // Auto-create compensation profile when any compensation field is explicitly supplied.
+    if (hasDriverCompensationUpdate(req.body)) {
       const payBasisLower = (payBasis || '').toString().toLowerCase();
       const profileType = (driverType || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'driver';
       let payModel = 'per_mile';
@@ -955,8 +956,8 @@ router.put('/:id', async (req, res) => {
       values
     );
 
-    // Auto-sync compensation profile if pay fields updated
-    const hasPayUpdate = body.payBasis || body.pay_basis || body.payRate || body.pay_rate || body.payPercentage || body.pay_percentage;
+    // Auto-sync compensation profile when any compensation field is explicitly updated.
+    const hasPayUpdate = hasDriverCompensationUpdate(body);
     if (hasPayUpdate && result.rows.length > 0) {
       const updatedDriver = result.rows[0];
       const payBasisLower = (updatedDriver.pay_basis || '').toString().toLowerCase();
@@ -1015,13 +1016,14 @@ router.put('/:id', async (req, res) => {
         }
       }
 
-      // Close any existing active profile and create new one
+      // Close overlapping active profiles before creating the latest snapshot row.
       await client.query(
         `UPDATE driver_compensation_profiles
          SET effective_end_date = $1, status = 'superseded', updated_at = NOW()
          WHERE driver_id = $2
            AND status = 'active'
-           AND effective_end_date IS NULL`,
+           AND effective_start_date <= $1
+           AND (effective_end_date IS NULL OR effective_end_date >= $1)`,
         [today, req.params.id]
       );
 
