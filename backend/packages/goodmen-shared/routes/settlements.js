@@ -52,7 +52,7 @@ async function getSettlementPdfContext(settlementId) {
       'l.load_number',
       'l.pickup_location',
       'l.delivery_location',
-      knex.raw(`COALESCE(sli.loaded_miles, l.loaded_miles) as loaded_miles`),
+      'sli.loaded_miles',
       knex.raw(`(
         SELECT ls.city
         FROM load_stops ls
