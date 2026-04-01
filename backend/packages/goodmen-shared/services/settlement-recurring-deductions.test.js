@@ -5,6 +5,7 @@ const {
   normalizeRecurringDeductionPayeeIds,
   resolveSpecificExpenseResponsibility,
   resolveRecurringDeductionBackfillStartDate,
+  resolveVariableExpenseSplit,
   shouldApplyRecurringDeductionForSettlement,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
@@ -195,5 +196,48 @@ describe('specific expense helpers', () => {
       ),
       false
     );
+  });
+});
+
+describe('resolveVariableExpenseSplit', () => {
+  it('splits shared fuel using the configured driver percentage', () => {
+    const split = resolveVariableExpenseSplit(
+      'fuel',
+      {
+        fuel_responsibility: 'shared',
+        custom_rules: { fuel_split_percentage: 40 }
+      },
+      250
+    );
+
+    assert.strictEqual(split.responsibility, 'shared');
+    assert.strictEqual(split.driverSharePct, 0.4);
+    assert.strictEqual(split.ownerSharePct, 0.6);
+    assert.strictEqual(split.driverAmount, 100);
+    assert.strictEqual(split.ownerAmount, 150);
+    assert.strictEqual(split.chargeParty, 'shared');
+  });
+
+  it('defaults shared toll to a 50/50 split when no explicit percentage is configured', () => {
+    const split = resolveVariableExpenseSplit(
+      'toll',
+      { toll_responsibility: 'shared', custom_rules: {} },
+      177.75
+    );
+
+    assert.strictEqual(split.driverAmount, 88.88);
+    assert.strictEqual(split.ownerAmount, 88.88);
+  });
+
+  it('routes owner-only expenses entirely to the owner side', () => {
+    const split = resolveVariableExpenseSplit(
+      'fuel',
+      { fuel_responsibility: 'owner' },
+      245
+    );
+
+    assert.strictEqual(split.driverAmount, 0);
+    assert.strictEqual(split.ownerAmount, 245);
+    assert.strictEqual(split.chargeParty, 'owner');
   });
 });
