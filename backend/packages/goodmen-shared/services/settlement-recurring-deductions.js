@@ -245,6 +245,24 @@ function resolveVariableExpenseSplit(expenseType, expenseProfile = {}, amount = 
   };
 }
 
+function resolveVariableExpenseShares(expenseType, expenseProfile = {}, amount = 0, isOwnerOperator = false) {
+  if (isOwnerOperator) {
+    const absoluteAmount = Math.round((Math.abs(Number(amount) || 0)) * 100) / 100;
+    return {
+      driverAmount: absoluteAmount,
+      ownerAmount: 0,
+      chargeParty: 'driver'
+    };
+  }
+
+  const split = resolveVariableExpenseSplit(expenseType, expenseProfile, amount);
+  return {
+    driverAmount: split.driverAmount,
+    ownerAmount: split.ownerAmount,
+    chargeParty: split.chargeParty
+  };
+}
+
 function getFixedAmountConfigKey(sourceType) {
   const normalizedSourceType = String(sourceType || '').trim().toLowerCase();
   const keyMap = {
@@ -300,5 +318,6 @@ module.exports = {
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo,
   resolveVariableExpenseSplit,
+  resolveVariableExpenseShares,
   resolveScheduledDeductionAmount
 };

@@ -20,7 +20,8 @@ const {
 const {
   normalizeRecurringDeductionPayeeIds,
   shouldApplyRecurringDeductionToSettlementSide,
-  resolveScheduledDeductionAmount
+  resolveScheduledDeductionAmount,
+  resolveVariableExpenseShares
 } = require('./settlement-recurring-deductions');
 const {
   buildUniqueSettlementNumber,
@@ -506,8 +507,14 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     const driverRevenue = Math.max(0, driverRevenueRaw);
 
     // --- 10. Create DRIVER settlement ---
-    const driverFuelShare = isOwnerOperator ? totalFuel : totalFuel * driverPct;
-    const driverTollShare = isOwnerOperator ? totalTolls : totalTolls * driverPct;
+    const driverFuelShare = fuelTxns.reduce((sum, fuel) => {
+      const shares = resolveVariableExpenseShares('fuel', expenseProfile, fuel.amount, isOwnerOperator);
+      return sum + shares.driverAmount;
+    }, 0);
+    const driverTollShare = tollTxns.reduce((sum, toll) => {
+      const shares = resolveVariableExpenseShares('toll', expenseProfile, toll.amount, isOwnerOperator);
+      return sum + shares.driverAmount;
+    }, 0);
 
     const driverSettlementBasePayload = {
       tenant_id: tenantId,
@@ -584,18 +591,28 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
 
     // Fuel deductions for driver
     for (const fuel of fuelTxns) {
-      const share = Math.round((Number(fuel.amount) || 0) * (isOwnerOperator ? 1.0 : driverPct) * 100) / 100;
+      const { driverAmount, chargeParty } = resolveVariableExpenseShares(
+        'fuel',
+        expenseProfile,
+        fuel.amount,
+        isOwnerOperator
+      );
+      const share = driverAmount;
       if (share === 0) continue;
-      await insertFuelAdjustment(knex, driverSettlement.id, fuel, share,
-        isOwnerOperator ? 'driver' : (driverPct < 1 ? 'shared' : 'driver'), userId);
+      await insertFuelAdjustment(knex, driverSettlement.id, fuel, share, chargeParty, userId);
     }
 
     // Toll deductions for driver
     for (const toll of tollTxns) {
-      const share = Math.round((Number(toll.amount) || 0) * (isOwnerOperator ? 1.0 : driverPct) * 100) / 100;
+      const { driverAmount, chargeParty } = resolveVariableExpenseShares(
+        'toll',
+        expenseProfile,
+        toll.amount,
+        isOwnerOperator
+      );
+      const share = driverAmount;
       if (share === 0) continue;
-      await insertTollAdjustment(knex, driverSettlement.id, toll, share,
-        isOwnerOperator ? 'driver' : (driverPct < 1 ? 'shared' : 'driver'), userId);
+      await insertTollAdjustment(knex, driverSettlement.id, toll, share, chargeParty, userId);
     }
 
     // Recurring deductions for driver
@@ -681,8 +698,14 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
       return sum + additionalPayeePay;
     }, 0);
     const eoRevenue = Math.max(0, eoRevenueRaw);
-    const eoFuelShare = totalFuel * ownerPct;
-    const eoTollShare = totalTolls * ownerPct;
+    const eoFuelShare = fuelTxns.reduce((sum, fuel) => {
+      const shares = resolveVariableExpenseShares('fuel', expenseProfile, fuel.amount, false);
+      return sum + shares.ownerAmount;
+    }, 0);
+    const eoTollShare = tollTxns.reduce((sum, toll) => {
+      const shares = resolveVariableExpenseShares('toll', expenseProfile, toll.amount, false);
+      return sum + shares.ownerAmount;
+    }, 0);
 
     // Prior EO carried balance
     const priorEoSettlement = await getPriorSettlement(knex, driverId, truckId, 'equipment_owner', periodStart);
@@ -758,18 +781,28 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
 
     // EO fuel deductions (owner's share)
     for (const fuel of fuelTxns) {
-      const share = Math.round((Number(fuel.amount) || 0) * ownerPct * 100) / 100;
+      const { ownerAmount, chargeParty } = resolveVariableExpenseShares(
+        'fuel',
+        expenseProfile,
+        fuel.amount,
+        false
+      );
+      const share = ownerAmount;
       if (share === 0) continue;
-      await insertFuelAdjustment(knex, eoSettlement.id, fuel, share,
-        ownerPct < 1 ? 'shared' : 'equipment_owner', userId);
+      await insertFuelAdjustment(knex, eoSettlement.id, fuel, share, chargeParty, userId);
     }
 
     // EO toll deductions (owner's share)
     for (const toll of tollTxns) {
-      const share = Math.round((Number(toll.amount) || 0) * ownerPct * 100) / 100;
+      const { ownerAmount, chargeParty } = resolveVariableExpenseShares(
+        'toll',
+        expenseProfile,
+        toll.amount,
+        false
+      );
+      const share = ownerAmount;
       if (share === 0) continue;
-      await insertTollAdjustment(knex, eoSettlement.id, toll, share,
-        ownerPct < 1 ? 'shared' : 'equipment_owner', userId);
+      await insertTollAdjustment(knex, eoSettlement.id, toll, share, chargeParty, userId);
     }
 
     // Recurring deductions for EO
