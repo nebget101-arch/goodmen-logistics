@@ -425,9 +425,10 @@ services:
 
   - type: web
     name: signoz-otel-collector-dev
-    runtime: image
-    image:
-      url: signoz/signoz-otel-collector:0.102.12
+    runtime: docker
+    branch: dev
+    dockerfilePath: infra/signoz/Dockerfile.otel-collector
+    dockerContext: .
     plan: starter
     envVars:
       - key: CLICKHOUSE_HOST
@@ -446,11 +447,18 @@ services:
 
   - type: web
     name: signoz-dashboard-dev
-    runtime: image
-    image:
-      url: signoz/query-service:0.53.0
+    runtime: docker
+    branch: dev
+    dockerfilePath: infra/signoz/Dockerfile.query-service
+    dockerContext: .
     plan: starter
+    disk:
+      name: signoz-dashboard-data
+      mountPath: /var/lib/signoz
+      sizeGB: 1
     envVars:
+      - key: ClickHouseUrl
+        value: tcp://signoz-clickhouse-dev:9000/signoz
       - key: CLICKHOUSE_HOST
         fromService:
           type: pserv
