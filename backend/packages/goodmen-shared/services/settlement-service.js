@@ -1485,7 +1485,7 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
       }
       if (!shouldApplyRecurringDeductionForSettlement(rule, applyTo, {
         expenseProfile,
-        hasLoadItems: false
+        hasLoadItems: loadItems.length > 0
       })) {
         continue;
       }
