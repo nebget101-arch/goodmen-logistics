@@ -1,9 +1,10 @@
 FROM signoz/query-service:0.53.0
 
-# SigNoz Query Service + API
-# Connects to ClickHouse to serve the SigNoz dashboard UI
-EXPOSE 8080
+# Create writable directory for SQLite metadata DB
+RUN mkdir -p /var/lib/signoz && chmod 777 /var/lib/signoz
 
 ENV STORAGE=clickhouse
-ENV ClickHouseUrl=tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}
+ENV SIGNOZ_LOCAL_DB_PATH=/var/lib/signoz/signoz.db
 ENV SIGNOZ_TELEMETRY_ENABLED=false
+
+EXPOSE 8080
