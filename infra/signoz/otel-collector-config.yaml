@@ -1,0 +1,61 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "https://fleetneuron.ai"
+            - "https://dev.fleetneuron.ai"
+            - "http://localhost:4200"
+          allowed_headers:
+            - "*"
+
+processors:
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+    timeout: 10s
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resourcedetection:
+    detectors:
+      - env
+
+exporters:
+  clickhousetraces:
+    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB:-signoz}&username=${CLICKHOUSE_USER:-default}&password=${CLICKHOUSE_PASSWORD}
+    low_cardinal_exception_grouping: true
+  clickhousemetricswrite:
+    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB:-signoz}&username=${CLICKHOUSE_USER:-default}&password=${CLICKHOUSE_PASSWORD}
+  clickhouselogsexporter:
+    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB:-signoz}&username=${CLICKHOUSE_USER:-default}&password=${CLICKHOUSE_PASSWORD}
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhousetraces]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhousemetricswrite]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhouselogsexporter]
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888

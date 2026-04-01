@@ -1,0 +1,9 @@
+FROM signoz/query-service:0.53.0
+
+# SigNoz Query Service + API
+# Connects to ClickHouse to serve the SigNoz dashboard UI
+EXPOSE 8080
+
+ENV STORAGE=clickhouse
+ENV ClickHouseUrl=tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}
+ENV SIGNOZ_TELEMETRY_ENABLED=false

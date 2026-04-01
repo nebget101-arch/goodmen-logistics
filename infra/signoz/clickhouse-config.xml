@@ -1,0 +1,31 @@
+<clickhouse>
+    <logger>
+        <level>warning</level>
+        <console>true</console>
+    </logger>
+
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+
+    <!-- Data retention TTLs — auto-delete old data to manage disk -->
+    <!-- Traces: 15 days -->
+    <!-- Metrics: 30 days -->
+    <!-- Actual TTL is set on table creation by SigNoz migrations -->
+
+    <max_connections>100</max_connections>
+    <max_concurrent_queries>50</max_concurrent_queries>
+
+    <!-- Memory limits for Render Starter+ (2GB RAM) -->
+    <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+
+    <merge_tree>
+        <max_bytes_to_merge_at_max_space_in_pool>161061273600</max_bytes_to_merge_at_max_space_in_pool>
+    </merge_tree>
+
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+
+    <users_config>users.xml</users_config>
+</clickhouse>

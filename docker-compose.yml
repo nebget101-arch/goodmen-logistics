@@ -214,5 +214,68 @@ services:
       - ./backend:/usr/src/app/backend
     command: ["npm", "run", "migrate:dev"]
 
+  # ── SigNoz Observability Stack (Local Dev) ──────────────────
+  signoz-clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    container_name: signoz-clickhouse
+    volumes:
+      - signoz_clickhouse_data:/var/lib/clickhouse
+      - ./infra/signoz/clickhouse-config.xml:/etc/clickhouse-server/config.d/fleetneuron.xml
+      - ./infra/signoz/clickhouse-users.xml:/etc/clickhouse-server/users.d/fleetneuron.xml
+    environment:
+      - CLICKHOUSE_DB=signoz
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=signoz_local_dev
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    restart: unless-stopped
+
+  signoz-otel-collector:
+    image: signoz/signoz-otel-collector:0.102.12
+    container_name: signoz-otel-collector
+    command: ["--config", "/etc/otel/config.yaml"]
+    volumes:
+      - ./infra/signoz/otel-collector-config.yaml:/etc/otel/config.yaml
+    environment:
+      - CLICKHOUSE_HOST=signoz-clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_DB=signoz
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=signoz_local_dev
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    depends_on:
+      - signoz-clickhouse
+    restart: unless-stopped
+
+  signoz-query-service:
+    image: signoz/query-service:0.53.0
+    container_name: signoz-query-service
+    environment:
+      - ClickHouseUrl=tcp://signoz-clickhouse:9000
+      - STORAGE=clickhouse
+      - SIGNOZ_TELEMETRY_ENABLED=false
+    ports:
+      - "8080:8080"
+    depends_on:
+      - signoz-clickhouse
+      - signoz-otel-collector
+    restart: unless-stopped
+
+  signoz-frontend:
+    image: signoz/frontend:0.53.0
+    container_name: signoz-frontend
+    environment:
+      - FRONTEND_API_ENDPOINT=http://signoz-query-service:8080
+    ports:
+      - "3301:3301"
+    depends_on:
+      - signoz-query-service
+    restart: unless-stopped
+
 volumes:
   redis_data:
+  signoz_clickhouse_data:
