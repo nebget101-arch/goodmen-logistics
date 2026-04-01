@@ -1731,8 +1731,8 @@ router.post('/generate-dual', requireRole(settlementRoles), async (req, res) => 
     if (!driver_id) return res.status(400).json({ error: 'driver_id is required' });
 
     const context = {
-      tenantId: req.tenantContext?.tenantId,
-      operatingEntityId: req.tenantContext?.operatingEntityId
+      tenantId: req.context?.tenantId,
+      operatingEntityId: req.context?.operatingEntityId
     };
 
     const result = await generateDualSettlements(
@@ -1761,8 +1761,8 @@ router.post('/generate-dual', requireRole(settlementRoles), async (req, res) => 
 router.get('/balance-transfers', requireRole(settlementRoles), async (req, res) => {
   try {
     const context = {
-      tenantId: req.tenantContext?.tenantId,
-      operatingEntityId: req.tenantContext?.operatingEntityId
+      tenantId: req.context?.tenantId,
+      operatingEntityId: req.context?.operatingEntityId
     };
     const filters = {
       status: req.query.status || null,
@@ -1784,8 +1784,8 @@ router.get('/balance-transfers', requireRole(settlementRoles), async (req, res) 
 router.post('/balance-transfers', requireRole(settlementRoles), async (req, res) => {
   try {
     const context = {
-      tenantId: req.tenantContext?.tenantId,
-      operatingEntityId: req.tenantContext?.operatingEntityId
+      tenantId: req.context?.tenantId,
+      operatingEntityId: req.context?.operatingEntityId
     };
     const transfer = await createBalanceTransfer(req.body, req.user?.id, knex, context);
     res.status(201).json(transfer);
@@ -1803,8 +1803,8 @@ router.post('/balance-transfers', requireRole(settlementRoles), async (req, res)
 router.patch('/balance-transfers/:id/approve', requireRole(['admin', 'manager']), async (req, res) => {
   try {
     const context = {
-      tenantId: req.tenantContext?.tenantId,
-      operatingEntityId: req.tenantContext?.operatingEntityId
+      tenantId: req.context?.tenantId,
+      operatingEntityId: req.context?.operatingEntityId
     };
     const updated = await approveBalanceTransfer(
       req.params.id,
@@ -1830,8 +1830,8 @@ router.patch('/balance-transfers/:id/approve', requireRole(['admin', 'manager'])
 router.patch('/balance-transfers/:id/reject', requireRole(['admin', 'manager']), async (req, res) => {
   try {
     const context = {
-      tenantId: req.tenantContext?.tenantId,
-      operatingEntityId: req.tenantContext?.operatingEntityId
+      tenantId: req.context?.tenantId,
+      operatingEntityId: req.context?.operatingEntityId
     };
     const updated = await rejectBalanceTransfer(
       req.params.id,
