@@ -56,6 +56,31 @@ function shouldIncludeRecurringDeductionRule(rule = {}, periodStart, periodEnd, 
   return true;
 }
 
+function resolveRecurringDeductionBackfillStartDate(rule = {}, periodEnd, options = {}) {
+  const historicalBackfillStart = normalizeRecurringDeductionDate(options?.historicalBackfillStartDate);
+  const historicalBackfillEnd = normalizeRecurringDeductionDate(options?.historicalBackfillEndDate);
+  const normalizedPeriodEnd = normalizeRecurringDeductionDate(periodEnd);
+  const normalizedRuleStart = normalizeRecurringDeductionDate(rule?.start_date);
+
+  if (!historicalBackfillStart || !historicalBackfillEnd || !normalizedPeriodEnd || !normalizedRuleStart) {
+    return null;
+  }
+
+  if (normalizedRuleStart <= normalizedPeriodEnd) {
+    return null;
+  }
+
+  if (normalizedRuleStart > historicalBackfillEnd) {
+    return null;
+  }
+
+  if (historicalBackfillStart >= normalizedRuleStart) {
+    return null;
+  }
+
+  return historicalBackfillStart;
+}
+
 function resolveRecurringDeductionApplyTo(rule = {}, payeeContext = {}) {
   const primaryPayeeId = String(payeeContext?.primaryPayeeId || '').trim();
   const additionalPayeeId = String(payeeContext?.additionalPayeeId || '').trim();
@@ -78,6 +103,7 @@ function resolveRecurringDeductionApplyTo(rule = {}, payeeContext = {}) {
 
 module.exports = {
   normalizeRecurringDeductionPayeeIds,
+  resolveRecurringDeductionBackfillStartDate,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
 };

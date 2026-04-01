@@ -1067,6 +1067,7 @@ router.post('/recurring-deductions/backfill', requireRole(settlementRoles), asyn
     for (const s of candidates) {
       try {
         await recalcAndUpdateSettlement(knex, s.id, {
+          historicalRecurringRuleStartDateStart: start_date,
           historicalRecurringRuleStartDateEnd: end_date
         });
         updated.push(s.id);

@@ -21,6 +21,7 @@ const {
 } = require('./settlement-load-dates');
 const {
   normalizeRecurringDeductionPayeeIds,
+  resolveRecurringDeductionBackfillStartDate,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
 } = require('./settlement-recurring-deductions');
@@ -1043,11 +1044,26 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
         payeeAssignment
       ),
       {
+        historicalBackfillStartDate: options?.historicalRecurringRuleStartDateStart || null,
         historicalBackfillEndDate: options?.historicalRecurringRuleStartDateEnd || null
       }
     );
 
     for (const rule of recurring) {
+      const backfilledRuleStartDate = resolveRecurringDeductionBackfillStartDate(rule, period.period_end, {
+        historicalBackfillStartDate: options?.historicalRecurringRuleStartDateStart || null,
+        historicalBackfillEndDate: options?.historicalRecurringRuleStartDateEnd || null
+      });
+      if (backfilledRuleStartDate) {
+        await knex('recurring_deduction_rules')
+          .where({ id: rule.id })
+          .update({
+            start_date: backfilledRuleStartDate,
+            updated_at: knex.fn.now()
+          });
+        rule.start_date = backfilledRuleStartDate;
+      }
+
       const applyTo = resolveRecurringDeductionApplyTo(rule, {
         primaryPayeeId: effectivePrimaryPayeeId,
         additionalPayeeId: effectiveAdditionalPayeeId
