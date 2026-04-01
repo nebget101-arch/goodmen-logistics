@@ -117,7 +117,7 @@ function getNetPayAmount(payload) {
 function buildSummaryRows(payload) {
   const settlement = payload?.settlement || {};
   const truckLabel = payload?.truck?.unit_number
-    ? `Unit ${payload.truck.unit_number}${payload?.truck?.plate_number ? ` • ${payload.truck.plate_number}` : ''}`
+    ? `Unit ${payload.truck.unit_number}${payload?.truck?.plate_number ? ` | ${payload.truck.plate_number}` : ''}`
     : safeText(payload?.truck?.plate_number, '—');
 
   return [
@@ -152,29 +152,68 @@ function getLoadPayAmount(item, settlementType) {
     : asNumber(item?.driver_pay_amount);
 }
 
-function classifyAdjustment(item) {
-  const sourceType = (item?.source_type || 'manual').toString();
-  if (sourceType === 'scheduled_rule') return 'Scheduled Deductions';
-  if (sourceType === 'manual') return 'Manual Adjustments';
-  if (sourceType === 'imported_fuel') return 'Fuel Variable Deductions';
-  if (sourceType === 'imported_toll') return 'Toll Variable Deductions';
-  if (sourceType === 'carried_balance') return 'Carried Balance';
-  return 'Other Deductions';
+function getLocationLabel(city, state, fallback = '') {
+  const value = [city, state].filter(Boolean).join(', ');
+  return safeText(value || fallback, '—');
 }
 
-function buildAdjustmentGroups(adjustmentItems) {
-  const groups = new Map();
-  for (const item of adjustmentItems || []) {
-    if (item?.source_type === 'scheduled_rule_removed') continue;
-    const groupName = classifyAdjustment(item);
-    if (!groups.has(groupName)) groups.set(groupName, []);
-    groups.get(groupName).push(item);
-  }
-  return Array.from(groups.entries()).map(([title, items]) => ({
-    title,
-    total: items.reduce((sum, item) => sum + asNumber(item?.amount), 0),
-    items
-  }));
+function getLoadDetails(item) {
+  const pickup = getLocationLabel(item?.pickup_city, item?.pickup_state, item?.pickup_location || '');
+  const delivery = getLocationLabel(item?.delivery_city, item?.delivery_state, item?.delivery_location || '');
+  return `${pickup} -> ${delivery}`;
+}
+
+function buildLoadRows(payload) {
+  const settlementType = payload?.settlement?.settlement_type;
+  return (payload?.loadItems || []).map((item) => ([
+    safeText(item?.load_number || item?.load_id),
+    `${fmtDate(item?.pickup_date)} -> ${fmtDate(item?.delivery_date)}`,
+    getLoadDetails(item),
+    item?.empty_miles === null || item?.empty_miles === undefined || item?.empty_miles === '' ? '—' : String(item.empty_miles),
+    item?.loaded_miles === null || item?.loaded_miles === undefined || item?.loaded_miles === '' ? '—' : String(item.loaded_miles),
+    `$${fmtMoney(item?.gross_amount)}`,
+    `$${fmtMoney(getLoadPayAmount(item, settlementType))}`
+  ]));
+}
+
+function buildFuelRows(adjustmentItems) {
+  return (adjustmentItems || [])
+    .filter((item) => item?.source_type === 'imported_fuel' && item?.fuel_transaction)
+    .map((item) => {
+      const fuel = item.fuel_transaction || {};
+      const location = [
+        fuel.location_name || fuel.vendor_name || '',
+        [fuel.city, fuel.state].filter(Boolean).join(', ')
+      ].filter(Boolean).join(' | ');
+
+      return [
+        fmtDate(fuel.transaction_date || item.occurrence_date),
+        safeText(location, '—'),
+        safeText(fuel.product_type, 'diesel'),
+        fuel.gallons === null || fuel.gallons === undefined ? '—' : String(fuel.gallons),
+        `$${fmtMoney(item.amount)}`
+      ];
+    });
+}
+
+function buildScheduledRows(adjustmentItems) {
+  return (adjustmentItems || [])
+    .filter((item) => item?.source_type === 'scheduled_rule')
+    .map((item, index) => ([
+      String(index + 1),
+      safeText(item?.description || 'Scheduled deduction'),
+      `$${fmtMoney(item?.amount)}`
+    ]));
+}
+
+function buildOtherDeductionRows(adjustmentItems) {
+  return (adjustmentItems || [])
+    .filter((item) => !['scheduled_rule', 'scheduled_rule_removed', 'imported_fuel'].includes(item?.source_type))
+    .map((item) => ([
+      safeText(item?.description || item?.source_type || item?.item_type),
+      safeText(item?.source_type || 'manual'),
+      `$${fmtMoney(item?.amount)}`
+    ]));
 }
 
 const COLORS = {
@@ -200,43 +239,68 @@ const LAYOUT = {
   marginRight: 36,
   marginTop: 34,
   marginBottom: 34,
-  contentWidth: 540
+  contentWidth: 540,
+  contentTop: 657,
+  contentBottom: 58
 };
 
-function wrapText(text, maxChars = 80) {
+function wrapTextToWidth(font, text, size, maxWidth) {
   const raw = safeText(text, '');
   if (!raw) return [''];
+
   const words = raw.split(/\s+/);
   const lines = [];
   let current = '';
+
   for (const word of words) {
     const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      lines.push(current);
-      current = word;
-    } else {
+    if (font.widthOfTextAtSize(next, size) <= maxWidth) {
       current = next;
+      continue;
     }
+
+    if (current) {
+      lines.push(current);
+      current = '';
+    }
+
+    if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+      current = word;
+      continue;
+    }
+
+    let segment = '';
+    for (const ch of word) {
+      const nextSegment = `${segment}${ch}`;
+      if (font.widthOfTextAtSize(nextSegment, size) <= maxWidth || !segment) {
+        segment = nextSegment;
+      } else {
+        lines.push(segment);
+        segment = ch;
+      }
+    }
+    current = segment;
   }
+
   if (current) lines.push(current);
   return lines;
 }
 
-function drawTextBlock(page, font, text, x, y, options = {}) {
-  const size = options.size || 10;
-  const color = options.color || COLORS.text;
+function drawWrappedLines(page, font, lines, x, y, options = {}) {
+  const size = options.size || 9;
   const lineHeight = options.lineHeight || size + 2;
-  const maxChars = options.maxChars || 80;
-  const lines = wrapText(text, maxChars);
+  const color = options.color || COLORS.text;
   let currentY = y;
+
   for (const line of lines) {
     page.drawText(line, { x, y: currentY, size, font, color });
     currentY -= lineHeight;
   }
+
   return currentY;
 }
 
-function drawPageChrome(page, fonts, payload, pageNumber, totalPages) {
+function drawPageBase(page, fonts, payload) {
   const { regular, bold } = fonts;
   page.drawRectangle({ x: 0, y: 0, width: LAYOUT.width, height: LAYOUT.height, color: COLORS.bg });
   page.drawRectangle({
@@ -270,21 +334,32 @@ function drawPageChrome(page, fonts, payload, pageNumber, totalPages) {
     font: bold,
     color: COLORS.accent
   });
+  page.drawText('www.fleetneuron.ai', {
+    x: LAYOUT.width - LAYOUT.marginRight - 116,
+    y: LAYOUT.height - 48,
+    size: 8,
+    font: bold,
+    color: COLORS.accent
+  });
 
   const companyName = getCompanyName(payload);
   const companyLine = getCompanyLine(payload);
-  drawTextBlock(page, regular, companyName, LAYOUT.marginLeft + 200, LAYOUT.height - 63, {
-    size: 10,
-    maxChars: 40,
-    color: COLORS.text,
-    lineHeight: 12
-  });
-  drawTextBlock(page, regular, companyLine, LAYOUT.marginLeft + 200, LAYOUT.height - 78, {
-    size: 8,
-    maxChars: 55,
-    color: COLORS.muted,
-    lineHeight: 10
-  });
+  drawWrappedLines(
+    page,
+    regular,
+    wrapTextToWidth(regular, companyName, 10, 150),
+    LAYOUT.marginLeft + 200,
+    LAYOUT.height - 63,
+    { size: 10, lineHeight: 12, color: COLORS.text }
+  );
+  drawWrappedLines(
+    page,
+    regular,
+    wrapTextToWidth(regular, companyLine, 8, 190),
+    LAYOUT.marginLeft + 200,
+    LAYOUT.height - 78,
+    { size: 8, lineHeight: 10, color: COLORS.muted }
+  );
 
   const badgeColor = payload?.settlement?.settlement_type === 'equipment_owner' ? COLORS.badgeOwner : COLORS.badgeDriver;
   const badgeText = getSettlementTypeBadge(payload?.settlement?.settlement_type);
@@ -305,14 +380,17 @@ function drawPageChrome(page, fonts, payload, pageNumber, totalPages) {
     font: bold,
     color: COLORS.white
   });
+}
 
+function drawPageFooter(page, fonts, pageNumber, totalPages) {
+  const { regular, bold } = fonts;
   page.drawLine({
     start: { x: LAYOUT.marginLeft, y: 42 },
     end: { x: LAYOUT.width - LAYOUT.marginRight, y: 42 },
     thickness: 0.7,
     color: COLORS.border
   });
-  page.drawText('PROTECTED BY FLEETNEURON AI ANOMALY DETECTION', {
+  page.drawText('www.fleetneuron.ai', {
     x: LAYOUT.marginLeft,
     y: 28,
     size: 7,
@@ -337,258 +415,320 @@ function drawPageChrome(page, fonts, payload, pageNumber, totalPages) {
   });
 }
 
-function drawSectionTitle(page, fonts, title, y) {
-  page.drawText(title, {
+function createDocumentState(pdfDoc, fonts, payload) {
+  return {
+    pdfDoc,
+    fonts,
+    payload,
+    pages: [],
+    page: null,
+    y: LAYOUT.contentTop
+  };
+}
+
+function addPage(state) {
+  const page = state.pdfDoc.addPage([LAYOUT.width, LAYOUT.height]);
+  drawPageBase(page, state.fonts, state.payload);
+  state.pages.push(page);
+  state.page = page;
+  state.y = LAYOUT.contentTop;
+  return state;
+}
+
+function ensureSpace(state, heightNeeded) {
+  if (!state.page) {
+    addPage(state);
+    return;
+  }
+
+  if (state.y - heightNeeded < LAYOUT.contentBottom) {
+    addPage(state);
+  }
+}
+
+function drawSectionTitle(state, title) {
+  ensureSpace(state, 26);
+  state.page.drawText(title, {
     x: LAYOUT.marginLeft,
-    y,
+    y: state.y,
     size: 12,
-    font: fonts.bold,
+    font: state.fonts.bold,
     color: COLORS.accent
   });
-  page.drawLine({
-    start: { x: LAYOUT.marginLeft, y: y - 4 },
-    end: { x: LAYOUT.width - LAYOUT.marginRight, y: y - 4 },
+  state.page.drawLine({
+    start: { x: LAYOUT.marginLeft, y: state.y - 4 },
+    end: { x: LAYOUT.width - LAYOUT.marginRight, y: state.y - 4 },
     thickness: 0.7,
     color: COLORS.accentSoft
   });
-  return y - 18;
+  state.y -= 20;
 }
 
-function drawInfoGrid(page, fonts, rows, y, options = {}) {
+function drawInfoGrid(state, rows) {
   const leftX = LAYOUT.marginLeft;
   const rightX = LAYOUT.marginLeft + 270;
-  const labelColor = options.labelColor || COLORS.muted;
-  const valueColor = options.valueColor || COLORS.text;
-  let currentY = y;
+  const labelSize = 7;
+  const valueSize = 9;
+  const valueWidth = 220;
+
   for (let i = 0; i < rows.length; i += 2) {
     const left = rows[i];
     const right = rows[i + 1];
-    page.drawText(left[0].toUpperCase(), { x: leftX, y: currentY, size: 7, font: fonts.bold, color: labelColor });
-    page.drawText(safeText(left[1]), { x: leftX, y: currentY - 12, size: 10, font: fonts.regular, color: valueColor });
+    const leftLines = wrapTextToWidth(state.fonts.regular, safeText(left[1]), valueSize, valueWidth);
+    const rightLines = right ? wrapTextToWidth(state.fonts.regular, safeText(right[1]), valueSize, valueWidth) : [''];
+    const rowHeight = Math.max(leftLines.length, rightLines.length) * 11 + 22;
+
+    ensureSpace(state, rowHeight);
+
+    state.page.drawText(left[0].toUpperCase(), {
+      x: leftX,
+      y: state.y,
+      size: labelSize,
+      font: state.fonts.bold,
+      color: COLORS.muted
+    });
+    drawWrappedLines(state.page, state.fonts.regular, leftLines, leftX, state.y - 12, {
+      size: valueSize,
+      lineHeight: 11,
+      color: COLORS.text
+    });
+
     if (right) {
-      page.drawText(right[0].toUpperCase(), { x: rightX, y: currentY, size: 7, font: fonts.bold, color: labelColor });
-      page.drawText(safeText(right[1]), { x: rightX, y: currentY - 12, size: 10, font: fonts.regular, color: valueColor });
+      state.page.drawText(right[0].toUpperCase(), {
+        x: rightX,
+        y: state.y,
+        size: labelSize,
+        font: state.fonts.bold,
+        color: COLORS.muted
+      });
+      drawWrappedLines(state.page, state.fonts.regular, rightLines, rightX, state.y - 12, {
+        size: valueSize,
+        lineHeight: 11,
+        color: COLORS.text
+      });
     }
-    currentY -= 30;
+
+    state.y -= rowHeight;
   }
-  return currentY;
 }
 
-function drawTotalsPanel(page, fonts, rows, y) {
-  const panelY = y - 118;
-  page.drawRectangle({
+function drawTotalsPanel(state, rows) {
+  const titleHeight = 20;
+  const rowHeight = 18;
+  const panelHeight = 20 + titleHeight + rows.length * rowHeight + 16;
+  ensureSpace(state, panelHeight + 12);
+
+  const topY = state.y;
+  const panelY = topY - panelHeight;
+  state.page.drawRectangle({
     x: LAYOUT.marginLeft,
     y: panelY,
     width: LAYOUT.contentWidth,
-    height: 128,
+    height: panelHeight,
     color: COLORS.panelAlt,
     borderColor: COLORS.border,
     borderWidth: 1
   });
-  page.drawText('Settlement Summary', {
+  state.page.drawText('Settlement Summary', {
     x: LAYOUT.marginLeft + 14,
-    y: y - 16,
+    y: topY - 18,
     size: 12,
-    font: fonts.bold,
+    font: state.fonts.bold,
     color: COLORS.white
   });
 
-  let currentY = y - 40;
+  let currentY = topY - 42;
   for (const [label, amount] of rows) {
-    page.drawText(label, {
+    state.page.drawText(label, {
       x: LAYOUT.marginLeft + 14,
       y: currentY,
       size: 9,
-      font: fonts.regular,
+      font: state.fonts.regular,
       color: COLORS.muted
     });
     const formatted = `$${fmtMoney(amount)}`;
-    const width = fonts.bold.widthOfTextAtSize(formatted, label === 'Net Pay' ? 13 : 10);
-    page.drawText(formatted, {
+    const fontSize = label === 'Net Pay' ? 13 : 10;
+    const width = state.fonts.bold.widthOfTextAtSize(formatted, fontSize);
+    state.page.drawText(formatted, {
       x: LAYOUT.width - LAYOUT.marginRight - 14 - width,
       y: currentY,
-      size: label === 'Net Pay' ? 13 : 10,
-      font: fonts.bold,
+      size: fontSize,
+      font: state.fonts.bold,
       color: label === 'Net Pay' ? COLORS.positive : COLORS.white
     });
-    currentY -= 16;
+    currentY -= rowHeight;
   }
-  return panelY - 18;
+
+  state.y = panelY - 14;
 }
 
-function drawLoadTable(page, fonts, payload, y) {
-  const settlementType = payload?.settlement?.settlement_type;
-  const items = payload?.loadItems || [];
-  page.drawRectangle({
+function getPreparedRow(fonts, columns, row, options = {}) {
+  const size = options.size || 8;
+  const lineHeight = options.lineHeight || 10;
+  const padding = options.padding || 4;
+  const cells = columns.map((column, index) => {
+    const lines = wrapTextToWidth(fonts.regular, safeText(row[index], ''), size, column.width - padding * 2);
+    return lines;
+  });
+  const height = Math.max(...cells.map((lines) => Math.max(lines.length, 1))) * lineHeight + padding * 2;
+  return { cells, height };
+}
+
+function drawTableHeader(state, columns) {
+  const topY = state.y;
+  state.page.drawRectangle({
     x: LAYOUT.marginLeft,
-    y: y - 20,
+    y: topY - 20,
     width: LAYOUT.contentWidth,
     height: 18,
     color: COLORS.accentSoft
   });
-  const columns = [
-    { label: 'Load', x: LAYOUT.marginLeft + 10 },
-    { label: 'Dates', x: LAYOUT.marginLeft + 92 },
-    { label: 'Gross', x: LAYOUT.marginLeft + 255 },
-    { label: 'Highlighted Pay', x: LAYOUT.marginLeft + 334 },
-    { label: 'Basis', x: LAYOUT.marginLeft + 456 }
-  ];
-  for (const column of columns) {
-    page.drawText(column.label, { x: column.x, y: y - 14, size: 8, font: fonts.bold, color: COLORS.white });
-  }
-  let currentY = y - 38;
-  if (!items.length) {
-    page.drawText('No load earnings were attached to this settlement.', {
-      x: LAYOUT.marginLeft + 10,
-      y: currentY,
-      size: 10,
-      font: fonts.regular,
-      color: COLORS.muted
-    });
-    return currentY - 18;
-  }
 
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
-    if (index % 2 === 0) {
-      page.drawRectangle({
-        x: LAYOUT.marginLeft,
-        y: currentY - 4,
-        width: LAYOUT.contentWidth,
-        height: 16,
-        color: COLORS.panel
-      });
-    }
-    page.drawText(safeText(item?.load_number || item?.load_id), {
-      x: LAYOUT.marginLeft + 10,
-      y: currentY,
-      size: 8,
-      font: fonts.regular,
-      color: COLORS.text
-    });
-    page.drawText(`${fmtDate(item?.pickup_date)} -> ${fmtDate(item?.delivery_date)}`, {
-      x: LAYOUT.marginLeft + 92,
-      y: currentY,
-      size: 8,
-      font: fonts.regular,
-      color: COLORS.text
-    });
-    page.drawText(`$${fmtMoney(item?.gross_amount)}`, {
-      x: LAYOUT.marginLeft + 255,
-      y: currentY,
-      size: 8,
-      font: fonts.regular,
-      color: COLORS.text
-    });
-    page.drawText(`$${fmtMoney(getLoadPayAmount(item, settlementType))}`, {
-      x: LAYOUT.marginLeft + 334,
-      y: currentY,
-      size: 8,
-      font: fonts.bold,
+  let cursorX = LAYOUT.marginLeft;
+  for (const column of columns) {
+    state.page.drawText(column.label, {
+      x: cursorX + 4,
+      y: topY - 14,
+      size: 7,
+      font: state.fonts.bold,
       color: COLORS.white
     });
-    page.drawText(safeText(item?.pay_basis_snapshot, 'gross'), {
-      x: LAYOUT.marginLeft + 456,
-      y: currentY,
-      size: 8,
-      font: fonts.regular,
-      color: COLORS.text
-    });
-    currentY -= 16;
+    cursorX += column.width;
   }
-  return currentY - 8;
+
+  state.y = topY - 24;
 }
 
-function drawAdjustmentSection(page, fonts, title, group, y) {
-  page.drawText(`${title}  •  Total $${fmtMoney(group.total)}`, {
-    x: LAYOUT.marginLeft,
-    y,
-    size: 10,
-    font: fonts.bold,
-    color: COLORS.white
-  });
-  let currentY = y - 16;
-  if (!group.items.length) {
-    page.drawText('No items.', {
-      x: LAYOUT.marginLeft + 8,
-      y: currentY,
-      size: 9,
-      font: fonts.regular,
-      color: COLORS.muted
-    });
-    return currentY - 14;
-  }
-  for (const item of group.items) {
-    page.drawText(`• ${safeText(item.description || item.source_type || item.item_type)}`, {
-      x: LAYOUT.marginLeft + 8,
-      y: currentY,
-      size: 9,
-      font: fonts.regular,
-      color: COLORS.text
-    });
-    const amount = `$${fmtMoney(item.amount)}`;
-    const width = fonts.bold.widthOfTextAtSize(amount, 9);
-    page.drawText(amount, {
-      x: LAYOUT.width - LAYOUT.marginRight - width,
-      y: currentY,
-      size: 9,
-      font: fonts.bold,
-      color: COLORS.warning
-    });
-    currentY -= 14;
-  }
-  return currentY - 4;
-}
+function drawTableRow(state, columns, preparedRow, index, options = {}) {
+  const topY = state.y;
+  const rowHeight = preparedRow.height;
+  const size = options.size || 8;
+  const lineHeight = options.lineHeight || 10;
+  const padding = options.padding || 4;
+  const rowColor = index % 2 === 0 ? COLORS.panel : COLORS.panelAlt;
 
-function drawInsightsSection(page, fonts, insights, y) {
-  page.drawRectangle({
+  state.page.drawRectangle({
     x: LAYOUT.marginLeft,
-    y: y - 124,
+    y: topY - rowHeight,
     width: LAYOUT.contentWidth,
-    height: 132,
+    height: rowHeight,
+    color: rowColor,
+    borderColor: COLORS.border,
+    borderWidth: 0.3
+  });
+
+  let cursorX = LAYOUT.marginLeft;
+  columns.forEach((column, columnIndex) => {
+    const font = column.bold ? state.fonts.bold : state.fonts.regular;
+    const color = column.color || COLORS.text;
+    drawWrappedLines(state.page, font, preparedRow.cells[columnIndex], cursorX + padding, topY - 10, {
+      size,
+      lineHeight,
+      color
+    });
+    cursorX += column.width;
+  });
+
+  state.y = topY - rowHeight;
+}
+
+function drawTableSection(state, title, columns, rows, options = {}) {
+  const emptyMessage = options.emptyMessage || 'No rows available.';
+  const tableOptions = {
+    size: options.size || 8,
+    lineHeight: options.lineHeight || 10,
+    padding: options.padding || 4
+  };
+
+  let rowIndex = 0;
+  let titleSuffix = '';
+
+  while (true) {
+    ensureSpace(state, 48);
+    drawSectionTitle(state, `${title}${titleSuffix}`);
+    drawTableHeader(state, columns);
+
+    if (!rows.length) {
+      ensureSpace(state, 22);
+      state.page.drawText(emptyMessage, {
+        x: LAYOUT.marginLeft + 6,
+        y: state.y,
+        size: 9,
+        font: state.fonts.regular,
+        color: COLORS.muted
+      });
+      state.y -= 18;
+      return;
+    }
+
+    while (rowIndex < rows.length) {
+      const preparedRow = getPreparedRow(state.fonts, columns, rows[rowIndex], tableOptions);
+      if (state.y - preparedRow.height < LAYOUT.contentBottom) {
+        addPage(state);
+        titleSuffix = ' (continued)';
+        break;
+      }
+      drawTableRow(state, columns, preparedRow, rowIndex, tableOptions);
+      rowIndex += 1;
+    }
+
+    state.y -= 10;
+    if (rowIndex >= rows.length) return;
+  }
+}
+
+function drawPanelSection(state, title, lines, options = {}) {
+  const titleSize = options.titleSize || 11;
+  const textSize = options.textSize || 8;
+  const lineHeight = options.lineHeight || 10;
+  const minHeight = options.minHeight || 78;
+  const contentHeight = lines.length * lineHeight;
+  const panelHeight = Math.max(minHeight, 28 + contentHeight + 18);
+  ensureSpace(state, panelHeight + 12);
+
+  const topY = state.y;
+  const panelY = topY - panelHeight;
+  state.page.drawRectangle({
+    x: LAYOUT.marginLeft,
+    y: panelY,
+    width: LAYOUT.contentWidth,
+    height: panelHeight,
     color: COLORS.panel,
     borderColor: COLORS.border,
     borderWidth: 1
   });
-  page.drawText('FleetNeuron AI Insights', {
+  state.page.drawText(title, {
     x: LAYOUT.marginLeft + 14,
-    y: y - 16,
-    size: 11,
-    font: fonts.bold,
+    y: topY - 16,
+    size: titleSize,
+    font: state.fonts.bold,
     color: COLORS.accent
   });
-  const summary = safeText(insights?.summary, 'Settlement insights are currently unavailable.');
-  drawTextBlock(page, fonts.regular, summary, LAYOUT.marginLeft + 14, y - 32, {
-    size: 8,
-    maxChars: 104,
-    lineHeight: 10,
+  drawWrappedLines(state.page, state.fonts.regular, lines, LAYOUT.marginLeft + 14, topY - 34, {
+    size: textSize,
+    lineHeight,
     color: COLORS.text
   });
+  state.y = panelY - 14;
+}
 
-  let currentY = y - 66;
-  const items = Array.isArray(insights?.insights) ? insights.insights.slice(0, 3) : [];
+function buildInsightLines(font, insights) {
+  const lines = [];
+  const summary = safeText(insights?.summary, 'Settlement insights are currently unavailable.');
+  lines.push(...wrapTextToWidth(font, summary, 8, LAYOUT.contentWidth - 28));
+  lines.push('');
+
+  const items = Array.isArray(insights?.insights) ? insights.insights.slice(0, 4) : [];
   if (!items.length) {
-    page.drawText('• Placeholder insights are being used for this PDF render.', {
-      x: LAYOUT.marginLeft + 14,
-      y: currentY,
-      size: 8,
-      font: fonts.regular,
-      color: COLORS.muted
-    });
-    return y - 140;
+    lines.push(...wrapTextToWidth(font, '- Placeholder insights are being used for this PDF render.', 8, LAYOUT.contentWidth - 28));
+    return lines;
   }
 
   for (const item of items) {
-    page.drawText(`• ${safeText(item?.title, 'Insight')}: ${safeText(item?.message, '')}`, {
-      x: LAYOUT.marginLeft + 14,
-      y: currentY,
-      size: 8,
-      font: fonts.regular,
-      color: item?.category === 'risk' ? COLORS.warning : COLORS.text
-    });
-    currentY -= 16;
+    const text = `- ${safeText(item?.title, 'Insight')}: ${safeText(item?.message, '')}`;
+    lines.push(...wrapTextToWidth(font, text, 8, LAYOUT.contentWidth - 28));
   }
-  return y - 140;
+  return lines;
 }
 
 async function buildSettlementPdf(payload) {
@@ -598,73 +738,127 @@ async function buildSettlementPdf(payload) {
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fonts = { regular, bold };
 
-  const page1 = pdfDoc.addPage([LAYOUT.width, LAYOUT.height]);
-  const page2 = pdfDoc.addPage([LAYOUT.width, LAYOUT.height]);
-  drawPageChrome(page1, fonts, payload, 1, 2);
-  drawPageChrome(page2, fonts, payload, 2, 2);
+  const state = createDocumentState(pdfDoc, fonts, payload);
+  addPage(state);
 
-  let y = LAYOUT.height - 135;
-  y = drawSectionTitle(page1, fonts, getSettlementTypeLabel(payload?.settlement?.settlement_type), y);
-  y = drawInfoGrid(page1, fonts, buildSummaryRows(payload), y);
-  y = drawTotalsPanel(page1, fonts, buildTotalRows(payload), y - 4);
-  y = drawSectionTitle(page1, fonts, 'Load Earnings', y);
-  drawLoadTable(page1, fonts, payload, y);
+  drawSectionTitle(state, getSettlementTypeLabel(payload?.settlement?.settlement_type));
+  drawInfoGrid(state, buildSummaryRows(payload));
+  drawTotalsPanel(state, buildTotalRows(payload));
 
-  let y2 = LAYOUT.height - 135;
-  y2 = drawSectionTitle(page2, fonts, 'Deductions Breakdown', y2);
-  const groups = buildAdjustmentGroups(payload?.adjustmentItems || []);
-  if (!groups.length) {
-    page2.drawText('No deductions or adjustments were applied to this settlement.', {
-      x: LAYOUT.marginLeft,
-      y: y2,
-      size: 10,
-      font: regular,
-      color: COLORS.muted
-    });
-  } else {
-    for (const group of groups) {
-      y2 = drawAdjustmentSection(page2, fonts, group.title, group, y2);
+  drawTableSection(
+    state,
+    'Load Earnings',
+    [
+      { label: 'Load', width: 48 },
+      { label: 'Dates', width: 84 },
+      { label: 'Load Details', width: 170 },
+      { label: 'Empty Miles', width: 52 },
+      { label: 'Loaded Miles', width: 56 },
+      { label: 'Gross Pay', width: 60 },
+      { label: getHighlightedPayLabel(payload), width: 70, bold: true }
+    ],
+    buildLoadRows(payload),
+    {
+      emptyMessage: 'No load earnings were attached to this settlement.',
+      size: 7,
+      lineHeight: 9,
+      padding: 4
     }
+  );
+
+  const fuelRows = buildFuelRows(payload?.adjustmentItems || []);
+  if (fuelRows.length) {
+    drawTableSection(
+      state,
+      'Fuel Deductions',
+      [
+        { label: 'Transaction Date', width: 84 },
+        { label: 'Location', width: 210 },
+        { label: 'Product Type', width: 82 },
+        { label: 'Gallons', width: 62 },
+        { label: 'Amount', width: 102, bold: true }
+      ],
+      fuelRows,
+      {
+        size: 8,
+        lineHeight: 10,
+        padding: 4
+      }
+    );
   }
 
-  y2 = drawInsightsSection(page2, fonts, aiInsights, y2 - 8);
+  const scheduledRows = buildScheduledRows(payload?.adjustmentItems || []);
+  if (scheduledRows.length) {
+    drawTableSection(
+      state,
+      'Scheduled Deductions',
+      [
+        { label: 'Deduction #', width: 72 },
+        { label: 'Deduction Description', width: 338 },
+        { label: 'Deduction Amount', width: 130, bold: true }
+      ],
+      scheduledRows,
+      {
+        size: 8,
+        lineHeight: 10,
+        padding: 4
+      }
+    );
+  }
 
-  page2.drawRectangle({
-    x: LAYOUT.marginLeft,
-    y: 40,
-    width: LAYOUT.contentWidth,
-    height: 92,
-    color: COLORS.panel,
-    borderColor: COLORS.border,
-    borderWidth: 1
+  const otherRows = buildOtherDeductionRows(payload?.adjustmentItems || []);
+  if (otherRows.length) {
+    drawTableSection(
+      state,
+      'Other Deductions and Adjustments',
+      [
+        { label: 'Description', width: 310 },
+        { label: 'Type', width: 120 },
+        { label: 'Amount', width: 110, bold: true }
+      ],
+      otherRows,
+      {
+        size: 8,
+        lineHeight: 10,
+        padding: 4
+      }
+    );
+  }
+
+  drawPanelSection(state, 'FleetNeuron AI Insights', buildInsightLines(regular, aiInsights), {
+    textSize: 8,
+    lineHeight: 10,
+    minHeight: 96
   });
-  page2.drawText('FleetNeuron Report Metadata', {
-    x: LAYOUT.marginLeft + 14,
-    y: 114,
-    size: 11,
-    font: bold,
-    color: COLORS.accent
+
+  const metadataLines = [
+    ...wrapTextToWidth(
+      regular,
+      `Settlement reference: ${safeText(payload?.settlement?.settlement_number || getSettlementDisplayNumber(payload))}`,
+      9,
+      LAYOUT.contentWidth - 28
+    ),
+    ...wrapTextToWidth(
+      regular,
+      `Generated for ${getPayableTo(payload)} using FleetNeuron AI settlement reporting.`,
+      9,
+      LAYOUT.contentWidth - 28
+    ),
+    ...wrapTextToWidth(
+      regular,
+      `Insights source: ${safeText(aiInsights?.source, 'fallback')} | status: ${safeText(aiInsights?.status, 'placeholder')}`,
+      8,
+      LAYOUT.contentWidth - 28
+    )
+  ];
+  drawPanelSection(state, 'FleetNeuron Report Metadata', metadataLines, {
+    textSize: 8,
+    lineHeight: 10,
+    minHeight: 78
   });
-  page2.drawText(`Settlement reference: ${safeText(payload?.settlement?.settlement_number || getSettlementDisplayNumber(payload))}`, {
-    x: LAYOUT.marginLeft + 14,
-    y: 96,
-    size: 9,
-    font: regular,
-    color: COLORS.text
-  });
-  page2.drawText(`Generated for ${getPayableTo(payload)} using FleetNeuron AI settlement reporting.`, {
-    x: LAYOUT.marginLeft + 14,
-    y: 80,
-    size: 9,
-    font: regular,
-    color: COLORS.text
-  });
-  page2.drawText(`Insights source: ${safeText(aiInsights?.source, 'fallback')} • status: ${safeText(aiInsights?.status, 'placeholder')}`, {
-    x: LAYOUT.marginLeft + 14,
-    y: 64,
-    size: 8,
-    font: regular,
-    color: COLORS.muted
+
+  state.pages.forEach((page, index) => {
+    drawPageFooter(page, fonts, index + 1, state.pages.length);
   });
 
   const bytes = await pdfDoc.save();
