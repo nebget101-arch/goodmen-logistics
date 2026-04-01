@@ -77,7 +77,7 @@ async function sendSms(toPhone, body) {
 
 /**
  * Send email via SendGrid.
- * @param {object} options - { to: string, subject: string, text?: string, html?: string }
+ * @param {object} options - { to: string|string[], subject: string, text?: string, html?: string, cc?: string|string[], replyTo?: string, attachments?: object[] }
  * @returns {Promise<{ sent: boolean, error?: string }>}
  */
 async function sendEmail(options) {
@@ -87,15 +87,35 @@ async function sendEmail(options) {
       error: 'Email not configured (set SENDGRID_API_KEY)'
     };
   }
-  const { to, subject, text, html } = options || {};
+  const { to, cc, subject, text, html, replyTo, attachments } = options || {};
   if (!to || !subject) {
     return { sent: false, error: 'Missing to or subject' };
   }
+
+  const normalizeRecipientList = (value) => {
+    return []
+      .concat(value || [])
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean);
+  };
+
+  const toList = normalizeRecipientList(to);
+  const ccList = normalizeRecipientList(cc);
+  if (!toList.length) {
+    return { sent: false, error: 'Missing to recipient list' };
+  }
+
+  const safeAttachments = Array.isArray(attachments)
+    ? attachments.filter((item) => item && item.content && item.filename)
+    : [];
   try {
     await sgMail.send({
-      to,
+      to: toList,
       from: FROM_EMAIL,
       subject,
+      ...(ccList.length ? { cc: ccList } : {}),
+      ...(replyTo ? { replyTo } : {}),
+      ...(safeAttachments.length ? { attachments: safeAttachments } : {}),
       ...(text ? { text } : {}),
       html: html || (text ? text.replace(/\n/g, '<br>') : subject)
     });
