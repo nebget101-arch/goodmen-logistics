@@ -1213,16 +1213,25 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
   for (const item of loadItems) {
     const itemSnapshot = normalizeSnapshot(item.pay_basis_snapshot);
     const payModel = itemSnapshot.pay_model || profileSnapshot.pay_model || 'per_mile';
+    const refreshedSnapshot = {
+      pay_model: payModel,
+      percentage_rate: itemSnapshot.percentage_rate ?? profileSnapshot.percentage_rate ?? null,
+      cents_per_mile: itemSnapshot.cents_per_mile ?? profileSnapshot.cents_per_mile ?? null,
+      flat_weekly_amount: itemSnapshot.flat_weekly_amount ?? profileSnapshot.flat_weekly_amount ?? null,
+      flat_per_load_amount: itemSnapshot.flat_per_load_amount ?? profileSnapshot.flat_per_load_amount ?? null,
+      additional_payee_rate: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate ?? null,
+      equipment_owner_percentage: itemSnapshot.equipment_owner_percentage ?? profileSnapshot.equipment_owner_percentage ?? null
+    };
     const { driverPay, additionalPayeePay } = computeLoadPay({
-      payModel,
-      centsPerMile: itemSnapshot.cents_per_mile ?? profileSnapshot.cents_per_mile,
-      percentageRate: itemSnapshot.percentage_rate ?? profileSnapshot.percentage_rate,
-      flatPerLoadAmount: itemSnapshot.flat_per_load_amount ?? profileSnapshot.flat_per_load_amount,
+      payModel: refreshedSnapshot.pay_model,
+      centsPerMile: refreshedSnapshot.cents_per_mile,
+      percentageRate: refreshedSnapshot.percentage_rate,
+      flatPerLoadAmount: refreshedSnapshot.flat_per_load_amount,
       gross: Number(item.gross_amount) || 0,
       loadedMiles: Number(item.loaded_miles) || 0,
       hasAdditionalPayee,
-      additionalPayeeRate: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate,
-      equipmentOwnerPercentage: itemSnapshot.equipment_owner_percentage ?? profileSnapshot.equipment_owner_percentage
+      additionalPayeeRate: refreshedSnapshot.additional_payee_rate,
+      equipmentOwnerPercentage: refreshedSnapshot.equipment_owner_percentage
     });
 
     console.log('[Settlement Recalc] load pay', {
@@ -1237,11 +1246,13 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
 
     if (
       Number(item.driver_pay_amount) !== Number(driverPay) ||
-      Number(item.additional_payee_amount || 0) !== Number(additionalPayeePay)
+      Number(item.additional_payee_amount || 0) !== Number(additionalPayeePay) ||
+      JSON.stringify(itemSnapshot || {}) !== JSON.stringify(refreshedSnapshot)
     ) {
       await knex('settlement_load_items')
         .where({ id: item.id })
         .update({
+          pay_basis_snapshot: refreshedSnapshot,
           driver_pay_amount: driverPay,
           additional_payee_amount: additionalPayeePay,
           updated_at: knex.fn.now()
@@ -1250,6 +1261,7 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
 
     recalculatedLoadItems.push({
       ...item,
+      pay_basis_snapshot: refreshedSnapshot,
       driver_pay_amount: driverPay,
       additional_payee_amount: additionalPayeePay
     });
