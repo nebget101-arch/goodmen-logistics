@@ -2,6 +2,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert');
 const {
   normalizeRecurringDeductionPayeeIds,
+  shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
 } = require('./settlement-recurring-deductions');
 
@@ -51,5 +52,53 @@ describe('resolveRecurringDeductionApplyTo', () => {
     );
 
     assert.strictEqual(applyTo, null);
+  });
+});
+
+describe('shouldIncludeRecurringDeductionRule', () => {
+  it('includes rules that overlap the settlement period', () => {
+    assert.strictEqual(
+      shouldIncludeRecurringDeductionRule(
+        { start_date: '2026-03-01', end_date: null },
+        '2026-03-01',
+        '2026-03-08'
+      ),
+      true
+    );
+  });
+
+  it('excludes future-dated rules during a normal recalc', () => {
+    assert.strictEqual(
+      shouldIncludeRecurringDeductionRule(
+        { start_date: '2026-03-31', end_date: null },
+        '2026-03-01',
+        '2026-03-08'
+      ),
+      false
+    );
+  });
+
+  it('includes future-dated rules during historical backfill within the selected range', () => {
+    assert.strictEqual(
+      shouldIncludeRecurringDeductionRule(
+        { start_date: '2026-03-31', end_date: null },
+        '2026-03-01',
+        '2026-03-08',
+        { historicalBackfillEndDate: '2026-04-30' }
+      ),
+      true
+    );
+  });
+
+  it('still excludes rules that ended before the settlement period', () => {
+    assert.strictEqual(
+      shouldIncludeRecurringDeductionRule(
+        { start_date: '2026-01-01', end_date: '2026-02-01' },
+        '2026-03-01',
+        '2026-03-08',
+        { historicalBackfillEndDate: '2026-04-30' }
+      ),
+      false
+    );
   });
 });

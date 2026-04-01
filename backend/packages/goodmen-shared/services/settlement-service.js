@@ -21,6 +21,7 @@ const {
 } = require('./settlement-load-dates');
 const {
   normalizeRecurringDeductionPayeeIds,
+  shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
 } = require('./settlement-recurring-deductions');
 const {
@@ -458,7 +459,7 @@ async function backfillSettlementLoadDates(knex, settlementId) {
 }
 
 /** Recurring deductions applicable for driver in date range. */
-async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, periodEnd, payeeIds = []) {
+async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, periodEnd, payeeIds = [], options = {}) {
   const startStr = toDateOnly(periodStart);
   const endStr = toDateOnly(periodEnd);
   if (!startStr || !endStr) {
@@ -467,9 +468,8 @@ async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, peri
   const normalizedPayeeIds = (Array.isArray(payeeIds) ? payeeIds : [])
     .map((value) => String(value || '').trim())
     .filter(Boolean);
-  return knex('recurring_deduction_rules')
+  const rows = await knex('recurring_deduction_rules')
     .where('enabled', true)
-    .whereRaw('start_date <= ?', [endStr])
     .where(function () {
       this.whereNull('end_date').orWhereRaw('end_date >= ?', [startStr]);
     })
@@ -485,6 +485,8 @@ async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, peri
         });
       }
     });
+
+  return rows.filter((rule) => shouldIncludeRecurringDeductionRule(rule, startStr, endStr, options));
 }
 
 async function generateSettlementNumberWithContext(_knex, driver, period) {
@@ -954,7 +956,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
   }
 }
 
-async function recalcAndUpdateSettlement(knex, settlementId) {
+async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
   const settlement = await knex('settlements').where({ id: settlementId }).first();
   if (!settlement) throw new Error('Settlement not found');
   if (settlement.settlement_status === 'void') return settlement;
@@ -1039,7 +1041,10 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
       normalizeRecurringDeductionPayeeIds(
         [effectivePrimaryPayeeId, effectiveAdditionalPayeeId],
         payeeAssignment
-      )
+      ),
+      {
+        historicalBackfillEndDate: options?.historicalRecurringRuleStartDateEnd || null
+      }
     );
 
     for (const rule of recurring) {
