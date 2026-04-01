@@ -10,7 +10,7 @@
  * Driver quit / termination with negative balance creates a settlement_balance_transfers record.
  */
 
-const { recalculateSettlementTotals } = require('./settlement-calculation');
+const { computeLoadPay, recalculateSettlementTotals } = require('./settlement-calculation');
 const {
   ensureActiveCompensationProfile,
   getActivePayeeAssignment,
@@ -48,6 +48,17 @@ function applyEntityFilter(qb, context, column = 'operating_entity_id') {
 }
 
 const SETTLEMENT_NUMBER_PREFIX = 'STL2';
+
+function buildV2PaySnapshot(compProfile, driver) {
+  return {
+    pay_model: compProfile?.pay_model || 'percentage',
+    percentage_rate: compProfile?.percentage_rate ?? driver?.pay_percentage ?? 0,
+    cents_per_mile: compProfile?.cents_per_mile ?? null,
+    flat_weekly_amount: compProfile?.flat_weekly_amount ?? null,
+    flat_per_load_amount: compProfile?.flat_per_load_amount ?? null,
+    equipment_owner_percentage: compProfile?.equipment_owner_percentage ?? null
+  };
+}
 
 async function generateV2Number(knex, driver, settlementType) {
   const driverName = [driver?.first_name, driver?.last_name]
@@ -452,13 +463,26 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     const priorDriverCarriedFromId = priorDriverCarried > 0 ? priorDriverSettlement.id : null;
 
     // --- 9. Determine driver revenue split ---
+    const paySnapshot = buildV2PaySnapshot(compProfile, driver);
     let driverRevenueRaw;
     if (isOwnerOperator) {
       // OO gets a single settlement; percentage from comp profile
       const ooRate = Number(compProfile?.percentage_rate || driver.pay_percentage || 88);
       driverRevenueRaw = grossTotal * (ooRate / 100);
     } else {
-      driverRevenueRaw = grossTotal * driverPct;
+      driverRevenueRaw = eligibleLoads.reduce((sum, load) => {
+        const { driverPay } = computeLoadPay({
+          payModel: paySnapshot.pay_model,
+          centsPerMile: paySnapshot.cents_per_mile,
+          percentageRate: paySnapshot.percentage_rate,
+          flatPerLoadAmount: paySnapshot.flat_per_load_amount,
+          gross: Number(load.rate) || 0,
+          loadedMiles: load.loaded_miles || 0,
+          hasAdditionalPayee: true,
+          equipmentOwnerPercentage: paySnapshot.equipment_owner_percentage
+        });
+        return sum + driverPay;
+      }, 0);
     }
     const driverRevenue = Math.max(0, driverRevenueRaw);
 
@@ -499,11 +523,31 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     for (const load of eligibleLoads) {
       const gross = Number(load.rate) || 0;
       let driverLoadPay;
+      let driverPaySnapshot;
       if (isOwnerOperator) {
         const ooRate = Number(compProfile?.percentage_rate || driver.pay_percentage || 88);
         driverLoadPay = gross * (ooRate / 100);
+        driverPaySnapshot = {
+          pay_model: compProfile?.pay_model || 'percentage',
+          percentage_rate: ooRate,
+          settlement_type: 'driver'
+        };
       } else {
-        driverLoadPay = gross * driverPct;
+        const pairedPay = computeLoadPay({
+          payModel: paySnapshot.pay_model,
+          centsPerMile: paySnapshot.cents_per_mile,
+          percentageRate: paySnapshot.percentage_rate,
+          flatPerLoadAmount: paySnapshot.flat_per_load_amount,
+          gross,
+          loadedMiles: load.loaded_miles || 0,
+          hasAdditionalPayee: true,
+          equipmentOwnerPercentage: paySnapshot.equipment_owner_percentage
+        });
+        driverLoadPay = pairedPay.driverPay;
+        driverPaySnapshot = {
+          ...paySnapshot,
+          settlement_type: 'driver'
+        };
       }
       await knex('settlement_load_items').insert({
         settlement_id: driverSettlement.id,
@@ -511,13 +555,7 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
         pickup_date: load.pickup_date,
         delivery_date: load.delivery_date,
         loaded_miles: load.loaded_miles ?? null,
-        pay_basis_snapshot: {
-          pay_model: compProfile?.pay_model || 'percentage',
-          percentage_rate: isOwnerOperator
-            ? (compProfile?.percentage_rate || driver.pay_percentage || 88)
-            : (driverPct * 100),
-          settlement_type: 'driver'
-        },
+        pay_basis_snapshot: driverPaySnapshot,
         gross_amount: gross,
         driver_pay_amount: driverLoadPay,
         additional_payee_amount: 0,
@@ -595,7 +633,19 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     }
 
     // --- 11. Create EQUIPMENT OWNER settlement ---
-    const eoRevenueRaw = grossTotal * ownerPct;
+    const eoRevenueRaw = eligibleLoads.reduce((sum, load) => {
+      const { additionalPayeePay } = computeLoadPay({
+        payModel: paySnapshot.pay_model,
+        centsPerMile: paySnapshot.cents_per_mile,
+        percentageRate: paySnapshot.percentage_rate,
+        flatPerLoadAmount: paySnapshot.flat_per_load_amount,
+        gross: Number(load.rate) || 0,
+        loadedMiles: load.loaded_miles || 0,
+        hasAdditionalPayee: true,
+        equipmentOwnerPercentage: paySnapshot.equipment_owner_percentage
+      });
+      return sum + additionalPayeePay;
+    }, 0);
     const eoRevenue = Math.max(0, eoRevenueRaw);
     const eoFuelShare = totalFuel * ownerPct;
     const eoTollShare = totalTolls * ownerPct;
@@ -643,7 +693,17 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     // EO load items (owner's revenue share)
     for (const load of eligibleLoads) {
       const gross = Number(load.rate) || 0;
-      const eoLoadPay = gross * ownerPct;
+      const { additionalPayeePay } = computeLoadPay({
+        payModel: paySnapshot.pay_model,
+        centsPerMile: paySnapshot.cents_per_mile,
+        percentageRate: paySnapshot.percentage_rate,
+        flatPerLoadAmount: paySnapshot.flat_per_load_amount,
+        gross,
+        loadedMiles: load.loaded_miles || 0,
+        hasAdditionalPayee: true,
+        equipmentOwnerPercentage: paySnapshot.equipment_owner_percentage
+      });
+      const eoLoadPay = additionalPayeePay;
       await knex('settlement_load_items').insert({
         settlement_id: eoSettlement.id,
         load_id: load.id,
@@ -651,8 +711,8 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
         delivery_date: load.delivery_date,
         loaded_miles: load.loaded_miles ?? null,
         pay_basis_snapshot: {
-          pay_model: 'percentage',
-          percentage_rate: ownerPct * 100,
+          ...paySnapshot,
+          percentage_rate: paySnapshot.equipment_owner_percentage ?? 0,
           settlement_type: 'equipment_owner'
         },
         gross_amount: gross,
