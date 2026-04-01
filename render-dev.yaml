@@ -410,7 +410,7 @@ services:
     runtime: docker
     branch: dev
     dockerfilePath: infra/signoz/Dockerfile.clickhouse
-    plan: starter_plus
+    plan: standard
     disk:
       name: clickhouse-data-dev
       mountPath: /var/lib/clickhouse
