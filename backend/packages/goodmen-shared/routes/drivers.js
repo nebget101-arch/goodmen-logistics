@@ -388,7 +388,6 @@ router.get('/:id', async (req, res) => {
     const driver = transformRow(result.rows[0]);
     const assignment = payeeAssignmentResult.rows[0] || null;
     const expense = expenseResponsibilityResult.rows[0] || null;
-    const compProfile = compensationProfileResult.rows[0] || null;
     const equipmentOwnerPercentage = pickLatestEquipmentOwnerPercentage(compensationProfileResult.rows);
 
     const response = {
