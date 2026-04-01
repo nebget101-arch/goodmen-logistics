@@ -314,27 +314,32 @@ async function recalcV2Settlement(knex, settlementId) {
       .where({ settlement_id: settlementId })
       .whereNot('status', 'removed');
 
-    const gross = loadItems.reduce((s, li) => s + (Number(li.gross_amount) || 0), 0);
-    const driverRevenue = loadItems.reduce((s, li) => s + (Number(li.driver_pay_amount) || 0), 0);
-    const deductions = adjustments
-      .filter((a) => a.item_type === 'deduction')
-      .reduce((s, a) => s + (Number(a.amount) || 0), 0);
-    const advances = adjustments
-      .filter((a) => a.item_type === 'advance')
-      .reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    const totals = recalculateSettlementTotals(settlement, loadItems, adjustments, {
+      pay_model: 'percentage'
+    });
     const carriedBalance = Number(settlement.carried_balance) || 0;
-    const netRaw = driverRevenue - deductions + advances - carriedBalance;
+    const settlementRevenue = settlement.settlement_type === 'equipment_owner'
+      ? Number(totals.subtotal_additional_payee) || 0
+      : Number(totals.subtotal_driver_pay) || 0;
+    const netRaw = settlementRevenue
+      - (Number(totals.total_deductions) || 0)
+      - (Number(totals.total_advances) || 0)
+      - carriedBalance;
     const netPay = Math.max(0, netRaw);
     const newCarried = netRaw < 0 ? Math.abs(netRaw) : 0;
+    const netField = settlement.settlement_type === 'equipment_owner'
+      ? { net_pay_driver: 0, net_pay_additional_payee: netPay }
+      : { net_pay_driver: netPay, net_pay_additional_payee: 0 };
 
     await knex('settlements')
       .where({ id: settlementId })
       .update({
-        subtotal_gross: gross,
-        subtotal_driver_pay: driverRevenue,
-        total_deductions: deductions,
-        total_advances: advances,
-        net_pay_driver: netPay,
+        subtotal_gross: totals.subtotal_gross,
+        subtotal_driver_pay: totals.subtotal_driver_pay,
+        subtotal_additional_payee: totals.subtotal_additional_payee,
+        total_deductions: totals.total_deductions,
+        total_advances: totals.total_advances,
+        ...netField,
         updated_at: knex.fn.now()
       });
 
@@ -602,8 +607,8 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
 
     // Prior EO carried balance
     const priorEoSettlement = await getPriorSettlement(knex, driverId, truckId, 'equipment_owner', periodStart);
-    const priorEoCarried = priorEoSettlement && Number(priorEoSettlement.net_pay_driver) < 0
-      ? Math.abs(Number(priorEoSettlement.net_pay_driver))
+    const priorEoCarried = priorEoSettlement && Number(priorEoSettlement.net_pay_additional_payee) < 0
+      ? Math.abs(Number(priorEoSettlement.net_pay_additional_payee))
       : 0;
     const priorEoCarriedFromId = priorEoCarried > 0 ? priorEoSettlement.id : null;
 
@@ -656,8 +661,8 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
           settlement_type: 'equipment_owner'
         },
         gross_amount: gross,
-        driver_pay_amount: eoLoadPay,
-        additional_payee_amount: 0,
+        driver_pay_amount: 0,
+        additional_payee_amount: eoLoadPay,
         included_by: userId
       });
     }

@@ -151,4 +151,21 @@ describe('recalculateSettlementTotals', () => {
     assert.strictEqual(totals.total_advances, 100);
     assert.strictEqual(totals.net_pay_driver, 2640 - 200 - 100);
   });
+
+  it('tracks equipment owner revenue in additional payee totals', () => {
+    const settlement = { settlement_type: 'equipment_owner' };
+    const loadItems = [
+      { gross_amount: 1700, driver_pay_amount: 0, additional_payee_amount: 561 },
+      { gross_amount: 2500, driver_pay_amount: 0, additional_payee_amount: 825 }
+    ];
+    const adjustmentItems = [
+      { item_type: 'deduction', amount: 100 },
+      { item_type: 'advance', amount: 25 }
+    ];
+    const totals = recalculateSettlementTotals(settlement, loadItems, adjustmentItems, { pay_model: 'percentage' });
+    assert.strictEqual(totals.subtotal_gross, 4200);
+    assert.strictEqual(totals.subtotal_driver_pay, 0);
+    assert.strictEqual(totals.subtotal_additional_payee, 1386);
+    assert.strictEqual(totals.net_pay_additional_payee, 1386 - 100 - 25);
+  });
 });
