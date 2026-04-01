@@ -1,0 +1,8 @@
+FROM clickhouse/clickhouse-server:24.1
+
+# Copy custom configuration
+COPY infra/signoz/clickhouse-config.xml /etc/clickhouse-server/config.d/fleetneuron.xml
+COPY infra/signoz/clickhouse-users.xml /etc/clickhouse-server/users.d/fleetneuron.xml
+
+# ClickHouse ports: 8123 (HTTP), 9000 (native TCP)
+EXPOSE 8123 9000
