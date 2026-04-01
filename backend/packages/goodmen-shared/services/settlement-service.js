@@ -1005,24 +1005,20 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
   if (!settlement) throw new Error('Settlement not found');
   if (settlement.settlement_status === 'void') return settlement;
 
-  const asOf = settlement.date || new Date().toISOString().slice(0, 10);
+  const asOf = toDateOnly(new Date());
   
   // Resolve compensation profile
-  let effectiveCompensationProfileId = settlement.compensation_profile_id;
-  if (!effectiveCompensationProfileId) {
-    let profile = await getActiveCompensationProfile(knex, settlement.driver_id, asOf);
-    if (!profile) {
-      // Fallback to latest profile
-      profile = await knex('driver_compensation_profiles')
-        .where({ driver_id: settlement.driver_id, status: 'active' })
-        .orderBy([
-          { column: 'effective_start_date', order: 'desc' },
-          { column: 'created_at', order: 'desc' }
-        ])
-        .first();
-    }
-    effectiveCompensationProfileId = profile?.id || null;
+  let activeCompensationProfile = await getActiveCompensationProfile(knex, settlement.driver_id, asOf);
+  if (!activeCompensationProfile) {
+    activeCompensationProfile = await knex('driver_compensation_profiles')
+      .where({ driver_id: settlement.driver_id, status: 'active' })
+      .orderBy([
+        { column: 'effective_start_date', order: 'desc' },
+        { column: 'created_at', order: 'desc' }
+      ])
+      .first();
   }
+  const effectiveCompensationProfileId = activeCompensationProfile?.id || settlement.compensation_profile_id || null;
 
   // Resolve payee assignment
   let payeeAssignment = await getActivePayeeAssignment(knex, settlement.driver_id, asOf);
@@ -1074,11 +1070,7 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
     : null;
 
   if (period) {
-    const expenseProfile = await getActiveExpenseResponsibilityProfile(
-      knex,
-      settlement.driver_id,
-      period.period_end || settlement.date || asOf
-    );
+    const expenseProfile = await getActiveExpenseResponsibilityProfile(knex, settlement.driver_id, asOf);
     const excludedScheduledRows = await knex('settlement_adjustment_items')
       .where({ settlement_id: settlementId, source_type: 'scheduled_rule_removed' })
       .select('source_reference_id', 'apply_to');
@@ -1171,9 +1163,10 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
 
   const loadItems = await knex('settlement_load_items').where({ settlement_id: settlementId });
   const adjustmentItems = await knex('settlement_adjustment_items').where({ settlement_id: settlementId });
-  const profile = settlement.compensation_profile_id
-    ? await knex('driver_compensation_profiles').where({ id: settlement.compensation_profile_id }).first()
-    : null;
+  const profile = activeCompensationProfile
+    || (effectiveCompensationProfileId
+      ? await knex('driver_compensation_profiles').where({ id: effectiveCompensationProfileId }).first()
+      : null);
   const driver = await knex('drivers')
     .where({ id: settlement.driver_id })
     .select('pay_basis', 'pay_rate', 'pay_percentage')
