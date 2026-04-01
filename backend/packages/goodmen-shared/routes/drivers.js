@@ -4,7 +4,11 @@ const { query, getClient } = require('../internal/db');
 const { transformRows, transformRow, toSnakeCase } = require('../utils/case-converter');
 const dtLogger = require('../utils/logger');
 const { syncTollDeviceDrivers } = require('../services/toll-device-driver-sync');
-const { hasDriverCompensationUpdate } = require('../services/driver-compensation-profile-sync');
+const {
+  hasDriverCompensationUpdate,
+  pickLatestEquipmentOwnerPercentage,
+  resolveCompensationProfileEffectiveStartDate
+} = require('../services/driver-compensation-profile-sync');
 const authMiddleware = require('../middleware/auth-middleware');
 const tenantContextMiddleware = require('../middleware/tenant-context-middleware');
 const { loadUserRbac } = require('../middleware/rbac-middleware');
@@ -370,14 +374,14 @@ router.get('/:id', async (req, res) => {
     // equipment_owner_percentage — that lives only on driver_compensation_profiles.
     // Use status = 'active' with date-range guard (same pattern as settlement-service.js).
     const compensationProfileResult = await query(
-      `SELECT percentage_rate, equipment_owner_percentage, profile_type, pay_model
+      `SELECT percentage_rate, equipment_owner_percentage, profile_type, pay_model, status, effective_start_date, created_at
        FROM driver_compensation_profiles
        WHERE driver_id = $1
-         AND status = 'active'
          AND effective_start_date <= $2
-         AND (effective_end_date IS NULL OR effective_end_date >= $2)
-       ORDER BY effective_start_date DESC, created_at DESC
-       LIMIT 1`,
+       ORDER BY
+         CASE WHEN status = 'active' THEN 0 ELSE 1 END,
+         effective_start_date DESC,
+         created_at DESC`,
       [driverId, asOf]
     );
 
@@ -385,6 +389,7 @@ router.get('/:id', async (req, res) => {
     const assignment = payeeAssignmentResult.rows[0] || null;
     const expense = expenseResponsibilityResult.rows[0] || null;
     const compProfile = compensationProfileResult.rows[0] || null;
+    const equipmentOwnerPercentage = pickLatestEquipmentOwnerPercentage(compensationProfileResult.rows);
 
     const response = {
       ...driver,
@@ -413,9 +418,7 @@ router.get('/:id', async (req, res) => {
 
       // FN-566: Compensation profile fields — equipment_owner_percentage is not on the
       // drivers table; it must be read from the active driver_compensation_profiles record.
-      equipmentOwnerPercentage: compProfile?.equipment_owner_percentage != null
-        ? Number(compProfile.equipment_owner_percentage)
-        : null
+      equipmentOwnerPercentage
     };
 
     dtLogger.trackDatabase('SELECT', 'drivers', duration, true, { driverId });
@@ -696,7 +699,11 @@ router.post('/', async (req, res) => {
         }
       }
 
-      const effectiveStart = hireDate || new Date().toISOString().slice(0, 10);
+      const effectiveStart = resolveCompensationProfileEffectiveStartDate(
+        'create',
+        { hire_date: hireDate },
+        new Date().toISOString().slice(0, 10)
+      );
       await client.query(
         `INSERT INTO driver_compensation_profiles (
           driver_id,
@@ -1027,7 +1034,11 @@ router.put('/:id', async (req, res) => {
         [today, req.params.id]
       );
 
-      const effectiveStart = updatedDriver.hire_date || today;
+      const effectiveStart = resolveCompensationProfileEffectiveStartDate(
+        'update',
+        updatedDriver,
+        today
+      );
       await client.query(
         `INSERT INTO driver_compensation_profiles (
           driver_id,
