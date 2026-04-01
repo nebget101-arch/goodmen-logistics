@@ -9,7 +9,11 @@ const authMiddleware = require('../middleware/auth-middleware');
 const tenantContextMiddleware = require('../middleware/tenant-context-middleware');
 const knex = require('../config/knex');
 const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
-const { buildSettlementPdf } = require('../utils/settlement-pdf');
+const {
+  buildSettlementPdf,
+  getSettlementDisplayNumber,
+  getSettlementPdfFileName
+} = require('../services/settlement-pdf.service');
 const {
   createDraftSettlement,
   recalcAndUpdateSettlement,
@@ -63,6 +67,30 @@ async function getSettlementPdfContext(settlementId) {
     ? await knex('payroll_periods').where({ id: settlement.payroll_period_id }).first()
     : null;
 
+  const truck = settlement.truck_id
+    ? await knex('vehicles')
+      .where({ id: settlement.truck_id })
+      .select(
+        'id',
+        'unit_number',
+        'equipment_owner_id',
+        knex.raw('license_plate as plate_number')
+      )
+      .first()
+    : null;
+
+  const equipmentOwner = settlement.equipment_owner_id
+    ? await knex('payees').where({ id: settlement.equipment_owner_id }).first()
+    : null;
+
+  const operatingEntity = settlement.operating_entity_id
+    ? await knex('operating_entities').where({ id: settlement.operating_entity_id }).first()
+    : null;
+
+  const tenant = settlement.tenant_id
+    ? await knex('tenants').where({ id: settlement.tenant_id }).first()
+    : null;
+
   return {
     settlement,
     loadItems,
@@ -70,24 +98,12 @@ async function getSettlementPdfContext(settlementId) {
     driver: driver || null,
     primaryPayee: primaryPayee || null,
     additionalPayee: additionalPayee || null,
-    period: period || null
+    period: period || null,
+    truck: truck || null,
+    equipmentOwner: equipmentOwner || null,
+    operatingEntity: operatingEntity || null,
+    tenant: tenant || null
   };
-}
-
-function safeToken(value, fallback = 'UNKNOWN') {
-  const raw = (value || '').toString().trim();
-  if (!raw) return fallback;
-  return raw
-    .replace(/[^a-zA-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .toUpperCase() || fallback;
-}
-
-function getSettlementDisplayNumber(payload) {
-  const driverName = [payload?.driver?.first_name, payload?.driver?.last_name].filter(Boolean).join('_') || 'DRIVER';
-  const start = String(payload?.period?.period_start || payload?.settlement?.period_start || '').slice(0, 10) || 'START';
-  const end = String(payload?.period?.period_end || payload?.settlement?.period_end || payload?.settlement?.date || '').slice(0, 10) || 'END';
-  return `STL-${safeToken(driverName, 'DRIVER')}-${safeToken(`${start}_TO_${end}`, 'NO_PERIOD')}`;
 }
 
 function requireRole(allowedRoles) {
@@ -1506,6 +1522,10 @@ router.get('/settlements/:id/pdf-payload', requireRole(settlementRoles), async (
       driver: payload.driver || {},
       primary_payee: payload.primaryPayee || {},
       additional_payee: payload.additionalPayee || null,
+      truck: payload.truck || null,
+      equipment_owner: payload.equipmentOwner || null,
+      operating_entity: payload.operatingEntity || null,
+      tenant: payload.tenant || null,
       period: payload.period || {},
       load_items: payload.loadItems,
       adjustment_items: payload.adjustmentItems
@@ -1528,11 +1548,15 @@ router.post('/settlements/:id/pdf/generate', requireRole(settlementRoles), async
       primaryPayee: payload.primaryPayee,
       additionalPayee: payload.additionalPayee,
       loadItems: payload.loadItems,
-      adjustmentItems: payload.adjustmentItems
+      adjustmentItems: payload.adjustmentItems,
+      truck: payload.truck,
+      equipmentOwner: payload.equipmentOwner,
+      operatingEntity: payload.operatingEntity,
+      tenant: payload.tenant
     });
 
     const displaySettlementNumber = getSettlementDisplayNumber(payload);
-    const fileName = `${displaySettlementNumber}.pdf`;
+    const fileName = getSettlementPdfFileName(payload);
     const { key: storageKey } = await uploadBuffer({
       buffer: pdfBuffer,
       contentType: 'application/pdf',
@@ -1555,26 +1579,43 @@ router.post('/settlements/:id/pdf/generate', requireRole(settlementRoles), async
   }
 });
 
-// Direct PDF download stream (no persistence)
+async function sendSettlementPdfDownload(req, res) {
+  const payload = await getSettlementPdfContext(req.params.id);
+  if (!payload) return res.status(404).json({ error: 'Settlement not found' });
+
+  const pdfBuffer = await buildSettlementPdf({
+    settlement: payload.settlement,
+    driver: payload.driver,
+    period: payload.period,
+    primaryPayee: payload.primaryPayee,
+    additionalPayee: payload.additionalPayee,
+    loadItems: payload.loadItems,
+    adjustmentItems: payload.adjustmentItems,
+    truck: payload.truck,
+    equipmentOwner: payload.equipmentOwner,
+    operatingEntity: payload.operatingEntity,
+    tenant: payload.tenant
+  });
+
+  const fileName = getSettlementPdfFileName(payload);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  return res.send(pdfBuffer);
+}
+
+// Canonical PDF download endpoint
+router.get('/settlements/:id/pdf', requireRole(settlementRoles), async (req, res) => {
+  try {
+    return await sendSettlementPdfDownload(req, res);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to download settlement PDF' });
+  }
+});
+
+// Legacy direct PDF download stream (kept for backward compatibility)
 router.get('/settlements/:id/pdf/download', requireRole(settlementRoles), async (req, res) => {
   try {
-    const payload = await getSettlementPdfContext(req.params.id);
-    if (!payload) return res.status(404).json({ error: 'Settlement not found' });
-
-    const pdfBuffer = await buildSettlementPdf({
-      settlement: payload.settlement,
-      driver: payload.driver,
-      period: payload.period,
-      primaryPayee: payload.primaryPayee,
-      additionalPayee: payload.additionalPayee,
-      loadItems: payload.loadItems,
-      adjustmentItems: payload.adjustmentItems
-    });
-
-    const fileName = `${getSettlementDisplayNumber(payload)}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.send(pdfBuffer);
+    return await sendSettlementPdfDownload(req, res);
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to download settlement PDF' });
   }
