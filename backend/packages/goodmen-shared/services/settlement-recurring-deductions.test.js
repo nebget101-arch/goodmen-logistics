@@ -8,6 +8,7 @@ const {
   resolveScheduledDeductionAmount,
   resolveVariableExpenseSplit,
   shouldApplyRecurringDeductionForSettlement,
+  shouldApplyRecurringDeductionToSettlementSide,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
 } = require('./settlement-recurring-deductions');
@@ -58,6 +59,71 @@ describe('resolveRecurringDeductionApplyTo', () => {
     );
 
     assert.strictEqual(applyTo, null);
+  });
+});
+
+describe('shouldApplyRecurringDeductionToSettlementSide', () => {
+  it('applies shared rules to the driver side only when targeted to the driver payee', () => {
+    const result = shouldApplyRecurringDeductionToSettlementSide(
+      {
+        payee_id: 'driver-payee',
+        applies_when: 'specific_expense',
+        source_type: 'insurance',
+        expense_responsibility: 'shared'
+      },
+      'driver',
+      {
+        primaryPayeeId: 'driver-payee',
+        additionalPayeeId: 'owner-payee'
+      },
+      {
+        expenseProfile: { insurance_responsibility: 'shared' }
+      }
+    );
+
+    assert.deepStrictEqual(result, { applies: true, applyTo: 'primary_payee' });
+  });
+
+  it('does not apply owner-targeted shared rules to the driver side', () => {
+    const result = shouldApplyRecurringDeductionToSettlementSide(
+      {
+        payee_id: 'owner-payee',
+        applies_when: 'specific_expense',
+        source_type: 'insurance',
+        expense_responsibility: 'shared'
+      },
+      'driver',
+      {
+        primaryPayeeId: 'driver-payee',
+        additionalPayeeId: 'owner-payee'
+      },
+      {
+        expenseProfile: { insurance_responsibility: 'shared' }
+      }
+    );
+
+    assert.deepStrictEqual(result, { applies: false, applyTo: 'additional_payee' });
+  });
+
+  it('does not apply driver-targeted shared rules to the equipment owner side', () => {
+    const result = shouldApplyRecurringDeductionToSettlementSide(
+      {
+        payee_id: 'driver-payee',
+        applies_when: 'specific_expense',
+        source_type: 'eld',
+        expense_responsibility: 'shared'
+      },
+      'equipment_owner',
+      {
+        primaryPayeeId: 'driver-payee',
+        additionalPayeeId: 'owner-payee'
+      },
+      {
+        expenseProfile: { eld_responsibility: 'shared' }
+      }
+    );
+
+    assert.deepStrictEqual(result, { applies: false, applyTo: 'primary_payee' });
   });
 });
 

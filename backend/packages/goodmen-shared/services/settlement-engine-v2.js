@@ -18,6 +18,8 @@ const {
   getRecurringDeductionsForPeriod
 } = require('./settlement-service');
 const {
+  normalizeRecurringDeductionPayeeIds,
+  shouldApplyRecurringDeductionToSettlementSide,
   resolveScheduledDeductionAmount
 } = require('./settlement-recurring-deductions');
 const {
@@ -461,7 +463,16 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     const totalTolls = tollTxns.reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
     // --- 7. Get recurring deductions ---
-    const allRecurring = await getRecurringDeductionsForPeriod(knex, driverId, periodStart, periodEnd, []);
+    const allRecurring = await getRecurringDeductionsForPeriod(
+      knex,
+      driverId,
+      periodStart,
+      periodEnd,
+      normalizeRecurringDeductionPayeeIds(
+        [driverPrimaryPayeeId, equipmentOwnerPrimaryPayeeId],
+        null
+      )
+    );
 
     // --- 8. Get prior carried balance ---
     const priorDriverSettlement = await getPriorSettlement(knex, driverId, truckId, 'driver', periodStart);
@@ -589,10 +600,21 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
 
     // Recurring deductions for driver
     for (const rule of allRecurring) {
-      const appliesWhen = (rule.applies_when || 'always').toLowerCase();
-      if (appliesWhen === 'equipment_owner_only') continue;
       const amount = Number(rule.amount) || 0;
       if (amount === 0) continue;
+      const driverRuleRouting = shouldApplyRecurringDeductionToSettlementSide(
+        rule,
+        'driver',
+        {
+          primaryPayeeId: driverPrimaryPayeeId,
+          additionalPayeeId: equipmentOwnerPrimaryPayeeId
+        },
+        {
+          expenseProfile,
+          hasLoadItems: eligibleLoads.length > 0
+        }
+      );
+      if (!driverRuleRouting.applies) continue;
       const driverScheduledAmount = isOwnerOperator
         ? amount
         : resolveScheduledDeductionAmount(rule, 'driver', expenseProfile, { driverPct, ownerPct });
@@ -752,10 +774,22 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
 
     // Recurring deductions for EO
     for (const rule of allRecurring) {
-      const appliesWhen = (rule.applies_when || 'always').toLowerCase();
-      if (appliesWhen === 'driver_only') continue;
       const amount = Number(rule.amount) || 0;
       if (amount === 0) continue;
+      const ownerRuleRouting = shouldApplyRecurringDeductionToSettlementSide(
+        rule,
+        'equipment_owner',
+        {
+          primaryPayeeId: driverPrimaryPayeeId,
+          additionalPayeeId: equipmentOwnerPrimaryPayeeId
+        },
+        {
+          expenseProfile,
+          hasLoadItems: eligibleLoads.length > 0
+        }
+      );
+      if (!ownerRuleRouting.applies) continue;
+      const appliesWhen = (rule.applies_when || 'always').toLowerCase();
       const eoShare = appliesWhen === 'equipment_owner_only'
         ? amount
         : resolveScheduledDeductionAmount(rule, 'equipment_owner', expenseProfile, { driverPct, ownerPct });

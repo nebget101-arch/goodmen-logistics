@@ -170,6 +170,33 @@ function resolveRecurringDeductionApplyTo(rule = {}, payeeContext = {}) {
   return null;
 }
 
+function shouldApplyRecurringDeductionToSettlementSide(
+  rule = {},
+  settlementSide,
+  payeeContext = {},
+  options = {}
+) {
+  const applyTo = resolveRecurringDeductionApplyTo(rule, payeeContext);
+  if (!applyTo) {
+    return { applies: false, applyTo: null };
+  }
+
+  if (!shouldApplyRecurringDeductionForSettlement(rule, applyTo, options)) {
+    return { applies: false, applyTo };
+  }
+
+  const normalizedSide = settlementSide === 'equipment_owner' ? 'equipment_owner' : 'driver';
+  if (normalizedSide === 'equipment_owner' && applyTo !== 'additional_payee') {
+    return { applies: false, applyTo };
+  }
+
+  if (normalizedSide === 'driver' && applyTo === 'additional_payee') {
+    return { applies: false, applyTo };
+  }
+
+  return { applies: true, applyTo };
+}
+
 function resolveVariableExpenseSplit(expenseType, expenseProfile = {}, amount = 0) {
   const normalizedType = String(expenseType || '').trim().toLowerCase();
   const rawAmount = Number(amount) || 0;
@@ -269,6 +296,7 @@ module.exports = {
   resolveSpecificExpenseResponsibility,
   resolveRecurringDeductionBackfillStartDate,
   shouldApplyRecurringDeductionForSettlement,
+  shouldApplyRecurringDeductionToSettlementSide,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo,
   resolveVariableExpenseSplit,
