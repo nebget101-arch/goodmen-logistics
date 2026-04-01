@@ -535,6 +535,41 @@ async function generateSettlementNumberWithContext(_knex, driver, period) {
   ]);
 }
 
+async function generateSettlementNumberWithType(_knex, partyName, period, typeToken) {
+  const displayName = String(partyName || '').trim() || 'PAYEE';
+  const periodStart = toDateOnly(period?.period_start) || 'START';
+  const periodEnd = toDateOnly(period?.period_end) || 'END';
+  return buildUniqueSettlementNumber(SETTLEMENT_NUMBER_PREFIX, [
+    sanitizeSettlementNumberToken(displayName, 'PAYEE'),
+    sanitizeSettlementNumberToken(`${periodStart}_TO_${periodEnd}`, 'NO_PERIOD'),
+    sanitizeSettlementNumberToken(typeToken || 'SETTLEMENT', 'SETTLEMENT')
+  ]);
+}
+
+async function updateSettlementTotalsFromRows(knex, settlementId, profileSnapshot) {
+  const settlement = await knex('settlements').where({ id: settlementId }).first();
+  const loadItems = await knex('settlement_load_items').where({ settlement_id: settlementId });
+  const adjustmentItems = await knex('settlement_adjustment_items').where({ settlement_id: settlementId });
+  const totals = recalculateSettlementTotals(settlement, loadItems, adjustmentItems, profileSnapshot);
+  await knex('settlements').where({ id: settlementId }).update({
+    ...totals,
+    updated_at: knex.fn.now()
+  });
+  return knex('settlements').where({ id: settlementId }).first();
+}
+
+async function syncPairedSettlementIds(knex, firstSettlementId, secondSettlementId) {
+  const settlementColumns = await getSettlementsColumnSet(knex);
+  if (!settlementColumns.has('paired_settlement_id')) return;
+
+  await knex('settlements')
+    .where({ id: firstSettlementId })
+    .update({ paired_settlement_id: secondSettlementId, updated_at: knex.fn.now() });
+  await knex('settlements')
+    .where({ id: secondSettlementId })
+    .update({ paired_settlement_id: firstSettlementId, updated_at: knex.fn.now() });
+}
+
 /**
  * FN-578: Consume unlinked fuel transactions for a settlement.
  * Queries fuel_transactions where driver_id matches and settlement_link_status = 'none',
@@ -811,7 +846,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
     const driver = await knex('drivers')
       .where({ id: driverId })
       .modify((qb) => applyTenantFilter(qb, context, 'drivers.tenant_id'))
-      .select('id', 'first_name', 'last_name', 'pay_basis', 'pay_rate', 'pay_percentage', 'driver_type', 'hire_date')
+      .select('id', 'first_name', 'last_name', 'pay_basis', 'pay_rate', 'pay_percentage', 'driver_type', 'hire_date', 'truck_id')
       .first();
     if (!driver) throw new Error('Driver not found');
 
@@ -871,6 +906,201 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       ...buildPaySnapshot(profile, driver),
       additional_payee_rate: additionalPayeeRate
     };
+
+    const settlementColumns = await getSettlementsColumnSet(knex);
+    const hasPairedSettlementId = settlementColumns.has('paired_settlement_id');
+    const isOwnerOperator = (driver.driver_type || '').toString().toLowerCase() === 'owner_operator';
+    const truckId = driver.truck_id || null;
+    const truck = truckId
+      ? await knex('vehicles')
+        .where({ id: truckId })
+        .modify((qb) => applyTenantFilter(qb, context, 'vehicles.tenant_id'))
+        .first()
+      : null;
+    const equipmentOwnerId = truck?.equipment_owner_id || null;
+    const ownerPayeeId = additionalPayeeId || equipmentOwnerId || null;
+    const shouldCreatePairedSettlements = Boolean(
+      hasPairedSettlementId
+      && !isOwnerOperator
+      && truckId
+      && equipmentOwnerId
+      && ownerPayeeId
+    );
+
+    if (shouldCreatePairedSettlements) {
+      const ownerPayee = await knex('payees').where({ id: ownerPayeeId }).first();
+      const driverSettlementBasePayload = {
+        tenant_id: tenantId,
+        operating_entity_id: operatingEntityId,
+        payroll_period_id: payrollPeriodId,
+        driver_id: driverId,
+        compensation_profile_id: profile?.id ?? null,
+        primary_payee_id: primaryPayeeId,
+        additional_payee_id: null,
+        settlement_type: 'driver',
+        equipment_owner_id: equipmentOwnerId,
+        truck_id: truckId,
+        settlement_status: 'preparing',
+        date: period.period_end,
+        subtotal_gross: 0,
+        subtotal_driver_pay: 0,
+        subtotal_additional_payee: 0,
+        total_deductions: 0,
+        total_advances: 0,
+        net_pay_driver: 0,
+        net_pay_additional_payee: 0,
+        created_by: userId
+      };
+      const eoSettlementBasePayload = {
+        tenant_id: tenantId,
+        operating_entity_id: operatingEntityId,
+        payroll_period_id: payrollPeriodId,
+        driver_id: driverId,
+        compensation_profile_id: profile?.id ?? null,
+        primary_payee_id: ownerPayeeId,
+        additional_payee_id: null,
+        settlement_type: 'equipment_owner',
+        equipment_owner_id: equipmentOwnerId,
+        truck_id: truckId,
+        settlement_status: 'preparing',
+        date: period.period_end,
+        subtotal_gross: 0,
+        subtotal_driver_pay: 0,
+        subtotal_additional_payee: 0,
+        total_deductions: 0,
+        total_advances: 0,
+        net_pay_driver: 0,
+        net_pay_additional_payee: 0,
+        created_by: userId
+      };
+
+      const driverSettlement = await insertSettlementWithRetry(knex, async () => ({
+        ...driverSettlementBasePayload,
+        settlement_number: await generateSettlementNumberWithType(
+          knex,
+          [driver.first_name, driver.last_name].filter(Boolean).join(' '),
+          period,
+          'DRV'
+        )
+      }));
+      const eoSettlement = await insertSettlementWithRetry(knex, async () => ({
+        ...eoSettlementBasePayload,
+        settlement_number: await generateSettlementNumberWithType(
+          knex,
+          ownerPayee?.name || truck?.equipment_owner_name || 'Equipment Owner',
+          period,
+          'EO'
+        )
+      }));
+      await syncPairedSettlementIds(knex, driverSettlement.id, eoSettlement.id);
+
+      for (const load of eligibleLoads) {
+        const gross = Number(load.rate) || 0;
+        const pairedPay = computeLoadPay({
+          payModel: profileSnapshot.pay_model,
+          centsPerMile: profileSnapshot.cents_per_mile,
+          percentageRate: profileSnapshot.percentage_rate,
+          flatPerLoadAmount: profileSnapshot.flat_per_load_amount,
+          gross,
+          loadedMiles: load.loaded_miles || 0,
+          hasAdditionalPayee: true,
+          additionalPayeeRate: profileSnapshot.additional_payee_rate,
+          equipmentOwnerPercentage: profileSnapshot.equipment_owner_percentage
+        });
+        const driverSnapshot = { ...profileSnapshot, settlement_type: 'driver' };
+        const eoSnapshot = { ...profileSnapshot, settlement_type: 'equipment_owner' };
+
+        await knex('settlement_load_items').insert({
+          settlement_id: driverSettlement.id,
+          load_id: load.id,
+          pickup_date: load.pickup_date,
+          delivery_date: load.delivery_date,
+          loaded_miles: load.loaded_miles ?? null,
+          pay_basis_snapshot: driverSnapshot,
+          gross_amount: gross,
+          driver_pay_amount: pairedPay.driverPay,
+          additional_payee_amount: 0,
+          included_by: userId
+        });
+        await knex('settlement_load_items').insert({
+          settlement_id: eoSettlement.id,
+          load_id: load.id,
+          pickup_date: load.pickup_date,
+          delivery_date: load.delivery_date,
+          loaded_miles: load.loaded_miles ?? null,
+          pay_basis_snapshot: eoSnapshot,
+          gross_amount: gross,
+          driver_pay_amount: 0,
+          additional_payee_amount: pairedPay.additionalPayeePay,
+          included_by: userId
+        });
+      }
+
+      const expenseProfile = await getActiveExpenseResponsibilityProfile(knex, driverId, period.period_end);
+      const recurring = await getRecurringDeductionsForPeriod(
+        knex,
+        driverId,
+        period.period_start,
+        period.period_end,
+        normalizeRecurringDeductionPayeeIds([primaryPayeeId, ownerPayeeId], payeeAssignment)
+      );
+      logTiming('recurring-deductions-resolved', { recurringCount: recurring.length, pairedMode: true });
+
+      for (const rule of recurring) {
+        const applyTo = resolveRecurringDeductionApplyTo(rule, {
+          primaryPayeeId,
+          additionalPayeeId: ownerPayeeId
+        });
+        if (!applyTo) continue;
+        if (!shouldApplyRecurringDeductionForSettlement(rule, applyTo, {
+          expenseProfile,
+          hasLoadItems: eligibleLoads.length > 0
+        })) {
+          continue;
+        }
+
+        const targetSettlementId = applyTo === 'additional_payee' ? eoSettlement.id : driverSettlement.id;
+        await knex('settlement_adjustment_items').insert({
+          settlement_id: targetSettlementId,
+          item_type: 'deduction',
+          source_type: 'scheduled_rule',
+          description: rule.description || rule.source_type || 'Recurring deduction',
+          amount: Number(rule.amount) || 0,
+          charge_party: applyTo === 'additional_payee' ? 'equipment_owner' : 'driver',
+          apply_to: 'primary_payee',
+          source_reference_id: rule.id,
+          source_reference_type: 'recurring_deduction_rule',
+          status: 'applied',
+          created_by: userId
+        });
+      }
+
+      await consumeFuelForSettlement(
+        knex,
+        driverSettlement.id,
+        driverId,
+        period.period_start,
+        period.period_end,
+        userId,
+        tenantId
+      );
+      logTiming('fuel-consumed', { pairedMode: true, targetSettlement: 'driver' });
+      await consumeTollsForSettlement(
+        knex,
+        driverSettlement.id,
+        driverId,
+        period.period_start,
+        period.period_end,
+        userId,
+        tenantId
+      );
+      logTiming('tolls-consumed', { pairedMode: true, targetSettlement: 'driver' });
+
+      const finalDriverSettlement = await updateSettlementTotalsFromRows(knex, driverSettlement.id, { ...profileSnapshot, settlement_type: 'driver' });
+      await updateSettlementTotalsFromRows(knex, eoSettlement.id, { ...profileSnapshot, settlement_type: 'equipment_owner' });
+      logTiming('settlement-recalculated', { pairedMode: true });
+      return finalDriverSettlement;
+    }
 
     const settlementDate = period.period_end;
     const settlementBasePayload = {
@@ -1016,6 +1246,8 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
   if (settlement.settlement_status === 'void') return settlement;
 
   const asOf = toDateOnly(new Date());
+  const isEquipmentOwnerSettlement = settlement.settlement_type === 'equipment_owner';
+  const isPairedDriverSettlement = settlement.settlement_type === 'driver' && !!settlement.paired_settlement_id;
   
   // Resolve compensation profile
   let activeCompensationProfile = await getActiveCompensationProfile(knex, settlement.driver_id, asOf);
@@ -1041,8 +1273,12 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
       ])
       .first();
   }
-  const effectivePrimaryPayeeId = settlement.primary_payee_id || payeeAssignment?.primary_payee_id || null;
-  const effectiveAdditionalPayeeId = settlement.additional_payee_id || payeeAssignment?.additional_payee_id || null;
+  const effectivePrimaryPayeeId = isEquipmentOwnerSettlement
+    ? (settlement.primary_payee_id || payeeAssignment?.additional_payee_id || null)
+    : (settlement.primary_payee_id || payeeAssignment?.primary_payee_id || null);
+  const effectiveAdditionalPayeeId = isEquipmentOwnerSettlement
+    ? null
+    : (isPairedDriverSettlement ? null : (settlement.additional_payee_id || payeeAssignment?.additional_payee_id || null));
 
   // Update settlement if snapshot values changed
   if (
@@ -1127,6 +1363,12 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
       if (!applyTo) {
         continue;
       }
+      if (isEquipmentOwnerSettlement && applyTo !== 'additional_payee') {
+        continue;
+      }
+      if (isPairedDriverSettlement && applyTo === 'additional_payee') {
+        continue;
+      }
       if (!shouldApplyRecurringDeductionForSettlement(rule, applyTo, {
         expenseProfile,
         hasLoadItems: false
@@ -1156,8 +1398,8 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
         source_type: 'scheduled_rule',
         description: rule.description || rule.source_type || 'Recurring deduction',
         amount: Number(rule.amount) || 0,
-        charge_party: 'driver',
-        apply_to: applyTo,
+        charge_party: isEquipmentOwnerSettlement ? 'equipment_owner' : 'driver',
+        apply_to: isEquipmentOwnerSettlement ? 'primary_payee' : applyTo,
         source_reference_id: rule.id,
         source_reference_type: 'recurring_deduction_rule',
         status: 'applied',
@@ -1190,7 +1432,9 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
     additional_payee_rate: additionalPayeeRate
   };
 
-  const hasAdditionalPayee = !!effectiveAdditionalPayeeId || (Number(additionalPayeeRate) || 0) > 0;
+  const hasAdditionalPayee = isEquipmentOwnerSettlement
+    ? true
+    : (!!effectiveAdditionalPayeeId || (Number(additionalPayeeRate) || 0) > 0);
 
   console.log('[Settlement Recalc] payee context', {
     settlementId,
@@ -1223,7 +1467,8 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
       flat_weekly_amount: itemSnapshot.flat_weekly_amount ?? profileSnapshot.flat_weekly_amount ?? null,
       flat_per_load_amount: itemSnapshot.flat_per_load_amount ?? profileSnapshot.flat_per_load_amount ?? null,
       additional_payee_rate: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate ?? null,
-      equipment_owner_percentage: itemSnapshot.equipment_owner_percentage ?? profileSnapshot.equipment_owner_percentage ?? null
+      equipment_owner_percentage: itemSnapshot.equipment_owner_percentage ?? profileSnapshot.equipment_owner_percentage ?? null,
+      settlement_type: itemSnapshot.settlement_type || settlement.settlement_type || 'driver'
     };
     const { driverPay, additionalPayeePay } = computeLoadPay({
       payModel: refreshedSnapshot.pay_model,
@@ -1236,28 +1481,32 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
       additionalPayeeRate: refreshedSnapshot.additional_payee_rate,
       equipmentOwnerPercentage: refreshedSnapshot.equipment_owner_percentage
     });
+    const targetDriverPay = isEquipmentOwnerSettlement ? 0 : driverPay;
+    const targetAdditionalPayee = isEquipmentOwnerSettlement
+      ? additionalPayeePay
+      : (isPairedDriverSettlement ? 0 : additionalPayeePay);
 
     console.log('[Settlement Recalc] load pay', {
       settlementId,
       loadId: item.load_id,
       gross: Number(item.gross_amount) || 0,
       rateUsed: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate,
-      driverPay,
-      additionalPayeePay,
+      driverPay: targetDriverPay,
+      additionalPayeePay: targetAdditionalPayee,
       previousAdditionalPayeeAmount: Number(item.additional_payee_amount || 0)
     });
 
     if (
-      Number(item.driver_pay_amount) !== Number(driverPay) ||
-      Number(item.additional_payee_amount || 0) !== Number(additionalPayeePay) ||
+      Number(item.driver_pay_amount) !== Number(targetDriverPay) ||
+      Number(item.additional_payee_amount || 0) !== Number(targetAdditionalPayee) ||
       JSON.stringify(itemSnapshot || {}) !== JSON.stringify(refreshedSnapshot)
     ) {
       await knex('settlement_load_items')
         .where({ id: item.id })
         .update({
           pay_basis_snapshot: refreshedSnapshot,
-          driver_pay_amount: driverPay,
-          additional_payee_amount: additionalPayeePay,
+          driver_pay_amount: targetDriverPay,
+          additional_payee_amount: targetAdditionalPayee,
           updated_at: knex.fn.now()
         });
     }
@@ -1265,8 +1514,8 @@ async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
     recalculatedLoadItems.push({
       ...item,
       pay_basis_snapshot: refreshedSnapshot,
-      driver_pay_amount: driverPay,
-      additional_payee_amount: additionalPayeePay
+      driver_pay_amount: targetDriverPay,
+      additional_payee_amount: targetAdditionalPayee
     });
   }
 
