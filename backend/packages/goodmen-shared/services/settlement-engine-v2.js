@@ -18,6 +18,9 @@ const {
   getRecurringDeductionsForPeriod
 } = require('./settlement-service');
 const {
+  resolveScheduledDeductionAmount
+} = require('./settlement-recurring-deductions');
+const {
   buildUniqueSettlementNumber,
   insertSettlementWithRetry,
   sanitizeSettlementNumberToken
@@ -590,12 +593,16 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
       if (appliesWhen === 'equipment_owner_only') continue;
       const amount = Number(rule.amount) || 0;
       if (amount === 0) continue;
+      const driverScheduledAmount = isOwnerOperator
+        ? amount
+        : resolveScheduledDeductionAmount(rule, 'driver', expenseProfile, { driverPct, ownerPct });
+      if (driverScheduledAmount === 0) continue;
       await knex('settlement_adjustment_items').insert({
         settlement_id: driverSettlement.id,
         item_type: 'deduction',
         source_type: 'scheduled_rule',
         description: rule.description || 'Recurring deduction',
-        amount: isOwnerOperator ? amount : (amount * driverPct),
+        amount: driverScheduledAmount,
         charge_party: 'driver',
         apply_to: 'primary_payee',
         source_reference_id: rule.id,
@@ -749,7 +756,10 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
       if (appliesWhen === 'driver_only') continue;
       const amount = Number(rule.amount) || 0;
       if (amount === 0) continue;
-      const eoShare = appliesWhen === 'equipment_owner_only' ? amount : (amount * ownerPct);
+      const eoShare = appliesWhen === 'equipment_owner_only'
+        ? amount
+        : resolveScheduledDeductionAmount(rule, 'equipment_owner', expenseProfile, { driverPct, ownerPct });
+      if (eoShare === 0) continue;
       await knex('settlement_adjustment_items').insert({
         settlement_id: eoSettlement.id,
         item_type: 'deduction',

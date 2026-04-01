@@ -218,6 +218,51 @@ function resolveVariableExpenseSplit(expenseType, expenseProfile = {}, amount = 
   };
 }
 
+function getFixedAmountConfigKey(sourceType) {
+  const normalizedSourceType = String(sourceType || '').trim().toLowerCase();
+  const keyMap = {
+    insurance: 'insurance',
+    eld: 'eld',
+    trailer_rent: 'trailerRent'
+  };
+
+  return keyMap[normalizedSourceType] || null;
+}
+
+function resolveScheduledDeductionAmount(rule = {}, settlementSide, expenseProfile = null, ratios = {}) {
+  const normalizedSide = settlementSide === 'equipment_owner' ? 'equipment_owner' : 'driver';
+  const amount = Number(rule?.amount) || 0;
+  const fixedAmountKey = getFixedAmountConfigKey(rule?.source_type);
+  const fixedAmounts = expenseProfile?.custom_rules?.fixedAmounts || {};
+  const fixedAmountConfig = fixedAmountKey ? fixedAmounts?.[fixedAmountKey] : null;
+
+  if (fixedAmountConfig) {
+    const configuredAmount = normalizedSide === 'equipment_owner'
+      ? Number(fixedAmountConfig.owner)
+      : Number(fixedAmountConfig.driver);
+
+    if (Number.isFinite(configuredAmount)) {
+      return Math.round(configuredAmount * 100) / 100;
+    }
+  }
+
+  if (rule?.expense_responsibility === 'shared' && String(rule?.split_type || '').toLowerCase() === 'fixed_amount') {
+    const sharedAmount = normalizedSide === 'equipment_owner'
+      ? Number(rule?.owner_share)
+      : Number(rule?.driver_share);
+
+    if (Number.isFinite(sharedAmount)) {
+      return Math.round(sharedAmount * 100) / 100;
+    }
+  }
+
+  if (normalizedSide === 'equipment_owner') {
+    return Math.round((amount * (Number(ratios?.ownerPct) || 0)) * 100) / 100;
+  }
+
+  return Math.round((amount * (Number(ratios?.driverPct) || 0)) * 100) / 100;
+}
+
 module.exports = {
   getExpenseResponsibilityFieldForSourceType,
   normalizeRecurringDeductionPayeeIds,
@@ -226,5 +271,6 @@ module.exports = {
   shouldApplyRecurringDeductionForSettlement,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo,
-  resolveVariableExpenseSplit
+  resolveVariableExpenseSplit,
+  resolveScheduledDeductionAmount
 };

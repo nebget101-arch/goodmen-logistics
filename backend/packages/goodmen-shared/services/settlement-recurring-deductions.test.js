@@ -5,6 +5,7 @@ const {
   normalizeRecurringDeductionPayeeIds,
   resolveSpecificExpenseResponsibility,
   resolveRecurringDeductionBackfillStartDate,
+  resolveScheduledDeductionAmount,
   resolveVariableExpenseSplit,
   shouldApplyRecurringDeductionForSettlement,
   shouldIncludeRecurringDeductionRule,
@@ -239,5 +240,70 @@ describe('resolveVariableExpenseSplit', () => {
     assert.strictEqual(split.driverAmount, 0);
     assert.strictEqual(split.ownerAmount, 245);
     assert.strictEqual(split.chargeParty, 'owner');
+  });
+});
+
+describe('resolveScheduledDeductionAmount', () => {
+  it('uses configured fixed amounts from expense responsibility for driver and owner settlements', () => {
+    const expenseProfile = {
+      custom_rules: {
+        fixedAmounts: {
+          insurance: { driver: 150, owner: 150 },
+          eld: { driver: 30, owner: 30 },
+          trailerRent: { driver: 0, owner: 200 }
+        }
+      }
+    };
+
+    assert.strictEqual(
+      resolveScheduledDeductionAmount(
+        { source_type: 'insurance', amount: 999 },
+        'driver',
+        expenseProfile,
+        { driverPct: 0.33, ownerPct: 0.67 }
+      ),
+      150
+    );
+
+    assert.strictEqual(
+      resolveScheduledDeductionAmount(
+        { source_type: 'trailer_rent', amount: 999 },
+        'equipment_owner',
+        expenseProfile,
+        { driverPct: 0.33, ownerPct: 0.67 }
+      ),
+      200
+    );
+  });
+
+  it('falls back to shared fixed split shares when explicit expense-profile fixed amounts are absent', () => {
+    assert.strictEqual(
+      resolveScheduledDeductionAmount(
+        {
+          source_type: 'insurance',
+          amount: 300,
+          expense_responsibility: 'shared',
+          split_type: 'fixed_amount',
+          driver_share: 150,
+          owner_share: 150
+        },
+        'equipment_owner',
+        null,
+        { driverPct: 0.33, ownerPct: 0.67 }
+      ),
+      150
+    );
+  });
+
+  it('falls back to percentage split for non-fixed categories', () => {
+    assert.strictEqual(
+      resolveScheduledDeductionAmount(
+        { source_type: 'repairs', amount: 300 },
+        'equipment_owner',
+        null,
+        { driverPct: 0.33, ownerPct: 0.67 }
+      ),
+      201
+    );
   });
 });
