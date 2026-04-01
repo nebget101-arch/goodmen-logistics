@@ -1,4 +1,5 @@
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { ensureSettlementAiInsights } = require('./settlement-ai-insights.service');
 
 function asNumber(value) {
   const num = Number(value || 0);
@@ -539,7 +540,59 @@ function drawAdjustmentSection(page, fonts, title, group, y) {
   return currentY - 4;
 }
 
+function drawInsightsSection(page, fonts, insights, y) {
+  page.drawRectangle({
+    x: LAYOUT.marginLeft,
+    y: y - 124,
+    width: LAYOUT.contentWidth,
+    height: 132,
+    color: COLORS.panel,
+    borderColor: COLORS.border,
+    borderWidth: 1
+  });
+  page.drawText('FleetNeuron AI Insights', {
+    x: LAYOUT.marginLeft + 14,
+    y: y - 16,
+    size: 11,
+    font: fonts.bold,
+    color: COLORS.accent
+  });
+  const summary = safeText(insights?.summary, 'Settlement insights are currently unavailable.');
+  drawTextBlock(page, fonts.regular, summary, LAYOUT.marginLeft + 14, y - 32, {
+    size: 8,
+    maxChars: 104,
+    lineHeight: 10,
+    color: COLORS.text
+  });
+
+  let currentY = y - 66;
+  const items = Array.isArray(insights?.insights) ? insights.insights.slice(0, 3) : [];
+  if (!items.length) {
+    page.drawText('• Placeholder insights are being used for this PDF render.', {
+      x: LAYOUT.marginLeft + 14,
+      y: currentY,
+      size: 8,
+      font: fonts.regular,
+      color: COLORS.muted
+    });
+    return y - 140;
+  }
+
+  for (const item of items) {
+    page.drawText(`• ${safeText(item?.title, 'Insight')}: ${safeText(item?.message, '')}`, {
+      x: LAYOUT.marginLeft + 14,
+      y: currentY,
+      size: 8,
+      font: fonts.regular,
+      color: item?.category === 'risk' ? COLORS.warning : COLORS.text
+    });
+    currentY -= 16;
+  }
+  return y - 140;
+}
+
 async function buildSettlementPdf(payload) {
+  const aiInsights = await ensureSettlementAiInsights(payload);
   const pdfDoc = await PDFDocument.create();
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -572,39 +625,41 @@ async function buildSettlementPdf(payload) {
     }
   }
 
+  y2 = drawInsightsSection(page2, fonts, aiInsights, y2 - 8);
+
   page2.drawRectangle({
     x: LAYOUT.marginLeft,
-    y: 92,
+    y: 40,
     width: LAYOUT.contentWidth,
-    height: 86,
+    height: 92,
     color: COLORS.panel,
     borderColor: COLORS.border,
     borderWidth: 1
   });
   page2.drawText('FleetNeuron Report Metadata', {
     x: LAYOUT.marginLeft + 14,
-    y: 154,
+    y: 114,
     size: 11,
     font: bold,
     color: COLORS.accent
   });
   page2.drawText(`Settlement reference: ${safeText(payload?.settlement?.settlement_number || getSettlementDisplayNumber(payload))}`, {
     x: LAYOUT.marginLeft + 14,
-    y: 136,
+    y: 96,
     size: 9,
     font: regular,
     color: COLORS.text
   });
   page2.drawText(`Generated for ${getPayableTo(payload)} using FleetNeuron AI settlement reporting.`, {
     x: LAYOUT.marginLeft + 14,
-    y: 120,
+    y: 80,
     size: 9,
     font: regular,
     color: COLORS.text
   });
-  page2.drawText('AI insights will be added in the next report iteration without changing this download endpoint.', {
+  page2.drawText(`Insights source: ${safeText(aiInsights?.source, 'fallback')} • status: ${safeText(aiInsights?.status, 'placeholder')}`, {
     x: LAYOUT.marginLeft + 14,
-    y: 104,
+    y: 64,
     size: 8,
     font: regular,
     color: COLORS.muted
