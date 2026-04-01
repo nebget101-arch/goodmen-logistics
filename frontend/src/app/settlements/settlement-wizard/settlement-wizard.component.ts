@@ -224,22 +224,26 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
   createDraft(): void {
     this.error = '';
     this.saving = true;
-    this.apiService.createSettlementDraft({
+    this.apiService.generateDualSettlements({
       payroll_period_id: this.payrollPeriodId,
       driver_id: this.driverId,
       date_basis: this.dateBasis
     }).subscribe({
-      next: (settlement: any) => {
+      next: (result: any) => {
         this.saving = false;
-        const sid = settlement?.id ?? settlement?.settlement_id;
+        const sid =
+          result?.driverSettlement?.id
+          ?? result?.driverSettlement?.settlement_id
+          ?? result?.id
+          ?? result?.settlement_id;
         if (!sid) {
-          this.error = 'Settlement was created but the server response did not include an id. Open Settlements and use View on the new row.';
+          this.error = 'Settlement generation finished but the server response did not include a driver settlement id. Open Settlements and use View on the new row.';
           return;
         }
         this.router.navigate(['/settlements', sid], { queryParams: { created: 'draft' } });
       },
       error: (err) => {
-        this.error = err?.error?.error || err?.message || 'Failed to create settlement';
+        this.error = err?.error?.error || err?.message || 'Failed to generate settlement';
         this.saving = false;
       }
     });
