@@ -203,7 +203,15 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
     ).subscribe({
       next: ({ settlementRes, loadsRes }) => {
         const settlement = settlementRes?.settlement || settlementRes;
-        this.settlement = settlement || null;
+        this.settlement = settlementRes?.settlement
+          ? {
+              ...settlementRes.settlement,
+              truck: settlementRes?.truck || null,
+              equipment_owner: settlementRes?.equipment_owner || null,
+              paired_settlement_id: settlementRes?.paired_settlement_id || null,
+              paired_settlement: settlementRes?.paired_settlement || null
+            }
+          : (settlement || null);
         this.loadItems = Array.isArray(settlementRes?.load_items) ? settlementRes.load_items : [];
         this.adjustmentItems = Array.isArray(settlementRes?.adjustment_items) ? settlementRes.adjustment_items : [];
 
@@ -330,7 +338,12 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
 
   getSettlementTitle(): string {
     const period = this.getSettlementPayrollPeriodLabel();
-    return period && period !== '—' ? `Settlement ${period}` : 'Settlement';
+    const prefix = this.isEoSettlement()
+      ? 'Equipment Owner Settlement'
+      : this.isDriverSettlement()
+        ? 'Driver Settlement'
+        : 'Settlement';
+    return period && period !== '—' ? `${prefix} ${period}` : prefix;
   }
 
   getSettlementNumberDisplay(): string {
@@ -754,6 +767,10 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
     return (this.settlement?.settlement_type || '') === 'equipment_owner';
   }
 
+  isDriverSettlement(): boolean {
+    return (this.settlement?.settlement_type || '') === 'driver';
+  }
+
   getSettlementTypeLabel(): string {
     const t = (this.settlement?.settlement_type || '').toLowerCase();
     if (t === 'equipment_owner') return 'Equipment Owner';
@@ -766,6 +783,84 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
     if (t === 'equipment_owner') return 'badge-eo';
     if (t === 'driver') return 'badge-driver-type';
     return '';
+  }
+
+  getTruckLabel(): string {
+    return this.settlement?.truck?.unit_number
+      || this.settlement?.truck?.plate_number
+      || this.settlement?.truck_id
+      || '—';
+  }
+
+  getEquipmentOwnerName(): string {
+    return this.settlement?.equipment_owner?.name
+      || this.settlement?.equipment_owner_name
+      || this.additionalPayee?.name
+      || this.settlement?.equipment_owner_id
+      || '—';
+  }
+
+  getPrimaryPartyLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner payee' : 'Driver payee';
+  }
+
+  getPrimaryPartyName(): string {
+    if (this.isEoSettlement()) {
+      return this.primaryPayee?.name || this.getEquipmentOwnerName();
+    }
+    return this.primaryPayee?.name || this.getDriverName();
+  }
+
+  getSecondaryPartyLabel(): string {
+    return this.isEoSettlement() ? 'Driver reference' : 'Equipment Owner reference';
+  }
+
+  getSecondaryPartyName(): string {
+    if (this.isEoSettlement()) {
+      return this.driver?.name || this.getDriverName();
+    }
+    return this.getEquipmentOwnerName();
+  }
+
+  getCurrentPartyPayLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner subtotal' : 'Driver pay subtotal';
+  }
+
+  getCurrentPartyPayValue(): number {
+    return this.isEoSettlement()
+      ? Number(this.settlement?.subtotal_additional_payee) || 0
+      : Number(this.settlement?.subtotal_driver_pay) || 0;
+  }
+
+  getNetPayLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner net pay' : 'Driver net pay';
+  }
+
+  getNetPayValue(): number {
+    return this.isEoSettlement()
+      ? Number(this.settlement?.net_pay_additional_payee) || 0
+      : Number(this.settlement?.net_pay_driver) || 0;
+  }
+
+  getLoadPayColumnLabel(): string {
+    return this.isEoSettlement() ? 'Highlighted payee amount' : 'Highlighted driver amount';
+  }
+
+  hasPairedSettlement(): boolean {
+    return !!(this.settlement?.paired_settlement_id || this.settlement?.paired_settlement?.id);
+  }
+
+  getPairedSettlementLabel(): string {
+    const pairedType = (this.settlement?.paired_settlement?.settlement_type || '').toLowerCase();
+    if (pairedType === 'equipment_owner') return 'View equipment owner settlement';
+    if (pairedType === 'driver') return 'View driver settlement';
+    return 'View paired settlement';
+  }
+
+  openPairedSettlement(): void {
+    const pairedId = this.settlement?.paired_settlement?.id || this.settlement?.paired_settlement_id;
+    if (!pairedId) return;
+    this.router.navigate(['/settlements', pairedId]);
   }
 
   getCarriedBalance(): number {

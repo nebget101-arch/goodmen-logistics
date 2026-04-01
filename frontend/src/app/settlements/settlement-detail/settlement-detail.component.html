@@ -35,6 +35,10 @@
         <span class="material-symbols-outlined">block</span>
         Void
       </button>
+      <button type="button" class="btn-secondary" *ngIf="hasPairedSettlement()" (click)="openPairedSettlement()" [disabled]="saving || loading">
+        <span class="material-symbols-outlined">swap_horiz</span>
+        {{ getPairedSettlementLabel() }}
+      </button>
     </div>
   </div>
 
@@ -70,23 +74,23 @@
           </div>
           <div class="summary-item" *ngIf="isV2Settlement() && settlement.truck_id">
             <div class="label">Truck</div>
-            <div class="value">{{ settlement.truck_id }}</div>
+            <div class="value">{{ getTruckLabel() }}</div>
           </div>
-          <div class="summary-item" *ngIf="isV2Settlement() && settlement.equipment_owner_name">
+          <div class="summary-item" *ngIf="isV2Settlement() && getEquipmentOwnerName() !== '—'">
             <div class="label">Equipment Owner</div>
-            <div class="value">{{ settlement.equipment_owner_name }}</div>
+            <div class="value">{{ getEquipmentOwnerName() }}</div>
           </div>
           <div class="summary-item">
             <div class="label">Payroll period</div>
             <div class="value">{{ dateOnly(period?.period_start || settlement.period_start) }} → {{ dateOnly(period?.period_end || settlement.period_end) }}</div>
           </div>
           <div class="summary-item">
-            <div class="label">Driver</div>
-            <div class="value">{{ primaryPayee?.name || settlement.primary_payee_id || '—' }}</div>
+            <div class="label">{{ getPrimaryPartyLabel() }}</div>
+            <div class="value">{{ getPrimaryPartyName() }}</div>
           </div>
           <div class="summary-item">
-            <div class="label">Equipment Owner</div>
-            <div class="value">{{ additionalPayee?.name || settlement.additional_payee_id || '—' }}</div>
+            <div class="label">{{ getSecondaryPartyLabel() }}</div>
+            <div class="value">{{ getSecondaryPartyName() }}</div>
           </div>
           <div class="summary-item">
             <div class="label">Date basis</div>
@@ -105,20 +109,16 @@
             <div class="metric-value">${{ settlement.subtotal_gross | number:'1.2-2' }}</div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">Driver pay subtotal</div>
-            <div class="metric-value">${{ settlement.subtotal_driver_pay | number:'1.2-2' }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Equipment Owner subtotal</div>
-            <div class="metric-value">${{ settlement.subtotal_additional_payee | number:'1.2-2' }}</div>
+            <div class="metric-label">{{ getCurrentPartyPayLabel() }}</div>
+            <div class="metric-value">${{ getCurrentPartyPayValue() | number:'1.2-2' }}</div>
           </div>
           <div class="metric-card metric-warn">
             <div class="metric-label">Total deductions</div>
             <div class="metric-value">${{ settlement.total_deductions | number:'1.2-2' }}</div>
           </div>
           <div class="metric-card" [ngClass]="hasNegativeNet() ? 'metric-danger' : 'metric-good'">
-            <div class="metric-label">Net pay</div>
-            <div class="metric-value">${{ settlement.net_pay_driver | number:'1.2-2' }}</div>
+            <div class="metric-label">{{ getNetPayLabel() }}</div>
+            <div class="metric-value">${{ getNetPayValue() | number:'1.2-2' }}</div>
             <div class="rollover-notice" *ngIf="hasNegativeNet()">
               <span class="material-symbols-outlined">arrow_upward</span>
               ${{ getCarriedBalance() | number:'1.2-2' }} carried forward
@@ -177,8 +177,8 @@
               <td>{{ dateOnly(li.delivery_date) }}</td>
               <td>{{ li.loaded_miles || 0 }}</td>
               <td>${{ li.gross_amount | number:'1.2-2' }}</td>
-              <td>${{ li.driver_pay_amount | number:'1.2-2' }}</td>
-              <td>${{ li.additional_payee_amount | number:'1.2-2' }}</td>
+              <td [class.pay-highlight]="!isEoSettlement()">${{ li.driver_pay_amount | number:'1.2-2' }}</td>
+              <td [class.pay-highlight]="isEoSettlement()">${{ li.additional_payee_amount | number:'1.2-2' }}</td>
               <td *ngIf="!isLocked()">
                 <button type="button" class="btn-sm btn-danger" (click)="removeLoad(li.id)" [disabled]="saving">
                   <span class="material-symbols-outlined">delete</span>

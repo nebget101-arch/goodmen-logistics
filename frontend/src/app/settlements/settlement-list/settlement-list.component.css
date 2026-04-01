@@ -245,6 +245,11 @@
   color: var(--text-light);
 }
 
+.settlements-list .list-subtext {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
 .settlements-list .btn-secondary {
   display: inline-flex;
   align-items: center;

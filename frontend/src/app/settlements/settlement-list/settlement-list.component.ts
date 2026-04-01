@@ -22,6 +22,7 @@ export interface SettlementRow {
   settlementType: 'driver' | 'equipment_owner' | '';
   equipmentOwnerName: string;
   carriedBalance: number;
+  pairedSettlementId: string;
 }
 
 @Component({
@@ -176,7 +177,8 @@ export class SettlementListComponent implements OnInit, OnDestroy {
       updatedAt: this.toDateOnly(s.updated_at || s.created_at),
       settlementType: (s.settlement_type || '') as 'driver' | 'equipment_owner' | '',
       equipmentOwnerName: s.equipment_owner_name || '',
-      carriedBalance: Number(s.carried_balance) || 0
+      carriedBalance: Number(s.carried_balance) || 0,
+      pairedSettlementId: s.paired_settlement_id || ''
     };
   }
 
@@ -247,9 +249,26 @@ export class SettlementListComponent implements OnInit, OnDestroy {
   }
 
   getTypeLabel(type: string): string {
-    if (type === 'equipment_owner') return 'Equip. Owner';
+    if (type === 'equipment_owner') return 'Equipment Owner';
     if (type === 'driver') return 'Driver';
-    return '—';
+    return 'Legacy';
+  }
+
+  getPayeeSummary(row: SettlementRow): string {
+    if (row.settlementType === 'equipment_owner') {
+      return row.payableTo || row.equipmentOwnerName || 'Equipment owner';
+    }
+    return row.payableTo || row.driverName || 'Driver';
+  }
+
+  getNetPayValue(row: SettlementRow): number {
+    return row.settlementType === 'equipment_owner'
+      ? row.netAdditionalPayee
+      : row.netDriver;
+  }
+
+  getNetPayLabel(row: SettlementRow): string {
+    return row.settlementType === 'equipment_owner' ? 'EO net' : 'Driver net';
   }
 
   getDriverDisplayName(d: { id: string; firstName?: string; lastName?: string; name?: string }): string {
