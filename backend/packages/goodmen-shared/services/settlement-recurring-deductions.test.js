@@ -265,6 +265,26 @@ describe('specific expense helpers', () => {
       false
     );
   });
+
+  it('preserves has_loads rules during recalc when the settlement still has loads', () => {
+    assert.strictEqual(
+      shouldApplyRecurringDeductionForSettlement(
+        { applies_when: 'has_loads', source_type: 'insurance' },
+        'primary_payee',
+        { hasLoadItems: true }
+      ),
+      true
+    );
+
+    assert.strictEqual(
+      shouldApplyRecurringDeductionForSettlement(
+        { applies_when: 'has_loads', source_type: 'insurance' },
+        'primary_payee',
+        { hasLoadItems: false }
+      ),
+      false
+    );
+  });
 });
 
 describe('resolveVariableExpenseSplit', () => {
