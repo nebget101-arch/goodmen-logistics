@@ -12,16 +12,8 @@
  *   NODE_ENV                     - Maps to deployment.environment resource attribute
  *
  * If OTEL_EXPORTER_OTLP_ENDPOINT is not set, tracing is disabled (graceful no-op for local dev).
+ * If @opentelemetry packages are not installed, tracing is disabled (graceful no-op).
  */
-
-const { NodeSDK } = require('@opentelemetry/sdk-node');
-const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node');
-const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
-const { PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
-const { Resource } = require('@opentelemetry/resources');
-const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION, ATTR_DEPLOYMENT_ENVIRONMENT } = require('@opentelemetry/semantic-conventions');
-const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
 
 /**
  * Initialize OpenTelemetry SDK with auto-instrumentation.
@@ -38,19 +30,42 @@ function initTracing({ serviceName, serviceVersion } = {}) {
     return;
   }
 
+  // Lazy-require OTel packages inside the function so that:
+  // 1. Missing deps don't crash the service at module load time
+  // 2. Services start normally even if OTel packages aren't installed yet
+  let NodeSDK, getNodeAutoInstrumentations, OTLPTraceExporter, OTLPMetricExporter,
+      PeriodicExportingMetricReader, Resource, semanticConventions, api;
+
+  try {
+    ({ NodeSDK } = require('@opentelemetry/sdk-node'));
+    ({ getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumentations-node'));
+    ({ OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http'));
+    ({ OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http'));
+    ({ PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics'));
+    ({ Resource } = require('@opentelemetry/resources'));
+    semanticConventions = require('@opentelemetry/semantic-conventions');
+    api = require('@opentelemetry/api');
+  } catch (err) {
+    console.warn(
+      `[tracing] OpenTelemetry packages not installed — tracing disabled (${serviceName || 'unknown'}). ` +
+      `Install @opentelemetry/* deps in the service package.json to enable. Error: ${err.message}`
+    );
+    return;
+  }
+
   const resolvedName = serviceName || process.env.OTEL_SERVICE_NAME || 'fleetneuron-unknown';
   const resolvedVersion = serviceVersion || '1.0.0';
   const environment = process.env.NODE_ENV || 'development';
 
   // Enable diagnostic logging in development for troubleshooting
   if (environment === 'development') {
-    diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.WARN);
+    api.diag.setLogger(new api.DiagConsoleLogger(), api.DiagLogLevel.WARN);
   }
 
   const resource = new Resource({
-    [ATTR_SERVICE_NAME]: resolvedName,
-    [ATTR_SERVICE_VERSION]: resolvedVersion,
-    [ATTR_DEPLOYMENT_ENVIRONMENT]: environment,
+    [semanticConventions.ATTR_SERVICE_NAME]: resolvedName,
+    [semanticConventions.ATTR_SERVICE_VERSION]: resolvedVersion,
+    [semanticConventions.ATTR_DEPLOYMENT_ENVIRONMENT]: environment,
   });
 
   // Trace exporter — sends spans to OTel Collector via HTTP/protobuf
@@ -110,7 +125,7 @@ function initTracing({ serviceName, serviceVersion } = {}) {
   const shutdown = () => {
     sdk.shutdown()
       .then(() => console.log(`[tracing] OpenTelemetry shut down gracefully (${resolvedName})`))
-      .catch((err) => console.error(`[tracing] Error shutting down OpenTelemetry:`, err));
+      .catch((shutdownErr) => console.error(`[tracing] Error shutting down OpenTelemetry:`, shutdownErr));
   };
 
   process.on('SIGTERM', shutdown);
