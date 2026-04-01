@@ -407,6 +407,69 @@ services:
       - key: AI_SERVICE_PORT
         value: 10010
 
+  # ── SigNoz Observability Stack ─────────────────────────────────
+  # Self-hosted SigNoz: ClickHouse + OTel Collector + Dashboard
+  # See infra/signoz/README.md for full documentation
+
+  - type: pserv
+    name: signoz-clickhouse
+    runtime: docker
+    dockerfilePath: infra/signoz/Dockerfile.clickhouse
+    plan: starter_plus
+    disk:
+      name: clickhouse-data
+      mountPath: /var/lib/clickhouse
+      sizeGB: 10
+    envVars:
+      - key: CLICKHOUSE_DB
+        value: signoz
+      - key: CLICKHOUSE_USER
+        value: default
+      - key: CLICKHOUSE_PASSWORD
+        sync: false
+
+  - type: web
+    name: signoz-otel-collector
+    runtime: docker
+    dockerfilePath: infra/signoz/Dockerfile.otel-collector
+    plan: starter
+    envVars:
+      - key: CLICKHOUSE_HOST
+        fromService:
+          type: pserv
+          name: signoz-clickhouse
+          property: host
+      - key: CLICKHOUSE_PORT
+        value: "9000"
+      - key: CLICKHOUSE_DB
+        value: signoz
+      - key: CLICKHOUSE_USER
+        value: default
+      - key: CLICKHOUSE_PASSWORD
+        sync: false
+
+  - type: web
+    name: signoz-dashboard
+    runtime: docker
+    dockerfilePath: infra/signoz/Dockerfile.query-service
+    plan: starter
+    envVars:
+      - key: CLICKHOUSE_HOST
+        fromService:
+          type: pserv
+          name: signoz-clickhouse
+          property: host
+      - key: CLICKHOUSE_PORT
+        value: "9000"
+      - key: SIGNOZ_TELEMETRY_ENABLED
+        value: "false"
+      - key: CLICKHOUSE_DB
+        value: signoz
+      - key: CLICKHOUSE_USER
+        value: default
+      - key: CLICKHOUSE_PASSWORD
+        sync: false
+
 databases:
   - name: safetyapp-db
     databaseName: goodmen_logistics
