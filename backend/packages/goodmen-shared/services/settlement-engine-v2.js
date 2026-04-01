@@ -12,6 +12,7 @@
 
 const { recalculateSettlementTotals } = require('./settlement-calculation');
 const {
+  ensureActiveCompensationProfile,
   getActivePayeeAssignment,
   getEligibleLoads,
   getRecurringDeductionsForPeriod
@@ -168,6 +169,18 @@ async function resolveSettlementPayees(knex, driver, period, truck, tenantId) {
     driverPrimaryPayeeId: primaryPayeeId,
     equipmentOwnerPrimaryPayeeId: additionalPayeeId || truck?.equipment_owner_id || null
   };
+}
+
+function resolveSettlementTruckId(driver, eligibleLoads) {
+  const loadTruckIds = Array.from(new Set(
+    (Array.isArray(eligibleLoads) ? eligibleLoads : [])
+      .map((load) => load?.truck_id || null)
+      .filter(Boolean)
+  ));
+
+  if (loadTruckIds.length === 1) return loadTruckIds[0];
+  if (driver?.truck_id && loadTruckIds.includes(driver.truck_id)) return driver.truck_id;
+  return driver?.truck_id || loadTruckIds[0] || null;
 }
 
 /**
@@ -379,35 +392,39 @@ async function generateDualSettlements(payrollPeriodId, driverId, dateBasis = 'p
     if (!driver) throw new Error('Driver not found');
 
     const isOwnerOperator = (driver.driver_type || '').toLowerCase() === 'owner_operator';
-    const truckId = driver.truck_id || null;
 
-    // --- 3. Load truck + equipment owner info ---
+    // --- 3. Get eligible loads early so truck resolution can use period data ---
+    const eligibleLoads = await getEligibleLoads(knex, client, driverId, periodStart, periodEnd, dateBasis, context);
+    if (!eligibleLoads.length) {
+      throw new Error(`No eligible loads found for driver ${driverId} in period ${periodStart} → ${periodEnd}`);
+    }
+
+    const truckId = resolveSettlementTruckId(driver, eligibleLoads);
+
+    // --- 4. Load truck + equipment owner info ---
     let truck = null;
     let equipmentOwnerId = null;
     let equipmentOwnerName = null;
 
     if (truckId) {
-      truck = await knex('vehicles').where({ id: truckId }).first();
+      truck = await knex('vehicles')
+        .where({ id: truckId })
+        .modify((qb) => applyTenantFilter(qb, context, 'vehicles.tenant_id'))
+        .first();
       if (truck) {
         equipmentOwnerId = truck.equipment_owner_id || null;
         equipmentOwnerName = truck.equipment_owner_name || null;
       }
     }
 
-    // --- 4. Load compensation + expense profiles ---
-    const compProfile = await getCompensationProfile(knex, driverId, periodEnd);
+    // --- 5. Load compensation + expense profiles ---
+    const compProfile = await ensureActiveCompensationProfile(knex, driver, periodEnd);
     const expenseProfile = await getExpenseProfile(knex, driverId, periodEnd);
     const { driverPct, ownerPct } = resolveSplitRatios(expenseProfile);
     const {
       driverPrimaryPayeeId,
       equipmentOwnerPrimaryPayeeId
     } = await resolveSettlementPayees(knex, driver, period, truck, tenantId);
-
-    // --- 5. Get eligible loads ---
-    const eligibleLoads = await getEligibleLoads(knex, client, driverId, periodStart, periodEnd, dateBasis, context);
-    if (!eligibleLoads.length) {
-      throw new Error(`No eligible loads found for driver ${driverId} in period ${periodStart} → ${periodEnd}`);
-    }
 
     const grossTotal = eligibleLoads.reduce((s, l) => s + (Number(l.rate) || 0), 0);
 
