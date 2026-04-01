@@ -32,6 +32,9 @@ const {
 const {
   applyLeaseDeductionForSettlement
 } = require('./lease-financing-service');
+const {
+  mergeCompensationProfileWithFallback
+} = require('./driver-compensation-profile-sync');
 
 const SETTLEMENT_NUMBER_PREFIX = 'STL';
 let payeesColumnSetCache = null;
@@ -148,6 +151,19 @@ async function getActiveCompensationProfile(knex, driverId, asOfDate) {
   return row || null;
 }
 
+async function getLatestCompensationProfile(knex, driverId) {
+  const row = await knex('driver_compensation_profiles')
+    .where({ driver_id: driverId })
+    .orderByRaw(`CASE WHEN status = 'active' THEN 0 ELSE 1 END`)
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
+    .first();
+
+  return row || null;
+}
+
 function buildCompensationProfileInsert(driverRow, effectiveStartDate) {
   if (!driverRow) return null;
 
@@ -189,6 +205,10 @@ function buildCompensationProfileInsert(driverRow, effectiveStartDate) {
     cents_per_mile: centsPerMile,
     flat_weekly_amount: flatWeeklyAmount,
     flat_per_load_amount: flatPerLoadAmount,
+    equipment_owner_percentage:
+      driverRow.equipment_owner_percentage
+      ?? driverRow.equipmentOwnerPercentage
+      ?? null,
     expense_sharing_enabled: false,
     effective_start_date: toDateOnly(driverRow.hire_date) || toDateOnly(effectiveStartDate) || toDateOnly(new Date()),
     effective_end_date: null,
@@ -201,9 +221,20 @@ async function ensureActiveCompensationProfile(knex, driverRow, asOfDate) {
   if (!driverRow?.id) return null;
 
   let profile = await getActiveCompensationProfile(knex, driverRow.id, asOfDate);
-  if (profile) return profile;
+  const latestKnownProfile = await getLatestCompensationProfile(knex, driverRow.id);
 
-  const insertPayload = buildCompensationProfileInsert(driverRow, asOfDate);
+  if (profile) {
+    return mergeCompensationProfileWithFallback(profile, latestKnownProfile, driverRow);
+  }
+
+  const insertPayload = buildCompensationProfileInsert({
+    ...driverRow,
+    equipment_owner_percentage:
+      driverRow?.equipment_owner_percentage
+      ?? driverRow?.equipmentOwnerPercentage
+      ?? latestKnownProfile?.equipment_owner_percentage
+      ?? null
+  }, asOfDate);
   if (!insertPayload) return null;
 
   const [created] = await knex('driver_compensation_profiles')
@@ -217,7 +248,7 @@ async function ensureActiveCompensationProfile(knex, driverRow, asOfDate) {
       updated_at: knex.fn.now()
     });
 
-  return created;
+  return mergeCompensationProfileWithFallback(created, latestKnownProfile, driverRow);
 }
 
 async function getActivePayeeAssignment(knex, driverId, asOfDate) {

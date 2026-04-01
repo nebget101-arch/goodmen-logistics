@@ -41,8 +41,41 @@ function resolveCompensationProfileEffectiveStartDate(mode, driverRow = {}, fall
   return normalizedFallbackDate;
 }
 
+function mergeCompensationProfileWithFallback(profile = null, fallbackProfile = null, driverRow = {}) {
+  if (!profile && !fallbackProfile) return null;
+
+  const merged = { ...(profile || {}) };
+  const fallback = fallbackProfile || {};
+
+  if ((merged.equipment_owner_percentage == null || merged.equipment_owner_percentage === '')
+    && fallback.equipment_owner_percentage != null
+    && fallback.equipment_owner_percentage !== '') {
+    merged.equipment_owner_percentage = fallback.equipment_owner_percentage;
+  }
+
+  const driverPayPct = driverRow?.pay_percentage ?? driverRow?.payPercentage ?? null;
+  const mergedPct = Number(merged.percentage_rate);
+  const hasDriverPayPct = driverPayPct != null && driverPayPct !== '' && Number.isFinite(Number(driverPayPct));
+  const fallbackPct = fallback.percentage_rate != null && fallback.percentage_rate !== ''
+    ? Number(fallback.percentage_rate)
+    : null;
+
+  if (String(merged.pay_model || '').toLowerCase() === 'percentage') {
+    if ((!Number.isFinite(mergedPct) || mergedPct === 0) && Number.isFinite(fallbackPct) && fallbackPct > 0) {
+      merged.percentage_rate = fallbackPct;
+    }
+
+    if ((!Number.isFinite(Number(merged.percentage_rate)) || Number(merged.percentage_rate) === 0) && hasDriverPayPct) {
+      merged.percentage_rate = Number(driverPayPct);
+    }
+  }
+
+  return merged;
+}
+
 module.exports = {
   hasDriverCompensationUpdate,
   pickLatestEquipmentOwnerPercentage,
-  resolveCompensationProfileEffectiveStartDate
+  resolveCompensationProfileEffectiveStartDate,
+  mergeCompensationProfileWithFallback
 };
