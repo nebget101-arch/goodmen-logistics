@@ -600,6 +600,8 @@ async function buildSettlementPdf(payload) {
 
   const page1 = pdfDoc.addPage([LAYOUT.width, LAYOUT.height]);
   const page2 = pdfDoc.addPage([LAYOUT.width, LAYOUT.height]);
+  drawPageChrome(page1, fonts, payload, 1, 2);
+  drawPageChrome(page2, fonts, payload, 2, 2);
 
   let y = LAYOUT.height - 135;
   y = drawSectionTitle(page1, fonts, getSettlementTypeLabel(payload?.settlement?.settlement_type), y);
@@ -665,8 +667,6 @@ async function buildSettlementPdf(payload) {
     color: COLORS.muted
   });
 
-  const pages = pdfDoc.getPages();
-  pages.forEach((page, index) => drawPageChrome(page, fonts, payload, index + 1, pages.length));
   const bytes = await pdfDoc.save();
   return Buffer.from(bytes);
 }
