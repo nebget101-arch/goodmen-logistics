@@ -101,14 +101,22 @@ function buildProxy(target, label) {
       return '/api' + (fullPath.startsWith('/') ? fullPath : '/' + fullPath);
     },
     logLevel: isProd ? 'warn' : 'debug',
-    onProxyReq: isProd
-      ? undefined
-      : (proxyReq, req) => {
-          // eslint-disable-next-line no-console
-          console.log(
-            `[gateway->${label}] ${req.method} ${req.originalUrl} -> ${proxyReq.path}`
-          );
-        },
+    onProxyReq: (proxyReq, req) => {
+      // Forward W3C trace context headers for distributed tracing (OpenTelemetry).
+      // http-proxy-middleware forwards most headers, but explicitly ensuring
+      // traceparent/tracestate survive guarantees end-to-end trace linkage.
+      const traceparent = req.headers['traceparent'];
+      const tracestate = req.headers['tracestate'];
+      if (traceparent) proxyReq.setHeader('traceparent', traceparent);
+      if (tracestate) proxyReq.setHeader('tracestate', tracestate);
+
+      if (!isProd) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[gateway->${label}] ${req.method} ${req.originalUrl} -> ${proxyReq.path}`
+        );
+      }
+    },
     onProxyRes: (proxyRes, req) => {
       const requestOrigin = req.headers.origin;
       if (!requestOrigin) {
