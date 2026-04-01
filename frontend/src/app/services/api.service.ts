@@ -381,7 +381,7 @@ export class ApiService {
   }
 
   downloadSettlementPdfBlob(id: string): Observable<Blob> {
-    return this.http.get(`${this.baseUrl}/settlements/settlements/${id}/pdf/download`, {
+    return this.http.get(`${this.baseUrl}/settlements/settlements/${id}/pdf`, {
       responseType: 'blob'
     });
   }

@@ -15,13 +15,15 @@
       </div>
     </div>
     <div class="header-actions" *ngIf="settlement">
-      <button type="button" class="btn-secondary" (click)="downloadSettlementPdf()" [disabled]="saving || loading">
-        <span class="material-symbols-outlined">download</span>
-        Download PDF
+      <button type="button" class="btn-secondary btn-export" (click)="downloadSettlementPdf()" [disabled]="loading || downloadingPdf">
+        <span class="material-symbols-outlined" *ngIf="!downloadingPdf">download</span>
+        <span class="spinner-inline" *ngIf="downloadingPdf" aria-hidden="true"></span>
+        {{ getExportButtonLabel() }}
       </button>
-      <button type="button" class="btn-secondary" (click)="generateSettlementPdfToCloud()" [disabled]="saving || loading">
-        <span class="material-symbols-outlined">cloud_upload</span>
-        Generate PDF
+      <button type="button" class="btn-primary btn-email-action" (click)="sendEmail()" [disabled]="loading || emailingSettlement">
+        <span class="material-symbols-outlined" *ngIf="!emailingSettlement">forward_to_inbox</span>
+        <span class="spinner-inline" *ngIf="emailingSettlement" aria-hidden="true"></span>
+        {{ getEmailButtonLabel() }}
       </button>
       <button type="button" class="btn-secondary" (click)="recalcTotals()" [disabled]="saving || loading">
         <span class="material-symbols-outlined">sync</span>
@@ -483,16 +485,19 @@
 
     <section class="detail-card">
       <div class="section-header">
-        <h2>Phase 4 helper: send settlement email</h2>
+        <h2>{{ getEmailSectionTitle() }}</h2>
+        <span class="pill">{{ getEmailActionLabel() }}</span>
       </div>
+      <p class="email-help">{{ getEmailHelpText() }}</p>
       <div class="email-options">
-        <label><input type="checkbox" [(ngModel)]="emailOptions.to_driver" /> Send to driver</label>
-        <label><input type="checkbox" [(ngModel)]="emailOptions.to_additional_payee" /> Send to Equipment Owner</label>
+        <label><input type="checkbox" [(ngModel)]="emailOptions.to_driver" /> {{ getEmailPrimaryOptionLabel() }}</label>
+        <label><input type="checkbox" [(ngModel)]="emailOptions.to_additional_payee" /> {{ getEmailSecondaryOptionLabel() }}</label>
         <label><input type="checkbox" [(ngModel)]="emailOptions.cc_internal" /> CC internal</label>
       </div>
-      <button type="button" class="btn-primary" (click)="sendEmail()" [disabled]="saving || loading">
-        <span class="material-symbols-outlined">forward_to_inbox</span>
-        Send email
+      <button type="button" class="btn-primary" (click)="sendEmail()" [disabled]="loading || emailingSettlement">
+        <span class="material-symbols-outlined" *ngIf="!emailingSettlement">forward_to_inbox</span>
+        <span class="spinner-inline" *ngIf="emailingSettlement" aria-hidden="true"></span>
+        {{ getEmailButtonLabel() }}
       </button>
       <div class="line-sub" *ngIf="lastGeneratedSettlementPdfUrl">
         Latest stored PDF: <a [href]="lastGeneratedSettlementPdfUrl" target="_blank" rel="noopener">Open signed download link</a>

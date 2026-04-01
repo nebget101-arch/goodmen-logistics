@@ -40,6 +40,11 @@
   flex-wrap: wrap;
 }
 
+.settlement-detail .btn-export,
+.settlement-detail .btn-email-action {
+  min-width: 144px;
+}
+
 .settlement-detail .data-source-badge {
   margin-top: 8px;
   display: inline-flex;
@@ -117,6 +122,15 @@
 .settlement-detail button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.settlement-detail .spinner-inline {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: currentColor;
+  animation: settlements-spin 0.8s linear infinite;
 }
 
 .settlement-detail .detail-grid {
@@ -393,6 +407,12 @@
   flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 12px;
+}
+
+.settlement-detail .email-help {
+  margin: 0 0 10px;
+  color: #cbd5e1;
+  font-size: 13px;
 }
 
 .settlement-detail .email-options label {
