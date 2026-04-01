@@ -33,6 +33,75 @@ function normalizeRecurringDeductionDate(value) {
   return null;
 }
 
+function normalizeRecurringResponsibility(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized || null;
+}
+
+function getExpenseResponsibilityFieldForSourceType(sourceType) {
+  const normalizedSourceType = String(sourceType || '').trim().toLowerCase();
+  if (!normalizedSourceType) return null;
+
+  const fieldMap = {
+    fuel: 'fuel_responsibility',
+    insurance: 'insurance_responsibility',
+    eld: 'eld_responsibility',
+    trailer_rent: 'trailer_rent_responsibility',
+    toll: 'toll_responsibility',
+    repairs: 'repairs_responsibility'
+  };
+
+  return fieldMap[normalizedSourceType] || null;
+}
+
+function resolveSpecificExpenseResponsibility(rule = {}, expenseProfile = null) {
+  const explicitResponsibility = normalizeRecurringResponsibility(rule?.expense_responsibility);
+  if (explicitResponsibility) {
+    return explicitResponsibility;
+  }
+
+  const fieldName = getExpenseResponsibilityFieldForSourceType(rule?.source_type);
+  if (!fieldName) {
+    return null;
+  }
+
+  return normalizeRecurringResponsibility(expenseProfile?.[fieldName]);
+}
+
+function shouldApplyRecurringDeductionForSettlement(rule = {}, applyTo, options = {}) {
+  const appliesWhen = String(rule?.applies_when || 'always').trim().toLowerCase();
+  if (!applyTo) {
+    return false;
+  }
+
+  if (appliesWhen === 'always' || !appliesWhen) {
+    return true;
+  }
+
+  if (appliesWhen === 'has_loads') {
+    return Boolean(options?.hasLoadItems);
+  }
+
+  if (appliesWhen !== 'specific_expense') {
+    return true;
+  }
+
+  const responsibility = resolveSpecificExpenseResponsibility(rule, options?.expenseProfile || null);
+  if (!responsibility) {
+    return false;
+  }
+
+  if (applyTo === 'primary_payee') {
+    return responsibility === 'driver' || responsibility === 'shared';
+  }
+
+  if (applyTo === 'additional_payee') {
+    return responsibility === 'owner' || responsibility === 'company' || responsibility === 'shared';
+  }
+
+  return false;
+}
+
 function shouldIncludeRecurringDeductionRule(rule = {}, periodStart, periodEnd, options = {}) {
   const normalizedPeriodStart = normalizeRecurringDeductionDate(periodStart);
   const normalizedPeriodEnd = normalizeRecurringDeductionDate(periodEnd);
@@ -102,8 +171,11 @@ function resolveRecurringDeductionApplyTo(rule = {}, payeeContext = {}) {
 }
 
 module.exports = {
+  getExpenseResponsibilityFieldForSourceType,
   normalizeRecurringDeductionPayeeIds,
+  resolveSpecificExpenseResponsibility,
   resolveRecurringDeductionBackfillStartDate,
+  shouldApplyRecurringDeductionForSettlement,
   shouldIncludeRecurringDeductionRule,
   resolveRecurringDeductionApplyTo
 };
