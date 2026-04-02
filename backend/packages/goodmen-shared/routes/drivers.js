@@ -154,27 +154,39 @@ async function findDriverByCdl(client, state, number) {
  * @openapi
  * /api/drivers:
  *   get:
- *     summary: List drivers
+ *     summary: List all drivers
+ *     description: Retrieves all drivers for the tenant. Supports view=dispatch (with vehicle assignments), view=dqf (DQF completeness), and optional status filter. Per 49 CFR Part 391 — Qualifications of Drivers.
  *     tags:
  *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: view
+ *         schema:
+ *           type: string
+ *           enum: [dispatch, dqf]
+ *         description: View mode — dispatch includes vehicle info, dqf includes compliance data
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter drivers by status (e.g. active, pending, applicant)
  *     responses:
  *       200:
- *         description: Drivers returned
- *   post:
- *     summary: Create driver
- *     tags:
- *       - Drivers
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             description: Driver payload
- *             additionalProperties: true
- *     responses:
- *       201:
- *         description: Driver created
+ *         description: Array of driver objects (shape varies by view)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       403:
+ *         description: Forbidden — insufficient permission (DQF view requires dqf.view or admin role)
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
  */
 // GET all drivers (supports view=dispatch|dqf and optional status filter)
 router.get('/', async (req, res) => {
@@ -347,6 +359,56 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/{id}:
+ *   get:
+ *     summary: Get driver by ID
+ *     description: Retrieves a single driver with operating entity, payee assignment, expense responsibility, and compensation profile details. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Driver ID
+ *     responses:
+ *       200:
+ *         description: Driver object with payee, expense, and compensation details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 firstName:
+ *                   type: string
+ *                 lastName:
+ *                   type: string
+ *                 truckId:
+ *                   type: integer
+ *                   nullable: true
+ *                 trailerId:
+ *                   type: integer
+ *                   nullable: true
+ *                 primaryPayeeId:
+ *                   type: integer
+ *                   nullable: true
+ *                 equipmentOwnerPercentage:
+ *                   type: number
+ *                   nullable: true
+ *       404:
+ *         description: Driver not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // GET driver by ID (simple query only so the request never hangs on JOINs or missing tables)
 router.get('/:id', async (req, res) => {
   const startTime = Date.now();
@@ -466,6 +528,47 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/zip-lookup/{zipCode}:
+ *   get:
+ *     summary: Look up city and state by ZIP code
+ *     description: Proxies a request to the Zippopotam.us API to resolve a US ZIP code into city and state.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: zipCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^\d{5}(-\d{4})?$'
+ *         description: US ZIP code (5 digits or ZIP+4)
+ *     responses:
+ *       200:
+ *         description: ZIP code resolved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 zipCode:
+ *                   type: string
+ *                 city:
+ *                   type: string
+ *                 state:
+ *                   type: string
+ *       400:
+ *         description: Invalid zip code format
+ *       404:
+ *         description: Zip code not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Zip code lookup failed
+ */
 // GET zip code lookup (Zippopotam.us - free, no API key)
 router.get('/zip-lookup/:zipCode', async (req, res) => {
   try {
@@ -494,6 +597,100 @@ router.get('/zip-lookup/:zipCode', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers:
+ *   post:
+ *     summary: Create a new driver
+ *     description: Creates a new driver record with CDL license, compliance, and optional compensation profile. Checks for duplicate CDL. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - cdlNumber
+ *               - cdlState
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               cdlNumber:
+ *                 type: string
+ *               cdlState:
+ *                 type: string
+ *               cdlClass:
+ *                 type: string
+ *               endorsements:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               cdlExpiry:
+ *                 type: string
+ *                 format: date
+ *               medicalCertExpiry:
+ *                 type: string
+ *                 format: date
+ *               hireDate:
+ *                 type: string
+ *                 format: date
+ *               streetAddress:
+ *                 type: string
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               zipCode:
+ *                 type: string
+ *               dateOfBirth:
+ *                 type: string
+ *                 format: date
+ *               clearinghouseStatus:
+ *                 type: string
+ *               driverType:
+ *                 type: string
+ *                 enum: [company, owner_operator]
+ *               payBasis:
+ *                 type: string
+ *               payRate:
+ *                 type: number
+ *               payPercentage:
+ *                 type: number
+ *               equipmentOwnerPercentage:
+ *                 type: number
+ *               terminationDate:
+ *                 type: string
+ *                 format: date
+ *               truckId:
+ *                 type: integer
+ *               trailerId:
+ *                 type: integer
+ *               coDriverId:
+ *                 type: integer
+ *     responses:
+ *       201:
+ *         description: Driver created successfully
+ *       400:
+ *         description: CDL state and number required, or invalid compensation values
+ *       403:
+ *         description: Forbidden — insufficient permission or missing operating entity context
+ *       409:
+ *         description: Driver already exists for this CDL number and state
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // POST create new driver
 router.post('/', async (req, res) => {
   if (!canWriteDrivers(req)) {
@@ -824,6 +1021,47 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/{id}:
+ *   put:
+ *     summary: Update a driver
+ *     description: Updates driver fields, CDL license, compliance records, and auto-syncs compensation profile. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Driver ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Partial driver fields to update (camelCase keys)
+ *             additionalProperties: true
+ *     responses:
+ *       200:
+ *         description: Updated driver object
+ *       400:
+ *         description: No fields to update, or invalid compensation values
+ *       403:
+ *         description: Forbidden — insufficient permission
+ *       404:
+ *         description: Driver not found
+ *       409:
+ *         description: Driver already exists for this CDL number and state
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // PUT update driver
 router.put('/:id', async (req, res) => {
   if (!canWriteDrivers(req)) {
@@ -1147,6 +1385,42 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/{id}:
+ *   delete:
+ *     summary: Delete a driver
+ *     description: Permanently deletes a driver record. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Driver ID
+ *     responses:
+ *       200:
+ *         description: Driver deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       403:
+ *         description: Forbidden — insufficient permission
+ *       404:
+ *         description: Driver not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // DELETE driver
 router.delete('/:id', async (req, res) => {
   if (!canWriteDrivers(req)) {
@@ -1165,6 +1439,30 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/compliance/issues:
+ *   get:
+ *     summary: Get drivers with compliance issues
+ *     description: Returns drivers with upcoming medical cert or CDL expiry (within 30 days), low DQF completeness, or non-eligible clearinghouse status. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of drivers with compliance issues
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // GET drivers with compliance issues
 router.get('/compliance/issues', (req, res) => {
   const issues = drivers.filter(d => {

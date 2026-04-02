@@ -99,6 +99,56 @@ async function handleDqfIntegration(driverId, testType, testResult, userId, resu
 }
 
 // ---------- GET all drug/alcohol records ----------
+/**
+ * @openapi
+ * /api/drug-alcohol:
+ *   get:
+ *     summary: List all drug and alcohol test records
+ *     description: >
+ *       Retrieves all drug and alcohol testing records scoped to the caller's
+ *       tenant and operating entity. Per 49 CFR Part 382 — Controlled Substances
+ *       and Alcohol Use and Testing. Integrates with FMCSA Drug & Alcohol
+ *       Clearinghouse per 49 CFR Part 382.
+ *     tags:
+ *       - Drug & Alcohol
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of drug/alcohol test records with driver names
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   driver_id:
+ *                     type: string
+ *                     format: uuid
+ *                   test_date:
+ *                     type: string
+ *                     format: date
+ *                   result:
+ *                     type: string
+ *                   test_type:
+ *                     type: string
+ *                     enum: [pre_employment, random, reasonable_suspicion, post_accident, return_to_duty, follow_up]
+ *                   substance_type:
+ *                     type: string
+ *                     enum: [drug, alcohol, both]
+ *                   reported_to_clearinghouse:
+ *                     type: boolean
+ *                   driverName:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/', async (req, res) => {
   try {
     const startTime = Date.now();
@@ -135,6 +185,47 @@ router.get('/', async (req, res) => {
 });
 
 // ---------- GET tests pending Clearinghouse reporting ----------
+/**
+ * @openapi
+ * /api/drug-alcohol/pending-clearinghouse:
+ *   get:
+ *     summary: List tests pending Clearinghouse reporting
+ *     description: >
+ *       Retrieves drug and alcohol tests that have a result but have not yet been
+ *       reported to the FMCSA Drug & Alcohol Clearinghouse. Per 49 CFR Part 382 —
+ *       Controlled Substances and Alcohol Use and Testing. Integrates with FMCSA
+ *       Drug & Alcohol Clearinghouse per 49 CFR Part 382.
+ *     tags:
+ *       - Drug & Alcohol
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of unreported test records with driver names
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   driver_id:
+ *                     type: string
+ *                     format: uuid
+ *                   result:
+ *                     type: string
+ *                   reported_to_clearinghouse:
+ *                     type: boolean
+ *                   driverName:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/pending-clearinghouse', async (req, res) => {
   try {
     const startTime = Date.now();
@@ -170,6 +261,48 @@ router.get('/pending-clearinghouse', async (req, res) => {
 });
 
 // ---------- GET summary (anonymized for dispatchers) ----------
+/**
+ * @openapi
+ * /api/drug-alcohol/summary:
+ *   get:
+ *     summary: Get anonymized drug/alcohol compliance summary
+ *     description: >
+ *       Returns a per-driver summary of drug and alcohol testing eligibility,
+ *       showing the most recent test date and whether the driver is eligible or
+ *       requires review. Suitable for dispatcher-level access. Per 49 CFR Part 382
+ *       — Controlled Substances and Alcohol Use and Testing. Integrates with FMCSA
+ *       Drug & Alcohol Clearinghouse per 49 CFR Part 382.
+ *     tags:
+ *       - Drug & Alcohol
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of driver eligibility summaries
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   driverId:
+ *                     type: string
+ *                     format: uuid
+ *                   driverName:
+ *                     type: string
+ *                   lastTestDate:
+ *                     type: string
+ *                     format: date
+ *                     nullable: true
+ *                   status:
+ *                     type: string
+ *                     enum: [Eligible, Review Required]
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/summary', async (req, res) => {
   try {
     const startTime = Date.now();
@@ -212,6 +345,60 @@ router.get('/summary', async (req, res) => {
 
 // ---------- GET records by driver ID ----------
 // Support both /driver/:driverId and /driver/:driverId/tests (frontend uses the latter)
+/**
+ * @openapi
+ * /api/drug-alcohol/driver/{driverId}:
+ *   get:
+ *     summary: Get drug/alcohol test records for a specific driver
+ *     description: >
+ *       Retrieves all drug and alcohol test records for a given driver. Also
+ *       available at /api/drug-alcohol/driver/{driverId}/tests. Per 49 CFR Part 382
+ *       — Controlled Substances and Alcohol Use and Testing. Integrates with FMCSA
+ *       Drug & Alcohol Clearinghouse per 49 CFR Part 382.
+ *     tags:
+ *       - Drug & Alcohol
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *     responses:
+ *       200:
+ *         description: Array of test records for the driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   driver_id:
+ *                     type: string
+ *                     format: uuid
+ *                   test_date:
+ *                     type: string
+ *                     format: date
+ *                   result:
+ *                     type: string
+ *                   test_type:
+ *                     type: string
+ *                   driverName:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.get(['/driver/:driverId', '/driver/:driverId/tests'], async (req, res) => {
   const startTime = Date.now();
   try {
@@ -241,6 +428,47 @@ router.get(['/driver/:driverId', '/driver/:driverId/tests'], async (req, res) =>
 });
 
 // ---------- GET clearance status for a driver ----------
+/**
+ * @openapi
+ * /api/drug-alcohol/driver/{driverId}/clearance-status:
+ *   get:
+ *     summary: Get driver clearance status for driving eligibility
+ *     description: >
+ *       Returns the current clearance-to-drive status for a driver based on their
+ *       drug and alcohol testing history. Per 49 CFR Part 382 — Controlled
+ *       Substances and Alcohol Use and Testing. Integrates with FMCSA Drug &
+ *       Alcohol Clearinghouse per 49 CFR Part 382.
+ *     tags:
+ *       - Drug & Alcohol
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *     responses:
+ *       200:
+ *         description: Driver clearance status object
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 cleared:
+ *                   type: boolean
+ *                 reason:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/driver/:driverId/clearance-status', async (req, res) => {
   const startTime = Date.now();
   try {
@@ -262,6 +490,80 @@ router.get('/driver/:driverId/clearance-status', async (req, res) => {
 });
 
 // ---------- POST upload result document for a test ----------
+/**
+ * @openapi
+ * /api/drug-alcohol/driver/{driverId}/tests/{testId}/result-document:
+ *   post:
+ *     summary: Upload a result document for a drug/alcohol test
+ *     description: >
+ *       Uploads a file as the result document for an existing drug/alcohol test
+ *       record. Stores the file in R2 and creates a driver_documents record.
+ *       Triggers DQF integration for pre-employment tests when a result exists.
+ *       Per 49 CFR Part 382 — Controlled Substances and Alcohol Use and Testing.
+ *       Integrates with FMCSA Drug & Alcohol Clearinghouse per 49 CFR Part 382.
+ *     tags:
+ *       - Drug & Alcohol
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *       - in: path
+ *         name: testId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The drug/alcohol test record ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: The result document file (max 10 MB)
+ *     responses:
+ *       201:
+ *         description: Document uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 doc_type:
+ *                   type: string
+ *                 file_name:
+ *                   type: string
+ *                 mime_type:
+ *                   type: string
+ *                 storage_key:
+ *                   type: string
+ *                 created_at:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: No file uploaded
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver or test record not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/driver/:driverId/tests/:testId/result-document', upload.single('file'), async (req, res) => {
   const startTime = Date.now();
   try {
@@ -356,6 +658,115 @@ router.post('/driver/:driverId/tests/:testId/result-document', upload.single('fi
 
 // ---------- POST create new test record ----------
 // Support both POST / (original) and POST /driver/:driverId/tests (frontend)
+/**
+ * @openapi
+ * /api/drug-alcohol:
+ *   post:
+ *     summary: Create a new drug/alcohol test record
+ *     description: >
+ *       Creates a new drug and alcohol test record. Also available at
+ *       /api/drug-alcohol/driver/{driverId}/tests. Accepts both camelCase and
+ *       snake_case field names. Triggers DQF integration for pre-employment tests.
+ *       Valid test types per FMCSA Part 382: pre_employment, random,
+ *       reasonable_suspicion, post_accident, return_to_duty, follow_up. Per 49 CFR
+ *       Part 382 — Controlled Substances and Alcohol Use and Testing. Integrates
+ *       with FMCSA Drug & Alcohol Clearinghouse per 49 CFR Part 382.
+ *     tags:
+ *       - Drug & Alcohol
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - driverId
+ *             properties:
+ *               driverId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Driver ID (also accepted as driver_id)
+ *               testDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Date of the test (also accepted as test_date or collection_date)
+ *               result:
+ *                 type: string
+ *                 description: Test result (e.g. NEGATIVE, POSITIVE). Optional — test may be scheduled before results arrive.
+ *               testType:
+ *                 type: string
+ *                 enum: [pre_employment, random, reasonable_suspicion, post_accident, return_to_duty, follow_up]
+ *                 description: FMCSA test type (also accepted as test_type)
+ *               substanceType:
+ *                 type: string
+ *                 enum: [drug, alcohol, both]
+ *                 description: Substance tested (also accepted as substance_type)
+ *               panelDetails:
+ *                 type: object
+ *                 description: Panel detail JSON (also accepted as panel_details)
+ *               collectionSite:
+ *                 type: string
+ *                 description: Collection site name (also accepted as collection_site)
+ *               collectionDate:
+ *                 type: string
+ *                 format: date
+ *               resultDate:
+ *                 type: string
+ *                 format: date
+ *               resultReceivedDate:
+ *                 type: string
+ *                 format: date
+ *               mroName:
+ *                 type: string
+ *                 description: Medical Review Officer name
+ *               mroVerified:
+ *                 type: boolean
+ *               ccfNumber:
+ *                 type: string
+ *                 description: Federal Custody and Control Form number
+ *               labName:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Test record created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 driver_id:
+ *                   type: string
+ *                   format: uuid
+ *                 test_date:
+ *                   type: string
+ *                   format: date
+ *                 result:
+ *                   type: string
+ *                 test_type:
+ *                   type: string
+ *                 substance_type:
+ *                   type: string
+ *                 reported_to_clearinghouse:
+ *                   type: boolean
+ *                 created_at:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Validation error (missing driverId, invalid testType or substanceType)
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.post(['/', '/driver/:driverId/tests'], async (req, res) => {
   const startTime = Date.now();
   try {
@@ -448,6 +859,104 @@ router.post(['/', '/driver/:driverId/tests'], async (req, res) => {
 
 // ---------- PUT update existing test record ----------
 // Support both PUT /:id (original) and PUT /tests/:id (frontend)
+/**
+ * @openapi
+ * /api/drug-alcohol/{id}:
+ *   put:
+ *     summary: Update an existing drug/alcohol test record
+ *     description: >
+ *       Updates an existing drug and alcohol test record. Also available at
+ *       /api/drug-alcohol/tests/{id}. Uses COALESCE so only provided fields are
+ *       updated. Accepts both camelCase and snake_case field names. Triggers DQF
+ *       integration for pre-employment tests. Per 49 CFR Part 382 — Controlled
+ *       Substances and Alcohol Use and Testing. Integrates with FMCSA Drug &
+ *       Alcohol Clearinghouse per 49 CFR Part 382.
+ *     tags:
+ *       - Drug & Alcohol
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The test record ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               testDate:
+ *                 type: string
+ *                 format: date
+ *               result:
+ *                 type: string
+ *               testType:
+ *                 type: string
+ *                 enum: [pre_employment, random, reasonable_suspicion, post_accident, return_to_duty, follow_up]
+ *               substanceType:
+ *                 type: string
+ *                 enum: [drug, alcohol, both]
+ *               panelDetails:
+ *                 type: object
+ *               collectionSite:
+ *                 type: string
+ *               collectionDate:
+ *                 type: string
+ *                 format: date
+ *               resultDate:
+ *                 type: string
+ *                 format: date
+ *               resultReceivedDate:
+ *                 type: string
+ *                 format: date
+ *               mroName:
+ *                 type: string
+ *               mroVerified:
+ *                 type: boolean
+ *               ccfNumber:
+ *                 type: string
+ *               labName:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated test record
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 driver_id:
+ *                   type: string
+ *                   format: uuid
+ *                 test_date:
+ *                   type: string
+ *                   format: date
+ *                 result:
+ *                   type: string
+ *                 test_type:
+ *                   type: string
+ *                 updated_at:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Invalid testType or substanceType
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Test record not found
+ *       500:
+ *         description: Server error
+ */
 router.put(['/:id', '/tests/:id'], async (req, res) => {
   const startTime = Date.now();
   try {
@@ -566,6 +1075,51 @@ router.put(['/:id', '/tests/:id'], async (req, res) => {
 
 // ---------- Mark test as reported to Clearinghouse ----------
 // Handler shared by POST /:id/mark-reported and PATCH /tests/:id/clearinghouse-reported
+/**
+ * @openapi
+ * /api/drug-alcohol/{id}/mark-reported:
+ *   post:
+ *     summary: Mark a test as reported to the FMCSA Clearinghouse
+ *     description: >
+ *       Sets reported_to_clearinghouse to true and records the timestamp. Also
+ *       available via PATCH /api/drug-alcohol/tests/{id}/clearinghouse-reported.
+ *       Per 49 CFR Part 382 — Controlled Substances and Alcohol Use and Testing.
+ *       Integrates with FMCSA Drug & Alcohol Clearinghouse per 49 CFR Part 382.
+ *     tags:
+ *       - Drug & Alcohol
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The test record ID
+ *     responses:
+ *       200:
+ *         description: Updated test record with clearinghouse reporting fields set
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 reported_to_clearinghouse:
+ *                   type: boolean
+ *                 clearinghouse_reported_at:
+ *                   type: string
+ *                   format: date-time
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Test record not found
+ *       500:
+ *         description: Server error
+ */
 async function markTestReportedHandler(req, res) {
   const startTime = Date.now();
   try {
