@@ -52,8 +52,29 @@ function pick(row, keys = []) {
 }
 
 /**
- * GET /api/parts/template
- * Download Excel template for bulk parts upload
+ * @openapi
+ * /api/parts/template:
+ *   get:
+ *     summary: Download parts bulk upload template
+ *     description: >-
+ *       Returns an Excel (.xlsx) template file with column headers and a sample
+ *       row for bulk-uploading parts. Columns include sku, name, category,
+ *       manufacturer, uom, unit_cost, unit_price, reorder_level, description,
+ *       barcode, pack_qty, vendor, and status.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Excel template file download
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       500:
+ *         description: Failed to generate template
  */
 router.get('/template', authMiddleware, requireRole(['admin', 'parts_manager']), async (_req, res) => {
 	try {
@@ -106,8 +127,69 @@ router.get('/template', authMiddleware, requireRole(['admin', 'parts_manager']),
 });
 
 /**
- * POST /api/parts/bulk-upload
- * Upload parts from Excel file (.xlsx/.xls/.csv)
+ * @openapi
+ * /api/parts/bulk-upload:
+ *   post:
+ *     summary: Bulk upload parts from Excel file
+ *     description: >-
+ *       Parses an uploaded Excel file and creates or updates parts for each row.
+ *       Existing parts (matched by SKU) are updated; new parts are inserted.
+ *       Barcodes are also created or updated when a barcode column is present.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Excel file (.xlsx, .xls, or .csv)
+ *     responses:
+ *       201:
+ *         description: Bulk upload summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalRows:
+ *                       type: integer
+ *                     created:
+ *                       type: integer
+ *                     updated:
+ *                       type: integer
+ *                     skipped:
+ *                       type: integer
+ *                     errors:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           row:
+ *                             type: integer
+ *                           sku:
+ *                             type: string
+ *                           error:
+ *                             type: string
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: File required or no data found
+ *       500:
+ *         description: Server error
  */
 router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'parts_manager']), upload.single('file'), async (req, res) => {
 	try {
@@ -260,8 +342,47 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'parts_manager
 });
 
 /**
- * GET /api/parts
- * Get all active parts with optional filters
+ * @openapi
+ * /api/parts:
+ *   get:
+ *     summary: List all parts
+ *     description: Returns all active parts with optional category, manufacturer, and search filters.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Filter by part category
+ *       - in: query
+ *         name: manufacturer
+ *         schema:
+ *           type: string
+ *         description: Filter by manufacturer
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Free-text search across part fields
+ *     responses:
+ *       200:
+ *         description: List of parts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       500:
+ *         description: Server error
  */
 router.get('/', authMiddleware, async (req, res) => {
 	try {
@@ -284,8 +405,31 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/parts/categories
- * Get list of distinct categories
+ * @openapi
+ * /api/parts/categories:
+ *   get:
+ *     summary: List part categories
+ *     description: Returns a list of distinct part categories for use in filter dropdowns.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of categories
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       500:
+ *         description: Server error
  */
 router.get('/categories', authMiddleware, async (req, res) => {
 	try {
@@ -302,8 +446,31 @@ router.get('/categories', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/parts/manufacturers
- * Get list of distinct manufacturers
+ * @openapi
+ * /api/parts/manufacturers:
+ *   get:
+ *     summary: List part manufacturers
+ *     description: Returns a list of distinct part manufacturers for use in filter dropdowns.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of manufacturers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       500:
+ *         description: Server error
  */
 router.get('/manufacturers', authMiddleware, async (req, res) => {
 	try {
@@ -320,9 +487,55 @@ router.get('/manufacturers', authMiddleware, async (req, res) => {
 });
 
 /**
- * POST /api/parts/:partId/barcodes
- * Assign a barcode to a part (supports pack qty)
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/parts/{partId}/barcodes:
+ *   post:
+ *     summary: Assign a barcode to a part
+ *     description: >-
+ *       Creates a barcode-to-part mapping. Supports pack quantity so a single
+ *       barcode scan can represent multiple units of the part.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: partId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               barcodeValue:
+ *                 type: string
+ *               packQty:
+ *                 type: integer
+ *                 description: Number of units per barcode scan
+ *               vendor:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Barcode assigned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Validation error
  */
 router.post('/:partId/barcodes', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
@@ -345,8 +558,39 @@ router.post('/:partId/barcodes', authMiddleware, requireRole(['admin', 'parts_ma
 });
 
 /**
- * GET /api/parts/:partId/barcodes
- * List barcodes assigned to a part
+ * @openapi
+ * /api/parts/{partId}/barcodes:
+ *   get:
+ *     summary: List barcodes for a part
+ *     description: Returns all barcode mappings assigned to the specified part.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: partId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part ID
+ *     responses:
+ *       200:
+ *         description: List of barcodes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       500:
+ *         description: Server error
  */
 router.get('/:partId/barcodes', authMiddleware, async (req, res) => {
 	try {
@@ -359,8 +603,37 @@ router.get('/:partId/barcodes', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/parts/:id
- * Get a single part by ID
+ * @openapi
+ * /api/parts/{id}:
+ *   get:
+ *     summary: Get a part by ID
+ *     description: Returns a single part by its UUID.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part ID
+ *     responses:
+ *       200:
+ *         description: Part details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       404:
+ *         description: Part not found
  */
 router.get('/:id([0-9a-fA-F-]{36})', authMiddleware, async (req, res) => {
 	try {
@@ -377,9 +650,60 @@ router.get('/:id([0-9a-fA-F-]{36})', authMiddleware, async (req, res) => {
 });
 
 /**
- * POST /api/parts
- * Create a new part
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/parts:
+ *   post:
+ *     summary: Create a new part
+ *     description: Creates a new part in the parts catalog. Requires admin or parts_manager role.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sku
+ *               - name
+ *             properties:
+ *               sku:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               manufacturer:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               unit_cost:
+ *                 type: number
+ *               unit_price:
+ *                 type: number
+ *               reorder_level:
+ *                 type: integer
+ *               status:
+ *                 type: string
+ *                 enum: [ACTIVE, INACTIVE]
+ *     responses:
+ *       201:
+ *         description: Part created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Validation error
  */
 router.post('/', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
@@ -399,9 +723,64 @@ router.post('/', authMiddleware, requireRole(['admin', 'parts_manager']), async 
 });
 
 /**
- * PUT /api/parts/:id
- * Update an existing part
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/parts/{id}:
+ *   put:
+ *     summary: Update a part
+ *     description: Updates an existing part by ID. Requires admin or parts_manager role.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               sku:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               manufacturer:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               unit_cost:
+ *                 type: number
+ *               unit_price:
+ *                 type: number
+ *               reorder_level:
+ *                 type: integer
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Part updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Validation error
  */
 router.put('/:id([0-9a-fA-F-]{36})', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
@@ -419,9 +798,41 @@ router.put('/:id([0-9a-fA-F-]{36})', authMiddleware, requireRole(['admin', 'part
 });
 
 /**
- * PATCH /api/parts/:id/deactivate
- * Deactivate a part (soft delete)
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/parts/{id}/deactivate:
+ *   patch:
+ *     summary: Deactivate a part
+ *     description: >-
+ *       Soft-deletes a part by setting its status to INACTIVE.
+ *       Requires admin or parts_manager role.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part ID
+ *     responses:
+ *       200:
+ *         description: Part deactivated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Validation error
  */
 router.patch('/:id([0-9a-fA-F-]{36})/deactivate', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {

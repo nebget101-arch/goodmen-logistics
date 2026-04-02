@@ -58,7 +58,48 @@ async function listScopedAuditTrail(req, res) {
   }
 }
 
-// GET application logs (from dtLogger buffer)
+/**
+ * @openapi
+ * /api/audit/logs:
+ *   get:
+ *     summary: Application logs
+ *     description: Returns recent in-memory application log entries from the dtLogger buffer. Optionally filter by log level.
+ *     tags:
+ *       - Audit
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 100
+ *         description: Maximum number of log entries to return
+ *       - in: query
+ *         name: level
+ *         schema:
+ *           type: string
+ *           enum: [all, INFO, WARN, ERROR, DEBUG]
+ *         description: Filter logs by level (case-insensitive; 'all' returns everything)
+ *     responses:
+ *       200:
+ *         description: Log entries returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   level:
+ *                     type: string
+ *                   message:
+ *                     type: string
+ *                   timestamp:
+ *                     type: string
+ *       500:
+ *         description: Server error
+ */
 router.get('/logs', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
@@ -78,7 +119,28 @@ router.get('/logs', (req, res) => {
   }
 });
 
-// GET audit trail
+/**
+ * @openapi
+ * /api/audit/trail:
+ *   get:
+ *     summary: Audit trail
+ *     description: Returns audit_logs rows scoped to the caller's tenant and operating entity. Falls back to unscoped results if scope columns are missing.
+ *     tags:
+ *       - Audit
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Audit log entries returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       500:
+ *         description: Server error
+ */
 router.get('/trail', async (req, res) => {
   try {
     return await listScopedAuditTrail(req, res);
@@ -88,7 +150,28 @@ router.get('/trail', async (req, res) => {
   }
 });
 
-// GET audit list (alias for /trail)
+/**
+ * @openapi
+ * /api/audit:
+ *   get:
+ *     summary: Audit list (alias for /trail)
+ *     description: Alias endpoint that returns the same scoped audit_logs data as /api/audit/trail.
+ *     tags:
+ *       - Audit
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Audit log entries returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       500:
+ *         description: Server error
+ */
 router.get('/', async (req, res) => {
   try {
     return await listScopedAuditTrail(req, res);
@@ -101,7 +184,78 @@ router.get('/', async (req, res) => {
 // Sensitive audit routes: legacy roles + RBAC safety/audit permissions (FN-129)
 router.use(requireAuditExportAccess);
 
-// GET export data for compliance review
+/**
+ * @openapi
+ * /api/audit/export/{category}:
+ *   get:
+ *     summary: Compliance data export
+ *     description: |
+ *       Exports compliance records for a given category. Requires elevated access
+ *       (admin, company_admin, super_admin, safety, safety_manager roles or RBAC safety/audit permissions).
+ *
+ *       Available categories:
+ *       - **dqf** — Driver Qualification Files (CDL, medical cert, DQF completeness)
+ *       - **hos** — Hours of Service records (6-month retention per 49 CFR 395.8)
+ *       - **maintenance** — Vehicle maintenance records (1-year retention per 49 CFR 396.3)
+ *       - **drug-alcohol** — Drug & Alcohol testing records (CONFIDENTIAL, per 49 CFR 382.401)
+ *     tags:
+ *       - Audit
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: category
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [dqf, hos, maintenance, drug-alcohol]
+ *         description: Export category
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of date range (informational, included in response metadata)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of date range (informational, included in response metadata)
+ *     responses:
+ *       200:
+ *         description: Export data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 exportType:
+ *                   type: string
+ *                 generatedAt:
+ *                   type: string
+ *                 dateRange:
+ *                   type: object
+ *                   properties:
+ *                     startDate:
+ *                       type: string
+ *                     endDate:
+ *                       type: string
+ *                 records:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 retentionNote:
+ *                   type: string
+ *                 securityNote:
+ *                   type: string
+ *       400:
+ *         description: Invalid export category
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/export/:category', async (req, res) => {
   try {
     const { category } = req.params;
@@ -248,7 +402,87 @@ router.get('/export/:category', async (req, res) => {
   }
 });
 
-// GET compliance summary report
+/**
+ * @openapi
+ * /api/audit/compliance-summary:
+ *   get:
+ *     summary: Compliance summary report
+ *     description: |
+ *       Generates a comprehensive compliance summary covering driver compliance
+ *       (total/active drivers, DQF completeness, medical cert expirations),
+ *       vehicle compliance (total, in-service, out-of-service, maintenance overdue),
+ *       and HOS compliance (violations, warnings, compliant records).
+ *       Includes recommended remediation actions. Returns degraded (zeroed) data on error.
+ *       Requires elevated access (admin, company_admin, super_admin, safety, safety_manager
+ *       roles or RBAC safety/audit permissions).
+ *     tags:
+ *       - Audit
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Compliance summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 generatedAt:
+ *                   type: string
+ *                 companyName:
+ *                   type: string
+ *                 reportPeriod:
+ *                   type: object
+ *                   properties:
+ *                     start:
+ *                       type: string
+ *                     end:
+ *                       type: string
+ *                 driverCompliance:
+ *                   type: object
+ *                   properties:
+ *                     totalDrivers:
+ *                       type: integer
+ *                     activeDrivers:
+ *                       type: integer
+ *                     averageDQFCompleteness:
+ *                       type: integer
+ *                     expiredMedCerts:
+ *                       type: integer
+ *                     upcomingExpirations:
+ *                       type: integer
+ *                 vehicleCompliance:
+ *                   type: object
+ *                   properties:
+ *                     totalVehicles:
+ *                       type: integer
+ *                     inService:
+ *                       type: integer
+ *                     outOfService:
+ *                       type: integer
+ *                     maintenanceOverdue:
+ *                       type: integer
+ *                 hosCompliance:
+ *                   type: object
+ *                   properties:
+ *                     totalRecords:
+ *                       type: integer
+ *                     violations:
+ *                       type: integer
+ *                     warnings:
+ *                       type: integer
+ *                     compliant:
+ *                       type: integer
+ *                 recommendedActions:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 degraded:
+ *                   type: boolean
+ *                   description: Present and true when data could not be fully loaded
+ *       403:
+ *         description: Insufficient permissions
+ */
 router.get('/compliance-summary', async (req, res) => {
   try {
     // Build scoped counts honoring tenant and operating entity

@@ -9,6 +9,53 @@ const { decodeBarcodeFromBuffer } = require('../services/barcode-decode');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+/**
+ * @openapi
+ * /api/barcodes/decode-image:
+ *   post:
+ *     summary: Decode a barcode from an image
+ *     description: Accepts an uploaded image file and attempts to decode a barcode from it. Returns the barcode value and format if found, or null values if no barcode is detected.
+ *     tags:
+ *       - Barcodes
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - image
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Image file containing a barcode (max 10 MB)
+ *     responses:
+ *       200:
+ *         description: Decode result (barcode may be null if not found)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     barcode:
+ *                       type: string
+ *                       nullable: true
+ *                     format:
+ *                       type: string
+ *                       nullable: true
+ *       400:
+ *         description: No image uploaded
+ *       500:
+ *         description: Failed to decode barcode
+ */
 router.post('/decode-image', authMiddleware, upload.single('image'), async (req, res) => {
   try {
     if (!req.file || !req.file.buffer) {
@@ -25,6 +72,57 @@ router.post('/decode-image', authMiddleware, upload.single('image'), async (req,
   }
 });
 
+/**
+ * @openapi
+ * /api/barcodes/{code}:
+ *   get:
+ *     summary: Look up a barcode
+ *     description: Looks up a barcode value and returns the associated part details and inventory-by-location breakdown. Optionally filter inventory to a single location.
+ *     tags:
+ *       - Barcodes
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: code
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Barcode value to look up
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Optional location UUID to filter inventory
+ *     responses:
+ *       200:
+ *         description: Barcode, part, and inventory data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     barcode:
+ *                       type: object
+ *                     part:
+ *                       type: object
+ *                     inventory_by_location:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       400:
+ *         description: Barcode code is required
+ *       404:
+ *         description: Barcode not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/:code', authMiddleware, async (req, res) => {
   try {
     const code = (req.params.code || '').trim();

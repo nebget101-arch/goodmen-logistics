@@ -193,12 +193,61 @@ router.post('/', async (req, res) => {
 
 // ─── PUBLIC: Fetch plan metadata (used by frontend) ──────────────────────────
 
+/**
+ * @openapi
+ * /api/public/trial-requests/plans:
+ *   get:
+ *     summary: Fetch available subscription plan metadata
+ *     description: Returns the list of subscription plans with pricing and feature details. Used by the frontend trial request form.
+ *     tags:
+ *       - Trial Requests
+ *     responses:
+ *       200:
+ *         description: Plan metadata
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data: { type: object, description: Map of plan IDs to plan definitions }
+ */
 router.get('/plans', (_req, res) => {
   return res.json({ success: true, data: PLANS });
 });
 
 // ─── PUBLIC: Trial signup username availability (no auth; must be before /signup/:token) ─
 
+/**
+ * @openapi
+ * /api/public/trial-requests/signup/check-username:
+ *   get:
+ *     summary: Check username availability for trial signup
+ *     description: Public endpoint to verify whether a username is available before completing trial signup.
+ *     tags:
+ *       - Trial Requests
+ *     parameters:
+ *       - in: query
+ *         name: username
+ *         required: true
+ *         schema: { type: string }
+ *         description: Username to check
+ *     responses:
+ *       200:
+ *         description: Availability result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     available: { type: boolean }
+ *       500:
+ *         description: Server error
+ */
 router.get('/signup/check-username', async (req, res) => {
   try {
     const username = req.query.username;
@@ -214,6 +263,32 @@ router.get('/signup/check-username', async (req, res) => {
 
 // ─── PUBLIC: Read signup context by approved token ─────────────────────────
 
+/**
+ * @openapi
+ * /api/public/trial-requests/signup/{token}:
+ *   get:
+ *     summary: Get signup context by approved token
+ *     description: Public endpoint that returns trial request details and pre-filled signup context for an approved trial token.
+ *     tags:
+ *       - Trial Requests
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *         description: Approved trial signup token
+ *     responses:
+ *       200:
+ *         description: Signup context with pre-filled company/contact details
+ *       400:
+ *         description: Invalid token
+ *       404:
+ *         description: Token not found
+ *       409:
+ *         description: Trial already completed
+ *       410:
+ *         description: Token expired
+ */
 router.get('/signup/:token', async (req, res) => {
   try {
     const data = await trialRequestService.getSignupContextByToken(req.params.token);
@@ -229,6 +304,41 @@ router.get('/signup/:token', async (req, res) => {
 
 // ─── PUBLIC: Complete approved trial signup ─────────────────────────────────
 
+/**
+ * @openapi
+ * /api/public/trial-requests/signup/{token}/complete:
+ *   post:
+ *     summary: Complete approved trial signup
+ *     description: Public endpoint that creates a tenant, admin user, and activates the trial using an approved signup token.
+ *     tags:
+ *       - Trial Requests
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *         description: Approved trial signup token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               username: { type: string }
+ *               password: { type: string }
+ *     responses:
+ *       201:
+ *         description: Trial account created successfully
+ *       400:
+ *         description: Invalid request or token
+ *       404:
+ *         description: Token not found
+ *       409:
+ *         description: Trial already completed
+ *       410:
+ *         description: Token expired
+ */
 router.post('/signup/:token/complete', async (req, res) => {
   try {
     const data = await trialRequestService.completeSignupFromToken(req.params.token, req.body || {});
@@ -248,6 +358,41 @@ router.post('/signup/:token/complete', async (req, res) => {
 
 // ─── ADMIN: List trial requests ───────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/public/trial-requests:
+ *   get:
+ *     summary: List trial requests (admin only)
+ *     description: Returns a paginated list of trial requests. Restricted to internal trial admin users in the FleetNeuron Default Tenant.
+ *     tags:
+ *       - Trial Requests
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *         description: Filter by status (e.g. pending, approved, converted)
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, default: 25, maximum: 200 }
+ *     responses:
+ *       200:
+ *         description: Array of trial requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data: { type: array, items: { type: object } }
+ *                 count: { type: integer }
+ *       403:
+ *         description: Forbidden — not an internal trial admin
+ */
 router.get('/', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
     const { status, page, pageSize } = req.query;
@@ -265,6 +410,51 @@ router.get('/', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
 
 // ─── ADMIN: Get (or regenerate) activation link for approved request ───────
 
+/**
+ * @openapi
+ * /api/public/trial-requests/{id}/activation-link:
+ *   get:
+ *     summary: Get or regenerate activation link for an approved trial request
+ *     description: Returns the activation URL for an approved trial request. Pass regenerate=true to force a new token.
+ *     tags:
+ *       - Trial Requests
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: regenerate
+ *         schema: { type: boolean, default: false }
+ *         description: Force regenerate the signup token
+ *     responses:
+ *       200:
+ *         description: Activation link details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string, format: uuid }
+ *                     status: { type: string }
+ *                     requestedPlan: { type: string }
+ *                     contactName: { type: string }
+ *                     email: { type: string }
+ *                     activationLink: { type: string, format: uri }
+ *                     activationExpiresAt: { type: string, format: date-time, nullable: true }
+ *       400:
+ *         description: Bad request
+ *       404:
+ *         description: Trial request not found
+ *       409:
+ *         description: Conflict
+ */
 router.get('/:id/activation-link', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
     const forceRegenerate = String(req.query.regenerate || '').toLowerCase() === 'true';
@@ -298,6 +488,27 @@ router.get('/:id/activation-link', authMiddleware, requireInternalTrialAdmin, as
 
 // ─── ADMIN: Get single trial request ─────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/public/trial-requests/{id}:
+ *   get:
+ *     summary: Get a single trial request by ID
+ *     description: Returns full details for a specific trial request. Admin only.
+ *     tags:
+ *       - Trial Requests
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Trial request details
+ *       404:
+ *         description: Not found
+ */
 router.get('/:id', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
     const record = await trialRequestService.getTrialRequestById(req.params.id);
@@ -311,6 +522,39 @@ router.get('/:id', authMiddleware, requireInternalTrialAdmin, async (req, res) =
 
 // ─── ADMIN: Reset tenant admin password (internal support action) ───────────
 
+/**
+ * @openapi
+ * /api/public/trial-requests/{id}/reset-tenant-admin-password:
+ *   post:
+ *     summary: Reset tenant admin password for a trial request
+ *     description: Internal support action that resets the tenant admin password associated with a completed trial request.
+ *     tags:
+ *       - Trial Requests
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data: { type: object }
+ *       400:
+ *         description: Bad request
+ *       404:
+ *         description: Trial request not found
+ *       409:
+ *         description: Conflict (e.g. trial not yet completed)
+ */
 router.post('/:id/reset-tenant-admin-password', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
     const result = await trialRequestService.resetTenantAdminPassword(req.params.id);
@@ -330,6 +574,42 @@ router.post('/:id/reset-tenant-admin-password', authMiddleware, requireInternalT
 
 // ─── ADMIN: Update status ─────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/public/trial-requests/{id}/status:
+ *   patch:
+ *     summary: Update trial request status
+ *     description: Transitions a trial request to a new status (e.g. approved, rejected, converted). When approved, sends activation email and generates a signup token. When converted, marks the trial as paid.
+ *     tags:
+ *       - Trial Requests
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, description: New status (pending, approved, rejected, converted, cancelled) }
+ *               subscriptionId: { type: string, description: Stripe subscription ID (for converted status) }
+ *               trialDays: { type: integer, default: 14, description: Trial duration in days }
+ *     responses:
+ *       200:
+ *         description: Updated trial request with optional email delivery details
+ *       400:
+ *         description: Missing or invalid status
+ *       404:
+ *         description: Trial request not found
+ *       409:
+ *         description: Conflict — invalid status transition
+ */
 router.patch('/:id/status', authMiddleware, requireInternalTrialAdmin, async (req, res) => {
   try {
     const { status, subscriptionId, trialDays } = req.body;

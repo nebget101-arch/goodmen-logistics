@@ -20,8 +20,41 @@ function requireRole(allowedRoles) {
 }
 
 /**
- * GET /api/adjustments
- * Get inventory adjustments for a location
+ * @openapi
+ * /api/adjustments:
+ *   get:
+ *     summary: List inventory adjustments
+ *     description: Returns all inventory adjustments for a location, including part details and creator/poster names.
+ *     tags:
+ *       - Adjustments
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Location UUID
+ *     responses:
+ *       200:
+ *         description: Adjustments list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Missing locationId
+ *       500:
+ *         description: Server error
  */
 router.get('/', authMiddleware, async (req, res) => {
 	try {
@@ -56,8 +89,39 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/adjustments/:id
- * Get a single adjustment
+ * @openapi
+ * /api/adjustments/{id}:
+ *   get:
+ *     summary: Get an adjustment by ID
+ *     description: Returns a single inventory adjustment with part details and creator/poster names.
+ *     tags:
+ *       - Adjustments
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Adjustment UUID
+ *     responses:
+ *       200:
+ *         description: Adjustment details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       404:
+ *         description: Adjustment not found
+ *       500:
+ *         description: Server error
  */
 router.get('/:id', authMiddleware, async (req, res) => {
 	try {
@@ -91,9 +155,69 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 /**
- * POST /api/adjustments
- * Create a new inventory adjustment (DRAFT)
- * Requires: Admin, Parts Manager, or Shop Manager role
+ * @openapi
+ * /api/adjustments:
+ *   post:
+ *     summary: Create an inventory adjustment
+ *     description: Creates a new DRAFT inventory adjustment. Supports SET_TO_QTY (absolute) or DELTA (relative) adjustment types. When posted this becomes an ADJUST transaction. Valid reason codes are DAMAGED, LOST, FOUND, DATA_CORRECTION, RETURN_TO_VENDOR, OTHER. Requires Admin, Parts Manager, or Shop Manager role.
+ *     tags:
+ *       - Adjustments
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - locationId
+ *               - partId
+ *               - adjustmentType
+ *               - reasonCode
+ *             properties:
+ *               locationId:
+ *                 type: string
+ *                 format: uuid
+ *               partId:
+ *                 type: string
+ *                 format: uuid
+ *               adjustmentType:
+ *                 type: string
+ *                 enum: [SET_TO_QTY, DELTA]
+ *               setToQty:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Required when adjustmentType is SET_TO_QTY
+ *               deltaQty:
+ *                 type: number
+ *                 description: Required when adjustmentType is DELTA (positive or negative)
+ *               reasonCode:
+ *                 type: string
+ *                 enum: [DAMAGED, LOST, FOUND, DATA_CORRECTION, RETURN_TO_VENDOR, OTHER]
+ *               notes:
+ *                 type: string
+ *                 description: Required when reasonCode is OTHER
+ *               attachmentUrl:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Adjustment created in DRAFT status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Part or inventory record not found
  */
 router.post('/', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager']), async (req, res) => {
 	try {
@@ -191,9 +315,62 @@ router.post('/', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_ma
 });
 
 /**
- * PUT /api/adjustments/:id
- * Update a draft adjustment
- * Requires: Admin, Parts Manager, or Shop Manager role
+ * @openapi
+ * /api/adjustments/{id}:
+ *   put:
+ *     summary: Update a draft adjustment
+ *     description: Updates an inventory adjustment that is still in DRAFT status. Requires Admin, Parts Manager, or Shop Manager role.
+ *     tags:
+ *       - Adjustments
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Adjustment UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               adjustmentType:
+ *                 type: string
+ *                 enum: [SET_TO_QTY, DELTA]
+ *               setToQty:
+ *                 type: number
+ *               deltaQty:
+ *                 type: number
+ *               reasonCode:
+ *                 type: string
+ *                 enum: [DAMAGED, LOST, FOUND, DATA_CORRECTION, RETURN_TO_VENDOR, OTHER]
+ *               notes:
+ *                 type: string
+ *               attachmentUrl:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Adjustment updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Not in DRAFT status or validation error
+ *       404:
+ *         description: Adjustment not found
  */
 router.put('/:id', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager']), async (req, res) => {
 	try {
@@ -235,10 +412,41 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_
 });
 
 /**
- * POST /api/adjustments/:id/post
- * Post (finalize) an adjustment
- * Creates transaction, updates inventory, locks record
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/adjustments/{id}/post:
+ *   post:
+ *     summary: Post an adjustment
+ *     description: Finalizes a DRAFT adjustment by creating an ADJUST inventory transaction, updating on-hand quantity, and locking the record. Negative inventory is blocked unless the user has admin role. Requires Admin or Parts Manager role.
+ *     tags:
+ *       - Adjustments
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Adjustment UUID
+ *     responses:
+ *       200:
+ *         description: Adjustment posted and inventory updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Already posted, inventory not found, or negative inventory
+ *       404:
+ *         description: Adjustment not found
  */
 router.post('/:id/post', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
