@@ -4,6 +4,42 @@ const roadsideService = require('../services/roadside.service');
 const twilioService = require('../services/twilio.service');
 const dtLogger = require('../utils/logger');
 
+/**
+ * @openapi
+ * /public/roadside/{callId}:
+ *   get:
+ *     summary: Get a roadside call via public token
+ *     description: Retrieves roadside call details using a public sharing token. No authentication required — token-based access for drivers and external parties. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: callId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Public access token
+ *     responses:
+ *       200:
+ *         description: Roadside call details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Token is required
+ *       404:
+ *         description: Not found or expired link
+ *       500:
+ *         description: Server error
+ */
 // GET /public/roadside/:callId?token=...
 router.get('/:callId', async (req, res) => {
   try {
@@ -20,6 +56,59 @@ router.get('/:callId', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/roadside/{callId}/media:
+ *   post:
+ *     summary: Add media to a roadside call via public token
+ *     description: Attaches uploaded media metadata to a roadside call using a public sharing token. No authentication required. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: callId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Public access token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - storage_key
+ *             properties:
+ *               storage_key:
+ *                 type: string
+ *               file_name:
+ *                 type: string
+ *               content_type:
+ *                 type: string
+ *               label:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Media record created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Token or storage_key is required
+ *       404:
+ *         description: Not found or expired link
+ *       500:
+ *         description: Server error
+ */
 // POST /public/roadside/:callId/media?token=...
 router.post('/:callId/media', async (req, res) => {
   try {
@@ -39,6 +128,57 @@ router.post('/:callId/media', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/roadside/{callId}/media/upload-url:
+ *   post:
+ *     summary: Generate a media upload URL via public token
+ *     description: Creates a pre-signed upload URL for media attachment using a public sharing token. No authentication required. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: callId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Public access token
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file_name:
+ *                 type: string
+ *               content_type:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Pre-signed upload URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 upload_url:
+ *                   type: string
+ *                 storage_key:
+ *                   type: string
+ *       400:
+ *         description: Token is required
+ *       404:
+ *         description: Not found or expired link
+ *       500:
+ *         description: Server error
+ */
 // POST /public/roadside/:callId/media/upload-url?token=...
 router.post('/:callId/media/upload-url', async (req, res) => {
   try {
@@ -57,6 +197,56 @@ router.post('/:callId/media/upload-url', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/roadside/{callId}/context:
+ *   post:
+ *     summary: Update context for a roadside call via public token
+ *     description: Allows external parties to submit additional context (location, description, etc.) for a roadside call via public token. No authentication required. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: callId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Public access token
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               location:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               driver_name:
+ *                 type: string
+ *               driver_phone:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Context updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Token is required
+ *       404:
+ *         description: Not found or expired link
+ *       500:
+ *         description: Server error
+ */
 // POST /public/roadside/:callId/context?token=...
 router.post('/:callId/context', async (req, res) => {
   try {
@@ -75,6 +265,45 @@ router.post('/:callId/context', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/roadside/{callId}/complete:
+ *   post:
+ *     summary: Mark a public roadside link as used/complete
+ *     description: Marks the public sharing token as consumed, indicating the external party has finished submitting information. No authentication required. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: callId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Public access token
+ *     responses:
+ *       200:
+ *         description: Token marked as used
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *       400:
+ *         description: Token is required
+ *       404:
+ *         description: Not found or expired link
+ *       500:
+ *         description: Server error
+ */
 // POST /public/roadside/:callId/complete?token=...
 router.post('/:callId/complete', async (req, res) => {
   try {
@@ -194,13 +423,229 @@ async function handleTwilioCallWebhook(req, res) {
   }
 }
 
+/**
+ * @openapi
+ * /public/roadside/webhooks/call:
+ *   post:
+ *     summary: Twilio call webhook (short path)
+ *     description: Handles incoming/outgoing Twilio voice call instructions for AI-powered roadside triage. Returns TwiML. No authentication — Twilio webhook. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: callId
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID (omit for new inbound calls)
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: integer
+ *         description: Current question index in the AI triage flow
+ *     requestBody:
+ *       content:
+ *         application/x-www-form-urlencoded:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               CallSid:
+ *                 type: string
+ *               CallStatus:
+ *                 type: string
+ *               From:
+ *                 type: string
+ *               To:
+ *                 type: string
+ *               SpeechResult:
+ *                 type: string
+ *               Digits:
+ *                 type: string
+ *               Confidence:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: TwiML response with next question or farewell
+ *         content:
+ *           text/xml:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Webhook processing error
+ *   get:
+ *     summary: Twilio call webhook (short path, GET)
+ *     description: GET variant of the Twilio call webhook for AI-powered roadside triage. Returns TwiML. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: callId
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: integer
+ *         description: Current question index
+ *       - in: query
+ *         name: SpeechResult
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: Digits
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: Confidence
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: TwiML response
+ *         content:
+ *           text/xml:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Webhook processing error
+ */
 // Twilio webhook: Handle incoming/outgoing call instructions
 // POST/GET /webhooks/twilio/call?callId=...&q=...
 router.post('/webhooks/call', handleTwilioCallWebhook);
 router.get('/webhooks/call', handleTwilioCallWebhook);
+/**
+ * @openapi
+ * /public/roadside/webhooks/twilio/call:
+ *   post:
+ *     summary: Twilio call webhook (full path)
+ *     description: Handles incoming/outgoing Twilio voice call instructions for AI-powered roadside triage. Returns TwiML. No authentication — Twilio webhook. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: callId
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID (omit for new inbound calls)
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: integer
+ *         description: Current question index in the AI triage flow
+ *     requestBody:
+ *       content:
+ *         application/x-www-form-urlencoded:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               CallSid:
+ *                 type: string
+ *               CallStatus:
+ *                 type: string
+ *               From:
+ *                 type: string
+ *               To:
+ *                 type: string
+ *               SpeechResult:
+ *                 type: string
+ *               Digits:
+ *                 type: string
+ *               Confidence:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: TwiML response with next question or farewell
+ *         content:
+ *           text/xml:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Webhook processing error
+ *   get:
+ *     summary: Twilio call webhook (full path, GET)
+ *     description: GET variant of the Twilio call webhook for AI-powered roadside triage. Returns TwiML. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: callId
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: integer
+ *         description: Current question index
+ *       - in: query
+ *         name: SpeechResult
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: Digits
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: Confidence
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: TwiML response
+ *         content:
+ *           text/xml:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Webhook processing error
+ */
 router.post('/webhooks/twilio/call', handleTwilioCallWebhook);
 router.get('/webhooks/twilio/call', handleTwilioCallWebhook);
 
+/**
+ * @openapi
+ * /public/roadside/webhooks/status:
+ *   post:
+ *     summary: Twilio call status webhook (short path)
+ *     description: Receives Twilio call status updates (completed, canceled, busy, failed, no-answer) and logs them. Ends active AI session on terminal statuses. No authentication — Twilio webhook. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: callId
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *     requestBody:
+ *       content:
+ *         application/x-www-form-urlencoded:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               CallSid:
+ *                 type: string
+ *               CallStatus:
+ *                 type: string
+ *               CallDuration:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Status logged
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *       400:
+ *         description: Webhook processing error
+ */
 // Twilio webhook: Handle call status updates
 // POST /webhooks/twilio/status?callId=...
 router.post('/webhooks/status', async (req, res) => {
@@ -232,6 +677,46 @@ router.post('/webhooks/status', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+/**
+ * @openapi
+ * /public/roadside/webhooks/twilio/status:
+ *   post:
+ *     summary: Twilio call status webhook (full path)
+ *     description: Receives Twilio call status updates (completed, canceled, busy, failed, no-answer) and logs them. Ends active AI session on terminal statuses. No authentication — Twilio webhook. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: callId
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *     requestBody:
+ *       content:
+ *         application/x-www-form-urlencoded:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               CallSid:
+ *                 type: string
+ *               CallStatus:
+ *                 type: string
+ *               CallDuration:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Status logged
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *       400:
+ *         description: Webhook processing error
+ */
 router.post('/webhooks/twilio/status', async (req, res) => {
   try {
     const statusData = twilioService.parseCallStatusWebhook(req);
@@ -262,6 +747,48 @@ router.post('/webhooks/twilio/status', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/roadside/webhooks/recording:
+ *   post:
+ *     summary: Twilio recording webhook (short path)
+ *     description: Receives Twilio call recording completion notifications and stores the recording metadata. No authentication — Twilio webhook. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: callId
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *     requestBody:
+ *       content:
+ *         application/x-www-form-urlencoded:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               CallSid:
+ *                 type: string
+ *               RecordingSid:
+ *                 type: string
+ *               RecordingUrl:
+ *                 type: string
+ *               RecordingDuration:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Recording logged
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *       400:
+ *         description: Webhook processing error
+ */
 // Twilio webhook: Handle call recording completion
 // POST /webhooks/twilio/recording?callId=...
 router.post('/webhooks/recording', async (req, res) => {
@@ -290,6 +817,48 @@ router.post('/webhooks/recording', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+/**
+ * @openapi
+ * /public/roadside/webhooks/twilio/recording:
+ *   post:
+ *     summary: Twilio recording webhook (full path)
+ *     description: Receives Twilio call recording completion notifications and stores the recording metadata. No authentication — Twilio webhook. Per 49 CFR Part 396 — Inspection, Repair, and Maintenance.
+ *     tags:
+ *       - Roadside (Public)
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: callId
+ *         schema:
+ *           type: string
+ *         description: Roadside call ID
+ *     requestBody:
+ *       content:
+ *         application/x-www-form-urlencoded:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               CallSid:
+ *                 type: string
+ *               RecordingSid:
+ *                 type: string
+ *               RecordingUrl:
+ *                 type: string
+ *               RecordingDuration:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Recording logged
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *       400:
+ *         description: Webhook processing error
+ */
 router.post('/webhooks/twilio/recording', async (req, res) => {
   try {
     const recordingData = twilioService.parseRecordingWebhook(req);

@@ -11,6 +11,64 @@ const { matchInspection, createRiskEvent } = require('../services/fmcsa-matching
 const dtLogger = require('../utils/logger');
 
 // GET /api/dqf-documents - list all DQF docs scoped through drivers
+/**
+ * @openapi
+ * /api/dqf-documents:
+ *   get:
+ *     summary: List all DQF documents
+ *     description: >
+ *       Retrieves all Driver Qualification File documents scoped through the
+ *       caller's tenant and operating entity. Includes signed download URLs for
+ *       each document. Per 49 CFR Part 391.51 — Driver Qualification File
+ *       retention requirements.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of DQF documents with signed download URLs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   driver_id:
+ *                     type: string
+ *                     format: uuid
+ *                   document_type:
+ *                     type: string
+ *                   file_name:
+ *                     type: string
+ *                   file_path:
+ *                     type: string
+ *                   file_size:
+ *                     type: integer
+ *                   mime_type:
+ *                     type: string
+ *                   first_name:
+ *                     type: string
+ *                   last_name:
+ *                     type: string
+ *                   operating_entity_id:
+ *                     type: string
+ *                     format: uuid
+ *                   downloadUrl:
+ *                     type: string
+ *                     nullable: true
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/', async (req, res) => {
   try {
     const params = [];
@@ -70,12 +128,96 @@ const upload = multer({
 });
 
 // POST upload DQF document
-// Supported documentTypes: 
+// Supported documentTypes:
 // - driver_license_front, driver_license_back
 // - medical_card_front, medical_card_back, green_card
 // - drug_test_result
 // - release_of_info
 // - employment_application, mvr_authorization, etc.
+/**
+ * @openapi
+ * /api/dqf-documents/upload:
+ *   post:
+ *     summary: Upload a DQF document
+ *     description: >
+ *       Uploads a document file to the Driver Qualification File. Stores the file
+ *       in R2 cloud storage and saves metadata to the database. Supported document
+ *       types include driver_license_front, driver_license_back, medical_card_front,
+ *       medical_card_back, green_card, drug_test_result, release_of_info,
+ *       employment_application, mvr_authorization, psp_report, and more. PSP
+ *       reports trigger background AI extraction and risk event creation. Per 49 CFR
+ *       Part 391.51 — Driver Qualification File retention requirements.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *               - driverId
+ *               - documentType
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: >
+ *                   The document file (max 10 MB). Allowed types: PDF, JPEG, PNG,
+ *                   GIF, WebP, DOC, DOCX.
+ *               driverId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: The driver's unique identifier
+ *               documentType:
+ *                 type: string
+ *                 description: The DQF document type classification
+ *               uploadedBy:
+ *                 type: string
+ *                 description: User or system that uploaded the file (defaults to 'system')
+ *     responses:
+ *       201:
+ *         description: Document uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 document:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     driver_id:
+ *                       type: string
+ *                       format: uuid
+ *                     document_type:
+ *                       type: string
+ *                     file_name:
+ *                       type: string
+ *                     file_path:
+ *                       type: string
+ *                     file_size:
+ *                       type: integer
+ *                     mime_type:
+ *                       type: string
+ *                 downloadUrl:
+ *                   type: string
+ *       400:
+ *         description: Missing file, driverId, or documentType
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -299,6 +441,60 @@ async function createPreHireAssessmentIfReady(tenantId, driverId, docId, pspData
 }
 
 // GET all documents for a driver
+/**
+ * @openapi
+ * /api/dqf-documents/driver/{driverId}:
+ *   get:
+ *     summary: Get all DQF documents for a driver
+ *     description: >
+ *       Retrieves all Driver Qualification File documents for a specific driver,
+ *       including signed download URLs. Per 49 CFR Part 391.51 — Driver
+ *       Qualification File retention requirements.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *     responses:
+ *       200:
+ *         description: Array of DQF documents with signed download URLs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   driver_id:
+ *                     type: string
+ *                     format: uuid
+ *                   document_type:
+ *                     type: string
+ *                   file_name:
+ *                     type: string
+ *                   downloadUrl:
+ *                     type: string
+ *                     nullable: true
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/driver/:driverId', async (req, res) => {
   try {
     // Validate OE access
@@ -327,6 +523,66 @@ router.get('/driver/:driverId', async (req, res) => {
 });
 
 // GET documents by type for a driver
+/**
+ * @openapi
+ * /api/dqf-documents/driver/{driverId}/type/{documentType}:
+ *   get:
+ *     summary: Get DQF documents by type for a driver
+ *     description: >
+ *       Retrieves DQF documents of a specific type for a given driver, including
+ *       signed download URLs. Per 49 CFR Part 391.51 — Driver Qualification File
+ *       retention requirements.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *       - in: path
+ *         name: documentType
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The document type to filter by (e.g. driver_license_front, medical_card_front)
+ *     responses:
+ *       200:
+ *         description: Array of DQF documents of the specified type
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   driver_id:
+ *                     type: string
+ *                     format: uuid
+ *                   document_type:
+ *                     type: string
+ *                   file_name:
+ *                     type: string
+ *                   downloadUrl:
+ *                     type: string
+ *                     nullable: true
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/driver/:driverId/type/:documentType', async (req, res) => {
   try {
     // Validate OE access
@@ -357,6 +613,44 @@ router.get('/driver/:driverId/type/:documentType', async (req, res) => {
 });
 
 // DELETE a document
+/**
+ * @openapi
+ * /api/dqf-documents/{id}:
+ *   delete:
+ *     summary: Delete a DQF document
+ *     description: >
+ *       Deletes a DQF document from both R2 cloud storage and the database.
+ *       Validates operating entity access through the parent driver. Per 49 CFR
+ *       Part 391.51 — Driver Qualification File retention requirements.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The DQF document ID
+ *     responses:
+ *       200:
+ *         description: Document deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Document or driver not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const result = await query(
@@ -394,6 +688,45 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET download a document
+/**
+ * @openapi
+ * /api/dqf-documents/download/{id}:
+ *   get:
+ *     summary: Get a signed download URL for a DQF document
+ *     description: >
+ *       Returns a time-limited signed download URL for a specific DQF document.
+ *       Validates operating entity access through the parent driver. Per 49 CFR
+ *       Part 391.51 — Driver Qualification File retention requirements.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The DQF document ID
+ *     responses:
+ *       200:
+ *         description: Signed download URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 downloadUrl:
+ *                   type: string
+ *                   format: uri
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Document not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/download/:id', async (req, res) => {
   try {
     const result = await query(
