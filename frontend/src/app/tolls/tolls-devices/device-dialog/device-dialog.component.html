@@ -4,8 +4,8 @@
   <form [formGroup]="form" (ngSubmit)="save()" class="dialog-form">
     <!-- Toll Account (required) -->
     <div class="form-field">
-      <label class="field-label">Toll Account <span class="required">*</span></label>
-      <select formControlName="toll_account_id" class="field-input">
+      <label class="field-label" for="toll-account-input">Toll Account <span class="required">*</span></label>
+      <select id="toll-account-input" formControlName="toll_account_id" class="field-input">
         <option value="" disabled>Select account</option>
         <option *ngFor="let acct of data.accounts" [value]="acct.id">
           {{ acct.display_name || acct.provider_name }} — {{ acct.account_number_masked || 'N/A' }}
@@ -19,85 +19,126 @@
 
     <!-- Device Number -->
     <div class="form-field">
-      <label class="field-label">Device Number</label>
+      <label class="field-label" for="device-number-input">Device Number</label>
       <input type="text"
+             id="device-number-input"
              formControlName="device_number"
              class="field-input"
              placeholder="e.g. 1234-5678"
              [attr.readonly]="isEdit ? true : null">
     </div>
 
-    <!-- Plate Number -->
-    <div class="form-field">
-      <label class="field-label">Plate Number</label>
-      <input type="text"
-             formControlName="plate_number"
-             class="field-input"
-             placeholder="e.g. ABC-1234">
-    </div>
-
-    <!-- Truck (autocomplete) -->
-    <div class="form-field">
-      <label class="field-label">Truck</label>
-      <input type="text"
-             [formControl]="truckControl"
-             class="field-input"
-             placeholder="Search by unit number..."
-             (input)="form.patchValue({ truck_id: '' })"
-             autocomplete="off">
-      <div class="autocomplete-dropdown" *ngIf="(filteredTrucks$ | async) as trucks">
-        <div *ngIf="trucks.length > 0 && truckControl.value && !form.value.truck_id"
-             class="autocomplete-list">
-          <div *ngFor="let t of trucks"
-               class="autocomplete-item"
-               (click)="onTruckSelected(t.id); truckControl.setValue(t.label)">
-            {{ t.label }}
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Driver (autocomplete) -->
     <div class="form-field">
-      <label class="field-label">Driver</label>
+      <label class="field-label" for="driver-name-input">Driver Name</label>
       <input type="text"
+             id="driver-name-input"
              [formControl]="driverControl"
              class="field-input"
              placeholder="Search by driver name..."
-             (input)="form.patchValue({ driver_id: '' })"
+             (input)="clearDriverSelection()"
              autocomplete="off">
       <div class="autocomplete-dropdown" *ngIf="(filteredDrivers$ | async) as drivers">
         <div *ngIf="drivers.length > 0 && driverControl.value && !form.value.driver_id"
              class="autocomplete-list">
-          <div *ngFor="let d of drivers"
+          <button *ngFor="let d of drivers"
+               type="button"
                class="autocomplete-item"
                (click)="onDriverSelected(d.id); driverControl.setValue(d.label)">
             {{ d.label }}
-          </div>
+          </button>
         </div>
       </div>
     </div>
 
+    <!-- Truck Unit Number -->
+    <div class="form-field">
+      <label class="field-label" for="truck-unit-input">Truck Unit Number</label>
+      <input type="text"
+             id="truck-unit-input"
+             [formControl]="truckControl"
+             class="field-input"
+             placeholder="Search by unit number..."
+             (input)="clearTruckSelection()"
+             autocomplete="off">
+      <div class="autocomplete-dropdown" *ngIf="(filteredTrucks$ | async) as trucks">
+        <div *ngIf="trucks.length > 0 && truckControl.value && !form.value.truck_id"
+             class="autocomplete-list">
+          <button *ngFor="let t of trucks"
+               type="button"
+               class="autocomplete-item"
+               (click)="onTruckSelected(t.id)">
+            {{ t.label }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Truck Plate Number -->
+    <div class="form-field">
+      <label class="field-label" for="truck-plate-input">Truck Plate Number</label>
+      <input type="text"
+             id="truck-plate-input"
+             formControlName="truck_plate_number"
+             class="field-input"
+             placeholder="e.g. ABC-1234">
+    </div>
+
+    <!-- Trailer -->
+    <div class="form-field">
+      <label class="field-label" for="trailer-input">Trailer</label>
+      <input type="text"
+             id="trailer-input"
+             [formControl]="trailerControl"
+             class="field-input"
+             placeholder="Search by trailer unit..."
+             (input)="clearTrailerSelection()"
+             autocomplete="off">
+      <div class="autocomplete-dropdown" *ngIf="(filteredTrailers$ | async) as trailers">
+        <div *ngIf="trailers.length > 0 && trailerControl.value && !form.value.trailer_id"
+             class="autocomplete-list">
+          <button *ngFor="let trailer of trailers"
+               type="button"
+               class="autocomplete-item"
+               (click)="onTrailerSelected(trailer.id)">
+            {{ trailer.label }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trailer Plate Number -->
+    <div class="form-field">
+      <label class="field-label" for="trailer-plate-input">Trailer Plate Number</label>
+      <input type="text"
+             id="trailer-plate-input"
+             formControlName="trailer_plate_number"
+             class="field-input"
+             placeholder="Blank if no trailer assigned">
+    </div>
+
     <!-- Effective Start Date -->
     <div class="form-field">
-      <label class="field-label">Effective Start Date</label>
+      <label class="field-label" for="effective-start-input">Effective Start Date</label>
       <input type="date"
+             id="effective-start-input"
              formControlName="effective_start_date"
              class="field-input">
     </div>
 
     <!-- Effective End Date -->
     <div class="form-field">
-      <label class="field-label">Effective End Date</label>
+      <label class="field-label" for="effective-end-input">Effective End Date</label>
       <input type="date"
+             id="effective-end-input"
              formControlName="effective_end_date"
              class="field-input">
     </div>
 
     <!-- Status -->
     <div class="form-field" *ngIf="isEdit">
-      <label class="field-label">Status</label>
-      <select formControlName="status" class="field-input">
+      <label class="field-label" for="status-input">Status</label>
+      <select id="status-input" formControlName="status" class="field-input">
         <option value="active">Active</option>
         <option value="inactive">Inactive</option>
       </select>
