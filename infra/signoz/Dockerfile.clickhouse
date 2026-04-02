@@ -1,8 +1,5 @@
 FROM clickhouse/clickhouse-server:24.1
 
-# Copy server tuning only — no custom users.xml.
-# User auth is handled by CLICKHOUSE_PASSWORD env var (Docker entrypoint).
-COPY infra/signoz/clickhouse-config.xml /etc/clickhouse-server/config.d/fleetneuron.xml
-
-# ClickHouse ports: 8123 (HTTP), 9000 (native TCP)
-EXPOSE 8123 9000
+# Add single-node cluster config so SigNoz OTel Collector's
+# ON CLUSTER cluster DDL succeeds on a standalone instance.
+COPY infra/signoz/clickhouse-cluster.xml /etc/clickhouse-server/config.d/cluster.xml
