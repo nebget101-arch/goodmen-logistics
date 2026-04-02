@@ -340,6 +340,7 @@ export class DeviceDialogComponent implements OnInit {
 
     const payload: Partial<TollDevice> = {
       toll_account_id: this.form.value.toll_account_id,
+      device_number_masked: this.form.value.device_number || undefined,
       plate_number: this.form.value.truck_plate_number || undefined,
       truck_id: this.form.value.truck_id || undefined,
       trailer_id: this.form.value.trailer_id || undefined,
@@ -352,11 +353,6 @@ export class DeviceDialogComponent implements OnInit {
         : undefined,
       status: this.form.value.status
     };
-
-    // Only send device_number on create (cannot be changed on edit for masked fields)
-    if (!this.isEdit && this.form.value.device_number) {
-      (payload as Record<string, unknown>)['device_number'] = this.form.value.device_number;
-    }
 
     const request$ = this.isEdit
       ? this.tolls.updateDevice(this.data.device!.id, payload)

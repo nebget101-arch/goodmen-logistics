@@ -21,7 +21,16 @@ export class TollsDevicesComponent implements OnInit {
   error = '';
   successMsg = '';
 
-  drivers: { id: string; first_name: string; last_name: string; truck_id?: string }[] = [];
+  drivers: {
+    id: string;
+    first_name?: string;
+    last_name?: string;
+    firstName?: string;
+    lastName?: string;
+    driver_name?: string;
+    driverName?: string;
+    truck_id?: string;
+  }[] = [];
   trucks: { id: string; unit_number: string; plate_number?: string }[] = [];
   assignmentMap: Record<string, TollDeviceAssignment> = {};
   driverOverrideMap: Record<string, string> = {};
@@ -116,10 +125,23 @@ export class TollsDevicesComponent implements OnInit {
     this.api.getDrivers().subscribe({
       next: (res) => {
         const raw = Array.isArray(res) ? res : (res?.drivers || []);
-        this.drivers = raw.map((d: { id: string; first_name: string; last_name: string; truck_id?: string }) => ({
+        this.drivers = raw.map((d: {
+          id: string;
+          first_name?: string;
+          last_name?: string;
+          firstName?: string;
+          lastName?: string;
+          driver_name?: string;
+          driverName?: string;
+          truck_id?: string;
+        }) => ({
           id: d.id,
           first_name: d.first_name,
           last_name: d.last_name,
+          firstName: d.firstName,
+          lastName: d.lastName,
+          driver_name: d.driver_name,
+          driverName: d.driverName,
           truck_id: d.truck_id
         }));
         this.cdr.markForCheck();
@@ -350,6 +372,13 @@ export class TollsDevicesComponent implements OnInit {
   driverDisplay(driverId: string): string {
     if (!driverId) return '';
     const d = this.drivers.find(dr => dr.id === driverId);
-    return d ? `${d.first_name} ${d.last_name}` : driverId;
+    if (!d) return driverId;
+
+    const name = d.driverName
+      || d.driver_name
+      || [d.firstName, d.lastName].filter(Boolean).join(' ')
+      || [d.first_name, d.last_name].filter(Boolean).join(' ');
+
+    return name || driverId;
   }
 }
