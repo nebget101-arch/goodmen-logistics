@@ -123,6 +123,101 @@ async function findCategoryById(req, id) {
   return customCategory ? { ...customCategory, source: 'custom' } : null;
 }
 
+/**
+ * @openapi
+ * /api/expense-payment-categories:
+ *   get:
+ *     summary: List merged expense/payment categories
+ *     description: >
+ *       Returns all categories visible to the current tenant, merging global
+ *       (system-defined) categories with tenant-scoped custom categories.
+ *       Results are returned as a hierarchy with parent/child relationships.
+ *     tags:
+ *       - Expense Categories
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [expense, revenue]
+ *         description: Filter categories by type
+ *       - in: query
+ *         name: active
+ *         schema:
+ *           type: string
+ *           enum: ['true', 'false']
+ *         description: Filter by active status. "false" returns only inactive categories.
+ *       - in: query
+ *         name: includeInactive
+ *         schema:
+ *           type: string
+ *           enum: ['true', 'false']
+ *         description: When "true", includes both active and inactive categories.
+ *     responses:
+ *       200:
+ *         description: Hierarchical list of categories
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   description: Root-level categories, each with a children array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       code:
+ *                         type: integer
+ *                       parent_code:
+ *                         type: integer
+ *                         nullable: true
+ *                       persistent:
+ *                         type: boolean
+ *                       name:
+ *                         type: string
+ *                       active:
+ *                         type: boolean
+ *                       type:
+ *                         type: string
+ *                         enum: [expense, revenue]
+ *                       description:
+ *                         type: string
+ *                       notes:
+ *                         type: string
+ *                         nullable: true
+ *                       source:
+ *                         type: string
+ *                         enum: [global, custom]
+ *                       children:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                 total:
+ *                   type: integer
+ *                   description: Total flat count of categories (before hierarchy)
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ */
 router.get('/', async (req, res) => {
   try {
     const categories = await listMergedCategories(req);
@@ -143,6 +238,100 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/expense-payment-categories/{id}:
+ *   get:
+ *     summary: Get a single category by ID
+ *     description: >
+ *       Returns a single category (global or custom) by its primary key.
+ *       The response includes the resolved parent object (if parent_code exists)
+ *       and an array of direct children.
+ *     tags:
+ *       - Expense Categories
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Category primary key
+ *     responses:
+ *       200:
+ *         description: Category with parent and children
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     code:
+ *                       type: integer
+ *                     parent_code:
+ *                       type: integer
+ *                       nullable: true
+ *                     persistent:
+ *                       type: boolean
+ *                     name:
+ *                       type: string
+ *                     active:
+ *                       type: boolean
+ *                     type:
+ *                       type: string
+ *                       enum: [expense, revenue]
+ *                     description:
+ *                       type: string
+ *                     notes:
+ *                       type: string
+ *                       nullable: true
+ *                     source:
+ *                       type: string
+ *                       enum: [global, custom]
+ *                     parent:
+ *                       type: object
+ *                       nullable: true
+ *                       description: Resolved parent category (if parent_code is set)
+ *                     children:
+ *                       type: array
+ *                       description: Direct child categories sorted by name
+ *                       items:
+ *                         type: object
+ *       404:
+ *         description: Category not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ */
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -173,6 +362,106 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/expense-payment-categories:
+ *   post:
+ *     summary: Create a custom category
+ *     description: >
+ *       Creates a new tenant-scoped custom category. Requires name and type.
+ *       The code is auto-assigned (starting at 2000+). An optional parent_code
+ *       can be provided to nest the category under an existing parent.
+ *     tags:
+ *       - Expense Categories
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - type
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Display name for the category
+ *               type:
+ *                 type: string
+ *                 enum: [expense, revenue]
+ *                 description: Category type
+ *               description:
+ *                 type: string
+ *                 description: Optional description
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Optional internal notes
+ *               parent_code:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Code of the parent category to nest under
+ *     responses:
+ *       201:
+ *         description: Category created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     code:
+ *                       type: integer
+ *                     parent_code:
+ *                       type: integer
+ *                       nullable: true
+ *                     persistent:
+ *                       type: boolean
+ *                       example: false
+ *                     name:
+ *                       type: string
+ *                     active:
+ *                       type: boolean
+ *                       example: true
+ *                     type:
+ *                       type: string
+ *                       enum: [expense, revenue]
+ *                     description:
+ *                       type: string
+ *                     notes:
+ *                       type: string
+ *                       nullable: true
+ *                     source:
+ *                       type: string
+ *                       example: custom
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Validation error (missing name/type, invalid type, or invalid parent_code)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.post('/', async (req, res) => {
   const { name, type, description, notes, parent_code } = req.body;
 
@@ -230,6 +519,90 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/expense-payment-categories/{id}:
+ *   put:
+ *     summary: Update a custom category
+ *     description: >
+ *       Updates a tenant-scoped custom category. Global categories cannot be
+ *       edited. Persistent (system-defined) categories allow only active,
+ *       description, and notes updates -- name and parent_code are locked.
+ *     tags:
+ *       - Expense Categories
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Category primary key
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Updated display name
+ *               active:
+ *                 type: boolean
+ *                 description: Activate or deactivate the category
+ *               description:
+ *                 type: string
+ *                 description: Updated description
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Updated internal notes
+ *               parent_code:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: New parent code (null to make root-level)
+ *     responses:
+ *       200:
+ *         description: Category updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     code:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                     active:
+ *                       type: boolean
+ *                     type:
+ *                       type: string
+ *                     source:
+ *                       type: string
+ *                       example: custom
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid parent_code or self-referencing parent
+ *       401:
+ *         description: Tenant context required
+ *       403:
+ *         description: Cannot edit global or persistent categories
+ *       404:
+ *         description: Category not found
+ *       500:
+ *         description: Server error
+ */
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const { name, active, description, notes, parent_code } = req.body;
@@ -288,6 +661,77 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/expense-payment-categories/{id}:
+ *   delete:
+ *     summary: Delete or deactivate a custom category
+ *     description: >
+ *       Soft-deletes (deactivates) a tenant-scoped custom category by default.
+ *       Pass ?hardDelete=true for permanent removal (only if the category has
+ *       zero usage in settlement adjustments and imported expenses). Global and
+ *       persistent categories cannot be deleted.
+ *     tags:
+ *       - Expense Categories
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Category primary key
+ *       - in: query
+ *         name: hardDelete
+ *         schema:
+ *           type: string
+ *           enum: ['true', 'false']
+ *         description: >
+ *           When "true", permanently deletes the category instead of
+ *           deactivating it. Fails if the category is in use.
+ *     responses:
+ *       200:
+ *         description: Category deleted or deactivated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   description: '"Category deleted permanently" or "Category deactivated"'
+ *                 note:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Usage note when soft-deleting a category that is referenced by transactions
+ *       400:
+ *         description: Cannot hard-delete a category that is in use
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                 usage:
+ *                   type: integer
+ *                   description: Number of transactions referencing this category
+ *       401:
+ *         description: Tenant context required
+ *       403:
+ *         description: Cannot delete global or system-defined categories
+ *       404:
+ *         description: Category not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   const { hardDelete } = req.query;
@@ -345,6 +789,73 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/expense-payment-categories/stats/usage:
+ *   get:
+ *     summary: Get usage statistics for all categories
+ *     description: >
+ *       Returns every category (global + tenant custom) with counts of how many
+ *       settlement adjustment items and imported expense items reference it.
+ *       Results are sorted by total usage descending.
+ *     tags:
+ *       - Expense Categories
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of categories with usage counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       code:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                         enum: [expense, revenue]
+ *                       active:
+ *                         type: boolean
+ *                       source:
+ *                         type: string
+ *                         enum: [global, custom]
+ *                       settlement_usage:
+ *                         type: integer
+ *                         description: Count of settlement_adjustment_items referencing this category
+ *                       imported_usage:
+ *                         type: integer
+ *                         description: Count of imported_expense_items referencing this category
+ *                       total_usage:
+ *                         type: integer
+ *                         description: Sum of settlement_usage and imported_usage
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ */
 router.get('/stats/usage', async (req, res) => {
   try {
     const tid = tenantId(req);

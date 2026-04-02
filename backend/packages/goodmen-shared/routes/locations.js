@@ -27,7 +27,52 @@ function supportsLocations(planId) {
   return planId === 'end_to_end' || planId === 'enterprise';
 }
 
-// GET all locations
+/**
+ * @openapi
+ * /api/locations:
+ *   get:
+ *     summary: List all locations
+ *     description: Returns all locations for the current tenant. Only available on End-to-End and Enterprise plans. Returns an empty array for other plans.
+ *     tags:
+ *       - Locations
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of locations
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   name:
+ *                     type: string
+ *                   address:
+ *                     type: string
+ *                   settings:
+ *                     type: object
+ *                   code:
+ *                     type: string
+ *                   location_type:
+ *                     type: string
+ *                   active:
+ *                     type: boolean
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *                   updated_at:
+ *                     type: string
+ *                     format: date-time
+ *       403:
+ *         description: Tenant context missing
+ *       500:
+ *         description: Server error
+ */
 router.get('/', async (req, res) => {
   try {
     const { tenantId, planId } = await getTenantContext(req);
@@ -41,7 +86,33 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET location by ID
+/**
+ * @openapi
+ * /api/locations/{id}:
+ *   get:
+ *     summary: Get location by ID
+ *     description: Returns a single location by its UUID. Only available on End-to-End and Enterprise plans.
+ *     tags:
+ *       - Locations
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Location details
+ *       403:
+ *         description: Tenant context missing or plan not supported
+ *       404:
+ *         description: Location not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { tenantId, planId } = await getTenantContext(req);
@@ -58,7 +129,46 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST create new location
+/**
+ * @openapi
+ * /api/locations:
+ *   post:
+ *     summary: Create a new location
+ *     description: Creates a new location for the current tenant. Only available on Advanced (End-to-End) and Enterprise plans.
+ *     tags:
+ *       - Locations
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               settings:
+ *                 type: object
+ *               code:
+ *                 type: string
+ *               location_type:
+ *                 type: string
+ *               active:
+ *                 type: boolean
+ *                 default: true
+ *     responses:
+ *       201:
+ *         description: Location created
+ *       403:
+ *         description: Tenant context missing or plan not supported
+ *       500:
+ *         description: Server error
+ */
 router.post('/', async (req, res) => {
   const { name, address, settings, code, location_type, active } = req.body;
   try {
@@ -79,7 +189,51 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT update location
+/**
+ * @openapi
+ * /api/locations/{id}:
+ *   put:
+ *     summary: Update a location
+ *     description: Updates an existing location by ID. Fields not provided are left unchanged (COALESCE).
+ *     tags:
+ *       - Locations
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               settings:
+ *                 type: object
+ *               code:
+ *                 type: string
+ *               location_type:
+ *                 type: string
+ *               active:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Updated location
+ *       403:
+ *         description: Tenant context missing or plan not supported
+ *       404:
+ *         description: Location not found
+ *       500:
+ *         description: Server error
+ */
 router.put('/:id', async (req, res) => {
   const { name, address, settings, code, location_type, active } = req.body;
   try {
@@ -104,7 +258,33 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE location
+/**
+ * @openapi
+ * /api/locations/{id}:
+ *   delete:
+ *     summary: Delete a location
+ *     description: Permanently deletes a location by ID.
+ *     tags:
+ *       - Locations
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Deleted location
+ *       403:
+ *         description: Tenant context missing or plan not supported
+ *       404:
+ *         description: Location not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { tenantId, planId } = await getTenantContext(req);
