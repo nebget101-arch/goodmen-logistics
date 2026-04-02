@@ -458,7 +458,7 @@ services:
       sizeGB: 1
     envVars:
       - key: ClickHouseUrl
-        value: tcp://signoz-clickhouse-dev:9000/signoz
+        value: tcp://signoz-clickhouse-dev:9000/
       - key: CLICKHOUSE_HOST
         fromService:
           type: pserv

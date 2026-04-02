@@ -28,12 +28,22 @@ processors:
 
 exporters:
   clickhousetraces:
-    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB}&username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
+    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=signoz_traces&username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
     low_cardinal_exception_grouping: true
   clickhousemetricswrite:
-    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB}&username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
+    endpoint: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=signoz_metrics&username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
+    resource_to_telemetry_conversion:
+      enabled: true
   clickhouselogsexporter:
-    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB}&username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
+    dsn: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=signoz_logs&username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
+    timeout: 5s
+    sending_queue:
+      queue_size: 100
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
 
 extensions:
   health_check:
