@@ -28,12 +28,12 @@ processors:
 
 exporters:
   clickhousetraces:
-    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB:-signoz}&username=${CLICKHOUSE_USER:-default}&password=${CLICKHOUSE_PASSWORD}
+    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB}&username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
     low_cardinal_exception_grouping: true
   clickhousemetricswrite:
-    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB:-signoz}&username=${CLICKHOUSE_USER:-default}&password=${CLICKHOUSE_PASSWORD}
+    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB}&username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
   clickhouselogsexporter:
-    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB:-signoz}&username=${CLICKHOUSE_USER:-default}&password=${CLICKHOUSE_PASSWORD}
+    datasource: tcp://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DB}&username=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}
 
 extensions:
   health_check:
