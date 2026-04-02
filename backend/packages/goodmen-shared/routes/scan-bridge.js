@@ -108,9 +108,62 @@ router.post('/session', authMiddleware, (req, res) => {
 });
 
 /**
- * POST /api/scan-bridge/decode-image
- * Decode barcode from photo (phone/tablet camera). No auth; requires writeToken + sessionId.
- * On success, pushes barcode to the bridge session so desktop receives it via SSE.
+ * @openapi
+ * /api/scan-bridge/decode-image:
+ *   post:
+ *     summary: Decode barcode from photo
+ *     description: Decodes a barcode from a camera photo (phone/tablet). No auth required — uses writeToken + sessionId for session validation. On success, pushes the decoded barcode to the bridge session via SSE.
+ *     tags:
+ *       - ScanBridge
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - image
+ *               - writeToken
+ *               - sessionId
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Barcode image file (max 10MB)
+ *               writeToken:
+ *                 type: string
+ *                 description: Session write token
+ *               sessionId:
+ *                 type: string
+ *                 description: Bridge session ID
+ *     responses:
+ *       201:
+ *         description: Barcode decoded and pushed to session
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     barcode:
+ *                       type: string
+ *                 pushed:
+ *                   type: boolean
+ *       200:
+ *         description: No barcode found in image
+ *       400:
+ *         description: No image uploaded
+ *       403:
+ *         description: Invalid write token
+ *       404:
+ *         description: Session not found or expired
+ *       500:
+ *         description: Failed to decode barcode
  */
 router.post('/decode-image', scanUpload.single('image'), async (req, res) => {
   const writeToken = (req.body?.writeToken || req.query?.writeToken || '').toString();
@@ -148,6 +201,36 @@ router.post('/decode-image', scanUpload.single('image'), async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/scan-bridge/session/{id}/events:
+ *   get:
+ *     summary: Subscribe to scan session events (SSE)
+ *     description: Opens a Server-Sent Events stream for the desktop to receive real-time barcode scan events from the mobile device. Requires readToken for authentication. Sends ping events every 20 seconds to keep the connection alive.
+ *     tags:
+ *       - ScanBridge
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bridge session ID
+ *       - in: query
+ *         name: readToken
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Session read token
+ *     responses:
+ *       200:
+ *         description: SSE stream opened (text/event-stream). Events — ready, scan, ping.
+ *       403:
+ *         description: Invalid read token
+ *       404:
+ *         description: Session not found or expired
+ */
 router.get('/session/:id/events', (req, res) => {
   const session = getSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
@@ -175,6 +258,63 @@ router.get('/session/:id/events', (req, res) => {
   });
 });
 
+/**
+ * @openapi
+ * /api/scan-bridge/session/{id}/scan:
+ *   post:
+ *     summary: Push a barcode scan to session
+ *     description: Pushes a scanned barcode value from the mobile device to the bridge session. All connected desktop SSE listeners receive the scan event in real time.
+ *     tags:
+ *       - ScanBridge
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bridge session ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - barcode
+ *               - writeToken
+ *             properties:
+ *               barcode:
+ *                 type: string
+ *                 description: Scanned barcode value
+ *               writeToken:
+ *                 type: string
+ *                 description: Session write token
+ *     responses:
+ *       201:
+ *         description: Barcode pushed to session
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     barcode:
+ *                       type: string
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: Missing barcode
+ *       403:
+ *         description: Invalid write token
+ *       404:
+ *         description: Session not found or expired
+ */
 router.post('/session/:id/scan', (req, res) => {
   const writeToken = req.body?.writeToken || req.query.writeToken;
   const session = getSessionForWrite(writeToken, req.params.id);
@@ -206,6 +346,38 @@ router.post('/session/:id/scan', (req, res) => {
   return res.status(201).json({ success: true, data: payload });
 });
 
+/**
+ * @openapi
+ * /api/scan-bridge/mobile:
+ *   get:
+ *     summary: Mobile scanner web page
+ *     description: Serves the phone/tablet scanner HTML page with live camera barcode scanning (Quagga2), photo decode, VIN OCR (Tesseract.js), and manual barcode entry. Requires session ID and writeToken as query parameters.
+ *     tags:
+ *       - ScanBridge
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: session
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bridge session ID
+ *       - in: query
+ *         name: writeToken
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Session write token
+ *     responses:
+ *       200:
+ *         description: HTML page for mobile barcode scanning
+ *         content:
+ *           text/html:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Missing session or token
+ */
 router.get('/mobile', (req, res) => {
   const sessionId = (req.query.session || '').toString();
   const writeToken = (req.query.writeToken || '').toString();
