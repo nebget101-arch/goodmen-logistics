@@ -416,8 +416,6 @@ services:
       mountPath: /var/lib/clickhouse
       sizeGB: 10
     envVars:
-      - key: CLICKHOUSE_DB
-        value: signoz
       - key: CLICKHOUSE_USER
         value: default
       - key: CLICKHOUSE_PASSWORD
