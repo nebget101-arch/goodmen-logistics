@@ -31,7 +31,27 @@ function requireRole(allowedRoles) {
   };
 }
 
-// GET /api/shop-clients/bulk-upload/template - Download template
+/**
+ * @openapi
+ * /api/shop-clients/bulk-upload/template:
+ *   get:
+ *     summary: Download bulk upload template
+ *     description: Returns an Excel (.xlsx) template file with sample rows and an instructions sheet for bulk uploading shop clients.
+ *     tags:
+ *       - Shop Clients
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Excel template file
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       500:
+ *         description: Failed to generate template
+ */
 router.get('/bulk-upload/template', authMiddleware, (req, res) => {
   try {
     // Create workbook
@@ -187,7 +207,75 @@ router.get('/bulk-upload/template', authMiddleware, (req, res) => {
   }
 });
 
-// POST /api/shop-clients/bulk-upload - Upload and process file
+/**
+ * @openapi
+ * /api/shop-clients/bulk-upload:
+ *   post:
+ *     summary: Bulk upload shop clients
+ *     description: Accepts an Excel file and creates shop client records for each valid row. Returns a summary of successful and failed rows with error details. Requires Admin, Service Advisor, or Accounting role.
+ *     tags:
+ *       - Shop Clients
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Excel file (.xlsx or .xls) with customer data
+ *     responses:
+ *       200:
+ *         description: Upload results with success and failure counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 results:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     successful:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           row:
+ *                             type: integer
+ *                           company:
+ *                             type: string
+ *                           id:
+ *                             type: string
+ *                     failed:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           row:
+ *                             type: integer
+ *                           company:
+ *                             type: string
+ *                           errors:
+ *                             type: array
+ *                             items:
+ *                               type: string
+ *       400:
+ *         description: No file provided or invalid file format
+ *       500:
+ *         description: Server error
+ */
 router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting']), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {

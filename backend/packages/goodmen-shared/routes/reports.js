@@ -126,8 +126,57 @@ router.get('/inventory-status', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/reports/low-stock
- * Low and out of stock items report
+ * @openapi
+ * /api/reports/low-stock:
+ *   get:
+ *     summary: Low and out-of-stock items report
+ *     description: Returns inventory items that are either out of stock (on_hand_qty = 0) or below their minimum stock level. Useful for reorder planning.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by warehouse/location ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *         description: Max rows to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Pagination offset
+ *     responses:
+ *       200:
+ *         description: Low-stock items returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       500:
+ *         description: Server error
  */
 router.get('/low-stock', authMiddleware, async (req, res) => {
 	try {
@@ -186,8 +235,64 @@ router.get('/low-stock', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/reports/valuation
- * Inventory valuation report: on-hand qty * cost
+ * @openapi
+ * /api/reports/valuation:
+ *   get:
+ *     summary: Inventory valuation report
+ *     description: Calculates total inventory value (on_hand_qty * unit_cost) per part/location. Returns per-row values and a grand total summary.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by warehouse/location ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *         description: Max rows to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Pagination offset
+ *     responses:
+ *       200:
+ *         description: Valuation data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalQuantity:
+ *                       type: integer
+ *                     totalValue:
+ *                       type: number
+ *       500:
+ *         description: Server error
  */
 router.get('/valuation', authMiddleware, async (req, res) => {
 	try {
@@ -253,8 +358,70 @@ router.get('/valuation', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/reports/movement
- * Stock movement report: InventoryTransaction history
+ * @openapi
+ * /api/reports/movement:
+ *   get:
+ *     summary: Stock movement report
+ *     description: Returns inventory transaction history (receipts, issues, adjustments, transfers). Defaults to the last 30 days if no date range is specified.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by warehouse/location ID
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of date range (defaults to 30 days ago)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of date range (defaults to today)
+ *       - in: query
+ *         name: transactionType
+ *         schema:
+ *           type: string
+ *         description: Filter by transaction type
+ *       - in: query
+ *         name: partId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by part ID
+ *     responses:
+ *       200:
+ *         description: Movement data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 filters:
+ *                   type: object
+ *                   properties:
+ *                     startDate:
+ *                       type: string
+ *                     endDate:
+ *                       type: string
+ *       500:
+ *         description: Server error
  */
 router.get('/movement', authMiddleware, async (req, res) => {
 	try {
@@ -312,8 +479,49 @@ router.get('/movement', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/reports/cycle-variance
- * Cycle count variance report
+ * @openapi
+ * /api/reports/cycle-variance:
+ *   get:
+ *     summary: Cycle count variance report
+ *     description: Returns approved cycle count lines where counted quantity differs from system on-hand quantity. Includes a summary of total lines, variance lines, and total variance quantity.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by warehouse/location ID
+ *     responses:
+ *       200:
+ *         description: Variance data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     total_lines:
+ *                       type: integer
+ *                     variance_lines:
+ *                       type: integer
+ *                     total_variance_qty:
+ *                       type: integer
+ *       500:
+ *         description: Server error
  */
 router.get('/cycle-variance', authMiddleware, async (req, res) => {
 	try {
@@ -377,7 +585,77 @@ router.get('/cycle-variance', authMiddleware, async (req, res) => {
 	}
 });
 
-// Customer reports
+/**
+ * @openapi
+ * /api/reports/shop-clients/summary:
+ *   get:
+ *     summary: Customer (shop client) summary report
+ *     description: Aggregates invoice and work order totals per shop client. Requires admin, accounting, or service_advisor role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date filter for invoices and work orders
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date filter
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by location
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by specific shop client
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Customer summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/shop-clients/summary', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, customerId } = req.query;
@@ -454,6 +732,73 @@ router.get('/shop-clients/summary', authMiddleware, requireRole(['admin', 'accou
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/shop-clients/activity:
+ *   get:
+ *     summary: Customer activity report
+ *     description: Ranks shop clients by combined invoice and work order activity. Requires admin, accounting, or service_advisor role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Activity data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/shop-clients/activity', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, customerId } = req.query;
@@ -530,6 +875,69 @@ router.get('/shop-clients/activity', authMiddleware, requireRole(['admin', 'acco
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/shop-clients/aging:
+ *   get:
+ *     summary: Customer accounts receivable aging report
+ *     description: Buckets outstanding invoice balances per customer into 0-30, 31-60, 61-90, and 90+ day aging brackets. Requires admin, accounting, or service_advisor role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: asOfDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Reference date for aging calculation (defaults to today)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Aging data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 asOf:
+ *                   type: string
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/shop-clients/aging', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
 	try {
 		const { asOfDate, locationId, customerId } = req.query;
@@ -569,7 +977,75 @@ router.get('/shop-clients/aging', authMiddleware, requireRole(['admin', 'account
 	}
 });
 
-// Vehicle reports
+/**
+ * @openapi
+ * /api/reports/vehicles/summary:
+ *   get:
+ *     summary: Vehicle fleet summary report
+ *     description: Lists vehicles with key details (VIN, mileage, PM due, inspection/registration/insurance expiry). Filterable by location, status, and PM-due date range. Requires admin, service_advisor, or safety role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: PM-due range start
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: PM-due range end
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Vehicle status filter (e.g. in-service, out-of-service)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Vehicle summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/vehicles/summary', authMiddleware, requireRole(['admin', 'service_advisor', 'safety']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, status, companyOwned } = req.query;
@@ -615,6 +1091,59 @@ router.get('/vehicles/summary', authMiddleware, requireRole(['admin', 'service_a
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/vehicles/status:
+ *   get:
+ *     summary: Vehicle status distribution report
+ *     description: Groups vehicles by status and returns counts per status. Requires admin, service_advisor, or safety role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Status distribution returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       status:
+ *                         type: string
+ *                       count:
+ *                         type: integer
+ *                 count:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/vehicles/status', authMiddleware, requireRole(['admin', 'service_advisor', 'safety']), async (req, res) => {
 	try {
 		const { locationId } = req.query;
@@ -639,6 +1168,77 @@ router.get('/vehicles/status', authMiddleware, requireRole(['admin', 'service_ad
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/vehicles/maintenance:
+ *   get:
+ *     summary: Vehicle maintenance due report
+ *     description: Lists vehicles whose next preventive maintenance date falls within a given range (defaults to today through 30 days out). Requires admin, service_advisor, or safety role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of PM-due window (defaults to today)
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of PM-due window (defaults to today + 30 days)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Maintenance due list returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 range:
+ *                   type: object
+ *                   properties:
+ *                     from:
+ *                       type: string
+ *                     to:
+ *                       type: string
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/vehicles/maintenance', authMiddleware, requireRole(['admin', 'service_advisor', 'safety']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -682,7 +1282,66 @@ router.get('/vehicles/maintenance', authMiddleware, requireRole(['admin', 'servi
 // New Reports & Analytics
 // =========================
 
-// Dashboard KPIs
+/**
+ * @openapi
+ * /api/reports/dashboard/kpis:
+ *   get:
+ *     summary: Dashboard key performance indicators
+ *     description: Returns aggregated KPIs for revenue, open work orders, vehicles out of service, inventory value, low-stock items, and average work order completion time. Requires admin, accounting, service_advisor, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of period (defaults to first day of current month)
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of period (defaults to today)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: KPI data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalRevenueMtd:
+ *                       type: number
+ *                     outstandingBalance:
+ *                       type: number
+ *                     openWorkOrders:
+ *                       type: integer
+ *                     vehiclesOutOfService:
+ *                       type: integer
+ *                     inventoryValue:
+ *                       type: number
+ *                     lowStockItems:
+ *                       type: integer
+ *                     avgCompletionHours:
+ *                       type: number
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/dashboard/kpis', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'technician']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -747,7 +1406,60 @@ router.get('/dashboard/kpis', authMiddleware, requireRole(['admin', 'accounting'
 	}
 });
 
-// Dashboard charts
+/**
+ * @openapi
+ * /api/reports/dashboard/charts:
+ *   get:
+ *     summary: Dashboard chart data
+ *     description: Returns time-series revenue trend (by issued_date) and work order breakdown by type for chart rendering. Requires admin, accounting, service_advisor, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of period (defaults to first day of current month)
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of period (defaults to today)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Chart data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     revenueTrend:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     workOrdersByType:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/dashboard/charts', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'technician']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -784,7 +1496,56 @@ router.get('/dashboard/charts', authMiddleware, requireRole(['admin', 'accountin
 	}
 });
 
-// Financial summary
+/**
+ * @openapi
+ * /api/reports/financial/summary:
+ *   get:
+ *     summary: Financial summary report
+ *     description: Aggregates invoice totals (count, invoiced, paid, outstanding, average), total payments received, and revenue broken down by location. Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Financial summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     summary:
+ *                       type: object
+ *                     revenueByLocation:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/financial/summary', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -843,7 +1604,65 @@ router.get('/financial/summary', authMiddleware, requireRole(['admin', 'accounti
 	}
 });
 
-// Work orders summary
+/**
+ * @openapi
+ * /api/reports/work-orders/summary:
+ *   get:
+ *     summary: Work orders summary report
+ *     description: Returns total, completed, and open work order counts with average completion time in hours, plus a breakdown by status. Requires admin, service_advisor, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Work orders summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: integer
+ *                         completed:
+ *                           type: integer
+ *                         open:
+ *                           type: integer
+ *                         avgCompletionHours:
+ *                           type: number
+ *                     byStatus:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/work-orders/summary', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -883,7 +1702,49 @@ router.get('/work-orders/summary', authMiddleware, requireRole(['admin', 'servic
 	}
 });
 
-// Financial aging
+/**
+ * @openapi
+ * /api/reports/financial/aging:
+ *   get:
+ *     summary: Financial accounts receivable aging
+ *     description: Lists individual unpaid invoices with aging bucket (0-30, 31-60, 61-90, 90+). Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: asOfDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Reference date for aging calculation (defaults to today)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Aging data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 asOf:
+ *                   type: string
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/financial/aging', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		const { asOfDate, locationId } = req.query;
@@ -917,7 +1778,58 @@ router.get('/financial/aging', authMiddleware, requireRole(['admin', 'accounting
 	}
 });
 
-// Financial payments
+/**
+ * @openapi
+ * /api/reports/financial/payments:
+ *   get:
+ *     summary: Financial payments report
+ *     description: Lists individual invoice payments with method, amount, reference number, and associated customer/location. Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Payments list returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/financial/payments', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, customerId } = req.query;
@@ -948,7 +1860,40 @@ router.get('/financial/payments', authMiddleware, requireRole(['admin', 'account
 	}
 });
 
-// Work order summary
+/**
+ * @openapi
+ * /api/reports/work-orders/summary-v2:
+ *   get:
+ *     summary: Work orders summary (alternate registration)
+ *     description: Duplicate route registration for work orders summary with admin and service_advisor roles. Returns total, completed, and open counts with average completion time and breakdown by status.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Work orders summary returned
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/work-orders/summary', authMiddleware, requireRole(['admin', 'service_advisor']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -985,7 +1930,40 @@ router.get('/work-orders/summary', authMiddleware, requireRole(['admin', 'servic
 	}
 });
 
-// Dashboard KPIs - using available seeded tables
+/**
+ * @openapi
+ * /api/reports/dashboard/kpis-v2:
+ *   get:
+ *     summary: Dashboard KPIs (seeded tables fallback)
+ *     description: Alternate KPI endpoint using seeded tables. Returns work order, vehicle, and customer counts. Requires admin, accounting, service_advisor, inventory_manager, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: KPI data returned
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/dashboard/kpis', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'inventory_manager', 'technician']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -1033,7 +2011,24 @@ router.get('/dashboard/kpis', authMiddleware, requireRole(['admin', 'accounting'
 	}
 });
 
-// Dashboard charts
+/**
+ * @openapi
+ * /api/reports/dashboard/charts-v2:
+ *   get:
+ *     summary: Dashboard charts (seeded tables fallback)
+ *     description: Alternate chart endpoint using seeded tables. Returns work orders grouped by status. Requires admin, accounting, service_advisor, inventory_manager, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Chart data returned
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/dashboard/charts', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'inventory_manager', 'technician']), async (req, res) => {
 	try {
 		// Get work orders by status
@@ -1055,6 +2050,42 @@ router.get('/dashboard/charts', authMiddleware, requireRole(['admin', 'accountin
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/invoices/summary:
+ *   get:
+ *     summary: Invoice summary report (stub)
+ *     description: Placeholder endpoint returning zeroed invoice summary. Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Invoice summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     invoice_count:
+ *                       type: integer
+ *                     total_revenue:
+ *                       type: number
+ *                     paid_revenue:
+ *                       type: number
+ *                     outstanding_balance:
+ *                       type: number
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/invoices/summary', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		res.json({ success: true, data: { invoice_count: 0, total_revenue: 0, paid_revenue: 0, outstanding_balance: 0 } });
@@ -1064,6 +2095,42 @@ router.get('/invoices/summary', authMiddleware, requireRole(['admin', 'accountin
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/invoices/aging:
+ *   get:
+ *     summary: Invoice aging report (stub)
+ *     description: Placeholder endpoint returning zeroed aging buckets. Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Invoice aging returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     0-30:
+ *                       type: number
+ *                     31-60:
+ *                       type: number
+ *                     61-90:
+ *                       type: number
+ *                     90+:
+ *                       type: number
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/invoices/aging', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		res.json({ success: true, data: { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0 } });
@@ -2035,6 +3102,154 @@ const v2Builders = {
 	'fully-loaded-profit': buildFullyLoadedProfit
 };
 
+/**
+ * @openapi
+ * /api/reports/v2/{reportKey}:
+ *   get:
+ *     summary: V2 analytics reports
+ *     description: |
+ *       Dynamic analytics endpoint serving 12 report keys. Requires admin, accounting, dispatcher, dispatch, or owner_operator role.
+ *       Results are cached for 60 seconds per tenant/entity/filter combination.
+ *
+ *       Available report keys:
+ *       - **overview** — Revenue, expenses, gross profit with trend data
+ *       - **emails** — Invoice email event history
+ *       - **total-revenue** — Revenue by period from completed loads
+ *       - **rate-per-mile** — Revenue per loaded mile from settlement load items
+ *       - **revenue-by-dispatcher** — Revenue grouped by dispatcher
+ *       - **payment-summary** — Payments by method with outstanding balance
+ *       - **expenses** — Expense breakdown (settlement adjustments, fuel, tolls)
+ *       - **gross-profit** — Revenue minus expenses by period
+ *       - **gross-profit-per-load** — Per-load gross profit (rate - fuel - tolls - adjustments)
+ *       - **profit-loss** — Full P&L: revenue, direct costs, operating expenses, net profit
+ *       - **direct-load-profit** — Per-load: rate minus driver pay, fuel, and tolls
+ *       - **fully-loaded-profit** — Direct load profit minus prorated period costs (insurance, ELD, maintenance). Supports groupBy: load, truck, or driver.
+ *
+ *       Common filter parameters (all optional):
+ *       - startDate / endDate — date range (defaults to last 30 days)
+ *       - dispatcherId — filter loads by dispatcher
+ *       - driverId — filter by driver
+ *       - truckId — filter by truck (direct-load-profit, fully-loaded-profit)
+ *       - status — filter loads by status
+ *       - period — aggregation period: day, week (default), or month
+ *       - groupBy — load (default), truck, or driver (fully-loaded-profit only)
+ *       - limit / offset — pagination (max 1000)
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: reportKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - overview
+ *             - emails
+ *             - total-revenue
+ *             - rate-per-mile
+ *             - revenue-by-dispatcher
+ *             - payment-summary
+ *             - expenses
+ *             - gross-profit
+ *             - gross-profit-per-load
+ *             - profit-loss
+ *             - direct-load-profit
+ *             - fully-loaded-profit
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dispatcherId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: driverId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: truckId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [day, week, month]
+ *           default: week
+ *       - in: query
+ *         name: groupBy
+ *         schema:
+ *           type: string
+ *           enum: [load, truck, driver]
+ *           default: load
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Report data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 cards:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       key:
+ *                         type: string
+ *                       label:
+ *                         type: string
+ *                       value:
+ *                         type: number
+ *                 summary:
+ *                   type: object
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     generatedAt:
+ *                       type: string
+ *                     reportKey:
+ *                       type: string
+ *                     filters:
+ *                       type: object
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 for (const [key, builder] of Object.entries(v2Builders)) {
 	router.get(`/v2/${key}`, authMiddleware, requireRole(V2_ALLOWED_ROLES), async (req, res) => {
 		try {
@@ -2066,6 +3281,117 @@ function toCsv(rows) {
 	return [headers.join(','), ...rows.map((r) => headers.map((h) => escape(r[h])).join(','))].join('\n');
 }
 
+/**
+ * @openapi
+ * /api/reports/v2/export/{reportKey}:
+ *   get:
+ *     summary: Export V2 report as CSV or PDF
+ *     description: |
+ *       Exports any V2 report key as a downloadable CSV (default) or PDF file.
+ *       Accepts the same filter parameters as the corresponding /api/reports/v2/{reportKey} endpoint.
+ *       Requires admin, accounting, dispatcher, dispatch, or owner_operator role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: reportKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - overview
+ *             - emails
+ *             - total-revenue
+ *             - rate-per-mile
+ *             - revenue-by-dispatcher
+ *             - payment-summary
+ *             - expenses
+ *             - gross-profit
+ *             - gross-profit-per-load
+ *             - profit-loss
+ *             - direct-load-profit
+ *             - fully-loaded-profit
+ *       - in: query
+ *         name: format
+ *         schema:
+ *           type: string
+ *           enum: [csv, pdf]
+ *           default: csv
+ *         description: Export format
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dispatcherId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: driverId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: truckId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [day, week, month]
+ *           default: week
+ *       - in: query
+ *         name: groupBy
+ *         schema:
+ *           type: string
+ *           enum: [load, truck, driver]
+ *           default: load
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: File download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       404:
+ *         description: Unknown report key
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ *       501:
+ *         description: PDF export unavailable (pdfkit not installed)
+ */
 router.get('/v2/export/:reportKey', authMiddleware, requireRole(V2_ALLOWED_ROLES), async (req, res) => {
 	try {
 		const reportKey = req.params.reportKey;

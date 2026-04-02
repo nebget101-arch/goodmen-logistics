@@ -93,7 +93,92 @@ async function tableExists(tableName) {
 // Protect all dashboard routes: admin, safety
 router.use(auth(['admin', 'safety']));
 
-// GET dashboard statistics — isolated query groups via Promise.allSettled
+/**
+ * @openapi
+ * /api/dashboard/stats:
+ *   get:
+ *     summary: Dashboard statistics
+ *     description: |
+ *       Returns aggregated fleet dashboard statistics scoped to the caller's tenant and
+ *       operating entity. Data is grouped into independent query groups (drivers, vehicles,
+ *       loads, billing, hos, compliance) that resolve via Promise.allSettled -- if one group
+ *       fails the others still return. A `degraded` flag and `degradedGroups` array are
+ *       included when any group fails. Requires admin or safety role.
+ *     tags:
+ *       - Dashboard
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard statistics returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 activeDrivers:
+ *                   type: integer
+ *                 totalDrivers:
+ *                   type: integer
+ *                 activeVehicles:
+ *                   type: integer
+ *                 totalVehicles:
+ *                   type: integer
+ *                 oosVehicles:
+ *                   type: integer
+ *                 vehiclesNeedingMaintenance:
+ *                   type: integer
+ *                 activeLoads:
+ *                   type: integer
+ *                 pendingLoads:
+ *                   type: integer
+ *                 completedLoadsToday:
+ *                   type: integer
+ *                 loadsDispatched:
+ *                   type: integer
+ *                 loadsInTransit:
+ *                   type: integer
+ *                 loadsDelivered:
+ *                   type: integer
+ *                 loadsCanceled:
+ *                   type: integer
+ *                 billingPending:
+ *                   type: integer
+ *                 billingCanceled:
+ *                   type: integer
+ *                 billingInvoiced:
+ *                   type: integer
+ *                 billingFunded:
+ *                   type: integer
+ *                 billingPaid:
+ *                   type: integer
+ *                 hosViolations:
+ *                   type: integer
+ *                 hosWarnings:
+ *                   type: integer
+ *                 dqfComplianceRate:
+ *                   type: number
+ *                 expiredMedCerts:
+ *                   type: integer
+ *                 upcomingMedCerts:
+ *                   type: integer
+ *                 expiredCDLs:
+ *                   type: integer
+ *                 clearinghouseIssues:
+ *                   type: integer
+ *                 degraded:
+ *                   type: boolean
+ *                   description: Present and true when one or more query groups failed
+ *                 degradedGroups:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   description: Names of groups that failed (drivers, vehicles, loads, billing, hos, compliance)
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/stats', async (req, res) => {
   const startTime = Date.now();
   try {
@@ -219,7 +304,53 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// GET compliance alerts
+/**
+ * @openapi
+ * /api/dashboard/alerts:
+ *   get:
+ *     summary: Compliance alerts
+ *     description: |
+ *       Generates real-time compliance and maintenance alerts for the caller's
+ *       tenant/operating entity. Checks active drivers for expired or soon-to-expire
+ *       medical certificates and CDLs, low DQF completeness, Clearinghouse issues,
+ *       and vehicles that are out of service or have overdue/upcoming PM dates.
+ *       Alerts are sorted by severity (critical first). Requires admin or safety role.
+ *     tags:
+ *       - Dashboard
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Alerts returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   type:
+ *                     type: string
+ *                     enum: [critical, warning]
+ *                   category:
+ *                     type: string
+ *                     enum: [driver, vehicle, maintenance, compliance]
+ *                   message:
+ *                     type: string
+ *                   driverId:
+ *                     type: string
+ *                     format: uuid
+ *                   vehicleId:
+ *                     type: string
+ *                     format: uuid
+ *                   date:
+ *                     type: string
+ *                     format: date
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/alerts', auth(['admin', 'safety']), async (req, res) => {
   try {
     const alerts = [];

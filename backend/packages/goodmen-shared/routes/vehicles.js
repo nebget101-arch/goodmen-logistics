@@ -97,6 +97,46 @@ function vehiclesRoleGate(req, res, next) {
 
 router.use(vehiclesRoleGate);
 
+/**
+ * @openapi
+ * /api/vehicles/decode-vin/{vin}:
+ *   get:
+ *     summary: Decode a VIN using NHTSA vPIC
+ *     description: >-
+ *       Calls the NHTSA Vehicle Product Information Catalog API to decode a VIN
+ *       and returns make, model, and year information.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: vin
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Vehicle Identification Number to decode
+ *     responses:
+ *       200:
+ *         description: Decoded VIN data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 vin:
+ *                   type: string
+ *                 make:
+ *                   type: string
+ *                 model:
+ *                   type: string
+ *                 year:
+ *                   type: string
+ *       400:
+ *         description: VIN is required
+ *       500:
+ *         description: Failed to decode VIN
+ */
 // GET decode VIN using NHTSA vPIC
 router.get('/decode-vin/:vin', async (req, res) => {
   const startTime = Date.now();
@@ -126,6 +166,64 @@ router.get('/decode-vin/:vin', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/vehicles/customer:
+ *   post:
+ *     summary: Create a customer vehicle
+ *     description: >-
+ *       Creates a new vehicle in the customer_vehicles table. Requires tenant context.
+ *       Used for shop client vehicles that are not part of the fleet.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               unit_number:
+ *                 type: string
+ *               vin:
+ *                 type: string
+ *               make:
+ *                 type: string
+ *               model:
+ *                 type: string
+ *               year:
+ *                 type: string
+ *               license_plate:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               mileage:
+ *                 type: integer
+ *               inspection_expiry:
+ *                 type: string
+ *                 format: date
+ *               next_pm_due:
+ *                 type: string
+ *                 format: date
+ *               next_pm_mileage:
+ *                 type: integer
+ *               customer_id:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       201:
+ *         description: Customer vehicle created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       403:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 // POST create new customer vehicle
 router.post('/customer', async (req, res) => {
   const startTime = Date.now();
@@ -207,6 +305,39 @@ router.use(auth([
 
 
 
+/**
+ * @openapi
+ * /api/vehicles/search:
+ *   get:
+ *     summary: Search vehicles by VIN
+ *     description: >-
+ *       Returns vehicles whose VIN contains the provided substring (case-insensitive).
+ *       Results include signed download URLs for any attached file.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: vin
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Partial or full VIN to search for
+ *     responses:
+ *       200:
+ *         description: Matching vehicles
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       400:
+ *         description: VIN query parameter is required
+ *       500:
+ *         description: Server error
+ */
 // GET vehicles by (partial) VIN
 router.get('/search', async (req, res) => {
   const vin = req.query.vin;
@@ -361,6 +492,36 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/vehicles/{id}:
+ *   get:
+ *     summary: Get vehicle by ID
+ *     description: Returns a single vehicle by its UUID from the all_vehicles view.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Vehicle ID
+ *     responses:
+ *       200:
+ *         description: Vehicle details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       404:
+ *         description: Vehicle not found
+ *       500:
+ *         description: Server error
+ */
 // GET vehicle by ID
 router.get('/:id', async (req, res) => {
   try {
@@ -459,6 +620,48 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/vehicles/{id}:
+ *   put:
+ *     summary: Update a vehicle
+ *     description: >-
+ *       Updates vehicle fields dynamically. Falls back to customer_vehicles table
+ *       if the vehicle is not found in the internal vehicles table.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Vehicle ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Any vehicle column as a key-value pair
+ *             additionalProperties: true
+ *     responses:
+ *       200:
+ *         description: Vehicle updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: No fields to update
+ *       404:
+ *         description: Vehicle not found
+ *       500:
+ *         description: Server error
+ */
 // PUT update vehicle
 router.put('/:id', async (req, res) => {
   const startTime = Date.now();
@@ -563,6 +766,40 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/vehicles/{id}:
+ *   delete:
+ *     summary: Delete a vehicle
+ *     description: >-
+ *       Deletes a vehicle from the internal vehicles table or the customer_vehicles table.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Vehicle ID
+ *     responses:
+ *       200:
+ *         description: Vehicle deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Vehicle not found
+ *       500:
+ *         description: Server error
+ */
 // DELETE vehicle
 router.delete('/:id', async (req, res) => {
   try {
@@ -581,6 +818,30 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/vehicles/maintenance/needed:
+ *   get:
+ *     summary: List vehicles needing maintenance
+ *     description: >-
+ *       Returns vehicles whose next PM due date is within 30 days or whose
+ *       status is out-of-service.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Vehicles needing maintenance
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       500:
+ *         description: Server error
+ */
 // GET vehicles needing maintenance
 router.get('/maintenance/needed', async (req, res) => {
   try {
@@ -599,6 +860,36 @@ router.get('/maintenance/needed', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/vehicles/{id}/documents:
+ *   get:
+ *     summary: List vehicle documents
+ *     description: Returns all documents attached to the specified vehicle, ordered by creation date descending.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Vehicle ID
+ *     responses:
+ *       200:
+ *         description: List of vehicle documents
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       500:
+ *         description: Server error
+ */
 // GET vehicle documents
 router.get('/:id/documents', async (req, res) => {
   try {
@@ -613,6 +904,66 @@ router.get('/:id/documents', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/vehicles/{id}/documents:
+ *   post:
+ *     summary: Upload a vehicle document
+ *     description: >-
+ *       Creates a vehicle document record with an R2 storage key. The file must
+ *       already be uploaded to R2; this endpoint records the metadata. Returns
+ *       the document with a signed download URL.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Vehicle ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file_path
+ *             properties:
+ *               document_type:
+ *                 type: string
+ *               file_name:
+ *                 type: string
+ *               file_path:
+ *                 type: string
+ *                 description: R2 object key
+ *               file_size:
+ *                 type: integer
+ *               mime_type:
+ *                 type: string
+ *               expiry_date:
+ *                 type: string
+ *                 format: date
+ *               uploaded_by:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Document record created with download URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: file_path is required
+ *       500:
+ *         description: Server error
+ */
 // POST upload vehicle document
 router.post('/:id/documents', async (req, res) => {
   const startTime = Date.now();
@@ -653,6 +1004,47 @@ router.post('/:id/documents', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/vehicles/{id}/documents/{documentId}:
+ *   delete:
+ *     summary: Delete a vehicle document
+ *     description: >-
+ *       Deletes the document record and removes the file from R2 storage.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Vehicle ID
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Document ID
+ *     responses:
+ *       200:
+ *         description: Document deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Document not found
+ *       500:
+ *         description: Server error
+ */
 // DELETE vehicle document
 router.delete('/:id/documents/:documentId', async (req, res) => {
   try {

@@ -170,6 +170,57 @@ async function routeEvent(event) {
   }
 }
 
+/**
+ * @openapi
+ * /api/stripe/webhook:
+ *   post:
+ *     summary: Stripe webhook receiver
+ *     description: >
+ *       Receives Stripe webhook events. The request body must be raw JSON (not parsed)
+ *       so the stripe-signature header can be verified against STRIPE_WEBHOOK_SECRET.
+ *       Handled event types:
+ *       - setup_intent.succeeded — logs successful SetupIntent
+ *       - invoice.payment_succeeded — marks trial as converted when first invoice is paid
+ *       - invoice.payment_failed — sets a 3-day grace period and logs an audit entry
+ *       - customer.subscription.updated — syncs extra seat quantities from the subscription
+ *       The endpoint acknowledges with 200 immediately and processes the event asynchronously.
+ *     tags:
+ *       - Billing
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: >
+ *               Raw Stripe event payload. Key fields: type (event type string),
+ *               id (event ID), data.object (event-specific resource).
+ *               See https://docs.stripe.com/api/events for full schema.
+ *             properties:
+ *               id: { type: string, description: Stripe event ID }
+ *               type: { type: string, description: "Event type (e.g. invoice.payment_succeeded)" }
+ *               data:
+ *                 type: object
+ *                 properties:
+ *                   object: { type: object, description: Event-specific resource }
+ *     parameters:
+ *       - in: header
+ *         name: stripe-signature
+ *         required: true
+ *         schema: { type: string }
+ *         description: Stripe webhook signature for payload verification
+ *     responses:
+ *       200:
+ *         description: Event received and queued for async processing
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 received: { type: boolean, example: true }
+ *       400:
+ *         description: Missing stripe-signature header, missing webhook secret, or invalid signature
+ */
 router.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   const signature = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;

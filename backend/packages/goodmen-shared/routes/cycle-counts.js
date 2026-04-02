@@ -19,8 +19,41 @@ function requireRole(allowedRoles) {
 }
 
 /**
- * GET /api/cycle-counts
- * Get cycle counts for a location
+ * @openapi
+ * /api/cycle-counts:
+ *   get:
+ *     summary: List cycle counts
+ *     description: Returns all cycle counts for a location, ordered by creation date descending. Includes creator, assignee, and approver names.
+ *     tags:
+ *       - Cycle Counts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Location UUID
+ *     responses:
+ *       200:
+ *         description: Cycle counts list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Missing locationId
+ *       500:
+ *         description: Server error
  */
 router.get('/', authMiddleware, async (req, res) => {
 	try {
@@ -53,8 +86,48 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/cycle-counts/:id
- * Get a single cycle count with its lines
+ * @openapi
+ * /api/cycle-counts/{id}:
+ *   get:
+ *     summary: Get a cycle count by ID
+ *     description: Returns a single cycle count with its line items, including part details and variance quantities.
+ *     tags:
+ *       - Cycle Counts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Cycle count UUID
+ *     responses:
+ *       200:
+ *         description: Cycle count with lines
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     lines:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       404:
+ *         description: Cycle count not found
+ *       500:
+ *         description: Server error
  */
 router.get('/:id', authMiddleware, async (req, res) => {
 	try {
@@ -100,10 +173,57 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 /**
- * POST /api/cycle-counts
- * Create a new cycle count (DRAFT)
- * Method: CATEGORY, BIN_RANGE, or SELECTED_PARTS
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/cycle-counts:
+ *   post:
+ *     summary: Create a cycle count
+ *     description: Creates a new DRAFT cycle count and auto-generates line items from inventory based on the chosen method (CATEGORY, BIN_RANGE, or SELECTED_PARTS). Requires Admin or Parts Manager role.
+ *     tags:
+ *       - Cycle Counts
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - locationId
+ *               - method
+ *             properties:
+ *               locationId:
+ *                 type: string
+ *                 format: uuid
+ *               method:
+ *                 type: string
+ *                 enum: [CATEGORY, BIN_RANGE, SELECTED_PARTS]
+ *               filterValue:
+ *                 description: Category name, bin range object {startBin, endBin}, or array of part UUIDs depending on method
+ *               assignedToUserId:
+ *                 type: string
+ *                 format: uuid
+ *               countDate:
+ *                 type: string
+ *                 format: date-time
+ *     responses:
+ *       201:
+ *         description: Cycle count created with line items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid method or missing fields
+ *       404:
+ *         description: Location not found
  */
 router.post('/', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
@@ -216,9 +336,63 @@ router.post('/', authMiddleware, requireRole(['admin', 'parts_manager']), async 
 });
 
 /**
- * PUT /api/cycle-counts/:id/lines/:lineId
- * Update a cycle count line with counted quantity
- * Allowed in DRAFT and COUNTING status
+ * @openapi
+ * /api/cycle-counts/{id}/lines/{lineId}:
+ *   put:
+ *     summary: Update a cycle count line
+ *     description: Records the physical counted quantity for a cycle count line item. Only allowed when the cycle count is in DRAFT or COUNTING status.
+ *     tags:
+ *       - Cycle Counts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Cycle count UUID
+ *       - in: path
+ *         name: lineId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Cycle count line UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - countedQty
+ *             properties:
+ *               countedQty:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Physical counted quantity
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Line updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid status or missing countedQty
+ *       404:
+ *         description: Cycle count or line not found
  */
 router.put('/:id/lines/:lineId', authMiddleware, async (req, res) => {
 	try {
@@ -268,9 +442,41 @@ router.put('/:id/lines/:lineId', authMiddleware, async (req, res) => {
 });
 
 /**
- * POST /api/cycle-counts/:id/submit
- * Submit a cycle count (transition to SUBMITTED)
- * All lines must have countedQty
+ * @openapi
+ * /api/cycle-counts/{id}/submit:
+ *   post:
+ *     summary: Submit a cycle count
+ *     description: Transitions the cycle count from DRAFT/COUNTING to SUBMITTED. All line items must have a counted quantity before submission is allowed.
+ *     tags:
+ *       - Cycle Counts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Cycle count UUID
+ *     responses:
+ *       200:
+ *         description: Cycle count submitted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Incomplete lines or invalid status
+ *       404:
+ *         description: Cycle count not found
  */
 router.post('/:id/submit', authMiddleware, async (req, res) => {
 	try {
@@ -315,10 +521,41 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
 });
 
 /**
- * POST /api/cycle-counts/:id/approve
- * Approve a cycle count and post variances
- * Creates inventory transactions for variance qty
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/cycle-counts/{id}/approve:
+ *   post:
+ *     summary: Approve a cycle count
+ *     description: Approves a SUBMITTED cycle count, creates CYCLE_COUNT_ADJUST inventory transactions for variances, and updates on-hand quantities. This is an ADJUST transaction type. Requires Admin or Parts Manager role.
+ *     tags:
+ *       - Cycle Counts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Cycle count UUID
+ *     responses:
+ *       200:
+ *         description: Cycle count approved and variances posted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid status (must be SUBMITTED)
+ *       404:
+ *         description: Cycle count not found
  */
 router.post('/:id/approve', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {

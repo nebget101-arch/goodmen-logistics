@@ -169,6 +169,31 @@ async function resolveUserIdByUsername(username) {
   return user ? user.id : null;
 }
 
+/**
+ * @openapi
+ * /api/work-orders/bulk-upload/template:
+ *   get:
+ *     summary: Download bulk upload Excel template
+ *     description: >-
+ *       Returns an Excel (.xlsx) template file with sample data and instructions
+ *       for bulk-uploading work orders. The template includes columns for vehicle
+ *       identification, customer info, type, priority, and status. Status workflow:
+ *       DRAFT -> IN_PROGRESS -> WAITING_PARTS -> COMPLETED -> CLOSED.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Excel template file download
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       500:
+ *         description: Failed to generate template
+ */
 router.get('/bulk-upload/template', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'shop_clerk', 'service_writer']), (_req, res) => {
   try {
     const wb = XLSX.utils.book_new();
@@ -227,6 +252,77 @@ router.get('/bulk-upload/template', authMiddleware, requireRole(['admin', 'servi
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/bulk-upload:
+ *   post:
+ *     summary: Bulk upload work orders from Excel file
+ *     description: >-
+ *       Parses an uploaded Excel file and creates work orders for each valid row.
+ *       Vehicles are resolved by VIN or unit number, locations by name or ID,
+ *       and customers by email, DOT number, or name. Status workflow:
+ *       DRAFT -> IN_PROGRESS -> WAITING_PARTS -> COMPLETED -> CLOSED.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Excel file (.xlsx or .xls)
+ *     responses:
+ *       200:
+ *         description: Bulk upload results with successful and failed rows
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 results:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     successful:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           row:
+ *                             type: integer
+ *                           workOrderId:
+ *                             type: string
+ *                           workOrderNumber:
+ *                             type: string
+ *                     failed:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           row:
+ *                             type: integer
+ *                           errors:
+ *                             type: array
+ *                             items:
+ *                               type: string
+ *       400:
+ *         description: No file provided or parse error
+ *       500:
+ *         description: Server error
+ */
 router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'shop_clerk', 'service_writer']), bulkUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -339,6 +435,66 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'service_advis
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders:
+ *   get:
+ *     summary: List work orders
+ *     description: >-
+ *       Returns a paginated list of work orders with optional query filters.
+ *       Status workflow: DRAFT -> IN_PROGRESS -> WAITING_PARTS -> COMPLETED -> CLOSED.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [DRAFT, IN_PROGRESS, WAITING_PARTS, COMPLETED, CLOSED, CANCELED]
+ *         description: Filter by work order status
+ *       - in: query
+ *         name: vehicleId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by vehicle ID
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by customer ID
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Results per page
+ *     responses:
+ *       200:
+ *         description: Paginated work orders list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *       500:
+ *         description: Server error
+ */
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const result = await workOrdersService.listWorkOrders(req.query || {}, req.context || null);
@@ -349,6 +505,65 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders:
+ *   post:
+ *     summary: Create a work order
+ *     description: >-
+ *       Creates a new work order. New work orders typically start in DRAFT status.
+ *       Status workflow: DRAFT -> IN_PROGRESS -> WAITING_PARTS -> COMPLETED -> CLOSED.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               vehicleId:
+ *                 type: string
+ *                 format: uuid
+ *               customerId:
+ *                 type: string
+ *                 format: uuid
+ *               locationId:
+ *                 type: string
+ *                 format: uuid
+ *               type:
+ *                 type: string
+ *                 enum: [REPAIR, PM, INSPECTION, TIRE, OTHER]
+ *               priority:
+ *                 type: string
+ *                 enum: [LOW, NORMAL, HIGH, URGENT]
+ *               status:
+ *                 type: string
+ *                 enum: [DRAFT, IN_PROGRESS, WAITING_PARTS, COMPLETED, CLOSED, CANCELED]
+ *               description:
+ *                 type: string
+ *               odometerMiles:
+ *                 type: number
+ *               assignedMechanicUserId:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       201:
+ *         description: Work order created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 router.post('/', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic', 'technician']), async (req, res) => {
   try {
     const workOrder = await workOrdersService.createWorkOrder(req.body || {}, req.user?.id, req.context || null);
@@ -359,6 +574,44 @@ router.post('/', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}:
+ *   get:
+ *     summary: Get work order by ID
+ *     description: >-
+ *       Returns a single work order with all related data (labor lines, parts,
+ *       documents, invoices). Status workflow:
+ *       DRAFT -> IN_PROGRESS -> WAITING_PARTS -> COMPLETED -> CLOSED.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     responses:
+ *       200:
+ *         description: Work order details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       404:
+ *         description: Work order not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const data = await workOrdersService.getWorkOrderById(req.params.id, req.context || null);
@@ -370,6 +623,69 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}:
+ *   put:
+ *     summary: Update a work order
+ *     description: >-
+ *       Updates an existing work order's fields. UUID fields that are empty strings
+ *       are normalized to null. Status workflow:
+ *       DRAFT -> IN_PROGRESS -> WAITING_PARTS -> COMPLETED -> CLOSED.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               vehicleId:
+ *                 type: string
+ *                 format: uuid
+ *               customerId:
+ *                 type: string
+ *                 format: uuid
+ *               locationId:
+ *                 type: string
+ *                 format: uuid
+ *               assignedMechanicUserId:
+ *                 type: string
+ *                 format: uuid
+ *               type:
+ *                 type: string
+ *               priority:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               odometerMiles:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Work order updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic', 'technician']), async (req, res) => {
   try {
     const payload = req.body || {};
@@ -391,6 +707,58 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'sho
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/status:
+ *   patch:
+ *     summary: Transition work order status
+ *     description: >-
+ *       Updates the status of a work order. Status workflow:
+ *       DRAFT -> IN_PROGRESS -> WAITING_PARTS -> COMPLETED -> CLOSED.
+ *       Restricted statuses (closed, approved, void) require manager role.
+ *       shop_clerk may only set open, in_progress, waiting_parts, completed,
+ *       or ready_to_invoice.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [DRAFT, IN_PROGRESS, WAITING_PARTS, COMPLETED, CLOSED, APPROVED, VOID, CANCELED]
+ *     responses:
+ *       200:
+ *         description: Status updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Invalid status transition
+ *       403:
+ *         description: Insufficient role for restricted status
+ */
 // Status transitions: shop_clerk may set open/in_progress/waiting_parts/completed/ready_to_invoice.
 // closed/approved/void require manager role (enforced by requireManagerForFinalStatus).
 router.patch('/:id/status', authMiddleware,
@@ -406,6 +774,55 @@ router.patch('/:id/status', authMiddleware,
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/labor:
+ *   post:
+ *     summary: Add a labor line to a work order
+ *     description: Adds a new labor line item to the specified work order.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               description:
+ *                 type: string
+ *               hours:
+ *                 type: number
+ *               rate:
+ *                 type: number
+ *               technicianId:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       201:
+ *         description: Labor line added
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 // Labor
 router.post('/:id/labor', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
@@ -417,6 +834,62 @@ router.post('/:id/labor', authMiddleware, requireRole(['admin', 'service_advisor
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/labor/{laborId}:
+ *   put:
+ *     summary: Update a labor line
+ *     description: Updates an existing labor line on the specified work order.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *       - in: path
+ *         name: laborId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Labor line ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               description:
+ *                 type: string
+ *               hours:
+ *                 type: number
+ *               rate:
+ *                 type: number
+ *               technicianId:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       200:
+ *         description: Labor line updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 router.put('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const line = await workOrdersService.updateLaborLine(req.params.id, req.params.laborId, req.body || {});
@@ -427,6 +900,46 @@ router.put('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'service
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/labor/{laborId}:
+ *   delete:
+ *     summary: Delete a labor line
+ *     description: >-
+ *       Removes a labor line from the work order. Manager-only operation;
+ *       shop_clerk cannot delete labor lines.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *       - in: path
+ *         name: laborId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Labor line ID
+ *     responses:
+ *       200:
+ *         description: Labor line deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       400:
+ *         description: Validation error
+ */
 // Labor delete is manager-only; shop_clerk cannot remove labor lines.
 router.delete('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'service_writer']), async (req, res) => {
   try {
@@ -438,6 +951,53 @@ router.delete('/:id/labor/:laborId', authMiddleware, requireRole(['admin', 'serv
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/parts:
+ *   post:
+ *     summary: Reserve a part for a work order
+ *     description: Reserves a part from inventory and adds it as a line item to the work order.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               partId:
+ *                 type: string
+ *                 format: uuid
+ *               quantity:
+ *                 type: number
+ *               unitPrice:
+ *                 type: number
+ *     responses:
+ *       201:
+ *         description: Part reserved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 // Parts
 router.post('/:id/parts', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
@@ -449,6 +1009,53 @@ router.post('/:id/parts', authMiddleware, requireRole(['admin', 'service_advisor
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/parts/scan:
+ *   post:
+ *     summary: Reserve parts by barcode scan
+ *     description: >-
+ *       Scans one or more barcodes and reserves the matching parts on the work order.
+ *       Resolves parts via the part_barcodes table.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               barcodes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of barcode values to scan
+ *     responses:
+ *       201:
+ *         description: Parts reserved from barcode scan
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 router.post('/:id/parts/scan', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const result = await workOrdersService.reservePartsFromBarcodes(req.params.id, req.body || {}, req.user?.id);
@@ -459,6 +1066,57 @@ router.post('/:id/parts/scan', authMiddleware, requireRole(['admin', 'service_ad
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/parts/{partLineId}/issue:
+ *   post:
+ *     summary: Issue a reserved part
+ *     description: >-
+ *       Transitions a reserved part line to issued status, deducting from inventory.
+ *       The part must already be reserved on the work order.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *       - in: path
+ *         name: partLineId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part line ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               quantity:
+ *                 type: number
+ *                 description: Quantity to issue (defaults to reserved quantity)
+ *     responses:
+ *       200:
+ *         description: Part issued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 router.post('/:id/parts/:partLineId/issue', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const updated = await workOrdersService.issuePart(req.params.id, req.params.partLineId, req.body || {}, req.user?.id);
@@ -469,6 +1127,60 @@ router.post('/:id/parts/:partLineId/issue', authMiddleware, requireRole(['admin'
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/parts/{partLineId}/return:
+ *   post:
+ *     summary: Return an issued part
+ *     description: >-
+ *       Returns a previously issued part back to inventory. Restores inventory
+ *       quantity and updates the part line status.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *       - in: path
+ *         name: partLineId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part line ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               quantity:
+ *                 type: number
+ *                 description: Quantity to return
+ *               reason:
+ *                 type: string
+ *                 description: Reason for return
+ *     responses:
+ *       200:
+ *         description: Part returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 router.post('/:id/parts/:partLineId/return', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
   try {
     const updated = await workOrdersService.returnPart(req.params.id, req.params.partLineId, req.body || {}, req.user?.id);
@@ -479,6 +1191,58 @@ router.post('/:id/parts/:partLineId/return', authMiddleware, requireRole(['admin
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/charges:
+ *   put:
+ *     summary: Update work order charges
+ *     description: >-
+ *       Updates pricing and charge information on the work order. Manager-only;
+ *       shop_clerk cannot modify charges.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               laborTotal:
+ *                 type: number
+ *               partsTotal:
+ *                 type: number
+ *               taxRate:
+ *                 type: number
+ *               discount:
+ *                 type: number
+ *               shopSuppliesFee:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Charges updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 // Charges
 // Charge/pricing updates: shop_manager and above only (not shop_clerk).
 router.put('/:id/charges', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_manager', 'service_writer']), async (req, res) => {
@@ -491,6 +1255,52 @@ router.put('/:id/charges', authMiddleware, requireRole(['admin', 'service_adviso
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/generate-invoice:
+ *   post:
+ *     summary: Generate invoice from work order
+ *     description: >-
+ *       Creates a draft invoice from the work order's labor, parts, and charges.
+ *       shop_clerk may generate draft invoices; posting requires manager role.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               notes:
+ *                 type: string
+ *               dueDate:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       201:
+ *         description: Invoice generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ */
 // Invoice integration
 // shop_clerk may generate a draft invoice from a work order (draft status; posting still requires manager).
 router.post('/:id/generate-invoice', authMiddleware, requireRole(['admin', 'service_advisor', 'accounting', 'shop_manager', 'shop_clerk', 'service_writer']), async (req, res) => {
@@ -503,6 +1313,43 @@ router.post('/:id/generate-invoice', authMiddleware, requireRole(['admin', 'serv
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/invoices:
+ *   get:
+ *     summary: List invoices for a work order
+ *     description: Returns all invoices linked to the specified work order.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     responses:
+ *       200:
+ *         description: List of invoices
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       404:
+ *         description: Work order not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id/invoices', authMiddleware, async (req, res) => {
   try {
     const data = await workOrdersService.getWorkOrderById(req.params.id, req.context || null);
@@ -514,6 +1361,57 @@ router.get('/:id/invoices', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/documents:
+ *   post:
+ *     summary: Upload a document to a work order
+ *     description: >-
+ *       Uploads a file to R2 storage and attaches it as a document to the work order.
+ *       Returns the document metadata and a signed download URL.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Document uploaded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 downloadUrl:
+ *                   type: string
+ *       400:
+ *         description: File is required
+ *       500:
+ *         description: Upload failed
+ */
 // Documents
 router.post('/:id/documents', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), upload.single('file'), async (req, res) => {
   try {
@@ -543,6 +1441,54 @@ router.post('/:id/documents', authMiddleware, requireRole(['admin', 'service_adv
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/documents:
+ *   get:
+ *     summary: List documents for a work order
+ *     description: Returns all documents attached to the work order with signed download URLs.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *     responses:
+ *       200:
+ *         description: List of documents with download URLs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       originalname:
+ *                         type: string
+ *                       mimetype:
+ *                         type: string
+ *                       size:
+ *                         type: integer
+ *                       downloadUrl:
+ *                         type: string
+ *       404:
+ *         description: Work order not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id/documents', authMiddleware, async (req, res) => {
   try {
     const data = await workOrdersService.getWorkOrderById(req.params.id, req.context || null);
@@ -561,6 +1507,48 @@ router.get('/:id/documents', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/work-orders/{id}/documents/{docId}/download:
+ *   get:
+ *     summary: Get download URL for a work order document
+ *     description: Returns a signed download URL for the specified document.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *       - in: path
+ *         name: docId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Document ID
+ *     responses:
+ *       200:
+ *         description: Signed download URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 downloadUrl:
+ *                   type: string
+ *       404:
+ *         description: Work order or document not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id/documents/:docId/download', authMiddleware, async (req, res) => {
   try {
     const data = await workOrdersService.getWorkOrderById(req.params.id, req.context || null);

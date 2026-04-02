@@ -31,8 +31,41 @@ async function generateTicketNumber(locationId) {
 }
 
 /**
- * GET /api/receiving
- * Get receiving tickets for a location
+ * @openapi
+ * /api/receiving:
+ *   get:
+ *     summary: List receiving tickets
+ *     description: Returns all receiving tickets for a location with their line items, ordered by creation date descending.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Location UUID
+ *     responses:
+ *       200:
+ *         description: Receiving tickets list with lines
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Missing locationId
+ *       500:
+ *         description: Server error
  */
 router.get('/', authMiddleware, async (req, res) => {
 	try {
@@ -79,8 +112,39 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/receiving/:id
- * Get a single receiving ticket
+ * @openapi
+ * /api/receiving/{id}:
+ *   get:
+ *     summary: Get a receiving ticket by ID
+ *     description: Returns a single receiving ticket with its line items and part details.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Receiving ticket UUID
+ *     responses:
+ *       200:
+ *         description: Receiving ticket with lines
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       404:
+ *         description: Receiving ticket not found
+ *       500:
+ *         description: Server error
  */
 router.get('/:id', authMiddleware, async (req, res) => {
 	try {
@@ -124,9 +188,50 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 /**
- * POST /api/receiving
- * Create a new receiving ticket (DRAFT)
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/receiving:
+ *   post:
+ *     summary: Create a receiving ticket
+ *     description: Creates a new DRAFT receiving ticket for a location. Requires Admin or Parts Manager role.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - locationId
+ *             properties:
+ *               locationId:
+ *                 type: string
+ *                 format: uuid
+ *               vendorName:
+ *                 type: string
+ *               referenceNumber:
+ *                 type: string
+ *                 description: PO or vendor reference number
+ *     responses:
+ *       201:
+ *         description: Receiving ticket created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Missing locationId
+ *       404:
+ *         description: Location not found
  */
 router.post('/', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
@@ -168,9 +273,63 @@ router.post('/', authMiddleware, requireRole(['admin', 'parts_manager']), async 
 });
 
 /**
- * POST /api/receiving/:id/lines
- * Add a line item to a receiving ticket
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/receiving/{id}/lines:
+ *   post:
+ *     summary: Add a line to a receiving ticket
+ *     description: Adds a part line item to a DRAFT receiving ticket. The ticket must be in DRAFT status. Requires Admin or Parts Manager role.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Receiving ticket UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - partId
+ *               - qtyReceived
+ *             properties:
+ *               partId:
+ *                 type: string
+ *                 format: uuid
+ *               qtyReceived:
+ *                 type: number
+ *                 minimum: 1
+ *               unitCost:
+ *                 type: number
+ *                 description: Overrides default part cost
+ *               binLocationOverride:
+ *                 type: string
+ *                 description: Override bin location for this receipt
+ *     responses:
+ *       201:
+ *         description: Line item added
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Ticket not in DRAFT status or invalid qty
+ *       404:
+ *         description: Ticket or part not found
  */
 router.post('/:id/lines', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
@@ -222,9 +381,46 @@ router.post('/:id/lines', authMiddleware, requireRole(['admin', 'parts_manager']
 });
 
 /**
- * DELETE /api/receiving/:ticketId/lines/:lineId
- * Remove a line item from a draft ticket
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/receiving/{ticketId}/lines/{lineId}:
+ *   delete:
+ *     summary: Remove a line from a receiving ticket
+ *     description: Deletes a line item from a DRAFT receiving ticket. Cannot remove lines from posted tickets. Requires Admin or Parts Manager role.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: ticketId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Receiving ticket UUID
+ *       - in: path
+ *         name: lineId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Line item UUID
+ *     responses:
+ *       200:
+ *         description: Line item deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Ticket not in DRAFT status
+ *       404:
+ *         description: Ticket or line not found
  */
 router.delete('/:ticketId/lines/:lineId', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
@@ -257,10 +453,41 @@ router.delete('/:ticketId/lines/:lineId', authMiddleware, requireRole(['admin', 
 });
 
 /**
- * POST /api/receiving/:id/post
- * Post (finalize) a receiving ticket
- * Creates transactions, updates inventory levels
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/receiving/{id}/post:
+ *   post:
+ *     summary: Post a receiving ticket
+ *     description: Finalizes a receiving ticket by creating RECEIVE inventory transactions for each line, incrementing on-hand quantities, and updating bin locations. This is a RECEIVE transaction type. Requires Admin or Parts Manager role.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Receiving ticket UUID
+ *     responses:
+ *       200:
+ *         description: Ticket posted and inventory updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Already posted, no lines, or invalid line data
+ *       404:
+ *         description: Receiving ticket not found
  */
 router.post('/:id/post', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {

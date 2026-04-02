@@ -5,6 +5,70 @@ const { query } = require('../internal/db');
 
 router.use(auth(['admin', 'dispatch', 'safety', 'fleet']));
 
+/**
+ * @openapi
+ * /api/equipment:
+ *   get:
+ *     summary: List equipment (trucks and trailers)
+ *     description: >-
+ *       Returns a filtered list of vehicles from the all_vehicles view for use
+ *       in dispatch and load assignment. Supports filtering by vehicle type
+ *       (truck/trailer), status, tenant, and operating entity. Returns an empty
+ *       array instead of an error if the database schema is not fully migrated.
+ *     tags:
+ *       - Equipment
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [truck, trailer]
+ *         description: Filter by vehicle type
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter by vehicle status (e.g. active, in-service)
+ *     responses:
+ *       200:
+ *         description: List of equipment
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       unit_number:
+ *                         type: string
+ *                       vin:
+ *                         type: string
+ *                       make:
+ *                         type: string
+ *                       model:
+ *                         type: string
+ *                       year:
+ *                         type: string
+ *                       vehicle_type:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       operating_entity_id:
+ *                         type: string
+ *                         format: uuid
+ *       500:
+ *         description: Server error
+ */
 router.get('/', async (req, res) => {
   try {
     const type = (req.query.type || '').toString().trim().toLowerCase();
