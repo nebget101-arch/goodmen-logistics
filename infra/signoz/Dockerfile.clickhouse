@@ -1,4 +1,4 @@
-FROM clickhouse/clickhouse-server:24.1
+FROM clickhouse/clickhouse-server:23.11.1.2711
 
 # Add single-node cluster config so SigNoz OTel Collector's
 # ON CLUSTER cluster DDL succeeds on a standalone instance.
