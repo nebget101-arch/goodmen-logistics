@@ -32,25 +32,47 @@ export class FuelService {
     return this.http.patch<FuelCardAccount>(`${this.base}/cards/${id}`, patch);
   }
 
-  getCardAssignments(cardId: string): Observable<CardDriverAssignment[]> {
-    return this.http.get<CardDriverAssignment[]>(`${this.base}/cards/${cardId}/assignments`);
+  /** `accountId` = fuel_card_accounts id; pass `fuelCardId` (fuel_cards row) to scope one physical card (FN-673). */
+  getCardAssignments(accountId: string, fuelCardId?: string): Observable<CardDriverAssignment[]> {
+    let url = `${this.base}/cards/${accountId}/assignments`;
+    if (fuelCardId) {
+      const p = new HttpParams().set('fuelCardId', fuelCardId);
+      url = `${url}?${p.toString()}`;
+    }
+    return this.http.get<CardDriverAssignment[]>(url);
   }
 
-  /** Backend expects camelCase `driverId` (and optional `cardNumberLast4` for per-card tracking). */
+  /** Backend: camelCase `driverId`; `fuelCardId` = fuel_cards.id for per-card assign/revoke scope. */
   assignDriver(
     accountId: string,
     driverId: string,
     notes?: string,
-    cardNumberLast4?: string
+    cardNumberLast4?: string,
+    fuelCardId?: string
   ): Observable<CardDriverAssignment> {
-    const body: { driverId: string; notes?: string; cardNumberLast4?: string } = { driverId };
+    const body: {
+      driverId: string;
+      notes?: string;
+      cardNumberLast4?: string;
+      fuelCardId?: string;
+    } = { driverId };
     if (notes) body.notes = notes;
     if (cardNumberLast4) body.cardNumberLast4 = cardNumberLast4;
+    if (fuelCardId) body.fuelCardId = fuelCardId;
     return this.http.post<CardDriverAssignment>(`${this.base}/cards/${accountId}/assign-driver`, body);
   }
 
-  revokeDriver(cardId: string, notes?: string): Observable<{ revoked: boolean }> {
-    return this.http.post<{ revoked: boolean }>(`${this.base}/cards/${cardId}/revoke-driver`, { notes });
+  revokeDriver(
+    accountId: string,
+    notes?: string,
+    fuelCardId?: string,
+    cardNumberLast4?: string
+  ): Observable<CardDriverAssignment> {
+    const body: { notes?: string; fuelCardId?: string; cardNumberLast4?: string } = {};
+    if (notes) body.notes = notes;
+    if (fuelCardId) body.fuelCardId = fuelCardId;
+    if (cardNumberLast4) body.cardNumberLast4 = cardNumberLast4;
+    return this.http.post<CardDriverAssignment>(`${this.base}/cards/${accountId}/revoke-driver`, body);
   }
 
   // ─── Cards (under Account) ─────────────────────────────────────────────────

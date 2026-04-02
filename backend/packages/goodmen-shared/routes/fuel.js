@@ -27,7 +27,7 @@
  *   POST   /api/fuel/exceptions/bulk-resolve
  *   POST   /api/fuel/reprocess-unmatched
  *   GET    /api/fuel/overview
- *   GET    /api/fuel/cards/:cardId/assignments
+ *   GET    /api/fuel/cards/:cardId/assignments (?fuelCardId= for one physical card)
  *   POST   /api/fuel/cards/:cardId/assign-driver
  *   POST   /api/fuel/cards/:cardId/revoke-driver
  *   GET    /api/fuel/driver-assignments
@@ -96,6 +96,45 @@ function requireTenant(req, res) {
   const tid = tenantId(req);
   if (!tid) { sendError(res, 401, 'Tenant context required'); return null; }
   return tid;
+}
+
+/** `cardId` route param is a fuel_card_accounts id (account). */
+async function loadPhysicalFuelCard(tenantId, accountId, fuelCardId) {
+  if (!fuelCardId) return null;
+  return knex('fuel_cards')
+    .where({
+      id: fuelCardId,
+      fuel_card_account_id: accountId,
+      tenant_id: tenantId
+    })
+    .first('id', 'card_number_last4');
+}
+
+async function countPhysicalCardsUnderAccount(tenantId, accountId) {
+  const r = await knex('fuel_cards')
+    .where({ fuel_card_account_id: accountId, tenant_id: tenantId })
+    .count('* as c')
+    .first();
+  return parseInt(r?.c, 10) || 0;
+}
+
+/**
+ * Active assignment rows that belong to this physical `fuel_cards` row (FN-673).
+ * Includes legacy rows: same account, null fuel_card_id, matching last4 or fully null (account-wide).
+ */
+function scopeAssignmentsToPhysicalCard(qb, physicalCard, alias = 'fuel_card_driver_assignments') {
+  const c = (name) => `${alias}.${name}`;
+  return qb.andWhere(function scopePhysical() {
+    this.where(c('fuel_card_id'), physicalCard.id);
+    if (physicalCard.card_number_last4) {
+      this.orWhere(function legacyLast4() {
+        this.whereNull(c('fuel_card_id')).where(c('card_number_last4'), physicalCard.card_number_last4);
+      });
+    }
+    this.orWhere(function legacyAccount() {
+      this.whereNull(c('fuel_card_id')).whereNull(c('card_number_last4'));
+    });
+  });
 }
 
 // ─── Provider templates ───────────────────────────────────────────────────────
@@ -189,16 +228,43 @@ router.patch('/cards/:id', async (req, res) => {
 
 /**
  * GET /cards/:cardId/assignments
- * List all assignments (active + revoked) for a fuel card.
+ * List assignments for a fuel card account. Optional query `fuelCardId` = `fuel_cards.id` scopes to one physical card.
  */
 router.get('/cards/:cardId/assignments', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const { cardId } = req.params;
+    const fuelCardId = req.query.fuelCardId || req.query.fuel_card_id;
 
-    const rows = await knex('fuel_card_driver_assignments as a')
+    const account = await knex('fuel_card_accounts')
+      .where({ id: cardId, tenant_id: tid })
+      .first('id');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
+
+    let q = knex('fuel_card_driver_assignments as a')
       .leftJoin('drivers as d', 'd.id', 'a.driver_id')
-      .where({ 'a.tenant_id': tid, 'a.fuel_card_account_id': cardId })
+      .where({ 'a.tenant_id': tid, 'a.fuel_card_account_id': cardId });
+
+    if (fuelCardId) {
+      const physicalCard = await loadPhysicalFuelCard(tid, cardId, fuelCardId);
+      if (!physicalCard) return sendError(res, 404, 'Fuel card not found under this account');
+      const singlePhysical = (await countPhysicalCardsUnderAccount(tid, cardId)) <= 1;
+      q = q.andWhere(function filterOnePhysicalCard() {
+        this.where('a.fuel_card_id', physicalCard.id);
+        if (physicalCard.card_number_last4) {
+          this.orWhere(function legacyLast4() {
+            this.whereNull('a.fuel_card_id').where('a.card_number_last4', physicalCard.card_number_last4);
+          });
+        }
+        if (singlePhysical) {
+          this.orWhere(function legacyAccount() {
+            this.whereNull('a.fuel_card_id').whereNull('a.card_number_last4');
+          });
+        }
+      });
+    }
+
+    const rows = await q
       .select(
         'a.*',
         knex.raw("COALESCE(d.first_name || ' ' || d.last_name, NULL) AS driver_name")
@@ -214,51 +280,79 @@ router.get('/cards/:cardId/assignments', async (req, res) => {
 
 /**
  * POST /cards/:cardId/assign-driver
- * Assign a driver to a fuel card. Auto-revokes any existing active assignment.
+ * Assign a driver to a physical fuel card under the account. Auto-revokes active assignments for that card only.
+ * Body: driverId, optional notes, optional fuelCardId (fuel_cards.id), optional cardNumberLast4 (legacy / disambiguation).
  */
 router.post('/cards/:cardId/assign-driver', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const { cardId } = req.params;
-    const { driverId, cardNumberLast4, notes } = req.body;
+    const { driverId, cardNumberLast4, notes, fuelCardId } = req.body;
 
     if (!driverId) return sendError(res, 400, 'driverId is required');
 
-    // Verify the card exists and belongs to this tenant
-    const card = await knex('fuel_card_accounts')
+    const account = await knex('fuel_card_accounts')
       .where({ id: cardId, tenant_id: tid })
       .first('id');
-    if (!card) return sendError(res, 404, 'Fuel card account not found');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
 
-    // Verify the driver exists and belongs to this tenant
     const driver = await knex('drivers')
       .where({ id: driverId, tenant_id: tid })
       .first('id');
     if (!driver) return sendError(res, 404, 'Driver not found');
 
+    let physicalCard = null;
+    if (fuelCardId) {
+      physicalCard = await loadPhysicalFuelCard(tid, cardId, fuelCardId);
+      if (!physicalCard) return sendError(res, 404, 'Fuel card not found under this account');
+    } else if (cardNumberLast4) {
+      const matches = await knex('fuel_cards')
+        .where({
+          fuel_card_account_id: cardId,
+          tenant_id: tid,
+          card_number_last4: cardNumberLast4
+        })
+        .select('id', 'card_number_last4');
+      if (matches.length > 1) {
+        return sendError(res, 400, 'Multiple cards share this last4; pass fuelCardId');
+      }
+      if (matches.length === 1) physicalCard = matches[0];
+    }
+
+    const physicalCount = await countPhysicalCardsUnderAccount(tid, cardId);
+    if (physicalCount > 1 && !physicalCard) {
+      return sendError(res, 400, 'fuelCardId or cardNumberLast4 is required when the account has multiple cards');
+    }
+
     const uid = userId(req);
+    let revokeQ = knex('fuel_card_driver_assignments')
+      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' });
 
-    // Auto-revoke any existing active assignment for this card
-    await knex('fuel_card_driver_assignments')
-      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' })
-      .update({
-        status: 'revoked',
-        revoked_date: new Date(),
-        revoked_by: uid,
-        updated_at: new Date()
-      });
+    if (physicalCard) {
+      revokeQ = scopeAssignmentsToPhysicalCard(revokeQ, physicalCard, 'fuel_card_driver_assignments');
+    }
 
-    // Create new active assignment
-    const [row] = await knex('fuel_card_driver_assignments').insert({
+    await revokeQ.update({
+      status: 'revoked',
+      revoked_date: new Date(),
+      revoked_by: uid,
+      updated_at: new Date()
+    });
+
+    const last4ForRow = physicalCard?.card_number_last4 ?? cardNumberLast4 ?? null;
+    const insert = {
       tenant_id: tid,
       fuel_card_account_id: cardId,
+      fuel_card_id: physicalCard?.id || null,
       driver_id: driverId,
-      card_number_last4: cardNumberLast4 || null,
+      card_number_last4: last4ForRow,
       status: 'active',
       assigned_date: new Date(),
       assigned_by: uid,
       notes: notes || null
-    }).returning('*');
+    };
+
+    const [row] = await knex('fuel_card_driver_assignments').insert(insert).returning('*');
 
     res.status(201).json(row);
   } catch (err) {
@@ -269,17 +363,50 @@ router.post('/cards/:cardId/assign-driver', async (req, res) => {
 
 /**
  * POST /cards/:cardId/revoke-driver
- * Revoke the active driver assignment for a fuel card.
+ * Revoke the active assignment for one physical card (body: fuelCardId or cardNumberLast4 when multiple cards).
  */
 router.post('/cards/:cardId/revoke-driver', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const { cardId } = req.params;
-    const { notes } = req.body;
+    const { notes, fuelCardId, cardNumberLast4 } = req.body;
 
-    const active = await knex('fuel_card_driver_assignments')
-      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' })
-      .first();
+    const account = await knex('fuel_card_accounts')
+      .where({ id: cardId, tenant_id: tid })
+      .first('id');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
+
+    let physicalCard = null;
+    if (fuelCardId) {
+      physicalCard = await loadPhysicalFuelCard(tid, cardId, fuelCardId);
+      if (!physicalCard) return sendError(res, 404, 'Fuel card not found under this account');
+    } else if (cardNumberLast4) {
+      const matches = await knex('fuel_cards')
+        .where({
+          fuel_card_account_id: cardId,
+          tenant_id: tid,
+          card_number_last4: cardNumberLast4
+        })
+        .select('id', 'card_number_last4');
+      if (matches.length > 1) {
+        return sendError(res, 400, 'Multiple cards share this last4; pass fuelCardId');
+      }
+      if (matches.length === 1) physicalCard = matches[0];
+    }
+
+    const physicalCount = await countPhysicalCardsUnderAccount(tid, cardId);
+    if (physicalCount > 1 && !physicalCard) {
+      return sendError(res, 400, 'fuelCardId or cardNumberLast4 is required when the account has multiple cards');
+    }
+
+    let activeQ = knex('fuel_card_driver_assignments')
+      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' });
+
+    if (physicalCard) {
+      activeQ = scopeAssignmentsToPhysicalCard(activeQ, physicalCard, 'fuel_card_driver_assignments');
+    }
+
+    const active = await activeQ.first();
 
     if (!active) return sendError(res, 404, 'No active assignment found for this card');
 
