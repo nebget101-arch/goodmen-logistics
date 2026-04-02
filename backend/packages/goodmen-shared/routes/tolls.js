@@ -218,12 +218,26 @@ async function validateDeviceRefs(tid, body) {
   return errors;
 }
 
+function resolveDeviceNumber(body = {}) {
+  return body.device_number_masked ?? body.device_number ?? null;
+}
+
 router.post('/devices', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
     if (!tid) return;
 
-    const { toll_account_id, device_number_masked, plate_number, truck_id, trailer_id, driver_id, effective_start_date, effective_end_date, notes } = req.body || {};
+    const {
+      toll_account_id,
+      plate_number,
+      truck_id,
+      trailer_id,
+      driver_id,
+      effective_start_date,
+      effective_end_date,
+      notes
+    } = req.body || {};
+    const deviceNumber = resolveDeviceNumber(req.body);
     if (!toll_account_id) return res.status(400).json({ error: 'toll_account_id is required' });
 
     // Validate truck_id / driver_id references
@@ -241,7 +255,7 @@ router.post('/devices', async (req, res) => {
         tenant_id: tid,
         operating_entity_id: operatingEntityId(req),
         toll_account_id,
-        device_number_masked: device_number_masked || null,
+        device_number_masked: deviceNumber,
         plate_number: plate_number || null,
         truck_id: truck_id || null,
         trailer_id: trailer_id || null,
@@ -275,6 +289,9 @@ router.patch('/devices/:id', async (req, res) => {
     const patch = {};
     for (const key of allowed) {
       if (req.body?.[key] !== undefined) patch[key] = req.body[key];
+    }
+    if (req.body?.device_number !== undefined && req.body?.device_number_masked === undefined) {
+      patch.device_number_masked = req.body.device_number;
     }
     patch.updated_at = new Date();
 
