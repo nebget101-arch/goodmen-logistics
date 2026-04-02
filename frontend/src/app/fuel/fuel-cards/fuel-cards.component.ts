@@ -408,7 +408,8 @@ export class FuelCardsComponent implements OnInit {
     const { driver_id, notes } = this.assignForm.value as { driver_id: string; notes: string };
     this.savingAssign = true;
     const last4 = this.assigningCard?.card_number_last4 || undefined;
-    this.fuel.assignDriver(this.selectedAccount.id, driver_id, notes || undefined, last4).subscribe({
+    const fuelCardId = this.assigningCard.id;
+    this.fuel.assignDriver(this.selectedAccount.id, driver_id, notes || undefined, last4, fuelCardId).subscribe({
       next: () => {
         this.savingAssign = false;
         this.showAssignDialog = false;
@@ -426,7 +427,12 @@ export class FuelCardsComponent implements OnInit {
   revokeAssignment(card: FuelCard): void {
     if (!this.selectedAccount) return;
     if (!confirm(`Revoke driver assignment for card ****${card.card_number_last4 || ''}?`)) return;
-    this.fuel.revokeDriver(this.selectedAccount.id).subscribe({
+    this.fuel.revokeDriver(
+      this.selectedAccount.id,
+      undefined,
+      card.id,
+      card.card_number_last4 || undefined
+    ).subscribe({
       next: () => { this.loadCardAssignments(); },
       error: (err) => { this.error = err.error?.error || 'Failed to revoke assignment'; this.cdr.markForCheck(); }
     });
@@ -439,7 +445,7 @@ export class FuelCardsComponent implements OnInit {
     this.historyLoading = true;
     this.showHistoryPanel = true;
     this.cdr.markForCheck();
-    this.fuel.getCardAssignments(this.selectedAccount.id).subscribe({
+    this.fuel.getCardAssignments(this.selectedAccount.id, card.id).subscribe({
       next: (rows) => { this.historyRows = rows; this.historyLoading = false; this.cdr.markForCheck(); },
       error: () => { this.historyRows = []; this.historyLoading = false; this.cdr.markForCheck(); }
     });
