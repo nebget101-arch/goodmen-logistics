@@ -9,6 +9,46 @@ const { triggerRecalculation: triggerRiskRecalc } = require('./safety-risk-engin
 // Protect all hos routes: admin, safety
 router.use(auth(['admin', 'safety']));
 
+/**
+ * @openapi
+ * /api/hos:
+ *   get:
+ *     summary: List all HOS records
+ *     description: Retrieves all Hours of Service records joined with driver names. Per 49 CFR Part 395 — Hours of Service of Drivers.
+ *     tags:
+ *       - HOS
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of HOS records with driver names
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   driver_id:
+ *                     type: integer
+ *                   record_date:
+ *                     type: string
+ *                     format: date
+ *                   on_duty_hours:
+ *                     type: number
+ *                   driving_hours:
+ *                     type: number
+ *                   violations:
+ *                     type: string
+ *                   driverName:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // GET all HOS records
 router.get('/', async (req, res) => {
   const startTime = Date.now();
@@ -44,6 +84,39 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/hos/driver/{driverId}:
+ *   get:
+ *     summary: Get HOS records by driver
+ *     description: Retrieves all HOS records for a specific driver. Per 49 CFR Part 395 — Hours of Service of Drivers.
+ *     tags:
+ *       - HOS
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Driver ID
+ *     responses:
+ *       200:
+ *         description: Array of HOS records for the driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       404:
+ *         description: Driver not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // GET HOS records by driver ID
 router.get('/driver/:driverId', async (req, res) => {
   const startTime = Date.now();
@@ -79,6 +152,38 @@ router.get('/driver/:driverId', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/hos/date/{date}:
+ *   get:
+ *     summary: Get HOS records by date
+ *     description: Retrieves all HOS records for a specific date. Per 49 CFR Part 395 — Hours of Service of Drivers.
+ *     tags:
+ *       - HOS
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Date in YYYY-MM-DD format
+ *     responses:
+ *       200:
+ *         description: Array of HOS records for the date
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // GET HOS records by date
 router.get('/date/:date', async (req, res) => {
   const startTime = Date.now();
@@ -114,6 +219,28 @@ router.get('/date/:date', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/hos/violations:
+ *   get:
+ *     summary: Get HOS violations
+ *     description: Retrieves all HOS records that contain violations. Per 49 CFR Part 395 — Hours of Service violations tracking.
+ *     tags:
+ *       - HOS
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of HOS records with violations (returns empty array on graceful degradation)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ */
 // GET HOS violations
 router.get('/violations', async (req, res) => {
   const startTime = Date.now();
@@ -149,6 +276,72 @@ router.get('/violations', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/hos:
+ *   post:
+ *     summary: Create a new HOS record
+ *     description: Creates a new Hours of Service record for a driver. Triggers risk score recalculation if violations are present. Per 49 CFR Part 395 — Hours of Service of Drivers.
+ *     tags:
+ *       - HOS
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - driverId
+ *               - recordDate
+ *             properties:
+ *               driverId:
+ *                 type: integer
+ *                 description: Driver ID
+ *               recordDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Date of the HOS record
+ *               onDutyHours:
+ *                 type: number
+ *                 description: Hours on duty (defaults to 0)
+ *               drivingHours:
+ *                 type: number
+ *                 description: Hours driving (defaults to 0)
+ *               violations:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                 description: Array of violation objects
+ *     responses:
+ *       201:
+ *         description: HOS record created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 driver_id:
+ *                   type: integer
+ *                 record_date:
+ *                   type: string
+ *                   format: date
+ *                 on_duty_hours:
+ *                   type: number
+ *                 driving_hours:
+ *                   type: number
+ *                 violations:
+ *                   type: string
+ *       404:
+ *         description: Driver not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // POST create new HOS record
 router.post('/', async (req, res) => {
   const startTime = Date.now();

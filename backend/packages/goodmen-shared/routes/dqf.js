@@ -34,6 +34,50 @@ const upload = multer({
 router.use(auth(['admin', 'safety']));
 
 // GET /api/dqf - list DQF documents scoped through drivers
+/**
+ * @openapi
+ * /api/dqf:
+ *   get:
+ *     summary: List all DQF records
+ *     description: >
+ *       Retrieves all Driver Qualification File document records scoped to the
+ *       caller's tenant and operating entity. Per 49 CFR Part 391 — Qualifications
+ *       of Drivers and Longer Combination Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of DQF document records with driver info
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   driver_id:
+ *                     type: string
+ *                     format: uuid
+ *                   first_name:
+ *                     type: string
+ *                   last_name:
+ *                     type: string
+ *                   operating_entity_id:
+ *                     type: string
+ *                     format: uuid
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/', async (req, res) => {
   const start = Date.now();
   try {
@@ -74,6 +118,93 @@ router.get('/', async (req, res) => {
 
 // FN-261: GET /api/dqf/driver/:driverId/status
 // Returns DQF completeness with category-aware breakdown and warning items.
+/**
+ * @openapi
+ * /api/dqf/driver/{driverId}/status:
+ *   get:
+ *     summary: Get DQF completeness status for a driver
+ *     description: >
+ *       Returns the DQF completeness score with a category-aware breakdown of all
+ *       requirements (including status, evidence, due dates, and urgency) plus
+ *       warning items. Completeness is calculated as
+ *       (sum of completed requirement weights) / (sum of all non-excluded requirement weights) * 100.
+ *       Each requirement has a weight from the dqf_requirements table. Requirements
+ *       with exclude_from_dqf=true are omitted from the score. Per 49 CFR Part 391
+ *       — Qualifications of Drivers and Longer Combination Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *     responses:
+ *       200:
+ *         description: DQF status with completeness score, requirements, and warnings
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 driverId:
+ *                   type: string
+ *                   format: uuid
+ *                 hire_date:
+ *                   type: string
+ *                   format: date
+ *                   nullable: true
+ *                 completeness:
+ *                   type: number
+ *                   description: Percentage 0-100
+ *                 requirements:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       key:
+ *                         type: string
+ *                       label:
+ *                         type: string
+ *                       weight:
+ *                         type: number
+ *                       category:
+ *                         type: string
+ *                       exclude_from_dqf:
+ *                         type: boolean
+ *                       status:
+ *                         type: string
+ *                         enum: [complete, missing, review_required]
+ *                       evidence_document_id:
+ *                         type: string
+ *                         format: uuid
+ *                         nullable: true
+ *                       completion_date:
+ *                         type: string
+ *                         format: date-time
+ *                         nullable: true
+ *                       due_date:
+ *                         type: string
+ *                         format: date
+ *                         nullable: true
+ *                       urgency:
+ *                         type: string
+ *                         nullable: true
+ *                 warning_items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/driver/:driverId/status', async (req, res) => {
   const start = Date.now();
   try {
@@ -142,6 +273,100 @@ router.get('/driver/:driverId/status', async (req, res) => {
 });
 
 // GET /api/dqf/drivers/:driverId
+/**
+ * @openapi
+ * /api/dqf/drivers/{driverId}:
+ *   get:
+ *     summary: Get full DQF profile for a driver
+ *     description: >
+ *       Returns the driver's profile, all DQF requirements with statuses, and all
+ *       driver documents. Auto-reconciles onboarding completion with DQF
+ *       requirements if they are out of sync (e.g. employment_application_submitted).
+ *       Per 49 CFR Part 391 — Qualifications of Drivers and Longer Combination
+ *       Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *     responses:
+ *       200:
+ *         description: Driver profile with DQF requirements and documents
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 driver:
+ *                   type: object
+ *                   description: Driver profile in camelCase
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     firstName:
+ *                       type: string
+ *                     lastName:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     cdlNumber:
+ *                       type: string
+ *                     cdlState:
+ *                       type: string
+ *                     cdlExpiry:
+ *                       type: string
+ *                       format: date
+ *                     status:
+ *                       type: string
+ *                     dqfCompleteness:
+ *                       type: number
+ *                 dqf:
+ *                   type: object
+ *                   properties:
+ *                     requirements:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           key:
+ *                             type: string
+ *                           label:
+ *                             type: string
+ *                           weight:
+ *                             type: number
+ *                           category:
+ *                             type: string
+ *                           status:
+ *                             type: string
+ *                     documents:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                             format: uuid
+ *                           doc_type:
+ *                             type: string
+ *                           file_name:
+ *                             type: string
+ *                     completeness:
+ *                       type: number
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/drivers/:driverId', async (req, res) => {
   const start = Date.now();
   try {
@@ -307,6 +532,47 @@ router.get('/drivers/:driverId', async (req, res) => {
 });
 
 // GET /api/dqf/documents/:id/download - download generated driver_documents (e.g. onboarding PDFs)
+/**
+ * @openapi
+ * /api/dqf/documents/{id}/download:
+ *   get:
+ *     summary: Download a driver document file
+ *     description: >
+ *       Downloads the binary content of a driver document (e.g. onboarding PDFs,
+ *       signed forms). Attempts to retrieve bytes from the database blob, then
+ *       falls back to R2 cloud storage. Per 49 CFR Part 391 — Qualifications of
+ *       Drivers and Longer Combination Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver document ID
+ *     responses:
+ *       200:
+ *         description: File binary content with Content-Disposition header
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Document not found or document data not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/documents/:id/download', async (req, res) => {
   try {
     const { id } = req.params;
@@ -384,6 +650,84 @@ router.get('/documents/:id/download', async (req, res) => {
 });
 
 // POST /api/dqf/requirement/:driverId/:requirementKey - Update a requirement status manually
+/**
+ * @openapi
+ * /api/dqf/requirement/{driverId}/{requirementKey}:
+ *   post:
+ *     summary: Update a DQF requirement status manually
+ *     description: >
+ *       Sets the status of a specific DQF requirement for a driver. Logs the
+ *       status change for audit purposes and recomputes DQF completeness. Per 49
+ *       CFR Part 391 — Qualifications of Drivers and Longer Combination Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *       - in: path
+ *         name: requirementKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The DQF requirement key (e.g. employment_application_submitted)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 description: New status value (e.g. complete, missing, review_required)
+ *               evidenceDocumentId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Optional evidence document ID
+ *               note:
+ *                 type: string
+ *                 description: Optional audit note
+ *               completionDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Optional completion date
+ *     responses:
+ *       200:
+ *         description: Requirement status updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 driverId:
+ *                   type: string
+ *                   format: uuid
+ *                 requirementKey:
+ *                   type: string
+ *                 oldStatus:
+ *                   type: string
+ *                 newStatus:
+ *                   type: string
+ *       400:
+ *         description: Missing required status field
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
   try {
     const { driverId, requirementKey } = req.params;
@@ -442,6 +786,70 @@ router.post('/requirement/:driverId/:requirementKey', async (req, res) => {
 });
 
 // POST /api/dqf/driver/:driverId/recalculate - Recalculate DQF completeness from current requirement statuses
+/**
+ * @openapi
+ * /api/dqf/driver/{driverId}/recalculate:
+ *   post:
+ *     summary: Recalculate DQF completeness for a driver
+ *     description: >
+ *       Forces a recalculation of the DQF completeness score from current
+ *       requirement statuses. Completeness = (sum of completed requirement weights) /
+ *       (sum of all non-excluded requirement weights) * 100. Pass ?debug=1 to
+ *       include a breakdown of totalWeight, completedWeight, missing requirements,
+ *       counted, and skipped. Per 49 CFR Part 391 — Qualifications of Drivers and
+ *       Longer Combination Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *       - in: query
+ *         name: debug
+ *         schema:
+ *           type: string
+ *           enum: ['1']
+ *         description: Set to 1 to include weight breakdown in response
+ *     responses:
+ *       200:
+ *         description: Recalculated completeness score
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 driverId:
+ *                   type: string
+ *                   format: uuid
+ *                 completeness:
+ *                   type: number
+ *                 breakdown:
+ *                   type: object
+ *                   description: Only present when ?debug=1
+ *                   properties:
+ *                     totalWeight:
+ *                       type: number
+ *                     completedWeight:
+ *                       type: number
+ *                     missing:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     counted:
+ *                       type: integer
+ *                     skipped:
+ *                       type: integer
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/driver/:driverId/recalculate', async (req, res) => {
   try {
     const { driverId } = req.params;
@@ -467,6 +875,78 @@ router.post('/driver/:driverId/recalculate', async (req, res) => {
 });
 
 // GET /api/dqf/requirement/:driverId/:requirementKey/changes - Get change history for a requirement
+/**
+ * @openapi
+ * /api/dqf/requirement/{driverId}/{requirementKey}/changes:
+ *   get:
+ *     summary: Get change history for a DQF requirement
+ *     description: >
+ *       Returns the audit trail of all status changes for a specific DQF
+ *       requirement, ordered by most recent first. Per 49 CFR Part 391 —
+ *       Qualifications of Drivers and Longer Combination Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *       - in: path
+ *         name: requirementKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The DQF requirement key
+ *     responses:
+ *       200:
+ *         description: List of status changes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 driverId:
+ *                   type: string
+ *                   format: uuid
+ *                 requirementKey:
+ *                   type: string
+ *                 changes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       requirement_key:
+ *                         type: string
+ *                       old_status:
+ *                         type: string
+ *                         nullable: true
+ *                       new_status:
+ *                         type: string
+ *                       changed_by_user_id:
+ *                         type: string
+ *                         format: uuid
+ *                         nullable: true
+ *                       changed_at:
+ *                         type: string
+ *                         format: date-time
+ *                       note:
+ *                         type: string
+ *                         nullable: true
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/requirement/:driverId/:requirementKey/changes', async (req, res) => {
   try {
     const { driverId, requirementKey } = req.params;
@@ -517,6 +997,66 @@ router.get('/requirement/:driverId/:requirementKey/changes', async (req, res) =>
 
 // FN-237: GET /api/dqf/driver/:driverId/prehire-documents
 // List all pre-hire documents for a driver (employment app + consent forms)
+/**
+ * @openapi
+ * /api/dqf/driver/{driverId}/prehire-documents:
+ *   get:
+ *     summary: List pre-hire documents for a driver
+ *     description: >
+ *       Returns all pre-hire documents for a driver including employment
+ *       applications, consent forms (FCRA, drug/alcohol, Clearinghouse, PSP, MVR),
+ *       onboarding uploads (CDL, medical cert, SSN), and MVR reports. Per 49 CFR
+ *       Part 391 — Qualifications of Drivers and Longer Combination Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *     responses:
+ *       200:
+ *         description: Array of pre-hire document records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   driver_id:
+ *                     type: string
+ *                     format: uuid
+ *                   packet_id:
+ *                     type: string
+ *                     format: uuid
+ *                     nullable: true
+ *                   doc_type:
+ *                     type: string
+ *                   file_name:
+ *                     type: string
+ *                   mime_type:
+ *                     type: string
+ *                   size_bytes:
+ *                     type: integer
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/driver/:driverId/prehire-documents', async (req, res) => {
   const start = Date.now();
   try {
@@ -591,6 +1131,54 @@ router.get('/driver/:driverId/prehire-documents', async (req, res) => {
 // Auto-pull an existing employment application document into the DQF checklist.
 // Looks for an already-generated `employment_application_signed` document first;
 // if none exists, regenerates the PDF from the onboarding packet data.
+/**
+ * @openapi
+ * /api/dqf/driver/{driverId}/auto-pull-emp-app:
+ *   post:
+ *     summary: Auto-pull employment application into DQF
+ *     description: >
+ *       Searches for an existing employment_application_signed document and links
+ *       it to the DQF checklist. If none exists, regenerates the PDF from
+ *       onboarding packet data and stores it. Marks the
+ *       employment_application_submitted requirement as complete and recomputes
+ *       DQF completeness. Per 49 CFR Part 391 — Qualifications of Drivers and
+ *       Longer Combination Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *     responses:
+ *       200:
+ *         description: Employment application pulled or generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 documentId:
+ *                   type: string
+ *                   format: uuid
+ *                 source:
+ *                   type: string
+ *                   enum: [existing, generated]
+ *                   description: Whether an existing doc was used or a new one was generated
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found or no employment application found
+ *       500:
+ *         description: Server error
+ */
 router.post('/driver/:driverId/auto-pull-emp-app', async (req, res) => {
   const start = Date.now();
   try {
@@ -733,6 +1321,75 @@ router.post('/driver/:driverId/auto-pull-emp-app', async (req, res) => {
 
 // FN-240: POST /api/dqf/driver/:driverId/requirement/:requirementKey/upload
 // Upload a document file for any DQF requirement and mark it complete.
+/**
+ * @openapi
+ * /api/dqf/driver/{driverId}/requirement/{requirementKey}/upload:
+ *   post:
+ *     summary: Upload a document for a DQF requirement
+ *     description: >
+ *       Uploads a document file for any DQF requirement and marks that requirement
+ *       as complete. Stores the file via R2, logs the status change, and
+ *       recomputes DQF completeness. Accepts PDF and image files (max 10 MB).
+ *       Per 49 CFR Part 391 — Qualifications of Drivers and Longer Combination
+ *       Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *       - in: path
+ *         name: requirementKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The DQF requirement key to fulfill
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: The document file (max 10 MB, PDF or image)
+ *     responses:
+ *       200:
+ *         description: Document uploaded and requirement marked complete
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 documentId:
+ *                   type: string
+ *                   format: uuid
+ *                 requirementKey:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                   enum: [complete]
+ *       400:
+ *         description: Missing file or unknown requirement key
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/driver/:driverId/requirement/:requirementKey/upload', upload.single('file'), async (req, res) => {
   const start = Date.now();
   try {
@@ -820,6 +1477,101 @@ router.post('/driver/:driverId/requirement/:requirementKey/upload', upload.singl
 
 // FN-264: POST /api/dqf/driver/:driverId/mvr-upload
 // Upload an MVR PDF, extract data via AI, store report and document.
+/**
+ * @openapi
+ * /api/dqf/driver/{driverId}/mvr-upload:
+ *   post:
+ *     summary: Upload an MVR (Motor Vehicle Record) PDF
+ *     description: >
+ *       Uploads an MVR PDF, extracts data via AI (license info, violations,
+ *       accidents, endorsements, restrictions), stores the document, creates a
+ *       driver_mvr_reports record, and auto-completes the mvr_data_received and
+ *       mvr_report_document DQF requirements. Only PDF files are accepted.
+ *       Per 49 CFR Part 391 — Qualifications of Drivers and Longer Combination
+ *       Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: MVR report PDF file (max 10 MB, PDF only)
+ *     responses:
+ *       200:
+ *         description: MVR report uploaded and data extracted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 documentId:
+ *                   type: string
+ *                   format: uuid
+ *                 mvrReportId:
+ *                   type: string
+ *                   format: uuid
+ *                 extractedData:
+ *                   type: object
+ *                   properties:
+ *                     licenseNumber:
+ *                       type: string
+ *                     licenseState:
+ *                       type: string
+ *                     licenseStatus:
+ *                       type: string
+ *                     licenseClass:
+ *                       type: string
+ *                     licenseExpiry:
+ *                       type: string
+ *                       format: date
+ *                     endorsements:
+ *                       type: string
+ *                     restrictions:
+ *                       type: string
+ *                     violations:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     accidents:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     pointsTotal:
+ *                       type: integer
+ *                     extractionMethod:
+ *                       type: string
+ *                 warning:
+ *                   type: string
+ *                   nullable: true
+ *       400:
+ *         description: Missing file or non-PDF file uploaded
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/driver/:driverId/mvr-upload', upload.single('file'), async (req, res) => {
   const start = Date.now();
   try {
@@ -969,6 +1721,100 @@ router.post('/driver/:driverId/mvr-upload', upload.single('file'), async (req, r
 
 // FN-264: GET /api/dqf/driver/:driverId/mvr-data
 // Return all MVR reports for a driver, ordered by report_date DESC.
+/**
+ * @openapi
+ * /api/dqf/driver/{driverId}/mvr-data:
+ *   get:
+ *     summary: Get all MVR reports for a driver
+ *     description: >
+ *       Returns all Motor Vehicle Record reports for a driver including license
+ *       info, violations, accidents, points, and extraction metadata. Ordered by
+ *       report_date descending. Gracefully returns an empty array if the
+ *       driver_mvr_reports table does not yet exist. Per 49 CFR Part 391 —
+ *       Qualifications of Drivers and Longer Combination Vehicles.
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The driver's unique identifier
+ *     responses:
+ *       200:
+ *         description: MVR reports for the driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 driverId:
+ *                   type: string
+ *                   format: uuid
+ *                 reports:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       driver_id:
+ *                         type: string
+ *                         format: uuid
+ *                       document_id:
+ *                         type: string
+ *                         format: uuid
+ *                       report_date:
+ *                         type: string
+ *                         format: date
+ *                       report_source:
+ *                         type: string
+ *                       license_number:
+ *                         type: string
+ *                       license_state:
+ *                         type: string
+ *                       license_status:
+ *                         type: string
+ *                       license_class:
+ *                         type: string
+ *                       license_expiry:
+ *                         type: string
+ *                         format: date
+ *                       endorsements:
+ *                         type: string
+ *                       restrictions:
+ *                         type: string
+ *                       violations:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                       accidents:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                       points_total:
+ *                         type: integer
+ *                       extraction_method:
+ *                         type: string
+ *                       violation_count:
+ *                         type: integer
+ *                       accident_count:
+ *                         type: integer
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/driver/:driverId/mvr-data', async (req, res) => {
   const start = Date.now();
   try {

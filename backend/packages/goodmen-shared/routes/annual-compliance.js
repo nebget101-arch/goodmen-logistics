@@ -16,6 +16,30 @@ const {
 // All routes require admin or safety role
 router.use(auth(['admin', 'safety']));
 
+/**
+ * @openapi
+ * /api/annual-compliance/dashboard:
+ *   get:
+ *     summary: Get annual compliance dashboard summary
+ *     description: Retrieves a summary of annual compliance status across all drivers. Per 49 CFR 391.25 — Annual inquiry and review of driving record.
+ *     tags:
+ *       - Compliance
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard summary object
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 // ---------------------------------------------------------------------------
 // GET /api/annual-compliance/dashboard
 // ---------------------------------------------------------------------------
@@ -40,6 +64,32 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/annual-compliance/overdue:
+ *   get:
+ *     summary: List overdue annual compliance items
+ *     description: Retrieves compliance items that are past their due date. Per 49 CFR 391.25 — Annual inquiry and review of driving record.
+ *     tags:
+ *       - Compliance
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of overdue compliance items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 // ---------------------------------------------------------------------------
 // GET /api/annual-compliance/overdue
 // ---------------------------------------------------------------------------
@@ -69,6 +119,39 @@ router.get('/overdue', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/annual-compliance/upcoming:
+ *   get:
+ *     summary: List upcoming annual compliance items
+ *     description: Retrieves compliance items due within the specified number of days. Per 49 CFR 391.25 — Annual inquiry and review of driving record.
+ *     tags:
+ *       - Compliance
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: days
+ *         schema:
+ *           type: integer
+ *           default: 30
+ *         description: Number of days to look ahead (defaults to 30)
+ *     responses:
+ *       200:
+ *         description: Array of upcoming compliance items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 // ---------------------------------------------------------------------------
 // GET /api/annual-compliance/upcoming?days=30
 // ---------------------------------------------------------------------------
@@ -98,6 +181,32 @@ router.get('/upcoming', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/annual-compliance/medical-expiry:
+ *   get:
+ *     summary: Get medical certificate expiry report
+ *     description: Retrieves a report of driver medical certificate expiration dates. Per 49 CFR 391.27 — Annual review of driving record.
+ *     tags:
+ *       - Compliance
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of medical certificate expiry records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 // ---------------------------------------------------------------------------
 // GET /api/annual-compliance/medical-expiry
 // ---------------------------------------------------------------------------
@@ -126,6 +235,44 @@ router.get('/medical-expiry', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/annual-compliance/driver/{driverId}:
+ *   get:
+ *     summary: Get compliance items for a driver
+ *     description: Retrieves annual compliance items for a specific driver, optionally filtered by year. Per 49 CFR 391.25 — Annual inquiry and review of driving record.
+ *     tags:
+ *       - Compliance
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The driver ID
+ *       - in: query
+ *         name: year
+ *         schema:
+ *           type: integer
+ *         description: Filter by compliance year (e.g. 2026)
+ *     responses:
+ *       200:
+ *         description: Array of compliance items for the driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 // ---------------------------------------------------------------------------
 // GET /api/annual-compliance/driver/:driverId?year=2026
 // ---------------------------------------------------------------------------
@@ -160,6 +307,65 @@ router.get('/driver/:driverId', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/annual-compliance/{id}/complete:
+ *   post:
+ *     summary: Complete a compliance item
+ *     description: Marks an annual compliance item as completed with reviewer details and determination. Per 49 CFR 391.25 — Annual inquiry and review of driving record.
+ *     tags:
+ *       - Compliance
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The compliance item ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - reviewerName
+ *             properties:
+ *               reviewerName:
+ *                 type: string
+ *                 description: Name of the person completing the review
+ *               reviewNotes:
+ *                 type: string
+ *                 description: Notes from the review
+ *               determination:
+ *                 type: string
+ *                 description: Review determination result
+ *               evidenceDocumentId:
+ *                 type: string
+ *                 description: ID of the supporting evidence document
+ *     responses:
+ *       200:
+ *         description: Compliance item completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 item:
+ *                   type: object
+ *       400:
+ *         description: reviewerName is required
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Compliance item not found
+ *       500:
+ *         description: Server error
+ */
 // ---------------------------------------------------------------------------
 // POST /api/annual-compliance/:id/complete
 // ---------------------------------------------------------------------------
@@ -217,6 +423,44 @@ router.post('/:id/complete', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/annual-compliance/generate/{year}:
+ *   post:
+ *     summary: Generate annual compliance items for a year
+ *     description: Bulk-generates annual compliance items for all drivers in the tenant for the specified year. Admin only. Per 49 CFR 391.25 — Annual inquiry and review of driving record.
+ *     tags:
+ *       - Compliance
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: year
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 2020
+ *           maximum: 2099
+ *         description: The compliance year to generate items for
+ *     responses:
+ *       200:
+ *         description: Generation summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid year (must be between 2020 and 2099)
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Tenant context required or insufficient role
+ *       500:
+ *         description: Server error
+ */
 // ---------------------------------------------------------------------------
 // POST /api/annual-compliance/generate/:year  (admin only)
 // ---------------------------------------------------------------------------

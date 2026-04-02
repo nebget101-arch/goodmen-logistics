@@ -354,6 +354,8 @@ export class DeviceDialogComponent implements OnInit {
       status: this.form.value.status
     };
 
+    (payload as Record<string, unknown>)['device_number'] = this.form.value.device_number || undefined;
+
     const request$ = this.isEdit
       ? this.tolls.updateDevice(this.data.device!.id, payload)
       : this.tolls.createDevice(payload);

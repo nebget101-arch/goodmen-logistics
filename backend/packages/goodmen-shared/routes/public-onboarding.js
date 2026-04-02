@@ -586,6 +586,77 @@ function rateLimited(req, res, next) {
   return next();
 }
 
+/**
+ * @openapi
+ * /public/onboarding/{packetId}:
+ *   get:
+ *     summary: Load onboarding packet
+ *     description: Loads a driver onboarding packet including sections, driver info, and employment application prefill data. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     responses:
+ *       200:
+ *         description: Onboarding packet with sections and driver data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 packet:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *                     driverId:
+ *                       type: integer
+ *                 driver:
+ *                   type: object
+ *                   nullable: true
+ *                 sections:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       section_key:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       data:
+ *                         type: object
+ *                         nullable: true
+ *       400:
+ *         description: Missing packetId or token
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet not found
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // GET /public/onboarding/:packetId?token=...
 router.get('/:packetId', rateLimited, async (req, res) => {
   const start = Date.now();
@@ -678,6 +749,78 @@ router.get('/:packetId', rateLimited, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/onboarding/{packetId}/sections/{sectionKey}:
+ *   post:
+ *     summary: Save or complete an onboarding section
+ *     description: Saves section data (draft or completed). On completion, records e-signatures and generates PDFs. Also syncs to normalized employment application tables. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: path
+ *         name: sectionKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [employment_application, mvr_authorization, uploads]
+ *         description: Section key
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - data
+ *             properties:
+ *               data:
+ *                 type: object
+ *                 description: Section data payload
+ *               status:
+ *                 type: string
+ *                 description: Section status (defaults to in_progress; set to completed to finalize)
+ *     responses:
+ *       200:
+ *         description: Section saved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 packetId:
+ *                   type: string
+ *                 sectionKey:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *       400:
+ *         description: Invalid section key or missing data payload
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet not found
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // POST /public/onboarding/:packetId/sections/:sectionKey?token=...
 router.post('/:packetId/sections/:sectionKey', rateLimited, async (req, res) => {
   const start = Date.now();
@@ -843,6 +986,81 @@ router.post('/:packetId/sections/:sectionKey', rateLimited, async (req, res) => 
   }
 });
 
+/**
+ * @openapi
+ * /public/onboarding/{packetId}/esignatures:
+ *   post:
+ *     summary: Capture an e-signature
+ *     description: Records a typed-name e-signature for a section (employment application or MVR authorization). Generates PDFs if sections are completed. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerName
+ *               - signatureValue
+ *             properties:
+ *               sectionKey:
+ *                 type: string
+ *                 enum: [employment_application, mvr_authorization]
+ *                 description: Section key (defaults to employment_application)
+ *               signerName:
+ *                 type: string
+ *               signatureValue:
+ *                 type: string
+ *               signatureType:
+ *                 type: string
+ *                 default: typed_name
+ *               consentTextVersion:
+ *                 type: string
+ *                 default: v1
+ *     responses:
+ *       200:
+ *         description: E-signature captured
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 packetId:
+ *                   type: string
+ *                 sectionKey:
+ *                   type: string
+ *                 signedAt:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Missing signerName or signatureValue
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet not found
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // POST /public/onboarding/:packetId/esignatures?token=...
 router.post('/:packetId/esignatures', rateLimited, async (req, res) => {
   const start = Date.now();
@@ -938,6 +1156,76 @@ router.post('/:packetId/esignatures', rateLimited, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/onboarding/{packetId}/upload-document:
+ *   post:
+ *     summary: Upload a driver document during onboarding
+ *     description: Uploads a driver document (CDL front/back, medical certificate, etc.) to R2 storage. Images are auto-converted to PDF. Auto-marks DQF requirements on upload. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *               - docType
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Document file (PDF or image, max 10 MB)
+ *               docType:
+ *                 type: string
+ *                 enum: [cdl_front, cdl_back, medical_certificate, social_security_card, other_certification]
+ *                 description: Document type
+ *     responses:
+ *       201:
+ *         description: Document uploaded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 documentId:
+ *                   type: integer
+ *                 fileName:
+ *                   type: string
+ *                 docType:
+ *                   type: string
+ *       400:
+ *         description: No file uploaded, invalid docType, or file too large
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet not found
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // FN-250: POST /public/onboarding/:packetId/upload-document?token=...
 // Upload a driver document (CDL, medical cert, etc.) during onboarding
 router.post(
@@ -1087,6 +1375,64 @@ router.post(
   }
 );
 
+/**
+ * @openapi
+ * /public/onboarding/{packetId}/documents:
+ *   get:
+ *     summary: List onboarding documents for a packet
+ *     description: Returns all uploaded onboarding documents for this packet's driver, with the onboarding_ prefix stripped from document types. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     responses:
+ *       200:
+ *         description: List of onboarding documents
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 documents:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       document_type:
+ *                         type: string
+ *                       file_name:
+ *                         type: string
+ *                       uploaded_at:
+ *                         type: string
+ *                         format: date-time
+ *       400:
+ *         description: Missing required parameters
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet not found
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // FN-250: GET /public/onboarding/:packetId/documents?token=...
 // List all onboarding documents for this packet's driver
 router.get('/:packetId/documents', rateLimited, async (req, res) => {
@@ -1136,6 +1482,63 @@ router.get('/:packetId/documents', rateLimited, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/onboarding/{packetId}/license:
+ *   get:
+ *     summary: Get driver license prefill data
+ *     description: Returns most recent license data (ssnLast4, dateOfBirth, licenseNumber, licenseState) for pre-populating the employment application. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     responses:
+ *       200:
+ *         description: License prefill data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ssnLast4:
+ *                   type: string
+ *                   nullable: true
+ *                 dateOfBirth:
+ *                   type: string
+ *                   format: date
+ *                   nullable: true
+ *                 licenseNumber:
+ *                   type: string
+ *                   nullable: true
+ *                 licenseState:
+ *                   type: string
+ *                   nullable: true
+ *       400:
+ *         description: Missing required parameters
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet not found
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // FN-528: GET /public/onboarding/:packetId/license?token=...
 // Returns most recent license data (ssnLast4, dateOfBirth, licenseNumber, licenseState)
 // for pre-populating the employment application license history section.
@@ -1200,6 +1603,60 @@ router.get('/:packetId/license', rateLimited, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/onboarding/{packetId}/documents/{documentId}:
+ *   delete:
+ *     summary: Delete an onboarding document
+ *     description: Soft-deletes an onboarding document uploaded during the onboarding process. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Document ID to delete
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     responses:
+ *       200:
+ *         description: Document deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Missing required parameters
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Document or packet not found
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // FN-250: DELETE /public/onboarding/:packetId/documents/:documentId?token=...
 // Soft-delete an onboarding document
 router.delete('/:packetId/documents/:documentId', rateLimited, async (req, res) => {
@@ -1256,6 +1713,69 @@ router.delete('/:packetId/documents/:documentId', rateLimited, async (req, res) 
   }
 });
 
+/**
+ * @openapi
+ * /public/onboarding/{packetId}/finalize:
+ *   post:
+ *     summary: Finalize and submit onboarding packet
+ *     description: Validates all required sections are completed, marks the packet as submitted, populates driver record from application data, and sends confirmation email. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     responses:
+ *       200:
+ *         description: Packet submitted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Missing required parameters
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet not found
+ *       409:
+ *         description: Packet already submitted
+ *       410:
+ *         description: Packet expired or revoked
+ *       422:
+ *         description: Required sections incomplete
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 incompleteSections:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // FN-270: POST /public/onboarding/:packetId/finalize?token=...
 // Marks the packet as submitted and sends a confirmation email to the driver.
 router.post('/:packetId/finalize', rateLimited, async (req, res) => {

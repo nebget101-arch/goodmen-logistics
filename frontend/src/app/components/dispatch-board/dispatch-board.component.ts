@@ -105,6 +105,11 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
   activeOperatingEntityName = '';
   // FN-504: risk badges for driver rows
   driverRiskMap = new Map<string, DriverRiskBadge>();
+
+  // FN-674: stacking rows for overlapping multi-day load cards
+  private stackRowByLoadId: Record<string, number> = {};
+  private maxStackRowsByDriverKey: Record<string, number> = {};
+
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
 
@@ -197,10 +202,13 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
         const driverIdStr = driverId.toString().trim();
         if (!loadDriverId || loadDriverId !== driverIdStr) return false;
       }
-      const delivery = l.delivery_date ? this.toDateOnly(l.delivery_date) : null;
       const pickup = l.pickup_date ? this.toDateOnly(l.pickup_date) : null;
-      const start = pickup || delivery || '';
-      const end = delivery || pickup || start;
+      const delivery = l.delivery_date ? this.toDateOnly(l.delivery_date) : null;
+      const completed = l.completed_date ? this.toDateOnly(l.completed_date) : null;
+
+      // Span uses pickup_date -> delivery_date (usually completion). Some loads only have completed_date.
+      const start = pickup || delivery || completed || '';
+      const end = delivery || completed || pickup || start;
       return (start >= weekStartStr && start <= weekEndStr) || (end >= weekStartStr && end <= weekEndStr);
     });
   }
@@ -217,15 +225,99 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
 
   /** Grid column start (1-7) and span for a load card. Uses local-date parsing to avoid timezone shift. */
   getLoadSpan(load: LoadListItem): { startCol: number; span: number } {
-    const pickup = load.pickup_date ? this.toDateOnly(load.pickup_date) : null;
-    const delivery = load.delivery_date ? this.toDateOnly(load.delivery_date) : null;
-    const startDate = pickup || delivery || '';
-    const endDate = delivery || pickup || startDate;
-    let startIdx = this.getDayIndexWithinWeek(startDate);
-    let endIdx = this.getDayIndexWithinWeek(endDate);
-    if (startIdx > endIdx) [startIdx, endIdx] = [endIdx, startIdx];
+    const { startIdx, endIdx } = this.getLoadDayInterval(load);
     const span = Math.max(1, endIdx - startIdx + 1);
     return { startCol: startIdx + 1, span };
+  }
+
+  private getDriverKey(driverId: string | null): string {
+    return driverId ?? 'unassigned';
+  }
+
+  /**
+   * Inclusive day interval (0-6 indices) for the current visible week view.
+   * Uses pickup_date -> delivery_date, with completed_date fallback when delivery_date is null.
+   */
+  private getLoadDayInterval(load: LoadListItem): { startIdx: number; endIdx: number } {
+    const pickup = load.pickup_date ? this.toDateOnly(load.pickup_date) : '';
+    const delivery = load.delivery_date ? this.toDateOnly(load.delivery_date) : '';
+    const completed = load.completed_date ? this.toDateOnly(load.completed_date) : '';
+
+    const startDate = pickup || delivery || completed || '';
+    const endDate = delivery || completed || pickup || startDate;
+
+    const startIdx = startDate ? this.getDayIndexWithinWeek(startDate) : 0;
+    const endIdx = endDate ? this.getDayIndexWithinWeek(endDate) : startIdx;
+    if (startIdx > endIdx) return { startIdx: endIdx, endIdx: startIdx };
+    return { startIdx, endIdx };
+  }
+
+  private getLoadPickupSortMs(load: LoadListItem): number {
+    const pickupStr =
+      load.pickup_date ? this.toDateOnly(load.pickup_date) :
+      (load.delivery_date ? this.toDateOnly(load.delivery_date) :
+        (load.completed_date ? this.toDateOnly(load.completed_date) : ''));
+    if (!pickupStr) return Number.POSITIVE_INFINITY;
+    const parsed = this.parseDateLocal(pickupStr);
+    return parsed ? parsed.getTime() : Number.POSITIVE_INFINITY;
+  }
+
+  private recomputeLoadStacking(): void {
+    this.stackRowByLoadId = {};
+    this.maxStackRowsByDriverKey = {};
+
+    const driverIds = this.drivers.map(d => (d.type === 'driver' || d.type === 'unassigned') ? d.id : null);
+    const uniqueKeys = new Set(driverIds.map(id => this.getDriverKey(id)));
+
+    for (const key of uniqueKeys) {
+      const driverId = key === 'unassigned' ? null : key;
+      const loads = this.getLoadsForDriver(driverId);
+
+      const items = loads.map(l => {
+        const { startIdx, endIdx } = this.getLoadDayInterval(l);
+        const pickupSortMs = this.getLoadPickupSortMs(l);
+        return { load: l, startIdx, endIdx, pickupSortMs };
+      });
+
+      items.sort((a, b) => {
+        const cmp = a.pickupSortMs - b.pickupSortMs;
+        if (cmp !== 0) return cmp;
+        return String(a.load.id).localeCompare(String(b.load.id));
+      });
+
+      const rowEnds: number[] = [];
+      let maxRows = 1;
+
+      for (const it of items) {
+        let placedRow = -1;
+        for (let r = 0; r < rowEnds.length; r++) {
+          // Strictly less => non-overlapping (inclusive day indices)
+          if (rowEnds[r] < it.startIdx) {
+            placedRow = r;
+            break;
+          }
+        }
+        if (placedRow === -1) {
+          placedRow = rowEnds.length;
+          rowEnds.push(it.endIdx);
+        } else {
+          rowEnds[placedRow] = it.endIdx;
+        }
+
+        this.stackRowByLoadId[it.load.id] = placedRow;
+        maxRows = Math.max(maxRows, placedRow + 1);
+      }
+
+      this.maxStackRowsByDriverKey[key] = maxRows;
+    }
+  }
+
+  getLoadStackRow(load: LoadListItem): number {
+    return this.stackRowByLoadId[load.id] ?? 0;
+  }
+
+  getMaxStackRowsForDriver(driverId: string | null): number {
+    return this.maxStackRowsByDriverKey[this.getDriverKey(driverId)] ?? 1;
   }
 
   /** Resolve load's driver ID from driver_id, driverId, or driver_name match. */
@@ -502,8 +594,11 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
     const weekStart = new Date(this.weekStart);
     weekStart.setHours(0, 0, 0, 0);
     parsed.setHours(0, 0, 0, 0);
-    const diffMs = parsed.getTime() - weekStart.getTime();
-    const diffDays = Math.round(diffMs / 86400000);
+
+    // DST/timezone safe: compute diffs in UTC "date-only" space.
+    const weekStartUtc = Date.UTC(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate());
+    const parsedUtc = Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+    const diffDays = Math.round((parsedUtc - weekStartUtc) / 86400000);
     return Math.max(0, Math.min(6, diffDays));
   }
 
@@ -686,6 +781,8 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
             this.loads = allLoads.filter(l => !!getAssignedDriverId(l));
             this.unassignedLoads = allLoads.filter(l => !getAssignedDriverId(l));
             this.loading = false;
+            this.recomputeLoadStacking();
+            this.cdr.markForCheck();
           },
           error: () => {
             this.loading = false;
