@@ -110,7 +110,11 @@
             <span class="unassigned-label">Unassigned Loads</span>
           </ng-container>
         </div>
-        <div class="col-days day-cells" *ngIf="driver.type === 'driver' || driver.type === 'unassigned'">
+        <div
+          class="col-days day-cells"
+          *ngIf="driver.type === 'driver' || driver.type === 'unassigned'"
+          [style.gridTemplateRows]="'repeat(' + getMaxStackRowsForDriver(driver.id) + ', 72px)'"
+        >
           <div class="day-cell" *ngFor="let day of days; let i = index" [style.grid-column]="(i+1) + ' / span 1'" [style.grid-row]="1">
             <span class="cell-placeholder" *ngIf="!isDayCoveredByLoad(driver.id, i)">No load assigned</span>
           </div>
@@ -118,7 +122,7 @@
             *ngFor="let load of getLoadsForDriver(driver.id)"
             class="load-card-wrapper load-card-spanning"
             [style.grid-column]="getLoadSpan(load).startCol + ' / span ' + getLoadSpan(load).span"
-            [style.grid-row]="1"
+            [style.grid-row]="(getLoadStackRow(load) + 1)"
           >
             <button
               type="button"
