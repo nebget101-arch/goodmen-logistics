@@ -109,6 +109,15 @@ export class DeviceDialogComponent implements OnInit {
     this.api.getDrivers().subscribe({
       next: (drivers: Array<{
         id: string;
+        firstName?: string;
+        lastName?: string;
+        driverName?: string;
+        truckId?: string;
+        truckUnitNumber?: string;
+        truckPlateNumber?: string;
+        trailerId?: string;
+        trailerUnitNumber?: string;
+        trailerPlateNumber?: string;
         first_name?: string;
         last_name?: string;
         driver_name?: string;
@@ -121,13 +130,17 @@ export class DeviceDialogComponent implements OnInit {
       }>) => {
         this.allDrivers = (drivers || []).map((d) => ({
           id: String(d.id),
-          label: d.driver_name || [d.first_name, d.last_name].filter(Boolean).join(' ') || String(d.id),
-          truckId: d.truck_id ? String(d.truck_id) : undefined,
-          truckUnitNumber: d.truck_unit_number || '',
-          truckPlateNumber: d.truck_plate_number || '',
-          trailerId: d.trailer_id ? String(d.trailer_id) : undefined,
-          trailerUnitNumber: d.trailer_unit_number || '',
-          trailerPlateNumber: d.trailer_plate_number || ''
+          label: d.driverName
+            || d.driver_name
+            || [d.firstName, d.lastName].filter(Boolean).join(' ')
+            || [d.first_name, d.last_name].filter(Boolean).join(' ')
+            || String(d.id),
+          truckId: d.truckId ? String(d.truckId) : (d.truck_id ? String(d.truck_id) : undefined),
+          truckUnitNumber: d.truckUnitNumber || d.truck_unit_number || '',
+          truckPlateNumber: d.truckPlateNumber || d.truck_plate_number || '',
+          trailerId: d.trailerId ? String(d.trailerId) : (d.trailer_id ? String(d.trailer_id) : undefined),
+          trailerUnitNumber: d.trailerUnitNumber || d.trailer_unit_number || '',
+          trailerPlateNumber: d.trailerPlateNumber || d.trailer_plate_number || ''
         }));
         this.setupDriverAutocomplete();
         this.patchDriverFromDevice();
