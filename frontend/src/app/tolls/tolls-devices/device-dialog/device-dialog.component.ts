@@ -177,10 +177,10 @@ export class DeviceDialogComponent implements OnInit {
     );
   }
 
-  private filterList(
-    items: Array<{ id: string; label: string }>,
+  private filterList<T extends { id: string; label: string }>(
+    items: T[],
     query: string
-  ): Array<{ id: string; label: string }> {
+  ): T[] {
     const lower = (query || '').toLowerCase().trim();
     if (!lower) return items.slice(0, 50);
     return items.filter((i) => i.label.toLowerCase().includes(lower)).slice(0, 50);
