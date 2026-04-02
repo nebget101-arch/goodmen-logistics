@@ -249,8 +249,11 @@ router.get('/', async (req, res) => {
         SELECT
           d.*,
           oe.name AS operating_entity_name,
+          concat_ws(' ', d.first_name, d.last_name) AS driver_name,
           t.unit_number AS truck_unit_number,
-          tr.unit_number AS trailer_unit_number
+          t.license_plate AS truck_plate_number,
+          tr.unit_number AS trailer_unit_number,
+          tr.license_plate AS trailer_plate_number
         FROM drivers d
         LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
         LEFT JOIN ${vehicleSource} t ON t.id = d.truck_id
@@ -260,8 +263,11 @@ router.get('/', async (req, res) => {
         SELECT
           d.*,
           oe.name AS operating_entity_name,
+          concat_ws(' ', d.first_name, d.last_name) AS driver_name,
           NULL AS truck_unit_number,
-          NULL AS trailer_unit_number
+          NULL AS truck_plate_number,
+          NULL AS trailer_unit_number,
+          NULL AS trailer_plate_number
         FROM drivers d
         LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
       `;
@@ -279,8 +285,36 @@ router.get('/', async (req, res) => {
       result = await query(sql, params);
     } else {
       // Legacy/default view – keep existing behaviour for backward compatibility
+      const vehicleSource = await resolveVehicleSource();
+      const hasVehicles = vehicleSource !== 'none';
       const params = [];
-      let sql = 'SELECT d.*, oe.name AS operating_entity_name FROM drivers d LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id';
+      let sql = hasVehicles
+        ? `
+        SELECT
+          d.*,
+          oe.name AS operating_entity_name,
+          concat_ws(' ', d.first_name, d.last_name) AS driver_name,
+          t.unit_number AS truck_unit_number,
+          t.license_plate AS truck_plate_number,
+          tr.unit_number AS trailer_unit_number,
+          tr.license_plate AS trailer_plate_number
+        FROM drivers d
+        LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
+        LEFT JOIN ${vehicleSource} t ON t.id = d.truck_id
+        LEFT JOIN ${vehicleSource} tr ON tr.id = d.trailer_id
+      `
+        : `
+        SELECT
+          d.*,
+          oe.name AS operating_entity_name,
+          concat_ws(' ', d.first_name, d.last_name) AS driver_name,
+          NULL AS truck_unit_number,
+          NULL AS truck_plate_number,
+          NULL AS trailer_unit_number,
+          NULL AS trailer_plate_number
+        FROM drivers d
+        LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
+      `;
       if (hasStatus) {
         params.push(req.context?.tenantId || null);
         params.push(status);
