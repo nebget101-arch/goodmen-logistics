@@ -210,16 +210,18 @@ export class DeviceDialogComponent implements OnInit {
 
   onDriverSelected(driverId: string): void {
     const driver = this.allDrivers.find((d) => d.id === driverId);
+    const truck = driver?.truckId ? this.allTrucks.find((t) => t.id === driver.truckId) : undefined;
+    const trailer = driver?.trailerId ? this.allTrailers.find((t) => t.id === driver.trailerId) : undefined;
     this.form.patchValue({
       driver_id: driverId,
       truck_id: driver?.truckId || '',
       trailer_id: driver?.trailerId || '',
-      truck_plate_number: driver?.truckPlateNumber || '',
-      trailer_plate_number: driver?.trailerPlateNumber || ''
+      truck_plate_number: driver?.truckPlateNumber || truck?.plateNumber || '',
+      trailer_plate_number: driver?.trailerPlateNumber || trailer?.plateNumber || ''
     });
     this.driverControl.setValue(driver?.label || '');
-    this.truckControl.setValue(driver?.truckUnitNumber || '');
-    this.trailerControl.setValue(driver?.trailerUnitNumber || '');
+    this.truckControl.setValue(driver?.truckUnitNumber || truck?.unitNumber || '');
+    this.trailerControl.setValue(driver?.trailerUnitNumber || trailer?.unitNumber || '');
   }
 
   onTrailerSelected(trailerId: string): void {
@@ -278,16 +280,20 @@ export class DeviceDialogComponent implements OnInit {
     const driverId = this.data.device?.driver_id ? String(this.data.device.driver_id) : '';
     if (!driverId) return;
     const driver = this.allDrivers.find((d) => d.id === driverId);
+    const truck = driver?.truckId ? this.allTrucks.find((t) => t.id === driver.truckId) : undefined;
+    const trailer = driver?.trailerId ? this.allTrailers.find((t) => t.id === driver.trailerId) : undefined;
     this.driverControl.setValue(driver?.label || '');
     if (!this.data.device?.truck_id && driver?.truckId) {
       this.form.patchValue({ truck_id: driver.truckId });
-      this.truckControl.setValue(driver.truckUnitNumber || '');
-      this.form.patchValue({ truck_plate_number: this.form.value.truck_plate_number || driver.truckPlateNumber || '' });
+      this.truckControl.setValue(driver.truckUnitNumber || truck?.unitNumber || '');
+      this.form.patchValue({
+        truck_plate_number: this.form.value.truck_plate_number || driver.truckPlateNumber || truck?.plateNumber || ''
+      });
     }
     if (!this.data.device?.trailer_id && driver?.trailerId) {
       this.form.patchValue({ trailer_id: driver.trailerId });
-      this.trailerControl.setValue(driver.trailerUnitNumber || '');
-      this.form.patchValue({ trailer_plate_number: driver.trailerPlateNumber || '' });
+      this.trailerControl.setValue(driver.trailerUnitNumber || trailer?.unitNumber || '');
+      this.form.patchValue({ trailer_plate_number: driver.trailerPlateNumber || trailer?.plateNumber || '' });
     }
   }
 
