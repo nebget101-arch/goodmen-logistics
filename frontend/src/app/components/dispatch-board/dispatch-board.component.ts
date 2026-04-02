@@ -594,8 +594,11 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
     const weekStart = new Date(this.weekStart);
     weekStart.setHours(0, 0, 0, 0);
     parsed.setHours(0, 0, 0, 0);
-    const diffMs = parsed.getTime() - weekStart.getTime();
-    const diffDays = Math.round(diffMs / 86400000);
+
+    // DST/timezone safe: compute diffs in UTC "date-only" space.
+    const weekStartUtc = Date.UTC(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate());
+    const parsedUtc = Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+    const diffDays = Math.round((parsedUtc - weekStartUtc) / 86400000);
     return Math.max(0, Math.min(6, diffDays));
   }
 
