@@ -166,7 +166,7 @@ function getLoadDetails(item) {
 function buildLoadRows(payload) {
   const settlementType = payload?.settlement?.settlement_type;
   return (payload?.loadItems || []).map((item) => ([
-    safeText(item?.load_number || item?.load_id),
+    `LOAD # ${safeText(item?.load_number || item?.load_id)}`,
     `${fmtDate(item?.pickup_date)} -> ${fmtDate(item?.delivery_date)}`,
     getLoadDetails(item),
     item?.empty_miles === null || item?.empty_miles === undefined || item?.empty_miles === '' ? '—' : String(item.empty_miles),
@@ -244,6 +244,51 @@ const LAYOUT = {
   contentBottom: 58
 };
 
+function drawAiGridWatermark(page) {
+  const gridColor = rgb(34 / 255, 211 / 255, 238 / 255);
+  const startX = LAYOUT.marginLeft + 6;
+  const endX = LAYOUT.width - LAYOUT.marginRight - 6;
+  const startY = LAYOUT.contentBottom + 16;
+  const endY = LAYOUT.height - 132;
+
+  for (let x = startX; x <= endX; x += 32) {
+    page.drawLine({
+      start: { x, y: startY },
+      end: { x, y: endY },
+      thickness: 0.2,
+      color: gridColor,
+      opacity: 0.08
+    });
+  }
+
+  for (let y = startY; y <= endY; y += 28) {
+    page.drawLine({
+      start: { x: startX, y },
+      end: { x: endX, y },
+      thickness: 0.2,
+      color: gridColor,
+      opacity: 0.08
+    });
+  }
+}
+
+function drawNeonDivider(page, y, width = LAYOUT.contentWidth, x = LAYOUT.marginLeft) {
+  page.drawLine({
+    start: { x, y },
+    end: { x: x + width, y },
+    thickness: 1.2,
+    color: COLORS.accent,
+    opacity: 0.55
+  });
+  page.drawLine({
+    start: { x, y: y - 1.5 },
+    end: { x: x + width, y: y - 1.5 },
+    thickness: 0.35,
+    color: COLORS.white,
+    opacity: 0.16
+  });
+}
+
 function wrapTextToWidth(font, text, size, maxWidth) {
   const raw = safeText(text, '');
   if (!raw) return [''];
@@ -303,6 +348,7 @@ function drawWrappedLines(page, font, lines, x, y, options = {}) {
 function drawPageBase(page, fonts, payload) {
   const { regular, bold } = fonts;
   page.drawRectangle({ x: 0, y: 0, width: LAYOUT.width, height: LAYOUT.height, color: COLORS.bg });
+  drawAiGridWatermark(page);
   page.drawRectangle({
     x: LAYOUT.marginLeft,
     y: LAYOUT.height - 112,
@@ -319,6 +365,7 @@ function drawPageBase(page, fonts, payload) {
     height: 3,
     color: COLORS.accent
   });
+  drawNeonDivider(page, LAYOUT.height - 126);
 
   page.drawText('FleetNeuron', {
     x: LAYOUT.marginLeft + 16,
@@ -455,12 +502,7 @@ function drawSectionTitle(state, title) {
     font: state.fonts.bold,
     color: COLORS.accent
   });
-  state.page.drawLine({
-    start: { x: LAYOUT.marginLeft, y: state.y - 4 },
-    end: { x: LAYOUT.width - LAYOUT.marginRight, y: state.y - 4 },
-    thickness: 0.7,
-    color: COLORS.accentSoft
-  });
+  drawNeonDivider(state.page, state.y - 4);
   state.y -= 20;
 }
 
@@ -687,6 +729,10 @@ function drawPanelSection(state, title, lines, options = {}) {
   const textSize = options.textSize || 8;
   const lineHeight = options.lineHeight || 10;
   const minHeight = options.minHeight || 78;
+  const isHighlighted = Boolean(options.highlighted);
+  const panelColor = options.panelColor || (isHighlighted ? rgb(18 / 255, 37 / 255, 52 / 255) : COLORS.panel);
+  const borderColor = options.borderColor || (isHighlighted ? COLORS.accent : COLORS.border);
+  const headerBandColor = options.headerBandColor || (isHighlighted ? rgb(8 / 255, 82 / 255, 103 / 255) : null);
   const contentHeight = lines.length * lineHeight;
   const panelHeight = Math.max(minHeight, 28 + contentHeight + 18);
   ensureSpace(state, panelHeight + 12);
@@ -698,10 +744,20 @@ function drawPanelSection(state, title, lines, options = {}) {
     y: panelY,
     width: LAYOUT.contentWidth,
     height: panelHeight,
-    color: COLORS.panel,
-    borderColor: COLORS.border,
+    color: panelColor,
+    borderColor,
     borderWidth: 1
   });
+  if (headerBandColor) {
+    state.page.drawRectangle({
+      x: LAYOUT.marginLeft,
+      y: topY - 24,
+      width: LAYOUT.contentWidth,
+      height: 18,
+      color: headerBandColor,
+      opacity: 0.45
+    });
+  }
   state.page.drawText(title, {
     x: LAYOUT.marginLeft + 14,
     y: topY - 16,
@@ -709,6 +765,9 @@ function drawPanelSection(state, title, lines, options = {}) {
     font: state.fonts.bold,
     color: COLORS.accent
   });
+  if (isHighlighted) {
+    drawNeonDivider(state.page, panelY + panelHeight - 2);
+  }
   drawWrappedLines(state.page, state.fonts.regular, lines, LAYOUT.marginLeft + 14, topY - 34, {
     size: textSize,
     lineHeight,
@@ -833,7 +892,8 @@ async function buildSettlementPdf(payload) {
   drawPanelSection(state, 'FleetNeuron AI Insights', buildInsightLines(regular, aiInsights), {
     textSize: 8,
     lineHeight: 10,
-    minHeight: 96
+    minHeight: 96,
+    highlighted: true
   });
 
   const metadataLines = [
