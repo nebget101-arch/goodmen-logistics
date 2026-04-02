@@ -86,7 +86,72 @@ async function getBrokerByIdWithOverride(id, tid) {
   };
 }
 
-/** GET /api/brokers - list brokers with pagination, optional ?q= fuzzy search */
+/**
+ * @openapi
+ * /api/brokers:
+ *   get:
+ *     summary: List brokers
+ *     description: >
+ *       Returns a paginated list of brokers with optional fuzzy search.
+ *       Results include tenant-specific overlay fields (credit_score,
+ *       payment_rating, broker_notes, is_blocked, is_preferred) when a
+ *       tenant context is present.
+ *     tags:
+ *       - Brokers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Fuzzy search term matched against legal_name, dba_name, mc_number, dot_number, and phone.
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number (1-based).
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           maximum: 100
+ *         description: Number of records per page (max 100).
+ *     responses:
+ *       200:
+ *         description: Paginated broker list.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Broker'
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     pageSize:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *       500:
+ *         description: Server error.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/', async (req, res) => {
   try {
     const q = (req.query.q || '').toString().trim();
@@ -125,14 +190,127 @@ router.get('/', async (req, res) => {
   }
 });
 
-/** GET /api/brokers/search?q= - fuzzy search (same logic as GET / with q) */
+/**
+ * @openapi
+ * /api/brokers/search:
+ *   get:
+ *     summary: Search brokers
+ *     description: >
+ *       Fuzzy search endpoint that delegates to GET /api/brokers with the
+ *       provided query term. Accepts either `q` or `search` as the query
+ *       parameter.
+ *     tags:
+ *       - Brokers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Search term (alias `search` also accepted).
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Alias for `q`.
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number (1-based).
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           maximum: 100
+ *         description: Number of records per page (max 100).
+ *     responses:
+ *       200:
+ *         description: Paginated broker list matching the search term.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Broker'
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     pageSize:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *       500:
+ *         description: Server error.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/search', (req, res, next) => {
   req.query.q = (req.query.q || req.query.search || '').toString().trim();
   req.url = '/';
   return router.handle(req, res, next);
 });
 
-/** GET /api/brokers/mc/:mcNumber */
+/**
+ * @openapi
+ * /api/brokers/mc/{mcNumber}:
+ *   get:
+ *     summary: Find brokers by MC number
+ *     description: Returns all brokers matching the given MC number, including tenant-specific overlay fields when available.
+ *     tags:
+ *       - Brokers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: mcNumber
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The MC (Motor Carrier) number to look up.
+ *     responses:
+ *       200:
+ *         description: Brokers matching the MC number.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Broker'
+ *       400:
+ *         description: MC number is missing.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/mc/:mcNumber', async (req, res) => {
   try {
     const tid = tenantId(req);
@@ -156,7 +334,51 @@ router.get('/mc/:mcNumber', async (req, res) => {
   }
 });
 
-/** GET /api/brokers/dot/:dotNumber */
+/**
+ * @openapi
+ * /api/brokers/dot/{dotNumber}:
+ *   get:
+ *     summary: Find brokers by DOT number
+ *     description: Returns all brokers matching the given DOT number, including tenant-specific overlay fields when available.
+ *     tags:
+ *       - Brokers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: dotNumber
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The USDOT number to look up.
+ *     responses:
+ *       200:
+ *         description: Brokers matching the DOT number.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Broker'
+ *       400:
+ *         description: DOT number is missing.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/dot/:dotNumber', async (req, res) => {
   try {
     const tid = tenantId(req);
@@ -180,7 +402,103 @@ router.get('/dot/:dotNumber', async (req, res) => {
   }
 });
 
-/** POST /api/brokers - create a new broker */
+/**
+ * @openapi
+ * /api/brokers:
+ *   post:
+ *     summary: Create a new broker
+ *     description: >
+ *       Inserts a broker into the `brokers` table. If the caller's tenant
+ *       context is present and any override fields (credit_score,
+ *       payment_rating, broker_notes, is_blocked, is_preferred) are
+ *       supplied, a `tenant_broker_overrides` row is upserted as well.
+ *     tags:
+ *       - Brokers
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - legal_name
+ *             properties:
+ *               legal_name:
+ *                 type: string
+ *                 description: Primary legal name (aliases companyName, company_name).
+ *               dba_name:
+ *                 type: string
+ *               mc_number:
+ *                 type: string
+ *                 description: MC number (alias mc).
+ *               dot_number:
+ *                 type: string
+ *                 description: DOT number (alias dot).
+ *               authority_type:
+ *                 type: string
+ *                 default: Broker
+ *               status:
+ *                 type: string
+ *                 default: Active
+ *               phone:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               street:
+ *                 type: string
+ *                 description: Street address (aliases address, address1).
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               zip:
+ *                 type: string
+ *               country:
+ *                 type: string
+ *                 default: US
+ *               credit_score:
+ *                 type: number
+ *                 description: Tenant-specific override field.
+ *               payment_rating:
+ *                 type: string
+ *                 description: Tenant-specific override field.
+ *               broker_notes:
+ *                 type: string
+ *                 description: Tenant-specific override field (alias notes).
+ *               is_blocked:
+ *                 type: boolean
+ *                 description: Tenant-specific override field.
+ *               is_preferred:
+ *                 type: boolean
+ *                 description: Tenant-specific override field.
+ *     responses:
+ *       201:
+ *         description: Broker created successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/Broker'
+ *       400:
+ *         description: Missing required field (legal_name).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/', async (req, res) => {
   try {
     if (!knex) {
@@ -257,7 +575,80 @@ router.post('/', async (req, res) => {
   }
 });
 
-/** POST /api/brokers/overrides - create/update tenant-specific broker overlay fields */
+/**
+ * @openapi
+ * /api/brokers/overrides:
+ *   post:
+ *     summary: Upsert tenant broker overrides
+ *     description: >
+ *       Creates or updates tenant-specific overlay fields for an existing
+ *       broker. Requires tenant context from the JWT. Uses an
+ *       INSERT ... ON CONFLICT MERGE against (tenant_id, broker_id).
+ *     tags:
+ *       - Brokers
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - broker_id
+ *             properties:
+ *               broker_id:
+ *                 type: string
+ *                 description: ID of the broker to overlay (alias brokerId).
+ *               credit_score:
+ *                 type: number
+ *               payment_rating:
+ *                 type: string
+ *               broker_notes:
+ *                 type: string
+ *                 description: Tenant notes (alias notes).
+ *               is_blocked:
+ *                 type: boolean
+ *               is_preferred:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Override saved. Returns the merged broker with overlay fields.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/Broker'
+ *       400:
+ *         description: Missing broker_id.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Tenant context required.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Broker not found.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/overrides', async (req, res) => {
   try {
     if (!knex) {

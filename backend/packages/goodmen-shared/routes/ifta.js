@@ -124,6 +124,52 @@ function normalizeQuarterStatus(status) {
   return 'draft';
 }
 
+/**
+ * @openapi
+ * /api/ifta/quarters:
+ *   get:
+ *     summary: List IFTA quarters
+ *     description: >
+ *       Returns all IFTA quarterly filing periods for the tenant, ordered by
+ *       tax_year and quarter descending. IFTA requires carriers to file fuel-tax
+ *       reports every calendar quarter. Use the optional filters to narrow results
+ *       by year, quarter number, or filing status (draft, in_review, finalized).
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: tax_year
+ *         schema:
+ *           type: integer
+ *         description: Filter by tax year (e.g. 2025)
+ *       - in: query
+ *         name: quarter
+ *         schema:
+ *           type: integer
+ *           enum: [1, 2, 3, 4]
+ *         description: Filter by quarter number (1-4)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [draft, under_review, finalized, exported]
+ *         description: Filter by quarter status
+ *     responses:
+ *       200:
+ *         description: Array of IFTA quarter records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.get('/ifta/quarters', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -143,6 +189,61 @@ router.get('/ifta/quarters', canView, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters:
+ *   post:
+ *     summary: Create a new IFTA quarter
+ *     description: >
+ *       Creates a new IFTA quarterly filing period in draft status. Each
+ *       quarter (Q1-Q4) per tax year per operating entity must be unique.
+ *       IFTA quarterly filing is mandatory for motor carriers operating in
+ *       multiple jurisdictions; this endpoint initializes the filing workspace.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - quarter
+ *               - tax_year
+ *             properties:
+ *               quarter:
+ *                 type: integer
+ *                 enum: [1, 2, 3, 4]
+ *                 description: Calendar quarter (1-4)
+ *               tax_year:
+ *                 type: integer
+ *                 description: Tax year (2000-2100)
+ *               filing_entity_name:
+ *                 type: string
+ *                 description: Name of the filing entity
+ *               selected_truck_ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Truck IDs included in this filing
+ *     responses:
+ *       201:
+ *         description: Created IFTA quarter record
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Invalid quarter or tax_year
+ *       401:
+ *         description: Tenant context required
+ *       409:
+ *         description: Quarter already exists for this entity
+ *       500:
+ *         description: Server error
+ */
 router.post('/ifta/quarters', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -190,6 +291,43 @@ router.post('/ifta/quarters', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}:
+ *   get:
+ *     summary: Get a single IFTA quarter
+ *     description: >
+ *       Retrieves full details for one IFTA quarterly filing period, including
+ *       the count of open warnings and blockers from the latest AI review.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     responses:
+ *       200:
+ *         description: IFTA quarter with open_warnings count
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 open_warnings:
+ *                   type: integer
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/ifta/quarters/:id', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -210,6 +348,57 @@ router.get('/ifta/quarters/:id', canView, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}:
+ *   patch:
+ *     summary: Update an IFTA quarter
+ *     description: >
+ *       Partially updates an existing IFTA quarterly filing period. You can
+ *       change the filing entity name, selected trucks, or status. Quarter
+ *       statuses follow the lifecycle: draft -> under_review -> finalized -> exported.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               filing_entity_name:
+ *                 type: string
+ *               selected_truck_ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               status:
+ *                 type: string
+ *                 enum: [draft, under_review, finalized, exported]
+ *     responses:
+ *       200:
+ *         description: Updated IFTA quarter record
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.patch('/ifta/quarters/:id', canEdit, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -235,6 +424,42 @@ router.patch('/ifta/quarters/:id', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/recalculate:
+ *   post:
+ *     summary: Recalculate IFTA quarter summary
+ *     description: >
+ *       Recomputes the jurisdiction-level summary (miles, gallons, MPG, tax
+ *       due/credit) for the given IFTA quarter. Call this after bulk edits to
+ *       miles or fuel entries to ensure the quarterly filing totals are accurate
+ *       before review or finalization.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     responses:
+ *       200:
+ *         description: Recalculated summary object
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/ifta/quarters/:id/recalculate', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -259,6 +484,85 @@ router.post('/ifta/quarters/:id/recalculate', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/miles:
+ *   get:
+ *     summary: List mileage entries for an IFTA quarter
+ *     description: >
+ *       Returns paginated mileage entries recorded against this IFTA quarter,
+ *       along with per-jurisdiction totals. Mileage data is a core component
+ *       of IFTA quarterly filings and must be reported by jurisdiction.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           minimum: 1
+ *           maximum: 500
+ *         description: Page size
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Pagination offset
+ *       - in: query
+ *         name: unit
+ *         schema:
+ *           type: string
+ *         description: Filter by truck unit number (partial match)
+ *       - in: query
+ *         name: jurisdiction
+ *         schema:
+ *           type: string
+ *         description: Filter by jurisdiction code (exact, uppercased)
+ *     responses:
+ *       200:
+ *         description: Paginated mileage rows with jurisdiction totals
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *                 totals:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       jurisdiction:
+ *                         type: string
+ *                       taxable_miles:
+ *                         type: number
+ *                       non_taxable_miles:
+ *                         type: number
+ *                       total_miles:
+ *                         type: number
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/ifta/quarters/:id/miles', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -291,6 +595,73 @@ router.get('/ifta/quarters/:id/miles', canView, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/miles:
+ *   post:
+ *     summary: Create a mileage entry
+ *     description: >
+ *       Adds a single mileage entry to an IFTA quarter. Miles must be
+ *       broken down by jurisdiction for IFTA quarterly filing. The quarter
+ *       summary is automatically recalculated after insertion.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - unit
+ *               - jurisdiction
+ *             properties:
+ *               unit:
+ *                 type: string
+ *                 description: Truck unit number
+ *               jurisdiction:
+ *                 type: string
+ *                 description: Two-letter jurisdiction code (uppercased automatically)
+ *               taxable_miles:
+ *                 type: number
+ *               non_taxable_miles:
+ *                 type: number
+ *               total_miles:
+ *                 type: number
+ *                 description: Defaults to taxable + non_taxable if omitted
+ *               truck_id:
+ *                 type: string
+ *               source:
+ *                 type: string
+ *                 default: manual
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Created mileage entry
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Missing unit, jurisdiction, or invalid miles
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/ifta/quarters/:id/miles', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -342,6 +713,83 @@ router.post('/ifta/quarters/:id/miles', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/miles/import:
+ *   post:
+ *     summary: Bulk-import mileage entries
+ *     description: >
+ *       Imports multiple mileage rows into an IFTA quarter from either a JSON
+ *       array or CSV text. A source file record is created for audit trail.
+ *       The quarter summary is automatically recalculated after import. This
+ *       supports large-scale quarterly filing preparation by allowing ELD or
+ *       GPS data uploads.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               rows:
+ *                 type: array
+ *                 description: Array of mileage row objects (takes priority over csv_text)
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     unit:
+ *                       type: string
+ *                     jurisdiction:
+ *                       type: string
+ *                     taxable_miles:
+ *                       type: number
+ *                     non_taxable_miles:
+ *                       type: number
+ *                     total_miles:
+ *                       type: number
+ *                     truck_id:
+ *                       type: string
+ *                     source:
+ *                       type: string
+ *                     notes:
+ *                       type: string
+ *               csv_text:
+ *                 type: string
+ *                 description: Raw CSV text (used if rows is not provided)
+ *               file_name:
+ *                 type: string
+ *                 description: Original file name for audit trail
+ *     responses:
+ *       201:
+ *         description: Import result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 inserted:
+ *                   type: integer
+ *       400:
+ *         description: No valid rows to import
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/ifta/quarters/:id/miles/import', canImport, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -413,6 +861,70 @@ router.post('/ifta/quarters/:id/miles/import', canImport, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/miles/{entryId}:
+ *   patch:
+ *     summary: Update a mileage entry
+ *     description: >
+ *       Partially updates a single mileage entry within an IFTA quarter. If
+ *       taxable or non-taxable miles change and total_miles is not provided,
+ *       total is auto-recalculated. The quarter summary is recalculated after
+ *       the update.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *       - in: path
+ *         name: entryId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Mileage entry ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               unit:
+ *                 type: string
+ *               jurisdiction:
+ *                 type: string
+ *               taxable_miles:
+ *                 type: number
+ *               non_taxable_miles:
+ *                 type: number
+ *               total_miles:
+ *                 type: number
+ *               source:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated mileage entry
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter or mileage row not found
+ *       500:
+ *         description: Server error
+ */
 router.patch('/ifta/quarters/:id/miles/:entryId', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -465,6 +977,51 @@ router.patch('/ifta/quarters/:id/miles/:entryId', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/miles/{entryId}:
+ *   delete:
+ *     summary: Soft-delete a mileage entry
+ *     description: >
+ *       Marks a mileage entry as deleted (soft delete). The quarter summary
+ *       is recalculated after removal to keep IFTA quarterly filing totals
+ *       accurate.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *       - in: path
+ *         name: entryId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Mileage entry ID
+ *     responses:
+ *       200:
+ *         description: Deletion confirmation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter or mileage row not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/ifta/quarters/:id/miles/:entryId', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -496,6 +1053,84 @@ router.delete('/ifta/quarters/:id/miles/:entryId', canEdit, async (req, res) => 
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/fuel:
+ *   get:
+ *     summary: List fuel purchase entries for an IFTA quarter
+ *     description: >
+ *       Returns paginated fuel purchase entries recorded against this IFTA
+ *       quarter, along with per-jurisdiction totals for gallons and amount.
+ *       Fuel purchases by jurisdiction are required for IFTA quarterly filing
+ *       to compute tax credits for fuel purchased in each state/province.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           minimum: 1
+ *           maximum: 500
+ *         description: Page size
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Pagination offset
+ *       - in: query
+ *         name: unit
+ *         schema:
+ *           type: string
+ *         description: Filter by truck unit number (partial match)
+ *       - in: query
+ *         name: jurisdiction
+ *         schema:
+ *           type: string
+ *         description: Filter by jurisdiction code (exact, uppercased)
+ *     responses:
+ *       200:
+ *         description: Paginated fuel rows with jurisdiction totals
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *                 totals:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       jurisdiction:
+ *                         type: string
+ *                       gallons:
+ *                         type: number
+ *                       amount:
+ *                         type: number
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/ifta/quarters/:id/fuel', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -528,6 +1163,92 @@ router.get('/ifta/quarters/:id/fuel', canView, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/fuel:
+ *   post:
+ *     summary: Create a fuel purchase entry
+ *     description: >
+ *       Adds a single fuel purchase entry to an IFTA quarter. Duplicate
+ *       detection is performed when a receipt_invoice_number is provided
+ *       (same unit + receipt + date). The quarter summary is automatically
+ *       recalculated after insertion. Fuel purchases must be allocated by
+ *       jurisdiction for IFTA quarterly filing.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - purchase_date
+ *               - unit
+ *               - jurisdiction
+ *               - gallons
+ *               - amount
+ *             properties:
+ *               purchase_date:
+ *                 type: string
+ *                 format: date
+ *               unit:
+ *                 type: string
+ *                 description: Truck unit number
+ *               jurisdiction:
+ *                 type: string
+ *                 description: Two-letter jurisdiction code
+ *               gallons:
+ *                 type: number
+ *                 description: Must be greater than 0
+ *               amount:
+ *                 type: number
+ *                 description: Dollar amount (>= 0)
+ *               truck_id:
+ *                 type: string
+ *               vendor:
+ *                 type: string
+ *               receipt_invoice_number:
+ *                 type: string
+ *               fuel_type:
+ *                 type: string
+ *                 default: diesel
+ *               tax_paid:
+ *                 type: boolean
+ *                 default: true
+ *               attachment_link:
+ *                 type: string
+ *               source:
+ *                 type: string
+ *                 default: manual
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Created fuel entry (includes duplicate_suspected flag)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Missing required fields or invalid values
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/ifta/quarters/:id/fuel', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -596,6 +1317,92 @@ router.post('/ifta/quarters/:id/fuel', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/fuel/import:
+ *   post:
+ *     summary: Bulk-import fuel purchase entries
+ *     description: >
+ *       Imports multiple fuel purchase rows into an IFTA quarter from either
+ *       a JSON array or CSV text. Duplicate detection is applied per row when
+ *       receipt numbers are present. A source file record is created for audit
+ *       trail and the quarter summary is recalculated. Supports fuel card
+ *       statement uploads for efficient IFTA quarterly filing preparation.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               rows:
+ *                 type: array
+ *                 description: Array of fuel row objects (takes priority over csv_text)
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     purchase_date:
+ *                       type: string
+ *                       format: date
+ *                     unit:
+ *                       type: string
+ *                     jurisdiction:
+ *                       type: string
+ *                     gallons:
+ *                       type: number
+ *                     amount:
+ *                       type: number
+ *                     vendor:
+ *                       type: string
+ *                     receipt_invoice_number:
+ *                       type: string
+ *                     fuel_type:
+ *                       type: string
+ *                     tax_paid:
+ *                       type: boolean
+ *                     truck_id:
+ *                       type: string
+ *                     source:
+ *                       type: string
+ *                     notes:
+ *                       type: string
+ *               csv_text:
+ *                 type: string
+ *                 description: Raw CSV text (used if rows is not provided)
+ *               file_name:
+ *                 type: string
+ *                 description: Original file name for audit trail
+ *     responses:
+ *       201:
+ *         description: Import result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 inserted:
+ *                   type: integer
+ *       400:
+ *         description: No valid rows to import
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/ifta/quarters/:id/fuel/import', canImport, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -691,6 +1498,80 @@ router.post('/ifta/quarters/:id/fuel/import', canImport, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/fuel/{entryId}:
+ *   patch:
+ *     summary: Update a fuel purchase entry
+ *     description: >
+ *       Partially updates a single fuel purchase entry within an IFTA quarter.
+ *       The quarter summary is recalculated after the update to keep filing
+ *       totals accurate.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *       - in: path
+ *         name: entryId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel entry ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               purchase_date:
+ *                 type: string
+ *                 format: date
+ *               unit:
+ *                 type: string
+ *               jurisdiction:
+ *                 type: string
+ *               vendor:
+ *                 type: string
+ *               receipt_invoice_number:
+ *                 type: string
+ *               gallons:
+ *                 type: number
+ *               amount:
+ *                 type: number
+ *               fuel_type:
+ *                 type: string
+ *               tax_paid:
+ *                 type: boolean
+ *               attachment_link:
+ *                 type: string
+ *               source:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated fuel entry
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter or fuel row not found
+ *       500:
+ *         description: Server error
+ */
 router.patch('/ifta/quarters/:id/fuel/:entryId', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -739,6 +1620,51 @@ router.patch('/ifta/quarters/:id/fuel/:entryId', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/fuel/{entryId}:
+ *   delete:
+ *     summary: Soft-delete a fuel purchase entry
+ *     description: >
+ *       Marks a fuel purchase entry as deleted (soft delete). The quarter
+ *       summary is recalculated after removal to keep IFTA quarterly filing
+ *       totals accurate.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *       - in: path
+ *         name: entryId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel entry ID
+ *     responses:
+ *       200:
+ *         description: Deletion confirmation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter or fuel row not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/ifta/quarters/:id/fuel/:entryId', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -770,6 +1696,68 @@ router.delete('/ifta/quarters/:id/fuel/:entryId', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/run-ai-review:
+ *   post:
+ *     summary: Run AI validation review on an IFTA quarter
+ *     description: >
+ *       Recalculates the quarter summary, runs automated validation rules to
+ *       produce findings (blockers, warnings, info), computes a readiness
+ *       score (0-100), and generates an AI narrative. Previous findings are
+ *       archived. If any blockers exist, the quarter status reverts to draft;
+ *       otherwise it advances to under_review. This is a key step in the IFTA
+ *       quarterly filing workflow to catch data quality issues before
+ *       finalization.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     responses:
+ *       200:
+ *         description: AI review results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 quarter:
+ *                   type: object
+ *                 readiness_score:
+ *                   type: integer
+ *                   minimum: 0
+ *                   maximum: 100
+ *                 narrative:
+ *                   type: string
+ *                 findings:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                       severity:
+ *                         type: string
+ *                         enum: [blocker, warning, info]
+ *                       title:
+ *                         type: string
+ *                       details:
+ *                         type: string
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/ifta/quarters/:id/run-ai-review', canRunAi, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -845,6 +1833,45 @@ router.post('/ifta/quarters/:id/run-ai-review', canRunAi, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/findings:
+ *   get:
+ *     summary: List AI findings for an IFTA quarter
+ *     description: >
+ *       Returns all non-archived AI validation findings for the given IFTA
+ *       quarter, ordered by severity (blockers first, then warnings, then
+ *       info). Findings are produced by the AI review step and must be
+ *       resolved or acknowledged before the quarter can be finalized for
+ *       IFTA quarterly filing.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     responses:
+ *       200:
+ *         description: Array of AI finding records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/ifta/quarters/:id/findings', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -863,6 +1890,50 @@ router.get('/ifta/quarters/:id/findings', canView, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/findings/{findingId}/resolve:
+ *   post:
+ *     summary: Resolve an AI finding
+ *     description: >
+ *       Marks a single AI validation finding as resolved with optional notes.
+ *       Resolving all blocker findings is required before an IFTA quarter can
+ *       be finalized for quarterly filing submission.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: findingId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: AI finding ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               notes:
+ *                 type: string
+ *                 description: Resolution notes explaining the action taken
+ *     responses:
+ *       200:
+ *         description: Resolved finding record
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Finding not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/ifta/findings/:findingId/resolve', canEdit, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -887,6 +1958,66 @@ router.post('/ifta/findings/:findingId/resolve', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/report-preview:
+ *   get:
+ *     summary: Preview the IFTA quarterly filing report
+ *     description: >
+ *       Returns a consolidated preview of the quarterly IFTA filing report
+ *       including top-level metric cards, jurisdiction summary rows, open
+ *       warning count, and the AI narrative. Use this to review the filing
+ *       before finalization. IFTA quarterly filings must be submitted to
+ *       the base jurisdiction within 30 days after quarter end.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     responses:
+ *       200:
+ *         description: Report preview payload
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 quarter:
+ *                   type: object
+ *                 cards:
+ *                   type: object
+ *                   properties:
+ *                     total_fleet_miles:
+ *                       type: number
+ *                     total_gallons:
+ *                       type: number
+ *                     fleet_mpg:
+ *                       type: number
+ *                     total_due_credit:
+ *                       type: number
+ *                     open_warnings:
+ *                       type: integer
+ *                 summary:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 ai_narrative:
+ *                   type: string
+ *                   nullable: true
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/ifta/quarters/:id/report-preview', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -920,6 +2051,62 @@ router.get('/ifta/quarters/:id/report-preview', canView, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/finalize:
+ *   post:
+ *     summary: Finalize an IFTA quarter
+ *     description: >
+ *       Locks the IFTA quarter by setting its status to finalized. The
+ *       quarter summary is recalculated and validation rules are re-run
+ *       first. If any blocker-severity findings exist the request is
+ *       rejected. Once finalized, the quarter data is considered ready
+ *       for official IFTA quarterly filing submission to the base
+ *       jurisdiction.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     responses:
+ *       200:
+ *         description: Finalized quarter with summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 quarter:
+ *                   type: object
+ *                 summary:
+ *                   type: object
+ *       400:
+ *         description: Validation blockers prevent finalization
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 blockers:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/ifta/quarters/:id/finalize', canFinalize, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -968,6 +2155,92 @@ router.post('/ifta/quarters/:id/finalize', canFinalize, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/filing-payload:
+ *   get:
+ *     summary: Get the machine-readable IFTA filing payload
+ *     description: >
+ *       Returns a versioned JSON payload containing all data needed for
+ *       IFTA quarterly filing: quarter metadata, fleet-level metrics,
+ *       jurisdiction summary rows, AI readiness score, narrative, and
+ *       findings. Intended for integration with state filing portals or
+ *       third-party IFTA filing services.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     responses:
+ *       200:
+ *         description: Filing payload
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 version:
+ *                   type: string
+ *                   example: ifta-filing-payload-v1
+ *                 generated_at:
+ *                   type: string
+ *                   format: date-time
+ *                 quarter:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     quarter:
+ *                       type: integer
+ *                     tax_year:
+ *                       type: integer
+ *                     filing_entity_name:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                 metrics:
+ *                   type: object
+ *                   properties:
+ *                     total_fleet_miles:
+ *                       type: number
+ *                     total_taxable_miles:
+ *                       type: number
+ *                     total_gallons:
+ *                       type: number
+ *                     fleet_mpg:
+ *                       type: number
+ *                     total_due_credit:
+ *                       type: number
+ *                 jurisdiction_summary:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 ai:
+ *                   type: object
+ *                   properties:
+ *                     readiness_score:
+ *                       type: integer
+ *                     narrative:
+ *                       type: string
+ *                       nullable: true
+ *                     findings:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/ifta/quarters/:id/filing-payload', canExport, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -1009,6 +2282,52 @@ router.get('/ifta/quarters/:id/filing-payload', canExport, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/export/csv/{kind}:
+ *   get:
+ *     summary: Export IFTA quarter data as CSV
+ *     description: >
+ *       Exports miles, fuel, or jurisdiction-summary data for the given IFTA
+ *       quarter as a downloadable CSV file. An export audit record is created
+ *       and the quarter status is set to exported. Exported CSVs can be used
+ *       to submit IFTA quarterly filing data to state portals that accept
+ *       CSV uploads.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *       - in: path
+ *         name: kind
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [miles, fuel, jurisdiction-summary]
+ *         description: Type of data to export
+ *     responses:
+ *       200:
+ *         description: CSV file download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Invalid kind parameter
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/ifta/quarters/:id/export/csv/:kind', canExport, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -1069,6 +2388,44 @@ router.get('/ifta/quarters/:id/export/csv/:kind', canExport, async (req, res) =>
   }
 });
 
+/**
+ * @openapi
+ * /api/ifta/quarters/{id}/export/pdf:
+ *   get:
+ *     summary: Export IFTA quarter summary as PDF
+ *     description: >
+ *       Generates and downloads a PDF report containing the IFTA quarter
+ *       summary: fleet-level metrics, jurisdiction breakdown, AI narrative,
+ *       and open findings. An export audit record is created and the quarter
+ *       status is set to exported. This PDF serves as a printable record of
+ *       the IFTA quarterly filing for internal review or auditor requests.
+ *     tags:
+ *       - IFTA
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: IFTA quarter ID
+ *     responses:
+ *       200:
+ *         description: PDF file download
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: IFTA quarter not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/ifta/quarters/:id/export/pdf', canExport, async (req, res) => {
   const trx = await knex.transaction();
   try {

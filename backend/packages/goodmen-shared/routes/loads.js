@@ -313,27 +313,112 @@ async function getLoadDetail(clientOrQuery, loadId, context = null) {
  * @openapi
  * /api/loads:
  *   get:
- *     summary: List loads
+ *     summary: List loads with filtering, sorting, and pagination
+ *     description: >
+ *       Returns a paginated list of loads. Supports filtering by load status, billing status,
+ *       driver, broker, date range, and free-text search. Drivers are scoped to their own loads.
+ *       Load statuses: DRAFT, NEW, CANCELLED, CANCELED, TONU, DISPATCHED, EN_ROUTE, PICKED_UP,
+ *       IN_TRANSIT, DELIVERED, COMPLETED. Billing statuses: PENDING, CANCELLED, CANCELED,
+ *       BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID. DRAFT loads appear first
+ *       when no status filter is applied.
  *     tags:
  *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [DRAFT, NEW, CANCELLED, CANCELED, TONU, DISPATCHED, EN_ROUTE, PICKED_UP, IN_TRANSIT, DELIVERED, COMPLETED]
+ *         description: Filter by load status
+ *       - in: query
+ *         name: billingStatus
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, CANCELLED, CANCELED, BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID]
+ *         description: Filter by billing status
+ *       - in: query
+ *         name: driverId
+ *         schema:
+ *           type: string
+ *         description: Filter by driver ID (ignored for driver role; auto-scoped)
+ *       - in: query
+ *         name: brokerId
+ *         schema:
+ *           type: string
+ *         description: Filter by broker ID
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Free-text search on load number, broker name, or driver name
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter loads with pickup or delivery date on or after this date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter loads with pickup or delivery date on or before this date
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number (1-based)
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 25
+ *           maximum: 200
+ *         description: Number of loads per page (max 200)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [load_number, pickup_date, rate, completed_date, created_at]
+ *         description: Column to sort by (default created_at)
+ *       - in: query
+ *         name: sortDir
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *         description: Sort direction (default desc; pickup_date defaults to asc)
  *     responses:
  *       200:
- *         description: Loads list returned
- *   post:
- *     summary: Create load
- *     tags:
- *       - Loads
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             description: Load payload
- *             additionalProperties: true
- *     responses:
- *       201:
- *         description: Load created
+ *         description: Paginated list of loads
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     pageSize:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *       400:
+ *         description: Invalid status or billing status filter
+ *       403:
+ *         description: Forbidden - insufficient role or driver not linked
+ *       500:
+ *         description: Server error
  */
 // GET /api/loads
 router.get('/', async (req, res) => {
@@ -520,6 +605,104 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads:
+ *   post:
+ *     summary: Create a new load
+ *     description: >
+ *       Creates a new load with stops, driver/truck/trailer assignments, and broker info.
+ *       Requires admin or dispatch role. The load is created with the given status (default NEW)
+ *       and billing status (default PENDING). Both PICKUP and DELIVERY stops are required.
+ *       A load number is auto-generated if not provided (PO number is used as load number when
+ *       available). Load status workflow: DRAFT -> NEW -> DISPATCHED -> EN_ROUTE -> PICKED_UP ->
+ *       IN_TRANSIT -> DELIVERED -> COMPLETED. Loads can also be CANCELLED or TONU at any point.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [DRAFT, NEW, CANCELLED, CANCELED, TONU, DISPATCHED, EN_ROUTE, PICKED_UP, IN_TRANSIT, DELIVERED, COMPLETED]
+ *                 default: NEW
+ *               billingStatus:
+ *                 type: string
+ *                 enum: [PENDING, CANCELLED, CANCELED, BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID]
+ *                 default: PENDING
+ *               loadNumber:
+ *                 type: string
+ *               poNumber:
+ *                 type: string
+ *               driverId:
+ *                 type: string
+ *               truckId:
+ *                 type: string
+ *               trailerId:
+ *                 type: string
+ *               brokerId:
+ *                 type: string
+ *               brokerName:
+ *                 type: string
+ *               dispatcherUserId:
+ *                 type: string
+ *               rate:
+ *                 type: number
+ *               notes:
+ *                 type: string
+ *               completedDate:
+ *                 type: string
+ *                 format: date
+ *               stops:
+ *                 type: array
+ *                 description: Array of stop objects (PICKUP and DELIVERY required)
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     stopType:
+ *                       type: string
+ *                       enum: [PICKUP, DELIVERY]
+ *                     date:
+ *                       type: string
+ *                       format: date
+ *                     city:
+ *                       type: string
+ *                     state:
+ *                       type: string
+ *                     zip:
+ *                       type: string
+ *                     address1:
+ *                       type: string
+ *                     address2:
+ *                       type: string
+ *                     sequence:
+ *                       type: integer
+ *     responses:
+ *       201:
+ *         description: Load created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Full load detail with stops, attachments, and trip metrics
+ *       400:
+ *         description: Invalid status, billing status, or stops
+ *       403:
+ *         description: Forbidden - insufficient role or missing operating entity context
+ *       500:
+ *         description: Server error
+ */
 // POST /api/loads (admin, dispatch only; driver cannot create)
 router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
   const startTime = Date.now();
@@ -799,6 +982,66 @@ async function processSingleRateConfirmation(file, req, dispatcherUserId) {
   return { success: true, data: created, filename: file.originalname };
 }
 
+/**
+ * @openapi
+ * /api/loads/bulk-rate-confirmations:
+ *   post:
+ *     summary: Bulk upload rate confirmation PDFs to create draft loads
+ *     description: >
+ *       Accepts up to 10 PDF rate confirmation files. Each PDF is processed via AI extraction
+ *       to create a new load in DRAFT status with PENDING billing status. The extracted data
+ *       includes broker, rate, pickup/delivery stops, and PO/load numbers. Each file is uploaded
+ *       to R2 storage and linked as a RATE_CONFIRMATION attachment. Files are processed
+ *       concurrently for performance. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - files
+ *             properties:
+ *               files:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: PDF files (max 10, max 15 MB each)
+ *     responses:
+ *       200:
+ *         description: Bulk upload results (each file reports success or failure individually)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 results:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       success:
+ *                         type: boolean
+ *                       data:
+ *                         type: object
+ *                       filename:
+ *                         type: string
+ *                       error:
+ *                         type: string
+ *       400:
+ *         description: No files uploaded, too many files, or non-PDF files
+ *       403:
+ *         description: Forbidden - insufficient role
+ *       500:
+ *         description: Server error
+ */
 // POST /api/loads/bulk-rate-confirmations (admin, dispatch only; max 10 PDFs)
 router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), upload.array('files', BULK_MAX_FILES), async (req, res) => {
   const startTime = Date.now();
@@ -840,6 +1083,105 @@ router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), uplo
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}/approve-draft:
+ *   patch:
+ *     summary: Approve a draft load and transition to DISPATCHED
+ *     description: >
+ *       Transitions a DRAFT load to DISPATCHED status. Optionally accepts load field updates
+ *       (rate, broker, driver, stops, notes, etc.) to persist form changes and transition
+ *       status in a single transaction. Only DRAFT loads can be approved. This is a key
+ *       status workflow step: DRAFT -> DISPATCHED. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               loadNumber:
+ *                 type: string
+ *               billingStatus:
+ *                 type: string
+ *                 enum: [PENDING, CANCELLED, CANCELED, BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID]
+ *               dispatcherUserId:
+ *                 type: string
+ *               driverId:
+ *                 type: string
+ *               truckId:
+ *                 type: string
+ *               trailerId:
+ *                 type: string
+ *               brokerId:
+ *                 type: string
+ *               brokerName:
+ *                 type: string
+ *               poNumber:
+ *                 type: string
+ *               rate:
+ *                 type: number
+ *               notes:
+ *                 type: string
+ *               completedDate:
+ *                 type: string
+ *                 format: date
+ *               stops:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     stopType:
+ *                       type: string
+ *                       enum: [PICKUP, DELIVERY]
+ *                     date:
+ *                       type: string
+ *                       format: date
+ *                     city:
+ *                       type: string
+ *                     state:
+ *                       type: string
+ *                     zip:
+ *                       type: string
+ *                     address1:
+ *                       type: string
+ *                     address2:
+ *                       type: string
+ *                     sequence:
+ *                       type: integer
+ *     responses:
+ *       200:
+ *         description: Load approved and transitioned to DISPATCHED
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Full load detail with stops, attachments, and trip metrics
+ *       400:
+ *         description: Load is not in DRAFT status, or invalid billing status / stops
+ *       403:
+ *         description: Forbidden - insufficient role
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // PATCH /api/loads/:id/approve-draft (admin, dispatch only; DRAFT -> DISPATCHED)
 // Accepts optional body with load fields (rate, broker, stops, driver, notes, etc.)
 // to persist form changes AND transition status in a single transaction.
@@ -985,6 +1327,45 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}:
+ *   delete:
+ *     summary: Delete a load
+ *     description: >
+ *       Permanently deletes a load. Only loads in DRAFT or NEW status can be deleted.
+ *       Loads that have progressed beyond NEW (e.g., DISPATCHED, IN_TRANSIT, DELIVERED)
+ *       cannot be deleted and should be CANCELLED instead. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     responses:
+ *       200:
+ *         description: Load deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       400:
+ *         description: Load is not in DRAFT or NEW status
+ *       403:
+ *         description: Forbidden - insufficient role
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // DELETE /api/loads/:id (admin, dispatch only; only NEW or DRAFT loads)
 router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   try {
@@ -1005,6 +1386,44 @@ router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}:
+ *   get:
+ *     summary: Get load details by ID
+ *     description: >
+ *       Returns the full load detail including stops, attachments (with signed download URLs),
+ *       trip metrics (empty miles, loaded miles, total miles, rate per mile), driver name,
+ *       and broker name. Drivers are scoped to their own loads only.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     responses:
+ *       200:
+ *         description: Load detail returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Full load detail with stops, attachments, and trip metrics
+ *       404:
+ *         description: Load not found (or driver does not have access)
+ *       500:
+ *         description: Server error
+ */
 // GET /api/loads/:id
 router.get('/:id', async (req, res) => {
   try {
@@ -1020,6 +1439,110 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}:
+ *   put:
+ *     summary: Update a load
+ *     description: >
+ *       Updates load fields, status, billing status, and/or stops. Only provided fields are
+ *       updated. When stops are provided, existing stops are replaced entirely. When status
+ *       transitions to DELIVERED or COMPLETED, the completed_date is auto-set if not already
+ *       present. Requires admin or dispatch role. Load status workflow: DRAFT -> NEW ->
+ *       DISPATCHED -> EN_ROUTE -> PICKED_UP -> IN_TRANSIT -> DELIVERED -> COMPLETED.
+ *       Loads can also be set to CANCELLED or TONU.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               loadNumber:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [DRAFT, NEW, CANCELLED, CANCELED, TONU, DISPATCHED, EN_ROUTE, PICKED_UP, IN_TRANSIT, DELIVERED, COMPLETED]
+ *               billingStatus:
+ *                 type: string
+ *                 enum: [PENDING, CANCELLED, CANCELED, BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID]
+ *               dispatcherUserId:
+ *                 type: string
+ *               driverId:
+ *                 type: string
+ *               truckId:
+ *                 type: string
+ *               trailerId:
+ *                 type: string
+ *               brokerId:
+ *                 type: string
+ *               brokerName:
+ *                 type: string
+ *               poNumber:
+ *                 type: string
+ *               rate:
+ *                 type: number
+ *               notes:
+ *                 type: string
+ *               completedDate:
+ *                 type: string
+ *                 format: date
+ *               stops:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     stopType:
+ *                       type: string
+ *                       enum: [PICKUP, DELIVERY]
+ *                     date:
+ *                       type: string
+ *                       format: date
+ *                     city:
+ *                       type: string
+ *                     state:
+ *                       type: string
+ *                     zip:
+ *                       type: string
+ *                     address1:
+ *                       type: string
+ *                     address2:
+ *                       type: string
+ *                     sequence:
+ *                       type: integer
+ *     responses:
+ *       200:
+ *         description: Load updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Full load detail with stops, attachments, and trip metrics
+ *       400:
+ *         description: Invalid status, billing status, or stops
+ *       403:
+ *         description: Forbidden - insufficient role
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // PUT /api/loads/:id (admin, dispatch only; driver cannot update load)
 router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   const client = await getClient();
@@ -1152,6 +1675,82 @@ async function ensureCanAccessLoad(loadId, req, res) {
   return loadResult.rows[0];
 }
 
+/**
+ * @openapi
+ * /api/loads/{id}/attachments:
+ *   post:
+ *     summary: Upload an attachment to a load
+ *     description: >
+ *       Uploads a file (PDF or image) to R2 storage and links it as an attachment to the
+ *       specified load. Requires a valid attachment type. Drivers can only upload to their
+ *       own loads. Max file size is 15 MB.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *               - type
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: PDF or image file (max 15 MB)
+ *               type:
+ *                 type: string
+ *                 enum: [RATE_CONFIRMATION, BOL, LUMPER, OTHER, CONFIRMATION, PROOF_OF_DELIVERY, ROADSIDE_MAINTENANCE_RECEIPT]
+ *                 description: Attachment type
+ *               notes:
+ *                 type: string
+ *                 description: Optional notes for the attachment
+ *     responses:
+ *       201:
+ *         description: Attachment uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     load_id:
+ *                       type: string
+ *                     type:
+ *                       type: string
+ *                     file_name:
+ *                       type: string
+ *                     mime_type:
+ *                       type: string
+ *                     size_bytes:
+ *                       type: integer
+ *                     file_url:
+ *                       type: string
+ *                       description: Signed download URL
+ *       400:
+ *         description: No file uploaded or invalid attachment type
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // POST /api/loads/:id/attachments
 router.post('/:id/attachments', upload.single('file'), async (req, res) => {
   try {
@@ -1205,6 +1804,61 @@ router.post('/:id/attachments', upload.single('file'), async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}/attachments:
+ *   get:
+ *     summary: List attachments for a load
+ *     description: >
+ *       Returns all attachments for the specified load, ordered by creation date descending.
+ *       Each attachment includes a signed download URL for the file. Drivers can only access
+ *       attachments on their own loads.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     responses:
+ *       200:
+ *         description: List of attachments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       load_id:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                       file_name:
+ *                         type: string
+ *                       mime_type:
+ *                         type: string
+ *                       size_bytes:
+ *                         type: integer
+ *                       file_url:
+ *                         type: string
+ *                         description: Signed download URL
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // GET /api/loads/:id/attachments
 router.get('/:id/attachments', async (req, res) => {
   try {
@@ -1227,6 +1881,49 @@ router.get('/:id/attachments', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}/attachments/{attachmentId}:
+ *   delete:
+ *     summary: Delete an attachment from a load
+ *     description: >
+ *       Deletes an attachment record from the database and removes the file from R2 storage.
+ *       The DB row is deleted first so the document is removed from the app even if R2
+ *       cleanup fails. Drivers can only delete attachments on their own loads.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *       - in: path
+ *         name: attachmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Attachment ID
+ *     responses:
+ *       200:
+ *         description: Attachment deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Load or attachment not found
+ *       500:
+ *         description: Server error
+ */
 // DELETE /api/loads/:id/attachments/:attachmentId
 router.delete('/:id/attachments/:attachmentId', async (req, res) => {
   const { id: loadId, attachmentId } = req.params;
@@ -1262,6 +1959,86 @@ router.delete('/:id/attachments/:attachmentId', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}/attachments/{attachmentId}:
+ *   put:
+ *     summary: Replace or update an attachment on a load
+ *     description: >
+ *       Updates an existing attachment's metadata (type, notes) and optionally replaces
+ *       the file. When a new file is uploaded, the old file is deleted from R2 storage.
+ *       If no new file is provided, only metadata fields are updated. Drivers can only
+ *       update attachments on their own loads.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *       - in: path
+ *         name: attachmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Attachment ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Replacement file (PDF or image, max 15 MB)
+ *               type:
+ *                 type: string
+ *                 enum: [RATE_CONFIRMATION, BOL, LUMPER, OTHER, CONFIRMATION, PROOF_OF_DELIVERY, ROADSIDE_MAINTENANCE_RECEIPT]
+ *                 description: Attachment type (defaults to existing type if not provided)
+ *               notes:
+ *                 type: string
+ *                 description: Attachment notes (defaults to existing notes if not provided)
+ *     responses:
+ *       200:
+ *         description: Attachment updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     load_id:
+ *                       type: string
+ *                     type:
+ *                       type: string
+ *                     file_name:
+ *                       type: string
+ *                     mime_type:
+ *                       type: string
+ *                     size_bytes:
+ *                       type: integer
+ *                     file_url:
+ *                       type: string
+ *                       description: Signed download URL
+ *       400:
+ *         description: Invalid attachment type
+ *       404:
+ *         description: Load or attachment not found
+ *       500:
+ *         description: Server error
+ */
 // PUT /api/loads/:id/attachments/:attachmentId (replace file and/or metadata on R2)
 router.put('/:id/attachments/:attachmentId', upload.single('file'), async (req, res) => {
   const { id: loadId, attachmentId } = req.params;
@@ -1328,6 +2105,51 @@ router.put('/:id/attachments/:attachmentId', upload.single('file'), async (req, 
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/ai-extract:
+ *   post:
+ *     summary: Extract load details from a rate confirmation PDF using AI
+ *     description: >
+ *       Accepts a PDF file and uses AI extraction to parse rate confirmation data including
+ *       broker name, rate, PO/load number, and pickup/delivery stop details. Returns the
+ *       extracted data without creating a load (use POST /api/loads or bulk-rate-confirmations
+ *       to persist). Only PDF files are supported.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: PDF rate confirmation file (max 15 MB)
+ *     responses:
+ *       200:
+ *         description: Extracted load data from the PDF
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: AI-extracted load fields (brokerName, rate, pickup, delivery, stops, poNumber, loadId, etc.)
+ *       400:
+ *         description: No file uploaded or file is not a PDF
+ *       500:
+ *         description: AI extraction failed (may include rate-limit details)
+ */
 // POST /api/loads/ai-extract
 router.post('/ai-extract', upload.single('file'), async (req, res) => {
   try {

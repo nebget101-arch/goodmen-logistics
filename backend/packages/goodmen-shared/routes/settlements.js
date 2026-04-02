@@ -414,6 +414,41 @@ async function findOrCreatePayeeByName({ trx, tenantId, name, requestedType, ema
   return created;
 }
 
+/**
+ * @openapi
+ * /api/settlements:
+ *   get:
+ *     summary: Settlements API root
+ *     description: Returns available sub-resource links for the Settlements API.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: API discovery links
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 links:
+ *                   type: object
+ *                   properties:
+ *                     payees:
+ *                       type: string
+ *                     payrollPeriods:
+ *                       type: string
+ *                     settlements:
+ *                       type: string
+ *                     recurringDeductions:
+ *                       type: string
+ *       403:
+ *         description: Forbidden — insufficient role
+ */
 // Root: avoid "Cannot GET /api/settlements/" when base URL is hit
 router.get('/', requireRole(settlementRoles), (_req, res) => {
   res.json({
@@ -429,6 +464,53 @@ router.get('/', requireRole(settlementRoles), (_req, res) => {
 });
 
 // ---------- Payees ----------
+/**
+ * @openapi
+ * /api/settlements/payees:
+ *   get:
+ *     summary: List payees
+ *     description: Returns payees for the current tenant, optionally filtered by type, active status, or search term.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [driver, company, owner, external_company, contractor]
+ *         description: Filter by payee type. "equipment_owner" is normalized to "owner".
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Case-insensitive name search (ILIKE).
+ *       - in: query
+ *         name: is_active
+ *         schema:
+ *           type: boolean
+ *         description: Filter by active status.
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           maximum: 100
+ *         description: Maximum number of rows to return.
+ *     responses:
+ *       200:
+ *         description: Array of payee objects with display_type included.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       500:
+ *         description: Internal server error.
+ */
 router.get('/payees', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -448,6 +530,58 @@ router.get('/payees', requireRole(settlementRoles), async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/payees/search:
+ *   get:
+ *     summary: Search payees
+ *     description: |
+ *       Search payees by name, email, or phone for use in Payable To / Additional Payee dropdowns.
+ *       Results are filtered by role context (primary vs additional payee).
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Search term (matches name, email, or phone via ILIKE). Alias "search" is also accepted.
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           enum: [primary, additional, all]
+ *           default: all
+ *         description: |
+ *           Restricts which payee types are returned.
+ *           "additional" limits to owner, external_company, contractor.
+ *       - in: query
+ *         name: include_inactive
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: When true, includes inactive payees in results.
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Array of matching payee objects with display_type.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       500:
+ *         description: Internal server error.
+ */
 // Search endpoint for Payable To / Additional Payee dropdowns
 router.get('/payees/search', requireRole(settlementRoles), async (req, res) => {
   try {
@@ -492,6 +626,85 @@ router.get('/payees/search', requireRole(settlementRoles), async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/payees:
+ *   post:
+ *     summary: Create a payee
+ *     description: Creates a new payee record for the current tenant. Extended address and vendor fields are persisted when the underlying DB columns exist.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               type:
+ *                 type: string
+ *                 enum: [driver, company, owner, external_company, contractor]
+ *                 description: Payee type. "equipment_owner" is normalized to "owner". Defaults to "driver".
+ *               name:
+ *                 type: string
+ *               contact_id:
+ *                 type: string
+ *                 nullable: true
+ *               email:
+ *                 type: string
+ *                 nullable: true
+ *               phone:
+ *                 type: string
+ *                 nullable: true
+ *               is_active:
+ *                 type: boolean
+ *                 default: true
+ *               address:
+ *                 type: string
+ *                 nullable: true
+ *               address_line_2:
+ *                 type: string
+ *                 nullable: true
+ *               city:
+ *                 type: string
+ *                 nullable: true
+ *               state:
+ *                 type: string
+ *                 nullable: true
+ *               zip:
+ *                 type: string
+ *                 nullable: true
+ *               fid_ein:
+ *                 type: string
+ *                 nullable: true
+ *               mc:
+ *                 type: string
+ *                 nullable: true
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *               vendor_type:
+ *                 type: string
+ *                 nullable: true
+ *               is_additional_payee:
+ *                 type: boolean
+ *               is_equipment_owner:
+ *                 type: boolean
+ *               additional_payee_rate:
+ *                 type: number
+ *                 nullable: true
+ *               settlement_template_type:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Created payee object with display_type.
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       500:
+ *         description: Internal server error.
+ */
 router.post('/payees', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -554,6 +767,77 @@ router.post('/payees', requireRole(settlementRoles), async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/payees/equipment-owner:
+ *   post:
+ *     summary: Create or retrieve an equipment-owner payee
+ *     description: |
+ *       Atomically finds an existing equipment-owner payee by name (case-insensitive)
+ *       or creates a new one. Used by the Driver Edit UI to ensure an owner payee exists.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Equipment owner name (required, used for deduplication).
+ *               email:
+ *                 type: string
+ *                 nullable: true
+ *               phone:
+ *                 type: string
+ *                 nullable: true
+ *               address:
+ *                 type: string
+ *                 nullable: true
+ *               address_line_2:
+ *                 type: string
+ *                 nullable: true
+ *               city:
+ *                 type: string
+ *                 nullable: true
+ *               state:
+ *                 type: string
+ *                 nullable: true
+ *               zip:
+ *                 type: string
+ *                 nullable: true
+ *               fid_ein:
+ *                 type: string
+ *                 nullable: true
+ *               mc:
+ *                 type: string
+ *                 nullable: true
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *               vendor_type:
+ *                 type: string
+ *                 nullable: true
+ *               additional_payee_rate:
+ *                 type: number
+ *                 nullable: true
+ *               settlement_template_type:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Created or existing payee object with display_type.
+ *       400:
+ *         description: Validation error — name is required.
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       500:
+ *         description: Internal server error.
+ */
 // Explicit create endpoint used by Driver Edit UI
 router.post('/payees/equipment-owner', requireRole(settlementRoles), async (req, res) => {
   try {
@@ -631,6 +915,33 @@ router.post('/payees/equipment-owner', requireRole(settlementRoles), async (req,
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/payees/{id}:
+ *   get:
+ *     summary: Get a payee by ID
+ *     description: Returns a single payee record for the current tenant.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Payee ID.
+ *     responses:
+ *       200:
+ *         description: Payee object.
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       404:
+ *         description: Payee not found.
+ *       500:
+ *         description: Internal server error.
+ */
 router.get('/payees/:id', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -644,6 +955,93 @@ router.get('/payees/:id', requireRole(settlementRoles), async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/payees/{id}:
+ *   put:
+ *     summary: Update a payee
+ *     description: Partially updates a payee record. Only supplied fields are changed.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Payee ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               type:
+ *                 type: string
+ *                 enum: [driver, company, owner, external_company, contractor]
+ *               name:
+ *                 type: string
+ *               contact_id:
+ *                 type: string
+ *                 nullable: true
+ *               email:
+ *                 type: string
+ *                 nullable: true
+ *               phone:
+ *                 type: string
+ *                 nullable: true
+ *               is_active:
+ *                 type: boolean
+ *               address:
+ *                 type: string
+ *                 nullable: true
+ *               address_line_2:
+ *                 type: string
+ *                 nullable: true
+ *               city:
+ *                 type: string
+ *                 nullable: true
+ *               state:
+ *                 type: string
+ *                 nullable: true
+ *               zip:
+ *                 type: string
+ *                 nullable: true
+ *               fid_ein:
+ *                 type: string
+ *                 nullable: true
+ *               mc:
+ *                 type: string
+ *                 nullable: true
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *               vendor_type:
+ *                 type: string
+ *                 nullable: true
+ *               is_additional_payee:
+ *                 type: boolean
+ *               is_equipment_owner:
+ *                 type: boolean
+ *               additional_payee_rate:
+ *                 type: number
+ *                 nullable: true
+ *               settlement_template_type:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       200:
+ *         description: Updated payee object with display_type.
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       404:
+ *         description: Payee not found.
+ *       500:
+ *         description: Internal server error.
+ */
 router.put('/payees/:id', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -709,6 +1107,37 @@ router.put('/payees/:id', requireRole(settlementRoles), async (req, res) => {
 });
 
 // ---------- Compensation profiles ----------
+/**
+ * @openapi
+ * /api/settlements/drivers/{driverId}/compensation-profile:
+ *   get:
+ *     summary: Get active compensation profile for a driver
+ *     description: Returns the currently active compensation profile for the given driver as of the requested date.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Driver ID.
+ *       - in: query
+ *         name: asOf
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Date to evaluate the active profile against. Defaults to today.
+ *     responses:
+ *       200:
+ *         description: Active compensation profile object.
+ *       404:
+ *         description: No active compensation profile found.
+ *       500:
+ *         description: Internal server error.
+ */
 router.get('/drivers/:driverId/compensation-profile', requireRole(settlementRoles), async (req, res) => {
   try {
     const asOf = req.query.asOf || new Date().toISOString().slice(0, 10);
@@ -720,6 +1149,35 @@ router.get('/drivers/:driverId/compensation-profile', requireRole(settlementRole
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/drivers/{driverId}/compensation-profiles:
+ *   get:
+ *     summary: List all compensation profiles for a driver
+ *     description: Returns every compensation profile for the driver, sorted by effective_start_date descending.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Driver ID.
+ *     responses:
+ *       200:
+ *         description: Array of compensation profile objects.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       500:
+ *         description: Internal server error.
+ */
 router.get('/drivers/:driverId/compensation-profiles', requireRole(settlementRoles), async (req, res) => {
   try {
     const rows = await knex('driver_compensation_profiles')
@@ -731,6 +1189,79 @@ router.get('/drivers/:driverId/compensation-profiles', requireRole(settlementRol
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/drivers/{driverId}/compensation-profiles:
+ *   post:
+ *     summary: Create a compensation profile
+ *     description: |
+ *       Creates a new compensation profile for the driver. Validates that
+ *       equipment_owner_percentage + percentage_rate does not exceed 100.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Driver ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               profile_type:
+ *                 type: string
+ *                 default: driver
+ *               pay_model:
+ *                 type: string
+ *                 enum: [per_mile, percentage, flat_weekly, flat_per_load]
+ *                 default: per_mile
+ *               percentage_rate:
+ *                 type: number
+ *                 nullable: true
+ *               cents_per_mile:
+ *                 type: number
+ *                 nullable: true
+ *               flat_weekly_amount:
+ *                 type: number
+ *                 nullable: true
+ *               flat_per_load_amount:
+ *                 type: number
+ *                 nullable: true
+ *               equipment_owner_percentage:
+ *                 type: number
+ *                 nullable: true
+ *                 description: Must be 0-100 and sum with percentage_rate must not exceed 100.
+ *               expense_sharing_enabled:
+ *                 type: boolean
+ *                 default: false
+ *               effective_start_date:
+ *                 type: string
+ *                 format: date
+ *               effective_end_date:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *               status:
+ *                 type: string
+ *                 default: active
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Created compensation profile object.
+ *       400:
+ *         description: Validation error (e.g. percentage sum exceeds 100).
+ *       500:
+ *         description: Internal server error.
+ */
 router.post('/drivers/:driverId/compensation-profiles', requireRole(settlementRoles), async (req, res) => {
   try {
     const body = req.body;
@@ -771,6 +1302,76 @@ router.post('/drivers/:driverId/compensation-profiles', requireRole(settlementRo
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/compensation-profiles/{id}:
+ *   put:
+ *     summary: Update a compensation profile
+ *     description: |
+ *       Partially updates a compensation profile. Only supplied fields are changed.
+ *       Validates equipment_owner_percentage + percentage_rate does not exceed 100.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Compensation profile ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               profile_type:
+ *                 type: string
+ *               pay_model:
+ *                 type: string
+ *                 enum: [per_mile, percentage, flat_weekly, flat_per_load]
+ *               percentage_rate:
+ *                 type: number
+ *                 nullable: true
+ *               cents_per_mile:
+ *                 type: number
+ *                 nullable: true
+ *               flat_weekly_amount:
+ *                 type: number
+ *                 nullable: true
+ *               flat_per_load_amount:
+ *                 type: number
+ *                 nullable: true
+ *               equipment_owner_percentage:
+ *                 type: number
+ *                 nullable: true
+ *               expense_sharing_enabled:
+ *                 type: boolean
+ *               effective_start_date:
+ *                 type: string
+ *                 format: date
+ *               effective_end_date:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *               status:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       200:
+ *         description: Updated compensation profile object.
+ *       400:
+ *         description: Validation error (e.g. percentage sum exceeds 100).
+ *       404:
+ *         description: Profile not found.
+ *       500:
+ *         description: Internal server error.
+ */
 router.put('/compensation-profiles/:id', requireRole(settlementRoles), async (req, res) => {
   try {
     const body = req.body;
@@ -822,6 +1423,52 @@ router.put('/compensation-profiles/:id', requireRole(settlementRoles), async (re
 });
 
 // ---------- Driver payee assignments ----------
+/**
+ * @openapi
+ * /api/settlements/drivers/{driverId}/payee-assignment:
+ *   get:
+ *     summary: Get active payee assignment for a driver
+ *     description: Returns the active payee assignment for the driver as of the given date, including resolved primary and additional payee details.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Driver ID.
+ *       - in: query
+ *         name: asOf
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Date to evaluate the active assignment against. Defaults to today.
+ *     responses:
+ *       200:
+ *         description: Assignment with resolved payee details.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 assignment:
+ *                   type: object
+ *                 primary_payee:
+ *                   type: object
+ *                   nullable: true
+ *                 additional_payee:
+ *                   type: object
+ *                   nullable: true
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       404:
+ *         description: No active payee assignment found.
+ *       500:
+ *         description: Internal server error.
+ */
 router.get('/drivers/:driverId/payee-assignment', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -849,6 +1496,59 @@ router.get('/drivers/:driverId/payee-assignment', requireRole(settlementRoles), 
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/drivers/{driverId}/payee-assignments:
+ *   post:
+ *     summary: Create a payee assignment
+ *     description: |
+ *       Creates a new payee assignment for the driver. Any existing open assignment
+ *       is automatically end-dated to the new assignment's start date.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Driver ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               primary_payee_id:
+ *                 type: string
+ *                 format: uuid
+ *               additional_payee_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               rule_type:
+ *                 type: string
+ *                 default: custom
+ *               effective_start_date:
+ *                 type: string
+ *                 format: date
+ *               effective_end_date:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Created payee assignment object.
+ *       400:
+ *         description: Validation error — payee does not belong to tenant.
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       500:
+ *         description: Internal server error.
+ */
 router.post('/drivers/:driverId/payee-assignments', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -889,6 +1589,85 @@ router.post('/drivers/:driverId/payee-assignments', requireRole(settlementRoles)
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/drivers/{driverId}/payee-assignment/resolve:
+ *   post:
+ *     summary: Resolve and upsert payee assignment
+ *     description: |
+ *       Upsert-like helper for the Driver Edit page. Accepts payee IDs or names;
+ *       creates missing equipment-owner payees on the fly. End-dates any existing
+ *       open assignment before inserting the new one.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Driver ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               primary_payee_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Existing payee ID (takes precedence over name).
+ *               primary_payee_name:
+ *                 type: string
+ *                 description: Name used to find-or-create the primary payee.
+ *               primary_payee_type:
+ *                 type: string
+ *                 default: driver
+ *               additional_payee_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               additional_payee_name:
+ *                 type: string
+ *                 nullable: true
+ *               additional_payee_type:
+ *                 type: string
+ *                 default: owner
+ *               rule_type:
+ *                 type: string
+ *                 default: custom
+ *               effective_start_date:
+ *                 type: string
+ *                 format: date
+ *               effective_end_date:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Created assignment with resolved primary and additional payee objects.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 assignment:
+ *                   type: object
+ *                 primary_payee:
+ *                   type: object
+ *                 additional_payee:
+ *                   type: object
+ *                   nullable: true
+ *       400:
+ *         description: Primary payable-to is required.
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       500:
+ *         description: Internal server error.
+ */
 // Upsert-like helper for Driver Edit page:
 // - accepts IDs if selected from dropdown
 // - accepts names if user typed a new payable_to / additional payee
@@ -982,6 +1761,35 @@ router.post('/drivers/:driverId/payee-assignment/resolve', requireRole(settlemen
 });
 
 // ---------- Expense responsibility profiles ----------
+/**
+ * @openapi
+ * /api/settlements/drivers/{driverId}/expense-responsibility:
+ *   get:
+ *     summary: Get active expense responsibility profile
+ *     description: Returns the active expense responsibility profile for the driver as of the given date. Uses deterministic ordering (effective_start_date desc, created_at desc) when multiple rows share the same start date.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Driver ID.
+ *       - in: query
+ *         name: asOf
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Date to evaluate against. Defaults to today.
+ *     responses:
+ *       200:
+ *         description: Expense responsibility profile object, or null if none found.
+ *       500:
+ *         description: Internal server error.
+ */
 router.get('/drivers/:driverId/expense-responsibility', requireRole(settlementRoles), async (req, res) => {
   try {
     const asOf = req.query.asOf || new Date().toISOString().slice(0, 10);
@@ -1005,6 +1813,84 @@ router.get('/drivers/:driverId/expense-responsibility', requireRole(settlementRo
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/drivers/{driverId}/expense-responsibility:
+ *   post:
+ *     summary: Create an expense responsibility profile
+ *     description: |
+ *       Creates a new expense responsibility profile for the driver. Automatically
+ *       end-dates any existing open profile. Resolves the active compensation profile
+ *       if compensation_profile_id is not provided.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Driver ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               compensation_profile_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: If omitted, the active compensation profile is resolved automatically.
+ *               fuel_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               insurance_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               eld_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               trailer_rent_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               toll_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               repairs_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               split_type:
+ *                 type: string
+ *                 nullable: true
+ *               driver_percentage:
+ *                 type: number
+ *                 nullable: true
+ *               driver_fixed_amount:
+ *                 type: number
+ *                 nullable: true
+ *               owner_fixed_amount:
+ *                 type: number
+ *                 nullable: true
+ *               custom_rules:
+ *                 type: object
+ *                 nullable: true
+ *               effective_start_date:
+ *                 type: string
+ *                 format: date
+ *               effective_end_date:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Created expense responsibility profile object.
+ *       500:
+ *         description: Internal server error.
+ */
 router.post('/drivers/:driverId/expense-responsibility', requireRole(settlementRoles), async (req, res) => {
   try {
     const body = req.body;
@@ -1064,6 +1950,51 @@ router.post('/drivers/:driverId/expense-responsibility', requireRole(settlementR
 });
 
 // ---------- Recurring deductions ----------
+/**
+ * @openapi
+ * /api/settlements/recurring-deductions:
+ *   get:
+ *     summary: List recurring deduction rules
+ *     description: Returns recurring deduction rules for the tenant, optionally filtered by driver, payee(s), or enabled status. Includes joined driver and payee names.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: driver_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by driver ID.
+ *       - in: query
+ *         name: payee_id
+ *         schema:
+ *           type: string
+ *         description: Filter by payee ID (single value or comma-separated).
+ *       - in: query
+ *         name: payee_ids
+ *         schema:
+ *           type: string
+ *         description: Filter by multiple payee IDs (comma-separated).
+ *       - in: query
+ *         name: enabled
+ *         schema:
+ *           type: boolean
+ *         description: Filter by enabled status.
+ *     responses:
+ *       200:
+ *         description: Array of recurring deduction rule objects with driver_name, payee_name, and payee_type.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       500:
+ *         description: Internal server error.
+ */
 router.get('/recurring-deductions', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -1105,6 +2036,94 @@ router.get('/recurring-deductions', requireRole(settlementRoles), async (req, re
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/recurring-deductions:
+ *   post:
+ *     summary: Create a recurring deduction rule
+ *     description: |
+ *       Creates a new recurring deduction rule. When expense_responsibility is "shared",
+ *       split_type is required and driver_share + owner_share must sum correctly
+ *       (100% for percentage, total amount for fixed_amount).
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               payee_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               equipment_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               rule_scope:
+ *                 type: string
+ *                 default: driver
+ *               description:
+ *                 type: string
+ *                 nullable: true
+ *               amount_type:
+ *                 type: string
+ *                 enum: [fixed, percentage]
+ *                 default: fixed
+ *               amount:
+ *                 type: number
+ *                 default: 0
+ *               frequency:
+ *                 type: string
+ *                 enum: [weekly, biweekly, monthly, per_settlement]
+ *                 default: weekly
+ *               start_date:
+ *                 type: string
+ *                 format: date
+ *               end_date:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *               source_type:
+ *                 type: string
+ *                 nullable: true
+ *               applies_when:
+ *                 type: string
+ *                 default: always
+ *               expense_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Set to "shared" to enable split fields.
+ *               split_type:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Required when expense_responsibility is "shared".
+ *               driver_share:
+ *                 type: number
+ *                 nullable: true
+ *               owner_share:
+ *                 type: number
+ *                 nullable: true
+ *               enabled:
+ *                 type: boolean
+ *                 default: true
+ *     responses:
+ *       201:
+ *         description: Created recurring deduction rule object.
+ *       400:
+ *         description: Validation error (e.g. split_type required, splits do not sum correctly).
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       500:
+ *         description: Internal server error.
+ */
 router.post('/recurring-deductions', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -1158,6 +2177,93 @@ router.post('/recurring-deductions', requireRole(settlementRoles), async (req, r
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/recurring-deductions/{id}:
+ *   patch:
+ *     summary: Update a recurring deduction rule
+ *     description: |
+ *       Partially updates a recurring deduction rule. Only supplied fields are changed.
+ *       Validates sharing splits when expense_responsibility is "shared".
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Recurring deduction rule ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               payee_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               equipment_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               rule_scope:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *                 nullable: true
+ *               amount_type:
+ *                 type: string
+ *               amount:
+ *                 type: number
+ *               frequency:
+ *                 type: string
+ *               start_date:
+ *                 type: string
+ *                 format: date
+ *               end_date:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *               source_type:
+ *                 type: string
+ *                 nullable: true
+ *               applies_when:
+ *                 type: string
+ *               expense_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               split_type:
+ *                 type: string
+ *                 nullable: true
+ *               driver_share:
+ *                 type: number
+ *                 nullable: true
+ *               owner_share:
+ *                 type: number
+ *                 nullable: true
+ *               enabled:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Updated recurring deduction rule object.
+ *       400:
+ *         description: Validation error (e.g. splits do not sum correctly).
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       404:
+ *         description: Not found.
+ *       500:
+ *         description: Internal server error.
+ */
 router.patch('/recurring-deductions/:id', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -1227,6 +2333,42 @@ router.patch('/recurring-deductions/:id', requireRole(settlementRoles), async (r
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/recurring-deductions/{id}:
+ *   delete:
+ *     summary: Delete a recurring deduction rule
+ *     description: Permanently removes a recurring deduction rule for the current tenant.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Recurring deduction rule ID.
+ *     responses:
+ *       200:
+ *         description: Deletion confirmation.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       403:
+ *         description: Forbidden — tenant context missing or insufficient role.
+ *       404:
+ *         description: Not found.
+ *       500:
+ *         description: Internal server error.
+ */
 router.delete('/recurring-deductions/:id', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = await getRequestTenantId(req);
@@ -1244,6 +2386,89 @@ router.delete('/recurring-deductions/:id', requireRole(settlementRoles), async (
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/recurring-deductions/backfill:
+ *   post:
+ *     summary: Backfill recurring deductions onto settlements
+ *     description: |
+ *       Re-applies recurring deduction rules to settlements within a date range.
+ *       Supports dry_run mode to preview affected settlements without making changes.
+ *       By default, locked settlements (approved/paid/void) are excluded.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [start_date, end_date]
+ *             properties:
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Optional driver filter.
+ *               start_date:
+ *                 type: string
+ *                 format: date
+ *               end_date:
+ *                 type: string
+ *                 format: date
+ *               include_locked:
+ *                 type: boolean
+ *                 default: false
+ *                 description: When true, includes approved/paid/void settlements.
+ *               dry_run:
+ *                 type: boolean
+ *                 default: false
+ *                 description: When true, returns matched settlements without updating them.
+ *               limit:
+ *                 type: integer
+ *                 default: 500
+ *                 maximum: 2000
+ *     responses:
+ *       200:
+ *         description: Backfill results.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 mode:
+ *                   type: string
+ *                   enum: [dry_run, execute]
+ *                 filters:
+ *                   type: object
+ *                 matched_count:
+ *                   type: integer
+ *                 updated_count:
+ *                   type: integer
+ *                 settlements_with_scheduled_deductions:
+ *                   type: integer
+ *                 scheduled_deduction_row_count:
+ *                   type: integer
+ *                 failed_count:
+ *                   type: integer
+ *                 updated_settlement_ids:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 failures:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       error:
+ *                         type: string
+ *       400:
+ *         description: start_date and end_date are required.
+ *       500:
+ *         description: Internal server error.
+ */
 router.post('/recurring-deductions/backfill', requireRole(settlementRoles), async (req, res) => {
   try {
     const {
@@ -1330,6 +2555,40 @@ router.post('/recurring-deductions/backfill', requireRole(settlementRoles), asyn
 });
 
 // ---------- Payroll periods ----------
+/**
+ * @openapi
+ * /api/settlements/payroll-periods:
+ *   get:
+ *     summary: List payroll periods
+ *     description: Returns payroll periods for the current tenant/operating entity, optionally filtered by status.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [draft, open, closed]
+ *         description: Filter by period status.
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Array of payroll period objects sorted by period_start descending.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       500:
+ *         description: Internal server error.
+ */
 router.get('/payroll-periods', requireRole(settlementRoles), async (req, res) => {
   try {
     const { status, limit = 50 } = req.query;
@@ -1348,6 +2607,40 @@ router.get('/payroll-periods', requireRole(settlementRoles), async (req, res) =>
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/payroll-periods:
+ *   post:
+ *     summary: Create a payroll period
+ *     description: Creates a new payroll period in draft status. Requires operating entity context.
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               period_start:
+ *                 type: string
+ *                 format: date
+ *               period_end:
+ *                 type: string
+ *                 format: date
+ *               run_type:
+ *                 type: string
+ *                 enum: [weekly, biweekly, monthly]
+ *                 default: weekly
+ *     responses:
+ *       201:
+ *         description: Created payroll period object.
+ *       403:
+ *         description: Operating entity context is required.
+ *       500:
+ *         description: Internal server error.
+ */
 router.post('/payroll-periods', requireRole(settlementRoles), async (req, res) => {
   try {
     const tenantId = req.context?.tenantId || null;
@@ -1374,6 +2667,42 @@ router.post('/payroll-periods', requireRole(settlementRoles), async (req, res) =
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/payroll-periods/{id}:
+ *   patch:
+ *     summary: Update a payroll period status
+ *     description: Updates the status of a payroll period (e.g. draft, open, closed).
+ *     tags: [Payroll]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Payroll period ID.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [draft, open, closed]
+ *     responses:
+ *       200:
+ *         description: Updated payroll period object.
+ *       404:
+ *         description: Period not found.
+ *       500:
+ *         description: Internal server error.
+ */
 router.patch('/payroll-periods/:id', requireRole(settlementRoles), async (req, res) => {
   try {
     const { status } = req.body;
@@ -1393,6 +2722,55 @@ router.patch('/payroll-periods/:id', requireRole(settlementRoles), async (req, r
 });
 
 // ---------- Eligible loads (preview for settlement) ----------
+/**
+ * @openapi
+ * /api/settlements/eligible-loads:
+ *   get:
+ *     summary: List eligible loads for a settlement
+ *     description: Returns loads eligible for inclusion in a settlement for a given driver and payroll period date range.
+ *     tags: [Settlements]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: driver_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: period_start
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: period_end
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: date_basis
+ *         schema:
+ *           type: string
+ *           enum: [pickup, delivery]
+ *           default: pickup
+ *         description: Which date on the load determines period eligibility.
+ *     responses:
+ *       200:
+ *         description: Array of eligible load objects.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       400:
+ *         description: driver_id, period_start, period_end required.
+ *       500:
+ *         description: Internal server error.
+ */
 router.get('/eligible-loads', requireRole(settlementRoles), async (req, res) => {
   try {
     const { driver_id, period_start, period_end, date_basis } = req.query;
@@ -1590,6 +2968,29 @@ router.get('/settlements/:id', requireRole(settlementRoles), async (req, res) =>
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/recalc:
+ *   post:
+ *     summary: Recalculate settlement totals
+ *     description: Recalculates all line items and totals for a settlement. Settlement lifecycle states are preparing → ready_for_review → approved → paid → void.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Recalculated settlement
+ *       400:
+ *         description: Bad request
+ */
 router.post('/settlements/:id/recalc', requireRole(settlementRoles), async (req, res) => {
   try {
     const settlement = await recalcAndUpdateSettlement(knex, req.params.id);
@@ -1599,6 +3000,41 @@ router.post('/settlements/:id/recalc', requireRole(settlementRoles), async (req,
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/loads:
+ *   post:
+ *     summary: Add a load to a settlement
+ *     description: Adds a load item to a settlement in preparation.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - load_id
+ *             properties:
+ *               load_id:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       200:
+ *         description: Updated settlement
+ *       400:
+ *         description: Missing load_id or bad request
+ */
 router.post('/settlements/:id/loads', requireRole(settlementRoles), async (req, res) => {
   try {
     const { load_id } = req.body;
@@ -1611,6 +3047,35 @@ router.post('/settlements/:id/loads', requireRole(settlementRoles), async (req, 
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/loads/{loadItemId}:
+ *   delete:
+ *     summary: Remove a load from a settlement
+ *     description: Removes a load item from a settlement.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: loadItemId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Updated settlement
+ *       400:
+ *         description: Bad request
+ */
 router.delete('/settlements/:id/loads/:loadItemId', requireRole(settlementRoles), async (req, res) => {
   try {
     await removeLoadFromSettlement(knex, req.params.id, req.params.loadItemId);
@@ -1621,6 +3086,35 @@ router.delete('/settlements/:id/loads/:loadItemId', requireRole(settlementRoles)
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/adjustments:
+ *   post:
+ *     summary: Add an adjustment to a settlement
+ *     description: Adds a manual adjustment (deduction or addition) to a settlement.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Updated settlement
+ *       400:
+ *         description: Bad request
+ */
 router.post('/settlements/:id/adjustments', requireRole(settlementRoles), async (req, res) => {
   try {
     await addAdjustment(knex, req.params.id, req.body, req.user?.id ?? null);
@@ -1631,6 +3125,35 @@ router.post('/settlements/:id/adjustments', requireRole(settlementRoles), async 
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/adjustments/{adjustmentId}:
+ *   delete:
+ *     summary: Remove an adjustment from a settlement
+ *     description: Soft-deletes an adjustment item from a settlement.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: adjustmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Updated settlement
+ *       400:
+ *         description: Bad request
+ */
 router.delete('/settlements/:id/adjustments/:adjustmentId', requireRole(settlementRoles), async (req, res) => {
   try {
     await removeAdjustment(knex, req.params.id, req.params.adjustmentId);
@@ -1641,6 +3164,35 @@ router.delete('/settlements/:id/adjustments/:adjustmentId', requireRole(settleme
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/adjustments/{adjustmentId}/restore:
+ *   post:
+ *     summary: Restore a deleted scheduled adjustment
+ *     description: Restores a previously removed scheduled adjustment to a settlement.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: adjustmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Updated settlement
+ *       400:
+ *         description: Bad request
+ */
 router.post('/settlements/:id/adjustments/:adjustmentId/restore', requireRole(settlementRoles), async (req, res) => {
   try {
     await restoreScheduledAdjustment(knex, req.params.id, req.params.adjustmentId);
@@ -1651,6 +3203,29 @@ router.post('/settlements/:id/adjustments/:adjustmentId/restore', requireRole(se
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/approve:
+ *   post:
+ *     summary: Approve a settlement
+ *     description: Transitions a settlement from ready_for_review to approved. Settlement lifecycle&#58; preparing → ready_for_review → approved → paid → void.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Approved settlement
+ *       400:
+ *         description: Invalid state transition
+ */
 router.post('/settlements/:id/approve', requireRole(settlementRoles), async (req, res) => {
   try {
     const settlement = await approveSettlement(knex, req.params.id, req.user?.id ?? null);
@@ -1660,6 +3235,29 @@ router.post('/settlements/:id/approve', requireRole(settlementRoles), async (req
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/void:
+ *   post:
+ *     summary: Void a settlement
+ *     description: Voids a settlement, making it inactive. Settlement lifecycle&#58; preparing → ready_for_review → approved → paid → void.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Voided settlement
+ *       400:
+ *         description: Invalid state transition
+ */
 router.post('/settlements/:id/void', requireRole(settlementRoles), async (req, res) => {
   try {
     const settlement = await voidSettlement(knex, req.params.id);
@@ -1669,7 +3267,67 @@ router.post('/settlements/:id/void', requireRole(settlementRoles), async (req, r
   }
 });
 
-// ---------- PDF payload (Phase 4) ----------
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/pdf-payload:
+ *   get:
+ *     summary: Get settlement PDF payload
+ *     description: Returns the full data context needed to render a settlement PDF, including driver, payees, truck, operating entity, and line items.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: PDF payload data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 settlement:
+ *                   type: object
+ *                 driver:
+ *                   type: object
+ *                 primary_payee:
+ *                   type: object
+ *                 additional_payee:
+ *                   type: object
+ *                   nullable: true
+ *                 truck:
+ *                   type: object
+ *                   nullable: true
+ *                 equipment_owner:
+ *                   type: object
+ *                   nullable: true
+ *                 operating_entity:
+ *                   type: object
+ *                   nullable: true
+ *                 tenant:
+ *                   type: object
+ *                   nullable: true
+ *                 period:
+ *                   type: object
+ *                 load_items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 adjustment_items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       404:
+ *         description: Settlement not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/settlements/:id/pdf-payload', requireRole(settlementRoles), async (req, res) => {
   try {
     const payload = await getSettlementPdfContext(req.params.id);
@@ -1693,7 +3351,49 @@ router.get('/settlements/:id/pdf-payload', requireRole(settlementRoles), async (
   }
 });
 
-// Generate PDF and upload to Cloudflare R2, then return signed URL
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/pdf/generate:
+ *   post:
+ *     summary: Generate settlement PDF
+ *     description: Generates a PDF for a settlement, uploads it to cloud storage, and returns a signed download URL.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Generated PDF details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 settlement_id:
+ *                   type: string
+ *                   format: uuid
+ *                 settlement_number_display:
+ *                   type: string
+ *                 storage_key:
+ *                   type: string
+ *                 file_name:
+ *                   type: string
+ *                 download_url:
+ *                   type: string
+ *       404:
+ *         description: Settlement not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/settlements/:id/pdf/generate', requireRole(settlementRoles), async (req, res) => {
   try {
     const payload = await getSettlementPdfContext(req.params.id);
@@ -1761,7 +3461,36 @@ async function sendSettlementPdfDownload(req, res) {
   return res.send(pdfBuffer);
 }
 
-// Canonical PDF download endpoint
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/pdf:
+ *   get:
+ *     summary: Download settlement PDF
+ *     description: Generates and streams a settlement PDF as an attachment.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: PDF file stream
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       404:
+ *         description: Settlement not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/settlements/:id/pdf', requireRole(settlementRoles), async (req, res) => {
   try {
     return await sendSettlementPdfDownload(req, res);
@@ -1770,7 +3499,36 @@ router.get('/settlements/:id/pdf', requireRole(settlementRoles), async (req, res
   }
 });
 
-// Legacy direct PDF download stream (kept for backward compatibility)
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/pdf/download:
+ *   get:
+ *     summary: Download settlement PDF (legacy)
+ *     description: Legacy endpoint — streams the settlement PDF as an attachment. Same behavior as GET /settlements/{id}/pdf.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: PDF file stream
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       404:
+ *         description: Settlement not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/settlements/:id/pdf/download', requireRole(settlementRoles), async (req, res) => {
   try {
     return await sendSettlementPdfDownload(req, res);
@@ -1779,7 +3537,60 @@ router.get('/settlements/:id/pdf/download', requireRole(settlementRoles), async 
   }
 });
 
-// ---------- Send settlement email (Phase 4) ----------
+/**
+ * @openapi
+ * /api/settlements/settlements/{id}/send-email:
+ *   post:
+ *     summary: Send settlement email
+ *     description: Generates a PDF and emails the settlement report to configured recipients.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Optional email options (recipients, cc, subject overrides)
+ *     responses:
+ *       200:
+ *         description: Email sent
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 recipients:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 cc_recipients:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 file_name:
+ *                   type: string
+ *       400:
+ *         description: No recipients
+ *       404:
+ *         description: Settlement not found
+ *       502:
+ *         description: Email send failure
+ *       503:
+ *         description: Email not configured
+ */
 router.post('/settlements/:id/send-email', requireRole(settlementRoles), async (req, res) => {
   try {
     const payload = await getSettlementPdfContext(req.params.id);
@@ -1832,7 +3643,22 @@ router.post('/settlements/:id/send-email', requireRole(settlementRoles), async (
   }
 });
 
-// ---------- Imported expense sources (Phase 4) ----------
+/**
+ * @openapi
+ * /api/settlements/imported-expense-sources:
+ *   get:
+ *     summary: List imported expense sources
+ *     description: Returns the most recent 100 imported expense sources (file uploads, integrations, etc.).
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of imported expense sources
+ *       500:
+ *         description: Server error
+ */
 router.get('/imported-expense-sources', requireRole(settlementRoles), async (req, res) => {
   try {
     const rows = await knex('imported_expense_sources').orderBy('imported_at', 'desc').limit(100);
@@ -1842,6 +3668,42 @@ router.get('/imported-expense-sources', requireRole(settlementRoles), async (req
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/imported-expense-sources:
+ *   post:
+ *     summary: Create an imported expense source
+ *     description: Registers a new expense source (e.g. a file upload or integration batch).
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               source_type:
+ *                 type: string
+ *                 default: manual_upload
+ *               file_id:
+ *                 type: string
+ *                 nullable: true
+ *               storage_key:
+ *                 type: string
+ *                 nullable: true
+ *               parse_status:
+ *                 type: string
+ *                 default: pending
+ *               raw_metadata:
+ *                 type: object
+ *     responses:
+ *       201:
+ *         description: Created expense source
+ *       500:
+ *         description: Server error
+ */
 router.post('/imported-expense-sources', requireRole(settlementRoles), async (req, res) => {
   try {
     const { source_type, file_id, storage_key, parse_status, raw_metadata } = req.body;
@@ -1861,6 +3723,37 @@ router.post('/imported-expense-sources', requireRole(settlementRoles), async (re
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/imported-expense-items:
+ *   get:
+ *     summary: List imported expense items
+ *     description: Returns imported expense items, optionally filtered by source, status, or matched driver.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: source_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: matched_driver_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Array of imported expense items
+ *       500:
+ *         description: Server error
+ */
 router.get('/imported-expense-items', requireRole(settlementRoles), async (req, res) => {
   try {
     const { source_id, status, matched_driver_id } = req.query;
@@ -1875,6 +3768,52 @@ router.get('/imported-expense-items', requireRole(settlementRoles), async (req, 
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/imported-expense-items/{id}/match:
+ *   patch:
+ *     summary: Match an imported expense item
+ *     description: Associates an imported expense item with a driver, payee, or vehicle.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               matched_driver_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               matched_payee_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               matched_vehicle_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               match_confidence:
+ *                 type: number
+ *                 nullable: true
+ *     responses:
+ *       200:
+ *         description: Updated expense item
+ *       404:
+ *         description: Not found
+ *       500:
+ *         description: Server error
+ */
 router.patch('/imported-expense-items/:id/match', requireRole(settlementRoles), async (req, res) => {
   try {
     const { matched_driver_id, matched_payee_id, matched_vehicle_id, match_confidence } = req.body;
@@ -1896,6 +3835,47 @@ router.patch('/imported-expense-items/:id/match', requireRole(settlementRoles), 
   }
 });
 
+/**
+ * @openapi
+ * /api/settlements/imported-expense-items/{id}/apply-to-settlement:
+ *   post:
+ *     summary: Apply imported expense to a settlement
+ *     description: Converts an imported expense item into a settlement adjustment and links it to the target settlement. Recalculates settlement totals after application.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - settlement_id
+ *             properties:
+ *               settlement_id:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       200:
+ *         description: Created adjustment
+ *       400:
+ *         description: Missing settlement_id
+ *       404:
+ *         description: Expense item not found
+ *       409:
+ *         description: Expense not billable under current responsibility profile
+ *       500:
+ *         description: Server error
+ */
 router.post('/imported-expense-items/:id/apply-to-settlement', requireRole(settlementRoles), async (req, res) => {
   try {
     const { settlement_id } = req.body;
@@ -1948,9 +3928,52 @@ const {
 } = require('../services/settlement-engine-v2');
 
 /**
- * POST /generate-dual
- * Generate Driver + EO settlements for a driver in a payroll period.
- * Body: { payroll_period_id, driver_id, date_basis? }
+ * @openapi
+ * /api/settlements/generate-dual:
+ *   post:
+ *     summary: Generate dual settlements (driver + equipment owner)
+ *     description: Creates both a driver settlement and an equipment-owner settlement for a given driver in a payroll period. Part of Settlement Engine V2.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - payroll_period_id
+ *               - driver_id
+ *             properties:
+ *               payroll_period_id:
+ *                 type: string
+ *                 format: uuid
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               date_basis:
+ *                 type: string
+ *                 default: pickup
+ *     responses:
+ *       201:
+ *         description: Dual settlements created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 driverSettlement:
+ *                   type: object
+ *                 eoSettlement:
+ *                   type: object
+ *       400:
+ *         description: Missing required fields
+ *       500:
+ *         description: Server error
  */
 router.post('/generate-dual', requireRole(settlementRoles), async (req, res) => {
   try {
@@ -1983,8 +4006,35 @@ router.post('/generate-dual', requireRole(settlementRoles), async (req, res) => 
 });
 
 /**
- * GET /balance-transfers
- * List balance transfers. Query: status, target_equipment_owner_id, source_driver_id
+ * @openapi
+ * /api/settlements/balance-transfers:
+ *   get:
+ *     summary: List balance transfers
+ *     description: Returns balance transfers, optionally filtered by status, target equipment owner, or source driver.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: target_equipment_owner_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: source_driver_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Array of balance transfers
+ *       500:
+ *         description: Server error
  */
 router.get('/balance-transfers', requireRole(settlementRoles), async (req, res) => {
   try {
@@ -2005,9 +4055,47 @@ router.get('/balance-transfers', requireRole(settlementRoles), async (req, res) 
 });
 
 /**
- * POST /balance-transfers
- * Create a pending balance transfer.
- * Body: { source_driver_id, source_settlement_id, target_equipment_owner_id, amount, reason }
+ * @openapi
+ * /api/settlements/balance-transfers:
+ *   post:
+ *     summary: Create a balance transfer
+ *     description: Creates a new pending balance transfer between a driver and an equipment owner.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - source_driver_id
+ *               - source_settlement_id
+ *               - target_equipment_owner_id
+ *               - amount
+ *             properties:
+ *               source_driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               source_settlement_id:
+ *                 type: string
+ *                 format: uuid
+ *               target_equipment_owner_id:
+ *                 type: string
+ *                 format: uuid
+ *               amount:
+ *                 type: number
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Created balance transfer
+ *       400:
+ *         description: Missing required fields
+ *       500:
+ *         description: Server error
  */
 router.post('/balance-transfers', requireRole(settlementRoles), async (req, res) => {
   try {
@@ -2024,9 +4112,39 @@ router.post('/balance-transfers', requireRole(settlementRoles), async (req, res)
 });
 
 /**
- * PATCH /balance-transfers/:id/approve
- * Approve a pending balance transfer.
- * Body: { review_notes? }
+ * @openapi
+ * /api/settlements/balance-transfers/{id}/approve:
+ *   patch:
+ *     summary: Approve a balance transfer
+ *     description: Approves a pending balance transfer. Requires admin or manager role.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               review_notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Approved transfer
+ *       404:
+ *         description: Transfer not found
+ *       422:
+ *         description: Cannot approve in current state
+ *       500:
+ *         description: Server error
  */
 router.patch('/balance-transfers/:id/approve', requireRole(['admin', 'manager']), async (req, res) => {
   try {
@@ -2051,9 +4169,39 @@ router.patch('/balance-transfers/:id/approve', requireRole(['admin', 'manager'])
 });
 
 /**
- * PATCH /balance-transfers/:id/reject
- * Reject a pending or approved balance transfer.
- * Body: { review_notes? }
+ * @openapi
+ * /api/settlements/balance-transfers/{id}/reject:
+ *   patch:
+ *     summary: Reject a balance transfer
+ *     description: Rejects a pending or approved balance transfer. Requires admin or manager role.
+ *     tags:
+ *       - Settlements
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               review_notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Rejected transfer
+ *       404:
+ *         description: Transfer not found
+ *       422:
+ *         description: Cannot reject in current state
+ *       500:
+ *         description: Server error
  */
 router.patch('/balance-transfers/:id/reject', requireRole(['admin', 'manager']), async (req, res) => {
   try {

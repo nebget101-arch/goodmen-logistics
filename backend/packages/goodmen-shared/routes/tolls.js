@@ -73,6 +73,39 @@ function requireTenant(req, res) {
   return tid;
 }
 
+/**
+ * @openapi
+ * /api/tolls:
+ *   get:
+ *     summary: Tolls API root
+ *     description: Returns the Phase 1 scaffold message and a map of available endpoints.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Scaffold info with endpoint list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 endpoints:
+ *                   type: object
+ *                   properties:
+ *                     overview:
+ *                       type: string
+ *                     accounts:
+ *                       type: string
+ *                     devices:
+ *                       type: string
+ *                     importBatches:
+ *                       type: string
+ */
 router.get('/', (_req, res) => {
   res.json({
     success: true,
@@ -86,6 +119,44 @@ router.get('/', (_req, res) => {
   });
 });
 
+/**
+ * @openapi
+ * /api/tolls/overview:
+ *   get:
+ *     summary: Toll module overview
+ *     description: Returns aggregate counts for accounts, devices, transactions, and open exceptions, plus the most recent import batch.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Overview cards and last batch
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 cards:
+ *                   type: object
+ *                   properties:
+ *                     accounts:
+ *                       type: integer
+ *                     devices:
+ *                       type: integer
+ *                     transactions:
+ *                       type: integer
+ *                     openExceptions:
+ *                       type: integer
+ *                 lastBatch:
+ *                   type: object
+ *                   nullable: true
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.get('/overview', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -122,6 +193,29 @@ router.get('/overview', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/tolls/accounts:
+ *   get:
+ *     summary: List toll accounts
+ *     description: Returns all toll accounts for the current tenant, ordered by creation date descending.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of toll account objects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.get('/accounts', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -134,6 +228,49 @@ router.get('/accounts', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/tolls/accounts:
+ *   post:
+ *     summary: Create a toll account
+ *     description: Creates a new toll account for the current tenant.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [provider_name, display_name]
+ *             properties:
+ *               provider_name:
+ *                 type: string
+ *               display_name:
+ *                 type: string
+ *               account_number_masked:
+ *                 type: string
+ *               import_method:
+ *                 type: string
+ *                 enum: [manual_upload, api]
+ *                 default: manual_upload
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Created toll account
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Missing required fields
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.post('/accounts', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -164,6 +301,54 @@ router.post('/accounts', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/tolls/accounts/{id}:
+ *   patch:
+ *     summary: Update a toll account
+ *     description: Partially updates an existing toll account. Only the provided fields are changed.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Toll account ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               display_name:
+ *                 type: string
+ *               account_number_masked:
+ *                 type: string
+ *               import_method:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated toll account
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Toll account not found
+ *       500:
+ *         description: Server error
+ */
 router.patch('/accounts/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -192,6 +377,29 @@ router.patch('/accounts/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/tolls/devices:
+ *   get:
+ *     summary: List toll devices
+ *     description: Returns all toll devices (transponders) for the current tenant, ordered by creation date descending.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of toll device objects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.get('/devices', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -218,6 +426,63 @@ async function validateDeviceRefs(tid, body) {
   return errors;
 }
 
+/**
+ * @openapi
+ * /api/tolls/devices:
+ *   post:
+ *     summary: Create a toll device
+ *     description: Creates a new toll device (transponder) linked to a toll account. Validates truck_id and driver_id references.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [toll_account_id]
+ *             properties:
+ *               toll_account_id:
+ *                 type: string
+ *                 format: uuid
+ *               device_number_masked:
+ *                 type: string
+ *               plate_number:
+ *                 type: string
+ *               truck_id:
+ *                 type: string
+ *                 format: uuid
+ *               trailer_id:
+ *                 type: string
+ *                 format: uuid
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               effective_start_date:
+ *                 type: string
+ *                 format: date
+ *               effective_end_date:
+ *                 type: string
+ *                 format: date
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Created toll device
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Missing required fields or invalid references
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Toll account not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/devices', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -259,6 +524,69 @@ router.post('/devices', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/tolls/devices/{id}:
+ *   patch:
+ *     summary: Update a toll device
+ *     description: Partially updates an existing toll device. Validates truck_id and driver_id references if provided.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Toll device ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               device_number_masked:
+ *                 type: string
+ *               plate_number:
+ *                 type: string
+ *               truck_id:
+ *                 type: string
+ *                 format: uuid
+ *               trailer_id:
+ *                 type: string
+ *                 format: uuid
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               effective_start_date:
+ *                 type: string
+ *                 format: date
+ *               effective_end_date:
+ *                 type: string
+ *                 format: date
+ *               status:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated toll device
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Invalid references
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Toll device not found
+ *       500:
+ *         description: Server error
+ */
 router.patch('/devices/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -316,10 +644,129 @@ async function listImportBatches(req, res) {
   }
 }
 
+/**
+ * @openapi
+ * /api/tolls/import/batches:
+ *   get:
+ *     summary: List import batches
+ *     description: Returns paginated toll import batches for the current tenant, ordered by start date descending. Also available at /api/tolls/import and /api/tolls/history.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           maximum: 200
+ *         description: Maximum number of batches to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Number of batches to skip
+ *     responses:
+ *       200:
+ *         description: Paginated list of import batches
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.get('/import', listImportBatches);
 router.get('/history', listImportBatches);
 router.get('/import/batches', listImportBatches);
 
+/**
+ * @openapi
+ * /api/tolls/transactions:
+ *   get:
+ *     summary: List toll transactions
+ *     description: Returns paginated toll transactions with optional filters for date range, driver, truck, batch, and validation status.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Maximum number of transactions to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Number of transactions to skip
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter transactions on or after this date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter transactions on or before this date
+ *       - in: query
+ *         name: driver_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by driver ID
+ *       - in: query
+ *         name: truck_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by truck ID
+ *       - in: query
+ *         name: batch_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by import batch ID
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [valid, exception]
+ *         description: Filter by validation status
+ *     responses:
+ *       200:
+ *         description: Paginated list of toll transactions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.get('/transactions', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -377,6 +824,87 @@ function buildDedupeHash(tenantId, provider, externalId, date, amount) {
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
+/**
+ * @openapi
+ * /api/tolls/transactions:
+ *   post:
+ *     summary: Create a manual toll transaction
+ *     description: Creates a single toll transaction with deduplication. Validates truck_id and driver_id references. Returns 409 if a duplicate is detected.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [transaction_date, provider_name, amount]
+ *             properties:
+ *               transaction_date:
+ *                 type: string
+ *                 format: date
+ *               provider_name:
+ *                 type: string
+ *               plaza_name:
+ *                 type: string
+ *               entry_location:
+ *                 type: string
+ *               exit_location:
+ *                 type: string
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *                 maxLength: 2
+ *               amount:
+ *                 type: number
+ *               truck_id:
+ *                 type: string
+ *                 format: uuid
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               load_id:
+ *                 type: string
+ *                 format: uuid
+ *               notes:
+ *                 type: string
+ *               external_transaction_id:
+ *                 type: string
+ *               device_number_masked:
+ *                 type: string
+ *               plate_number_raw:
+ *                 type: string
+ *               unit_number_raw:
+ *                 type: string
+ *               driver_name_raw:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Created toll transaction
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Missing required fields or invalid references
+ *       401:
+ *         description: Tenant context required
+ *       409:
+ *         description: Duplicate transaction detected
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                 existingId:
+ *                   type: string
+ *       500:
+ *         description: Server error
+ */
 router.post('/transactions', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -453,7 +981,72 @@ router.post('/transactions', async (req, res) => {
   }
 });
 
-// POST /transactions/batch – create multiple toll transactions at once (invoice upload flow)
+/**
+ * @openapi
+ * /api/tolls/transactions/batch:
+ *   post:
+ *     summary: Batch-create toll transactions
+ *     description: Creates multiple toll transactions at once (used by the invoice upload flow). Skips duplicates and reports per-row errors.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [transactions]
+ *             properties:
+ *               transactions:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [transaction_date, provider_name, amount]
+ *                   properties:
+ *                     transaction_date:
+ *                       type: string
+ *                       format: date
+ *                     provider_name:
+ *                       type: string
+ *                     amount:
+ *                       type: number
+ *                     plaza_name:
+ *                       type: string
+ *                     truck_id:
+ *                       type: string
+ *                       format: uuid
+ *                     driver_id:
+ *                       type: string
+ *                       format: uuid
+ *     responses:
+ *       201:
+ *         description: Batch creation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 created:
+ *                   type: integer
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       index:
+ *                         type: integer
+ *                       error:
+ *                         type: string
+ *       400:
+ *         description: Invalid or empty transactions array
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.post('/transactions/batch', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -525,6 +1118,53 @@ router.post('/transactions/batch', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/tolls/exceptions:
+ *   get:
+ *     summary: List toll transaction exceptions
+ *     description: Returns paginated toll transaction exceptions (e.g. match failures) with optional status filter.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Maximum number of exceptions to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Number of exceptions to skip
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [open, resolved]
+ *         description: Filter by resolution status
+ *     responses:
+ *       200:
+ *         description: Paginated list of exceptions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.get('/exceptions', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -604,7 +1244,63 @@ function computeDedupeHash(tenantId, provider, transactionDate, amount, plazaNam
 // Import endpoints (FN-431)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// POST /import/upload – accept CSV, parse headers + sample rows
+/**
+ * @openapi
+ * /api/tolls/import/upload:
+ *   post:
+ *     summary: Upload a toll CSV/XLSX file
+ *     description: Accepts a CSV or XLSX file, parses headers and rows, creates an import batch record, and returns headers plus sample rows for column mapping.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: CSV or XLSX file (max 10 MB)
+ *               accountId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Optional toll account to associate with the batch
+ *     responses:
+ *       201:
+ *         description: Upload parsed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 batchId:
+ *                   type: string
+ *                   format: uuid
+ *                 headers:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 sampleRows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 allRows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 totalRows:
+ *                   type: integer
+ *       400:
+ *         description: No file uploaded or unparseable file
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.post('/import/upload', upload.single('file'), async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -663,7 +1359,71 @@ function parseDate(val) {
   return d.toISOString().slice(0, 10);
 }
 
-// POST /import/commit – commit mapped rows into toll_transactions
+/**
+ * @openapi
+ * /api/tolls/import/commit:
+ *   post:
+ *     summary: Commit imported toll rows
+ *     description: Takes mapped rows from a previously uploaded batch and inserts them as toll transactions. Performs deduplication, auto-matches devices, and creates exceptions for unmatched rows.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [batchId, rows]
+ *             properties:
+ *               batchId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Import batch ID from the upload step
+ *               batch_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Alias for batchId
+ *               rows:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                 description: Array of row objects (raw or pre-mapped)
+ *               column_map:
+ *                 type: object
+ *                 additionalProperties:
+ *                   type: string
+ *                 description: Mapping of normalized field names to raw CSV headers
+ *               columnMap:
+ *                 type: object
+ *                 additionalProperties:
+ *                   type: string
+ *                 description: Alias for column_map
+ *     responses:
+ *       200:
+ *         description: Commit result with counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 imported:
+ *                   type: integer
+ *                 duplicates:
+ *                   type: integer
+ *                 errors:
+ *                   type: integer
+ *                 exceptions:
+ *                   type: integer
+ *       400:
+ *         description: Missing batchId or empty rows array
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Import batch not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/import/commit', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -857,7 +1617,29 @@ router.post('/import/commit', async (req, res) => {
   }
 });
 
-// GET /import/mapping-profiles – list profiles for tenant
+/**
+ * @openapi
+ * /api/tolls/import/mapping-profiles:
+ *   get:
+ *     summary: List import mapping profiles
+ *     description: Returns all toll import column-mapping profiles for the current tenant, ordered by creation date descending.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of mapping profile objects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.get('/import/mapping-profiles', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -872,7 +1654,45 @@ router.get('/import/mapping-profiles', async (req, res) => {
   }
 });
 
-// POST /import/mapping-profiles – create a new profile
+/**
+ * @openapi
+ * /api/tolls/import/mapping-profiles:
+ *   post:
+ *     summary: Create an import mapping profile
+ *     description: Saves a reusable column-mapping profile so future CSV imports from the same provider can auto-map columns.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, columnMappings]
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Human-readable profile name
+ *               columnMappings:
+ *                 type: object
+ *                 additionalProperties:
+ *                   type: string
+ *                 description: Map of normalized field names to raw CSV header names
+ *     responses:
+ *       201:
+ *         description: Created mapping profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Missing required fields
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.post('/import/mapping-profiles', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -904,9 +1724,62 @@ router.post('/import/mapping-profiles', async (req, res) => {
 // ---------------------------------------------------------------------------
 
 /**
- * POST /api/tolls/transactions/:id/post-to-settlement
- * Manually link a single toll transaction to a settlement as a deduction.
- * Body: { settlement_id }
+ * @openapi
+ * /api/tolls/transactions/{id}/post-to-settlement:
+ *   post:
+ *     summary: Post toll to settlement
+ *     description: Manually links a single toll transaction to a settlement as a variable expense deduction. Uses the responsibility profile to determine billing. Returns 409 if already linked or settlement is voided.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Toll transaction ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [settlement_id]
+ *             properties:
+ *               settlement_id:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       200:
+ *         description: Toll linked to settlement
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 adjustment:
+ *                   type: object
+ *                   nullable: true
+ *                 toll_transaction_id:
+ *                   type: string
+ *                   format: uuid
+ *                 settlement_id:
+ *                   type: string
+ *                   format: uuid
+ *       400:
+ *         description: Missing settlement_id
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Toll transaction or settlement not found
+ *       409:
+ *         description: Already linked, voided settlement, or not billable
+ *       500:
+ *         description: Server error
  */
 router.post('/transactions/:id/post-to-settlement', async (req, res) => {
   try {
@@ -993,8 +1866,46 @@ router.post('/transactions/:id/post-to-settlement', async (req, res) => {
 });
 
 /**
- * POST /api/tolls/transactions/:id/unlink-from-settlement
- * Unlink a toll transaction from its settlement.
+ * @openapi
+ * /api/tolls/transactions/{id}/unlink-from-settlement:
+ *   post:
+ *     summary: Unlink toll from settlement
+ *     description: Removes the link between a toll transaction and its settlement, deleting the corresponding adjustment items. Cannot unlink from approved or voided settlements.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Toll transaction ID
+ *     responses:
+ *       200:
+ *         description: Toll unlinked from settlement
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 toll_transaction_id:
+ *                   type: string
+ *                   format: uuid
+ *                 unlinked_from_settlement:
+ *                   type: string
+ *                   format: uuid
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Toll transaction not found
+ *       409:
+ *         description: Not linked or settlement is approved/voided
+ *       500:
+ *         description: Server error
  */
 router.post('/transactions/:id/unlink-from-settlement', async (req, res) => {
   try {
@@ -1070,7 +1981,66 @@ router.post('/transactions/:id/unlink-from-settlement', async (req, res) => {
   }
 });
 
-// ─── Invoice Image Upload + AI Extraction ────────────────────────────────────
+/**
+ * @openapi
+ * /api/tolls/import/invoice-image:
+ *   post:
+ *     summary: Upload toll invoice images for AI extraction
+ *     description: Accepts up to 10 invoice images (JPG, PNG, PDF, WebP), sends each to the AI service for OCR/vision extraction, auto-matches plates to toll devices, and flags duplicates.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [images]
+ *             properties:
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 maxItems: 10
+ *                 description: Invoice image files (JPG, PNG, PDF, WebP; max 10 MB each)
+ *     responses:
+ *       200:
+ *         description: Extraction results per file
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 results:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       file:
+ *                         type: string
+ *                       invoiceMeta:
+ *                         type: object
+ *                       confidence:
+ *                         type: number
+ *                       warnings:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                       transactions:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *       400:
+ *         description: No image files provided
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Server error
+ */
 router.post('/import/invoice-image', invoiceUpload.array('images', 10), async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -1201,7 +2171,80 @@ router.post('/import/invoice-image', invoiceUpload.array('images', 10), async (r
   }
 });
 
-// ─── CSV AI Normalization ─────────────────────────────────────────────────────
+/**
+ * @openapi
+ * /api/tolls/import/ai-normalize:
+ *   post:
+ *     summary: AI-normalize CSV column mapping
+ *     description: Sends CSV headers and sample rows to the AI service for automatic column-mapping suggestions. Auto-saves a mapping profile when confidence is >= 0.8.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [batchId, headers, sampleRows]
+ *             properties:
+ *               batchId:
+ *                 type: string
+ *                 format: uuid
+ *               headers:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Raw CSV column headers
+ *               sampleRows:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                 description: First few data rows for AI analysis
+ *     responses:
+ *       200:
+ *         description: AI normalization result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 batchId:
+ *                   type: string
+ *                   format: uuid
+ *                 overallConfidence:
+ *                   type: number
+ *                 columnMapping:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: string
+ *                 confidenceScores:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: number
+ *                 normalizedSample:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 warnings:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 mappingProfileSaved:
+ *                   type: boolean
+ *       400:
+ *         description: Missing required fields
+ *       401:
+ *         description: Tenant context required
+ *       502:
+ *         description: AI service unreachable or returned an error
+ *       504:
+ *         description: AI service timeout
+ *       500:
+ *         description: Server error
+ */
 router.post('/import/ai-normalize', async (req, res) => {
   try {
     const tid = requireTenant(req, res);
@@ -1296,8 +2339,37 @@ router.post('/import/ai-normalize', async (req, res) => {
 // ─── FN-468: Device assignment endpoints ─────────────────────────────────────
 
 /**
- * GET /api/tolls/devices/:deviceId/assignments
- * List all vehicle assignments (active + history) for a device.
+ * @openapi
+ * /api/tolls/devices/{deviceId}/assignments:
+ *   get:
+ *     summary: List device vehicle assignments
+ *     description: Returns all vehicle assignment records (active and historical) for a specific toll device, ordered by assigned date descending.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Toll device ID
+ *     responses:
+ *       200:
+ *         description: Array of assignment records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Toll device not found
+ *       500:
+ *         description: Server error
  */
 router.get('/devices/:deviceId/assignments', async (req, res) => {
   try {
@@ -1325,10 +2397,57 @@ router.get('/devices/:deviceId/assignments', async (req, res) => {
 });
 
 /**
- * POST /api/tolls/devices/:deviceId/assign-vehicle
- * Assign transponder to vehicle.
- * Body: { truck_id, plate_number, notes }
- * Auto-removes previous active assignment. Updates toll_devices.truck_id.
+ * @openapi
+ * /api/tolls/devices/{deviceId}/assign-vehicle:
+ *   post:
+ *     summary: Assign vehicle to toll device
+ *     description: Assigns a vehicle (truck) to a toll device (transponder). Automatically removes the previous active assignment and auto-resolves the driver from the truck's active driver.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Toll device ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [truck_id]
+ *             properties:
+ *               truck_id:
+ *                 type: string
+ *                 format: uuid
+ *               plate_number:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Vehicle assigned successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 device:
+ *                   type: object
+ *       400:
+ *         description: Missing truck_id or invalid reference
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Toll device not found
+ *       500:
+ *         description: Server error
  */
 router.post('/devices/:deviceId/assign-vehicle', async (req, res) => {
   try {
@@ -1401,10 +2520,48 @@ router.post('/devices/:deviceId/assign-vehicle', async (req, res) => {
 });
 
 /**
- * POST /api/tolls/devices/:deviceId/remove-vehicle
- * Remove current vehicle assignment.
- * Body: { notes }
- * Clears toll_devices.truck_id.
+ * @openapi
+ * /api/tolls/devices/{deviceId}/remove-vehicle:
+ *   post:
+ *     summary: Remove vehicle from toll device
+ *     description: Removes the current vehicle assignment from a toll device. Clears truck_id and (unless a manual driver override is set) also clears driver_id.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Toll device ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Vehicle removed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 device:
+ *                   type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Toll device not found
+ *       500:
+ *         description: Server error
  */
 router.post('/devices/:deviceId/remove-vehicle', async (req, res) => {
   try {
@@ -1458,10 +2615,55 @@ router.post('/devices/:deviceId/remove-vehicle', async (req, res) => {
 });
 
 /**
- * POST /api/tolls/devices/:deviceId/assign-driver
- * Direct driver override on device (skips vehicle->driver chain).
- * Body: { driver_id, notes }
- * Updates toll_devices.driver_id.
+ * @openapi
+ * /api/tolls/devices/{deviceId}/assign-driver:
+ *   post:
+ *     summary: Override driver on toll device
+ *     description: Directly assigns a driver to a toll device, bypassing the vehicle-to-driver chain. Sets the is_driver_override flag so the driver is not cleared when the vehicle assignment changes.
+ *     tags: [Tolls]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Toll device ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [driver_id]
+ *             properties:
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Driver assigned successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 device:
+ *                   type: object
+ *       400:
+ *         description: Missing driver_id or invalid reference
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Toll device not found
+ *       500:
+ *         description: Server error
  */
 router.post('/devices/:deviceId/assign-driver', async (req, res) => {
   try {
