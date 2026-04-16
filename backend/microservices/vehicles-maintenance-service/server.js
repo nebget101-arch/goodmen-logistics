@@ -25,34 +25,15 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Vehicles & Maintenance Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Vehicles & Maintenance microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Vehicles & Maintenance Service API',
+  description: 'API documentation for the Vehicles & Maintenance microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
@@ -67,6 +48,7 @@ const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middle
 
 const requirePartsPlan = requirePlanAccess('/parts');
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/vehicles', authMiddleware, tenantContextMiddleware, vehiclesRouter);

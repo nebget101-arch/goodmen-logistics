@@ -4,6 +4,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const swaggerUi = require('swagger-ui-express');
 
 const app = express();
 
@@ -86,6 +87,166 @@ app.get('/health', (req, res) => {
     }
   });
 });
+
+// ── Unified API Documentation ─────────────────────────────────────
+// Aggregates OpenAPI specs from all downstream services into a single
+// Swagger UI available at /api-docs on the gateway.
+const SERVICE_SPECS = [
+  { name: 'Auth & Users', url: AUTH_USERS_SERVICE_URL },
+  { name: 'Logistics', url: LOGISTICS_SERVICE_URL },
+  { name: 'Drivers Compliance', url: DRIVERS_COMPLIANCE_SERVICE_URL },
+  { name: 'Vehicles & Maintenance', url: VEHICLES_MAINTENANCE_SERVICE_URL },
+  { name: 'Inventory', url: INVENTORY_SERVICE_URL },
+  { name: 'Reporting', url: REPORTING_SERVICE_URL },
+  { name: 'Integrations', url: INTEGRATIONS_SERVICE_URL },
+  { name: 'AI Service', url: AI_SERVICE_URL }
+];
+
+let cachedSpec = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function fetchServiceSpec(serviceUrl) {
+  const specUrl = `${serviceUrl.replace(/\/$/, '')}/api-docs-json`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(specUrl, { signal: controller.signal });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function mergePaths(specs) {
+  const merged = {};
+  for (const spec of specs) {
+    if (!spec || !spec.paths) continue;
+    for (const [path, methods] of Object.entries(spec.paths)) {
+      if (!merged[path]) {
+        merged[path] = methods;
+      } else {
+        Object.assign(merged[path], methods);
+      }
+    }
+  }
+  return merged;
+}
+
+function mergeSchemas(specs) {
+  const merged = {};
+  for (const spec of specs) {
+    if (!spec?.components?.schemas) continue;
+    Object.assign(merged, spec.components.schemas);
+  }
+  return merged;
+}
+
+function collectTags(specs) {
+  const tagSet = new Set();
+  for (const spec of specs) {
+    if (!spec?.paths) continue;
+    for (const methods of Object.values(spec.paths)) {
+      for (const op of Object.values(methods)) {
+        if (op?.tags) {
+          op.tags.forEach((t) => tagSet.add(t));
+        }
+      }
+    }
+  }
+  return Array.from(tagSet)
+    .sort()
+    .map((name) => ({ name }));
+}
+
+async function getAggregatedSpec() {
+  const now = Date.now();
+  if (cachedSpec && now - cacheTimestamp < CACHE_TTL_MS) {
+    return cachedSpec;
+  }
+
+  const results = await Promise.all(
+    SERVICE_SPECS.map((s) => fetchServiceSpec(s.url))
+  );
+  const validSpecs = results.filter(Boolean);
+
+  const gatewayUrl =
+    process.env.NODE_ENV === 'production'
+      ? 'https://fleetneuron-logistics-gateway.onrender.com'
+      : isProd
+        ? 'https://fleetneuron-logistics-gateway.onrender.com'
+        : `http://localhost:${PORT}`;
+
+  cachedSpec = {
+    openapi: '3.0.0',
+    info: {
+      title: 'FleetNeuron API — Unified Documentation',
+      version: '2.0.0',
+      description: `AI-powered fleet management platform API. Aggregated from ${validSpecs.length}/${SERVICE_SPECS.length} services.`,
+      contact: { name: 'FleetNeuron', url: 'https://fleetneuron.ai' }
+    },
+    servers: [
+      { url: gatewayUrl, description: isProd ? 'Production' : 'Current' },
+      {
+        url: 'https://fleetneuron-logistics-gateway-dev.onrender.com',
+        description: 'Dev'
+      },
+      {
+        url: 'https://fleetneuron-logistics-gateway.onrender.com',
+        description: 'Production'
+      }
+    ],
+    tags: collectTags(validSpecs),
+    paths: mergePaths(validSpecs),
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT'
+        }
+      },
+      schemas: mergeSchemas(validSpecs)
+    },
+    security: [{ bearerAuth: [] }]
+  };
+  cacheTimestamp = now;
+  return cachedSpec;
+}
+
+// Serve raw JSON spec (used by other services and swagger:export)
+app.get('/api-docs-json', async (_req, res) => {
+  try {
+    const spec = await getAggregatedSpec();
+    res.json(spec);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[gateway] Failed to aggregate specs:', err.message);
+    res.status(500).json({ error: 'Failed to aggregate API specs' });
+  }
+});
+
+// Serve Swagger UI
+app.use(
+  '/api-docs',
+  swaggerUi.serve,
+  async (req, res, next) => {
+    try {
+      const spec = await getAggregatedSpec();
+      return swaggerUi.setup(spec, {
+        customSiteTitle: 'FleetNeuron API Docs',
+        customCss: '.swagger-ui .topbar { display: none }'
+      })(req, res, next);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[gateway] Swagger UI error:', err.message);
+      return res.status(500).send('Failed to load API documentation');
+    }
+  }
+);
 
 function buildProxy(target, label) {
   return createProxyMiddleware({

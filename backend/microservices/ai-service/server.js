@@ -24,37 +24,19 @@ app.use(
 
 app.use(bodyParser.json({ limit: '20mb' }));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'AI Service API',
-      version: '1.0.0',
-      description: 'FleetNeuron AI Service — chat, vision extraction, analysis, and intelligent recommendations powered by OpenAI and Anthropic models.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'AI Service API',
+  description: 'FleetNeuron AI Service — chat, vision extraction, analysis, and intelligent recommendations powered by OpenAI and Anthropic models.',
   apis: [
     path.join(__dirname, 'src/ai-router.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 const openai = new OpenAI({

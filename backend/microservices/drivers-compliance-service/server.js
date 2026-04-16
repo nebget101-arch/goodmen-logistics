@@ -24,34 +24,15 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Drivers Compliance Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Drivers Compliance microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Drivers Compliance Service API',
+  description: 'API documentation for the Drivers Compliance microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
@@ -79,6 +60,7 @@ const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middle
 
 const requireRoadsidePlan = requirePlanAccess('/roadside');
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/drivers', authMiddleware, tenantContextMiddleware, driversRouter);

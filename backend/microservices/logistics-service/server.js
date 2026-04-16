@@ -29,34 +29,15 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const uploadsPath = path.join(__dirname, '..', '..', 'goodmen-logistics', 'backend', 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Logistics Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Logistics microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Logistics Service API',
+  description: 'API documentation for the Logistics microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
@@ -100,6 +81,7 @@ const requireLeaseFinancingPlan = requirePlanAccess((req) => {
 });
 const requireIftaPlan = requirePlanAccess('/compliance/ifta');
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/fuel', authMiddleware, tenantContextMiddleware, fuelRouter);
