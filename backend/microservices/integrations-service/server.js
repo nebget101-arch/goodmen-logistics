@@ -25,34 +25,15 @@ setDatabase({ knex });
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Integrations Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Integrations microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Integrations Service API',
+  description: 'API documentation for the Integrations microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
@@ -64,6 +45,7 @@ app.use('/api/scan-bridge', scanBridgeRouter);
 app.use('/api/fmcsa', fmcsaRouter);
 app.use('/api/fmcsa/safety', authMiddleware, tenantContextMiddleware, fmcsaSafetyRouter);
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ─── Bull Queue initialization ───────────────────────────────────────────────

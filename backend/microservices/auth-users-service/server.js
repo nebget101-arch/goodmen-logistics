@@ -41,37 +41,19 @@ app.use('/api/stripe', stripeWebhookRouter);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Auth & Users Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Auth & Users microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Auth & Users Service API',
+  description: 'API documentation for the Auth & Users microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/auth', authRouter);
