@@ -44,6 +44,7 @@ const barcodesRouter = require('@goodmen/shared/routes/barcodes');
 const shopClientsRouter = require('@goodmen/shared/routes/shop-clients');
 const customerBulkUploadRouter = require('@goodmen/shared/routes/customer-bulk-upload');
 const locationBinsRouter = require('@goodmen/shared/routes/location-bins');
+const warehouseSupplyRulesRouter = require('@goodmen/shared/routes/warehouse-supply-rules');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
@@ -63,6 +64,7 @@ app.use('/api/barcodes', authMiddleware, tenantContextMiddleware, requireBarcode
 app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, customerBulkUploadRouter);
 app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, shopClientsRouter);
 app.use('/api/locations/:locationId/bins', authMiddleware, tenantContextMiddleware, locationBinsRouter);
+app.use('/api/locations/:id/supply-rules', authMiddleware, tenantContextMiddleware, warehouseSupplyRulesRouter);
 
 /**
  * @openapi
