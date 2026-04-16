@@ -3,9 +3,11 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('../internal/db');
 const auth = require('./auth-middleware');
+const { loadUserRbac, requirePermission } = require('../middleware/rbac-middleware');
 
-// Protect all locations routes: admin, fleet
-router.use(auth(['admin', 'fleet']));
+// RBAC: load user permissions on all locations routes
+router.use(auth(['admin', 'fleet', 'shop_manager', 'parts_manager', 'parts_clerk', 'inventory_auditor', 'executive_read_only', 'company_accountant']));
+router.use(loadUserRbac);
 
 const VALID_TYPES = ['SHOP', 'YARD', 'DROP_YARD', 'WAREHOUSE', 'OFFICE', 'TERMINAL'];
 
@@ -66,7 +68,7 @@ async function getTenantId(req) {
  *       500:
  *         description: Server error
  */
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('locations.view'), async (req, res) => {
   try {
     const tenantId = await getTenantId(req);
     if (!tenantId) return res.status(403).json({ message: 'Tenant context missing' });
@@ -141,7 +143,7 @@ router.get('/', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('locations.view'), async (req, res) => {
   try {
     const tenantId = await getTenantId(req);
     if (!tenantId) return res.status(403).json({ message: 'Tenant context missing' });
@@ -250,7 +252,7 @@ router.get('/:id', async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('locations.manage'), async (req, res) => {
   const {
     name, address, city, state, zip, phone, email, contact_name,
     timezone, operating_hours, settings, code, location_type, active
@@ -399,7 +401,7 @@ async function handleLocationUpdate(req, res) {
   }
 }
 
-router.patch('/:id', handleLocationUpdate);
+router.patch('/:id', requirePermission('locations.manage'), handleLocationUpdate);
 
 /**
  * @openapi
@@ -455,7 +457,7 @@ router.put('/:id', handleLocationUpdate);
  *       500:
  *         description: Server error
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('locations.manage'), async (req, res) => {
   try {
     const tenantId = await getTenantId(req);
     if (!tenantId) return res.status(403).json({ message: 'Tenant context missing' });
