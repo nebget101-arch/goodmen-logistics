@@ -30,6 +30,13 @@ const MODULES = [
 ];
 const ACTIONS = ['view', 'create', 'edit', 'delete', 'assign', 'approve', 'receive', 'transfer', 'adjust', 'bill', 'export', 'manage'];
 
+// Sub-module permissions that don't fit the standard MODULE.ACTION grid
+const EXTRA_PERMISSIONS = [
+  { module: 'locations', action: 'manage', code: 'locations.bins.manage', description: 'Manage bins within locations' },
+  { module: 'locations', action: 'manage', code: 'locations.users.manage', description: 'Manage user-location assignments' },
+  { module: 'locations', action: 'manage', code: 'locations.supply_rules.manage', description: 'Manage warehouse-to-shop supply rules' }
+];
+
 function buildPermissions() {
   const list = [];
   for (const mod of MODULES) {
@@ -37,6 +44,8 @@ function buildPermissions() {
       list.push({ module: mod, action, code: `${mod}.${action}`, description: `${mod} ${action}` });
     }
   }
+  // Append sub-module permissions
+  list.push(...EXTRA_PERMISSIONS);
   return list;
 }
 
@@ -63,10 +72,10 @@ const ROLE_PERMISSIONS = {
     'reports.view',
   ],
   carrier_accountant: ['dashboard.view', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.bill', 'accounting.view', 'accounting.manage', 'settlements.view', 'settlements.create', 'settlements.edit', 'settlements.approve', 'settlements.manage', 'reports.view', 'reports.export'],
-  shop_manager: ['dashboard.view', 'work_orders.view', 'work_orders.manage', 'invoices.view', 'invoices.bill', 'parts.view', 'locations.view'],
+  shop_manager: ['dashboard.view', 'work_orders.view', 'work_orders.manage', 'invoices.view', 'invoices.bill', 'parts.view', 'locations.view', 'locations.manage', 'locations.bins.manage', 'locations.users.manage', 'locations.supply_rules.manage'],
   service_writer: ['dashboard.view', 'work_orders.view', 'work_orders.create', 'work_orders.edit', 'invoices.view', 'invoices.create', 'invoices.edit', 'parts.view', 'parts.receive'],
   mechanic: ['dashboard.view', 'work_orders.view', 'work_orders.edit', 'parts.view', 'parts.receive'],
-  parts_manager: ['dashboard.view', 'parts.view', 'parts.create', 'parts.edit', 'parts.manage', 'inventory.view', 'inventory.receive', 'inventory.adjust', 'inventory.transfer', 'inventory_transfers.view', 'inventory_transfers.manage', 'purchase_orders.view', 'purchase_orders.manage', 'vendors.view', 'vendors.manage', 'locations.view'],
+  parts_manager: ['dashboard.view', 'parts.view', 'parts.create', 'parts.edit', 'parts.manage', 'inventory.view', 'inventory.receive', 'inventory.adjust', 'inventory.transfer', 'inventory_transfers.view', 'inventory_transfers.manage', 'purchase_orders.view', 'purchase_orders.manage', 'vendors.view', 'vendors.manage', 'locations.view', 'locations.manage', 'locations.bins.manage', 'locations.users.manage', 'locations.supply_rules.manage'],
   parts_clerk: ['dashboard.view', 'parts.view', 'inventory.view', 'inventory.receive', 'inventory_transfers.view', 'inventory_transfers.manage', 'customers.view', 'locations.view'],
   inventory_auditor: ['dashboard.view', 'inventory.view', 'reports.view', 'locations.view'],
   company_accountant: ['dashboard.view', 'invoices.view', 'accounting.view', 'accounting.manage', 'reports.view', 'reports.export', 'locations.view'],
