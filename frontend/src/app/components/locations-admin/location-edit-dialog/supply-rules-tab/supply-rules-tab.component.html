@@ -1,0 +1,276 @@
+<!-- FN-701: Supply Rules Tab — visible only for WAREHOUSE and SHOP locations -->
+
+<!-- ── Guard: unsaved location ─────────────────────────────────────────────── -->
+<div *ngIf="!locationId" class="srt-empty-state">
+  <span class="material-symbols-outlined srt-empty-icon">save</span>
+  <p>Save the location first to manage supply rules.</p>
+</div>
+
+<!-- ── Guard: wrong type ───────────────────────────────────────────────────── -->
+<div *ngIf="locationId && !isWarehouse && !isShop" class="srt-empty-state">
+  <span class="material-symbols-outlined srt-empty-icon">info</span>
+  <p>Supply rules are only available for WAREHOUSE and SHOP locations.</p>
+</div>
+
+<!-- ── Main content ────────────────────────────────────────────────────────── -->
+<ng-container *ngIf="locationId && (isWarehouse || isShop)">
+
+  <!-- Header row -->
+  <div class="srt-header">
+    <div class="srt-heading">
+      <span class="material-symbols-outlined">local_shipping</span>
+      {{ sectionHeading }}
+    </div>
+    <button
+      class="srt-btn srt-btn--primary"
+      type="button"
+      [disabled]="loading"
+      (click)="openAddDialog()"
+    >
+      <span class="material-symbols-outlined">add</span>
+      Add Supply Rule
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="srt-loading">
+    <span class="srt-spinner"></span>
+    Loading supply rules…
+  </div>
+
+  <!-- Load error -->
+  <div *ngIf="loadError && !loading" class="srt-alert-error">
+    <span class="material-symbols-outlined">error</span>
+    {{ loadError }}
+    <button class="srt-link" (click)="loadRules()">Retry</button>
+  </div>
+
+  <!-- Empty state -->
+  <div *ngIf="!loading && !loadError && rules.length === 0" class="srt-empty-state">
+    <span class="material-symbols-outlined srt-empty-icon">local_shipping</span>
+    <p>No supply rules yet.</p>
+    <p class="srt-empty-sub">
+      Click <strong>Add Supply Rule</strong> to link a
+      {{ counterpartLabel | lowercase }} to this location.
+    </p>
+  </div>
+
+  <!-- Rules table -->
+  <div *ngIf="!loading && rules.length > 0" class="srt-table-wrap">
+    <table class="srt-table">
+      <thead>
+        <tr>
+          <th>{{ counterpartLabel }}</th>
+          <th class="srt-center">Primary</th>
+          <th class="srt-center">Auto-Replenish</th>
+          <th class="srt-center">Lead Days</th>
+          <th class="srt-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let rule of rules" [class.srt-row--inactive]="!rule.active">
+
+          <!-- Counterpart name + code -->
+          <td>
+            <span class="srt-counterpart-name">{{ getCounterpartName(rule) }}</span>
+            <span *ngIf="rule.notes" class="srt-notes-badge" [title]="rule.notes">
+              <span class="material-symbols-outlined">notes</span>
+            </span>
+          </td>
+
+          <!-- Primary supplier badge -->
+          <td class="srt-center">
+            <span *ngIf="rule.is_primary_supplier" class="srt-badge srt-badge--primary">
+              <span class="material-symbols-outlined">star</span> Primary
+            </span>
+            <span *ngIf="!rule.is_primary_supplier" class="srt-dash">—</span>
+          </td>
+
+          <!-- Auto-replenish -->
+          <td class="srt-center">
+            <span *ngIf="rule.auto_replenish" class="srt-badge srt-badge--replenish">
+              <span class="material-symbols-outlined">autorenew</span> On
+            </span>
+            <span *ngIf="!rule.auto_replenish" class="srt-dash">—</span>
+          </td>
+
+          <!-- Delivery days -->
+          <td class="srt-center">
+            <span *ngIf="rule.delivery_days != null" class="srt-days">
+              {{ rule.delivery_days }}d
+            </span>
+            <span *ngIf="rule.delivery_days == null" class="srt-dash">—</span>
+          </td>
+
+          <!-- Row actions -->
+          <td class="srt-right">
+            <!-- Normal actions -->
+            <ng-container *ngIf="confirmDeleteId !== rule.id">
+              <button
+                class="srt-action-btn"
+                type="button"
+                title="Edit rule"
+                (click)="openEditDialog(rule)"
+              >
+                <span class="material-symbols-outlined">edit</span>
+              </button>
+              <button
+                class="srt-action-btn srt-action-btn--danger"
+                type="button"
+                title="Delete rule"
+                [disabled]="deletingId === rule.id"
+                (click)="confirmDelete(rule)"
+              >
+                <span *ngIf="deletingId !== rule.id" class="material-symbols-outlined">delete</span>
+                <span *ngIf="deletingId === rule.id" class="srt-spinner srt-spinner--sm"></span>
+              </button>
+            </ng-container>
+
+            <!-- Delete confirmation inline -->
+            <ng-container *ngIf="confirmDeleteId === rule.id">
+              <span class="srt-confirm-text">Remove?</span>
+              <button
+                class="srt-action-btn srt-action-btn--danger-confirm"
+                type="button"
+                (click)="deleteRule(rule)"
+              >Yes</button>
+              <button
+                class="srt-action-btn"
+                type="button"
+                (click)="cancelDelete()"
+              >No</button>
+            </ng-container>
+          </td>
+
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</ng-container>
+
+<!-- ── Add / Edit Dialog ────────────────────────────────────────────────────── -->
+<div class="srt-dialog-backdrop" *ngIf="showRuleDialog" (click)="onDialogBackdrop($event)">
+  <div class="srt-dialog">
+
+    <div class="srt-dialog-header">
+      <span class="material-symbols-outlined">local_shipping</span>
+      <span class="srt-dialog-title">
+        {{ editingRule ? 'Edit Supply Rule' : 'Add Supply Rule' }}
+      </span>
+      <button class="srt-dialog-close" type="button" (click)="closeRuleDialog()" aria-label="Close">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <div class="srt-dialog-body">
+
+      <!-- General error -->
+      <div *ngIf="ruleErrors['general']" class="srt-alert-error">
+        <span class="material-symbols-outlined">error</span>
+        {{ ruleErrors['general'] }}
+      </div>
+
+      <!-- Counterpart select (disabled in edit mode — can't change the pair) -->
+      <div class="srt-field" [class.has-error]="ruleErrors['counterpart']">
+        <label class="srt-label">
+          {{ counterpartLabel }} <span class="srt-required">*</span>
+        </label>
+        <div class="srt-select-wrap">
+          <select
+            class="srt-select"
+            [(ngModel)]="selectedCounterpartId"
+            [disabled]="!!editingRule"
+            (change)="ruleErrors['counterpart'] && (ruleErrors['counterpart'] = '')"
+          >
+            <option value="">— Select {{ counterpartLabel | lowercase }} —</option>
+            <option *ngFor="let cp of availableCounterparts" [value]="cp.id">
+              {{ cp.name }}<ng-container *ngIf="cp.code"> ({{ cp.code }})</ng-container>
+            </option>
+          </select>
+          <span class="material-symbols-outlined srt-select-arrow">expand_more</span>
+        </div>
+        <span *ngIf="ruleErrors['counterpart']" class="srt-error-msg">
+          {{ ruleErrors['counterpart'] }}
+        </span>
+        <span *ngIf="editingRule" class="srt-hint">
+          The warehouse–shop pair cannot be changed after creation.
+        </span>
+        <span *ngIf="!editingRule && availableCounterparts.length === 0" class="srt-hint">
+          No unlinked {{ counterpartLabel | lowercase }} locations found.
+        </span>
+      </div>
+
+      <!-- Primary supplier toggle -->
+      <div class="srt-field srt-field--row">
+        <div class="srt-field-info">
+          <label class="srt-label">Primary Supplier</label>
+          <span class="srt-hint">Only one {{ counterpartLabel.toLowerCase() }} can be primary per shop. Enabling this will unset any current primary.</span>
+        </div>
+        <label class="srt-toggle">
+          <input type="checkbox" [(ngModel)]="isPrimary" />
+          <span class="srt-toggle-track"><span class="srt-toggle-thumb"></span></span>
+        </label>
+      </div>
+
+      <!-- Auto-replenish toggle -->
+      <div class="srt-field srt-field--row">
+        <div class="srt-field-info">
+          <label class="srt-label">Auto-Replenish</label>
+          <span class="srt-hint">Automatically generate replenishment orders when stock falls below threshold.</span>
+        </div>
+        <label class="srt-toggle">
+          <input type="checkbox" [(ngModel)]="autoReplenish" />
+          <span class="srt-toggle-track"><span class="srt-toggle-thumb"></span></span>
+        </label>
+      </div>
+
+      <!-- Delivery days -->
+      <div class="srt-field srt-field--half" [class.has-error]="ruleErrors['deliveryDays']">
+        <label class="srt-label">Lead Time (days)</label>
+        <input
+          class="srt-input"
+          type="number"
+          [(ngModel)]="deliveryDays"
+          (input)="ruleErrors['deliveryDays'] && (ruleErrors['deliveryDays'] = '')"
+          min="0"
+          max="365"
+          step="1"
+          placeholder="e.g. 2"
+        />
+        <span *ngIf="ruleErrors['deliveryDays']" class="srt-error-msg">{{ ruleErrors['deliveryDays'] }}</span>
+        <span *ngIf="!ruleErrors['deliveryDays']" class="srt-hint">Days from order to delivery</span>
+      </div>
+
+      <!-- Notes -->
+      <div class="srt-field">
+        <label class="srt-label">Notes</label>
+        <textarea
+          class="srt-input srt-input--textarea"
+          [(ngModel)]="notes"
+          placeholder="Optional notes about this supply relationship…"
+          rows="3"
+          maxlength="500"
+        ></textarea>
+      </div>
+
+    </div>
+
+    <div class="srt-dialog-footer">
+      <button class="srt-btn" type="button" [disabled]="savingRule" (click)="closeRuleDialog()">
+        Cancel
+      </button>
+      <button
+        class="srt-btn srt-btn--primary"
+        type="button"
+        [disabled]="savingRule"
+        (click)="saveRule()"
+      >
+        <span *ngIf="savingRule" class="srt-spinner"></span>
+        <span *ngIf="!savingRule" class="material-symbols-outlined">save</span>
+        {{ savingRule ? 'Saving…' : (editingRule ? 'Save Changes' : 'Add Rule') }}
+      </button>
+    </div>
+
+  </div>
+</div>

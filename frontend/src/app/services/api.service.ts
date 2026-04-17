@@ -16,9 +16,71 @@ export class ApiService {
     return this.baseUrl;
   }
 
-  // Locations
+  // ── Locations — FN-691 / FN-698 / FN-701 ────────────────────────────────
+
+  /** Legacy — kept for backward compatibility */
   getLocations(): Observable<any> {
     return this.http.get(`${this.baseUrl}/locations`);
+  }
+
+  /** Paginated, filterable list → { data, meta: { page, pageSize, total } } */
+  listLocations(params?: {
+    type?: string;
+    active?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+    sortBy?: string;
+    sortDir?: string;
+  }): Observable<any> {
+    const p = new URLSearchParams();
+    if (params?.type)     p.set('type',     params.type);
+    if (params?.active)   p.set('active',   params.active);
+    if (params?.search)   p.set('search',   params.search);
+    if (params?.page)     p.set('page',     String(params.page));
+    if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+    if (params?.sortBy)   p.set('sortBy',   params.sortBy);
+    if (params?.sortDir)  p.set('sortDir',  params.sortDir);
+    const qs = p.toString();
+    return this.http.get<any>(`${this.baseUrl}/locations${qs ? '?' + qs : ''}`);
+  }
+
+  getLocationById(id: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/locations/${id}`);
+  }
+
+  createLocation(payload: Record<string, unknown>): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/locations`, payload);
+  }
+
+  updateLocation(id: string, payload: Record<string, unknown>): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/locations/${id}`, payload);
+  }
+
+  deleteLocation(id: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/locations/${id}`);
+  }
+
+  // ── Location Supply Rules — FN-693 / FN-701 ──────────────────────────────
+
+  /** GET /api/locations/:id/supply-rules → { success, data: SupplyRuleRow[] } */
+  getLocationSupplyRules(locationId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/locations/${locationId}/supply-rules`);
+  }
+
+  /** POST /api/locations/:id/supply-rules */
+  createLocationSupplyRule(locationId: string, payload: Record<string, unknown>): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/locations/${locationId}/supply-rules`, payload);
+  }
+
+  /** PATCH /api/locations/:id/supply-rules/:ruleId */
+  updateLocationSupplyRule(locationId: string, ruleId: string, payload: Record<string, unknown>): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/locations/${locationId}/supply-rules/${ruleId}`, payload);
+  }
+
+  /** DELETE /api/locations/:id/supply-rules/:ruleId */
+  deleteLocationSupplyRule(locationId: string, ruleId: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/locations/${locationId}/supply-rules/${ruleId}`);
   }
 
   // FMCSA company info lookup (legacy — shop clients context)
