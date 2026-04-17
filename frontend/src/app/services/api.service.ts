@@ -16,9 +16,42 @@ export class ApiService {
     return this.baseUrl;
   }
 
-  // Locations
+  // ─── Locations ───────────────────────────────────────────────────────────
   getLocations(): Observable<any> {
     return this.http.get(`${this.baseUrl}/locations`);
+  }
+
+  listLocations(params?: {
+    type?: string;
+    active?: boolean;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }): Observable<any> {
+    const query = new URLSearchParams();
+    if (params?.type) { query.set('type', params.type); }
+    if (params?.active !== undefined) { query.set('active', String(params.active)); }
+    if (params?.search) { query.set('search', params.search); }
+    if (params?.page) { query.set('page', String(params.page)); }
+    if (params?.pageSize) { query.set('pageSize', String(params.pageSize)); }
+    const qs = query.toString();
+    return this.http.get(`${this.baseUrl}/locations${qs ? '?' + qs : ''}`);
+  }
+
+  getLocationById(id: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/locations/${id}`);
+  }
+
+  createLocation(payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/locations`, payload);
+  }
+
+  updateLocation(id: string, payload: any): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/locations/${id}`, payload);
+  }
+
+  deleteLocation(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/locations/${id}`);
   }
 
   // FMCSA company info lookup (legacy — shop clients context)

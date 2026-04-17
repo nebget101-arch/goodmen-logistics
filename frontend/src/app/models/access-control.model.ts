@@ -245,6 +245,15 @@ export const PERMISSIONS = {
   FMCSA_SAFETY_VIEW: 'fmcsa_safety.view',
   FMCSA_SAFETY_MANAGE: 'fmcsa_safety.manage',
   FMCSA_SAFETY_SCRAPE: 'fmcsa_safety.scrape',
+
+  // Locations admin
+  LOCATIONS_VIEW: 'locations.view',
+  LOCATIONS_CREATE: 'locations.create',
+  LOCATIONS_EDIT: 'locations.edit',
+  LOCATIONS_MANAGE: 'locations.manage',
+  LOCATIONS_BINS_MANAGE: 'locations.bins.manage',
+  LOCATIONS_USERS_MANAGE: 'locations.users.manage',
+  LOCATIONS_SUPPLY_RULES_MANAGE: 'locations.supply_rules.manage',
 } as const;
 
 export type PermissionCode = typeof PERMISSIONS[keyof typeof PERMISSIONS];
