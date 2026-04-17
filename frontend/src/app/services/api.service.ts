@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, timeout } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
+import { LocationBin, BinFormValue, BulkBinPayload, LocationListResponse } from '../models/location.model';
 
 @Injectable({
   providedIn: 'root'
@@ -16,9 +17,76 @@ export class ApiService {
     return this.baseUrl;
   }
 
-  // Locations
+  // ─── Locations ───────────────────────────────────────────────────────────
   getLocations(): Observable<any> {
     return this.http.get(`${this.baseUrl}/locations`);
+  }
+
+  listLocations(params?: {
+    type?: string;
+    active?: boolean;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }): Observable<LocationListResponse> {
+    const query = new URLSearchParams();
+    if (params?.type) { query.set('type', params.type); }
+    if (params?.active !== undefined) { query.set('active', String(params.active)); }
+    if (params?.search) { query.set('search', params.search); }
+    if (params?.page) { query.set('page', String(params.page)); }
+    if (params?.pageSize) { query.set('pageSize', String(params.pageSize)); }
+    const qs = query.toString();
+    return this.http.get<LocationListResponse>(
+      `${this.baseUrl}/locations${qs ? '?' + qs : ''}`
+    );
+  }
+
+  getLocationById(id: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/locations/${id}`);
+  }
+
+  createLocation(payload: any): Observable<any> {
+    return this.http.post(`${this.baseUrl}/locations`, payload);
+  }
+
+  updateLocation(id: string, payload: any): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/locations/${id}`, payload);
+  }
+
+  deleteLocation(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/locations/${id}`);
+  }
+
+  // ─── Location Bins ──────────────────────────────────────────────────────
+  getLocationBins(locationId: string, active?: boolean): Observable<LocationBin[]> {
+    const params = active !== undefined ? `?active=${active}` : '';
+    return this.http.get<LocationBin[]>(
+      `${this.baseUrl}/locations/${locationId}/bins${params}`
+    );
+  }
+
+  createLocationBin(locationId: string, bin: BinFormValue): Observable<LocationBin> {
+    return this.http.post<LocationBin>(
+      `${this.baseUrl}/locations/${locationId}/bins`, bin
+    );
+  }
+
+  bulkCreateBins(locationId: string, payload: BulkBinPayload): Observable<{ created: LocationBin[] }> {
+    return this.http.post<{ created: LocationBin[] }>(
+      `${this.baseUrl}/locations/${locationId}/bins/bulk`, payload
+    );
+  }
+
+  updateLocationBin(locationId: string, binId: string, updates: Partial<BinFormValue>): Observable<LocationBin> {
+    return this.http.patch<LocationBin>(
+      `${this.baseUrl}/locations/${locationId}/bins/${binId}`, updates
+    );
+  }
+
+  deleteLocationBin(locationId: string, binId: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(
+      `${this.baseUrl}/locations/${locationId}/bins/${binId}`
+    );
   }
 
   // FMCSA company info lookup (legacy — shop clients context)
