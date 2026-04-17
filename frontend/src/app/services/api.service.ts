@@ -4,6 +4,18 @@ import { Observable, timeout } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
+/** Shape returned by GET /api/locations/:id/users */
+export interface LocationUserRecord {
+  id: string;
+  user_id: string;
+  username: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  role: string | null;
+  assigned_at: string | null;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -19,6 +31,26 @@ export class ApiService {
   // Locations
   getLocations(): Observable<any> {
     return this.http.get(`${this.baseUrl}/locations`);
+  }
+
+  // Location — user assignments (FN-700)
+  getLocationUsers(locationId: string): Observable<{ data: LocationUserRecord[] }> {
+    return this.http.get<{ data: LocationUserRecord[] }>(
+      `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users`
+    );
+  }
+
+  assignLocationUsers(locationId: string, userIds: string[]): Observable<{ data: LocationUserRecord[] }> {
+    return this.http.post<{ data: LocationUserRecord[] }>(
+      `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users`,
+      { user_ids: userIds }
+    );
+  }
+
+  removeLocationUser(locationId: string, userId: string): Observable<{ success: boolean }> {
+    return this.http.delete<{ success: boolean }>(
+      `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users/${encodeURIComponent(userId)}`
+    );
   }
 
   // FMCSA company info lookup (legacy — shop clients context)

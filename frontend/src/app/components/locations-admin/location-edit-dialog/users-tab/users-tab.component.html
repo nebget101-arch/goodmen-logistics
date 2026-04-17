@@ -1,0 +1,164 @@
+<div class="users-tab-shell">
+  <!-- Success / Error banners -->
+  <div *ngIf="successMessage" class="alert alert-success">
+    <span class="material-symbols-outlined">check_circle</span>
+    {{ successMessage }}
+  </div>
+  <div *ngIf="error" class="alert alert-error">
+    <span class="material-symbols-outlined">error</span>
+    {{ error }}
+  </div>
+
+  <!-- Toolbar -->
+  <div class="users-tab-toolbar">
+    <h3 class="users-tab-title">Assigned Users</h3>
+    <button
+      type="button"
+      class="btn btn-primary btn-sm"
+      (click)="openAssignPanel()"
+      [disabled]="showAssignPanel"
+    >
+      <span class="material-symbols-outlined">person_add</span>
+      Assign User
+    </button>
+  </div>
+
+  <!-- Assign panel (multi-select autocomplete) -->
+  <div class="assign-panel" *ngIf="showAssignPanel">
+    <div class="assign-panel-header">
+      <span class="assign-panel-label">Select users to assign</span>
+      <button type="button" class="btn btn-ghost btn-sm" (click)="closeAssignPanel()">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <!-- Selected chips -->
+    <div class="chips-row" *ngIf="selectedUsers.length">
+      <span class="user-chip" *ngFor="let u of selectedUsers; trackBy: trackByTenantUserId">
+        {{ formatTenantName(u) }}
+        <button type="button" class="chip-remove" (click)="deselectUser(u)">&times;</button>
+      </span>
+    </div>
+
+    <!-- Search input -->
+    <div class="assign-search-box">
+      <span class="material-symbols-outlined">search</span>
+      <input
+        type="text"
+        class="form-input"
+        placeholder="Search by name, email, or username"
+        [formControl]="assignSearchCtrl"
+        (input)="onSearchInput()"
+        autocomplete="off"
+      />
+    </div>
+
+    <!-- Suggestion list -->
+    <ul class="suggestion-list" *ngIf="filteredSuggestions.length">
+      <li
+        *ngFor="let s of filteredSuggestions; trackBy: trackByTenantUserId"
+        class="suggestion-item"
+        (click)="selectUser(s)"
+      >
+        <div class="suggestion-name">{{ formatTenantName(s) }}</div>
+        <div class="suggestion-meta">{{ s.email || s.username }}</div>
+      </li>
+    </ul>
+    <div class="suggestion-empty" *ngIf="!filteredSuggestions.length && assignSearchCtrl.value">
+      No matching users found.
+    </div>
+
+    <!-- Submit -->
+    <div class="assign-panel-footer">
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        [disabled]="!selectedUsers.length || assignLoading"
+        (click)="submitAssign()"
+      >
+        <span class="material-symbols-outlined">group_add</span>
+        {{ assignLoading ? 'Assigning...' : 'Assign ' + selectedUsers.length + ' User(s)' }}
+      </button>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="closeAssignPanel()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Loading state -->
+  <div class="loading-state" *ngIf="loading">
+    <div class="spinner"></div>
+    <span>Loading assigned users...</span>
+  </div>
+
+  <!-- Assigned users table -->
+  <div class="users-table-wrap" *ngIf="!loading">
+    <table class="users-table" *ngIf="assignedUsers.length; else emptyState">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Date Assigned</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let user of assignedUsers; trackBy: trackByUserId">
+          <td>
+            <div class="user-name-cell">
+              <strong>{{ formatName(user) }}</strong>
+              <span class="username-sub">&#64;{{ user.username }}</span>
+            </div>
+          </td>
+          <td>{{ user.email || '--' }}</td>
+          <td>
+            <span class="role-badge">{{ user.role || 'N/A' }}</span>
+          </td>
+          <td>{{ formatDate(user.assigned_at) }}</td>
+          <td>
+            <ng-container *ngIf="confirmingRemoveId !== user.user_id; else confirmBlock">
+              <button
+                type="button"
+                class="btn btn-danger btn-sm"
+                (click)="confirmRemove(user.user_id)"
+              >
+                <span class="material-symbols-outlined">person_remove</span>
+                Remove
+              </button>
+            </ng-container>
+            <ng-template #confirmBlock>
+              <div class="confirm-inline">
+                <span class="confirm-text">Remove this user?</span>
+                <button
+                  type="button"
+                  class="btn btn-danger btn-sm"
+                  [disabled]="removeLoading"
+                  (click)="executeRemove(user.user_id)"
+                >
+                  {{ removeLoading ? 'Removing...' : 'Yes' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  (click)="cancelRemove()"
+                >
+                  No
+                </button>
+              </div>
+            </ng-template>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <ng-template #emptyState>
+      <div class="empty-state">
+        <span class="material-symbols-outlined empty-icon">group_off</span>
+        <p>No users assigned to this location yet.</p>
+        <button type="button" class="btn btn-primary btn-sm" (click)="openAssignPanel()" [disabled]="showAssignPanel">
+          <span class="material-symbols-outlined">person_add</span>
+          Assign User
+        </button>
+      </div>
+    </ng-template>
+  </div>
+</div>
