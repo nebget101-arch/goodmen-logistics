@@ -16,9 +16,85 @@ export class ApiService {
     return this.baseUrl;
   }
 
-  // Locations
+  // ── Locations — FN-691 / FN-698 ─────────────────────────────────────────
+
+  /** Legacy — kept for backward compatibility */
   getLocations(): Observable<any> {
     return this.http.get(`${this.baseUrl}/locations`);
+  }
+
+  /** Paginated, filterable list → { data, meta: { page, pageSize, total } } */
+  listLocations(params?: {
+    type?: string;
+    active?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+    sortBy?: string;
+    sortDir?: string;
+  }): Observable<any> {
+    const p = new URLSearchParams();
+    if (params?.type)     p.set('type',     params.type);
+    if (params?.active)   p.set('active',   params.active);
+    if (params?.search)   p.set('search',   params.search);
+    if (params?.page)     p.set('page',     String(params.page));
+    if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+    if (params?.sortBy)   p.set('sortBy',   params.sortBy);
+    if (params?.sortDir)  p.set('sortDir',  params.sortDir);
+    const qs = p.toString();
+    return this.http.get<any>(`${this.baseUrl}/locations${qs ? '?' + qs : ''}`);
+  }
+
+  getLocationById(id: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/locations/${id}`);
+  }
+
+  createLocation(payload: Record<string, unknown>): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/locations`, payload);
+  }
+
+  updateLocation(id: string, payload: Record<string, unknown>): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/locations/${id}`, payload);
+  }
+
+  deleteLocation(id: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/locations/${id}`);
+  }
+
+  // ── Location Bins — FN-692 ────────────────────────────────────────────────
+
+  getLocationBins(locationId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/locations/${locationId}/bins`);
+  }
+
+  createLocationBin(locationId: string, payload: Record<string, unknown>): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/locations/${locationId}/bins`, payload);
+  }
+
+  updateLocationBin(locationId: string, binId: string, payload: Record<string, unknown>): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/locations/${locationId}/bins/${binId}`, payload);
+  }
+
+  deleteLocationBin(locationId: string, binId: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/locations/${locationId}/bins/${binId}`);
+  }
+
+  // ── Location Users — FN-694 ───────────────────────────────────────────────
+
+  getLocationUsers(locationId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/locations/${locationId}/users`);
+  }
+
+  assignUsersToLocation(locationId: string, userIds: string[]): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/locations/${locationId}/users`, { user_ids: userIds });
+  }
+
+  removeUserFromLocation(locationId: string, userId: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/locations/${locationId}/users/${userId}`);
+  }
+
+  getUserLocations(userId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/users/${userId}/locations`);
   }
 
   // FMCSA company info lookup (legacy — shop clients context)
