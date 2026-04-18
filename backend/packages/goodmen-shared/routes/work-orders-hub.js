@@ -841,7 +841,23 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'sho
     payload.assignedMechanicUserId = normalizeUuidInput(payload.assignedMechanicUserId);
 
     const workOrder = await workOrdersService.updateWorkOrder(req.params.id, payload, req.user?.id, req.context || null);
-    res.json({ success: true, data: workOrder });
+
+    // Auto-generate DRAFT invoice when work order reaches COMPLETED status (billable only)
+    let autoInvoice = null;
+    const updatedStatus = (workOrder.status || '').toString().toLowerCase();
+    const costType = (workOrder.cost_type || '').toString().toLowerCase();
+    if (updatedStatus === 'completed' && costType !== 'internal') {
+      try {
+        autoInvoice = await workOrdersService.generateInvoiceForWorkOrder(
+          req.params.id, req.user?.id, {}, req.context || null
+        );
+      } catch (invoiceErr) {
+        // Non-blocking: log but don't fail the work order update
+        dtLogger.warn('auto_invoice_on_complete_failed', { id: req.params.id, error: invoiceErr.message });
+      }
+    }
+
+    res.json({ success: true, data: workOrder, invoice: autoInvoice });
   } catch (error) {
     dtLogger.error('work_orders_update_failed', error);
     res.status(400).json({ error: error.message });
@@ -940,7 +956,22 @@ router.patch('/:id/status', authMiddleware,
     }
 
     const workOrder = await workOrdersService.updateWorkOrderStatus(req.params.id, nextStatus, req.user?.role);
-    res.json({ success: true, data: workOrder });
+
+    // Auto-generate DRAFT invoice on COMPLETED transition (billable work orders only)
+    let autoInvoice = null;
+    const targetStatus = (nextStatus || '').toString().toUpperCase();
+    const costType = (workOrder.cost_type || '').toString().toLowerCase();
+    if (targetStatus === 'COMPLETED' && costType !== 'internal') {
+      try {
+        autoInvoice = await workOrdersService.generateInvoiceForWorkOrder(
+          req.params.id, req.user?.id, {}, req.context || null
+        );
+      } catch (invoiceErr) {
+        dtLogger.warn('auto_invoice_on_complete_failed', { id: req.params.id, error: invoiceErr.message });
+      }
+    }
+
+    res.json({ success: true, data: workOrder, invoice: autoInvoice });
   } catch (error) {
     dtLogger.error('work_orders_status_failed', error);
     res.status(400).json({ error: error.message });
