@@ -1,0 +1,32 @@
+.credit-section {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.credit-label {
+  color: #e2e8f0;
+}
+
+.credit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-bottom: 0;
+  color: #e2e8f0;
+}
+
+.text-success {
+  color: #86efac;
+  font-weight: 500;
+}
+
+.text-danger {
+  color: #fca5a5;
+}
+
+.text-muted {
+  color: #94a3b8;
+}

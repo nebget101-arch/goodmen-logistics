@@ -1,0 +1,118 @@
+/* Part dropdown */
+.part-dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-top: none;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+}
+
+.part-dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-left: 3px solid;
+  color: #e2e8f0;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.part-dropdown-detail {
+  font-size: 0.85em;
+  color: #94a3b8;
+}
+
+/* Bin readout */
+.bin-readout {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64b5f6;
+  white-space: nowrap;
+}
+
+.bin-readout.bin-none {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* Technician dropdown */
+.technician-input-wrap {
+  position: relative;
+}
+
+.technician-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.technician-option {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.technician-option:hover {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.technician-empty {
+  padding: 8px 12px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.text-muted {
+  color: #94a3b8;
+}
+
+.text-success {
+  color: #86efac;
+}
+
+.text-danger {
+  color: #fca5a5;
+}
+
+.btn-outline-secondary {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: transparent;
+  color: #e2e8f0;
+  padding: 8px 16px;
+  border-radius: 10px;
+}
+
+.btn-outline-secondary:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.btn-outline-danger {
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: transparent;
+  color: #fca5a5;
+}
+
+.btn-outline-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+}

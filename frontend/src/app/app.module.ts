@@ -28,6 +28,12 @@ import { VehicleFormComponent } from './components/vehicles/vehicle-form/vehicle
 import { HosComponent } from './components/hos/hos.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { WorkOrderComponent } from './components/work-order/work-order.component';
+import { WoStatusBarComponent } from './components/work-order/status-bar/status-bar.component';
+import { WoBasicsTabComponent } from './components/work-order/tabs/basics-tab/basics-tab.component';
+import { WoServiceDetailsTabComponent } from './components/work-order/tabs/service-details-tab/service-details-tab.component';
+import { WoWorkTabComponent } from './components/work-order/tabs/work-tab/work-tab.component';
+import { WoFinancialsTabComponent } from './components/work-order/tabs/financials-tab/financials-tab.component';
+import { WoNotesTabComponent } from './components/work-order/tabs/notes-tab/notes-tab.component';
 import { LoadsComponent } from './components/loads/loads.component';
 import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
@@ -101,6 +107,12 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     UserCreateComponent,
     ProfileComponent,
     WorkOrderComponent,
+    WoStatusBarComponent,
+    WoBasicsTabComponent,
+    WoServiceDetailsTabComponent,
+    WoWorkTabComponent,
+    WoFinancialsTabComponent,
+    WoNotesTabComponent,
     PartsCatalogComponent,
     BarcodeManagementComponent,
     WarehouseReceivingComponent,

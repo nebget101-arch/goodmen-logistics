@@ -1,0 +1,31 @@
+/* Inherited from parent work-order styles via shared dark theme */
+.dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-top: none;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+}
+
+.dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+.dropdown-item:hover {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.text-muted {
+  color: #94a3b8;
+}

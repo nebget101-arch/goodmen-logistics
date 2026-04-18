@@ -1,0 +1,259 @@
+<div class="section">
+  <h3>Parts</h3>
+  <button type="button" class="btn btn-secondary" (click)="addPart()">+ Add Part</button>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Part Name</th>
+        <th>SKU</th>
+        <th>Bin</th>
+        <th>Quantity</th>
+        <th>Unit Cost</th>
+        <th>Total Cost</th>
+        <th>Vendor</th>
+        <th>Warranty</th>
+        <th>Remove</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let part of workOrder.parts; let i = index">
+        <td>
+          <input type="text" class="form-control" list="partOptions" [(ngModel)]="part.partName" name="partName{{i}}" (input)="onPartLookup(i, part.partName)" (change)="onPartLookup(i, part.partName)">
+        </td>
+        <td><input type="text" class="form-control" [(ngModel)]="part.partNumber" name="partNumber{{i}}"></td>
+        <td>
+          <span class="bin-readout" *ngIf="part.binDisplay">{{ part.binDisplay }}</span>
+          <span class="bin-readout bin-none" *ngIf="!part.binDisplay">&mdash;</span>
+        </td>
+        <td><input type="number" class="form-control" [(ngModel)]="part.quantity" name="quantity{{i}}" (input)="updatePartTotals(i)"></td>
+        <td><input type="number" class="form-control" [(ngModel)]="part.unitCost" name="unitCost{{i}}" (input)="updatePartTotals(i)"></td>
+        <td><input type="number" class="form-control" [(ngModel)]="part.totalCost" name="totalCost{{i}}" readonly></td>
+        <td><input type="text" class="form-control" [(ngModel)]="part.vendor" name="vendor{{i}}"></td>
+        <td>
+          <select class="form-control" [(ngModel)]="part.warranty" name="warranty{{i}}">
+            <option value="No">No</option>
+            <option value="Yes">Yes</option>
+          </select>
+        </td>
+        <td><button type="button" class="btn btn-danger" (click)="removePart(i)">Remove</button></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <datalist id="partOptions">
+    <option *ngFor="let p of partsCatalog" [value]="p.sku + ' - ' + p.name"></option>
+  </datalist>
+
+  <!-- Barcode scanner section -->
+  <div class="row" style="margin-top: 12px;">
+    <div class="col">
+      <label for="scanBatchInput">Scan Parts (barcodes)</label>
+      <div style="display:flex; gap:8px; flex-wrap: wrap;">
+        <textarea
+          id="scanBatchInput"
+          class="form-control"
+          placeholder="Scan or paste barcodes here (one per line)."
+          [(ngModel)]="scanBatchInput"
+          name="scanBatchInput"
+          rows="3"
+          style="min-width: 260px; flex: 1;"
+        ></textarea>
+        <select class="form-control" [(ngModel)]="reservePartForm.locationId" name="scanPartLocation" style="max-width: 220px;">
+          <option [ngValue]="''">WO Location</option>
+          <option *ngFor="let loc of locations" [ngValue]="loc.id">{{ loc.name }}</option>
+        </select>
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          (click)="bridgeConnected ? stopPhoneBridge() : startPhoneBridge()"
+        >
+          {{ bridgeConnected ? 'Phone Connected' : 'Scan with Phone' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-outline-primary"
+          (click)="processScannedParts()"
+          [disabled]="scanBatchProcessing || (!scannedParts.length && !scanBatchInput)"
+        >
+          {{ scanBatchProcessing ? 'Reserving...' : 'Reserve Scanned Parts' }}
+        </button>
+      </div>
+      <small class="text-muted">Tip: scanning a barcode multiple times increases quantity.</small>
+      <div *ngIf="scanBridgeError" class="text-danger" style="margin-top: 6px;">{{ scanBridgeError }}</div>
+      <div *ngIf="bridgeMobileUrl" style="margin-top: 8px;">
+        <div>Scan this QR code with your phone:</div>
+        <img *ngIf="qrCodeDataUrl" [src]="qrCodeDataUrl" alt="QR Code" style="width: 220px; max-width: 100%; border: 1px solid rgba(148,163,184,0.3); border-radius: 4px;" />
+        <div style="margin-top: 6px;">
+          <a [href]="bridgeMobileUrl" target="_blank" rel="noopener">Open on phone</a>
+        </div>
+      </div>
+      <div *ngIf="scanBatchSuccess" class="text-success" style="margin-top: 6px;">{{ scanBatchSuccess }}</div>
+      <div *ngIf="scanBatchErrors.length" class="text-danger" style="margin-top: 6px;">
+        <div *ngFor="let err of scanBatchErrors">{{ err }}</div>
+      </div>
+
+      <!-- Scanned parts staging table -->
+      <div *ngIf="scannedParts.length" style="margin-top: 10px;">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Part</th>
+              <th>SKU</th>
+              <th>Qty</th>
+              <th>Unit Price</th>
+              <th>Reserve</th>
+              <th>Remove</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let part of scannedParts; let i = index">
+              <td>{{ part.name }}</td>
+              <td>{{ part.sku }}</td>
+              <td style="max-width: 120px;">
+                <input type="number" class="form-control" [(ngModel)]="part.qty" min="1" />
+              </td>
+              <td style="max-width: 140px;">
+                <input type="number" class="form-control" [(ngModel)]="part.unitPrice" min="0" />
+              </td>
+              <td>
+                <button type="button" class="btn btn-sm btn-outline-primary" (click)="reserveSingleScannedPart(part)" [disabled]="!workOrderId || !part.qty || part.qty <= 0">Reserve</button>
+              </td>
+              <td>
+                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeScannedPart(i)">Remove</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reserve from inventory -->
+  <div class="row" style="margin-top: 12px;">
+    <div class="col">
+      <label>Reserve Part from Inventory</label>
+      <div style="display:flex; gap:8px; flex-wrap: wrap;">
+        <div style="position: relative; max-width: 260px;">
+          <input type="text" class="form-control" placeholder="Search by name or SKU..." [(ngModel)]="partSearch" name="partSearch" (ngModelChange)="onPartSearchChange()" (blur)="onPartBlur()" autocomplete="off">
+          <div *ngIf="showPartDropdown && filteredParts.length > 0" class="part-dropdown-list">
+            <div *ngFor="let p of filteredParts" (click)="selectPart(p)" class="part-dropdown-item" (mouseenter)="onPartHover($event, true)" (mouseleave)="onPartHover($event, false)" [ngStyle]="{'border-left-color': (p.quantity_on_hand > 0) ? '#28a745' : '#dc3545'}">
+              <strong>{{ p.name }}</strong>
+              <div class="part-dropdown-detail">
+                SKU: {{ p.sku }}
+                <span *ngIf="p.part_number"> | Part #: {{ p.part_number }}</span>
+                | <span [ngStyle]="{'color': (p.quantity_on_hand > 0) ? '#86efac' : '#fca5a5', 'font-weight': '600'}">Stock: {{ p.quantity_on_hand || 0 }}</span> |
+                Price: ${{ p.unit_price | number:'1.2-2' }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <input type="number" class="form-control" placeholder="Qty" [(ngModel)]="reservePartForm.qtyRequested" name="reservePartQty" style="max-width: 120px;">
+        <input type="number" class="form-control" placeholder="Unit Price" [(ngModel)]="reservePartForm.unitPrice" name="reservePartPrice" style="max-width: 140px;">
+        <select class="form-control" [(ngModel)]="reservePartForm.locationId" name="reservePartLocation" style="max-width: 220px;">
+          <option [ngValue]="''">WO Location</option>
+          <option *ngFor="let loc of locations" [ngValue]="loc.id">{{ loc.name }}</option>
+        </select>
+        <button type="button" class="btn btn-outline-primary" (click)="reservePart()" [disabled]="!reservePartForm.partId">Reserve</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reserved/Issued parts from API -->
+  <div class="row" style="margin-top: 12px;">
+    <div class="col">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Part</th>
+            <th>Requested</th>
+            <th>Reserved</th>
+            <th>Issued</th>
+            <th>Status</th>
+            <th>Unit Price</th>
+            <th>Line Total</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let line of workOrderParts">
+            <td>
+              <div>{{ line.part_name || line.part_sku || line.part_id }}</div>
+              <small class="text-muted" *ngIf="line.part_sku && line.part_name">SKU: {{ line.part_sku }}</small>
+            </td>
+            <td>{{ line.qty_requested }}</td>
+            <td>{{ line.qty_reserved }}</td>
+            <td>{{ line.qty_issued }}</td>
+            <td>
+              <span [ngStyle]="line.status === 'BACKORDERED' ? {'background-color': '#ffc107', 'color': '#000', 'padding': '4px 8px', 'border-radius': '3px', 'font-size': '0.85em', 'font-weight': '600'} : {'background-color': 'rgba(59,130,246,0.4)', 'color': 'white', 'padding': '4px 8px', 'border-radius': '3px', 'font-size': '0.85em', 'font-weight': '600'}">
+                {{ line.status }}
+              </span>
+            </td>
+            <td>${{ line.unit_price | number:'1.2-2' }}</td>
+            <td>${{ line.line_total | number:'1.2-2' }}</td>
+            <td style="display:flex; gap:6px;">
+              <button type="button" class="btn btn-sm btn-outline-success" (click)="issuePart(line)" [disabled]="(line.qty_reserved || 0) - (line.qty_issued || 0) <= 0" [title]="(line.qty_reserved || 0) - (line.qty_issued || 0) <= 0 ? 'Reserve quantity before issuing' : 'Issue reserved quantity'">Issue</button>
+              <button type="button" class="btn btn-sm btn-outline-primary" *ngIf="(line.qty_reserved || 0) - (line.qty_issued || 0) <= 0" (click)="reserveFromLine(line)">Reserve</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" (click)="returnPart(line)">Return</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Labor Section -->
+<div class="section">
+  <h3>Labor</h3>
+  <button type="button" class="btn btn-secondary" (click)="addLabor()">+ Add Labor</button>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th>Mechanic Name</th>
+        <th>Labor Hours</th>
+        <th>Labor Rate</th>
+        <th>Labor Cost</th>
+        <th>Remove</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let labor of workOrder.labor; let j = index">
+        <td>
+          <input type="text" class="form-control" [(ngModel)]="labor.description" name="laborDescription{{j}}" placeholder="Task description">
+        </td>
+        <td>
+          <div class="technician-input-wrap">
+            <input
+              type="text"
+              class="form-control"
+              [(ngModel)]="labor.mechanicName"
+              name="mechanicName{{j}}"
+              (input)="onMechanicLookup(j, labor.mechanicName)"
+              (focus)="showTechnicianDropdown(j, true)"
+              (blur)="showTechnicianDropdown(j, false)"
+              autocomplete="off"
+            >
+            <div class="technician-dropdown" *ngIf="activeMechanicIndex === j">
+              <button
+                type="button"
+                class="technician-option"
+                *ngFor="let tech of filterTechnicians(labor.mechanicName)"
+                (mousedown)="selectTechnician(j, tech)"
+              >
+                {{ tech.username }}
+              </button>
+              <div class="technician-empty" *ngIf="filterTechnicians(labor.mechanicName).length === 0">
+                No matches
+              </div>
+            </div>
+          </div>
+        </td>
+        <td><input type="number" class="form-control" [(ngModel)]="labor.hours" name="hours{{j}}" (input)="updateLaborTotals(j)"></td>
+        <td><input type="number" class="form-control" [(ngModel)]="labor.rate" name="rate{{j}}" (input)="updateLaborTotals(j)"></td>
+        <td><input type="number" class="form-control" [(ngModel)]="labor.cost" name="cost{{j}}" readonly></td>
+        <td><button type="button" class="btn btn-danger" (click)="removeLabor(j)">Remove</button></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
