@@ -84,6 +84,11 @@
               <span class="material-symbols-outlined">approval</span> Trial Requests Admin
             </a>
           </ng-container>
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/locations', adminMenuPermissions)">
+            <a routerLink="/admin/locations" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">location_on</span> Locations Admin
+            </a>
+          </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
             <span class="material-symbols-outlined">logout</span> Logout
           </button>
@@ -137,6 +142,11 @@
           <ng-container *ngIf="canSeeTrialRequestsAdmin()">
             <a routerLink="/admin/trial-requests" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">approval</span> Trial Requests Admin
+            </a>
+          </ng-container>
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/locations', adminMenuPermissions)">
+            <a routerLink="/admin/locations" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">location_on</span> Locations Admin
             </a>
           </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
