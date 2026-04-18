@@ -89,6 +89,7 @@ import { LoadWizardModule } from './components/loads-dashboard/load-wizard/load-
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
 import { StepStopsComponent } from './components/loads-dashboard/load-wizard/step-stops/step-stops.component';
+import { WizardStepDriverComponent } from './components/loads-dashboard/load-wizard/step-driver/step-driver.component';
 
 @NgModule({
   declarations: [
@@ -157,7 +158,8 @@ import { StepStopsComponent } from './components/loads-dashboard/load-wizard/ste
     IdleTruckAlertsComponent,
     InventoryItemEditDialogComponent,
     AutoReplenishmentComponent,
-    StepStopsComponent
+    StepStopsComponent,
+    WizardStepDriverComponent
   ],
   imports: [
     BrowserModule,
