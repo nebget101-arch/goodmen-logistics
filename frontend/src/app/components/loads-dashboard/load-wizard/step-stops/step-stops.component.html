@@ -1,0 +1,81 @@
+<!-- FN-734 — Step 2: Stops — drag-drop list + trip metrics -->
+<div class="ss-container">
+
+  <!-- ── Section header ───────────────────────────────────────────────────── -->
+  <div class="ss-header">
+    <div class="ss-title-row">
+      <h3 class="ss-title">Stops</h3>
+      <span class="ss-count">{{ stops.length }} stop{{ stops.length !== 1 ? 's' : '' }}</span>
+    </div>
+    <p class="ss-subtitle">Add pickup and delivery locations. Drag to reorder.</p>
+  </div>
+
+  <!-- ── Validation message ───────────────────────────────────────────────── -->
+  <div class="ss-validation" *ngIf="validationMessage">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 10.5a.75.75 0 110-1.5.75.75 0 010 1.5zM8.75 7.25a.75.75 0 01-1.5 0v-2.5a.75.75 0 011.5 0v2.5z"/>
+    </svg>
+    <span>{{ validationMessage }}</span>
+  </div>
+
+  <!-- ── Drag-drop stop list ──────────────────────────────────────────────── -->
+  <div class="ss-list"
+       cdkDropList
+       [cdkDropListData]="stops"
+       (cdkDropListDropped)="onDrop($event)">
+
+    <div *ngFor="let stop of stops; let i = index; trackBy: trackByIndex"
+         class="ss-item"
+         cdkDrag>
+
+      <!-- CDK drag placeholder -->
+      <div class="ss-drag-placeholder" *cdkDragPlaceholder></div>
+
+      <app-stop-card
+        [stop]="stop"
+        [index]="i"
+        [expanded]="expandedIndex === i"
+        [disableDelete]="isDeleteDisabled(stop)"
+        (stopChange)="onStopChange($event, i)"
+        (duplicate)="onDuplicate(i)"
+        (deleteStop)="onDelete(i)"
+        (toggle)="onToggle(i)">
+      </app-stop-card>
+    </div>
+  </div>
+
+  <!-- ── Add stop button ──────────────────────────────────────────────────── -->
+  <button class="ss-add-btn" type="button" (click)="addStop()">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="8" y1="3" x2="8" y2="13"/>
+      <line x1="3" y1="8" x2="13" y2="8"/>
+    </svg>
+    Add Stop
+  </button>
+
+  <!-- ── Trip metrics box ─────────────────────────────────────────────────── -->
+  <div class="ss-metrics">
+    <h4 class="ss-metrics__title">Trip Metrics</h4>
+    <div class="ss-metrics__grid">
+      <div class="ss-metric">
+        <span class="ss-metric__label">Total Miles</span>
+        <span class="ss-metric__value">{{ metrics.totalMiles != null ? metrics.totalMiles : '--' }}</span>
+      </div>
+      <div class="ss-metric">
+        <span class="ss-metric__label">Empty Miles</span>
+        <span class="ss-metric__value">{{ metrics.emptyMiles != null ? metrics.emptyMiles : '--' }}</span>
+      </div>
+      <div class="ss-metric">
+        <span class="ss-metric__label">Loaded Miles</span>
+        <span class="ss-metric__value">{{ metrics.loadedMiles != null ? metrics.loadedMiles : '--' }}</span>
+      </div>
+      <div class="ss-metric">
+        <span class="ss-metric__label">Rate / Mile</span>
+        <span class="ss-metric__value ss-metric__value--accent">
+          {{ metrics.ratePerMile != null ? ('$' + metrics.ratePerMile.toFixed(2)) : '--' }}
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
