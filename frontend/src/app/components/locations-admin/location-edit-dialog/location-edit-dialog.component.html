@@ -1,0 +1,301 @@
+<!-- FN-698: Location Add/Edit Dialog — tabbed shell + Details tab -->
+<div class="led-backdrop" *ngIf="isOpen" (click)="onBackdropClick($event)">
+  <div class="led-modal" role="dialog" [attr.aria-label]="dialogTitle">
+
+    <!-- ── Header ──────────────────────────────────────────────────────── -->
+    <div class="led-header">
+      <div class="led-header-left">
+        <span class="material-symbols-outlined led-header-icon">location_on</span>
+        <span class="led-title">{{ dialogTitle }}</span>
+        <span class="led-mode-badge" [class.edit]="isEditMode">
+          {{ isEditMode ? 'Edit' : 'New' }}
+        </span>
+      </div>
+      <button class="led-close-btn" type="button" (click)="onClose()" aria-label="Close">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <!-- ── Tab bar ─────────────────────────────────────────────────────── -->
+    <div class="led-tabs">
+      <button
+        class="led-tab"
+        type="button"
+        [class.active]="activeTab === 'details'"
+        (click)="setTab('details')"
+      >
+        <span class="material-symbols-outlined">info</span>
+        Details
+      </button>
+      <button
+        class="led-tab"
+        type="button"
+        [class.active]="activeTab === 'bins'"
+        [class.disabled]="!showBinsTab"
+        [disabled]="!showBinsTab"
+        (click)="showBinsTab && setTab('bins')"
+        [title]="showBinsTab ? '' : 'Only available for SHOP or WAREHOUSE locations'"
+      >
+        <span class="material-symbols-outlined">shelves</span>
+        Bins
+      </button>
+      <button
+        class="led-tab"
+        type="button"
+        [class.active]="activeTab === 'users'"
+        (click)="setTab('users')"
+      >
+        <span class="material-symbols-outlined">group</span>
+        Users
+      </button>
+      <button
+        class="led-tab"
+        type="button"
+        [class.active]="activeTab === 'supply_rules'"
+        [class.disabled]="!showSupplyRulesTab"
+        [disabled]="!showSupplyRulesTab"
+        (click)="showSupplyRulesTab && setTab('supply_rules')"
+        [title]="showSupplyRulesTab ? '' : 'Only available for SHOP or WAREHOUSE locations'"
+      >
+        <span class="material-symbols-outlined">local_shipping</span>
+        Supply Rules
+      </button>
+    </div>
+
+    <!-- ── Body ────────────────────────────────────────────────────────── -->
+    <div class="led-body">
+
+      <!-- General error -->
+      <div *ngIf="errors['general']" class="led-alert-error">
+        <span class="material-symbols-outlined">error</span>
+        {{ errors['general'] }}
+      </div>
+
+      <!-- ────────── DETAILS TAB ────────────────────────────────────────── -->
+      <ng-container *ngIf="activeTab === 'details'">
+
+        <!-- Name + Code row -->
+        <div class="led-row">
+          <div class="led-field" [class.has-error]="errors['name']">
+            <label class="led-label">Name <span class="led-required">*</span></label>
+            <input
+              class="led-input"
+              type="text"
+              [(ngModel)]="name"
+              (input)="errors['name'] && (errors['name'] = '')"
+              placeholder="e.g. Main Shop — Chicago"
+              maxlength="255"
+            />
+            <span *ngIf="errors['name']" class="led-error-msg">{{ errors['name'] }}</span>
+          </div>
+          <div class="led-field led-field--sm">
+            <label class="led-label">Code</label>
+            <input
+              class="led-input"
+              type="text"
+              [(ngModel)]="code"
+              placeholder="e.g. CHI-01"
+              maxlength="50"
+            />
+          </div>
+        </div>
+
+        <!-- Type + Active row -->
+        <div class="led-row">
+          <div class="led-field" [class.has-error]="errors['locationType']">
+            <label class="led-label">Type <span class="led-required">*</span></label>
+            <div class="led-select-wrapper">
+              <select
+                class="led-select"
+                [(ngModel)]="locationType"
+                (change)="errors['locationType'] && (errors['locationType'] = '')"
+              >
+                <option value="">— Select type —</option>
+                <option *ngFor="let t of locationTypeOptions" [value]="t.value">
+                  {{ t.label }} — {{ t.description }}
+                </option>
+              </select>
+              <span class="material-symbols-outlined led-select-arrow">expand_more</span>
+            </div>
+            <span *ngIf="errors['locationType']" class="led-error-msg">{{ errors['locationType'] }}</span>
+          </div>
+          <div class="led-field led-field--xs">
+            <label class="led-label">Active</label>
+            <label class="led-toggle">
+              <input type="checkbox" [(ngModel)]="active" />
+              <span class="led-toggle-track">
+                <span class="led-toggle-thumb"></span>
+              </span>
+              <span class="led-toggle-label">{{ active ? 'Yes' : 'No' }}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Address section -->
+        <div class="led-section-label">Address</div>
+
+        <div class="led-field">
+          <label class="led-label">Address Line 1</label>
+          <input class="led-input" type="text" [(ngModel)]="addressLine1" placeholder="Street address" maxlength="255" />
+        </div>
+        <div class="led-field">
+          <label class="led-label">Address Line 2</label>
+          <input class="led-input" type="text" [(ngModel)]="addressLine2" placeholder="Suite, unit, building…" maxlength="255" />
+        </div>
+
+        <div class="led-row">
+          <div class="led-field led-field--grow">
+            <label class="led-label">City</label>
+            <input class="led-input" type="text" [(ngModel)]="city" placeholder="City" maxlength="100" />
+          </div>
+          <div class="led-field led-field--state">
+            <label class="led-label">State</label>
+            <div class="led-select-wrapper">
+              <select class="led-select" [(ngModel)]="state">
+                <option value="">—</option>
+                <option *ngFor="let s of stateOptions" [value]="s.value">{{ s.label }}</option>
+              </select>
+              <span class="material-symbols-outlined led-select-arrow">expand_more</span>
+            </div>
+          </div>
+          <div class="led-field led-field--zip">
+            <label class="led-label">ZIP</label>
+            <input class="led-input" type="text" [(ngModel)]="zip" placeholder="ZIP" maxlength="20" />
+          </div>
+        </div>
+
+        <!-- Contact section -->
+        <div class="led-section-label">Contact</div>
+
+        <div class="led-row">
+          <div class="led-field">
+            <label class="led-label">Contact Name</label>
+            <input class="led-input" type="text" [(ngModel)]="contactName" placeholder="Primary contact person" maxlength="255" />
+          </div>
+        </div>
+        <div class="led-row">
+          <div class="led-field" [class.has-error]="errors['email']">
+            <label class="led-label">Email</label>
+            <input
+              class="led-input"
+              type="email"
+              [(ngModel)]="email"
+              (input)="errors['email'] && (errors['email'] = '')"
+              placeholder="location@example.com"
+              maxlength="255"
+            />
+            <span *ngIf="errors['email']" class="led-error-msg">{{ errors['email'] }}</span>
+          </div>
+          <div class="led-field">
+            <label class="led-label">Phone</label>
+            <input class="led-input" type="tel" [(ngModel)]="phone" placeholder="(555) 555-5555" maxlength="30" />
+          </div>
+        </div>
+
+        <!-- Settings section -->
+        <div class="led-section-label">Settings</div>
+
+        <div class="led-field led-field--half">
+          <label class="led-label">Timezone</label>
+          <div class="led-select-wrapper">
+            <select class="led-select" [(ngModel)]="timezone">
+              <option *ngFor="let tz of timezones" [value]="tz.value">{{ tz.label }}</option>
+            </select>
+            <span class="material-symbols-outlined led-select-arrow">expand_more</span>
+          </div>
+        </div>
+
+        <!-- Operating hours section -->
+        <div class="led-section-label">
+          Operating Hours
+          <span class="led-section-sub">(optional)</span>
+        </div>
+
+        <div class="led-hours-grid">
+          <ng-container *ngFor="let day of days">
+            <div class="led-hours-row">
+              <span class="led-day-label">{{ dayLabels[day] }}</span>
+
+              <label class="led-toggle led-toggle--sm">
+                <input
+                  type="checkbox"
+                  [checked]="operatingHours[day].closed"
+                  (change)="operatingHours[day].closed = !operatingHours[day].closed"
+                />
+                <span class="led-toggle-track">
+                  <span class="led-toggle-thumb"></span>
+                </span>
+                <span class="led-toggle-label led-toggle-label--sm">Closed</span>
+              </label>
+
+              <ng-container *ngIf="!operatingHours[day].closed">
+                <input
+                  class="led-input led-input--time"
+                  type="time"
+                  [value]="operatingHours[day].open"
+                  (change)="operatingHours[day].open = $any($event.target).value"
+                />
+                <span class="led-hours-sep">–</span>
+                <input
+                  class="led-input led-input--time"
+                  type="time"
+                  [value]="operatingHours[day].close"
+                  (change)="operatingHours[day].close = $any($event.target).value"
+                />
+              </ng-container>
+              <span *ngIf="operatingHours[day].closed" class="led-closed-label">Closed</span>
+            </div>
+          </ng-container>
+        </div>
+
+      </ng-container>
+      <!-- ────────── END DETAILS TAB ───────────────────────────────────── -->
+
+      <!-- ────────── BINS TAB (placeholder — FN-699) ───────────────────── -->
+      <ng-container *ngIf="activeTab === 'bins'">
+        <div class="led-placeholder">
+          <span class="material-symbols-outlined led-placeholder-icon">shelves</span>
+          <p>Bins management will be available here.</p>
+          <p class="led-placeholder-sub">Coming in a future update.</p>
+        </div>
+      </ng-container>
+
+      <!-- ────────── USERS TAB (placeholder — FN-700) ──────────────────── -->
+      <ng-container *ngIf="activeTab === 'users'">
+        <div class="led-placeholder">
+          <span class="material-symbols-outlined led-placeholder-icon">group</span>
+          <p>User assignments will be available here.</p>
+          <p class="led-placeholder-sub">Coming in a future update.</p>
+        </div>
+      </ng-container>
+
+      <!-- ────────── SUPPLY RULES TAB (placeholder — FN-701) ───────────── -->
+      <ng-container *ngIf="activeTab === 'supply_rules'">
+        <div class="led-placeholder">
+          <span class="material-symbols-outlined led-placeholder-icon">local_shipping</span>
+          <p>Supply rules will be available here.</p>
+          <p class="led-placeholder-sub">Coming in a future update.</p>
+        </div>
+      </ng-container>
+
+    </div><!-- /led-body -->
+
+    <!-- ── Footer ──────────────────────────────────────────────────────── -->
+    <div class="led-footer">
+      <button class="led-btn" type="button" (click)="onClose()" [disabled]="saving">
+        Cancel
+      </button>
+      <button
+        class="led-btn led-btn--primary"
+        type="button"
+        [disabled]="saving"
+        (click)="onSave()"
+      >
+        <span *ngIf="saving" class="led-spinner"></span>
+        <span *ngIf="!saving" class="material-symbols-outlined">save</span>
+        {{ saving ? 'Saving…' : (isEditMode ? 'Save Changes' : 'Create Location') }}
+      </button>
+    </div>
+
+  </div><!-- /led-modal -->
+</div><!-- /led-backdrop -->

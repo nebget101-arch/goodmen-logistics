@@ -75,6 +75,7 @@ import { EmployerHistoryTieredComponent } from './components/onboarding-packet/e
 import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 import { LocationsListComponent } from './components/locations-admin/locations-list/locations-list.component';
+import { LocationEditDialogComponent } from './components/locations-admin/location-edit-dialog/location-edit-dialog.component';
 
 @NgModule({
   declarations: [
@@ -132,7 +133,8 @@ import { LocationsListComponent } from './components/locations-admin/locations-l
     EmployerHistoryTieredComponent,
     DisqualificationHistoryComponent,
     IdleTruckAlertsComponent,
-    LocationsListComponent
+    LocationsListComponent,
+    LocationEditDialogComponent
   ],
   imports: [
     BrowserModule,
