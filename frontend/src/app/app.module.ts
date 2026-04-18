@@ -15,6 +15,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDialogModule } from '@angular/material/dialog';
+import { DragDropModule } from '@angular/cdk/drag-drop';
 import { CommonModule } from '@angular/common';
 import { SharedModule } from './shared/shared.module';
 import { AppRoutingModule } from './app-routing.module';
@@ -87,6 +88,7 @@ import { LocationsAdminModule } from './components/locations-admin/locations-adm
 import { LoadWizardModule } from './components/loads-dashboard/load-wizard/load-wizard.module';
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
+import { StepStopsComponent } from './components/loads-dashboard/load-wizard/step-stops/step-stops.component';
 
 @NgModule({
   declarations: [
@@ -154,7 +156,8 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     DisqualificationHistoryComponent,
     IdleTruckAlertsComponent,
     InventoryItemEditDialogComponent,
-    AutoReplenishmentComponent
+    AutoReplenishmentComponent,
+    StepStopsComponent
   ],
   imports: [
     BrowserModule,
@@ -169,6 +172,7 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     MatFormFieldModule,
     MatInputModule,
     MatDialogModule,
+    DragDropModule,
     SharedModule,
     LocationsAdminModule,
     LoadWizardModule
