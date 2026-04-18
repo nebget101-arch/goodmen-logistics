@@ -39,7 +39,7 @@ export class ApiService {
   /** Paginated, filterable list → { data, meta: { page, pageSize, total } } */
   listLocations(params?: {
     type?: string;
-    active?: string;
+    active?: boolean;
     search?: string;
     page?: number;
     pageSize?: number;
@@ -48,7 +48,7 @@ export class ApiService {
   }): Observable<any> {
     const p = new URLSearchParams();
     if (params?.type)     p.set('type',     params.type);
-    if (params?.active)   p.set('active',   params.active);
+    if (params?.active !== undefined)   p.set('active',   String(params.active));
     if (params?.search)   p.set('search',   params.search);
     if (params?.page)     p.set('page',     String(params.page));
     if (params?.pageSize) p.set('pageSize', String(params.pageSize));
@@ -62,11 +62,11 @@ export class ApiService {
     return this.http.get<any>(`${this.baseUrl}/locations/${id}`);
   }
 
-  createLocation(payload: Record<string, unknown>): Observable<any> {
+  createLocation(payload: any): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/locations`, payload);
   }
 
-  updateLocation(id: string, payload: Record<string, unknown>): Observable<any> {
+  updateLocation(id: string, payload: any): Observable<any> {
     return this.http.patch<any>(`${this.baseUrl}/locations/${id}`, payload);
   }
 
@@ -86,34 +86,16 @@ export class ApiService {
     return this.http.get<any>(`${this.baseUrl}/locations/${locationId}/bins`);
   }
 
-  createLocationBin(locationId: string, payload: Record<string, unknown>): Observable<any> {
+  createLocationBin(locationId: string, payload: any): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/locations/${locationId}/bins`, payload);
   }
 
-  updateLocationBin(locationId: string, binId: string, payload: Record<string, unknown>): Observable<any> {
+  updateLocationBin(locationId: string, binId: string, payload: any): Observable<any> {
     return this.http.patch<any>(`${this.baseUrl}/locations/${locationId}/bins/${binId}`, payload);
   }
 
   deleteLocationBin(locationId: string, binId: string): Observable<any> {
     return this.http.delete<any>(`${this.baseUrl}/locations/${locationId}/bins/${binId}`);
-  }
-
-  // ── Location Users — FN-694 ───────────────────────────────────────────────
-
-  getLocationUsers(locationId: string): Observable<any> {
-    return this.http.get<any>(`${this.baseUrl}/locations/${locationId}/users`);
-  }
-
-  assignUsersToLocation(locationId: string, userIds: string[]): Observable<any> {
-    return this.http.post<any>(`${this.baseUrl}/locations/${locationId}/users`, { user_ids: userIds });
-  }
-
-  removeUserFromLocation(locationId: string, userId: string): Observable<any> {
-    return this.http.delete<any>(`${this.baseUrl}/locations/${locationId}/users/${userId}`);
-  }
-
-  getUserLocations(userId: string): Observable<any> {
-    return this.http.get<any>(`${this.baseUrl}/users/${userId}/locations`);
   }
 
   // ── Location Supply Rules — FN-693 ────────────────────────────────────────
@@ -122,11 +104,11 @@ export class ApiService {
     return this.http.get<any>(`${this.baseUrl}/locations/${locationId}/supply-rules`);
   }
 
-  createLocationSupplyRule(locationId: string, payload: Record<string, unknown>): Observable<any> {
+  createLocationSupplyRule(locationId: string, payload: any): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/locations/${locationId}/supply-rules`, payload);
   }
 
-  updateLocationSupplyRule(locationId: string, ruleId: string, payload: Record<string, unknown>): Observable<any> {
+  updateLocationSupplyRule(locationId: string, ruleId: string, payload: any): Observable<any> {
     return this.http.patch<any>(`${this.baseUrl}/locations/${locationId}/supply-rules/${ruleId}`, payload);
   }
 
