@@ -5,10 +5,7 @@ import { DriversComponent } from './components/drivers/drivers.component';
 import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
 import { HosComponent } from './components/hos/hos.component';
-import { MaintenanceComponent } from './components/maintenance/maintenance.component';
-import { WorkOrderComponent } from './components/work-order/work-order.component';
 import { LoadsComponent } from './components/loads/loads.component';
-import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
@@ -21,7 +18,6 @@ import { UserCreateComponent } from './components/user-create/user-create.compon
 import { UsersAdminComponent } from './components/users-admin/users-admin.component';
 import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
-import { BarcodeManagementComponent } from './components/barcode-management/barcode-management.component';
 import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
@@ -96,34 +92,19 @@ const routes: Routes = [
     }
   },
   { path: 'hos', component: HosComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/hos' } },
+  // FN-770: lazy-load heavy routes to keep initial bundle under budget.
   {
     path: 'maintenance',
-    component: MaintenanceComponent,
-    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: {
-      planPath: '/maintenance',
-      anyPermission: [PERMISSIONS.MAINTENANCE_VIEW, PERMISSIONS.WORK_ORDERS_VIEW]
-    }
+    loadChildren: () => import('./components/maintenance/maintenance.module').then(m => m.MaintenanceModule)
   },
   {
     path: 'work-order',
-    component: WorkOrderComponent,
-    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: {
-      planPath: '/work-order',
-      anyPermission: [PERMISSIONS.WORK_ORDERS_VIEW, PERMISSIONS.WORK_ORDERS_CREATE, PERMISSIONS.WORK_ORDERS_EDIT]
-    }
+    loadChildren: () => import('./components/work-order/work-order.module').then(m => m.WorkOrderModule)
   },
   {
-    path: 'work-order/:id',
-    component: WorkOrderComponent,
-    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: {
-      planPath: '/work-order',
-      anyPermission: [PERMISSIONS.WORK_ORDERS_VIEW, PERMISSIONS.WORK_ORDERS_EDIT]
-    }
+    path: 'loads',
+    loadChildren: () => import('./components/loads-dashboard/loads-dashboard.module').then(m => m.LoadsDashboardModule)
   },
-  { path: 'loads', component: LoadsDashboardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/loads' } },
   { path: 'dispatch-board', component: DispatchBoardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/dispatch-board' } },
   {
     path: 'roadside',
@@ -133,7 +114,10 @@ const routes: Routes = [
   },
   { path: 'audit', component: AuditComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/audit' } },
   { path: 'parts', component: PartsCatalogComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/parts' } },
-  { path: 'barcodes', component: BarcodeManagementComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/barcodes' } },
+  {
+    path: 'barcodes',
+    loadChildren: () => import('./components/barcode-management/barcode-management.module').then(m => m.BarcodeManagementModule)
+  },
   { path: 'receiving', component: WarehouseReceivingComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/receiving' } },
   { path: 'inventory-transfers', component: InventoryTransfersComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-transfers' } },
   { path: 'direct-sales', component: DirectSalesComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/direct-sales' } },

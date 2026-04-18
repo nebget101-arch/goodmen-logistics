@@ -27,19 +27,11 @@ import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
 import { VehicleFormComponent } from './components/vehicles/vehicle-form/vehicle-form.component';
 import { HosComponent } from './components/hos/hos.component';
-import { MaintenanceComponent } from './components/maintenance/maintenance.component';
-import { WorkOrderComponent } from './components/work-order/work-order.component';
-import { WoStatusBarComponent } from './components/work-order/status-bar/status-bar.component';
-import { WoBasicsTabComponent } from './components/work-order/tabs/basics-tab/basics-tab.component';
-import { WoServiceDetailsTabComponent } from './components/work-order/tabs/service-details-tab/service-details-tab.component';
-import { WoWorkTabComponent } from './components/work-order/tabs/work-tab/work-tab.component';
-import { WoFinancialsTabComponent } from './components/work-order/tabs/financials-tab/financials-tab.component';
-import { WoNotesTabComponent } from './components/work-order/tabs/notes-tab/notes-tab.component';
-import { WoWorkflowButtonsComponent } from './components/work-order/workflow-buttons/workflow-buttons.component';
-import { WoStatusTimelineComponent } from './components/work-order/workflow-buttons/status-timeline.component';
+// FN-770: MaintenanceComponent, WorkOrderComponent (+ tabs), LoadsDashboardComponent,
+// and BarcodeManagementComponent are now declared in their own lazy-loaded feature
+// modules (see app-routing.module.ts loadChildren entries).
 import { SmartAutocompleteComponent } from './shared/components/smart-autocomplete/smart-autocomplete.component';
 import { LoadsComponent } from './components/loads/loads.component';
-import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
@@ -49,19 +41,15 @@ import { UserCreateComponent } from './components/user-create/user-create.compon
 import { UsersAdminComponent } from './components/users-admin/users-admin.component';
 import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
-import { BarcodeManagementComponent } from './components/barcode-management/barcode-management.component';
 import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
-import { StatusPillComponent } from './components/shared/status-pill/status-pill.component';
-import { AttachmentChipComponent } from './components/shared/attachment-chip/attachment-chip.component';
 import { OnboardingPacketComponent } from './components/onboarding-packet/onboarding-packet.component';
 import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-policy.component';
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { DatePickerComponent } from './components/shared/date-picker/date-picker.component';
-import { InlineDateFilterComponent } from './components/shared/inline-date-filter/inline-date-filter.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
 import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
 import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
@@ -85,12 +73,10 @@ import { EmployerHistoryTieredComponent } from './components/onboarding-packet/e
 import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 import { LocationsAdminModule } from './components/locations-admin/locations-admin.module';
-import { LoadWizardModule } from './components/loads-dashboard/load-wizard/load-wizard.module';
+// FN-770: LoadWizardModule, StepStopsComponent, WizardStepDriverComponent,
+// StepAttachmentsComponent moved into LoadsDashboardModule (lazy-loaded).
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
-import { StepStopsComponent } from './components/loads-dashboard/load-wizard/step-stops/step-stops.component';
-import { WizardStepDriverComponent } from './components/loads-dashboard/load-wizard/step-driver/step-driver.component';
-import { StepAttachmentsComponent } from './components/loads-dashboard/load-wizard/step-attachments/step-attachments.component';
 
 @NgModule({
   declarations: [
@@ -103,9 +89,7 @@ import { StepAttachmentsComponent } from './components/loads-dashboard/load-wiza
     VehiclesComponent,
     VehicleFormComponent,
     HosComponent,
-    MaintenanceComponent,
     LoadsComponent,
-    LoadsDashboardComponent,
     DispatchBoardComponent,
     AuditComponent,
     LoginComponent,
@@ -114,30 +98,17 @@ import { StepAttachmentsComponent } from './components/loads-dashboard/load-wiza
     UsersAdminComponent,
     UserCreateComponent,
     ProfileComponent,
-    WorkOrderComponent,
     SmartAutocompleteComponent,
-    WoStatusBarComponent,
-    WoBasicsTabComponent,
-    WoServiceDetailsTabComponent,
-    WoWorkTabComponent,
-    WoFinancialsTabComponent,
-    WoNotesTabComponent,
-    WoWorkflowButtonsComponent,
-    WoStatusTimelineComponent,
     PartsCatalogComponent,
-    BarcodeManagementComponent,
     WarehouseReceivingComponent,
     InventoryTransfersComponent,
     DirectSalesComponent,
     InventoryReportsComponent,
-    StatusPillComponent,
-    AttachmentChipComponent,
     OnboardingPacketComponent,
     PrivacyPolicyComponent,
     TermsComponent,
     CommunicationPreferencesComponent,
     DatePickerComponent,
-    InlineDateFilterComponent,
     MultiMcAdminComponent
     ,TrialRequestsAdminComponent
     ,EmploymentApplicationComponent,
@@ -158,10 +129,7 @@ import { StepAttachmentsComponent } from './components/loads-dashboard/load-wiza
     DisqualificationHistoryComponent,
     IdleTruckAlertsComponent,
     InventoryItemEditDialogComponent,
-    AutoReplenishmentComponent,
-    StepStopsComponent,
-    WizardStepDriverComponent,
-    StepAttachmentsComponent
+    AutoReplenishmentComponent
   ],
   imports: [
     BrowserModule,
@@ -178,8 +146,7 @@ import { StepAttachmentsComponent } from './components/loads-dashboard/load-wiza
     MatDialogModule,
     DragDropModule,
     SharedModule,
-    LocationsAdminModule,
-    LoadWizardModule
+    LocationsAdminModule
   ],
   providers: [
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
