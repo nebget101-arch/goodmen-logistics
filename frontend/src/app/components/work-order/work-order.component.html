@@ -505,6 +505,7 @@
                 <tr>
                   <th>Part Name</th>
                   <th>SKU</th>
+                  <th>Bin</th>
                   <th>Quantity</th>
                   <th>Unit Cost</th>
                   <th>Total Cost</th>
@@ -519,6 +520,10 @@
                     <input type="text" class="form-control" list="partOptions" [(ngModel)]="part.partName" name="partName{{i}}" (input)="onPartLookup(i, part.partName)" (change)="onPartLookup(i, part.partName)">
                   </td>
                   <td><input type="text" class="form-control" [(ngModel)]="part.partNumber" name="partNumber{{i}}"></td>
+                  <td>
+                    <span class="bin-readout" *ngIf="part.binDisplay">{{ part.binDisplay }}</span>
+                    <span class="bin-readout bin-none" *ngIf="!part.binDisplay">—</span>
+                  </td>
                   <td><input type="number" class="form-control" [(ngModel)]="part.quantity" name="quantity{{i}}" (input)="updatePartTotals(i)"></td>
                   <td><input type="number" class="form-control" [(ngModel)]="part.unitCost" name="unitCost{{i}}" (input)="updatePartTotals(i)"></td>
                   <td><input type="number" class="form-control" [(ngModel)]="part.totalCost" name="totalCost{{i}}" readonly></td>
