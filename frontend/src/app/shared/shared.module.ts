@@ -11,9 +11,17 @@ import { AiSelectComponent } from './ai-select/ai-select.component';
 import { AiDatePickerComponent } from './ai-date-picker/ai-date-picker.component';
 import { BinPickerComponent } from './components/bin-picker/bin-picker.component';
 import { StopCardComponent } from './components/stop-card/stop-card.component';
+import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives/has-permission.directive';
 
 @NgModule({
-  declarations: [AiSelectComponent, AiDatePickerComponent, BinPickerComponent, StopCardComponent],
+  declarations: [
+    AiSelectComponent,
+    AiDatePickerComponent,
+    BinPickerComponent,
+    StopCardComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective
+  ],
   imports: [
     CommonModule,
     FormsModule,
@@ -25,6 +33,13 @@ import { StopCardComponent } from './components/stop-card/stop-card.component';
     MatSelectModule,
     DragDropModule
   ],
-  exports: [AiSelectComponent, AiDatePickerComponent, BinPickerComponent, StopCardComponent]
+  exports: [
+    AiSelectComponent,
+    AiDatePickerComponent,
+    BinPickerComponent,
+    StopCardComponent,
+    HasPermissionDirective,
+    HasAnyPermissionDirective
+  ]
 })
 export class SharedModule {}
