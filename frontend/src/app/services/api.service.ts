@@ -917,6 +917,10 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/work-orders/${id}/generate-invoice`, payload || {});
   }
 
+  updateInvoiceStatus(invoiceId: string, status: string, reason?: string): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/invoices/${invoiceId}/status`, { status, reason });
+  }
+
   downloadWorkOrderUploadTemplate(): Observable<Blob> {
     return this.http.get(`${this.baseUrl}/work-orders/bulk-upload/template`, { responseType: 'blob' });
   }

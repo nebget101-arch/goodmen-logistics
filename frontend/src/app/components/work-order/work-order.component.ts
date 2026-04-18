@@ -235,7 +235,16 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
         const savedData = saved?.data || saved;
         const workOrderId = savedData?.id || this.workOrderId;
         this.workOrder.workOrderNumber = savedData?.work_order_number || savedData?.id || this.workOrder.workOrderNumber;
-        this.workOrderSaveSuccess = this.isEditMode ? 'Work order updated successfully.' : 'Work order saved successfully.';
+
+        // Handle auto-generated invoice returned from server on COMPLETED transition
+        if (saved?.invoice) {
+          this.invoiceInfo = saved.invoice;
+          const invNum = saved.invoice.invoice_number || saved.invoice.id;
+          this.workOrderSaveSuccess = `Invoice #${invNum} created as draft.`;
+        } else {
+          this.workOrderSaveSuccess = this.isEditMode ? 'Work order updated successfully.' : 'Work order saved successfully.';
+        }
+
         if (workOrderId) {
           this.isEditMode = true;
           this.workOrderId = workOrderId;
@@ -276,6 +285,19 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
       },
       error: (error: any) => {
         this.creditCheckError = error?.error?.error || error?.message || 'Failed to generate invoice';
+      }
+    });
+  }
+
+  sendInvoice(): void {
+    if (!this.invoiceInfo?.id) { return; }
+    this.apiService.updateInvoiceStatus(this.invoiceInfo.id, 'SENT').subscribe({
+      next: (res: any) => {
+        this.invoiceInfo = res?.data || res;
+        this.workOrderSaveSuccess = 'Invoice sent successfully.';
+      },
+      error: (err: any) => {
+        this.creditCheckError = err?.error?.error || err?.message || 'Failed to send invoice';
       }
     });
   }
