@@ -422,3 +422,15 @@
   padding: 8px 16px;
   border-radius: 10px;
 }
+
+/* FN-707: Bin readout in parts table */
+.bin-readout {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64b5f6;
+  white-space: nowrap;
+}
+.bin-readout.bin-none {
+  color: #666;
+  font-weight: 400;
+}

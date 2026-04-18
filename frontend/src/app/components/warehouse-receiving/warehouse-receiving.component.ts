@@ -17,7 +17,14 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit {
   scanCode = '';
   qtyMultiplier = 1;
 
-  lines: Array<{ partId: string; sku: string; name: string; qty: number; unitCostAtTime?: number }> = [];
+  lines: Array<{
+    partId: string;
+    sku: string;
+    name: string;
+    qty: number;
+    unitCostAtTime?: number;
+    bin_id_override: string | null;
+  }> = [];
 
   message = '';
   error = '';
@@ -79,7 +86,8 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit {
             sku: part.sku,
             name: part.name,
             qty,
-            unitCostAtTime: part.default_cost || 0
+            unitCostAtTime: part.default_cost || 0,
+            bin_id_override: null
           });
         }
 
@@ -196,8 +204,8 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit {
     }
 
     this.submitting = true;
-    const payloads = this.lines.map(line =>
-      firstValueFrom(this.api.receiveInventory({
+    const payloads = this.lines.map(line => {
+      const payload: Record<string, unknown> = {
         locationId: this.locationId,
         partId: line.partId,
         qty: line.qty,
@@ -205,8 +213,15 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit {
         referenceType: 'RECEIVING_TICKET',
         referenceId: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `recv-${Date.now()}`,
         notes: 'Warehouse receive via scanner'
-      }))
-    );
+      };
+
+      // Include bin override when the user selected (or typed) a bin
+      if (line.bin_id_override) {
+        payload['bin_id_override'] = line.bin_id_override;
+      }
+
+      return firstValueFrom(this.api.receiveInventory(payload));
+    });
 
     Promise.all(payloads)
       .then(() => {
