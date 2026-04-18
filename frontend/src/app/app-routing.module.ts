@@ -42,6 +42,7 @@ import { BillingAdminGuard } from './guards/billing-admin.guard';
 import { BillingComponent } from './billing/billing.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 import { LocationsListComponent } from './components/locations-admin/locations-list/locations-list.component';
+import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
@@ -137,6 +138,7 @@ const routes: Routes = [
   { path: 'inventory-transfers', component: InventoryTransfersComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-transfers' } },
   { path: 'direct-sales', component: DirectSalesComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/direct-sales' } },
   { path: 'inventory-reports', component: InventoryReportsComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-reports' } },
+  { path: 'reports/auto-replenishment', component: AutoReplenishmentComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-reports' } },
   // Employment application standalone route
   { path: 'employment-application', component: EmploymentApplicationComponent },
   // Public driver onboarding packet link (no AuthGuard)

@@ -76,6 +76,7 @@ import { DisqualificationHistoryComponent } from './components/onboarding-packet
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 import { LocationsAdminModule } from './components/locations-admin/locations-admin.module';
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
+import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
 
 @NgModule({
   declarations: [
@@ -133,7 +134,8 @@ import { InventoryItemEditDialogComponent } from './components/inventory/invento
     EmployerHistoryTieredComponent,
     DisqualificationHistoryComponent,
     IdleTruckAlertsComponent,
-    InventoryItemEditDialogComponent
+    InventoryItemEditDialogComponent,
+    AutoReplenishmentComponent
   ],
   imports: [
     BrowserModule,
