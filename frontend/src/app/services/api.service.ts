@@ -1419,6 +1419,14 @@ export class ApiService {
     return this.http.put(`${this.baseUrl}/inventory/${id}`, data);
   }
 
+  /**
+   * FN-708 — Return all inventory lines for a given part across all locations.
+   * Each item includes: location_id, location_name, on_hand_qty, bin_id?, bin_code?, bin_name?
+   */
+  getInventoryByPart(partId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/inventory?partId=${encodeURIComponent(partId)}`);
+  }
+
   // Receiving
   getReceivingTickets(locationId: string): Observable<any> {
     return this.http.get(`${this.baseUrl}/receiving?locationId=${locationId}`);
