@@ -123,7 +123,7 @@ export class SupplyRulesTabComponent implements OnChanges {
   }
 
   loadCounterparts(): void {
-    this.api.listLocations({ type: this.counterpartType, active: 'true' }).subscribe({
+    this.api.listLocations({ type: this.counterpartType, active: true }).subscribe({
       next: (resp) => {
         const all: any[] = resp?.data ?? (Array.isArray(resp) ? resp : []);
         this.counterpartLocations = all.map((l: any) => ({

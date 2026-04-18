@@ -102,8 +102,11 @@ export interface LocationListItem {
   city: string | null;
   state: string | null;
   phone: string | null;
+  contact_name: string | null;
+  timezone: string | null;
   active: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Location extends LocationListItem {
