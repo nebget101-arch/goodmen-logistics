@@ -248,6 +248,14 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     });
   }
 
+  onWorkflowStatusChange(event: { newStatus: string; cancelReason?: string }): void {
+    this.workOrder.status = event.newStatus;
+    if (event.cancelReason) {
+      this.workOrder.cancelReason = event.cancelReason;
+    }
+    this.submitWorkOrder();
+  }
+
   cancelWorkOrder(): void { this.router.navigate(['/maintenance']); }
 
   generateInvoice(): void {

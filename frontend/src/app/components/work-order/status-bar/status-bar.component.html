@@ -1,3 +1,8 @@
+<!-- Status Timeline -->
+<app-wo-status-timeline
+  [currentStatus]="workOrder.status || 'DRAFT'"
+></app-wo-status-timeline>
+
 <div class="wo-status-bar">
   <div class="status-bar-left">
     <span class="wo-number" *ngIf="workOrder.workOrderNumber">WO# {{ workOrder.workOrderNumber }}</span>
@@ -5,7 +10,11 @@
   </div>
 
   <div class="status-bar-center">
-    <span class="status-badge" [ngClass]="getStatusClass()">{{ workOrder.status || 'DRAFT' }}</span>
+    <!-- Workflow buttons replace the old status badge -->
+    <app-wo-workflow-buttons
+      [workOrder]="workOrder"
+      (statusChange)="onWorkflowStatusChange($event)"
+    ></app-wo-workflow-buttons>
     <span *ngIf="invoiceInfo" class="invoice-badge">Invoice: {{ invoiceInfo.status }}</span>
   </div>
 
@@ -20,7 +29,7 @@
       {{ invoiceInfo ? 'Regenerate Invoice' : 'Generate Invoice' }}
     </button>
     <a *ngIf="invoiceInfo" class="btn btn-outline-primary btn-sm" [routerLink]="['/invoices', invoiceInfo.id]">View Invoice</a>
-    <button type="button" class="btn btn-secondary btn-sm" (click)="cancel.emit()">Cancel</button>
+    <button type="button" class="btn btn-secondary btn-sm" (click)="cancel.emit()">Back</button>
     <button
       type="button"
       class="btn btn-success btn-sm"

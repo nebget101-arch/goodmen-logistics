@@ -130,14 +130,7 @@
     </div>
     <div class="col">
       <label for="workOrderStatus">Status</label>
-      <select id="workOrderStatus" class="form-control" [(ngModel)]="workOrder.status" name="status" required>
-        <option value="DRAFT">Draft</option>
-        <option value="IN_PROGRESS">In Progress</option>
-        <option value="WAITING_PARTS">Waiting Parts</option>
-        <option value="COMPLETED">Completed</option>
-        <option value="CLOSED">Closed</option>
-        <option value="CANCELED">Canceled</option>
-      </select>
+      <input id="workOrderStatus" type="text" class="form-control" [ngModel]="workOrder.status || 'DRAFT'" name="status" readonly>
     </div>
   </div>
   <div class="row">

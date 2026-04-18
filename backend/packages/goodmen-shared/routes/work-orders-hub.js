@@ -56,6 +56,147 @@ function requireManagerForFinalStatus(req, res, next) {
   });
 }
 
+// ── Work-order status transition validation ──────────────────────────
+const ALLOWED_TRANSITIONS = {
+  DRAFT:         ['IN_PROGRESS', 'CANCELED'],
+  IN_PROGRESS:   ['WAITING_PARTS', 'COMPLETED', 'CANCELED'],
+  WAITING_PARTS: ['IN_PROGRESS', 'CANCELED'],
+  COMPLETED:     ['CLOSED', 'CANCELED'],
+  // Terminal statuses — no transitions out
+  CLOSED:        [],
+  CANCELED:      [],
+};
+
+const TERMINAL_STATUSES = ['CLOSED', 'CANCELED'];
+
+/**
+ * Normalises a persisted status value (which may be a legacy lowercase string
+ * like "open", "in_progress", "completed", "closed") to the canonical
+ * upper-case workflow status used by the transition map.
+ *
+ * Legacy mapping:
+ *   open        → DRAFT
+ *   in_progress → IN_PROGRESS
+ *   completed   → COMPLETED
+ *   closed      → CLOSED
+ */
+function canonicalStatus(raw) {
+  if (!raw) return null;
+  const upper = String(raw).trim().toUpperCase();
+  if (ALLOWED_TRANSITIONS[upper] !== undefined) return upper;
+  // Map legacy DB values
+  const LEGACY_TO_CANONICAL = {
+    OPEN: 'DRAFT',
+    IN_PROGRESS: 'IN_PROGRESS',
+    COMPLETED: 'COMPLETED',
+    CLOSED: 'CLOSED',
+  };
+  return LEGACY_TO_CANONICAL[upper] || upper;
+}
+
+/**
+ * Validates that a requested status transition is allowed and that
+ * all prerequisite data is present for the specific transition.
+ *
+ * Returns null when the transition is valid.
+ * Returns { status: 409, body: { error, message, validationErrors } }
+ * when the transition should be rejected.
+ *
+ * @param {object}  workOrder   – row from work_orders table
+ * @param {string}  nextStatus  – requested target status (canonical upper-case)
+ * @param {object}  body        – full request body
+ */
+async function validateStatusTransition(workOrder, nextStatus, body) {
+  const currentStatus = canonicalStatus(workOrder.status);
+  const target = String(nextStatus).trim().toUpperCase();
+
+  // 1. Reject transitions out of terminal statuses
+  if (TERMINAL_STATUSES.includes(currentStatus)) {
+    return {
+      status: 409,
+      body: {
+        error: 'Invalid transition',
+        message: `Work order is ${currentStatus} and cannot be transitioned to another status`,
+        validationErrors: [`${currentStatus} is a terminal status`],
+      },
+    };
+  }
+
+  // 2. Check if the transition edge is allowed
+  const allowed = ALLOWED_TRANSITIONS[currentStatus] || [];
+  if (!allowed.includes(target)) {
+    return {
+      status: 409,
+      body: {
+        error: 'Invalid transition',
+        message: `Cannot transition from ${currentStatus} to ${target}`,
+        validationErrors: [
+          `Allowed transitions from ${currentStatus}: ${allowed.length ? allowed.join(', ') : 'none'}`,
+        ],
+      },
+    };
+  }
+
+  // 3. Per-transition field validations
+  const validationErrors = [];
+
+  if (currentStatus === 'DRAFT' && target === 'IN_PROGRESS') {
+    // Body (or existing WO) must include customer, vehicle, description, type, priority
+    const customerId = body.customer_id ?? body.customerId ?? workOrder.shop_client_id;
+    const vehicleId  = body.vehicle_id  ?? body.vehicleId  ?? workOrder.vehicle_id;
+    const description = body.description ?? body.title ?? workOrder.description;
+    const type       = body.type   ?? workOrder.type;
+    const priority   = body.priority ?? workOrder.priority;
+
+    if (!customerId)   validationErrors.push('customer_id is required to start a work order');
+    if (!vehicleId)    validationErrors.push('vehicle_id is required to start a work order');
+    if (!description)  validationErrors.push('description (title) is required to start a work order');
+    if (!type)         validationErrors.push('type is required to start a work order');
+    if (!priority)     validationErrors.push('priority is required to start a work order');
+  }
+
+  if (currentStatus === 'IN_PROGRESS' && target === 'COMPLETED') {
+    // Work order must have at least one part or labor line item
+    const laborCount = await db('work_order_labor_items')
+      .where({ work_order_id: workOrder.id })
+      .count('id as cnt')
+      .first();
+    const partsCount = await db('work_order_part_items')
+      .where({ work_order_id: workOrder.id })
+      .count('id as cnt')
+      .first();
+
+    const totalLines = Number(laborCount?.cnt || 0) + Number(partsCount?.cnt || 0);
+    if (totalLines === 0) {
+      validationErrors.push(
+        'Work order must have at least one labor or part line item before completing'
+      );
+    }
+  }
+
+  // COMPLETED → CLOSED: no special validation for now
+
+  if (target === 'CANCELED') {
+    const reason = body.cancel_reason ?? body.cancelReason;
+    if (!reason || !String(reason).trim()) {
+      validationErrors.push('cancel_reason is required when canceling a work order');
+    }
+  }
+
+  if (validationErrors.length) {
+    return {
+      status: 409,
+      body: {
+        error: 'Invalid transition',
+        message: `Cannot transition from ${currentStatus} to ${target}: validation failed`,
+        validationErrors,
+      },
+    };
+  }
+
+  return null; // transition is valid
+}
+
 const upload = multer({ storage: multer.memoryStorage() });
 const bulkUpload = multer({
   storage: multer.memoryStorage(),
@@ -758,6 +899,25 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'service_advisor', 'sho
  *         description: Invalid status transition
  *       403:
  *         description: Insufficient role for restricted status
+ *       404:
+ *         description: Work order not found
+ *       409:
+ *         description: Status transition not allowed or validation failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Invalid transition
+ *                 message:
+ *                   type: string
+ *                   example: Cannot transition from DRAFT to COMPLETED
+ *                 validationErrors:
+ *                   type: array
+ *                   items:
+ *                     type: string
  */
 // Status transitions: shop_clerk may set open/in_progress/waiting_parts/completed/ready_to_invoice.
 // closed/approved/void require manager role (enforced by requireManagerForFinalStatus).
@@ -766,7 +926,20 @@ router.patch('/:id/status', authMiddleware,
   requireManagerForFinalStatus,
   async (req, res) => {
   try {
-    const workOrder = await workOrdersService.updateWorkOrderStatus(req.params.id, req.body?.status, req.user?.role);
+    const nextStatus = req.body?.status;
+
+    // Only run transition validation when status is actually changing
+    if (nextStatus) {
+      const workOrder = await db('work_orders').where({ id: req.params.id }).first();
+      if (!workOrder) return res.status(404).json({ error: 'Work order not found' });
+
+      const rejection = await validateStatusTransition(workOrder, nextStatus, req.body);
+      if (rejection) {
+        return res.status(rejection.status).json(rejection.body);
+      }
+    }
+
+    const workOrder = await workOrdersService.updateWorkOrderStatus(req.params.id, nextStatus, req.user?.role);
     res.json({ success: true, data: workOrder });
   } catch (error) {
     dtLogger.error('work_orders_status_failed', error);
