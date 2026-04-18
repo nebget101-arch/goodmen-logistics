@@ -1,0 +1,89 @@
+<div class="workflow-buttons-bar">
+  <!-- Forward transition buttons -->
+  <div class="workflow-actions">
+    <button
+      *ngIf="showStartWork"
+      type="button"
+      class="wf-btn wf-btn-green"
+      (click)="onStartWork()"
+    >Start Work</button>
+
+    <button
+      *ngIf="showWaitingParts"
+      type="button"
+      class="wf-btn wf-btn-amber"
+      (click)="onWaitingParts()"
+    >Waiting for Parts</button>
+
+    <button
+      *ngIf="showMarkComplete"
+      type="button"
+      class="wf-btn wf-btn-green"
+      (click)="onMarkComplete()"
+    >Mark Complete</button>
+
+    <button
+      *ngIf="showResumeWork"
+      type="button"
+      class="wf-btn wf-btn-blue"
+      (click)="onResumeWork()"
+    >Resume Work</button>
+
+    <button
+      *ngIf="showCloseWorkOrder"
+      type="button"
+      class="wf-btn wf-btn-green"
+      (click)="onCloseWorkOrder()"
+    >Close Work Order</button>
+
+    <!-- Terminal status read-only badge -->
+    <span *ngIf="isTerminal" class="wf-terminal-badge" [ngClass]="{
+      'wf-badge-closed': currentStatus === 'CLOSED',
+      'wf-badge-canceled': currentStatus === 'CANCELED'
+    }">{{ currentStatus === 'CLOSED' ? 'Closed' : 'Canceled' }}</span>
+  </div>
+
+  <!-- Cancel button (always visible for non-terminal) -->
+  <button
+    *ngIf="showCancel"
+    type="button"
+    class="wf-btn wf-btn-cancel"
+    (click)="openCancelDialog()"
+  >Cancel</button>
+</div>
+
+<!-- Validation errors -->
+<div *ngIf="validationErrors.length > 0" class="wf-validation-errors">
+  <div class="wf-error-header">
+    <span>Cannot transition &mdash; please fix the following:</span>
+    <button type="button" class="wf-error-dismiss" (click)="dismissErrors()">&times;</button>
+  </div>
+  <ul class="wf-error-list">
+    <li *ngFor="let err of validationErrors">{{ err.message }}</li>
+  </ul>
+</div>
+
+<!-- Cancel reason dialog -->
+<div *ngIf="showCancelDialog" class="modal-backdrop" (click)="closeCancelDialog()">
+  <div class="modal wo-modal wf-cancel-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3 class="modal-title">Cancel Work Order</h3>
+      <button type="button" class="close-btn" (click)="closeCancelDialog()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <label for="cancelReason">Cancellation Reason</label>
+      <textarea
+        id="cancelReason"
+        class="form-control wf-cancel-textarea"
+        [(ngModel)]="cancelReason"
+        placeholder="Explain why this work order is being canceled..."
+        rows="4"
+      ></textarea>
+      <div *ngIf="cancelReasonError" class="wf-cancel-error">{{ cancelReasonError }}</div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" (click)="closeCancelDialog()">Go Back</button>
+      <button type="button" class="btn btn-danger" (click)="confirmCancel()">Confirm Cancellation</button>
+    </div>
+  </div>
+</div>

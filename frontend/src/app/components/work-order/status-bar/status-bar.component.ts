@@ -21,6 +21,7 @@ export class WoStatusBarComponent {
   @Output() save = new EventEmitter<void>();
   @Output() cancel = new EventEmitter<void>();
   @Output() generateInvoice = new EventEmitter<void>();
+  @Output() statusChange = new EventEmitter<{ newStatus: string; cancelReason?: string }>();
 
   constructor(private permissions: PermissionHelperService) {}
 
@@ -37,17 +38,8 @@ export class WoStatusBarComponent {
     return status === 'COMPLETED' && this.permissions.hasAnyPermission([PERMISSIONS.INVOICES_CREATE, PERMISSIONS.INVOICES_EDIT]);
   }
 
-  getStatusClass(): string {
-    const status = (this.workOrder?.status || 'DRAFT').toUpperCase();
-    switch (status) {
-      case 'DRAFT': return 'status-draft';
-      case 'IN_PROGRESS': return 'status-in-progress';
-      case 'WAITING_PARTS': return 'status-waiting';
-      case 'COMPLETED': return 'status-completed';
-      case 'CLOSED': return 'status-closed';
-      case 'CANCELED': return 'status-canceled';
-      default: return 'status-draft';
-    }
+  onWorkflowStatusChange(event: { newStatus: string; cancelReason?: string }): void {
+    this.statusChange.emit(event);
   }
 
   isClosingDisabled(): boolean {

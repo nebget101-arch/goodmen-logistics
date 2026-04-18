@@ -1,0 +1,157 @@
+/* ─── Status Timeline ─── */
+
+.status-timeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 40px;
+  padding: 0 4px;
+  position: relative;
+}
+
+/* ─── Steps ─── */
+
+.timeline-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.timeline-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 2px solid rgba(51, 65, 85, 0.8);
+  background: rgba(15, 23, 42, 0.6);
+  transition: all 0.2s ease;
+}
+
+.timeline-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: color 0.2s ease;
+}
+
+/* ─── States ─── */
+
+/* Past */
+.timeline-past .timeline-circle {
+  border-color: rgba(34, 197, 94, 0.7);
+  background: rgba(34, 197, 94, 0.2);
+}
+
+.timeline-past .timeline-label {
+  color: #86efac;
+}
+
+.timeline-check {
+  font-size: 10px;
+  color: #86efac;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Current */
+.timeline-current .timeline-circle {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.2);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+}
+
+.timeline-current .timeline-label {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.timeline-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+}
+
+/* Future */
+.timeline-future .timeline-circle {
+  border-color: rgba(51, 65, 85, 0.6);
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.timeline-future .timeline-label {
+  color: rgba(148, 163, 184, 0.5);
+}
+
+/* ─── Connector lines ─── */
+
+.timeline-connector {
+  flex: 0 0 24px;
+  height: 2px;
+  background: rgba(51, 65, 85, 0.6);
+  margin: 0 4px;
+  transition: background 0.2s ease;
+}
+
+.connector-done {
+  background: rgba(34, 197, 94, 0.5);
+}
+
+/* ─── Waiting Parts branch ─── */
+
+.timeline-branch {
+  display: flex;
+  align-items: center;
+  position: relative;
+  margin-left: -4px;
+}
+
+.branch-connector {
+  width: 16px;
+  height: 2px;
+  background: rgba(245, 158, 11, 0.5);
+  margin-right: 2px;
+}
+
+.timeline-branch-step {
+  position: relative;
+}
+
+.timeline-circle-amber {
+  border-color: rgba(245, 158, 11, 0.7) !important;
+  background: rgba(245, 158, 11, 0.2) !important;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3) !important;
+}
+
+.timeline-circle-amber .timeline-dot {
+  background: #f59e0b;
+}
+
+.timeline-branch-step .timeline-label {
+  color: #fcd34d;
+  font-weight: 600;
+}
+
+/* ─── Canceled ─── */
+
+.timeline-canceled {
+  margin-left: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.timeline-canceled-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}

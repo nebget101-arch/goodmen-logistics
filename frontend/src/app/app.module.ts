@@ -34,6 +34,8 @@ import { WoServiceDetailsTabComponent } from './components/work-order/tabs/servi
 import { WoWorkTabComponent } from './components/work-order/tabs/work-tab/work-tab.component';
 import { WoFinancialsTabComponent } from './components/work-order/tabs/financials-tab/financials-tab.component';
 import { WoNotesTabComponent } from './components/work-order/tabs/notes-tab/notes-tab.component';
+import { WoWorkflowButtonsComponent } from './components/work-order/workflow-buttons/workflow-buttons.component';
+import { WoStatusTimelineComponent } from './components/work-order/workflow-buttons/status-timeline.component';
 import { LoadsComponent } from './components/loads/loads.component';
 import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
@@ -113,6 +115,8 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     WoWorkTabComponent,
     WoFinancialsTabComponent,
     WoNotesTabComponent,
+    WoWorkflowButtonsComponent,
+    WoStatusTimelineComponent,
     PartsCatalogComponent,
     BarcodeManagementComponent,
     WarehouseReceivingComponent,
