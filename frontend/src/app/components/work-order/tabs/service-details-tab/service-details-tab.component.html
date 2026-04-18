@@ -1,0 +1,108 @@
+<div class="section">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h3 class="mb-0">Service / Repair Details</h3>
+    <button
+      type="button"
+      class="btn btn-ai-suggest"
+      (click)="runAiTriage()"
+      [disabled]="aiTriageLoading"
+    >
+      {{ aiTriageLoading ? 'AI analyzing...' : 'AI Suggest Tasks & Parts' }}
+    </button>
+  </div>
+
+  <div *ngIf="aiTriageError" class="alert alert-warning mt-2">
+    {{ aiTriageError }}
+  </div>
+  <div *ngIf="aiTriageResult" class="alert alert-info mt-2">
+    <div *ngIf="aiTriageResult.priority">
+      <strong>Suggested priority:</strong> {{ aiTriageResult.priority }}
+    </div>
+    <div *ngIf="aiTriageResult.notes">
+      <strong>Notes:</strong> {{ aiTriageResult.notes }}
+    </div>
+    <div *ngIf="aiTriageResult.tasks?.length">
+      <strong>Suggested tasks:</strong>
+      <ul class="mb-1">
+        <li *ngFor="let t of aiTriageResult.tasks">
+          {{ t.description }} <span *ngIf="t.estimatedHours">({{ t.estimatedHours }} hrs)</span>
+        </li>
+      </ul>
+    </div>
+    <div *ngIf="aiTriageResult.parts?.length">
+      <strong>Suggested parts:</strong>
+      <ul class="mb-1">
+        <li *ngFor="let p of aiTriageResult.parts">
+          {{ p.query }} <span *ngIf="p.qty">x {{ p.qty }}</span>
+        </li>
+      </ul>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm mt-1" (click)="applyAiTriage()">
+      Apply suggestions to form
+    </button>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <label for="workOrderServiceCategory">Service Category</label>
+      <select id="workOrderServiceCategory" class="form-control" [(ngModel)]="workOrder.serviceCategory" name="serviceCategory">
+        <option value="Engine">Engine</option>
+        <option value="Transmission">Transmission</option>
+        <option value="Tires">Tires</option>
+        <option value="Electrical">Electrical</option>
+        <option value="PM Service">PM Service</option>
+        <option value="Brake">Brake</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="workOrderServiceDescription">Service Description</label>
+      <input id="workOrderServiceDescription" type="text" class="form-control" [(ngModel)]="workOrder.serviceDescription" name="serviceDescription">
+    </div>
+    <div class="col">
+      <label for="workOrderProblemReported">Problem Reported</label>
+      <input id="workOrderProblemReported" type="text" class="form-control" [(ngModel)]="workOrder.problemReported" name="problemReported">
+    </div>
+    <div class="col" *ngIf="isStatusAtLeast('COMPLETED')">
+      <label for="workOrderRootCause">Root Cause</label>
+      <input id="workOrderRootCause" type="text" class="form-control" [(ngModel)]="workOrder.rootCause" name="rootCause">
+    </div>
+  </div>
+  <div class="row">
+    <div class="col" *ngIf="isStatusAtLeast('IN_PROGRESS')">
+      <label for="workOrderWorkPerformed">Work Performed</label>
+      <input id="workOrderWorkPerformed" type="text" class="form-control" [(ngModel)]="workOrder.workPerformed" name="workPerformed">
+    </div>
+    <div class="col">
+      <label for="workOrderSafetyIssue">Safety Issue</label>
+      <select id="workOrderSafetyIssue" class="form-control" [(ngModel)]="workOrder.safetyIssue" name="safetyIssue">
+        <option value="No">No</option>
+        <option value="Yes">Yes</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="workOrderDowntimeReason">Downtime Reason</label>
+      <input id="workOrderDowntimeReason" type="text" class="form-control" [(ngModel)]="workOrder.downtimeReason" name="downtimeReason">
+    </div>
+    <div class="col">
+      <label for="workOrderRoadCall">Road Call</label>
+      <select id="workOrderRoadCall" class="form-control" [(ngModel)]="workOrder.roadCall" name="roadCall">
+        <option value="No">No</option>
+        <option value="Yes">Yes</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderBreakdownLocation">Breakdown Location</label>
+      <input id="workOrderBreakdownLocation" type="text" class="form-control" [(ngModel)]="workOrder.breakdownLocation" name="breakdownLocation">
+    </div>
+    <div class="col">
+      <label for="workOrderEstimatedDuration">Estimated Duration (hrs)</label>
+      <input id="workOrderEstimatedDuration" type="number" class="form-control" [(ngModel)]="workOrder.estimatedDuration" name="estimatedDuration">
+    </div>
+    <div class="col">
+      <label for="workOrderCurrentOdometerSvc">Odometer Reading</label>
+      <input id="workOrderCurrentOdometerSvc" type="number" class="form-control" [(ngModel)]="workOrder.currentOdometer" name="currentOdometerSvc">
+    </div>
+  </div>
+</div>

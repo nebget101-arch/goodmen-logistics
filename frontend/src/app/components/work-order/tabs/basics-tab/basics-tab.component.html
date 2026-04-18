@@ -1,0 +1,341 @@
+<!-- Customer Section -->
+<div class="section">
+  <h3>Customer</h3>
+  <div class="row align-items-end">
+    <div class="col">
+      <label for="customerDotSearch">Search by DOT Number</label>
+      <input id="customerDotSearch" type="text" class="form-control" [(ngModel)]="customerDotSearch" name="customerDotSearch" placeholder="Enter DOT Number">
+    </div>
+    <div class="col">
+      <button type="button" class="btn btn-secondary" (click)="searchCustomerByDot()">Search</button>
+    </div>
+    <div class="col">
+      <label for="customerSearch">Or search and select customer by name</label>
+      <div style="position: relative;">
+        <input id="customerSearch" type="text" class="form-control" [(ngModel)]="customerSearch" (ngModelChange)="onCustomerSearchChange()" (blur)="onCustomerBlur()" name="customerSearch" placeholder="Type customer name or DOT...">
+        <div *ngIf="showCustomerDropdown && filteredCustomers.length > 0" class="dropdown-list">
+          <div
+            *ngFor="let c of filteredCustomers"
+            (click)="selectCustomer(c)"
+            (keydown.enter)="selectCustomer(c)"
+            tabindex="0"
+            class="dropdown-item"
+          >
+            {{ c.displayName || c.company_name || c.name }} <span *ngIf="c.dot_number" class="text-muted">(DOT: {{ c.dot_number }})</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <button
+        type="button"
+        class="btn btn-outline-primary"
+        (click)="showNewCustomerModal = true"
+        [disabled]="!canCreateCustomerInline()"
+        [title]="!canCreateCustomerInline() ? 'You do not have permission to create customers.' : ''"
+      >Add New Customer</button>
+    </div>
+  </div>
+  <div *ngIf="customerSearchError" class="alert alert-danger mt-2">{{customerSearchError}}</div>
+  <div *ngIf="selectedCustomer">
+    <div class="mt-2"><strong>Selected:</strong> {{ selectedCustomer.displayName || selectedCustomer.company_name || selectedCustomer.name }} (DOT: {{selectedCustomer.dot_number}})</div>
+  </div>
+</div>
+
+<!-- New Customer Modal -->
+<div class="modal-backdrop" *ngIf="showNewCustomerModal" (click)="showNewCustomerModal = false">
+  <div class="modal wo-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3 class="modal-title">Add New Customer</h3>
+      <button type="button" class="close-btn" (click)="showNewCustomerModal = false">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="mb-2">
+        <label for="newCustomerName">Company Name</label>
+        <input id="newCustomerName" type="text" class="form-control" [(ngModel)]="newCustomer.company_name" name="newCustomerName">
+      </div>
+      <div class="mb-2">
+        <label for="newCustomerDot">DOT Number</label>
+        <input id="newCustomerDot" type="text" class="form-control" [(ngModel)]="newCustomer.dot_number" name="newCustomerDot">
+      </div>
+      <div class="mb-2">
+        <label for="newCustomerAddress">Address</label>
+        <input id="newCustomerAddress" type="text" class="form-control" [(ngModel)]="newCustomer.address" name="newCustomerAddress">
+      </div>
+      <div class="mb-2">
+        <label for="newCustomerCity">City</label>
+        <input id="newCustomerCity" type="text" class="form-control" [(ngModel)]="newCustomer.city" name="newCustomerCity">
+      </div>
+      <div class="mb-2">
+        <label for="newCustomerState">State</label>
+        <input id="newCustomerState" type="text" class="form-control" [(ngModel)]="newCustomer.state" name="newCustomerState">
+      </div>
+      <div class="mb-2">
+        <label for="newCustomerZip">ZIP</label>
+        <input id="newCustomerZip" type="text" class="form-control" [(ngModel)]="newCustomer.zip" name="newCustomerZip">
+      </div>
+      <div class="mb-2">
+        <label for="newCustomerPhone">Phone</label>
+        <input id="newCustomerPhone" type="text" class="form-control" [(ngModel)]="newCustomer.phone" name="newCustomerPhone">
+      </div>
+      <div class="mb-2">
+        <label for="newCustomerEmail">Email</label>
+        <input id="newCustomerEmail" type="email" class="form-control" [(ngModel)]="newCustomer.email" name="newCustomerEmail">
+      </div>
+      <div *ngIf="newCustomerError" class="alert alert-danger">{{newCustomerError}}</div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" (click)="showNewCustomerModal = false">Cancel</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="createCustomer()"
+        [disabled]="!canCreateCustomerInline()"
+        [title]="!canCreateCustomerInline() ? 'You do not have permission to create customers.' : ''"
+      >Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Work Order Info -->
+<div class="section">
+  <h3>Work Order Info</h3>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderNumber">Work Order Number</label>
+      <input id="workOrderNumber" type="text" class="form-control" [(ngModel)]="workOrder.workOrderNumber" name="workOrderNumber" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderTitle">Title</label>
+      <input id="workOrderTitle" type="text" class="form-control" [(ngModel)]="workOrder.title" name="title" required>
+    </div>
+    <div class="col">
+      <label for="workOrderType">Type</label>
+      <select id="workOrderType" class="form-control" [(ngModel)]="workOrder.type" name="type" required>
+        <option value="REPAIR">Repair</option>
+        <option value="PM">PM</option>
+        <option value="INSPECTION">Inspection</option>
+        <option value="TIRE">Tire</option>
+        <option value="OTHER">Other</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="workOrderPriority">Priority</label>
+      <select id="workOrderPriority" class="form-control" [(ngModel)]="workOrder.priority" name="priority" required>
+        <option value="LOW">Low</option>
+        <option value="NORMAL">Normal</option>
+        <option value="HIGH">High</option>
+        <option value="URGENT">Urgent</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="workOrderStatus">Status</label>
+      <select id="workOrderStatus" class="form-control" [(ngModel)]="workOrder.status" name="status" required>
+        <option value="DRAFT">Draft</option>
+        <option value="IN_PROGRESS">In Progress</option>
+        <option value="WAITING_PARTS">Waiting Parts</option>
+        <option value="COMPLETED">Completed</option>
+        <option value="CLOSED">Closed</option>
+        <option value="CANCELED">Canceled</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderRequestedBy">Requested By</label>
+      <input id="workOrderRequestedBy" type="text" class="form-control" [(ngModel)]="workOrder.requestedBy" name="requestedBy" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderAssignedTo">Assigned To</label>
+      <input id="workOrderAssignedTo" type="text" class="form-control" [(ngModel)]="workOrder.assignedTo" name="assignedTo" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderVendor">Vendor</label>
+      <input id="workOrderVendor" type="text" class="form-control" [(ngModel)]="workOrder.vendor" name="vendor">
+    </div>
+    <div class="col">
+      <label for="workOrderShopLocation">Shop Location</label>
+      <select id="workOrderShopLocation" class="form-control" [(ngModel)]="workOrder.shopLocationId" name="shopLocationId">
+        <option [ngValue]="null">-- Select Location --</option>
+        <option *ngFor="let loc of locations" [ngValue]="loc.id">{{ loc.name }} ({{ loc.address }})</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <app-ai-date-picker inputId="workOrderRequestDate" label="Request Date" [(ngModel)]="workOrder.requestDate" name="requestDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+    </div>
+    <div class="col">
+      <app-ai-date-picker inputId="workOrderScheduledDate" label="Scheduled Date" [(ngModel)]="workOrder.scheduledDate" name="scheduledDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+    </div>
+    <div class="col">
+      <app-ai-date-picker inputId="workOrderStartDate" label="Start Date" [(ngModel)]="workOrder.startDate" name="startDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+    </div>
+    <div class="col">
+      <app-ai-date-picker inputId="workOrderCompletionDate" label="Completion Date" [(ngModel)]="workOrder.completionDate" name="completionDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+    </div>
+  </div>
+</div>
+
+<!-- Vehicle Section -->
+<div class="section">
+  <h3>Vehicle Info</h3>
+  <div class="row">
+    <div class="col">
+      <label for="vehicleSearch">Search Vehicle (Unit, VIN, Make, Model)</label>
+      <div style="position: relative;">
+        <input id="vehicleSearch" type="text" class="form-control mb-2" [(ngModel)]="vehicleSearch" name="vehicleSearch" placeholder="Type to search vehicles..." (ngModelChange)="onVehicleSearchChange()" (focus)="showVehicleDropdownForCustomer()" (click)="showVehicleDropdownForCustomer()" (blur)="onVehicleBlur()">
+        <div *ngIf="showVehicleDropdown && filteredVehicles.length > 0" class="dropdown-list" style="margin-top: -8px;">
+          <div
+            *ngFor="let vehicle of filteredVehicles"
+            (click)="selectVehicle(vehicle)"
+            (keydown.enter)="selectVehicle(vehicle)"
+            tabindex="0"
+            class="dropdown-item"
+          >
+            <strong>{{ vehicle.unit_number || vehicle.unitNumber }}</strong> - {{ vehicle.vin }}
+            <span class="text-muted">({{ vehicle.make }} {{ vehicle.model }} {{ vehicle.year }})</span>
+            <span class="badge" [ngClass]="vehicle.source === 'customer' || vehicle.company_owned === false ? 'badge-info' : 'badge-secondary'" style="margin-left: 8px;">
+              {{ vehicle.source === 'customer' || vehicle.company_owned === false ? 'Customer' : 'Internal' }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="btn btn-outline-primary mb-2"
+        (click)="openAddVehicleModal()"
+        [disabled]="!canCreateVehicleInline()"
+        [title]="!canCreateVehicleInline() ? 'You do not have permission to create vehicles.' : ''"
+      >Add Vehicle</button>
+
+      <!-- Add Customer Vehicle Modal -->
+      <div class="modal-backdrop" *ngIf="showNewCustomerVehicleModal" (click)="showNewCustomerVehicleModal = false">
+        <div class="modal wo-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3 class="modal-title">Add Vehicle</h3>
+            <button type="button" class="close-btn" (click)="showNewCustomerVehicleModal = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-2">
+              <label for="newVehicleOwnership">Ownership</label>
+              <select id="newVehicleOwnership" class="form-control" [(ngModel)]="newVehicleOwnership" name="newVehicleOwnership">
+                <option value="company">Company Owned</option>
+                <option value="customer">Customer Owned</option>
+              </select>
+            </div>
+            <div class="mb-2" *ngIf="newVehicleOwnership === 'customer'">
+              <label for="newCustomerVehicleCustomer">Customer</label>
+              <select id="newCustomerVehicleCustomer" class="form-control" [(ngModel)]="newCustomerVehicle.customer_id" name="newCustomerVehicleCustomer">
+                <option [ngValue]="null">-- Select Customer --</option>
+                <option *ngFor="let c of customers" [ngValue]="c.id">{{ c.company_name }} (DOT: {{ c.dot_number }})</option>
+              </select>
+            </div>
+            <div class="mb-2">
+              <label for="newCustomerVehicleVin">VIN</label>
+              <input id="newCustomerVehicleVin" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.vin" name="newCustomerVehicleVin">
+              <button type="button" class="btn btn-sm btn-outline-secondary mt-2" (click)="decodeVinForNewVehicle()">Decode VIN</button>
+            </div>
+            <div class="mb-2">
+              <label for="newCustomerVehicleUnitNumber">Unit Number</label>
+              <input id="newCustomerVehicleUnitNumber" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.unit_number" name="newCustomerVehicleUnitNumber">
+            </div>
+            <div class="mb-2">
+              <label for="newCustomerVehicleMake">Make</label>
+              <input id="newCustomerVehicleMake" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.make" name="newCustomerVehicleMake">
+            </div>
+            <div class="mb-2">
+              <label for="newCustomerVehicleModel">Model</label>
+              <input id="newCustomerVehicleModel" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.model" name="newCustomerVehicleModel">
+            </div>
+            <div class="mb-2">
+              <label for="newCustomerVehicleYear">Year</label>
+              <input id="newCustomerVehicleYear" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.year" name="newCustomerVehicleYear">
+            </div>
+            <div class="mb-2">
+              <label for="newCustomerVehicleLicensePlate">License Plate</label>
+              <input id="newCustomerVehicleLicensePlate" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.license_plate" name="newCustomerVehicleLicensePlate">
+            </div>
+            <div class="mb-2">
+              <label for="newCustomerVehicleState">State</label>
+              <input id="newCustomerVehicleState" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.state" name="newCustomerVehicleState">
+            </div>
+            <div class="mb-2">
+              <label for="newCustomerVehicleMileage">Mileage</label>
+              <input id="newCustomerVehicleMileage" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.mileage" name="newCustomerVehicleMileage">
+            </div>
+            <div class="mb-2">
+              <app-ai-date-picker inputId="newCustomerVehicleInspectionExpiry" label="Inspection Expiry" [(ngModel)]="newCustomerVehicle.inspection_expiry" name="newCustomerVehicleInspectionExpiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+            </div>
+            <div class="mb-2">
+              <app-ai-date-picker inputId="newCustomerVehicleNextPmDue" label="Next PM Due" [(ngModel)]="newCustomerVehicle.next_pm_due" name="newCustomerVehicleNextPmDue" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+            </div>
+            <div class="mb-2">
+              <label for="newCustomerVehicleNextPmMileage">Next PM Mileage</label>
+              <input id="newCustomerVehicleNextPmMileage" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.next_pm_mileage" name="newCustomerVehicleNextPmMileage">
+            </div>
+            <div *ngIf="newCustomerVehicleError" class="alert alert-danger">{{newCustomerVehicleError}}</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="showNewCustomerVehicleModal = false">Cancel</button>
+            <button type="button" class="btn btn-primary" (click)="createVehicleFromWorkOrder()">Create</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <label for="workOrderUnitNumber">Unit Number</label>
+      <input id="workOrderUnitNumber" type="text" class="form-control" [(ngModel)]="workOrder.unitNumber" name="unitNumber" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderVin">VIN</label>
+      <input id="workOrderVin" type="text" class="form-control" [(ngModel)]="workOrder.vin" name="vin" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderLicensePlate">License Plate</label>
+      <input id="workOrderLicensePlate" type="text" class="form-control" [(ngModel)]="workOrder.licensePlate" name="licensePlate" readonly>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderMake">Make</label>
+      <input id="workOrderMake" type="text" class="form-control" [(ngModel)]="workOrder.make" name="make" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderModel">Model</label>
+      <input id="workOrderModel" type="text" class="form-control" [(ngModel)]="workOrder.model" name="model" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderYear">Year</label>
+      <input id="workOrderYear" type="text" class="form-control" [(ngModel)]="workOrder.year" name="year" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderVehicleType">Vehicle Type</label>
+      <input id="workOrderVehicleType" type="text" class="form-control" [(ngModel)]="workOrder.vehicleType" name="vehicleType" readonly>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderCurrentOdometer">Current Odometer</label>
+      <input id="workOrderCurrentOdometer" type="number" class="form-control" [(ngModel)]="workOrder.currentOdometer" name="currentOdometer">
+    </div>
+    <div class="col">
+      <label for="workOrderEngineHours">Engine Hours</label>
+      <input id="workOrderEngineHours" type="number" class="form-control" [(ngModel)]="workOrder.engineHours" name="engineHours" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderFleetTerminal">Fleet / Terminal</label>
+      <input id="workOrderFleetTerminal" type="text" class="form-control" [(ngModel)]="workOrder.fleetTerminal" name="fleetTerminal" readonly>
+    </div>
+    <div class="col">
+      <label for="workOrderDriverAssigned">Driver Assigned</label>
+      <input id="workOrderDriverAssigned" type="text" class="form-control" [(ngModel)]="workOrder.driverAssigned" name="driverAssigned" readonly>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderVehicleStatus">Status</label>
+      <input id="workOrderVehicleStatus" type="text" class="form-control" [(ngModel)]="workOrder.vehicleStatus" name="vehicleStatus" readonly>
+    </div>
+  </div>
+</div>

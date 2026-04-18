@@ -1,0 +1,86 @@
+<!-- Notes -->
+<div class="section">
+  <h3>Notes</h3>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderInternalNotes">Internal Notes</label>
+      <textarea id="workOrderInternalNotes" class="form-control" [(ngModel)]="workOrder.internalNotes" name="internalNotes"></textarea>
+    </div>
+    <div class="col">
+      <label for="workOrderMechanicNotes">Mechanic Notes</label>
+      <textarea id="workOrderMechanicNotes" class="form-control" [(ngModel)]="workOrder.mechanicNotes" name="mechanicNotes"></textarea>
+    </div>
+    <div class="col">
+      <label for="workOrderDriverNotes">Driver Notes</label>
+      <textarea id="workOrderDriverNotes" class="form-control" [(ngModel)]="workOrder.driverNotes" name="driverNotes"></textarea>
+    </div>
+    <div class="col">
+      <label for="workOrderCustomerNotes">Customer Notes</label>
+      <textarea id="workOrderCustomerNotes" class="form-control" [(ngModel)]="workOrder.customerNotes" name="customerNotes"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- Attachments -->
+<div class="section">
+  <h3>Attachments</h3>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderAttachments">File Attachments</label>
+      <input id="workOrderAttachments" type="file" class="form-control" (change)="onFileChange($event)" multiple>
+    </div>
+  </div>
+  <div class="row" style="margin-top: 12px;">
+    <div class="col">
+      <label for="workOrderDocuments">Work Order Documents</label>
+      <input
+        id="workOrderDocuments"
+        type="file"
+        class="form-control"
+        (change)="uploadDocument($event)"
+        [disabled]="!canUploadWorkOrderDocument()"
+        [title]="!canUploadWorkOrderDocument() ? 'You do not have permission to upload documents.' : ''"
+      >
+      <ul class="document-list" *ngIf="documents.length">
+        <li *ngFor="let doc of documents">{{ doc.file_name }}</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- Audit (collapsed by default) -->
+<div class="section">
+  <div class="audit-header" (click)="toggleAudit()">
+    <h3 class="mb-0">Audit Info</h3>
+    <span class="audit-toggle">{{ showAudit ? 'Hide' : 'Show' }}</span>
+  </div>
+  <div *ngIf="showAudit" class="audit-body">
+    <div class="row">
+      <div class="col">
+        <label for="workOrderCreatedBy">Created By</label>
+        <input id="workOrderCreatedBy" type="text" class="form-control" [(ngModel)]="workOrder.createdBy" name="createdBy" readonly>
+      </div>
+      <div class="col">
+        <app-ai-date-picker inputId="workOrderCreatedDate" label="Created Date" [(ngModel)]="workOrder.createdDate" name="createdDate" [disabled]="true" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      </div>
+      <div class="col">
+        <label for="workOrderLastUpdatedBy">Last Updated By</label>
+        <input id="workOrderLastUpdatedBy" type="text" class="form-control" [(ngModel)]="workOrder.lastUpdatedBy" name="lastUpdatedBy" readonly>
+      </div>
+      <div class="col">
+        <app-ai-date-picker inputId="workOrderLastUpdatedDate" label="Last Updated Date" [(ngModel)]="workOrder.lastUpdatedDate" name="lastUpdatedDate" [disabled]="true" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      </div>
+      <div class="col">
+        <label for="workOrderDeletedFlag">Deleted Flag</label>
+        <select id="workOrderDeletedFlag" class="form-control" [(ngModel)]="workOrder.deletedFlag" name="deletedFlag" readonly>
+          <option value="No">No</option>
+          <option value="Yes">Yes</option>
+        </select>
+      </div>
+      <div class="col">
+        <label for="workOrderVersion">Version</label>
+        <input id="workOrderVersion" type="number" class="form-control" [(ngModel)]="workOrder.version" name="version" readonly>
+      </div>
+    </div>
+  </div>
+</div>

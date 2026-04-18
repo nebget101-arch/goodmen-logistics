@@ -1,0 +1,36 @@
+<div class="wo-status-bar">
+  <div class="status-bar-left">
+    <span class="wo-number" *ngIf="workOrder.workOrderNumber">WO# {{ workOrder.workOrderNumber }}</span>
+    <span class="wo-title" *ngIf="workOrder.title">{{ workOrder.title }}</span>
+  </div>
+
+  <div class="status-bar-center">
+    <span class="status-badge" [ngClass]="getStatusClass()">{{ workOrder.status || 'DRAFT' }}</span>
+    <span *ngIf="invoiceInfo" class="invoice-badge">Invoice: {{ invoiceInfo.status }}</span>
+  </div>
+
+  <div class="status-bar-right">
+    <button
+      type="button"
+      class="btn btn-outline-success btn-sm"
+      (click)="generateInvoice.emit()"
+      [disabled]="!canGenerateInvoice()"
+      *ngIf="isEditMode"
+    >
+      {{ invoiceInfo ? 'Regenerate Invoice' : 'Generate Invoice' }}
+    </button>
+    <a *ngIf="invoiceInfo" class="btn btn-outline-primary btn-sm" [routerLink]="['/invoices', invoiceInfo.id]">View Invoice</a>
+    <button type="button" class="btn btn-secondary btn-sm" (click)="cancel.emit()">Cancel</button>
+    <button
+      type="button"
+      class="btn btn-success btn-sm"
+      (click)="save.emit()"
+      [disabled]="isClosingDisabled()"
+      [title]="getSaveTooltip()"
+    >Save</button>
+  </div>
+</div>
+
+<div *ngIf="workOrderLoadError" class="alert alert-danger status-alert">{{ workOrderLoadError }}</div>
+<div *ngIf="workOrderSaveError" class="alert alert-danger status-alert">{{ workOrderSaveError }}</div>
+<div *ngIf="workOrderSaveSuccess" class="alert alert-success status-alert">{{ workOrderSaveSuccess }}</div>
