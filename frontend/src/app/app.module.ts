@@ -84,6 +84,7 @@ import { EmployerHistoryTieredComponent } from './components/onboarding-packet/e
 import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 import { LocationsAdminModule } from './components/locations-admin/locations-admin.module';
+import { LoadWizardModule } from './components/loads-dashboard/load-wizard/load-wizard.module';
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
 
@@ -169,7 +170,8 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     MatInputModule,
     MatDialogModule,
     SharedModule,
-    LocationsAdminModule
+    LocationsAdminModule,
+    LoadWizardModule
   ],
   providers: [
     { provide: ErrorHandler, useClass: GlobalErrorHandler },

@@ -37,6 +37,16 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   showNewLoadMenu = false;
   showManualModal = false;
   showAutoModal = false;
+
+  // ─── Load Wizard (FN-732) ───────────────────────────────────────────────
+  /** Whether the 4-step load creation wizard is open. */
+  showLoadWizard = false;
+  /** Index of the currently active wizard step (0-based, 0–3). */
+  wizardActiveStep = 0;
+  /** Validity state of each wizard step — used by the progress bar jump guard. */
+  wizardStepValid: boolean[] = [false, false, false, false];
+  /** True when the user has made unsaved edits inside the wizard. */
+  wizardDirty = false;
   showBulkUploadModal = false;
   showDetailsModal = false;
   showInlineNewLoad = false;
@@ -993,6 +1003,39 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.autoExtraction = null;
     this.showAutoModal = true;
     this.showNewLoadMenu = false;
+  }
+
+  // ─── Load Wizard methods (FN-732) ─────────────────────────────────────────
+
+  /** Open the 4-step load creation wizard (replaces the inline new-load form). */
+  openLoadWizard(): void {
+    this.wizardActiveStep = 0;
+    this.wizardStepValid = [false, false, false, false];
+    this.wizardDirty = false;
+    this.showLoadWizard = true;
+    this.showNewLoadMenu = false;
+  }
+
+  /** Close the wizard and reset its state. */
+  closeWizard(): void {
+    this.showLoadWizard = false;
+    this.wizardActiveStep = 0;
+    this.wizardDirty = false;
+  }
+
+  /** Called when the wizard emits (save). Creates the load and closes the wizard. */
+  onWizardSave(): void {
+    // Step implementations (FN-733 through FN-736) will call createLoad() here.
+    // For now the save event closes the wizard as a placeholder.
+    this.closeWizard();
+  }
+
+  /** Called when the wizard emits (saveAndNew). Creates the load and resets to step 0. */
+  onWizardSaveAndNew(): void {
+    // Step implementations will call createLoad() then reset wizard state.
+    this.wizardActiveStep = 0;
+    this.wizardStepValid = [false, false, false, false];
+    this.wizardDirty = false;
   }
 
   openBulkUpload(): void {

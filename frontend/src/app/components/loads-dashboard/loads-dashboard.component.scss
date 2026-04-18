@@ -2911,3 +2911,17 @@
     }
   }
 }
+
+/* ─── Load Wizard step placeholder (FN-732) — replaced by real steps in FN-733–736 ── */
+.wizard-step-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.wiz-placeholder-text {
+  color: #475569;
+  font-style: italic;
+  font-size: 0.9rem;
+}

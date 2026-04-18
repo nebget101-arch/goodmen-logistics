@@ -1,0 +1,383 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Load Wizard — FN-732
+   Shell container: backdrop, panel, progress bar, navigation footer
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Host: full-screen overlay ─────────────────────────────────────────────── */
+
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+/* ── Backdrop ──────────────────────────────────────────────────────────────── */
+
+.wizard-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 25, 0.82);
+  backdrop-filter: blur(4px);
+  z-index: 0;
+}
+
+/* ── Panel ─────────────────────────────────────────────────────────────────── */
+
+.wizard-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 860px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.07), transparent 55%),
+    rgba(10, 17, 34, 0.98);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 60px rgba(5, 10, 25, 0.9),
+    0 0 0 1px rgba(10, 17, 34, 1);
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+  overflow: hidden;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+
+.wizard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.wizard-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+
+  .material-symbols-outlined {
+    font-size: 1.25rem;
+    color: #38bdf8;
+  }
+}
+
+.wizard-close-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+
+  .material-symbols-outlined { font-size: 1.3rem; }
+
+  &:hover:not(:disabled) {
+    color: #e2e8f0;
+    background: rgba(51, 65, 85, 0.35);
+  }
+
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+
+/* ── Progress steps bar ────────────────────────────────────────────────────── */
+
+.wizard-progress {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.wizard-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  counter-reset: step;
+}
+
+.wizard-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  gap: 6px;
+}
+
+/* Horizontal connector line */
+.step-connector {
+  position: absolute;
+  top: 17px; /* centered with the circle (34px / 2 = 17) */
+  left: -50%;
+  width: 100%;
+  height: 2px;
+  background: rgba(51, 65, 85, 0.5);
+  transition: background 0.25s;
+
+  &.is-done {
+    background: #0284c7;
+  }
+}
+
+/* Circle button wrapper */
+.step-circle-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+.step-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 2px solid rgba(51, 65, 85, 0.6);
+  background: rgba(15, 23, 42, 0.9);
+  color: #64748b;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+/* Active step */
+.wizard-step.is-active .step-circle {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+}
+
+/* Completed step */
+.wizard-step.is-completed .step-circle {
+  border-color: #0284c7;
+  background: rgba(2, 132, 199, 0.18);
+  color: #38bdf8;
+}
+
+/* Locked (future, not reachable yet) */
+.wizard-step.is-locked .step-circle-btn:not(:disabled):hover .step-circle,
+.wizard-step:not(.is-active):not(.is-completed):not(.is-locked) .step-circle-btn:hover .step-circle {
+  border-color: #475569;
+  background: rgba(51, 65, 85, 0.25);
+  color: #94a3b8;
+}
+
+/* Hoverable (reachable) step */
+.wizard-step:not(.is-locked) .step-circle-btn:not(:disabled):hover .step-circle {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+  color: #38bdf8;
+}
+
+.step-icon-check {
+  font-size: 1rem;
+}
+
+.step-num {
+  line-height: 1;
+}
+
+.step-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #64748b;
+  text-align: center;
+  white-space: nowrap;
+  transition: color 0.2s;
+  pointer-events: none;
+}
+
+.wizard-step.is-active   .step-label { color: #38bdf8; }
+.wizard-step.is-completed .step-label { color: #7dd3fc; }
+
+/* ── Body (projected step content) ────────────────────────────────────────── */
+
+.wizard-body {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+
+.wizard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-top: 1px solid rgba(51, 65, 85, 0.45);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wizard-footer-left,
+.wizard-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Button variants ───────────────────────────────────────────────────────── */
+
+.btn-wiz {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background 0.14s, opacity 0.14s, border-color 0.14s;
+
+  .material-symbols-outlined { font-size: 1rem; }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.btn-wiz-primary {
+  background: #0284c7;
+  border: 1px solid #0369a1;
+  color: #fff;
+
+  &:hover:not(:disabled) { background: #0369a1; }
+}
+
+.btn-wiz-outline {
+  background: transparent;
+  border: 1px solid rgba(51, 65, 85, 0.75);
+  color: #94a3b8;
+
+  &:hover:not(:disabled) {
+    border-color: #38bdf8;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.06);
+  }
+}
+
+.btn-wiz-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #64748b;
+
+  &:hover:not(:disabled) {
+    color: #94a3b8;
+    border-color: rgba(51, 65, 85, 0.5);
+    background: rgba(51, 65, 85, 0.15);
+  }
+}
+
+.btn-wiz-danger {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+
+  &:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: #f87171;
+  }
+}
+
+/* ── Spin animation (saving spinner) ──────────────────────────────────────── */
+
+.spin {
+  animation: spin-anim 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin-anim {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Unsaved-changes overlay ───────────────────────────────────────────────── */
+
+.unsaved-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 10, 25, 0.65);
+  backdrop-filter: blur(3px);
+}
+
+.unsaved-dialog {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(239, 68, 68, 0.08), transparent 60%),
+    rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 14px;
+  padding: 28px 32px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 16px 40px rgba(5, 10, 25, 0.85);
+
+  h3 {
+    margin: 10px 0 8px;
+    font-size: 1.05rem;
+    color: #e2e8f0;
+  }
+
+  p {
+    margin: 0 0 20px;
+    font-size: 0.875rem;
+    color: #94a3b8;
+    line-height: 1.5;
+  }
+}
+
+.unsaved-icon {
+  font-size: 2rem;
+  color: #fb923c;
+}
+
+.unsaved-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  :host { padding: 0; align-items: stretch; }
+
+  .wizard-panel {
+    border-radius: 0;
+    min-height: 100dvh;
+    max-width: 100%;
+  }
+
+  .step-label { display: none; }
+  .wizard-body { padding: 16px; }
+  .wizard-footer { padding: 12px 16px; }
+}
