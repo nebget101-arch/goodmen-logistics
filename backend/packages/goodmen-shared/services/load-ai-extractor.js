@@ -74,6 +74,45 @@ Document structure:
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_API_TOKEN || null;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 
+// ---------------------------------------------------------------------------
+// Confidence scoring thresholds (FN-738)
+// ---------------------------------------------------------------------------
+/** Scores above this threshold are tier "green". */
+const CONFIDENCE_TIER_GREEN  = 0.95;
+/** Scores between this and green are tier "yellow"; below is "red". */
+const CONFIDENCE_TIER_YELLOW = 0.80;
+/** Minimum overall_confidence to auto-approve (bulk mode only). */
+const AUTO_APPROVE_THRESHOLD = 0.90;
+
+/**
+ * Maps a 0–1 confidence score to a display tier.
+ * @param {number} score
+ * @returns {'green'|'yellow'|'red'}
+ */
+function confidenceTier(score) {
+  if (score > CONFIDENCE_TIER_GREEN)  return 'green';
+  if (score >= CONFIDENCE_TIER_YELLOW) return 'yellow';
+  return 'red';
+}
+
+/**
+ * Computes overall_confidence as the minimum of the four required fields:
+ * brokerName, rate, pickup (first stop), and delivery (last stop).
+ * This is intentionally conservative — if any required field is weak the
+ * overall score reflects that uncertainty.
+ * @param {{ brokerName: number, rate: number, pickup: number, delivery: number }} c
+ * @returns {number}
+ */
+function computeOverallConfidence(c) {
+  const required = [
+    typeof c.brokerName === 'number' ? c.brokerName : 0,
+    typeof c.rate       === 'number' ? c.rate       : 0,
+    typeof c.pickup     === 'number' ? c.pickup     : 0,
+    typeof c.delivery   === 'number' ? c.delivery   : 0,
+  ];
+  return Math.min(...required);
+}
+
 const MAX_INPUT_CHARS = 120_000;
 
 // Only treat as garbled when obviously corrupted: majority CJK/specials/control and almost no printable.
@@ -329,8 +368,27 @@ function preParseHints(text) {
 // ---------------------------------------------------------------------------
 // Main extraction
 // ---------------------------------------------------------------------------
-async function extractLoadFromPdf(buffer, filename) {
-  dtLogger.info('load_ai_extract_start', { filename: filename || 'unknown', bufferLength: buffer?.length });
+/**
+ * Extract load data from a PDF buffer using AI.
+ *
+ * @param {Buffer} buffer - PDF file bytes
+ * @param {string} filename - Original filename (for logging/prompt context)
+ * @param {{ mode?: 'single'|'bulk' }} [opts={}] - Options.
+ *   `mode='bulk'` enables auto-approval when overall_confidence >= AUTO_APPROVE_THRESHOLD.
+ */
+async function extractLoadFromPdf(buffer, filename, opts = {}) {
+  const mode = opts.mode || 'single';
+  dtLogger.info('load_ai_extract_start', { filename: filename || 'unknown', bufferLength: buffer?.length, mode });
+
+  /** Zero-value confidence block used in error / no-API-key returns. */
+  const ZERO_CONFIDENCE = {
+    confidence:           { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
+    confidence_tiers:     { brokerName: 'red', poNumber: 'red', rate: 'red', pickup: 'red', delivery: 'red' },
+    overall_confidence:   0,
+    overall_confidence_tier: 'red',
+    auto_approve:         false,
+  };
+
   if (!OPENAI_API_KEY) {
     dtLogger.warn('load_ai_extract_skipped_no_key', { filename });
     return {
@@ -340,7 +398,7 @@ async function extractLoadFromPdf(buffer, filename) {
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
       notes: null,
-      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
+      ...ZERO_CONFIDENCE,
       rawTextSnippet: null,
       stops: [],
       provider: 'none',
@@ -364,7 +422,7 @@ async function extractLoadFromPdf(buffer, filename) {
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
       notes: null,
-      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
+      ...ZERO_CONFIDENCE,
       rawTextSnippet: null,
       stops: [],
       provider: 'none',
@@ -380,7 +438,7 @@ async function extractLoadFromPdf(buffer, filename) {
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
       notes: null,
-      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
+      ...ZERO_CONFIDENCE,
       rawTextSnippet: null,
       stops: [],
       provider: 'none',
@@ -397,7 +455,7 @@ async function extractLoadFromPdf(buffer, filename) {
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
       notes: null,
-      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
+      ...ZERO_CONFIDENCE,
       rawTextSnippet: null,
       stops: [],
       provider: 'none',
@@ -545,17 +603,33 @@ async function extractLoadFromPdf(buffer, filename) {
     },
     stops,
     notes: parsed.notes ?? null,
-    confidence: {
-      brokerName: typeof parsed.confidence?.brokerName === 'number' ? parsed.confidence.brokerName : 0,
-      poNumber: typeof parsed.confidence?.poNumber === 'number' ? parsed.confidence.poNumber : 0,
-      rate: typeof parsed.confidence?.rate === 'number' ? parsed.confidence.rate : 0,
-      pickup: typeof parsed.confidence?.pickup === 'number' ? parsed.confidence.pickup : 0,
-      delivery: typeof parsed.confidence?.delivery === 'number' ? parsed.confidence.delivery : 0
+  };
+
+  const rawConf = {
+    brokerName: typeof parsed.confidence?.brokerName === 'number' ? parsed.confidence.brokerName : 0,
+    poNumber:   typeof parsed.confidence?.poNumber   === 'number' ? parsed.confidence.poNumber   : 0,
+    rate:       typeof parsed.confidence?.rate       === 'number' ? parsed.confidence.rate       : 0,
+    pickup:     typeof parsed.confidence?.pickup     === 'number' ? parsed.confidence.pickup     : 0,
+    delivery:   typeof parsed.confidence?.delivery   === 'number' ? parsed.confidence.delivery   : 0,
+  };
+  const overallConf = computeOverallConfidence(rawConf);
+
+  Object.assign(safe, {
+    confidence: rawConf,
+    confidence_tiers: {
+      brokerName: confidenceTier(rawConf.brokerName),
+      poNumber:   confidenceTier(rawConf.poNumber),
+      rate:       confidenceTier(rawConf.rate),
+      pickup:     confidenceTier(rawConf.pickup),
+      delivery:   confidenceTier(rawConf.delivery),
     },
+    overall_confidence:      overallConf,
+    overall_confidence_tier: confidenceTier(overallConf),
+    auto_approve:            mode === 'bulk' && overallConf >= AUTO_APPROVE_THRESHOLD,
     rawTextSnippet: parsed.rawTextSnippet ?? null,
     provider: 'openai',
-    model: OPENAI_MODEL
-  };
+    model: OPENAI_MODEL,
+  });
 
   return safe;
 }
@@ -565,5 +639,10 @@ module.exports = {
   LOAD_EXTRACTION_PROMPT,
   looksGarbled,
   extractWithPdftotext,
-  preParseHints
+  preParseHints,
+  confidenceTier,
+  computeOverallConfidence,
+  AUTO_APPROVE_THRESHOLD,
+  CONFIDENCE_TIER_GREEN,
+  CONFIDENCE_TIER_YELLOW,
 };
