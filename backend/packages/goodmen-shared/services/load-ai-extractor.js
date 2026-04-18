@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -549,18 +550,111 @@ function preParseHints(text) {
 }
 
 // ---------------------------------------------------------------------------
+// PDF hash cache helpers (FN-741)
+// ---------------------------------------------------------------------------
+
+/** Lazily require knex so the module can load in environments without a DB. */
+function _getDb() {
+  try {
+    // eslint-disable-next-line global-require
+    return require('../internal/db').knex;
+  } catch (_) {
+    return null;
+  }
+}
+
+const CACHE_TTL_DAYS = 7;
+
+/**
+ * Compute a SHA-256 hex digest of the raw PDF bytes.
+ * This is the primary key for the load_ai_extractions cache table.
+ */
+function computePdfHash(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * Look up a cached extraction result by (tenant_id, pdf_hash).
+ * Returns the cached row `{ extracted_data, extraction_method }` if fresh
+ * (within CACHE_TTL_DAYS), otherwise null. Swallows DB errors so callers
+ * always fall back to live extraction.
+ */
+async function getCachedExtraction(tenantId, pdfHash) {
+  const db = _getDb();
+  if (!db || !tenantId || !pdfHash) return null;
+  try {
+    const cutoff = new Date(Date.now() - CACHE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const row = await db('load_ai_extractions')
+      .where({ tenant_id: tenantId, pdf_hash: pdfHash })
+      .where('created_at', '>=', cutoff)
+      .select('extracted_data', 'extraction_method')
+      .first();
+    return row || null;
+  } catch (err) {
+    dtLogger.warn('load_ai_cache_read_failed', { error: err?.message, tenantId });
+    return null;
+  }
+}
+
+/**
+ * Persist a successful extraction result in the cache.
+ * Uses INSERT … ON CONFLICT DO UPDATE so a re-upload of the same PDF within
+ * the TTL refreshes the created_at timestamp. Swallows errors so a write
+ * failure never surfaces to the caller.
+ */
+async function storeCachedExtraction(tenantId, pdfHash, extractedData, extractionMethod) {
+  const db = _getDb();
+  if (!db || !tenantId || !pdfHash) return;
+  try {
+    await db.raw(
+      `INSERT INTO load_ai_extractions
+         (tenant_id, pdf_hash, extracted_data, extraction_method, created_at)
+       VALUES (?, ?, ?::jsonb, ?, now())
+       ON CONFLICT (tenant_id, pdf_hash)
+       DO UPDATE SET extracted_data    = EXCLUDED.extracted_data,
+                     extraction_method = EXCLUDED.extraction_method,
+                     created_at        = now()`,
+      [tenantId, pdfHash, JSON.stringify(extractedData), extractionMethod || null]
+    );
+    dtLogger.info('load_ai_cache_stored', { tenantId, hash: pdfHash.slice(0, 12) });
+  } catch (err) {
+    dtLogger.warn('load_ai_cache_write_failed', { error: err?.message, tenantId });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main extraction
 // ---------------------------------------------------------------------------
 /**
  * Extract load data from a PDF buffer using AI.
  *
- * @param {Buffer} buffer - PDF file bytes
- * @param {string} filename - Original filename (for logging/prompt context)
- * @param {{ mode?: 'single'|'bulk' }} [opts={}] - Options.
+ * @param {Buffer}  buffer    - PDF file bytes
+ * @param {string}  filename  - Original filename (for logging/prompt context)
+ * @param {{ mode?: 'single'|'bulk', tenantId?: string, skipCache?: boolean }} [opts={}]
  *   `mode='bulk'` enables auto-approval when overall_confidence >= AUTO_APPROVE_THRESHOLD.
+ *   `tenantId`   enables PDF hash caching (load_ai_extractions table).
+ *   `skipCache`  bypasses cache read even when tenantId is set.
  */
 async function extractLoadFromPdf(buffer, filename, opts = {}) {
-  const mode = opts.mode || 'single';
+  const mode     = opts.mode     || 'single';
+  const tenantId = opts.tenantId || null;
+
+  // ── Cache check ────────────────────────────────────────────────────────────
+  // Hash computed once; reused for the store step at the end of the function.
+  let pdfHash = null;
+  if (tenantId && !opts.skipCache) {
+    pdfHash = computePdfHash(buffer);
+    const cached = await getCachedExtraction(tenantId, pdfHash);
+    if (cached) {
+      dtLogger.info('load_ai_cache_hit', {
+        tenantId,
+        hash: pdfHash.slice(0, 12),
+        method: cached.extraction_method,
+      });
+      return { ...cached.extracted_data, cache_hit: true };
+    }
+  }
+
   dtLogger.info('load_ai_extract_start', { filename: filename || 'unknown', bufferLength: buffer?.length, mode });
 
   /** Zero-value confidence block used in error / no-API-key returns. */
@@ -571,7 +665,6 @@ async function extractLoadFromPdf(buffer, filename, opts = {}) {
     overall_confidence_tier: 'red',
     auto_approve:         false,
   };
-
   if (!OPENAI_API_KEY) {
     dtLogger.warn('load_ai_extract_skipped_no_key', { filename });
     return {
@@ -910,6 +1003,11 @@ async function extractLoadFromPdf(buffer, filename, opts = {}) {
     extraction_method: 'text',
   });
 
+  // ── Cache write ────────────────────────────────────────────────────────────
+  if (tenantId && pdfHash) {
+    await storeCachedExtraction(tenantId, pdfHash, safe, extractionSource);
+  }
+
   return safe;
 }
 
@@ -926,4 +1024,8 @@ module.exports = {
   AUTO_APPROVE_THRESHOLD,
   CONFIDENCE_TIER_GREEN,
   CONFIDENCE_TIER_YELLOW,
+  computePdfHash,
+  getCachedExtraction,
+  storeCachedExtraction,
+  CACHE_TTL_DAYS,
 };
