@@ -5,6 +5,18 @@ import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { LocationBin, BinFormValue, BulkBinPayload, LocationListResponse } from '../models/location.model';
 
+/** Shape returned by GET /api/locations/:id/users */
+export interface LocationUserRecord {
+  id: string;
+  user_id: string;
+  username: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  role: string | null;
+  assigned_at: string | null;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -128,6 +140,41 @@ export class ApiService {
     return this.http.post<{ created: LocationBin[] }>(
       `${this.baseUrl}/locations/${locationId}/bins/bulk`, payload
     );
+  }
+
+  // ── Location Users — FN-694 / FN-700 ─────────────────────────────────────
+
+  getLocationUsers(locationId: string): Observable<{ data: LocationUserRecord[] }> {
+    return this.http.get<{ data: LocationUserRecord[] }>(
+      `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users`
+    );
+  }
+
+  assignLocationUsers(locationId: string, userIds: string[]): Observable<{ data: LocationUserRecord[] }> {
+    return this.http.post<{ data: LocationUserRecord[] }>(
+      `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users`,
+      { user_ids: userIds }
+    );
+  }
+
+  /** @alias assignLocationUsers — kept for backward compatibility */
+  assignUsersToLocation(locationId: string, userIds: string[]): Observable<any> {
+    return this.assignLocationUsers(locationId, userIds);
+  }
+
+  removeLocationUser(locationId: string, userId: string): Observable<{ success: boolean }> {
+    return this.http.delete<{ success: boolean }>(
+      `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users/${encodeURIComponent(userId)}`
+    );
+  }
+
+  /** @alias removeLocationUser — kept for backward compatibility */
+  removeUserFromLocation(locationId: string, userId: string): Observable<any> {
+    return this.removeLocationUser(locationId, userId);
+  }
+
+  getUserLocations(userId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/users/${userId}/locations`);
   }
 
   // FMCSA company info lookup (legacy — shop clients context)
