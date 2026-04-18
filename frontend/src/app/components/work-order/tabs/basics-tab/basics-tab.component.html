@@ -13,86 +13,78 @@
       <label for="customerSearch">Or search and select customer by name</label>
       <div style="position: relative;">
         <input id="customerSearch" type="text" class="form-control" [(ngModel)]="customerSearch" (ngModelChange)="onCustomerSearchChange()" (blur)="onCustomerBlur()" name="customerSearch" placeholder="Type customer name or DOT...">
-        <div *ngIf="showCustomerDropdown && filteredCustomers.length > 0" class="dropdown-list">
+        <div *ngIf="showCustomerDropdown && customerSearch" class="dropdown-list">
           <div
             *ngFor="let c of filteredCustomers"
-            (click)="selectCustomer(c)"
+            (mousedown)="selectCustomer(c)"
             (keydown.enter)="selectCustomer(c)"
             tabindex="0"
             class="dropdown-item"
           >
             {{ c.displayName || c.company_name || c.name }} <span *ngIf="c.dot_number" class="text-muted">(DOT: {{ c.dot_number }})</span>
           </div>
+          <!-- Quick-create option at bottom of dropdown -->
+          <div
+            *ngIf="canCreateCustomerInline()"
+            (mousedown)="openInlineCustomerCreate()"
+            class="dropdown-item quick-create-option"
+            tabindex="0"
+          >
+            <span class="quick-create-icon">+</span> Create new customer: "<strong>{{ customerSearch }}</strong>"
+          </div>
         </div>
       </div>
-    </div>
-    <div class="col">
-      <button
-        type="button"
-        class="btn btn-outline-primary"
-        (click)="showNewCustomerModal = true"
-        [disabled]="!canCreateCustomerInline()"
-        [title]="!canCreateCustomerInline() ? 'You do not have permission to create customers.' : ''"
-      >Add New Customer</button>
     </div>
   </div>
   <div *ngIf="customerSearchError" class="alert alert-danger mt-2">{{customerSearchError}}</div>
   <div *ngIf="selectedCustomer">
     <div class="mt-2"><strong>Selected:</strong> {{ selectedCustomer.displayName || selectedCustomer.company_name || selectedCustomer.name }} (DOT: {{selectedCustomer.dot_number}})</div>
   </div>
-</div>
 
-<!-- New Customer Modal -->
-<div class="modal-backdrop" *ngIf="showNewCustomerModal" (click)="showNewCustomerModal = false">
-  <div class="modal wo-modal" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3 class="modal-title">Add New Customer</h3>
-      <button type="button" class="close-btn" (click)="showNewCustomerModal = false">&times;</button>
+  <!-- Inline Quick-Create Customer Form -->
+  <div *ngIf="showInlineCustomerCreate" class="inline-create-form mt-3">
+    <div class="inline-create-header">
+      <h4>Quick Create Customer</h4>
+      <button type="button" class="inline-create-close" (click)="cancelInlineCustomerCreate()">&times;</button>
     </div>
-    <div class="modal-body">
-      <div class="mb-2">
-        <label for="newCustomerName">Company Name</label>
-        <input id="newCustomerName" type="text" class="form-control" [(ngModel)]="newCustomer.company_name" name="newCustomerName">
+    <div class="inline-create-body">
+      <div class="inline-create-fields">
+        <div class="inline-field">
+          <label for="qcCustomerName">Company Name <span class="required">*</span></label>
+          <input id="qcCustomerName" type="text" class="form-control" [(ngModel)]="newCustomer.company_name" name="qcCustomerName" placeholder="e.g. Smith Trucking LLC">
+        </div>
+        <div class="inline-field">
+          <label for="qcCustomerDot">DOT Number</label>
+          <div class="input-with-action">
+            <input id="qcCustomerDot" type="text" class="form-control" [(ngModel)]="newCustomer.dot_number" name="qcCustomerDot" placeholder="e.g. 1234567">
+            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="lookupFmcsaForInlineCustomer()" [disabled]="fmcsaLookupLoading" title="Look up company info from FMCSA">
+              <span *ngIf="!fmcsaLookupLoading">FMCSA</span>
+              <span *ngIf="fmcsaLookupLoading">...</span>
+            </button>
+          </div>
+        </div>
+        <div class="inline-field">
+          <label for="qcContactName">Primary Contact Name</label>
+          <input id="qcContactName" type="text" class="form-control" [(ngModel)]="newCustomer.contact_name" name="qcContactName" placeholder="e.g. John Smith">
+        </div>
+        <div class="inline-field">
+          <label for="qcCustomerPhone">Phone</label>
+          <input id="qcCustomerPhone" type="text" class="form-control" [(ngModel)]="newCustomer.phone" name="qcCustomerPhone" placeholder="e.g. (555) 123-4567">
+        </div>
       </div>
-      <div class="mb-2">
-        <label for="newCustomerDot">DOT Number</label>
-        <input id="newCustomerDot" type="text" class="form-control" [(ngModel)]="newCustomer.dot_number" name="newCustomerDot">
+      <div *ngIf="newCustomerError" class="alert alert-danger mt-2">{{newCustomerError}}</div>
+      <div class="inline-create-actions">
+        <button type="button" class="btn btn-secondary btn-sm" (click)="cancelInlineCustomerCreate()">Cancel</button>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          (click)="createCustomer()"
+          [disabled]="!canCreateCustomerInline()"
+        >Save Customer</button>
       </div>
-      <div class="mb-2">
-        <label for="newCustomerAddress">Address</label>
-        <input id="newCustomerAddress" type="text" class="form-control" [(ngModel)]="newCustomer.address" name="newCustomerAddress">
+      <div class="inline-create-link">
+        <a routerLink="/admin/customers" target="_blank" class="edit-full-link">Edit full details in Admin &rarr; Customers</a>
       </div>
-      <div class="mb-2">
-        <label for="newCustomerCity">City</label>
-        <input id="newCustomerCity" type="text" class="form-control" [(ngModel)]="newCustomer.city" name="newCustomerCity">
-      </div>
-      <div class="mb-2">
-        <label for="newCustomerState">State</label>
-        <input id="newCustomerState" type="text" class="form-control" [(ngModel)]="newCustomer.state" name="newCustomerState">
-      </div>
-      <div class="mb-2">
-        <label for="newCustomerZip">ZIP</label>
-        <input id="newCustomerZip" type="text" class="form-control" [(ngModel)]="newCustomer.zip" name="newCustomerZip">
-      </div>
-      <div class="mb-2">
-        <label for="newCustomerPhone">Phone</label>
-        <input id="newCustomerPhone" type="text" class="form-control" [(ngModel)]="newCustomer.phone" name="newCustomerPhone">
-      </div>
-      <div class="mb-2">
-        <label for="newCustomerEmail">Email</label>
-        <input id="newCustomerEmail" type="email" class="form-control" [(ngModel)]="newCustomer.email" name="newCustomerEmail">
-      </div>
-      <div *ngIf="newCustomerError" class="alert alert-danger">{{newCustomerError}}</div>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn btn-secondary" (click)="showNewCustomerModal = false">Cancel</button>
-      <button
-        type="button"
-        class="btn btn-primary"
-        (click)="createCustomer()"
-        [disabled]="!canCreateCustomerInline()"
-        [title]="!canCreateCustomerInline() ? 'You do not have permission to create customers.' : ''"
-      >Create</button>
     </div>
   </div>
 </div>
@@ -178,10 +170,10 @@
       <label for="vehicleSearch">Search Vehicle (Unit, VIN, Make, Model)</label>
       <div style="position: relative;">
         <input id="vehicleSearch" type="text" class="form-control mb-2" [(ngModel)]="vehicleSearch" name="vehicleSearch" placeholder="Type to search vehicles..." (ngModelChange)="onVehicleSearchChange()" (focus)="showVehicleDropdownForCustomer()" (click)="showVehicleDropdownForCustomer()" (blur)="onVehicleBlur()">
-        <div *ngIf="showVehicleDropdown && filteredVehicles.length > 0" class="dropdown-list" style="margin-top: -8px;">
+        <div *ngIf="showVehicleDropdown" class="dropdown-list" style="margin-top: -8px;">
           <div
             *ngFor="let vehicle of filteredVehicles"
-            (click)="selectVehicle(vehicle)"
+            (mousedown)="selectVehicle(vehicle)"
             (keydown.enter)="selectVehicle(vehicle)"
             tabindex="0"
             class="dropdown-item"
@@ -192,86 +184,61 @@
               {{ vehicle.source === 'customer' || vehicle.company_owned === false ? 'Customer' : 'Internal' }}
             </span>
           </div>
+          <!-- Quick-create option at bottom of dropdown -->
+          <div
+            *ngIf="canCreateVehicleInline() && vehicleSearch"
+            (mousedown)="openInlineVehicleCreate(vehicleSearch)"
+            class="dropdown-item quick-create-option"
+            tabindex="0"
+          >
+            <span class="quick-create-icon">+</span> Create new vehicle: "<strong>{{ vehicleSearch }}</strong>"
+          </div>
         </div>
       </div>
-      <button
-        type="button"
-        class="btn btn-outline-primary mb-2"
-        (click)="openAddVehicleModal()"
-        [disabled]="!canCreateVehicleInline()"
-        [title]="!canCreateVehicleInline() ? 'You do not have permission to create vehicles.' : ''"
-      >Add Vehicle</button>
 
-      <!-- Add Customer Vehicle Modal -->
-      <div class="modal-backdrop" *ngIf="showNewCustomerVehicleModal" (click)="showNewCustomerVehicleModal = false">
-        <div class="modal wo-modal" (click)="$event.stopPropagation()">
-          <div class="modal-header">
-            <h3 class="modal-title">Add Vehicle</h3>
-            <button type="button" class="close-btn" (click)="showNewCustomerVehicleModal = false">&times;</button>
+      <!-- Inline Quick-Create Vehicle Form -->
+      <div *ngIf="showInlineVehicleCreate" class="inline-create-form mt-2">
+        <div class="inline-create-header">
+          <h4>Quick Create Vehicle</h4>
+          <button type="button" class="inline-create-close" (click)="cancelInlineVehicleCreate()">&times;</button>
+        </div>
+        <div class="inline-create-body">
+          <div class="inline-create-fields">
+            <div class="inline-field">
+              <label for="qcVehicleVin">VIN <span class="required">*</span></label>
+              <div class="input-with-action">
+                <input id="qcVehicleVin" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.vin" name="qcVehicleVin" placeholder="e.g. 1HGBH41JXMN109186">
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="decodeVinForNewVehicle()" [disabled]="vinDecodeLoading" title="Decode VIN to auto-fill make/model/year">
+                  <span *ngIf="!vinDecodeLoading">Decode</span>
+                  <span *ngIf="vinDecodeLoading">...</span>
+                </button>
+              </div>
+              <div *ngIf="vinDecodedInfo" class="vin-decoded-info">
+                Decoded: {{ vinDecodedInfo.year }} {{ vinDecodedInfo.make }} {{ vinDecodedInfo.model }}
+              </div>
+            </div>
+            <div class="inline-field">
+              <label for="qcVehicleUnit">Unit Number</label>
+              <input id="qcVehicleUnit" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.unit_number" name="qcVehicleUnit" placeholder="e.g. T-101">
+            </div>
+            <div class="inline-field">
+              <label for="qcVehiclePlate">License Plate</label>
+              <input id="qcVehiclePlate" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.license_plate" name="qcVehiclePlate" placeholder="e.g. ABC-1234">
+            </div>
           </div>
-          <div class="modal-body">
-            <div class="mb-2">
-              <label for="newVehicleOwnership">Ownership</label>
-              <select id="newVehicleOwnership" class="form-control" [(ngModel)]="newVehicleOwnership" name="newVehicleOwnership">
-                <option value="company">Company Owned</option>
-                <option value="customer">Customer Owned</option>
-              </select>
-            </div>
-            <div class="mb-2" *ngIf="newVehicleOwnership === 'customer'">
-              <label for="newCustomerVehicleCustomer">Customer</label>
-              <select id="newCustomerVehicleCustomer" class="form-control" [(ngModel)]="newCustomerVehicle.customer_id" name="newCustomerVehicleCustomer">
-                <option [ngValue]="null">-- Select Customer --</option>
-                <option *ngFor="let c of customers" [ngValue]="c.id">{{ c.company_name }} (DOT: {{ c.dot_number }})</option>
-              </select>
-            </div>
-            <div class="mb-2">
-              <label for="newCustomerVehicleVin">VIN</label>
-              <input id="newCustomerVehicleVin" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.vin" name="newCustomerVehicleVin">
-              <button type="button" class="btn btn-sm btn-outline-secondary mt-2" (click)="decodeVinForNewVehicle()">Decode VIN</button>
-            </div>
-            <div class="mb-2">
-              <label for="newCustomerVehicleUnitNumber">Unit Number</label>
-              <input id="newCustomerVehicleUnitNumber" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.unit_number" name="newCustomerVehicleUnitNumber">
-            </div>
-            <div class="mb-2">
-              <label for="newCustomerVehicleMake">Make</label>
-              <input id="newCustomerVehicleMake" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.make" name="newCustomerVehicleMake">
-            </div>
-            <div class="mb-2">
-              <label for="newCustomerVehicleModel">Model</label>
-              <input id="newCustomerVehicleModel" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.model" name="newCustomerVehicleModel">
-            </div>
-            <div class="mb-2">
-              <label for="newCustomerVehicleYear">Year</label>
-              <input id="newCustomerVehicleYear" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.year" name="newCustomerVehicleYear">
-            </div>
-            <div class="mb-2">
-              <label for="newCustomerVehicleLicensePlate">License Plate</label>
-              <input id="newCustomerVehicleLicensePlate" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.license_plate" name="newCustomerVehicleLicensePlate">
-            </div>
-            <div class="mb-2">
-              <label for="newCustomerVehicleState">State</label>
-              <input id="newCustomerVehicleState" type="text" class="form-control" [(ngModel)]="newCustomerVehicle.state" name="newCustomerVehicleState">
-            </div>
-            <div class="mb-2">
-              <label for="newCustomerVehicleMileage">Mileage</label>
-              <input id="newCustomerVehicleMileage" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.mileage" name="newCustomerVehicleMileage">
-            </div>
-            <div class="mb-2">
-              <app-ai-date-picker inputId="newCustomerVehicleInspectionExpiry" label="Inspection Expiry" [(ngModel)]="newCustomerVehicle.inspection_expiry" name="newCustomerVehicleInspectionExpiry" placeholder="MM/DD/YYYY"></app-ai-date-picker>
-            </div>
-            <div class="mb-2">
-              <app-ai-date-picker inputId="newCustomerVehicleNextPmDue" label="Next PM Due" [(ngModel)]="newCustomerVehicle.next_pm_due" name="newCustomerVehicleNextPmDue" placeholder="MM/DD/YYYY"></app-ai-date-picker>
-            </div>
-            <div class="mb-2">
-              <label for="newCustomerVehicleNextPmMileage">Next PM Mileage</label>
-              <input id="newCustomerVehicleNextPmMileage" type="number" class="form-control" [(ngModel)]="newCustomerVehicle.next_pm_mileage" name="newCustomerVehicleNextPmMileage">
-            </div>
-            <div *ngIf="newCustomerVehicleError" class="alert alert-danger">{{newCustomerVehicleError}}</div>
+          <div *ngIf="workOrder.customerId" class="inline-create-note mt-1">
+            Will be linked to selected customer. Otherwise saved as company-owned.
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" (click)="showNewCustomerVehicleModal = false">Cancel</button>
-            <button type="button" class="btn btn-primary" (click)="createVehicleFromWorkOrder()">Create</button>
+          <div *ngIf="!workOrder.customerId" class="inline-create-note mt-1">
+            No customer selected. Vehicle will be saved as company-owned.
+          </div>
+          <div *ngIf="newCustomerVehicleError" class="alert alert-danger mt-2">{{newCustomerVehicleError}}</div>
+          <div class="inline-create-actions">
+            <button type="button" class="btn btn-secondary btn-sm" (click)="cancelInlineVehicleCreate()">Cancel</button>
+            <button type="button" class="btn btn-primary btn-sm" (click)="createVehicleFromWorkOrder()">Save Vehicle</button>
+          </div>
+          <div class="inline-create-link">
+            <a routerLink="/admin/vehicles" target="_blank" class="edit-full-link">Edit full details in Admin &rarr; Vehicles</a>
           </div>
         </div>
       </div>

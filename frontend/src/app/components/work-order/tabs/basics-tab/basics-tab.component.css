@@ -29,3 +29,170 @@
 .text-muted {
   color: #94a3b8;
 }
+
+/* ─── Quick-create dropdown option ─── */
+.quick-create-option {
+  color: #38bdf8;
+  border-top: 1px solid rgba(51, 65, 85, 0.8);
+  border-bottom: none;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quick-create-option:hover {
+  background: rgba(56, 189, 248, 0.1);
+  color: #67e8f9;
+}
+
+.quick-create-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ─── Inline quick-create form ─── */
+.inline-create-form {
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.inline-create-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(56, 189, 248, 0.08);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+}
+
+.inline-create-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #38bdf8;
+}
+
+.inline-create-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.inline-create-close:hover {
+  color: #e2e8f0;
+}
+
+.inline-create-body {
+  padding: 12px 16px 16px;
+}
+
+.inline-create-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.inline-field label {
+  display: block;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.inline-field .required {
+  color: #f87171;
+}
+
+.inline-field .form-control {
+  font-size: 13px;
+}
+
+/* Input with action button (FMCSA lookup, VIN decode) */
+.input-with-action {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.input-with-action .form-control {
+  flex: 1;
+}
+
+.input-with-action .btn {
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-color: rgba(51, 65, 85, 0.8);
+  color: #94a3b8;
+}
+
+.input-with-action .btn:hover {
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+/* VIN decoded info badge */
+.vin-decoded-info {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #67e8f9;
+  padding: 4px 8px;
+  background: rgba(56, 189, 248, 0.08);
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* Inline create actions */
+.inline-create-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.inline-create-actions .btn-sm {
+  font-size: 12px;
+  padding: 5px 14px;
+}
+
+/* Note about ownership */
+.inline-create-note {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* Edit full details link */
+.inline-create-link {
+  margin-top: 8px;
+  text-align: right;
+}
+
+.edit-full-link {
+  font-size: 12px;
+  color: #38bdf8;
+  text-decoration: none;
+}
+
+.edit-full-link:hover {
+  color: #67e8f9;
+  text-decoration: underline;
+}

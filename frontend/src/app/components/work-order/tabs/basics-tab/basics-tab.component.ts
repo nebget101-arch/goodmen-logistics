@@ -1,4 +1,4 @@
-import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ApiService } from '../../../../services/api.service';
 import { CreditService } from '../../../../services/credit.service';
 import { PermissionHelperService } from '../../../../services/permission-helper.service';
@@ -32,24 +32,30 @@ export class WoBasicsTabComponent {
   selectedCustomer: any = null;
   filteredCustomers: any[] = [];
   showCustomerDropdown = false;
-  showNewCustomerModal = false;
-  newCustomer: any = { company_name: '', dot_number: '', address: '', city: '', state: '', zip: '', phone: '', email: '' };
+
+  /* Inline quick-create customer (replaces modal) */
+  showInlineCustomerCreate = false;
+  newCustomer: any = { company_name: '', dot_number: '', contact_name: '', phone: '' };
   newCustomerError = '';
+  fmcsaLookupLoading = false;
 
   /* Vehicle search state */
   vehicleSearch = '';
-  vehicleVinSearch = '';
   filteredVehicles: any[] = [];
   showVehicleDropdown = false;
-  showNewCustomerVehicleModal = false;
-  newCustomerVehicle: any = { unit_number: '', vin: '', make: '', model: '', year: '', license_plate: '', state: '', mileage: '', inspection_expiry: '', next_pm_due: '', next_pm_mileage: '', customer_id: '' };
+
+  /* Inline quick-create vehicle (replaces modal) */
+  showInlineVehicleCreate = false;
+  newCustomerVehicle: any = { vin: '', unit_number: '', license_plate: '' };
   newCustomerVehicleError = '';
-  newVehicleOwnership: 'company' | 'customer' = 'company';
+  vinDecodeLoading = false;
+  vinDecodedInfo: { make: string; model: string; year: string } | null = null;
 
   constructor(
     private apiService: ApiService,
     private creditService: CreditService,
-    private permissions: PermissionHelperService
+    private permissions: PermissionHelperService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   /* ─── Customer search ─── */
@@ -100,7 +106,8 @@ export class WoBasicsTabComponent {
       const dot = (c.dot_number || '').toLowerCase();
       return name.includes(search) || dot.includes(search);
     });
-    this.showCustomerDropdown = this.filteredCustomers.length > 0;
+    /* Always show dropdown when typing so the "+ Create new" option is visible */
+    this.showCustomerDropdown = true;
   }
 
   selectCustomer(customer: any): void {
@@ -144,19 +151,20 @@ export class WoBasicsTabComponent {
           this.newCustomer = {
             company_name: company.legal_name || company.name || '',
             dot_number: dot,
-            address: company.address || '',
-            city: company.city || '',
-            state: company.state || '',
-            zip: company.zip || '',
-            phone: company.phone || '',
-            email: ''
+            contact_name: '',
+            phone: company.phone || ''
           };
-          this.showNewCustomerModal = true;
+          this.showInlineCustomerCreate = true;
+          this.cdr.markForCheck();
         } else {
           this.customerSearchError = 'No customer found for this DOT number.';
+          this.cdr.markForCheck();
         }
       },
-      error: () => { this.customerSearchError = 'FMCSA lookup failed or unavailable.'; }
+      error: () => {
+        this.customerSearchError = 'FMCSA lookup failed or unavailable.';
+        this.cdr.markForCheck();
+      }
     });
   }
 
@@ -166,8 +174,8 @@ export class WoBasicsTabComponent {
       return;
     }
     this.newCustomerError = '';
-    if (!this.newCustomer.company_name || !this.newCustomer.dot_number) {
-      this.newCustomerError = 'Company name and DOT number are required.';
+    if (!this.newCustomer.company_name) {
+      this.newCustomerError = 'Company name is required.';
       return;
     }
     this.apiService.createCustomer(this.newCustomer).subscribe({
@@ -175,12 +183,17 @@ export class WoBasicsTabComponent {
         this.customers.push(customer);
         this.workOrder.customerId = customer.id;
         this.selectedCustomer = customer;
-        this.showNewCustomerModal = false;
+        this.showInlineCustomerCreate = false;
         this.customerSearch = customer.company_name || customer.name || '';
         this.applyCustomerVehicleFilter();
-        this.newCustomer = { company_name: '', dot_number: '', address: '', city: '', state: '', zip: '', phone: '', email: '' };
+        this.checkCustomerCredit(customer.id);
+        this.newCustomer = { company_name: '', dot_number: '', contact_name: '', phone: '' };
+        this.cdr.markForCheck();
       },
-      error: () => { this.newCustomerError = 'Failed to create customer.'; }
+      error: () => {
+        this.newCustomerError = 'Failed to create customer.';
+        this.cdr.markForCheck();
+      }
     });
   }
 
@@ -206,7 +219,8 @@ export class WoBasicsTabComponent {
       const model = (v.model || '').toLowerCase();
       return unit.includes(search) || vin.includes(search) || make.includes(search) || model.includes(search);
     });
-    this.showVehicleDropdown = this.filteredVehicles.length > 0;
+    /* Always show dropdown when typing so the "+ Create new" option is visible */
+    this.showVehicleDropdown = true;
   }
 
   showVehicleDropdownForCustomer(): void {
@@ -268,54 +282,83 @@ export class WoBasicsTabComponent {
     }
   }
 
-  openAddVehicleModal(): void {
+  /** Opens the inline quick-create vehicle form (replaces old modal) */
+  openInlineVehicleCreate(prefillSearch?: string): void {
     if (!this.canCreateVehicleInline()) {
       this.newCustomerVehicleError = 'You do not have permission to create vehicles.';
       return;
     }
     this.newCustomerVehicleError = '';
-    this.newVehicleOwnership = this.workOrder.customerId ? 'customer' : 'company';
+    this.vinDecodedInfo = null;
+    const searchVal = (prefillSearch || this.vehicleSearch || '').trim();
+    /* Guess whether the search text is a VIN (17 chars alphanumeric) or a unit number */
+    const isLikelyVin = /^[A-HJ-NPR-Z0-9]{6,17}$/i.test(searchVal);
     this.newCustomerVehicle = {
-      unit_number: '', vin: '', make: '', model: '', year: '',
-      license_plate: '', state: '', mileage: '', inspection_expiry: '',
-      next_pm_due: '', next_pm_mileage: '',
-      customer_id: this.workOrder.customerId || ''
+      vin: isLikelyVin ? searchVal : '',
+      unit_number: isLikelyVin ? '' : searchVal,
+      license_plate: ''
     };
-    this.showNewCustomerVehicleModal = true;
+    this.showInlineVehicleCreate = true;
+    this.showVehicleDropdown = false;
+    this.cdr.markForCheck();
   }
 
-  onVehicleVinSearchChange(): void {
-    const search = this.vehicleVinSearch.trim();
-    if (search.length < 1) {
-      this.filteredVehicles = this.vehicles;
-      this.showNewCustomerVehicleModal = false;
+  /** Opens the inline quick-create customer form (replaces old modal) */
+  openInlineCustomerCreate(): void {
+    if (!this.canCreateCustomerInline()) {
+      this.newCustomerError = 'You do not have permission to create customers.';
       return;
     }
-    this.apiService.getVehiclesByVin(search).subscribe({
-      next: (data: any) => {
-        this.filteredVehicles = data;
-        if (this.filteredVehicles.length === 0) {
-          this.showNewCustomerVehicleModal = true;
-          this.newVehicleOwnership = this.workOrder.customerId ? 'customer' : 'company';
-          this.newCustomerVehicle = {
-            unit_number: '', vin: search, make: '', model: '', year: '',
-            license_plate: '', state: '', mileage: '', inspection_expiry: '',
-            next_pm_due: '', next_pm_mileage: '',
-            customer_id: this.workOrder.customerId || ''
-          };
+    this.newCustomerError = '';
+    this.newCustomer = {
+      company_name: this.customerSearch || '',
+      dot_number: '',
+      contact_name: '',
+      phone: ''
+    };
+    this.showInlineCustomerCreate = true;
+    this.showCustomerDropdown = false;
+    this.cdr.markForCheck();
+  }
+
+  cancelInlineCustomerCreate(): void {
+    this.showInlineCustomerCreate = false;
+    this.newCustomerError = '';
+    this.cdr.markForCheck();
+  }
+
+  cancelInlineVehicleCreate(): void {
+    this.showInlineVehicleCreate = false;
+    this.newCustomerVehicleError = '';
+    this.vinDecodedInfo = null;
+    this.cdr.markForCheck();
+  }
+
+  /** FMCSA lookup for the inline quick-create customer form */
+  lookupFmcsaForInlineCustomer(): void {
+    const dot = (this.newCustomer.dot_number || '').trim();
+    if (!dot) {
+      this.newCustomerError = 'Enter a DOT number to look up.';
+      return;
+    }
+    this.fmcsaLookupLoading = true;
+    this.newCustomerError = '';
+    this.cdr.markForCheck();
+    this.apiService.getFmcsainfo(dot).subscribe({
+      next: (company: any) => {
+        this.fmcsaLookupLoading = false;
+        if (company) {
+          this.newCustomer.company_name = company.legal_name || company.name || this.newCustomer.company_name;
+          this.newCustomer.phone = company.phone || this.newCustomer.phone;
         } else {
-          this.showNewCustomerVehicleModal = false;
+          this.newCustomerError = 'No FMCSA record found for this DOT.';
         }
+        this.cdr.markForCheck();
       },
       error: () => {
-        this.filteredVehicles = [];
-        this.showNewCustomerVehicleModal = true;
-        this.newVehicleOwnership = this.workOrder.customerId ? 'customer' : 'company';
-        this.newCustomerVehicle = {
-          unit_number: '', vin: search, make: '', model: '', year: '',
-          license_plate: '', state: '', mileage: '', insurance_expiry: '',
-          registration_expiry: '', customer_id: this.workOrder.customerId || ''
-        };
+        this.fmcsaLookupLoading = false;
+        this.newCustomerError = 'FMCSA lookup failed.';
+        this.cdr.markForCheck();
       }
     });
   }
@@ -327,13 +370,23 @@ export class WoBasicsTabComponent {
       return;
     }
     this.newCustomerVehicleError = '';
+    this.vinDecodeLoading = true;
+    this.cdr.markForCheck();
     this.apiService.decodeVin(vin).subscribe({
       next: (decoded: any) => {
-        this.newCustomerVehicle.make = decoded.make || this.newCustomerVehicle.make;
-        this.newCustomerVehicle.model = decoded.model || this.newCustomerVehicle.model;
-        this.newCustomerVehicle.year = decoded.year || this.newCustomerVehicle.year;
+        this.vinDecodeLoading = false;
+        this.vinDecodedInfo = {
+          make: decoded.make || '',
+          model: decoded.model || '',
+          year: decoded.year || ''
+        };
+        this.cdr.markForCheck();
       },
-      error: () => { this.newCustomerVehicleError = 'Failed to decode VIN.'; }
+      error: () => {
+        this.vinDecodeLoading = false;
+        this.newCustomerVehicleError = 'Failed to decode VIN.';
+        this.cdr.markForCheck();
+      }
     });
   }
 
@@ -347,36 +400,54 @@ export class WoBasicsTabComponent {
       this.newCustomerVehicleError = 'VIN is required.';
       return;
     }
-    if (this.newVehicleOwnership === 'customer') {
-      if (!this.newCustomerVehicle.customer_id) {
-        this.newCustomerVehicleError = 'Customer is required for customer-owned vehicles.';
-        return;
-      }
-      this.apiService.createCustomerVehicle(this.newCustomerVehicle).subscribe({
+
+    /* Build the payload: 3 user fields + decoded info */
+    const payload: any = {
+      vin: this.newCustomerVehicle.vin,
+      unit_number: this.newCustomerVehicle.unit_number,
+      license_plate: this.newCustomerVehicle.license_plate
+    };
+    if (this.vinDecodedInfo) {
+      payload.make = this.vinDecodedInfo.make;
+      payload.model = this.vinDecodedInfo.model;
+      payload.year = this.vinDecodedInfo.year;
+    }
+
+    /* Link to customer if one is selected; otherwise company-owned */
+    if (this.workOrder.customerId) {
+      payload.customer_id = this.workOrder.customerId;
+      this.apiService.createCustomerVehicle(payload).subscribe({
         next: (vehicle: any) => {
           vehicle.company_owned = false;
           this.vehicles.push(vehicle);
           this.filteredVehicles = [vehicle];
-          this.workOrder.vehicleId = vehicle.id;
-          this.showNewCustomerVehicleModal = false;
+          this.selectVehicle(vehicle);
+          this.showInlineVehicleCreate = false;
+          this.vinDecodedInfo = null;
+          this.cdr.markForCheck();
         },
-        error: () => { this.newCustomerVehicleError = 'Failed to create customer vehicle.'; }
+        error: () => {
+          this.newCustomerVehicleError = 'Failed to create customer vehicle.';
+          this.cdr.markForCheck();
+        }
       });
-      return;
+    } else {
+      this.apiService.createVehicle(payload).subscribe({
+        next: (vehicle: any) => {
+          vehicle.company_owned = true;
+          this.vehicles.push(vehicle);
+          this.filteredVehicles = [vehicle];
+          this.selectVehicle(vehicle);
+          this.showInlineVehicleCreate = false;
+          this.vinDecodedInfo = null;
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.newCustomerVehicleError = 'Failed to create company vehicle.';
+          this.cdr.markForCheck();
+        }
+      });
     }
-
-    const companyVehicle = { ...this.newCustomerVehicle };
-    delete companyVehicle.customer_id;
-    this.apiService.createVehicle(companyVehicle).subscribe({
-      next: (vehicle: any) => {
-        vehicle.company_owned = true;
-        this.vehicles.push(vehicle);
-        this.filteredVehicles = [vehicle];
-        this.workOrder.vehicleId = vehicle.id;
-        this.showNewCustomerVehicleModal = false;
-      },
-      error: () => { this.newCustomerVehicleError = 'Failed to create company vehicle.'; }
-    });
   }
 
   canCreateVehicleInline(): boolean {
