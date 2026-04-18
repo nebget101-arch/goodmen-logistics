@@ -73,6 +73,8 @@ Document structure:
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_API_TOKEN || null;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || null;
+const ANTHROPIC_VISION_MODEL = process.env.ANTHROPIC_VISION_MODEL || 'claude-sonnet-4-20250514';
 
 const MAX_INPUT_CHARS = 120_000;
 
@@ -158,6 +160,145 @@ async function extractWithPdftotext(buffer, opts = {}) {
     try {
       await fs.promises.unlink(pdfPath).catch(() => {});
       await fs.promises.unlink(txtPath).catch(() => {});
+      await fs.promises.rmdir(dir).catch(() => {});
+    } catch (_) {}
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scanned PDF detection heuristic (FN-739)
+// ---------------------------------------------------------------------------
+const SCANNED_MIN_CHARS = 100;
+const SCANNED_ALPHA_RATIO = 0.20;
+
+function isScannedPdf(text) {
+  if (!text || text.length < SCANNED_MIN_CHARS) return true;
+  const sample = text.slice(0, 4000);
+  const alphanumeric = (sample.match(/[A-Za-z0-9]/g) || []).length;
+  const ratio = alphanumeric / Math.max(sample.length, 1);
+  return ratio < SCANNED_ALPHA_RATIO;
+}
+
+// ---------------------------------------------------------------------------
+// Vision fallback: convert PDF to images and send to Claude Vision API (FN-739)
+// ---------------------------------------------------------------------------
+async function extractWithVision(buffer, filename) {
+  if (!ANTHROPIC_API_KEY) {
+    dtLogger.warn('load_ai_vision_skipped_no_key', { filename });
+    return null;
+  }
+
+  dtLogger.info('load_ai_vision_start', { filename, bufferLength: buffer?.length });
+
+  // Convert PDF pages to PNG using pdftoppm (Poppler)
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ratecon-vision-'));
+  const pdfPath = path.join(dir, 'input.pdf');
+
+  try {
+    await fs.promises.writeFile(pdfPath, buffer);
+
+    // Render up to 5 pages as PNG (rate cons rarely exceed 5 pages)
+    const maxPages = 5;
+    await execFileAsync('pdftoppm', [
+      '-png', '-r', '200', '-l', String(maxPages),
+      pdfPath, path.join(dir, 'page')
+    ], { timeout: 30000 });
+
+    // Read generated PNG files
+    const files = await fs.promises.readdir(dir);
+    const pngFiles = files
+      .filter(f => f.endsWith('.png'))
+      .sort();
+
+    if (pngFiles.length === 0) {
+      dtLogger.warn('load_ai_vision_no_images', { filename });
+      return null;
+    }
+
+    dtLogger.info('load_ai_vision_pages_rendered', { filename, pageCount: pngFiles.length });
+
+    // Build image content blocks for Claude Vision
+    const imageBlocks = [];
+    for (const png of pngFiles.slice(0, maxPages)) {
+      const imgBuffer = await fs.promises.readFile(path.join(dir, png));
+      const base64 = imgBuffer.toString('base64');
+      imageBlocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: 'image/png',
+          data: base64
+        }
+      });
+    }
+
+    // Add the extraction prompt as text
+    imageBlocks.push({
+      type: 'text',
+      text: LOAD_EXTRACTION_PROMPT +
+        `\n\nThe above images are pages from a rate confirmation or BOL PDF. Filename: ${filename || 'unknown'}. ` +
+        `This is a scanned/image PDF so text extraction failed. Extract all visible load details from the images.`
+    });
+
+    // Call Claude Vision API
+    const response = await axios.post(
+      'https://api.anthropic.com/v1/messages',
+      {
+        model: ANTHROPIC_VISION_MODEL,
+        max_tokens: 2048,
+        messages: [
+          {
+            role: 'user',
+            content: imageBlocks
+          }
+        ]
+      },
+      {
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json'
+        },
+        timeout: 90000
+      }
+    );
+
+    const content = response.data?.content?.[0]?.text;
+    if (!content) {
+      dtLogger.warn('load_ai_vision_no_response', { filename });
+      return null;
+    }
+
+    // Parse JSON from response (strip markdown fences if present)
+    let jsonStr = content.trim();
+    const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) jsonStr = fenceMatch[1].trim();
+
+    const parsed = JSON.parse(jsonStr);
+
+    dtLogger.info('load_ai_vision_success', {
+      filename,
+      brokerName: parsed.brokerName || null,
+      rate: parsed.rate || null,
+      stopsCount: parsed.stops?.length || 0,
+      model: ANTHROPIC_VISION_MODEL
+    });
+
+    return parsed;
+  } catch (err) {
+    dtLogger.error('load_ai_vision_failed', err, {
+      filename,
+      message: err?.message,
+      code: err?.response?.status
+    });
+    return null;
+  } finally {
+    // Clean up temp files
+    try {
+      const files = await fs.promises.readdir(dir);
+      for (const f of files) {
+        await fs.promises.unlink(path.join(dir, f)).catch(() => {});
+      }
       await fs.promises.rmdir(dir).catch(() => {});
     } catch (_) {}
   }
@@ -372,37 +513,81 @@ async function extractLoadFromPdf(buffer, filename) {
     };
   }
 
-  if (!pdfText) {
-    return {
-      brokerName: null,
-      poNumber: null,
-      rate: null,
-      pickup: { date: null, city: null, state: null, zip: null, address1: null },
-      delivery: { date: null, city: null, state: null, zip: null, address1: null },
-      notes: null,
-      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
-      rawTextSnippet: null,
-      stops: [],
-      provider: 'none',
-      warning: 'No text detected in PDF (likely a scanned image); cannot auto-extract.'
-    };
-  }
+  // FN-739: Vision fallback for scanned/empty/garbled PDFs
+  const needsVisionFallback = !pdfText || isScannedPdf(pdfText) || looksGarbled(pdfText);
 
-  if (looksGarbled(pdfText)) {
-    dtLogger.warn('load_ai_extract_skipped_garbled', { source: extractionSource, length: pdfText.length });
-    return {
-      brokerName: null,
-      poNumber: null,
-      rate: null,
-      pickup: { date: null, city: null, state: null, zip: null, address1: null },
-      delivery: { date: null, city: null, state: null, zip: null, address1: null },
-      notes: null,
-      confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
-      rawTextSnippet: null,
-      stops: [],
-      provider: 'none',
-      warning: `PDF text appears corrupted (font/encoding issue). Extraction used: ${extractionSource}. Try installing Poppler (pdftotext) on the server for better extraction.`
-    };
+  if (needsVisionFallback) {
+    const reason = !pdfText ? 'no_text' : isScannedPdf(pdfText) ? 'scanned' : 'garbled';
+    dtLogger.info('load_ai_extract_vision_fallback', { reason, textLength: (pdfText || '').length, filename });
+
+    const visionResult = await extractWithVision(buffer, filename);
+    if (visionResult) {
+      // Normalize vision result to match standard schema
+      let stops = [];
+      if (Array.isArray(visionResult.stops) && visionResult.stops.length > 0) {
+        stops = visionResult.stops.map((s, idx) => ({
+          type: (s.type || '').toString().trim().toUpperCase() === 'DELIVERY' ? 'DELIVERY' : 'PICKUP',
+          sequence: typeof s.sequence === 'number' ? s.sequence : idx + 1,
+          date: s.date ?? null, city: s.city ?? null, state: s.state ?? null,
+          zip: s.zip != null ? String(s.zip).trim() : null, address1: s.address1 ?? null
+        })).sort((a, b) => a.sequence - b.sequence);
+      }
+
+      return {
+        brokerName: visionResult.brokerName ?? null,
+        poNumber: visionResult.poNumber ?? null,
+        loadId: (visionResult.loadId || '').toString().trim() || null,
+        orderId: (visionResult.orderId || '').toString().trim() || null,
+        proNumber: (visionResult.proNumber || '').toString().trim() || null,
+        rate: visionResult.rate != null ? Number(visionResult.rate) : null,
+        pickup: {
+          date: visionResult.pickup?.date ?? null, city: visionResult.pickup?.city ?? null,
+          state: visionResult.pickup?.state ?? null, zip: visionResult.pickup?.zip ?? null,
+          address1: visionResult.pickup?.address1 ?? null
+        },
+        delivery: {
+          date: visionResult.delivery?.date ?? null, city: visionResult.delivery?.city ?? null,
+          state: visionResult.delivery?.state ?? null, zip: visionResult.delivery?.zip ?? null,
+          address1: visionResult.delivery?.address1 ?? null
+        },
+        stops,
+        notes: visionResult.notes ?? null,
+        confidence: {
+          brokerName: typeof visionResult.confidence?.brokerName === 'number' ? visionResult.confidence.brokerName : 0,
+          poNumber: typeof visionResult.confidence?.poNumber === 'number' ? visionResult.confidence.poNumber : 0,
+          rate: typeof visionResult.confidence?.rate === 'number' ? visionResult.confidence.rate : 0,
+          pickup: typeof visionResult.confidence?.pickup === 'number' ? visionResult.confidence.pickup : 0,
+          delivery: typeof visionResult.confidence?.delivery === 'number' ? visionResult.confidence.delivery : 0
+        },
+        rawTextSnippet: visionResult.rawTextSnippet ?? null,
+        provider: 'anthropic',
+        model: ANTHROPIC_VISION_MODEL,
+        extraction_method: 'vision',
+        vision_fallback_reason: reason
+      };
+    }
+
+    // Vision also failed — return the appropriate warning
+    if (!pdfText) {
+      return {
+        brokerName: null, poNumber: null, rate: null,
+        pickup: { date: null, city: null, state: null, zip: null, address1: null },
+        delivery: { date: null, city: null, state: null, zip: null, address1: null },
+        notes: null, confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
+        rawTextSnippet: null, stops: [], provider: 'none', extraction_method: 'none',
+        warning: 'No text detected in PDF (scanned image) and vision fallback unavailable.'
+      };
+    }
+    if (looksGarbled(pdfText)) {
+      return {
+        brokerName: null, poNumber: null, rate: null,
+        pickup: { date: null, city: null, state: null, zip: null, address1: null },
+        delivery: { date: null, city: null, state: null, zip: null, address1: null },
+        notes: null, confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
+        rawTextSnippet: null, stops: [], provider: 'none', extraction_method: 'none',
+        warning: `PDF text appears corrupted. Vision fallback also failed. Source: ${extractionSource}.`
+      };
+    }
   }
 
   dtLogger.info('load_ai_extract_calling_openai', { source: extractionSource, trimmedLength: Math.min(pdfText.length, MAX_INPUT_CHARS) });
@@ -554,7 +739,8 @@ async function extractLoadFromPdf(buffer, filename) {
     },
     rawTextSnippet: parsed.rawTextSnippet ?? null,
     provider: 'openai',
-    model: OPENAI_MODEL
+    model: OPENAI_MODEL,
+    extraction_method: 'text'
   };
 
   return safe;
@@ -564,6 +750,8 @@ module.exports = {
   extractLoadFromPdf,
   LOAD_EXTRACTION_PROMPT,
   looksGarbled,
+  isScannedPdf,
   extractWithPdftotext,
+  extractWithVision,
   preParseHints
 };
