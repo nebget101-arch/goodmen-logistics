@@ -1,78 +1,147 @@
 <div class="maintenance-dashboard container">
+
+  <!-- ── HEADER ── -->
   <div class="header">
     <div>
       <h1>Work Orders Hub</h1>
-      <p class="subtitle">Track, filter, and invoice work orders faster</p>
+      <p class="subtitle">Track, filter, and manage work orders across your fleet</p>
     </div>
     <div class="header-actions">
+      <button type="button" class="btn btn-sm btn-outline" (click)="toggleBulkUpload()">
+        <span class="material-symbols-outlined">upload_file</span>
+        Bulk Upload
+      </button>
       <button class="btn btn-primary" (click)="goToWorkOrder()">
         <span class="material-symbols-outlined">add</span> New Work Order
       </button>
     </div>
   </div>
 
+  <!-- ── STATS CARDS ── -->
+  <div class="stats-grid" *ngIf="!loading">
+    <div
+      class="stat-card"
+      *ngFor="let card of statsCards"
+      [ngClass]="'stat-accent-' + card.accent"
+      (click)="card.filterFn()"
+    >
+      <div class="stat-icon">
+        <span class="material-symbols-outlined">{{ card.icon }}</span>
+      </div>
+      <div class="stat-body">
+        <span class="stat-value">{{ card.value }}</span>
+        <span class="stat-label">{{ card.label }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MAIN CARD ── -->
   <div class="card hub-card">
+
+    <!-- Quick filter chips -->
     <div class="quick-filters">
-      <button type="button" class="chip" [class.active]="!filters.status" (click)="setStatusFilter('')">All</button>
-      <button type="button" class="chip" [class.active]="filters.status === 'IN_PROGRESS'" (click)="setStatusFilter('IN_PROGRESS')">In Progress</button>
-      <button type="button" class="chip" [class.active]="filters.status === 'WAITING_PARTS'" (click)="setStatusFilter('WAITING_PARTS')">Waiting Parts</button>
-      <button type="button" class="chip" [class.active]="filters.status === 'COMPLETED'" (click)="setStatusFilter('COMPLETED')">Completed</button>
-      <button type="button" class="chip" [class.active]="filters.status === 'CLOSED'" (click)="setStatusFilter('CLOSED')">Closed</button>
-      <button type="button" class="chip" [class.active]="filters.status === 'CANCELED'" (click)="setStatusFilter('CANCELED')">Canceled</button>
+      <button type="button" class="chip" [class.active]="!filterStatus && !quickMyOrders && !quickUrgent && !quickOverdue" (click)="setStatusFilter('')">All</button>
+      <button type="button" class="chip" [class.active]="filterStatus === 'DRAFT'" (click)="setStatusFilter('DRAFT')">Draft</button>
+      <button type="button" class="chip" [class.active]="filterStatus === 'IN_PROGRESS'" (click)="setStatusFilter('IN_PROGRESS')">In Progress</button>
+      <button type="button" class="chip" [class.active]="filterStatus === 'WAITING_PARTS'" (click)="setStatusFilter('WAITING_PARTS')">Waiting Parts</button>
+      <button type="button" class="chip" [class.active]="filterStatus === 'COMPLETED'" (click)="setStatusFilter('COMPLETED')">Completed</button>
+      <button type="button" class="chip" [class.active]="filterStatus === 'CLOSED'" (click)="setStatusFilter('CLOSED')">Closed</button>
+      <button type="button" class="chip" [class.active]="filterStatus === 'CANCELED'" (click)="setStatusFilter('CANCELED')">Canceled</button>
+      <span class="chip-divider"></span>
+      <button type="button" class="chip chip-quick" [class.active]="quickMyOrders" (click)="toggleQuickMyOrders()">
+        <span class="material-symbols-outlined chip-icon">person</span> My WOs
+      </button>
+      <button type="button" class="chip chip-quick" [class.active]="quickUrgent" (click)="toggleQuickUrgent()">
+        <span class="material-symbols-outlined chip-icon">priority_high</span> Urgent
+      </button>
+      <button type="button" class="chip chip-quick" [class.active]="quickOverdue" (click)="toggleQuickOverdue()">
+        <span class="material-symbols-outlined chip-icon">schedule</span> Overdue
+      </button>
     </div>
 
+    <!-- Filters panel -->
     <div class="filters-panel">
       <div class="filters-grid">
         <div class="filter-item filter-search">
-          <label for="wo-search">Search</label>
+          <label>Search</label>
           <input
-            id="wo-search"
             type="text"
             class="form-control"
-            placeholder="WO #, unit, VIN, customer"
-            [(ngModel)]="filters.search"
-            (keyup.enter)="applyFilters()"
+            placeholder="WO #, title, unit, customer..."
+            [value]="filterSearch"
+            (input)="onSearchInput($any($event.target).value)"
           >
         </div>
         <div class="filter-item">
-          <label for="wo-status">Status</label>
-          <select id="wo-status" class="form-control" [(ngModel)]="filters.status">
-            <option value="">All Statuses</option>
-            <option *ngFor="let status of statuses" [value]="status">{{ status }}</option>
-          </select>
-        </div>
-        <div class="filter-item">
-          <label for="wo-type">Type</label>
-          <select id="wo-type" class="form-control" [(ngModel)]="filters.type">
+          <label>Type</label>
+          <select class="form-control" [(ngModel)]="filterType" (change)="applyFilters()">
             <option value="">All Types</option>
-            <option *ngFor="let type of types" [value]="type">{{ type }}</option>
+            <option *ngFor="let t of types" [value]="t">{{ t }}</option>
           </select>
         </div>
         <div class="filter-item">
-          <label for="wo-location">Location</label>
-          <select id="wo-location" class="form-control" [(ngModel)]="filters.locationId">
-            <option value="">All Locations</option>
-            <option *ngFor="let loc of locations" [value]="loc.id">{{ loc.name }}</option>
+          <label>Priority</label>
+          <select class="form-control" [(ngModel)]="filterPriority" (change)="applyFilters()">
+            <option value="">All Priorities</option>
+            <option *ngFor="let p of priorities" [value]="p">{{ p }}</option>
           </select>
         </div>
         <div class="filter-item">
-          <label for="wo-invoice">Invoice</label>
-          <select id="wo-invoice" class="form-control" [(ngModel)]="filters.invoiceStatus">
+          <label>Assigned To</label>
+          <select class="form-control" [(ngModel)]="filterAssignedTo" (change)="applyFilters()">
+            <option value="">All Mechanics</option>
+            <option *ngFor="let m of mechanics" [value]="m.id">{{ m.name }}</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>Invoice</label>
+          <select class="form-control" [(ngModel)]="filterInvoiceStatus" (change)="applyFilters()">
             <option value="">All Invoice Statuses</option>
-            <option *ngFor="let status of invoiceStatuses" [value]="status">{{ status }}</option>
+            <option *ngFor="let s of invoiceStatuses" [value]="s">{{ s }}</option>
           </select>
+        </div>
+        <div class="filter-item">
+          <label>Customer</label>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Search customer..."
+            [(ngModel)]="filterCustomer"
+            (input)="applyFilters()"
+          >
+        </div>
+        <div class="filter-item">
+          <label>Vehicle</label>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Unit # or VIN..."
+            [(ngModel)]="filterVehicle"
+            (input)="applyFilters()"
+          >
+        </div>
+        <div class="filter-item">
+          <label>Date From</label>
+          <input type="date" class="form-control" [(ngModel)]="filterDateFrom" (change)="applyFilters()">
+        </div>
+        <div class="filter-item">
+          <label>Date To</label>
+          <input type="date" class="form-control" [(ngModel)]="filterDateTo" (change)="applyFilters()">
         </div>
       </div>
       <div class="filters-actions">
-        <span class="active-count">{{ getActiveFilterCount() }} filter(s) active</span>
+        <span class="active-count" *ngIf="getActiveFilterCount() > 0">{{ getActiveFilterCount() }} filter(s) active</span>
+        <span class="results-count">{{ filteredWorkOrders.length }} work order(s)</span>
         <div class="filters-buttons">
-          <button type="button" class="btn btn-secondary" (click)="applyFilters()">Apply Filters</button>
-          <button type="button" class="btn btn-outline" (click)="clearFilters()">Reset</button>
+          <button type="button" class="btn btn-outline" (click)="clearFilters()">
+            <span class="material-symbols-outlined">filter_alt_off</span> Reset
+          </button>
         </div>
       </div>
     </div>
 
-    <div class="bulk-upload-panel">
+    <!-- Bulk upload panel (collapsible) -->
+    <div class="bulk-upload-panel" *ngIf="showBulkUpload">
       <div class="bulk-upload-header">
         <div class="bulk-upload-title">
           <h3>Bulk Work Order Upload</h3>
@@ -106,7 +175,6 @@
           <button type="button" class="btn btn-outline" (click)="clearBulkUpload()" [disabled]="bulkUploading">Clear</button>
         </div>
       </div>
-
       <div class="bulk-upload-results" *ngIf="bulkUploadResults">
         <div class="summary">
           <span>Successful: {{ bulkUploadResults.successful?.length || 0 }}</span>
@@ -122,53 +190,127 @@
       </div>
     </div>
 
+    <!-- Bulk action bar -->
+    <div class="bulk-action-bar" *ngIf="selectedIds.size > 0">
+      <span class="bulk-count">{{ selectedIds.size }} selected</span>
+      <div class="bulk-actions">
+        <div class="bulk-action-group">
+          <label>Assign to:</label>
+          <select class="form-control form-control-sm" #assignSelect (change)="bulkAssignTo(assignSelect.value); assignSelect.value = ''">
+            <option value="">Select...</option>
+            <option *ngFor="let m of mechanics" [value]="m.id">{{ m.name }}</option>
+          </select>
+        </div>
+        <div class="bulk-action-group">
+          <label>Priority:</label>
+          <select class="form-control form-control-sm" #prioritySelect (change)="bulkChangePriority(prioritySelect.value); prioritySelect.value = ''">
+            <option value="">Select...</option>
+            <option *ngFor="let p of priorities" [value]="p">{{ p }}</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline" (click)="exportSelectedCsv()">
+          <span class="material-symbols-outlined">download</span> Export CSV
+        </button>
+        <button type="button" class="btn btn-sm btn-outline" (click)="clearSelection()">
+          Clear
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading -->
     <div *ngIf="loading" class="loading">
       <div class="spinner"></div>
     </div>
 
+    <!-- Table -->
     <div class="table-wrap" *ngIf="!loading">
       <table class="table">
         <thead>
           <tr>
+            <th class="th-checkbox">
+              <input type="checkbox" [checked]="allSelected" (change)="toggleSelectAll()">
+            </th>
             <th>WO #</th>
-            <th>Vehicle</th>
+            <th>Title</th>
             <th>Customer</th>
-            <th>Location</th>
+            <th>Vehicle</th>
             <th>Type</th>
-            <th>Total</th>
+            <th>Priority</th>
             <th>Status</th>
-            <th>Invoice</th>
+            <th>Assigned</th>
+            <th>Total</th>
+            <th>Age</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let record of workOrders">
-            <td><strong>{{ record.work_order_number }}</strong></td>
-            <td>{{ record.vehicle_unit }}</td>
+          <tr
+            *ngFor="let record of filteredWorkOrders; trackBy: trackById"
+            [class.row-selected]="isRowSelected(record.id)"
+            (click)="viewWorkOrder(record)"
+          >
+            <td class="td-checkbox" (click)="$event.stopPropagation()">
+              <input type="checkbox" [checked]="isRowSelected(record.id)" (change)="toggleRowSelect(record.id)">
+            </td>
+            <td><strong class="wo-number">{{ record.work_order_number }}</strong></td>
+            <td class="td-title">{{ record.title || '-' }}</td>
             <td>{{ record.customer_name || 'Internal' }}</td>
-            <td>{{ record.location_name }}</td>
-            <td>{{ record.type }}</td>
-            <td>${{ record.total_amount | number:'1.2-2' }}</td>
+            <td>{{ record.vehicle_unit || '-' }}</td>
             <td>
-              <span [class]="'badge ' + getStatusBadge(record.status)">
-                {{ record.status }}
-              </span>
+              <span *ngIf="record.type" [class]="'badge ' + getTypeBadge(record.type)">{{ record.type }}</span>
+              <span *ngIf="!record.type">-</span>
             </td>
             <td>
-              <span *ngIf="record.invoice_status" [class]="'badge ' + getInvoiceBadge(record.invoice_status)">
-                {{ record.invoice_status }}
-              </span>
-              <span *ngIf="!record.invoice_status">—</span>
+              <span *ngIf="record.priority" [class]="'badge ' + getPriorityBadge(record.priority)">{{ record.priority }}</span>
+              <span *ngIf="!record.priority">-</span>
             </td>
-            <td class="actions-cell">
-              <button type="button" class="btn-action btn-view" (click)="editWorkOrder(record)">View</button>
-              <button type="button" class="btn-action btn-invoice" (click)="generateInvoice(record)" [disabled]="record.status !== 'COMPLETED' || record.invoice_id">
-                Generate Invoice
+            <td>
+              <span [class]="'badge ' + getStatusBadge(record.status)">{{ formatStatusLabel(record.status) }}</span>
+            </td>
+            <td>{{ record.assigned_to_name || '-' }}</td>
+            <td class="td-total">${{ record.total_amount | number:'1.2-2' }}</td>
+            <td class="td-age">{{ getAge(record.created_at) }}</td>
+            <td class="actions-cell" (click)="$event.stopPropagation()">
+              <button type="button" class="btn-action btn-view" (click)="viewWorkOrder(record)" title="View">
+                <span class="material-symbols-outlined">visibility</span>
+              </button>
+              <button type="button" class="btn-action btn-edit" (click)="editWorkOrder(record)" title="Edit">
+                <span class="material-symbols-outlined">edit</span>
+              </button>
+              <button
+                *ngIf="record.status === 'DRAFT'"
+                type="button"
+                class="btn-action btn-status"
+                (click)="quickStatusChange(record, 'IN_PROGRESS')"
+                title="Start"
+              >
+                <span class="material-symbols-outlined">play_arrow</span>
+              </button>
+              <button
+                *ngIf="record.status === 'IN_PROGRESS'"
+                type="button"
+                class="btn-action btn-status-complete"
+                (click)="quickStatusChange(record, 'COMPLETED')"
+                title="Complete"
+              >
+                <span class="material-symbols-outlined">check</span>
+              </button>
+              <button
+                *ngIf="record.status === 'COMPLETED' && !record.invoice_id"
+                type="button"
+                class="btn-action btn-invoice"
+                (click)="generateInvoice(record)"
+                title="Generate Invoice"
+              >
+                <span class="material-symbols-outlined">receipt_long</span>
               </button>
             </td>
           </tr>
-          <tr *ngIf="workOrders.length === 0">
-            <td colspan="9" class="empty-row">No work orders found with the selected filters.</td>
+          <tr *ngIf="filteredWorkOrders.length === 0">
+            <td colspan="12" class="empty-row">
+              <span class="material-symbols-outlined empty-icon">search_off</span>
+              <span>No work orders found with the selected filters.</span>
+            </td>
           </tr>
         </tbody>
       </table>
