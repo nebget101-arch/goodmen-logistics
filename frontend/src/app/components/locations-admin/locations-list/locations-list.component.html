@@ -14,6 +14,10 @@
         <span class="material-symbols-outlined">refresh</span>
         {{ loading ? 'Loading…' : 'Refresh' }}
       </button>
+      <button type="button" class="btn btn-primary" (click)="onAddLocation()">
+        <span class="material-symbols-outlined">add</span>
+        Add Location
+      </button>
     </div>
   </header>
 
@@ -82,7 +86,15 @@
               City / State
               <span class="material-symbols-outlined sort-icon">{{ sortIcon('city') }}</span>
             </th>
-            <th scope="col">Contact</th>
+            <th scope="col">Phone</th>
+            <th scope="col" class="col-count" title="Active bins">
+              <span class="material-symbols-outlined col-count-icon">shelves</span>
+              Bins
+            </th>
+            <th scope="col" class="col-count" title="Assigned users">
+              <span class="material-symbols-outlined col-count-icon">group</span>
+              Users
+            </th>
             <th scope="col" class="sortable" (click)="onSort('active')" (keydown.enter)="onSort('active')" tabindex="0">
               Status
               <span class="material-symbols-outlined sort-icon">{{ sortIcon('active') }}</span>
@@ -92,7 +104,7 @@
         </thead>
         <tbody>
           <tr *ngIf="locations.length === 0">
-            <td colspan="6" class="empty-state">
+            <td colspan="8" class="empty-state">
               <span class="material-symbols-outlined">location_off</span>
               No locations found.
             </td>
@@ -121,10 +133,22 @@
               <ng-template #noCityState><span class="muted">—</span></ng-template>
             </td>
 
-            <!-- Contact -->
+            <!-- Phone -->
             <td>
-              <span *ngIf="loc.contact_name; else noContact">{{ loc.contact_name }}</span>
-              <ng-template #noContact><span class="muted">—</span></ng-template>
+              <span *ngIf="loc.phone; else noPhone" class="loc-phone">{{ loc.phone }}</span>
+              <ng-template #noPhone><span class="muted">—</span></ng-template>
+            </td>
+
+            <!-- # Bins -->
+            <td class="col-count">
+              <span *ngIf="loc.bin_count != null" class="count-badge">{{ loc.bin_count }}</span>
+              <span *ngIf="loc.bin_count == null" class="muted">—</span>
+            </td>
+
+            <!-- # Users -->
+            <td class="col-count">
+              <span *ngIf="loc.user_count != null" class="count-badge">{{ loc.user_count }}</span>
+              <span *ngIf="loc.user_count == null" class="muted">—</span>
             </td>
 
             <!-- Active status pill -->
@@ -137,25 +161,48 @@
             <!-- Actions -->
             <td class="col-actions">
               <div class="action-group">
+                <!-- Edit (details) -->
                 <button
                   type="button"
-                  class="btn-sm btn-outline"
+                  class="btn-icon"
                   [disabled]="actionLoadingId === loc.id"
                   (click)="onEditLocation(loc)"
-                  title="Edit location"
+                  title="Edit location details"
                 >
                   <span class="material-symbols-outlined">edit</span>
-                  Edit
                 </button>
+
+                <!-- Manage Bins -->
                 <button
                   type="button"
-                  class="btn-sm btn-secondary-sm"
+                  class="btn-icon"
                   [disabled]="actionLoadingId === loc.id"
-                  (click)="onManageLocation(loc)"
-                  title="Manage location"
+                  (click)="onManageBins(loc)"
+                  title="Manage bins"
                 >
-                  <span class="material-symbols-outlined">settings</span>
-                  Manage
+                  <span class="material-symbols-outlined">shelves</span>
+                </button>
+
+                <!-- Manage Users -->
+                <button
+                  type="button"
+                  class="btn-icon"
+                  [disabled]="actionLoadingId === loc.id"
+                  (click)="onManageUsers(loc)"
+                  title="Manage users"
+                >
+                  <span class="material-symbols-outlined">manage_accounts</span>
+                </button>
+
+                <!-- Delete -->
+                <button
+                  type="button"
+                  class="btn-icon btn-icon-danger"
+                  [disabled]="actionLoadingId === loc.id"
+                  (click)="onDeleteLocation(loc)"
+                  title="Delete location"
+                >
+                  <span class="material-symbols-outlined">delete</span>
                 </button>
               </div>
             </td>
@@ -193,3 +240,21 @@
     </div>
   </section>
 </div>
+
+<!-- Edit / Add location dialog -->
+<app-location-edit-dialog
+  [location]="editingLocation"
+  [isOpen]="showEditDialog"
+  [initialTab]="editDialogInitialTab"
+  (saved)="onEditDialogSaved()"
+  (close)="onEditDialogClose()"
+></app-location-edit-dialog>
+
+<!-- Delete location dialog -->
+<app-delete-location-dialog
+  [location]="deletingLocation"
+  [isOpen]="showDeleteDialog"
+  (deleted)="onLocationDeleted($event)"
+  (markedInactive)="onLocationMarkedInactive($event)"
+  (close)="onDeleteDialogClose()"
+></app-delete-location-dialog>

@@ -1,6 +1,7 @@
 import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ApiService } from '../../../services/api.service';
-import { LocationListItem, LocationListResponse, LocationType } from '../../../models/location.model';
+import { Location, LocationListItem, LocationListResponse, LocationType } from '../../../models/location.model';
+import { DialogTab } from '../location-edit-dialog/location-edit-dialog.component';
 
 @Component({
   selector: 'app-locations-list',
@@ -25,6 +26,15 @@ export class LocationsListComponent implements OnInit {
   loading = false;
   error = '';
   actionLoadingId: string | null = null;
+
+  // ── Edit dialog ────────────────────────────────────────────────────────────
+  showEditDialog = false;
+  editingLocation: Location | null = null;
+  editDialogInitialTab: DialogTab = 'details';
+
+  // ── Delete dialog ──────────────────────────────────────────────────────────
+  showDeleteDialog = false;
+  deletingLocation: LocationListItem | null = null;
 
   readonly typeOptions: Array<{ value: LocationType; label: string }> = [
     { value: 'SHOP',      label: 'Shop' },
@@ -102,13 +112,97 @@ export class LocationsListComponent implements OnInit {
     this.loadLocations();
   }
 
-  onEditLocation(loc: LocationListItem): void {
-    console.log('[LocationsAdmin] Edit location stub:', loc.id, loc.name);
+  // ── Add / Edit / Manage ───────────────────────────────────────────────────
+
+  /** Open dialog in "Add" mode (no location pre-loaded). */
+  onAddLocation(): void {
+    this.editingLocation = null;
+    this.editDialogInitialTab = 'details';
+    this.showEditDialog = true;
+    this.cdr.markForCheck();
   }
 
-  onManageLocation(loc: LocationListItem): void {
-    console.log('[LocationsAdmin] Manage location stub:', loc.id, loc.name);
+  /** Fetch full location then open in "Edit" mode on the Details tab. */
+  onEditLocation(loc: LocationListItem): void {
+    this.actionLoadingId = loc.id;
+    this.cdr.markForCheck();
+    this.api.getLocationById(loc.id).subscribe({
+      next: (res: any) => {
+        this.editingLocation = res?.data ?? res;
+        this.editDialogInitialTab = 'details';
+        this.showEditDialog = true;
+        this.actionLoadingId = null;
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.actionLoadingId = null;
+        this.cdr.markForCheck();
+      }
+    });
   }
+
+  /** Open edit dialog pre-navigated to the Bins tab. */
+  onManageBins(loc: LocationListItem): void {
+    this.editingLocation = loc as unknown as Location;
+    this.editDialogInitialTab = 'bins';
+    this.showEditDialog = true;
+    this.cdr.markForCheck();
+  }
+
+  /** Open edit dialog pre-navigated to the Users tab. */
+  onManageUsers(loc: LocationListItem): void {
+    this.editingLocation = loc as unknown as Location;
+    this.editDialogInitialTab = 'users';
+    this.showEditDialog = true;
+    this.cdr.markForCheck();
+  }
+
+  // ── Edit dialog events ─────────────────────────────────────────────────────
+
+  onEditDialogSaved(): void {
+    this.showEditDialog = false;
+    this.editingLocation = null;
+    this.loadLocations();
+  }
+
+  onEditDialogClose(): void {
+    this.showEditDialog = false;
+    this.editingLocation = null;
+    this.cdr.markForCheck();
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+
+  onDeleteLocation(loc: LocationListItem): void {
+    this.deletingLocation = loc;
+    this.showDeleteDialog = true;
+    this.cdr.markForCheck();
+  }
+
+  onDeleteDialogClose(): void {
+    this.showDeleteDialog = false;
+    this.deletingLocation = null;
+    this.cdr.markForCheck();
+  }
+
+  onLocationDeleted(id: string): void {
+    this.locations = this.locations.filter(l => l.id !== id);
+    this.total = Math.max(0, this.total - 1);
+    this.showDeleteDialog = false;
+    this.deletingLocation = null;
+    this.cdr.markForCheck();
+  }
+
+  onLocationMarkedInactive(id: string): void {
+    this.locations = this.locations.map(l =>
+      l.id === id ? { ...l, active: false } : l
+    );
+    this.showDeleteDialog = false;
+    this.deletingLocation = null;
+    this.cdr.markForCheck();
+  }
+
+  // ── Display helpers ────────────────────────────────────────────────────────
 
   getTypeLabel(type: LocationType | null): string {
     if (!type) { return '—'; }

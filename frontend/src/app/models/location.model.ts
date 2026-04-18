@@ -107,6 +107,10 @@ export interface LocationListItem {
   active: boolean;
   created_at: string;
   updated_at: string;
+  /** Aggregate: count of active bins at this location (returned by list endpoint). */
+  bin_count: number | null;
+  /** Aggregate: count of assigned users at this location (returned by list endpoint). */
+  user_count: number | null;
 }
 
 export interface Location extends LocationListItem {

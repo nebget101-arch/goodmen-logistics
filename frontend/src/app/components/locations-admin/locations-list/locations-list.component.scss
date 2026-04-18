@@ -399,6 +399,103 @@
   }
 }
 
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: #0284c7;
+  border: 1px solid #0369a1;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover:not(:disabled) {
+    background: #0369a1;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+// ─── Icon-only action buttons ─────────────────────────────────────────────────
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid rgba(51, 65, 85, 0.7);
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+
+  .material-symbols-outlined {
+    font-size: 1rem;
+  }
+
+  &:hover:not(:disabled) {
+    background: rgba(51, 65, 85, 0.5);
+    border-color: #38bdf8;
+    color: #38bdf8;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.btn-icon-danger {
+  &:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.15);
+    border-color: #f87171;
+    color: #f87171;
+  }
+}
+
+// ─── Count columns ────────────────────────────────────────────────────────────
+
+.col-count {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.col-count-icon {
+  font-size: 0.85rem;
+  vertical-align: middle;
+  margin-right: 2px;
+}
+
+.count-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(51, 65, 85, 0.4);
+  border: 1px solid rgba(51, 65, 85, 0.7);
+  color: #cbd5e1;
+  min-width: 24px;
+  text-align: center;
+}
+
+// ─── Phone cell ───────────────────────────────────────────────────────────────
+
+.loc-phone {
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 // ─── Pagination ───────────────────────────────────────────────────────────────
 
 .pagination {
