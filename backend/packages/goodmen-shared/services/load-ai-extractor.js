@@ -39,8 +39,30 @@ The JSON MUST match this exact schema and key names:
     "address1": string | null
   },
   "stops": [
-    { "type": "PICKUP" | "DELIVERY", "sequence": 1, "date": string | null, "city": string | null, "state": string | null, "zip": string | null, "address1": string | null }
+    {
+      "type": "PICKUP" | "DELIVERY",
+      "sequence": 1,
+      "date": string | null,
+      "city": string | null,
+      "state": string | null,
+      "zip": string | null,
+      "address1": string | null,
+      "appointment_time_from": string | null,
+      "appointment_time_to": string | null,
+      "contact_name": string | null,
+      "contact_phone": string | null,
+      "facility_name": string | null,
+      "reference_number": string | null
+    }
   ],
+  "commodity": string | null,
+  "weight_lbs": number | null,
+  "pieces": number | null,
+  "special_instructions": string | null,
+  "is_hazmat": boolean | null,
+  "detention_free_hours": number | null,
+  "temperature_min": number | null,
+  "temperature_max": number | null,
   "notes": string | null,
   "confidence": { "brokerName": number, "poNumber": number, "rate": number, "pickup": number, "delivery": number },
   "rawTextSnippet": string | null
@@ -57,6 +79,14 @@ Stops (REQUIRED – always return this array):
 - One pickup only: stops = [{ type: "PICKUP", sequence: 1, ... }].
 - One pickup + one delivery: stops = [{ type: "PICKUP", sequence: 1, ... }, { type: "DELIVERY", sequence: 2, ... }].
 - Multiple pickups and/or deliveries: include every stop in order. Do not merge multiple stops into one.
+- Multi-stop routes (A->B->C->D): extract ALL stops in route order. A rate con may have 2, 3, 4, or more stops. Output every one.
+
+Stop-level fields (per stop):
+- "appointment_time_from" / "appointment_time_to": appointment or time window for the stop (e.g. "08:00" and "12:00" for "8:00 AM - 12:00 PM"). Use 24-hour HH:MM format. If only a single appointment time is given, put it in "appointment_time_from" and set "appointment_time_to" to null. If no time window is mentioned, set both to null.
+- "contact_name": facility contact person name (e.g. "John Smith"). null if not listed.
+- "contact_phone": facility contact phone number. null if not listed.
+- "facility_name": name of the warehouse, distribution center, shipper, or consignee (e.g. "Amazon FBA - MDW2", "Walmart DC #6087"). null if not listed.
+- "reference_number": stop-level reference, PO, or appointment number specific to that stop (often labeled REF#, PO#, Appt#, DN#). null if not listed. This is different from the top-level poNumber/loadId.
 
 Shipment Stops section (common on rate cons):
 - Many rate confirmations have a "Shipment Stops" or similar section with lettered stops: A, B, C, D, E, F, etc.
@@ -66,6 +96,18 @@ Shipment Stops section (common on rate cons):
 - Example: A=PICK, B–F=DROP means 1 pickup and 5 deliveries -> 6 entries in "stops" (one PICKUP, five DELIVERY), in order. If you see six lettered blocks, output six stops.
 
 Also set "pickup" to the first pickup stop and "delivery" to the last delivery stop. If only one address appears, put it in stops as type PICKUP and set delivery to null.
+
+Cargo details (top-level fields):
+- "commodity": description of the freight/cargo (e.g. "Dry Grocery", "Electronics", "Frozen Meat"). null if not listed.
+- "weight_lbs": total shipment weight in pounds (numeric only). null if not listed.
+- "pieces": total piece/pallet/unit count (numeric only). null if not listed.
+
+Special instructions and flags (top-level fields):
+- "special_instructions": free-text with any special handling, driver instructions, appointment requirements, detention rules, or delivery notes found in the document. Concatenate multiple instructions separated by "; ". null if none found.
+- "is_hazmat": true if the load is marked as hazardous material (HazMat, HAZMAT, Hazardous). false if explicitly marked non-hazmat. null if not mentioned.
+- "detention_free_hours": number of free detention hours before charges apply (e.g. 2 if "2 hours free detention"). null if not mentioned.
+- "temperature_min": minimum required temperature in Fahrenheit for reefer/temp-controlled loads. null if not a temp-controlled load or not mentioned.
+- "temperature_max": maximum required temperature in Fahrenheit for reefer/temp-controlled loads. null if not mentioned.
 
 Document structure:
 - In multi-page rate confirmations, the first pages are often terms/boilerplate; load details (stops, rate, dates, addresses) are frequently on the final pages. Prefer and prioritize information from the end of the provided text when present.
@@ -295,7 +337,7 @@ async function getPdfText(buffer) {
 function filterRelevantLines(text) {
   if (!text) return '';
   const lines = text.split(/\r?\n/);
-  const keywords = /(shipment|stops|pick|drop|pickup|pick-up|delivery|consignee|shipper|origin|destination|deliver to|ship to|rate|total|linehaul|line haul|load|reference|broker|carrier|commodity|weight|address|conf#|order#|pieces|pkwy|street|blvd|ave|drive|appointment|lbs)/i;
+  const keywords = /(shipment|stops|pick|drop|pickup|pick-up|delivery|consignee|shipper|origin|destination|deliver to|ship to|rate|total|linehaul|line haul|load|reference|broker|carrier|commodity|weight|address|conf#|order#|pieces|pkwy|street|blvd|ave|drive|appointment|lbs|hazmat|hazardous|reefer|temperature|temp\b|detention|contact|phone|special\s*instructions|handling|pallets?|instructions)/i;
   const isShipmentStopsLine = /(shipment\s*stops|^\s*[A-F]\s*$|PICK|DROP)/i;
   const kept = [];
   for (let i = 0; i < lines.length; i += 1) {
@@ -339,10 +381,18 @@ async function extractLoadFromPdf(buffer, filename) {
       rate: null,
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
+      stops: [],
+      commodity: null,
+      weight_lbs: null,
+      pieces: null,
+      special_instructions: null,
+      is_hazmat: null,
+      detention_free_hours: null,
+      temperature_min: null,
+      temperature_max: null,
       notes: null,
       confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
       rawTextSnippet: null,
-      stops: [],
       provider: 'none',
       warning: 'OPENAI_API_KEY is not configured; returned empty extraction payload.'
     };
@@ -363,10 +413,18 @@ async function extractLoadFromPdf(buffer, filename) {
       rate: null,
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
+      stops: [],
+      commodity: null,
+      weight_lbs: null,
+      pieces: null,
+      special_instructions: null,
+      is_hazmat: null,
+      detention_free_hours: null,
+      temperature_min: null,
+      temperature_max: null,
       notes: null,
       confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
       rawTextSnippet: null,
-      stops: [],
       provider: 'none',
       warning: 'Failed to read text from PDF (it may be a scanned image or corrupted). Load not auto-extracted.'
     };
@@ -379,10 +437,18 @@ async function extractLoadFromPdf(buffer, filename) {
       rate: null,
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
+      stops: [],
+      commodity: null,
+      weight_lbs: null,
+      pieces: null,
+      special_instructions: null,
+      is_hazmat: null,
+      detention_free_hours: null,
+      temperature_min: null,
+      temperature_max: null,
       notes: null,
       confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
       rawTextSnippet: null,
-      stops: [],
       provider: 'none',
       warning: 'No text detected in PDF (likely a scanned image); cannot auto-extract.'
     };
@@ -396,10 +462,18 @@ async function extractLoadFromPdf(buffer, filename) {
       rate: null,
       pickup: { date: null, city: null, state: null, zip: null, address1: null },
       delivery: { date: null, city: null, state: null, zip: null, address1: null },
+      stops: [],
+      commodity: null,
+      weight_lbs: null,
+      pieces: null,
+      special_instructions: null,
+      is_hazmat: null,
+      detention_free_hours: null,
+      temperature_min: null,
+      temperature_max: null,
       notes: null,
       confidence: { brokerName: 0, poNumber: 0, rate: 0, pickup: 0, delivery: 0 },
       rawTextSnippet: null,
-      stops: [],
       provider: 'none',
       warning: `PDF text appears corrupted (font/encoding issue). Extraction used: ${extractionSource}. Try installing Poppler (pdftotext) on the server for better extraction.`
     };
@@ -456,7 +530,7 @@ async function extractLoadFromPdf(buffer, filename) {
       model: OPENAI_MODEL,
       messages,
       response_format: { type: 'json_object' },
-      max_tokens: 1500
+      max_tokens: 2500
     },
     {
       headers: {
@@ -489,7 +563,13 @@ async function extractLoadFromPdf(buffer, filename) {
         city: s.city ?? null,
         state: s.state ?? null,
         zip: s.zip != null ? String(s.zip).trim() : null,
-        address1: s.address1 ?? null
+        address1: s.address1 ?? null,
+        appointment_time_from: s.appointment_time_from ?? null,
+        appointment_time_to: s.appointment_time_to ?? null,
+        contact_name: s.contact_name ?? null,
+        contact_phone: s.contact_phone ?? null,
+        facility_name: s.facility_name ?? null,
+        reference_number: s.reference_number ?? null
       }))
       .sort((a, b) => a.sequence - b.sequence);
   }
@@ -506,7 +586,13 @@ async function extractLoadFromPdf(buffer, filename) {
         city: p.city ?? null,
         state: p.state ?? null,
         zip: p.zip != null ? String(p.zip).trim() : null,
-        address1: p.address1 ?? null
+        address1: p.address1 ?? null,
+        appointment_time_from: null,
+        appointment_time_to: null,
+        contact_name: null,
+        contact_phone: null,
+        facility_name: null,
+        reference_number: null
       });
     }
     if (hasDelivery) {
@@ -517,7 +603,13 @@ async function extractLoadFromPdf(buffer, filename) {
         city: d.city ?? null,
         state: d.state ?? null,
         zip: d.zip != null ? String(d.zip).trim() : null,
-        address1: d.address1 ?? null
+        address1: d.address1 ?? null,
+        appointment_time_from: null,
+        appointment_time_to: null,
+        contact_name: null,
+        contact_phone: null,
+        facility_name: null,
+        reference_number: null
       });
     }
   }
@@ -544,6 +636,14 @@ async function extractLoadFromPdf(buffer, filename) {
       address1: parsed.delivery?.address1 ?? null
     },
     stops,
+    commodity: parsed.commodity ?? null,
+    weight_lbs: parsed.weight_lbs != null ? Number(parsed.weight_lbs) : null,
+    pieces: parsed.pieces != null ? Number(parsed.pieces) : null,
+    special_instructions: parsed.special_instructions ?? null,
+    is_hazmat: typeof parsed.is_hazmat === 'boolean' ? parsed.is_hazmat : null,
+    detention_free_hours: parsed.detention_free_hours != null ? Number(parsed.detention_free_hours) : null,
+    temperature_min: parsed.temperature_min != null ? Number(parsed.temperature_min) : null,
+    temperature_max: parsed.temperature_max != null ? Number(parsed.temperature_max) : null,
     notes: parsed.notes ?? null,
     confidence: {
       brokerName: typeof parsed.confidence?.brokerName === 'number' ? parsed.confidence.brokerName : 0,
