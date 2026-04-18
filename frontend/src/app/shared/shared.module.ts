@@ -8,9 +8,10 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { AiSelectComponent } from './ai-select/ai-select.component';
 import { AiDatePickerComponent } from './ai-date-picker/ai-date-picker.component';
+import { BinPickerComponent } from './components/bin-picker/bin-picker.component';
 
 @NgModule({
-  declarations: [AiSelectComponent, AiDatePickerComponent],
+  declarations: [AiSelectComponent, AiDatePickerComponent, BinPickerComponent],
   imports: [
     CommonModule,
     FormsModule,
@@ -21,6 +22,6 @@ import { AiDatePickerComponent } from './ai-date-picker/ai-date-picker.component
     MatInputModule,
     MatSelectModule
   ],
-  exports: [AiSelectComponent, AiDatePickerComponent]
+  exports: [AiSelectComponent, AiDatePickerComponent, BinPickerComponent]
 })
 export class SharedModule {}
