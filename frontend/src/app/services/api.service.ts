@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, timeout } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
+import { LocationBin, BinFormValue, BulkBinPayload, LocationListResponse } from '../models/location.model';
 
 @Injectable({
   providedIn: 'root'
@@ -16,7 +17,7 @@ export class ApiService {
     return this.baseUrl;
   }
 
-  // ── Locations — FN-691 / FN-698 ─────────────────────────────────────────
+  // ── Locations — FN-691 / FN-698 / FN-699 ────────────────────────────────
 
   /** Legacy — kept for backward compatibility */
   getLocations(): Observable<any> {
@@ -119,6 +120,14 @@ export class ApiService {
 
   deleteLocationSupplyRule(locationId: string, ruleId: string): Observable<any> {
     return this.http.delete<any>(`${this.baseUrl}/locations/${locationId}/supply-rules/${ruleId}`);
+  }
+
+  // ── Location Bins — Bulk Create (FN-699) ─────────────────────────────────
+
+  bulkCreateBins(locationId: string, payload: BulkBinPayload): Observable<{ created: LocationBin[] }> {
+    return this.http.post<{ created: LocationBin[] }>(
+      `${this.baseUrl}/locations/${locationId}/bins/bulk`, payload
+    );
   }
 
   // FMCSA company info lookup (legacy — shop clients context)

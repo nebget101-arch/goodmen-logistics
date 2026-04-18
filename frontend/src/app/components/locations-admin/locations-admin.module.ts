@@ -3,10 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { LocationsListComponent } from './locations-list/locations-list.component';
+import { BinsTabComponent } from './bins-tab/bins-tab.component';
 
 @NgModule({
   declarations: [
-    LocationsListComponent
+    LocationsListComponent,
+    BinsTabComponent
   ],
   imports: [
     CommonModule,
@@ -14,7 +16,8 @@ import { LocationsListComponent } from './locations-list/locations-list.componen
     RouterModule
   ],
   exports: [
-    LocationsListComponent
+    LocationsListComponent,
+    BinsTabComponent
   ]
 })
 export class LocationsAdminModule {}
