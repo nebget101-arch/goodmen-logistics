@@ -109,7 +109,12 @@ router.get('/', requirePermission('locations.view'), async (req, res) => {
     params.push(pageSize);
     params.push(offset);
     const dataResult = await query(
-      `SELECT ${LIST_COLS} FROM locations WHERE ${whereClause} ORDER BY name ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      `SELECT l.id, l.name, l.address, l.city, l.state, l.zip, l.code,
+              l.location_type, l.active, l.timezone, l.contact_name, l.phone,
+              l.created_at, l.updated_at,
+              (SELECT COUNT(*)::int FROM location_bins lb WHERE lb.location_id = l.id AND lb.active = true) AS bin_count,
+              (SELECT COUNT(*)::int FROM user_locations ul WHERE ul.location_id = l.id) AS user_count
+       FROM locations l WHERE ${whereClause} ORDER BY l.name ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
 

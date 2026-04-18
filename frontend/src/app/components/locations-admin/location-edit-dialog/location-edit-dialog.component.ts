@@ -60,6 +60,8 @@ export class LocationEditDialogComponent implements OnChanges {
   /** Pass null to open in Add mode; pass a Location to open in Edit mode. */
   @Input() location: Location | null = null;
   @Input() isOpen = false;
+  /** Which tab to activate when the dialog opens. Defaults to 'details'. */
+  @Input() initialTab: DialogTab = 'details';
 
   /** Emitted after a successful save so the parent can refresh the list. */
   @Output() saved = new EventEmitter<void>();
@@ -121,7 +123,7 @@ export class LocationEditDialogComponent implements OnChanges {
   // ── Form helpers ──────────────────────────────────────────────────────────
 
   resetForm(): void {
-    this.activeTab = 'details';
+    this.activeTab = this.initialTab || 'details';
     this.errors = {};
     this.saving = false;
 
