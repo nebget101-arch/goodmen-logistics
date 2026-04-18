@@ -1,0 +1,127 @@
+.sa-container {
+  position: relative;
+  width: 100%;
+}
+
+.sa-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sa-search-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 14px;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.sa-input {
+  padding-left: 32px !important;
+}
+
+.sa-spinner {
+  position: absolute;
+  right: 10px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(148, 163, 184, 0.3);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: sa-spin 0.6s linear infinite;
+}
+
+@keyframes sa-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Dropdown */
+.sa-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+}
+
+.sa-section-header {
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  background: rgba(30, 41, 59, 0.5);
+}
+
+.sa-divider {
+  height: 1px;
+  background: rgba(51, 65, 85, 0.6);
+  margin: 2px 0;
+}
+
+.sa-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #e2e8f0;
+  transition: background 0.1s ease;
+}
+
+.sa-item:hover,
+.sa-item-active {
+  background: rgba(51, 65, 85, 0.6);
+}
+
+.sa-item-text {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sa-truncation {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
+  border-top: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.sa-empty {
+  padding: 16px 12px;
+  font-size: 13px;
+  color: #64748b;
+  text-align: center;
+}
+
+.sa-loading {
+  padding: 16px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* Scrollbar */
+.sa-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+.sa-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sa-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 3px;
+}
