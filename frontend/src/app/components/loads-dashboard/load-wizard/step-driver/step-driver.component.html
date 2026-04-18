@@ -1,0 +1,239 @@
+<!-- ─── Step 3: Driver & Equipment ────────────────────────────────────────── -->
+
+<!-- ─── Driver section ─────────────────────────────────────────────────────── -->
+<div class="step-section">
+  <div class="step-section-header">
+    <span class="material-symbols-outlined">person</span>
+    <h3>Driver</h3>
+  </div>
+
+  <!-- Last Used chips (shown only when search is empty and no driver selected) -->
+  <div class="last-used-row" *ngIf="!driverId && recentDrivers.length && !driverSearch.trim()">
+    <span class="last-used-label">Last used:</span>
+    <button
+      type="button"
+      class="chip chip-driver"
+      *ngFor="let d of recentDrivers"
+      (click)="selectDriver(d)"
+      [title]="d.name"
+    >
+      <span class="material-symbols-outlined chip-icon">person</span>
+      {{ d.name }}
+    </button>
+  </div>
+
+  <!-- Driver autocomplete -->
+  <div class="autocomplete-wrap" (click)="$event.stopPropagation()">
+    <div class="autocomplete-field" [class.has-value]="!!driverId">
+      <span class="material-symbols-outlined field-prefix-icon">badge</span>
+      <input
+        type="text"
+        class="autocomplete-input"
+        placeholder="Search driver…"
+        [(ngModel)]="driverSearch"
+        [ngModelOptions]="{standalone: true}"
+        (focus)="driverDropdownOpen = true"
+        (input)="onDriverInputChange()"
+        autocomplete="off"
+      />
+      <button
+        type="button"
+        class="field-clear-btn"
+        *ngIf="driverId"
+        (click)="clearDriver()"
+        title="Clear driver"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+      <span class="material-symbols-outlined field-caret" (click)="driverDropdownOpen = !driverDropdownOpen">
+        {{ driverDropdownOpen ? 'expand_less' : 'expand_more' }}
+      </span>
+    </div>
+
+    <!-- Driver dropdown -->
+    <div class="autocomplete-dropdown" *ngIf="driverDropdownOpen">
+      <div class="dropdown-loading" *ngIf="loadingDrivers">
+        <span class="material-symbols-outlined spin-sm">progress_activity</span> Loading drivers…
+      </div>
+      <ng-container *ngIf="!loadingDrivers">
+        <div class="dropdown-empty" *ngIf="filteredDrivers.length === 0">No drivers found</div>
+        <button
+          type="button"
+          class="dropdown-item"
+          *ngFor="let d of filteredDrivers"
+          (click)="selectDriver(d)"
+          [class.is-selected]="d.id === driverId"
+        >
+          <span class="material-symbols-outlined dropdown-item-icon">person</span>
+          <span class="dropdown-item-label">{{ d.name }}</span>
+          <span class="material-symbols-outlined dropdown-item-check" *ngIf="d.id === driverId">check</span>
+        </button>
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- Selected driver info: position + truck/trailer pre-fill note -->
+  <div class="driver-info-row" *ngIf="selectedDriver">
+    <!-- Current position -->
+    <div class="driver-info-chip" *ngIf="driverPositionDisplay">
+      <span class="material-symbols-outlined">location_on</span>
+      <span>Currently in <strong>{{ driverPositionDisplay }}</strong></span>
+    </div>
+    <!-- Auto-fill notice -->
+    <div class="driver-info-chip driver-info-chip--note" *ngIf="selectedDriver.truckId || selectedDriver.trailerId">
+      <span class="material-symbols-outlined">auto_awesome</span>
+      <span>Truck/trailer auto-filled from driver assignment</span>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Truck section ──────────────────────────────────────────────────────── -->
+<div class="step-section">
+  <div class="step-section-header">
+    <span class="material-symbols-outlined">local_shipping</span>
+    <h3>Truck</h3>
+    <!-- Show all toggle when filtered to driver's truck -->
+    <button
+      type="button"
+      class="show-all-btn"
+      *ngIf="hasDriverAssignedTruck"
+      (click)="showAllTrucks = true; truckDropdownOpen = true"
+    >
+      Show all trucks
+    </button>
+    <button
+      type="button"
+      class="show-all-btn show-all-btn--active"
+      *ngIf="showAllTrucks && !!driverId"
+      (click)="showAllTrucks = false; truckDropdownOpen = true"
+    >
+      Show assigned only
+    </button>
+  </div>
+
+  <!-- Truck autocomplete -->
+  <div class="autocomplete-wrap" (click)="$event.stopPropagation()">
+    <div class="autocomplete-field" [class.has-value]="!!truckId">
+      <span class="material-symbols-outlined field-prefix-icon">local_shipping</span>
+      <input
+        type="text"
+        class="autocomplete-input"
+        placeholder="Search truck…"
+        [(ngModel)]="truckSearch"
+        [ngModelOptions]="{standalone: true}"
+        (focus)="truckDropdownOpen = true"
+        (input)="truckDropdownOpen = true"
+        autocomplete="off"
+      />
+      <!-- Owner badge on selected truck -->
+      <span
+        class="owner-badge"
+        *ngIf="selectedTruck?.equipment_owner"
+        [title]="'Owner: ' + selectedTruck!.equipment_owner"
+      >
+        {{ selectedTruck!.equipment_owner }}
+      </span>
+      <button
+        type="button"
+        class="field-clear-btn"
+        *ngIf="truckId"
+        (click)="clearTruck()"
+        title="Clear truck"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+      <span class="material-symbols-outlined field-caret" (click)="truckDropdownOpen = !truckDropdownOpen">
+        {{ truckDropdownOpen ? 'expand_less' : 'expand_more' }}
+      </span>
+    </div>
+
+    <!-- Truck dropdown -->
+    <div class="autocomplete-dropdown" *ngIf="truckDropdownOpen">
+      <div class="dropdown-loading" *ngIf="loadingTrucks">
+        <span class="material-symbols-outlined spin-sm">progress_activity</span> Loading trucks…
+      </div>
+      <ng-container *ngIf="!loadingTrucks">
+        <div class="dropdown-empty" *ngIf="filteredTrucks.length === 0">No trucks found</div>
+        <button
+          type="button"
+          class="dropdown-item"
+          *ngFor="let t of filteredTrucks"
+          (click)="selectTruck(t)"
+          [class.is-selected]="t.id === truckId"
+        >
+          <span class="material-symbols-outlined dropdown-item-icon">local_shipping</span>
+          <span class="dropdown-item-label">{{ _truckLabel(t) }}</span>
+          <!-- Owner badge in dropdown -->
+          <span class="owner-badge owner-badge--sm" *ngIf="t.equipment_owner">
+            {{ t.equipment_owner }}
+          </span>
+          <span class="material-symbols-outlined dropdown-item-check" *ngIf="t.id === truckId">check</span>
+        </button>
+      </ng-container>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Trailer section ────────────────────────────────────────────────────── -->
+<div class="step-section">
+  <div class="step-section-header">
+    <span class="material-symbols-outlined">rv_hookup</span>
+    <h3>Trailer <span class="optional-label">(optional)</span></h3>
+  </div>
+
+  <!-- Trailer autocomplete -->
+  <div class="autocomplete-wrap" (click)="$event.stopPropagation()">
+    <div class="autocomplete-field" [class.has-value]="!!trailerId">
+      <span class="material-symbols-outlined field-prefix-icon">rv_hookup</span>
+      <input
+        type="text"
+        class="autocomplete-input"
+        placeholder="Search trailer…"
+        [(ngModel)]="trailerSearch"
+        [ngModelOptions]="{standalone: true}"
+        (focus)="trailerDropdownOpen = true"
+        (input)="trailerDropdownOpen = true"
+        autocomplete="off"
+      />
+      <button
+        type="button"
+        class="field-clear-btn"
+        *ngIf="trailerId"
+        (click)="clearTrailer()"
+        title="Clear trailer"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+      <span class="material-symbols-outlined field-caret" (click)="trailerDropdownOpen = !trailerDropdownOpen">
+        {{ trailerDropdownOpen ? 'expand_less' : 'expand_more' }}
+      </span>
+    </div>
+
+    <!-- Trailer dropdown -->
+    <div class="autocomplete-dropdown" *ngIf="trailerDropdownOpen">
+      <div class="dropdown-loading" *ngIf="loadingTrailers">
+        <span class="material-symbols-outlined spin-sm">progress_activity</span> Loading trailers…
+      </div>
+      <ng-container *ngIf="!loadingTrailers">
+        <div class="dropdown-empty" *ngIf="filteredTrailers.length === 0">No trailers found</div>
+        <button
+          type="button"
+          class="dropdown-item"
+          *ngFor="let t of filteredTrailers"
+          (click)="selectTrailer(t)"
+          [class.is-selected]="t.id === trailerId"
+        >
+          <span class="material-symbols-outlined dropdown-item-icon">rv_hookup</span>
+          <span class="dropdown-item-label">{{ _equipLabel(t) }}</span>
+          <span class="material-symbols-outlined dropdown-item-check" *ngIf="t.id === trailerId">check</span>
+        </button>
+      </ng-container>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Validation hint ───────────────────────────────────────────────────── -->
+<div class="step-hint" *ngIf="!isValid">
+  <span class="material-symbols-outlined">info</span>
+  Select a driver to continue.
+</div>
