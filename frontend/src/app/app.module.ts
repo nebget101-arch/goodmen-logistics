@@ -79,6 +79,7 @@ import { LocationEditDialogComponent } from './components/locations-admin/locati
 import { UsersTabComponent } from './components/locations-admin/location-edit-dialog/users-tab/users-tab.component';
 import { SupplyRulesTabComponent } from './components/locations-admin/location-edit-dialog/supply-rules-tab/supply-rules-tab.component';
 import { DeleteLocationDialogComponent } from './components/locations-admin/delete-location-dialog/delete-location-dialog.component';
+import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
 
 @NgModule({
   declarations: [
@@ -140,7 +141,8 @@ import { DeleteLocationDialogComponent } from './components/locations-admin/dele
     LocationEditDialogComponent,
     UsersTabComponent,
     SupplyRulesTabComponent,
-    DeleteLocationDialogComponent
+    DeleteLocationDialogComponent,
+    InventoryItemEditDialogComponent
   ],
   imports: [
     BrowserModule,

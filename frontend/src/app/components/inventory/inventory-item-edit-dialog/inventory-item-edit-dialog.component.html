@@ -1,0 +1,114 @@
+<!-- FN-705 — Inventory item edit dialog -->
+
+<div
+  *ngIf="isOpen && item"
+  class="iied-backdrop"
+  (click)="onBackdropClick($event)"
+>
+  <div class="iied-dialog" role="dialog" aria-modal="true" aria-labelledby="iied-title">
+
+    <!-- Header -->
+    <div class="iied-header">
+      <div class="iied-title-block">
+        <span id="iied-title" class="iied-title">Edit Inventory Item</span>
+        <span class="iied-subtitle">{{ item.sku }} — {{ item.name }}</span>
+      </div>
+      <button
+        type="button"
+        class="iied-close"
+        (click)="onClose()"
+        [disabled]="saving"
+        aria-label="Close"
+      >✕</button>
+    </div>
+
+    <!-- Body -->
+    <div class="iied-body">
+
+      <!-- Location context (read-only) -->
+      <div class="iied-info-row" *ngIf="item.location_name">
+        <span class="iied-info-label">Location</span>
+        <span class="iied-info-value">{{ item.location_name }}</span>
+      </div>
+
+      <!-- Current stock (read-only) -->
+      <div class="iied-info-grid">
+        <div class="iied-info-cell">
+          <span class="iied-info-label">On Hand</span>
+          <span class="iied-info-value">{{ item.on_hand_qty ?? '—' }}</span>
+        </div>
+        <div class="iied-info-cell">
+          <span class="iied-info-label">Available</span>
+          <span class="iied-info-value">{{ item.available_qty ?? '—' }}</span>
+        </div>
+        <div class="iied-info-cell">
+          <span class="iied-info-label">Status</span>
+          <span class="iied-info-value">{{ item.status ?? '—' }}</span>
+        </div>
+      </div>
+
+      <div class="iied-divider"></div>
+
+      <!-- Bin picker — FN-705 core change -->
+      <div class="iied-field">
+        <app-bin-picker
+          [locationId]="locationId"
+          [(value)]="form.bin_id"
+          [allowCreate]="true"
+          [fallbackToText]="true"
+          [label]="'Bin Location'"
+          [placeholder]="'Select a bin…'"
+        ></app-bin-picker>
+
+        <!-- Legacy bin_location note -->
+        <div *ngIf="showLegacyNote" class="iied-legacy-note">
+          <span class="iied-legacy-icon">ℹ</span>
+          Previous bin (text): <strong>{{ legacyBinLocation }}</strong>.
+          Select a bin above to replace it with a proper bin record.
+        </div>
+      </div>
+
+      <!-- Reorder level -->
+      <div class="iied-field">
+        <label class="iied-label" for="iied-reorder-level">Reorder Level</label>
+        <input
+          id="iied-reorder-level"
+          type="number"
+          class="iied-input"
+          [(ngModel)]="form.reorder_level"
+          placeholder="e.g. 5"
+          min="0"
+          step="1"
+          [disabled]="saving"
+        />
+        <span class="iied-hint">Trigger a reorder alert when on-hand drops below this number.</span>
+      </div>
+
+      <!-- Save error -->
+      <div *ngIf="saveError" class="iied-error">
+        <span class="iied-error-icon">⚠</span> {{ saveError }}
+      </div>
+
+    </div><!-- /.iied-body -->
+
+    <!-- Footer -->
+    <div class="iied-footer">
+      <button
+        type="button"
+        class="iied-btn iied-btn-cancel"
+        (click)="onClose()"
+        [disabled]="saving"
+      >Cancel</button>
+      <button
+        type="button"
+        class="iied-btn iied-btn-save"
+        (click)="onSave()"
+        [disabled]="saving"
+      >
+        <span *ngIf="saving" class="iied-spinner"></span>
+        {{ saving ? 'Saving…' : 'Save Changes' }}
+      </button>
+    </div>
+
+  </div><!-- /.iied-dialog -->
+</div><!-- /.iied-backdrop -->
