@@ -81,6 +81,7 @@ import { UsersTabComponent } from './components/locations-admin/location-edit-di
 import { SupplyRulesTabComponent } from './components/locations-admin/location-edit-dialog/supply-rules-tab/supply-rules-tab.component';
 import { DeleteLocationDialogComponent } from './components/locations-admin/delete-location-dialog/delete-location-dialog.component';
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
+import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
 
 @NgModule({
   declarations: [
@@ -143,7 +144,8 @@ import { InventoryItemEditDialogComponent } from './components/inventory/invento
     UsersTabComponent,
     SupplyRulesTabComponent,
     DeleteLocationDialogComponent,
-    InventoryItemEditDialogComponent
+    InventoryItemEditDialogComponent,
+    AutoReplenishmentComponent
   ],
   imports: [
     BrowserModule,
