@@ -74,6 +74,11 @@ import { ConsentFormComponent } from './components/onboarding-packet/consent-for
 import { EmployerHistoryTieredComponent } from './components/onboarding-packet/employer-history-tiered/employer-history-tiered.component';
 import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
+import { LocationsListComponent } from './components/locations-admin/locations-list/locations-list.component';
+import { LocationEditDialogComponent } from './components/locations-admin/location-edit-dialog/location-edit-dialog.component';
+import { UsersTabComponent } from './components/locations-admin/location-edit-dialog/users-tab/users-tab.component';
+import { SupplyRulesTabComponent } from './components/locations-admin/location-edit-dialog/supply-rules-tab/supply-rules-tab.component';
+import { DeleteLocationDialogComponent } from './components/locations-admin/delete-location-dialog/delete-location-dialog.component';
 
 @NgModule({
   declarations: [
@@ -130,7 +135,12 @@ import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-tr
     ConsentFormComponent,
     EmployerHistoryTieredComponent,
     DisqualificationHistoryComponent,
-    IdleTruckAlertsComponent
+    IdleTruckAlertsComponent,
+    LocationsListComponent,
+    LocationEditDialogComponent,
+    UsersTabComponent,
+    SupplyRulesTabComponent,
+    DeleteLocationDialogComponent
   ],
   imports: [
     BrowserModule,

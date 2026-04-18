@@ -41,6 +41,7 @@ import { InternalTrialAdminGuard } from './guards/internal-trial-admin.guard';
 import { BillingAdminGuard } from './guards/billing-admin.guard';
 import { BillingComponent } from './billing/billing.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
+import { LocationsListComponent } from './components/locations-admin/locations-list/locations-list.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
@@ -246,6 +247,12 @@ const routes: Routes = [
     path: 'admin/trial-requests',
     component: TrialRequestsAdminComponent,
     canActivate: [AuthGuard, InternalTrialAdminGuard]
+  },
+  {
+    path: 'admin/locations',
+    component: LocationsListComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: [PERMISSIONS.LOCATIONS_MANAGE, PERMISSIONS.LOCATIONS_VIEW] }
   },
   { path: 'login', component: LoginComponent },
   { path: 'forgot-password', component: ForgotPasswordComponent },
