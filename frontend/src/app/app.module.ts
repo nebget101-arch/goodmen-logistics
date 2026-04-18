@@ -62,7 +62,8 @@ import { TrialBannerComponent } from './shared/trial-banner/trial-banner.compone
 import { BillingComponent } from './billing/billing.component';
 import { AuthInterceptor } from './auth.interceptor';
 import { CacheBustingInterceptor } from './cache-busting.interceptor';
-import { HasPermissionDirective, HasAnyPermissionDirective } from './directives/has-permission.directive';
+// FN-771: HasPermissionDirective + HasAnyPermissionDirective moved into SharedModule
+// so they're available in lazy-loaded feature modules (e.g. LoadsDashboardModule).
 import { DriverComplianceSectionComponent } from './components/drivers/driver-compliance-section/driver-compliance-section.component';
 import { PreEmploymentGateComponent } from './components/drivers/pre-employment-gate/pre-employment-gate.component';
 import { InvestigationPanelComponent } from './components/drivers/investigation-panel/investigation-panel.component';
@@ -81,8 +82,6 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
 @NgModule({
   declarations: [
     AppComponent,
-    HasPermissionDirective,
-    HasAnyPermissionDirective,
     DashboardComponent,
     DriversComponent,
     DispatchDriversComponent,
