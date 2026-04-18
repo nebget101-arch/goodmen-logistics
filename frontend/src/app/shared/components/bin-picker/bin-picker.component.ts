@@ -257,7 +257,7 @@ export class BinPickerComponent implements OnInit, OnChanges {
       zone:     this.createForm.zone.trim() || null,
     };
 
-    this.api.createLocationBin(this.locationId, payload as Record<string, unknown>).subscribe({
+    this.api.createLocationBin(this.locationId, payload as unknown as Record<string, unknown>).subscribe({
       next: (newBin: LocationBin) => {
         this.creating = false;
         this.showCreateDialog = false;
