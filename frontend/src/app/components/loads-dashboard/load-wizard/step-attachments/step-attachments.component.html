@@ -1,0 +1,137 @@
+<!-- FN-736 — Step 4: Attachments — drag-drop upload + typed categories -->
+<div class="sa-container">
+
+  <!-- ── Section header ───────────────────────────────────────────────────── -->
+  <div class="sa-header">
+    <div class="sa-title-row">
+      <h3 class="sa-title">Attachments</h3>
+      <span class="sa-count" *ngIf="attachments.length > 0">
+        {{ attachments.length }} file{{ attachments.length !== 1 ? 's' : '' }}
+      </span>
+    </div>
+    <p class="sa-subtitle">
+      Upload rate confirmations, BOLs, PODs, and other documents.
+      Drag files here or click to browse.
+    </p>
+  </div>
+
+  <!-- ── AI auto-attach badge ─────────────────────────────────────────────── -->
+  <div class="sa-ai-badge" *ngIf="aiExtractedPdf">
+    <span class="material-symbols-outlined sa-ai-icon">smart_toy</span>
+    <span>
+      AI-extracted PDF auto-attached as
+      <strong>Rate Confirmation</strong>
+    </span>
+  </div>
+
+  <!-- ── Drop zone ────────────────────────────────────────────────────────── -->
+  <div
+    class="sa-dropzone"
+    [class.is-drag-over]="isDragOver"
+    (dragover)="onDragOver($event)"
+    (dragleave)="onDragLeave($event)"
+    (drop)="onDrop($event)"
+  >
+    <div class="sa-dropzone-content">
+      <span class="material-symbols-outlined sa-dropzone-icon">cloud_upload</span>
+      <p class="sa-dropzone-label">
+        Drag &amp; drop files here
+      </p>
+      <span class="sa-dropzone-divider">or</span>
+      <label class="sa-browse-btn">
+        Browse Files
+        <input
+          type="file"
+          multiple
+          class="sa-file-input"
+          (change)="onFileInputChange($event)"
+        />
+      </label>
+      <p class="sa-dropzone-hint">
+        PDF, JPEG, PNG, TIFF, XLSX, DOCX &mdash; max 25 MB per file
+      </p>
+    </div>
+  </div>
+
+  <!-- ── File list ────────────────────────────────────────────────────────── -->
+  <div class="sa-file-list" *ngIf="attachments.length > 0">
+    <div
+      class="sa-file-card"
+      *ngFor="let att of attachments; trackBy: trackByUid"
+    >
+      <!-- File icon + info -->
+      <div class="sa-file-info">
+        <span class="material-symbols-outlined sa-file-icon">
+          {{ getFileIcon(att.file) }}
+        </span>
+        <div class="sa-file-meta">
+          <span class="sa-file-name" [title]="att.file.name">
+            {{ att.file.name }}
+          </span>
+          <span class="sa-file-size">
+            {{ formatSize(att.file.size) }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Upload progress bar (shown when uploading) -->
+      <div class="sa-progress-bar-container" *ngIf="att.uploadProgress !== null">
+        <div class="sa-progress-bar">
+          <div
+            class="sa-progress-fill"
+            [style.width.%]="att.uploadProgress"
+          ></div>
+        </div>
+        <span class="sa-progress-text">{{ att.uploadProgress }}%</span>
+      </div>
+
+      <!-- Per-file metadata controls -->
+      <div class="sa-file-controls">
+        <!-- Type dropdown -->
+        <div class="sa-control-group">
+          <label class="sa-control-label">Type</label>
+          <select
+            class="sa-select"
+            [ngModel]="att.type"
+            (ngModelChange)="onTypeChange(att.uid, $event)"
+          >
+            <option
+              *ngFor="let opt of typeOptions"
+              [value]="opt.value"
+            >
+              {{ opt.label }}
+            </option>
+          </select>
+        </div>
+
+        <!-- Notes input -->
+        <div class="sa-control-group sa-notes-group">
+          <label class="sa-control-label">Notes</label>
+          <input
+            type="text"
+            class="sa-input"
+            placeholder="Optional notes..."
+            [ngModel]="att.notes"
+            (ngModelChange)="onNotesChange(att.uid, $event)"
+          />
+        </div>
+
+        <!-- Remove button -->
+        <button
+          type="button"
+          class="sa-remove-btn"
+          (click)="removeAttachment(att.uid)"
+          title="Remove file"
+        >
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Empty state ──────────────────────────────────────────────────────── -->
+  <div class="sa-empty" *ngIf="attachments.length === 0 && !aiExtractedPdf">
+    <span class="material-symbols-outlined sa-empty-icon">folder_open</span>
+    <p class="sa-empty-text">No files attached yet. You can add them now or after saving the load.</p>
+  </div>
+</div>
