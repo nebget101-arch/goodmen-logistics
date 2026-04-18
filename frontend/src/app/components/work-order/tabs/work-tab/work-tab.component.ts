@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ApiService } from '../../../../services/api.service';
 import { lastValueFrom } from 'rxjs';
 import * as QRCode from 'qrcode';
@@ -19,172 +19,273 @@ export class WoWorkTabComponent implements OnDestroy {
 
   @Output() reloadWorkOrder = new EventEmitter<void>();
 
-  /* Part search */
-  filteredParts: any[] = [];
-  partSearch = '';
-  showPartDropdown = false;
+  // ─── Add Part dialog ───────────────────────────────────────────────────────
+  showAddPartDialog = false;
+  dialogMode: 'catalog' | 'barcode' | 'manual' = 'catalog';
+  dialogError = '';
+  dialogSuccess = '';
+  dialogSubmitting = false;
+  dialogLocationId = '';
 
-  /* Reserve part form */
-  reservePartForm: any = { partId: '', qtyRequested: 1, unitPrice: null, locationId: '' };
+  // Catalog mode
+  catalogSearch = '';
+  catalogFiltered: any[] = [];
+  catalogSelected: any = null;
+  catalogQty = 1;
+  catalogPrice: number | null = null;
+  catalogShowDropdown = false;
+  stockWarning = '';
 
-  /* Scanner */
-  scanBatchInput = '';
-  scanBatchProcessing = false;
-  scanBatchErrors: string[] = [];
-  scanBatchSuccess = '';
-  scannedParts: Array<{
-    partId: string; sku: string; name: string; qty: number;
-    unitPrice: number; packQty: number; barcodeValue?: string;
-  }> = [];
-  scanCache: Record<string, any> = {};
+  // Barcode mode
+  dialogBarcodeInput = '';
+  dialogBarcodeProcessing = false;
 
-  /* Phone bridge */
+  // Manual mode
+  manualSku = '';
+  manualName = '';
+  manualQty = 1;
+  manualPrice = 0;
+
+  // ─── Bulk actions ──────────────────────────────────────────────────────────
+  bulkActioning = false;
+  bulkError = '';
+
+  // ─── Phone bridge ──────────────────────────────────────────────────────────
   bridgeMobileUrl = '';
   bridgeSessionId = '';
   bridgeConnected = false;
   bridgeEvents: EventSource | null = null;
   qrCodeDataUrl = '';
-  scanBridgeError = '';
+  bridgeError = '';
 
-  /* Technician dropdown */
+  // ─── Technician dropdown ───────────────────────────────────────────────────
   activeMechanicIndex: number | null = null;
 
-  constructor(private apiService: ApiService) {}
+  constructor(private apiService: ApiService, private cdr: ChangeDetectorRef) {}
 
   ngOnDestroy(): void {
     this.stopPhoneBridge();
   }
 
-  /* ─── Parts table ─── */
+  // ─── Add Part dialog ───────────────────────────────────────────────────────
 
-  addPart(): void {
-    this.workOrder.parts.push({});
+  openAddPartDialog(): void {
+    this.dialogLocationId = this.workOrder?.shopLocationId || '';
+    this.dialogMode = 'catalog';
+    this.dialogError = '';
+    this.dialogSuccess = '';
+    this.dialogSubmitting = false;
+    this.catalogSearch = '';
+    this.catalogFiltered = [];
+    this.catalogSelected = null;
+    this.catalogQty = 1;
+    this.catalogPrice = null;
+    this.catalogShowDropdown = false;
+    this.stockWarning = '';
+    this.dialogBarcodeInput = '';
+    this.dialogBarcodeProcessing = false;
+    this.manualSku = '';
+    this.manualName = '';
+    this.manualQty = 1;
+    this.manualPrice = 0;
+    this.showAddPartDialog = true;
+    this.cdr.markForCheck();
   }
 
-  removePart(index: number): void {
-    this.workOrder.parts.splice(index, 1);
+  closeAddPartDialog(): void {
+    this.showAddPartDialog = false;
+    this.stopPhoneBridge();
+    this.cdr.markForCheck();
   }
 
-  onPartLookup(index: number, lookupValue: string): void {
-    const selected = this.findPartByLookup(lookupValue);
-    if (!selected) return;
-    const part = this.workOrder.parts[index] || {};
-    part.partId = selected.id;
-    part.partName = selected.name;
-    part.partNumber = selected.sku;
-    part.quantity = part.quantity ?? 1;
-    part.unitCost = selected.unit_cost ?? selected.unit_price ?? part.unitCost;
-    part.binDisplay = this.resolveBinDisplay(selected);
-    this.updatePartTotals(index);
-    this.workOrder.parts[index] = part;
+  setDialogMode(mode: 'catalog' | 'barcode' | 'manual'): void {
+    this.dialogMode = mode;
+    this.dialogError = '';
+    this.dialogSuccess = '';
+    this.cdr.markForCheck();
   }
 
-  resolveBinDisplay(inventoryItem: any): string {
-    if (inventoryItem?.bin) {
-      const code = inventoryItem.bin.bin_code || '';
-      const name = inventoryItem.bin.bin_name || '';
-      return name ? `${code} (${name})` : code;
-    }
-    if (inventoryItem?.bin_code) {
-      const name = inventoryItem.bin_name || '';
-      return name ? `${inventoryItem.bin_code} (${name})` : inventoryItem.bin_code;
-    }
-    if (inventoryItem?.bin_location) return inventoryItem.bin_location;
-    return '';
-  }
+  // ─── Catalog mode ──────────────────────────────────────────────────────────
 
-  updatePartTotals(index: number): void {
-    const part = this.workOrder.parts[index];
-    if (!part) return;
-    const qty = Number(part.quantity) || 0;
-    const unitCost = Number(part.unitCost) || 0;
-    part.totalCost = qty * unitCost;
-    this.workOrder.parts[index] = part;
-  }
-
-  /* ─── Part search dropdown ─── */
-
-  onPartSearchChange(): void {
-    if (!this.partSearch) {
-      this.filteredParts = [];
-      this.showPartDropdown = false;
+  onCatalogSearchChange(): void {
+    if (!this.catalogSearch) {
+      this.catalogFiltered = [];
+      this.catalogShowDropdown = false;
+      this.catalogSelected = null;
+      this.stockWarning = '';
+      this.cdr.markForCheck();
       return;
     }
-    const search = this.partSearch.toLowerCase();
-    this.filteredParts = this.partsCatalog.filter((p: any) => {
+    const search = this.catalogSearch.toLowerCase();
+    this.catalogFiltered = this.partsCatalog.filter((p: any) => {
       const sku = (p.sku || '').toLowerCase();
       const name = (p.name || '').toLowerCase();
       const partNumber = (p.part_number || '').toLowerCase();
       return sku.includes(search) || name.includes(search) || partNumber.includes(search);
     }).slice(0, 50);
-    this.showPartDropdown = this.filteredParts.length > 0;
+    this.catalogShowDropdown = this.catalogFiltered.length > 0;
+    this.cdr.markForCheck();
   }
 
-  selectPart(part: any): void {
-    this.reservePartForm.partId = part.id;
-    this.partSearch = `${part.sku} - ${part.name}`;
-    this.showPartDropdown = false;
-    this.onReservePartChange();
+  onCatalogSelectPart(part: any): void {
+    this.catalogSelected = part;
+    this.catalogSearch = `${part.sku} — ${part.name}`;
+    this.catalogShowDropdown = false;
+    this.catalogPrice = part.unit_cost ?? part.unit_price ?? null;
+    this.stockWarning = '';
+    const qoh = part.quantity_on_hand ?? Infinity;
+    if (isFinite(qoh) && qoh < this.catalogQty) {
+      this.stockWarning = `Only ${qoh} in stock at selected location.`;
+    }
+    this.cdr.markForCheck();
   }
 
-  onPartBlur(): void {
-    setTimeout(() => { this.showPartDropdown = false; }, 200);
+  onCatalogBlur(): void {
+    setTimeout(() => {
+      this.catalogShowDropdown = false;
+      this.cdr.markForCheck();
+    }, 200);
   }
 
-  onPartHover(event: any, isEnter: boolean): void {
-    const element = event?.target as HTMLElement;
-    if (element) {
-      element.style.backgroundColor = isEnter ? 'rgba(59,130,246,0.15)' : 'transparent';
+  onCatalogQtyChange(): void {
+    if (!this.catalogSelected) { return; }
+    const qoh = this.catalogSelected.quantity_on_hand ?? Infinity;
+    this.stockWarning = isFinite(qoh) && qoh < this.catalogQty
+      ? `Only ${qoh} in stock at selected location.`
+      : '';
+    this.cdr.markForCheck();
+  }
+
+  async submitCatalog(override = false): Promise<void> {
+    if (!this.catalogSelected) { this.dialogError = 'Select a part from the list.'; return; }
+    if (!this.workOrderId) { this.dialogError = 'Save the work order first.'; return; }
+    const qoh = this.catalogSelected.quantity_on_hand ?? Infinity;
+    if (!override && isFinite(qoh) && qoh < this.catalogQty) {
+      this.stockWarning = `Only ${qoh} in stock. Use "Backorder" to proceed anyway.`;
+      return;
+    }
+    this.dialogSubmitting = true;
+    this.dialogError = '';
+    this.cdr.markForCheck();
+    try {
+      await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
+        partId: this.catalogSelected.id,
+        qtyRequested: this.catalogQty,
+        unitPrice: this.catalogPrice ?? this.catalogSelected.unit_cost ?? this.catalogSelected.unit_price ?? 0,
+        locationId: this.dialogLocationId || undefined,
+        taxable: true
+      }));
+      this.reloadWorkOrder.emit();
+      this.closeAddPartDialog();
+    } catch (err: any) {
+      this.dialogError = err?.error?.error || err?.message || 'Failed to add part.';
+    } finally {
+      this.dialogSubmitting = false;
+      this.cdr.markForCheck();
     }
   }
 
-  onReservePartChange(): void {
-    const selected = this.partsCatalog.find((p: any) => String(p.id) === String(this.reservePartForm.partId));
-    if (!selected) return;
-    if (this.reservePartForm.unitPrice === null || this.reservePartForm.unitPrice === undefined || this.reservePartForm.unitPrice === '') {
-      this.reservePartForm.unitPrice = selected.unit_cost ?? selected.unit_price ?? this.reservePartForm.unitPrice;
+  // ─── Barcode mode ──────────────────────────────────────────────────────────
+
+  onBarcodeKeyEnter(event: Event): void {
+    event.preventDefault();
+    const code = this.dialogBarcodeInput.trim();
+    if (code) { this.submitBarcode(code); }
+  }
+
+  async submitBarcode(code: string): Promise<void> {
+    const normalized = code.trim();
+    if (!normalized) { return; }
+    if (!this.workOrderId) {
+      this.dialogError = 'Save the work order first.';
+      this.cdr.markForCheck();
+      return;
+    }
+    this.dialogBarcodeProcessing = true;
+    this.dialogError = '';
+    this.cdr.markForCheck();
+    try {
+      const response = await lastValueFrom(
+        this.apiService.lookupBarcode(normalized, this.dialogLocationId || undefined)
+      );
+      const payload = response?.data || response;
+      const part = payload?.part || {};
+      if (!part?.id) { throw new Error('Barcode not linked to a part'); }
+      const packQty = Number(payload?.barcode?.pack_qty) || 1;
+      await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
+        partId: part.id,
+        qtyRequested: packQty,
+        unitPrice: part.unit_price ?? part.unit_cost ?? 0,
+        locationId: this.dialogLocationId || undefined,
+        taxable: true
+      }));
+      this.dialogBarcodeInput = '';
+      this.dialogSuccess = `Added: ${part.sku || normalized}`;
+      this.reloadWorkOrder.emit();
+    } catch (err: any) {
+      this.dialogError = err?.error?.error || err?.message || `Barcode lookup failed: ${normalized}`;
+    } finally {
+      this.dialogBarcodeProcessing = false;
+      this.cdr.markForCheck();
     }
   }
 
-  reservePart(): void {
-    if (!this.workOrderId) return;
-    const payload = {
-      partId: this.reservePartForm.partId,
-      qtyRequested: this.reservePartForm.qtyRequested,
-      unitPrice: this.reservePartForm.unitPrice,
-      locationId: this.reservePartForm.locationId || this.workOrder.shopLocationId,
-      taxable: true
-    };
-    this.apiService.reserveWorkOrderPart(this.workOrderId, payload).subscribe({
-      next: () => {
-        const selected = this.partsCatalog.find((p: any) => String(p.id) === String(this.reservePartForm.partId));
-        if (selected) {
-          const qty = Number(this.reservePartForm.qtyRequested) || 1;
-          const unitCost = Number(this.reservePartForm.unitPrice ?? selected.unit_cost ?? selected.unit_price ?? 0);
-          this.workOrder.parts.push({
-            partId: selected.id, partName: selected.name, partNumber: selected.sku,
-            quantity: qty, unitCost, totalCost: qty * unitCost
-          });
+  // ─── Manual mode ───────────────────────────────────────────────────────────
+
+  async submitManual(): Promise<void> {
+    if (!this.manualName.trim()) { this.dialogError = 'Part name is required.'; return; }
+
+    // Try to match by SKU in catalog if workOrderId is available
+    if (this.workOrderId) {
+      const match = this.manualSku
+        ? this.partsCatalog.find((p: any) => (p.sku || '').toLowerCase() === this.manualSku.toLowerCase())
+        : null;
+      if (match) {
+        this.dialogSubmitting = true;
+        this.dialogError = '';
+        this.cdr.markForCheck();
+        try {
+          await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
+            partId: match.id,
+            qtyRequested: this.manualQty,
+            unitPrice: this.manualPrice,
+            locationId: this.dialogLocationId || undefined,
+            taxable: true
+          }));
+          this.reloadWorkOrder.emit();
+          this.closeAddPartDialog();
+          return;
+        } catch (err: any) {
+          this.dialogError = err?.error?.error || err?.message || 'Failed to reserve part.';
+          this.dialogSubmitting = false;
+          this.cdr.markForCheck();
+          return;
         }
-        this.reservePartForm = { partId: '', qtyRequested: 1, unitPrice: null, locationId: this.workOrder.shopLocationId || '' };
-        this.partSearch = '';
-        this.reloadWorkOrder.emit();
       }
+    }
+
+    // No workOrderId or no catalog match — push to inline form array
+    if (!this.workOrder.parts) { this.workOrder.parts = []; }
+    this.workOrder.parts.push({
+      partName: this.manualName.trim(),
+      partNumber: this.manualSku.trim(),
+      quantity: this.manualQty,
+      unitCost: this.manualPrice,
+      totalCost: this.manualQty * this.manualPrice
     });
+    this.closeAddPartDialog();
   }
 
-  /* ─── Inventory parts actions ─── */
+  // ─── Inline row actions ────────────────────────────────────────────────────
 
   issuePart(line: any): void {
-    if (!this.workOrderId || !line?.id) return;
+    if (!this.workOrderId || !line?.id) { return; }
     if (line.part_id && line.status === 'BACKORDERED') {
       this.apiService.getPartById(line.part_id).subscribe({
         next: (response: any) => {
           try {
             const part = response?.data || response;
-            if (part && part.quantity_on_hand && part.quantity_on_hand > 0) {
-              line.status = 'PENDING';
-            }
+            if (part?.quantity_on_hand > 0) { line.status = 'PENDING'; }
             this.proceedWithIssuePart(line);
           } catch { this.proceedWithIssuePart(line); }
         },
@@ -196,14 +297,14 @@ export class WoWorkTabComponent implements OnDestroy {
   }
 
   proceedWithIssuePart(line: any): void {
-    if (!this.workOrderId) return;
+    if (!this.workOrderId) { return; }
     const reserved = Number(line.qty_reserved) || 0;
     const alreadyIssued = Number(line.qty_issued) || 0;
     const maxCanIssue = Math.max(0, reserved - alreadyIssued);
     if (maxCanIssue <= 0) { alert('No remaining reserved quantity to issue for this part'); return; }
     const qtyStr = prompt(`Qty to issue (max: ${maxCanIssue}):`, maxCanIssue.toString());
     const qty = qtyStr ? Number(qtyStr) : 0;
-    if (!qty || qty <= 0) return;
+    if (!qty || qty <= 0) { return; }
     if (qty > maxCanIssue) { alert(`Cannot issue more than ${maxCanIssue}.`); return; }
     this.apiService.issueWorkOrderPart(this.workOrderId, line.id, qty).subscribe({
       next: () => { this.reloadWorkOrder.emit(); }
@@ -211,15 +312,13 @@ export class WoWorkTabComponent implements OnDestroy {
   }
 
   returnPart(line: any): void {
-    if (!this.workOrderId || !line?.id) return;
+    if (!this.workOrderId || !line?.id) { return; }
     if (line.part_id && line.status === 'BACKORDERED') {
       this.apiService.getPartById(line.part_id).subscribe({
         next: (response: any) => {
           try {
             const part = response?.data || response;
-            if (part && part.quantity_on_hand && part.quantity_on_hand > 0) {
-              line.status = 'PENDING';
-            }
+            if (part?.quantity_on_hand > 0) { line.status = 'PENDING'; }
             this.proceedWithReturnPart(line);
           } catch { this.proceedWithReturnPart(line); }
         },
@@ -231,12 +330,12 @@ export class WoWorkTabComponent implements OnDestroy {
   }
 
   proceedWithReturnPart(line: any): void {
-    if (!this.workOrderId) return;
+    if (!this.workOrderId) { return; }
     const issued = Number(line.qty_issued) || 0;
     if (issued <= 0) { alert('No issued quantity to return for this part'); return; }
     const qtyStr = prompt(`Qty to return (max: ${issued}):`, issued.toString());
     const qty = qtyStr ? Number(qtyStr) : 0;
-    if (!qty || qty <= 0) return;
+    if (!qty || qty <= 0) { return; }
     if (qty > issued) { alert(`Cannot return more than ${issued}.`); return; }
     this.apiService.returnWorkOrderPart(this.workOrderId, line.id, qty).subscribe({
       next: () => { this.reloadWorkOrder.emit(); }
@@ -244,28 +343,157 @@ export class WoWorkTabComponent implements OnDestroy {
   }
 
   reserveFromLine(line: any): void {
-    if (!this.workOrderId || !line?.part_id) return;
+    if (!this.workOrderId || !line?.part_id) { return; }
     const requested = Number(line.qty_requested) || 0;
     const reserved = Number(line.qty_reserved) || 0;
     const remainingToReserve = Math.max(0, requested - reserved);
     if (remainingToReserve <= 0) { alert('No remaining quantity to reserve for this part'); return; }
     const qtyStr = prompt(`Qty to reserve (max: ${remainingToReserve}):`, remainingToReserve.toString());
     const qty = qtyStr ? Number(qtyStr) : 0;
-    if (!qty || qty <= 0) return;
+    if (!qty || qty <= 0) { return; }
     if (qty > remainingToReserve) { alert(`Cannot reserve more than ${remainingToReserve}.`); return; }
-    const payload = {
+    this.apiService.reserveWorkOrderPart(this.workOrderId, {
       partId: line.part_id, partLineId: line.id, qtyRequested: qty,
       unitPrice: line.unit_price, locationId: line.location_id || this.workOrder?.shopLocationId
-    };
-    this.apiService.reserveWorkOrderPart(this.workOrderId, payload).subscribe({
+    }).subscribe({
       next: () => { this.reloadWorkOrder.emit(); },
       error: (err: any) => { alert(err?.error?.error || err?.message || 'Failed to reserve part'); }
     });
   }
 
-  /* ─── Labor table ─── */
+  /** Remove an API-backed part line. NOTE: removeWorkOrderPart API not yet available. */
+  removeLine(_line: any): void {
+    alert('Remove via API is not yet available for inventory-tracked parts. Contact your administrator to cancel this reservation.');
+  }
+
+  /** Remove a form-backed inline part (before WO is saved). */
+  removeFormPart(index: number): void {
+    this.workOrder.parts.splice(index, 1);
+  }
+
+  // ─── Bulk actions ──────────────────────────────────────────────────────────
+
+  async issueAllReserved(): Promise<void> {
+    if (!this.workOrderId) { return; }
+    const reservedLines = (this.workOrderParts || []).filter((l: any) =>
+      ((Number(l.qty_reserved) || 0) - (Number(l.qty_issued) || 0)) > 0
+    );
+    if (!reservedLines.length) { return; }
+    this.bulkActioning = true;
+    this.bulkError = '';
+    this.cdr.markForCheck();
+    try {
+      for (const line of reservedLines) {
+        const maxCanIssue = (Number(line.qty_reserved) || 0) - (Number(line.qty_issued) || 0);
+        if (maxCanIssue <= 0) { continue; }
+        try {
+          await lastValueFrom(this.apiService.issueWorkOrderPart(this.workOrderId, line.id, maxCanIssue));
+        } catch (err: any) {
+          this.bulkError = err?.error?.error || err?.message || `Failed to issue ${line.part_name || line.id}`;
+        }
+      }
+      this.reloadWorkOrder.emit();
+    } finally {
+      this.bulkActioning = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async returnAllIssued(): Promise<void> {
+    if (!this.workOrderId) { return; }
+    const issuedLines = (this.workOrderParts || []).filter((l: any) => (Number(l.qty_issued) || 0) > 0);
+    if (!issuedLines.length) { return; }
+    this.bulkActioning = true;
+    this.bulkError = '';
+    this.cdr.markForCheck();
+    try {
+      for (const line of issuedLines) {
+        const qty = Number(line.qty_issued) || 0;
+        if (qty <= 0) { continue; }
+        try {
+          await lastValueFrom(this.apiService.returnWorkOrderPart(this.workOrderId, line.id, qty));
+        } catch (err: any) {
+          this.bulkError = err?.error?.error || err?.message || `Failed to return ${line.part_name || line.id}`;
+        }
+      }
+      this.reloadWorkOrder.emit();
+    } finally {
+      this.bulkActioning = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  // ─── Status badge ──────────────────────────────────────────────────────────
+
+  getStatusBadgeClass(status: string): string {
+    switch ((status || '').toUpperCase()) {
+      case 'RESERVED':    return 'status-badge status-reserved';
+      case 'ISSUED':      return 'status-badge status-issued';
+      case 'BACKORDERED': return 'status-badge status-backordered';
+      case 'RETURNED':    return 'status-badge status-returned';
+      case 'PENDING':     return 'status-badge status-pending';
+      default:            return 'status-badge status-pending';
+    }
+  }
+
+  // ─── Phone bridge ──────────────────────────────────────────────────────────
+
+  startPhoneBridge(): void {
+    this.bridgeError = '';
+    this.stopPhoneBridge();
+    this.apiService.createScanBridgeSession().subscribe({
+      next: (res: any) => {
+        const data = res?.data || {};
+        this.bridgeMobileUrl = data.mobileUrl || '';
+        this.bridgeSessionId = data.sessionId || '';
+        this.qrCodeDataUrl = '';
+        if (this.bridgeMobileUrl) {
+          QRCode.toDataURL(this.bridgeMobileUrl, { width: 250, margin: 2, color: { dark: '#000000', light: '#ffffff' } })
+            .then((url: string) => { this.qrCodeDataUrl = url; this.cdr.markForCheck(); })
+            .catch(() => {
+              this.qrCodeDataUrl = this.fallbackQrUrl(this.bridgeMobileUrl);
+              this.bridgeError = 'Failed to generate QR code locally; using fallback.';
+              this.cdr.markForCheck();
+            });
+        }
+        const base = this.apiService.getBaseUrl();
+        const eventsUrl = `${base}/scan-bridge/session/${encodeURIComponent(data.sessionId)}/events?readToken=${encodeURIComponent(data.readToken)}`;
+        this.bridgeEvents = new EventSource(eventsUrl);
+        this.bridgeEvents.addEventListener('ready', () => { this.bridgeConnected = true; this.cdr.markForCheck(); });
+        this.bridgeEvents.addEventListener('scan', (evt: MessageEvent) => {
+          try {
+            const payload = JSON.parse(evt.data || '{}');
+            const barcode = (payload.barcode || '').toString().trim();
+            // Scan event auto-adds directly to work order — no staging table
+            if (barcode) { this.submitBarcode(barcode); }
+          } catch { /* ignore parse errors */ }
+        });
+        this.bridgeEvents.onerror = () => {
+          this.bridgeConnected = false;
+          this.bridgeError = 'Phone scanner disconnected';
+          this.cdr.markForCheck();
+        };
+        this.cdr.markForCheck();
+      },
+      error: (err: any) => {
+        this.bridgeError = err?.error?.error || err?.message || 'Failed to start phone bridge';
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  stopPhoneBridge(): void {
+    if (this.bridgeEvents) { this.bridgeEvents.close(); this.bridgeEvents = null; }
+    this.bridgeConnected = false;
+    this.bridgeMobileUrl = '';
+    this.bridgeSessionId = '';
+    this.qrCodeDataUrl = '';
+  }
+
+  // ─── Labor table ───────────────────────────────────────────────────────────
 
   addLabor(): void {
+    if (!this.workOrder.labor) { this.workOrder.labor = []; }
     this.workOrder.labor.push({});
     this.updateAssignedToFromLabor();
   }
@@ -276,10 +504,10 @@ export class WoWorkTabComponent implements OnDestroy {
   }
 
   onMechanicLookup(index: number, lookupValue: string): void {
-    if (!lookupValue) return;
+    if (!lookupValue) { return; }
     const normalized = lookupValue.trim().toLowerCase();
     const tech = this.technicians.find((t: any) => (t.username || '').toLowerCase() === normalized);
-    if (!tech) return;
+    if (!tech) { return; }
     const labor = this.workOrder.labor[index] || {};
     labor.mechanicId = tech.id;
     labor.mechanicName = tech.username;
@@ -288,7 +516,7 @@ export class WoWorkTabComponent implements OnDestroy {
   }
 
   filterTechnicians(query: string | null | undefined): any[] {
-    if (!query) return this.technicians;
+    if (!query) { return this.technicians; }
     const normalized = query.trim().toLowerCase();
     return this.technicians.filter((t: any) => (t.username || '').toLowerCase().includes(normalized));
   }
@@ -309,7 +537,7 @@ export class WoWorkTabComponent implements OnDestroy {
 
   updateLaborTotals(index: number): void {
     const labor = this.workOrder.labor[index];
-    if (!labor) return;
+    if (!labor) { return; }
     const hours = Number(labor.hours) || 0;
     const rate = Number(labor.rate) || 0;
     labor.cost = hours * rate;
@@ -320,195 +548,38 @@ export class WoWorkTabComponent implements OnDestroy {
     const names = (this.workOrder.labor || [])
       .map((line: any) => (line?.mechanicName || '').trim())
       .filter((name: string) => name.length > 0);
-    const unique = Array.from(new Set(names));
-    this.workOrder.assignedTo = unique.join(', ');
+    this.workOrder.assignedTo = Array.from(new Set(names)).join(', ');
   }
 
-  /* ─── Barcode scanning ─── */
+  // ─── Display helpers ───────────────────────────────────────────────────────
 
-  async processScannedParts(): Promise<void> {
-    if (!this.workOrderId) return;
-    this.scanBatchErrors = [];
-    this.scanBatchSuccess = '';
-    if (!this.scannedParts.length && this.scanBatchInput.trim()) {
-      await this.buildScannedPartsFromText();
+  resolveBinDisplay(inventoryItem: any): string {
+    if (inventoryItem?.bin) {
+      const code = inventoryItem.bin.bin_code || '';
+      const name = inventoryItem.bin.bin_name || '';
+      return name ? `${code} (${name})` : code;
     }
-    if (!this.scannedParts.length) return;
-
-    const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
-    this.scanBatchProcessing = true;
-    try {
-      let successCount = 0;
-      for (const line of this.scannedParts) {
-        if (!line.partId || line.qty <= 0) continue;
-        try {
-          await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
-            partId: line.partId, qtyRequested: line.qty, unitPrice: line.unitPrice,
-            locationId: locationId || undefined, taxable: true
-          }));
-          successCount += 1;
-        } catch (error: any) {
-          this.scanBatchErrors.push(`${line.sku || line.partId}: ${error?.error?.error || error?.message || 'Reserve failed'}`);
-        }
-      }
-      if (successCount > 0) {
-        this.scanBatchSuccess = `Added ${successCount} part${successCount === 1 ? '' : 's'} from scan.`;
-        this.reloadWorkOrder.emit();
-      }
-    } catch (error: any) {
-      this.scanBatchErrors.push(error?.error?.error || error?.message || 'Scan failed');
-    } finally {
-      this.scanBatchInput = '';
-      this.scannedParts = [];
-      this.scanBatchProcessing = false;
-      this.stopPhoneBridge();
+    if (inventoryItem?.bin_code) {
+      const name = inventoryItem.bin_name || '';
+      return name ? `${inventoryItem.bin_code} (${name})` : inventoryItem.bin_code;
     }
+    if (inventoryItem?.bin_location) { return inventoryItem.bin_location; }
+    return '';
   }
 
-  startPhoneBridge(): void {
-    this.scanBridgeError = '';
-    this.stopPhoneBridge();
-    this.apiService.createScanBridgeSession().subscribe({
-      next: (res: any) => {
-        const data = res?.data || {};
-        this.bridgeMobileUrl = data.mobileUrl || '';
-        this.bridgeSessionId = data.sessionId || '';
-        this.qrCodeDataUrl = '';
-        if (this.bridgeMobileUrl) {
-          QRCode.toDataURL(this.bridgeMobileUrl, { width: 250, margin: 2, color: { dark: '#000000', light: '#ffffff' } })
-            .then((url: string) => { this.qrCodeDataUrl = url; })
-            .catch(() => {
-              this.qrCodeDataUrl = this.fallbackQrUrl(this.bridgeMobileUrl);
-              this.scanBridgeError = 'Failed to generate QR code locally; using fallback.';
-            });
-        }
-        const base = this.apiService.getBaseUrl();
-        const eventsUrl = `${base}/scan-bridge/session/${encodeURIComponent(data.sessionId)}/events?readToken=${encodeURIComponent(data.readToken)}`;
-        this.bridgeEvents = new EventSource(eventsUrl);
-        this.bridgeEvents.addEventListener('ready', () => { this.bridgeConnected = true; });
-        this.bridgeEvents.addEventListener('scan', (evt: MessageEvent) => {
-          try {
-            const payload = JSON.parse(evt.data || '{}');
-            const barcode = (payload.barcode || '').toString().trim();
-            if (barcode) this.appendScanCode(barcode);
-          } catch { /* ignore parse errors */ }
-        });
-        this.bridgeEvents.onerror = () => {
-          this.bridgeConnected = false;
-          this.scanBridgeError = 'Phone scanner disconnected';
-        };
-      },
-      error: (err: any) => {
-        this.scanBridgeError = err?.error?.error || err?.message || 'Failed to start phone bridge';
-      }
-    });
+  get hasReservedLines(): boolean {
+    return (this.workOrderParts || []).some((l: any) =>
+      ((Number(l.qty_reserved) || 0) - (Number(l.qty_issued) || 0)) > 0
+    );
   }
 
-  stopPhoneBridge(): void {
-    if (this.bridgeEvents) {
-      this.bridgeEvents.close();
-      this.bridgeEvents = null;
-    }
-    this.bridgeConnected = false;
-    this.bridgeMobileUrl = '';
-    this.bridgeSessionId = '';
-    this.qrCodeDataUrl = '';
+  get hasIssuedLines(): boolean {
+    return (this.workOrderParts || []).some((l: any) => (Number(l.qty_issued) || 0) > 0);
   }
 
-  removeScannedPart(index: number): void {
-    this.scannedParts.splice(index, 1);
-  }
-
-  async reserveSingleScannedPart(line: any): Promise<void> {
-    if (!this.workOrderId || !line?.partId) {
-      if (!this.workOrderId) this.scanBatchErrors.push('Save the work order before reserving scanned parts.');
-      return;
-    }
-    const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
-    const qty = Math.max(1, Number(line.qty) || 1);
-    line.qty = qty;
-    if (qty <= 0) return;
-    try {
-      this.scanBatchSuccess = 'Reserving...';
-      const response = await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
-        partId: line.partId, qtyRequested: qty, unitPrice: Number(line.unitPrice) || 0,
-        locationId: locationId || undefined, taxable: true
-      }));
-      const savedLine = response?.data || response;
-      if (savedLine) {
-        const existingIndex = (this.workOrderParts || []).findIndex((p: any) => String(p.id) === String(savedLine.id));
-        if (existingIndex >= 0) { this.workOrderParts[existingIndex] = savedLine; }
-        else { this.workOrderParts.unshift(savedLine); }
-      }
-      const idx = this.scannedParts.indexOf(line);
-      if (idx >= 0) this.removeScannedPart(idx);
-      this.scanBatchSuccess = `Reserved ${line.sku || line.partId}.`;
-      this.reloadWorkOrder.emit();
-    } catch (error: any) {
-      this.scanBatchErrors.push(`${line.sku || line.partId}: ${error?.error?.error || error?.message || 'Reserve failed'}`);
-    }
-  }
-
-  /* ─── Private helpers ─── */
-
-  private findPartByLookup(lookupValue: string): any | null {
-    if (!lookupValue) return null;
-    const normalized = lookupValue.trim().toLowerCase();
-    return this.partsCatalog.find((p: any) => {
-      const sku = (p.sku || '').toLowerCase();
-      const name = (p.name || '').toLowerCase();
-      const combined = `${p.sku || ''} - ${p.name || ''}`.toLowerCase();
-      return sku === normalized || name === normalized || combined === normalized;
-    }) || null;
-  }
-
-  private appendScanCode(code: string): void {
-    if (!code) return;
-    const existing = this.scanBatchInput ? `${this.scanBatchInput.trim()}\n` : '';
-    this.scanBatchInput = `${existing}${code}`.trim();
-    this.handleBarcodeScan(code);
-  }
+  // ─── Private helpers ───────────────────────────────────────────────────────
 
   private fallbackQrUrl(data: string): string {
     return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(data || '')}`;
-  }
-
-  private async buildScannedPartsFromText(): Promise<void> {
-    const codes = this.extractScanCodes(this.scanBatchInput);
-    for (const code of codes) { await this.handleBarcodeScan(code); }
-  }
-
-  private async handleBarcodeScan(code: string): Promise<void> {
-    const normalized = String(code || '').trim();
-    if (!normalized) return;
-    const cached = this.scanCache[normalized];
-    if (cached?.part) { this.upsertScannedPart(cached.part, cached.barcode, cached.packQty); return; }
-    try {
-      const locationId = this.reservePartForm.locationId || this.workOrder.shopLocationId || '';
-      const response = await lastValueFrom(this.apiService.lookupBarcode(normalized, locationId || undefined));
-      const payload = response?.data || response;
-      const barcode = payload?.barcode || {};
-      const part = payload?.part || {};
-      if (!part?.id) throw new Error('Barcode not linked to a part');
-      const packQty = Number(barcode.pack_qty) || 1;
-      this.scanCache[normalized] = { part, barcode, packQty };
-      this.upsertScannedPart(part, barcode, packQty);
-    } catch (error: any) {
-      this.scanBatchErrors.push(`${normalized}: ${error?.error?.error || error?.message || 'Lookup failed'}`);
-    }
-  }
-
-  private upsertScannedPart(part: any, barcode: any, _packQty: number): void {
-    const existing = this.scannedParts.find(p => p.partId === part.id);
-    if (existing) return;
-    const unitPrice = Number(part.unit_price ?? part.unit_cost ?? part.default_retail_price ?? part.default_cost ?? 0);
-    this.scannedParts.push({
-      partId: part.id, sku: part.sku || '', name: part.name || '',
-      qty: 1, unitPrice, packQty: 1, barcodeValue: barcode?.barcode_value
-    });
-  }
-
-  private extractScanCodes(input: string): string[] {
-    return (input || '').split(/[\s,]+/).map(v => v.trim()).filter(Boolean);
   }
 }
