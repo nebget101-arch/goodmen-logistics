@@ -889,8 +889,34 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     part.partNumber = selected.sku;
     part.quantity = part.quantity ?? 1;
     part.unitCost = selected.unit_cost ?? selected.unit_price ?? part.unitCost;
+    // FN-707: Resolve bin display from inventory bin_id or bin_location text
+    part.binDisplay = this.resolveBinDisplay(selected);
     this.updatePartTotals(index);
     this.workOrder.parts[index] = part;
+  }
+
+  /**
+   * FN-707: Resolve bin display string from inventory part data.
+   * Prefers bin_id resolved data (bin_code + bin_name) from location_bins.
+   * Falls back to legacy bin_location text if bin_id is null.
+   */
+  resolveBinDisplay(inventoryItem: any): string {
+    // bin object joined from location_bins via bin_id
+    if (inventoryItem?.bin) {
+      const code = inventoryItem.bin.bin_code || '';
+      const name = inventoryItem.bin.bin_name || '';
+      return name ? `${code} (${name})` : code;
+    }
+    // bin_code directly on the inventory item (flat join)
+    if (inventoryItem?.bin_code) {
+      const name = inventoryItem.bin_name || '';
+      return name ? `${inventoryItem.bin_code} (${name})` : inventoryItem.bin_code;
+    }
+    // Legacy fallback: bin_location free-text field
+    if (inventoryItem?.bin_location) {
+      return inventoryItem.bin_location;
+    }
+    return '';
   }
 
   onMechanicLookup(index: number, lookupValue: string): void {
