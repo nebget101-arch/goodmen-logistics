@@ -51,6 +51,7 @@
               <th>Name</th>
               <th>Qty</th>
               <th>Unit Cost</th>
+              <th>Bin Override</th>
               <th></th>
             </tr>
           </thead>
@@ -60,6 +61,15 @@
               <td>{{ line.name }}</td>
               <td>{{ line.qty }}</td>
               <td><input type="number" step="0.01" class="form-control inline-input" [(ngModel)]="line.unitCostAtTime" /></td>
+              <td class="bin-override-cell">
+                <app-bin-picker
+                  [locationId]="locationId"
+                  [(value)]="line.bin_id_override"
+                  [fallbackToText]="true"
+                  [allowCreate]="true"
+                  placeholder="Default bin"
+                ></app-bin-picker>
+              </td>
               <td><button type="button" class="btn-remove" (click)="removeLine(i)">Remove</button></td>
             </tr>
           </tbody>

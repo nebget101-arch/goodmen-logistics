@@ -266,6 +266,15 @@
   font-size: 13px;
 }
 
+.receiving-dashboard .bin-override-cell {
+  min-width: 180px;
+  max-width: 240px;
+}
+
+.receiving-dashboard .bin-override-cell app-bin-picker {
+  display: block;
+}
+
 .receiving-dashboard .btn-remove {
   padding: 6px 12px;
   border-radius: 8px;
