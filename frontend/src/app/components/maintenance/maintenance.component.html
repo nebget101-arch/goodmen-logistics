@@ -184,7 +184,7 @@
         <div class="failures" *ngIf="bulkUploadResults.failed?.length">
           <div class="failure-row" *ngFor="let failure of bulkUploadResults.failed">
             <strong>Row {{ failure.row }}:</strong>
-            <span>{{ failure.errors?.join(', ') }}</span>
+            <span>{{ failure.errors.join(', ') }}</span>
           </div>
         </div>
       </div>

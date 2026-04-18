@@ -5,5 +5,11 @@
     "types": []
   },
   "files": ["src/main.ts"],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/app/guards/permission.guard.spec.ts",
+    "src/app/services/access-control.service.spec.ts",
+    "src/app/services/permission-helper.service.spec.ts",
+    "src/environments/environment.prod.ts"
+  ]
 }
