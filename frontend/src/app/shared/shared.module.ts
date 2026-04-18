@@ -6,12 +6,14 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { DragDropModule } from '@angular/cdk/drag-drop';
 import { AiSelectComponent } from './ai-select/ai-select.component';
 import { AiDatePickerComponent } from './ai-date-picker/ai-date-picker.component';
 import { BinPickerComponent } from './components/bin-picker/bin-picker.component';
+import { StopCardComponent } from './components/stop-card/stop-card.component';
 
 @NgModule({
-  declarations: [AiSelectComponent, AiDatePickerComponent, BinPickerComponent],
+  declarations: [AiSelectComponent, AiDatePickerComponent, BinPickerComponent, StopCardComponent],
   imports: [
     CommonModule,
     FormsModule,
@@ -20,8 +22,9 @@ import { BinPickerComponent } from './components/bin-picker/bin-picker.component
     MatNativeDateModule,
     MatFormFieldModule,
     MatInputModule,
-    MatSelectModule
+    MatSelectModule,
+    DragDropModule
   ],
-  exports: [AiSelectComponent, AiDatePickerComponent, BinPickerComponent]
+  exports: [AiSelectComponent, AiDatePickerComponent, BinPickerComponent, StopCardComponent]
 })
 export class SharedModule {}

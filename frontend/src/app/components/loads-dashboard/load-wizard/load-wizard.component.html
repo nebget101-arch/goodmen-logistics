@@ -1,0 +1,152 @@
+<!-- ─── Backdrop ──────────────────────────────────────────────────────────── -->
+<div class="wizard-backdrop" (click)="requestClose()"></div>
+
+<!-- ─── Wizard Panel ───────────────────────────────────────────────────────── -->
+<div class="wizard-panel" role="dialog" aria-modal="true" [attr.aria-label]="title">
+
+  <!-- ── Header ────────────────────────────────────────────────────────────── -->
+  <div class="wizard-header">
+    <div class="wizard-title">
+      <span class="material-symbols-outlined">local_shipping</span>
+      <span>{{ title }}</span>
+    </div>
+    <button
+      type="button"
+      class="wizard-close-btn"
+      (click)="requestClose()"
+      title="Close wizard (Esc)"
+      [disabled]="saving"
+    >
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <!-- ── Step Progress Bar ─────────────────────────────────────────────────── -->
+  <nav class="wizard-progress" aria-label="Wizard steps">
+    <ol class="wizard-steps">
+      <li
+        *ngFor="let step of STEPS; let i = index"
+        class="wizard-step"
+        [class.is-active]="i === activeStep"
+        [class.is-completed]="isCompleted(i)"
+        [class.is-locked]="!canJumpTo(i)"
+        [attr.aria-current]="i === activeStep ? 'step' : null"
+      >
+        <!-- Connector line before each step (except first) -->
+        <span class="step-connector" *ngIf="i > 0" [class.is-done]="i <= activeStep"></span>
+
+        <!-- Step circle + click target -->
+        <button
+          type="button"
+          class="step-circle-btn"
+          (click)="goToStep(i)"
+          [disabled]="!canJumpTo(i)"
+          [title]="step.label + (canJumpTo(i) ? '' : ' (complete prior steps first)')"
+        >
+          <span class="step-circle">
+            <!-- Completed: show checkmark -->
+            <span
+              class="material-symbols-outlined step-icon-check"
+              *ngIf="isCompleted(i)"
+            >check</span>
+            <!-- Active or future: show step number -->
+            <span class="step-num" *ngIf="!isCompleted(i)">{{ i + 1 }}</span>
+          </span>
+        </button>
+
+        <span class="step-label">{{ step.label }}</span>
+      </li>
+    </ol>
+  </nav>
+
+  <!-- ── Step Content (projected from parent) ──────────────────────────────── -->
+  <div class="wizard-body">
+    <ng-content></ng-content>
+  </div>
+
+  <!-- ── Footer Navigation ─────────────────────────────────────────────────── -->
+  <div class="wizard-footer">
+    <!-- Left: Back -->
+    <div class="wizard-footer-left">
+      <button
+        type="button"
+        class="btn-wiz btn-wiz-outline"
+        (click)="back()"
+        [disabled]="isFirstStep || saving"
+      >
+        <span class="material-symbols-outlined">arrow_back</span>
+        Back
+      </button>
+    </div>
+
+    <!-- Right: Cancel / Next / Save -->
+    <div class="wizard-footer-right">
+      <button
+        type="button"
+        class="btn-wiz btn-wiz-ghost"
+        (click)="requestClose()"
+        [disabled]="saving"
+        title="Cancel (Esc)"
+      >
+        Cancel
+      </button>
+
+      <!-- Next step (not on last step) -->
+      <button
+        type="button"
+        class="btn-wiz btn-wiz-primary"
+        *ngIf="!isLastStep"
+        (click)="next()"
+        [disabled]="saving"
+        title="Next step (Enter)"
+      >
+        Next
+        <span class="material-symbols-outlined">arrow_forward</span>
+      </button>
+
+      <!-- Save & New (last step only) -->
+      <button
+        type="button"
+        class="btn-wiz btn-wiz-outline"
+        *ngIf="isLastStep"
+        (click)="saveAndNew.emit()"
+        [disabled]="saving"
+        title="Save and create another load (⌘⇧S)"
+      >
+        <span class="material-symbols-outlined">add</span>
+        Save &amp; New
+      </button>
+
+      <!-- Save & Close (last step only) -->
+      <button
+        type="button"
+        class="btn-wiz btn-wiz-primary"
+        *ngIf="isLastStep"
+        (click)="save.emit()"
+        [disabled]="saving"
+        title="Save load (⌘S)"
+      >
+        <span *ngIf="!saving" class="material-symbols-outlined">save</span>
+        <span *ngIf="saving"  class="material-symbols-outlined spin">progress_activity</span>
+        {{ saving ? 'Saving…' : 'Save &amp; Close' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Unsaved-changes confirmation dialog ───────────────────────────────── -->
+<div class="unsaved-overlay" *ngIf="showUnsavedWarning" role="alertdialog" aria-modal="true">
+  <div class="unsaved-dialog">
+    <span class="material-symbols-outlined unsaved-icon">warning</span>
+    <h3>Unsaved changes</h3>
+    <p>You have unsaved changes. If you leave now, your changes will be lost.</p>
+    <div class="unsaved-actions">
+      <button type="button" class="btn-wiz btn-wiz-outline" (click)="dismissUnsavedWarning()">
+        Keep editing
+      </button>
+      <button type="button" class="btn-wiz btn-wiz-danger" (click)="confirmDiscard()">
+        Discard changes
+      </button>
+    </div>
+  </div>
+</div>

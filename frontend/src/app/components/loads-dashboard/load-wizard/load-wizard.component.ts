@@ -1,0 +1,197 @@
+import {
+  Component,
+  Input,
+  Output,
+  EventEmitter,
+  HostListener,
+  ChangeDetectorRef,
+} from '@angular/core';
+
+export interface WizardStep {
+  label: string;
+  icon: string;
+}
+
+/**
+ * LoadWizardComponent — shell container for the 4-step load creation wizard.
+ *
+ * Responsibilities (FN-732 scope):
+ *  - Render a 4-step progress bar with active/completed/locked states
+ *  - Expose Next / Back / jump-to-step navigation (forward jump requires prior steps valid)
+ *  - Keyboard shortcuts: Enter=Next, Esc=Cancel, Cmd+S=Save, Cmd+Shift+S=Save&New
+ *  - Unsaved-changes confirmation dialog when closing with isDirty=true
+ *
+ * Step content is projected via <ng-content> — the parent controls which step
+ * is visible using [activeStep] two-way binding.
+ */
+@Component({
+  selector: 'app-load-wizard',
+  templateUrl: './load-wizard.component.html',
+  styleUrls: ['./load-wizard.component.scss'],
+})
+export class LoadWizardComponent {
+
+  readonly STEPS: WizardStep[] = [
+    { label: 'Basics',             icon: 'assignment' },
+    { label: 'Stops',              icon: 'place' },
+    { label: 'Driver & Equipment', icon: 'local_shipping' },
+    { label: 'Attachments',        icon: 'attach_file' },
+  ];
+
+  // ─── Inputs ───────────────────────────────────────────────────────────────
+
+  /** Index of the currently active step (0-based). Two-way via (activeStepChange). */
+  @Input() activeStep = 0;
+
+  /** True when the user has made unsaved edits — guards the close button. */
+  @Input() isDirty = false;
+
+  /**
+   * Validity flag for each step. Forward jump (via progress bar click) requires
+   * all steps up to — but not including — the target to be valid.
+   */
+  @Input() stepValid: boolean[] = [false, false, false, false];
+
+  /** True while a save/submit network call is in flight. */
+  @Input() saving = false;
+
+  /** Wizard modal title shown in the header bar. */
+  @Input() title = 'New Load';
+
+  // ─── Outputs ──────────────────────────────────────────────────────────────
+
+  /** Emitted whenever the active step index changes. Use with banana-in-a-box: [(activeStep)]. */
+  @Output() activeStepChange = new EventEmitter<number>();
+
+  /** Emitted when the user requests Save (Cmd+S or Save button on last step). */
+  @Output() save = new EventEmitter<void>();
+
+  /** Emitted when the user requests Save & Create Another (Cmd+Shift+S). */
+  @Output() saveAndNew = new EventEmitter<void>();
+
+  /** Emitted when the wizard is dismissed (Esc or ✕, after unsaved-changes check). */
+  @Output() cancel = new EventEmitter<void>();
+
+  // ─── Internal UI state ────────────────────────────────────────────────────
+
+  /** Controls visibility of the unsaved-changes confirmation dialog. */
+  showUnsavedWarning = false;
+
+  constructor(private cdr: ChangeDetectorRef) {}
+
+  // ─── Step navigation ──────────────────────────────────────────────────────
+
+  get isFirstStep(): boolean { return this.activeStep === 0; }
+  get isLastStep():  boolean { return this.activeStep === this.STEPS.length - 1; }
+
+  next(): void {
+    if (!this.isLastStep) {
+      this._setStep(this.activeStep + 1);
+    }
+  }
+
+  back(): void {
+    if (!this.isFirstStep) {
+      this._setStep(this.activeStep - 1);
+    }
+  }
+
+  /**
+   * Jump directly to `index`.
+   * - Backward jumps are always allowed.
+   * - Forward jumps require all steps between current and target to be valid.
+   */
+  goToStep(index: number): void {
+    if (index === this.activeStep) { return; }
+    if (index < this.activeStep) {
+      this._setStep(index);
+      return;
+    }
+    if (this.canJumpTo(index)) {
+      this._setStep(index);
+    }
+  }
+
+  /**
+   * Returns true when the user may click step `index` in the progress bar.
+   * Backward (or same): always. Forward: all prior steps must be valid.
+   */
+  canJumpTo(index: number): boolean {
+    if (index <= this.activeStep) { return true; }
+    return this.stepValid.slice(0, index).every(Boolean);
+  }
+
+  /** True if the step at `index` has been completed (visited and valid). */
+  isCompleted(index: number): boolean {
+    return index < this.activeStep && !!this.stepValid[index];
+  }
+
+  private _setStep(index: number): void {
+    this.activeStep = index;
+    this.activeStepChange.emit(index);
+    this.cdr.markForCheck();
+  }
+
+  // ─── Close / unsaved-changes guard ────────────────────────────────────────
+
+  /** Called when the user clicks ✕ or presses Esc. */
+  requestClose(): void {
+    if (this.isDirty) {
+      this.showUnsavedWarning = true;
+      this.cdr.markForCheck();
+    } else {
+      this.cancel.emit();
+    }
+  }
+
+  /** User confirmed "Yes, discard changes" in the warning dialog. */
+  confirmDiscard(): void {
+    this.showUnsavedWarning = false;
+    this.cancel.emit();
+  }
+
+  /** User clicked "Keep editing" — dismiss the warning, stay in wizard. */
+  dismissUnsavedWarning(): void {
+    this.showUnsavedWarning = false;
+    this.cdr.markForCheck();
+  }
+
+  // ─── Keyboard shortcuts ───────────────────────────────────────────────────
+
+  @HostListener('document:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    const tag = ((event.target as HTMLElement)?.tagName || '').toLowerCase();
+    const inTextInput = ['input', 'textarea', 'select'].includes(tag);
+
+    // Esc: close warning overlay first, then wizard
+    if (event.key === 'Escape') {
+      if (this.showUnsavedWarning) {
+        this.dismissUnsavedWarning();
+      } else {
+        this.requestClose();
+      }
+      event.preventDefault();
+      return;
+    }
+
+    // Cmd/Ctrl + Shift + S → Save & New
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 's') {
+      this.saveAndNew.emit();
+      event.preventDefault();
+      return;
+    }
+
+    // Cmd/Ctrl + S → Save
+    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 's') {
+      this.save.emit();
+      event.preventDefault();
+      return;
+    }
+
+    // Enter → Next (skip if user is typing in a form field or on the last step)
+    if (event.key === 'Enter' && !inTextInput && !this.isLastStep) {
+      this.next();
+      event.preventDefault();
+    }
+  }
+}

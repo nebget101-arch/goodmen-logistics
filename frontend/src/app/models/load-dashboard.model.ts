@@ -56,12 +56,15 @@ export interface LoadStop {
   load_id?: string;
   stop_type: LoadStopType;
   stop_date?: string | null;
+  stop_time?: string | null;
   city?: string | null;
   state?: string | null;
   zip?: string | null;
   address1?: string | null;
   address2?: string | null;
   sequence?: number | null;
+  facility_name?: string | null;
+  notes?: string | null;
 }
 
 export interface LoadAttachment {

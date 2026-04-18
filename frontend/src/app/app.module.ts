@@ -15,6 +15,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDialogModule } from '@angular/material/dialog';
+import { DragDropModule } from '@angular/cdk/drag-drop';
 import { CommonModule } from '@angular/common';
 import { SharedModule } from './shared/shared.module';
 import { AppRoutingModule } from './app-routing.module';
@@ -84,8 +85,12 @@ import { EmployerHistoryTieredComponent } from './components/onboarding-packet/e
 import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 import { LocationsAdminModule } from './components/locations-admin/locations-admin.module';
+import { LoadWizardModule } from './components/loads-dashboard/load-wizard/load-wizard.module';
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
+import { StepStopsComponent } from './components/loads-dashboard/load-wizard/step-stops/step-stops.component';
+import { WizardStepDriverComponent } from './components/loads-dashboard/load-wizard/step-driver/step-driver.component';
+import { StepAttachmentsComponent } from './components/loads-dashboard/load-wizard/step-attachments/step-attachments.component';
 
 @NgModule({
   declarations: [
@@ -153,7 +158,10 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     DisqualificationHistoryComponent,
     IdleTruckAlertsComponent,
     InventoryItemEditDialogComponent,
-    AutoReplenishmentComponent
+    AutoReplenishmentComponent,
+    StepStopsComponent,
+    WizardStepDriverComponent,
+    StepAttachmentsComponent
   ],
   imports: [
     BrowserModule,
@@ -168,8 +176,10 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     MatFormFieldModule,
     MatInputModule,
     MatDialogModule,
+    DragDropModule,
     SharedModule,
-    LocationsAdminModule
+    LocationsAdminModule,
+    LoadWizardModule
   ],
   providers: [
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
