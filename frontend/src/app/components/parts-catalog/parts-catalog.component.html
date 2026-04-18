@@ -204,6 +204,7 @@
       <table class="report-table">
         <thead>
           <tr>
+            <th class="th-expand"></th>
             <th>SKU</th>
             <th>Name</th>
             <th>Category</th>
@@ -217,45 +218,123 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let part of filteredParts">
-            <td>{{ part.sku }}</td>
-            <td class="cell-name">{{ part.name }}</td>
-            <td>{{ part.category }}</td>
-            <td>{{ part.manufacturer }}</td>
-            <td>{{ part.uom }}</td>
-            <td>{{ part.quantity_on_hand || 0 }}</td>
-            <td>${{ part.unit_cost | number: '1.2-2' }}</td>
-            <td>${{ part.unit_price | number: '1.2-2' }}</td>
-            <td>
-              <span
-                class="status-pill"
-                [ngClass]="part.status === 'ACTIVE' ? 'status-active' : 'status-inactive'"
-              >
-                {{ part.status || 'UNKNOWN' }}
-              </span>
-            </td>
-            <td>
-              <div class="row-actions" *ngIf="userRole === 'admin' || userRole === 'parts_manager'">
+          <ng-container *ngFor="let part of filteredParts">
+
+            <!-- Main row -->
+            <tr [class.row-expanded]="expandedStockPartId === part.id">
+              <td class="cell-expand">
                 <button
                   type="button"
-                  class="btn-small btn-secondary btn-with-icon"
-                  (click)="openFormModal(part)"
+                  class="btn-expand-stock"
+                  (click)="toggleStockBreakdown(part)"
+                  [title]="expandedStockPartId === part.id ? 'Hide stock locations' : 'Show stock by location'"
+                  [attr.aria-expanded]="expandedStockPartId === part.id"
                 >
-                  <span class="btn-icon icon-edit"></span>
-                  <span>Edit</span>
+                  <span class="expand-chevron" [class.open]="expandedStockPartId === part.id">▶</span>
                 </button>
-                <button
-                  type="button"
-                  class="btn-small btn-danger btn-with-icon"
-                  (click)="deactivatePart(part.id)"
-                  *ngIf="part.status === 'ACTIVE'"
+              </td>
+              <td>{{ part.sku }}</td>
+              <td class="cell-name">{{ part.name }}</td>
+              <td>{{ part.category }}</td>
+              <td>{{ part.manufacturer }}</td>
+              <td>{{ part.uom }}</td>
+              <td>{{ part.quantity_on_hand || 0 }}</td>
+              <td>${{ part.unit_cost | number: '1.2-2' }}</td>
+              <td>${{ part.unit_price | number: '1.2-2' }}</td>
+              <td>
+                <span
+                  class="status-pill"
+                  [ngClass]="part.status === 'ACTIVE' ? 'status-active' : 'status-inactive'"
                 >
-                  <span class="btn-icon icon-deactivate"></span>
-                  <span>Deactivate</span>
-                </button>
-              </div>
-            </td>
-          </tr>
+                  {{ part.status || 'UNKNOWN' }}
+                </span>
+              </td>
+              <td>
+                <div class="row-actions" *ngIf="userRole === 'admin' || userRole === 'parts_manager'">
+                  <button
+                    type="button"
+                    class="btn-small btn-secondary btn-with-icon"
+                    (click)="openFormModal(part)"
+                  >
+                    <span class="btn-icon icon-edit"></span>
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-small btn-danger btn-with-icon"
+                    (click)="deactivatePart(part.id)"
+                    *ngIf="part.status === 'ACTIVE'"
+                  >
+                    <span class="btn-icon icon-deactivate"></span>
+                    <span>Deactivate</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- FN-708: Stock breakdown expand row -->
+            <tr *ngIf="expandedStockPartId === part.id" class="stock-breakdown-row">
+              <td colspan="11" class="stock-breakdown-cell">
+
+                <!-- Loading -->
+                <div *ngIf="stockLoadingForId === part.id" class="sb-loading">
+                  <span class="sb-spinner"></span> Loading stock locations…
+                </div>
+
+                <!-- Error -->
+                <div *ngIf="stockLoadingForId !== part.id && stockLoadError" class="sb-error">
+                  ⚠ {{ stockLoadError }}
+                </div>
+
+                <!-- Lines -->
+                <ng-container *ngIf="stockLoadingForId !== part.id && !stockLoadError">
+
+                  <div *ngIf="getStockLines(part.id).length === 0" class="sb-empty">
+                    No inventory records found for this part across any location.
+                  </div>
+
+                  <div *ngIf="getStockLines(part.id).length > 0" class="sb-content">
+                    <div class="sb-heading">
+                      Stock for <strong>{{ part.sku }}</strong> —
+                      <span class="sb-summary-inline">{{ getStockSummary(part.id) }}</span>
+                    </div>
+
+                    <div class="sb-cards">
+                      <div
+                        *ngFor="let line of getStockLines(part.id)"
+                        class="sb-card"
+                        [class.sb-card-low]="(line.on_hand_qty ?? 0) > 0 && (line.on_hand_qty ?? 0) <= (line.reorder_level ?? 0)"
+                        [class.sb-card-zero]="(line.on_hand_qty ?? 0) === 0"
+                      >
+                        <div class="sb-loc-name">{{ line.location_name || line.location_id }}</div>
+
+                        <div class="sb-bin-row" *ngIf="line.bin_code">
+                          <span class="sb-bin-badge">{{ line.bin_code }}</span>
+                          <span *ngIf="line.bin_name" class="sb-bin-name">{{ line.bin_name }}</span>
+                        </div>
+                        <div class="sb-bin-row sb-bin-legacy" *ngIf="!line.bin_code && line.bin_location">
+                          {{ line.bin_location }}
+                        </div>
+
+                        <div class="sb-qty">
+                          <span class="sb-qty-num">{{ line.on_hand_qty ?? 0 }}</span>
+                          <span class="sb-qty-label">on hand</span>
+                        </div>
+
+                        <a
+                          class="sb-link"
+                          [routerLink]="['/inventory-reports']"
+                          title="View in Inventory Reports"
+                        >View →</a>
+                      </div>
+                    </div>
+                  </div>
+
+                </ng-container>
+              </td>
+            </tr>
+
+          </ng-container>
         </tbody>
       </table>
     </div>

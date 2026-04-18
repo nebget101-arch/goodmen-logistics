@@ -29,6 +29,16 @@ export class PartsCatalogComponent implements OnInit {
   bulkUploading = false;
   bulkUploadSummary: { created?: number; updated?: number; skipped?: number; errors?: Array<{ row?: number; sku?: string; error?: string }> } | null = null;
 
+  // ── FN-708: Stock breakdown per part ────────────────────────────────────────
+  /** The part.id whose stock breakdown row is currently expanded (null = none). */
+  expandedStockPartId: string | null = null;
+  /** Cache: partId → inventory lines across all locations. */
+  private stockCache = new Map<string, any[]>();
+  /** partId currently being fetched. */
+  stockLoadingForId: string | null = null;
+  stockLoadError: string | null = null;
+  // ─────────────────────────────────────────────────────────────────────────────
+
   aiAnalysisLoading = false;
   aiAnalysisError = '';
   aiAnalysisResult: {
@@ -390,6 +400,73 @@ export class PartsCatalogComponent implements OnInit {
   /** Filtered recommendations for display. (Show all; insights are filtered by type.) */
   get filteredRecommendations() {
     return this.aiAnalysisResult?.recommendations || [];
+  }
+
+  // ── FN-708: Stock breakdown methods ──────────────────────────────────────────
+
+  /**
+   * Toggle the stock breakdown row for a part.
+   * First toggle loads from the API; subsequent toggles use the cache.
+   */
+  toggleStockBreakdown(part: any): void {
+    if (this.expandedStockPartId === part.id) {
+      // Collapse
+      this.expandedStockPartId = null;
+      this.stockLoadError = null;
+      return;
+    }
+
+    this.expandedStockPartId = part.id;
+    this.stockLoadError = null;
+
+    // Already cached — nothing to fetch
+    if (this.stockCache.has(part.id)) return;
+
+    this.stockLoadingForId = part.id;
+    this.apiService.getInventoryByPart(part.id).subscribe({
+      next: (res: any) => {
+        const lines: any[] = Array.isArray(res) ? res : (res?.data ?? []);
+        this.stockCache.set(part.id, lines);
+        this.stockLoadingForId = null;
+      },
+      error: (err: any) => {
+        this.stockLoadError = err?.error?.error ?? err?.message ?? 'Failed to load stock.';
+        this.stockLoadingForId = null;
+      }
+    });
+  }
+
+  /** Returns cached stock lines for a part, or [] if not yet loaded. */
+  getStockLines(partId: string): any[] {
+    return this.stockCache.get(partId) ?? [];
+  }
+
+  /**
+   * Produce a compact comma-separated summary for all stock lines of a part.
+   * Example: "SHOP-A (A-3): 5 units, WAREHOUSE-1 (W-27): 20 units"
+   */
+  getStockSummary(partId: string): string {
+    const lines = this.stockCache.get(partId) ?? [];
+    if (!lines.length) return '—';
+    return lines.map(l => this.formatStockLine(l)).join(', ');
+  }
+
+  /**
+   * Format one stock line into a human-readable summary pill.
+   * Pattern: "Location Name (BIN-CODE): 5 units"
+   * Falls back to bin_location text if no bin_code.
+   */
+  formatStockLine(item: any): string {
+    const location = item.location_name || item.location_id || '—';
+    const binPart  = item.bin_code
+      ? `(${item.bin_code})`
+      : item.bin_location
+        ? `(${item.bin_location})`
+        : '';
+    const qty = Number(item.on_hand_qty ?? item.available_qty ?? 0);
+    return binPart
+      ? `${location} ${binPart}: ${qty} units`
+      : `${location}: ${qty} units`;
   }
 
   loadAiAnalysis(): void {
