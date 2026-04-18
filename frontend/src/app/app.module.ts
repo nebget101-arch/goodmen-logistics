@@ -37,6 +37,7 @@ import { WoNotesTabComponent } from './components/work-order/tabs/notes-tab/note
 import { WoWorkflowButtonsComponent } from './components/work-order/workflow-buttons/workflow-buttons.component';
 import { WoStatusTimelineComponent } from './components/work-order/workflow-buttons/status-timeline.component';
 import { SmartAutocompleteComponent } from './shared/components/smart-autocomplete/smart-autocomplete.component';
+import { StepBasicsComponent } from './components/loads-dashboard/load-wizard/step-basics/step-basics.component';
 import { LoadsComponent } from './components/loads/loads.component';
 import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
@@ -111,6 +112,7 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     ProfileComponent,
     WorkOrderComponent,
     SmartAutocompleteComponent,
+    StepBasicsComponent,
     WoStatusBarComponent,
     WoBasicsTabComponent,
     WoServiceDetailsTabComponent,
