@@ -68,6 +68,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/inventory-transfers', label: 'Transfers', tab: 'transfers' },
       { path: '/direct-sales', label: 'Direct Sales', tab: 'sales' },
       { path: '/inventory-reports', label: 'Reports', tab: 'inventory_reports' },
+      { path: '/reports/auto-replenishment', label: 'Auto-Replenishment', tab: 'inventory_reports' },
     ],
   },
   {
