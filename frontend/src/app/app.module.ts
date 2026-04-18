@@ -86,6 +86,7 @@ import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-tr
 import { LocationsAdminModule } from './components/locations-admin/locations-admin.module';
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
+import { StepAttachmentsComponent } from './components/loads-dashboard/load-wizard/step-attachments/step-attachments.component';
 
 @NgModule({
   declarations: [
@@ -153,7 +154,8 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     DisqualificationHistoryComponent,
     IdleTruckAlertsComponent,
     InventoryItemEditDialogComponent,
-    AutoReplenishmentComponent
+    AutoReplenishmentComponent,
+    StepAttachmentsComponent
   ],
   imports: [
     BrowserModule,
