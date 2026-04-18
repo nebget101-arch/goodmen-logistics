@@ -16,10 +16,37 @@ export class ApiService {
     return this.baseUrl;
   }
 
-  // Locations
+  // ── Locations — FN-691 / FN-702 ─────────────────────────────────────────
+
+  /** Legacy — kept for backward compatibility */
   getLocations(): Observable<any> {
     return this.http.get(`${this.baseUrl}/locations`);
   }
+
+  getLocationById(id: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/locations/${id}`);
+  }
+
+  createLocation(payload: Record<string, unknown>): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/locations`, payload);
+  }
+
+  /**
+   * Partial update — used for editing details and for soft-delete (active: false).
+   * Calls PATCH /api/locations/:id.
+   */
+  updateLocation(id: string, payload: Record<string, unknown>): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/locations/${id}`, payload);
+  }
+
+  /**
+   * Hard delete. Returns 409 { message, dependencies: { work_orders, inventory_items, users, vehicles } }
+   * if blocking records exist. Returns 200 with deleted row on success.
+   */
+  deleteLocation(id: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/locations/${id}`);
+  }
+
 
   // FMCSA company info lookup (legacy — shop clients context)
   getFmcsainfo(dot: string): Observable<any> {

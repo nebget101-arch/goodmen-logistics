@@ -74,6 +74,7 @@ import { ConsentFormComponent } from './components/onboarding-packet/consent-for
 import { EmployerHistoryTieredComponent } from './components/onboarding-packet/employer-history-tiered/employer-history-tiered.component';
 import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
+import { DeleteLocationDialogComponent } from './components/locations-admin/delete-location-dialog/delete-location-dialog.component';
 
 @NgModule({
   declarations: [
@@ -130,7 +131,8 @@ import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-tr
     ConsentFormComponent,
     EmployerHistoryTieredComponent,
     DisqualificationHistoryComponent,
-    IdleTruckAlertsComponent
+    IdleTruckAlertsComponent,
+    DeleteLocationDialogComponent
   ],
   imports: [
     BrowserModule,
