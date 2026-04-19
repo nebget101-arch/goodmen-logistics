@@ -1580,6 +1580,14 @@
     </div>
   </div>
 
+  <!-- FN-745: Bulk Extraction Grid -->
+  <app-bulk-extraction-grid
+    *ngIf="showBulkExtractionGrid"
+    [files]="bulkExtractionFiles"
+    (close)="closeBulkExtractionGrid()"
+    (reviewNow)="onBulkExtractionReviewNow()">
+  </app-bulk-extraction-grid>
+
   <!-- Auto-create placeholder -->
   <div class="modal-backdrop" *ngIf="showAutoModal">
     <div class="modal ai-modal">

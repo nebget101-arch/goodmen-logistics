@@ -100,6 +100,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   bulkError = '';
   bulkResults: Array<{ success: boolean; data?: LoadDetail; error?: string; filename: string }> = [];
 
+  // FN-745: Bulk extraction grid
+  showBulkExtractionGrid = false;
+  bulkExtractionFiles: File[] = [];
+
   deletingDraft = false;
 
   drivers: { id: string; name: string; truckId?: string | null; trailerId?: string | null }[] = [];
@@ -1051,6 +1055,29 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showBulkUploadModal = false;
     this.bulkPdfFiles = [];
     this.bulkResults = [];
+  }
+
+  // ─── FN-745: Bulk Extraction Grid ─────────────────────────────────────
+  openBulkExtractionGrid(files: File[]): void {
+    const pdfs = files.filter((f) => f.type === 'application/pdf');
+    if (pdfs.length < 2 || pdfs.length > 10) return;
+    this.bulkExtractionFiles = pdfs;
+    this.showBulkExtractionGrid = true;
+  }
+
+  closeBulkExtractionGrid(): void {
+    this.showBulkExtractionGrid = false;
+    this.bulkExtractionFiles = [];
+    this.loadLoads();
+  }
+
+  onBulkExtractionReviewNow(): void {
+    this.showBulkExtractionGrid = false;
+    this.bulkExtractionFiles = [];
+    // Reload the list filtered to drafts needing review
+    this.filters.status = 'DRAFT';
+    this.page = 1;
+    this.loadLoads();
   }
 
   onBulkFilesSelected(files: FileList | null, inputEl?: HTMLInputElement): void {
@@ -2376,6 +2403,28 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.driverDropdownOpen = false;
     this.truckDropdownOpen = false;
     this.trailerDropdownOpen = false;
+  }
+
+  // FN-745: Page-level drop handler for multi-PDF bulk extraction
+  @HostListener('document:dragover', ['$event'])
+  onPageDragOver(event: DragEvent): void {
+    // Prevent default to allow drops on the page
+    event.preventDefault();
+  }
+
+  @HostListener('document:drop', ['$event'])
+  onPageDrop(event: DragEvent): void {
+    // Skip if a modal is already open or we're inside a specific dropzone
+    if (this.showBulkUploadModal || this.showAutoModal || this.showBulkExtractionGrid || this.showManualModal || this.showLoadWizard) {
+      return;
+    }
+    const files = event.dataTransfer?.files;
+    if (!files || files.length < 2) return;
+    const pdfs = Array.from(files).filter((f) => f.type === 'application/pdf');
+    if (pdfs.length >= 2 && pdfs.length <= 10) {
+      event.preventDefault();
+      this.openBulkExtractionGrid(pdfs);
+    }
   }
 
   // Auto-create from PDF handlers
