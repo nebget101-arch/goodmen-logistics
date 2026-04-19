@@ -721,6 +721,15 @@
     z-index: 30;
   }
 
+  /* FN-775: promote .actions-dropdown to its own stacking context so the
+     z-index:30 menu child clears subsequent <tr> cells regardless of
+     <td>-as-containing-block quirks under table-layout: fixed. */
+  .actions-dropdown {
+    position: relative;
+    z-index: 40;
+    isolation: isolate;
+  }
+
   .actions-trigger {
     display: inline-flex;
     align-items: center;
