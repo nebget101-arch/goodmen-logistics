@@ -42,8 +42,8 @@ router.get('/', async (req, res) => {
       success: true,
       data: {
         tenantId,
-        inboundEmailAddress: null,
-        configured: false,
+        address: null,
+        is_active: false,
         message: 'Inbound email feature not yet provisioned (FN-759 migration pending)'
       }
     });
@@ -55,12 +55,13 @@ router.get('/', async (req, res) => {
     .first()
     .catch(() => null);
 
+  const address = row?.inbound_email_address || null;
   return res.json({
     success: true,
     data: {
       tenantId,
-      inboundEmailAddress: row?.inbound_email_address || null,
-      configured: !!row?.inbound_email_address
+      address,
+      is_active: !!address
     }
   });
 });
