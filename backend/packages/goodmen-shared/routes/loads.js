@@ -2208,4 +2208,384 @@ router.post('/ai-extract', upload.single('file'), async (req, res) => {
   }
 });
 
+// ─── Granular Stop Endpoints (FN-748) ────────────────────────────────────────
+
+/**
+ * @openapi
+ * /api/loads/{id}/stops:
+ *   post:
+ *     summary: Add a stop to an existing load
+ *     description: >
+ *       Appends a new stop to the load. The stop sequence is auto-assigned as
+ *       max(existing sequences) + 1. Trip metrics are recalculated and returned
+ *       in the full load response. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [stop_type]
+ *             properties:
+ *               stop_type:
+ *                 type: string
+ *                 enum: [PICKUP, DELIVERY]
+ *               stop_date:
+ *                 type: string
+ *                 format: date
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               zip:
+ *                 type: string
+ *               address1:
+ *                 type: string
+ *               address2:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Full updated load with stops and recalculated trip metrics
+ *       400:
+ *         description: Invalid stop_type
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
+router.post('/:id/stops', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const loadId = req.params.id;
+  const body = req.body || {};
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const loadCheck = await client.query(
+      'SELECT id FROM loads WHERE id = $1',
+      [loadId]
+    );
+    if (loadCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Load not found' });
+    }
+    const stopType = normalizeEnum(body.stop_type || body.stopType);
+    if (!STOP_TYPES.includes(stopType)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, error: `Invalid stop_type: ${stopType}` });
+    }
+    const seqResult = await client.query(
+      'SELECT COALESCE(MAX(sequence), 0) AS max_seq FROM load_stops WHERE load_id = $1',
+      [loadId]
+    );
+    const nextSeq = (parseInt(seqResult.rows[0]?.max_seq ?? 0, 10)) + 1;
+    await client.query(
+      `INSERT INTO load_stops (load_id, stop_type, stop_date, city, state, zip, address1, address2, sequence)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        loadId,
+        stopType,
+        body.stop_date || body.stopDate || null,
+        body.city || null,
+        body.state || null,
+        body.zip || null,
+        body.address1 || null,
+        body.address2 || null,
+        nextSeq
+      ]
+    );
+    await client.query('COMMIT');
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_add_stop_failed', error, { loadId });
+    res.status(500).json({ success: false, error: 'Failed to add stop' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}/stops/reorder:
+ *   patch:
+ *     summary: Reorder stops on a load
+ *     description: >
+ *       Accepts an array of {stopId, newSequence} pairs and persists the new
+ *       ordering. Trip metrics are recalculated in the response. This route is
+ *       registered BEFORE /:id/stops/:stopId to avoid the literal string
+ *       "reorder" being captured as a stopId parameter. Requires admin or
+ *       dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: array
+ *             items:
+ *               type: object
+ *               required: [stopId, newSequence]
+ *               properties:
+ *                 stopId:
+ *                   type: string
+ *                 newSequence:
+ *                   type: integer
+ *     responses:
+ *       200:
+ *         description: Full updated load with stops in new order
+ *       400:
+ *         description: Body must be a non-empty array
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
+router.patch('/:id/stops/reorder', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const loadId = req.params.id;
+  const body = req.body;
+  if (!Array.isArray(body) || body.length === 0) {
+    return res.status(400).json({ success: false, error: 'Body must be a non-empty array of {stopId, newSequence}' });
+  }
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const loadCheck = await client.query(
+      'SELECT id FROM loads WHERE id = $1',
+      [loadId]
+    );
+    if (loadCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Load not found' });
+    }
+    for (const item of body) {
+      if (!item.stopId || item.newSequence == null) continue;
+      await client.query(
+        'UPDATE load_stops SET sequence = $1 WHERE id = $2 AND load_id = $3',
+        [item.newSequence, item.stopId, loadId]
+      );
+    }
+    await client.query('COMMIT');
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_reorder_stops_failed', error, { loadId });
+    res.status(500).json({ success: false, error: 'Failed to reorder stops' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}/stops/{stopId}:
+ *   patch:
+ *     summary: Update a single stop on a load
+ *     description: >
+ *       Performs a partial update on one stop. Only the fields provided in the
+ *       request body are changed. Trip metrics are recalculated and returned in
+ *       the full load response. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *       - in: path
+ *         name: stopId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Stop ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               stop_type:
+ *                 type: string
+ *                 enum: [PICKUP, DELIVERY]
+ *               stop_date:
+ *                 type: string
+ *                 format: date
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               zip:
+ *                 type: string
+ *               address1:
+ *                 type: string
+ *               address2:
+ *                 type: string
+ *               sequence:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Full updated load with recalculated trip metrics
+ *       400:
+ *         description: No updatable fields provided, or invalid stop_type
+ *       404:
+ *         description: Stop not found on this load
+ *       500:
+ *         description: Server error
+ */
+router.patch('/:id/stops/:stopId', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const { id: loadId, stopId } = req.params;
+  const body = req.body || {};
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const stopCheck = await client.query(
+      'SELECT id FROM load_stops WHERE id = $1 AND load_id = $2',
+      [stopId, loadId]
+    );
+    if (stopCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Stop not found on this load' });
+    }
+    const sets = [];
+    const params = [];
+    const addField = (col, val) => {
+      params.push(val);
+      sets.push(`${col} = $${params.length}`);
+    };
+    if (body.stop_type !== undefined || body.stopType !== undefined) {
+      const stopType = normalizeEnum(body.stop_type || body.stopType);
+      if (!STOP_TYPES.includes(stopType)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: `Invalid stop_type: ${stopType}` });
+      }
+      addField('stop_type', stopType);
+    }
+    if (body.stop_date !== undefined || body.stopDate !== undefined) {
+      addField('stop_date', body.stop_date ?? body.stopDate ?? null);
+    }
+    if (body.city !== undefined) addField('city', body.city || null);
+    if (body.state !== undefined) addField('state', body.state || null);
+    if (body.zip !== undefined) addField('zip', body.zip || null);
+    if (body.address1 !== undefined) addField('address1', body.address1 || null);
+    if (body.address2 !== undefined) addField('address2', body.address2 || null);
+    if (body.sequence !== undefined) addField('sequence', body.sequence);
+    if (sets.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, error: 'No updatable fields provided' });
+    }
+    params.push(stopId);
+    await client.query(
+      `UPDATE load_stops SET ${sets.join(', ')} WHERE id = $${params.length}`,
+      params
+    );
+    await client.query('COMMIT');
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_update_stop_failed', error, { loadId, stopId });
+    res.status(500).json({ success: false, error: 'Failed to update stop' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}/stops/{stopId}:
+ *   delete:
+ *     summary: Remove a stop from a load
+ *     description: >
+ *       Deletes the specified stop and renumbers all remaining stops 1-based
+ *       in their current order (by sequence, then created_at). Trip metrics
+ *       are recalculated and returned in the full load response. Requires
+ *       admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *       - in: path
+ *         name: stopId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Stop ID to delete
+ *     responses:
+ *       200:
+ *         description: Full updated load with remaining stops renumbered
+ *       404:
+ *         description: Stop not found on this load
+ *       500:
+ *         description: Server error
+ */
+router.delete('/:id/stops/:stopId', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const { id: loadId, stopId } = req.params;
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const stopCheck = await client.query(
+      'SELECT id FROM load_stops WHERE id = $1 AND load_id = $2',
+      [stopId, loadId]
+    );
+    if (stopCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Stop not found on this load' });
+    }
+    await client.query('DELETE FROM load_stops WHERE id = $1', [stopId]);
+    // Renumber remaining stops 1-based in their existing order
+    const remaining = await client.query(
+      'SELECT id FROM load_stops WHERE load_id = $1 ORDER BY sequence, created_at',
+      [loadId]
+    );
+    for (let i = 0; i < remaining.rows.length; i++) {
+      await client.query(
+        'UPDATE load_stops SET sequence = $1 WHERE id = $2',
+        [i + 1, remaining.rows[i].id]
+      );
+    }
+    await client.query('COMMIT');
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_delete_stop_failed', error, { loadId, stopId });
+    res.status(500).json({ success: false, error: 'Failed to delete stop' });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
