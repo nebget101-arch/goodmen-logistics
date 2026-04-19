@@ -15,12 +15,14 @@ import { SharedModule } from '../../shared/shared.module';
 import { LoadWizardModule } from './load-wizard/load-wizard.module';
 
 import { LoadsDashboardComponent } from './loads-dashboard.component';
+import { BulkExtractionGridComponent } from './bulk-extraction-grid/bulk-extraction-grid.component';
 import { StatusPillComponent } from '../shared/status-pill/status-pill.component';
 import { AttachmentChipComponent } from '../shared/attachment-chip/attachment-chip.component';
 import { InlineDateFilterComponent } from '../shared/inline-date-filter/inline-date-filter.component';
 import { StepStopsComponent } from './load-wizard/step-stops/step-stops.component';
 import { WizardStepDriverComponent } from './load-wizard/step-driver/step-driver.component';
 import { StepAttachmentsComponent } from './load-wizard/step-attachments/step-attachments.component';
+import { LoadsHeroCtaComponent } from './loads-hero-cta/loads-hero-cta.component';
 
 const routes: Routes = [
   {
@@ -41,12 +43,14 @@ const routes: Routes = [
 @NgModule({
   declarations: [
     LoadsDashboardComponent,
+    BulkExtractionGridComponent,
     StatusPillComponent,
     AttachmentChipComponent,
     InlineDateFilterComponent,
     StepStopsComponent,
     WizardStepDriverComponent,
-    StepAttachmentsComponent
+    StepAttachmentsComponent,
+    LoadsHeroCtaComponent
   ],
   imports: [
     CommonModule,

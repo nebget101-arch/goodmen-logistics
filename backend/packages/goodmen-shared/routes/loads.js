@@ -437,6 +437,8 @@ router.get('/', async (req, res) => {
     const q = (req.query.q || '').toString().trim();
     const dateFrom = (req.query.dateFrom || '').toString().trim();
     const dateTo = (req.query.dateTo || '').toString().trim();
+    // FN-746: needs_review filter — true string activates filter
+    const needsReview = req.query.needsReview === 'true';
 
     if (status && !LOAD_STATUSES.includes(status)) {
       return res.status(400).json({ success: false, error: 'Invalid status filter' });
@@ -483,6 +485,11 @@ router.get('/', async (req, res) => {
         OR concat_ws(' ', d.first_name, d.last_name) ILIKE $${params.length}
       )`);
     }
+    // FN-746: filter to loads flagged for review
+    if (needsReview) {
+      where.push('l.needs_review = true');
+    }
+
     if (dateFrom && dateTo) {
       params.push(dateFrom);
       const idxFrom = params.length;
@@ -572,7 +579,8 @@ router.get('/', async (req, res) => {
         l.operating_entity_id,
         oe.name as operating_entity_name,
         COALESCE(att.attachment_count, 0) as attachment_count,
-        COALESCE(att.attachment_types, ARRAY[]::text[]) as attachment_types
+        COALESCE(att.attachment_types, ARRAY[]::text[]) as attachment_types,
+        COALESCE(l.needs_review, false) as needs_review
       ${baseSql}
       ORDER BY ${draftFirst}${orderBy} ${sortDir}
       LIMIT $${params.length - 1} OFFSET $${params.length}

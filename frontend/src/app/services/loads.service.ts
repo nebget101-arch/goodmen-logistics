@@ -23,6 +23,8 @@ export interface LoadFilters {
   pageSize?: number;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
+  /** FN-746: when true, fetches only loads with needs_review = true. */
+  needsReview?: boolean;
 }
 
 export interface DriverOption {

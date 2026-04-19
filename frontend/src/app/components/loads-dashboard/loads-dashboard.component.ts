@@ -100,6 +100,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   bulkError = '';
   bulkResults: Array<{ success: boolean; data?: LoadDetail; error?: string; filename: string }> = [];
 
+  // FN-745: Bulk extraction grid
+  showBulkExtractionGrid = false;
+  bulkExtractionFiles: File[] = [];
+
   deletingDraft = false;
 
   drivers: { id: string; name: string; truckId?: string | null; trailerId?: string | null }[] = [];
@@ -169,11 +173,14 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     billingStatus: string;
     driverId: string;
     q: string;
+    /** FN-746: shows only loads flagged for dispatcher review. */
+    needsReview: boolean;
   } = {
     status: '',
     billingStatus: '',
     driverId: '',
-    q: ''
+    q: '',
+    needsReview: false
   };
 
   sortBy: 'load_number' | 'pickup_date' | 'rate' | 'completed_date' = 'pickup_date';
@@ -831,7 +838,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         page: this.page,
         pageSize: this.pageSize,
         sortBy: this.sortBy,
-        sortDir: this.sortDir
+        sortDir: this.sortDir,
+        needsReview: this.filters.needsReview || undefined
       })
       .subscribe({
         next: (res) => {
@@ -868,6 +876,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   setStatusFilter(value: string): void {
     this.filters.status = value;
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  /** FN-746: toggle the Needs Review filter chip. */
+  toggleNeedsReview(): void {
+    this.filters.needsReview = !this.filters.needsReview;
     this.page = 1;
     this.loadLoads();
   }
@@ -1047,10 +1062,64 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showNewLoadMenu = false;
   }
 
+  // ─── Hero CTA handlers (FN-743) ────────────────────────────────────────
+
+  /** Single PDF selected from hero upload zone — pre-fills the auto-create modal. */
+  onHeroSinglePdf(file: File): void {
+    this.autoPdfFile = file;
+    this.autoExtracting = false;
+    this.autoError = '';
+    this.autoExtraction = null;
+    this.showAutoModal = true;
+  }
+
+  /** Multiple PDFs selected from hero upload zone — pre-fills the bulk upload modal. */
+  onHeroBulkPdfs(files: File[]): void {
+    this.bulkPdfFiles = files.slice(0, 10);
+    this.bulkUploading = false;
+    this.bulkError = '';
+    this.bulkResults = [];
+    this.showBulkUploadModal = true;
+  }
+
+  /**
+   * Clone Existing Load — stub until the clone API endpoint is built.
+   * Will open a search/select dialog to pick the source load.
+   */
+  openCloneLoad(): void {
+    // TODO: open clone-load dialog when backend endpoint lands (FN-724 sibling subtask)
+    this.successMessage = '';
+    this.errorMessage = 'Clone load is coming soon.';
+    setTimeout(() => { this.errorMessage = ''; }, 3000);
+  }
+
   closeBulkUploadModal(): void {
     this.showBulkUploadModal = false;
     this.bulkPdfFiles = [];
     this.bulkResults = [];
+  }
+
+  // ─── FN-745: Bulk Extraction Grid ─────────────────────────────────────
+  openBulkExtractionGrid(files: File[]): void {
+    const pdfs = files.filter((f) => f.type === 'application/pdf');
+    if (pdfs.length < 2 || pdfs.length > 10) return;
+    this.bulkExtractionFiles = pdfs;
+    this.showBulkExtractionGrid = true;
+  }
+
+  closeBulkExtractionGrid(): void {
+    this.showBulkExtractionGrid = false;
+    this.bulkExtractionFiles = [];
+    this.loadLoads();
+  }
+
+  onBulkExtractionReviewNow(): void {
+    this.showBulkExtractionGrid = false;
+    this.bulkExtractionFiles = [];
+    // Reload the list filtered to drafts needing review
+    this.filters.status = 'DRAFT';
+    this.page = 1;
+    this.loadLoads();
   }
 
   onBulkFilesSelected(files: FileList | null, inputEl?: HTMLInputElement): void {
@@ -2378,6 +2447,28 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.trailerDropdownOpen = false;
   }
 
+  // FN-745: Page-level drop handler for multi-PDF bulk extraction
+  @HostListener('document:dragover', ['$event'])
+  onPageDragOver(event: DragEvent): void {
+    // Prevent default to allow drops on the page
+    event.preventDefault();
+  }
+
+  @HostListener('document:drop', ['$event'])
+  onPageDrop(event: DragEvent): void {
+    // Skip if a modal is already open or we're inside a specific dropzone
+    if (this.showBulkUploadModal || this.showAutoModal || this.showBulkExtractionGrid || this.showManualModal || this.showLoadWizard) {
+      return;
+    }
+    const files = event.dataTransfer?.files;
+    if (!files || files.length < 2) return;
+    const pdfs = Array.from(files).filter((f) => f.type === 'application/pdf');
+    if (pdfs.length >= 2 && pdfs.length <= 10) {
+      event.preventDefault();
+      this.openBulkExtractionGrid(pdfs);
+    }
+  }
+
   // Auto-create from PDF handlers
 
   onAutoFileSelected(files: FileList | null): void {
@@ -2550,13 +2641,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     key: string;
     label: string;
     value: string;
-    kind: 'header' | 'status' | 'billing' | 'driver';
+    kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review';
   }> {
     const chips: Array<{
       key: string;
       label: string;
       value: string;
-      kind: 'header' | 'status' | 'billing' | 'driver';
+      kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review';
     }> = [];
 
     // Header filters
@@ -2602,10 +2693,20 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       });
     }
 
+    // FN-746: Needs review filter
+    if (this.filters.needsReview) {
+      chips.push({
+        key: 'needsReview',
+        label: 'Filter',
+        value: 'Needs review',
+        kind: 'needs_review'
+      });
+    }
+
     return chips;
   }
 
-  clearFilterChip(chip: { key: string; kind: 'header' | 'status' | 'billing' | 'driver' }): void {
+  clearFilterChip(chip: { key: string; kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review' }): void {
     if (chip.kind === 'header') {
       this.headerFilters = {
         ...this.headerFilters,
@@ -2632,6 +2733,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       this.filters.driverId = '';
       this.page = 1;
       this.loadLoads();
+      return;
+    }
+
+    if (chip.kind === 'needs_review') {
+      this.filters.needsReview = false;
+      this.page = 1;
+      this.loadLoads();
     }
   }
 
@@ -2654,7 +2762,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       ...this.filters,
       status: '',
       billingStatus: '',
-      driverId: ''
+      driverId: '',
+      needsReview: false
     };
 
     this.page = 1;

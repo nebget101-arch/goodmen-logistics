@@ -9,58 +9,19 @@
         <div class="search-box ai-search-box">
         <input type="text" class="ai-search-input" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
       </div>
-      <ng-container *ngIf="!isDriverRole">
-        <div class="dropdown new-load-dropdown" (click)="$event.stopPropagation()" *appHasPermission="'loads.create'">
-          <button class="btn btn-primary btn-new-load-ai" (click)="showNewLoadMenu = !showNewLoadMenu">
-            <span class="material-symbols-outlined">local_shipping</span>
-            New Load
-            <span class="material-symbols-outlined cta-caret">expand_more</span>
-          </button>
-          <div class="dropdown-menu new-load-menu" *ngIf="showNewLoadMenu">
-            <button
-              type="button"
-              class="new-load-item"
-              (click)="openAutoCreate()"
-            >
-              <span class="new-load-icon ai">
-                <span class="material-symbols-outlined">auto_awesome</span>
-              </span>
-              <span class="new-load-text">
-                <span class="title">Auto-Create from PDF</span>
-                <span class="subtitle">Automatically extract load details from a PDF using AI.</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              class="new-load-item"
-              (click)="openBulkUpload()"
-            >
-              <span class="new-load-icon">
-                <span class="material-symbols-outlined">upload_file</span>
-              </span>
-              <span class="new-load-text">
-                <span class="title">Bulk Upload Rate Confirmations</span>
-                <span class="subtitle">Upload up to 10 PDFs; AI extracts data, creates drafts for validation.</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              class="new-load-item"
-              (click)="openLoadWizard()"
-            >
-              <span class="new-load-icon">
-                <span class="material-symbols-outlined">edit_note</span>
-              </span>
-              <span class="new-load-text">
-                <span class="title">Manual Load Entry</span>
-                <span class="subtitle">Enter load information yourself with full control.</span>
-              </span>
-            </button>
-          </div>
-        </div>
-      </ng-container>
     </div>
   </div>
+
+  <!-- FN-743: Hero CTA panel — replaces old "New Load" dropdown -->
+  <ng-container *ngIf="!isDriverRole">
+    <app-loads-hero-cta
+      *appHasPermission="'loads.create'"
+      (singlePdfSelected)="onHeroSinglePdf($event)"
+      (bulkPdfsSelected)="onHeroBulkPdfs($event)"
+      (manualCreateClick)="openLoadWizard()"
+      (cloneLoadClick)="openCloneLoad()"
+    ></app-loads-hero-cta>
+  </ng-container>
 
   <div *ngIf="errorMessage" class="alert alert-error">{{ errorMessage }}</div>
   <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
@@ -109,6 +70,20 @@
         <span class="legend-value">${{ seg.amount | number:'1.0-2' }}</span>
       </button>
     </div>
+  </div>
+
+  <!-- FN-746: Needs review toggle chip -->
+  <div class="quick-filter-row" *ngIf="!isDriverRole">
+    <button
+      type="button"
+      class="quick-filter-chip"
+      [class.quick-filter-chip--active]="filters.needsReview"
+      (click)="toggleNeedsReview()"
+      title="Show only loads that need dispatcher review"
+    >
+      <span class="material-symbols-outlined">warning</span>
+      Needs review
+    </button>
   </div>
 
   <!-- Active filters summary -->
@@ -456,6 +431,14 @@
         <tr *ngFor="let load of filteredLoads" [ngClass]="rowClass(load)">
           <td [title]="load.load_number || ''">
             <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
+            <!-- FN-746: needs_review badge -->
+            <span
+              *ngIf="load.needs_review"
+              class="review-badge"
+              title="Needs review"
+            >
+              <span class="material-symbols-outlined">warning</span>
+            </span>
           </td>
           <td [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
           <td [title]="load.driver_name || '--'">{{ load.driver_name || '--' }}</td>
@@ -1579,6 +1562,14 @@
       </div>
     </div>
   </div>
+
+  <!-- FN-745: Bulk Extraction Grid -->
+  <app-bulk-extraction-grid
+    *ngIf="showBulkExtractionGrid"
+    [files]="bulkExtractionFiles"
+    (close)="closeBulkExtractionGrid()"
+    (reviewNow)="onBulkExtractionReviewNow()">
+  </app-bulk-extraction-grid>
 
   <!-- Auto-create placeholder -->
   <div class="modal-backdrop" *ngIf="showAutoModal">

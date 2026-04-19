@@ -49,6 +49,8 @@ export interface LoadListItem {
   attachment_count: number;
   attachment_types: LoadAttachmentType[];
   notes?: string | null;
+  /** FN-746: true when AI-created load needs dispatcher review before approval. */
+  needs_review?: boolean;
 }
 
 export interface LoadStop {
