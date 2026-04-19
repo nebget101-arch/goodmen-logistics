@@ -20,6 +20,8 @@ import { LoadTemplatesService } from '../../services/load-templates.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
+import { StepBasicsData } from './load-wizard/step-basics/step-basics.component';
+import { WizardAttachment } from './load-wizard/step-attachments/step-attachments.component';
 
 type SortDir = 'asc' | 'desc';
 
@@ -54,6 +56,16 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   wizardEditLoadId: string | null = null;
   /** FN-749: Pre-filled wizard data from loaded existing load. */
   wizardPrefilledData: any = null;
+
+  // FN-778: Per-step form state projected into the wizard children.
+  wizardBasics: StepBasicsData = this.defaultBasics();
+  wizardStops: LoadStop[] = [];
+  wizardDriverId: string | null = null;
+  wizardTruckId: string | null = null;
+  wizardTrailerId: string | null = null;
+  wizardAttachments: WizardAttachment[] = [];
+  wizardAiExtractedPdf: File | null = null;
+  wizardAiPrefilledFields: Set<string> = new Set();
   showBulkUploadModal = false;
   showDetailsModal = false;
   showInlineNewLoad = false;
@@ -1047,6 +1059,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.wizardActiveStep = 0;
     this.wizardStepValid = [false, false, false, false];
     this.wizardDirty = false;
+    this.resetWizardFormState();
     this.showLoadWizard = true;
     this.showNewLoadMenu = false;
   }
@@ -1212,6 +1225,82 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.wizardActiveStep = 0;
     this.wizardStepValid = [false, false, false, false];
     this.wizardDirty = false;
+    this.resetWizardFormState();
+  }
+
+  // ─── FN-778: Wizard step bindings ────────────────────────────────────────
+
+  onWizardBasicsChange(data: StepBasicsData): void {
+    this.wizardBasics = data;
+    this.wizardDirty = true;
+  }
+
+  onWizardBasicsValid(valid: boolean): void {
+    this.wizardStepValid = this.updateStepValid(0, valid);
+  }
+
+  onWizardStopsChange(stops: LoadStop[]): void {
+    this.wizardStops = stops;
+    this.wizardDirty = true;
+  }
+
+  onWizardStopsValid(valid: boolean): void {
+    this.wizardStepValid = this.updateStepValid(1, valid);
+  }
+
+  onWizardDriverChange(driverId: string | null): void {
+    this.wizardDriverId = driverId;
+    this.wizardDirty = true;
+  }
+
+  onWizardTruckChange(truckId: string | null): void {
+    this.wizardTruckId = truckId;
+    this.wizardDirty = true;
+  }
+
+  onWizardTrailerChange(trailerId: string | null): void {
+    this.wizardTrailerId = trailerId;
+    this.wizardDirty = true;
+  }
+
+  onWizardDriverValid(valid: boolean): void {
+    this.wizardStepValid = this.updateStepValid(2, valid);
+  }
+
+  onWizardAttachmentsChange(attachments: WizardAttachment[]): void {
+    this.wizardAttachments = attachments;
+    this.wizardDirty = true;
+  }
+
+  private updateStepValid(index: number, valid: boolean): boolean[] {
+    const next = [...this.wizardStepValid];
+    next[index] = valid;
+    return next;
+  }
+
+  private resetWizardFormState(): void {
+    this.wizardBasics = this.defaultBasics();
+    this.wizardStops = [];
+    this.wizardDriverId = null;
+    this.wizardTruckId = null;
+    this.wizardTrailerId = null;
+    this.wizardAttachments = [];
+    this.wizardAiExtractedPdf = null;
+    this.wizardAiPrefilledFields = new Set();
+  }
+
+  private defaultBasics(): StepBasicsData {
+    return {
+      loadNumber: '',
+      status: 'BOOKED',
+      billingStatus: 'UNBILLED',
+      brokerId: null,
+      brokerName: '',
+      poNumber: '',
+      rate: null,
+      dispatcher: '',
+      notes: ''
+    };
   }
 
   openBulkUpload(): void {
