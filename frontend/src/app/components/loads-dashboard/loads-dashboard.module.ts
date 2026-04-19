@@ -19,6 +19,7 @@ import { BulkExtractionGridComponent } from './bulk-extraction-grid/bulk-extract
 import { StatusPillComponent } from '../shared/status-pill/status-pill.component';
 import { AttachmentChipComponent } from '../shared/attachment-chip/attachment-chip.component';
 import { InlineDateFilterComponent } from '../shared/inline-date-filter/inline-date-filter.component';
+import { StepBasicsComponent } from './load-wizard/step-basics/step-basics.component';
 import { StepStopsComponent } from './load-wizard/step-stops/step-stops.component';
 import { WizardStepDriverComponent } from './load-wizard/step-driver/step-driver.component';
 import { StepAttachmentsComponent } from './load-wizard/step-attachments/step-attachments.component';
@@ -54,6 +55,7 @@ const routes: Routes = [
     StatusPillComponent,
     AttachmentChipComponent,
     InlineDateFilterComponent,
+    StepBasicsComponent,
     StepStopsComponent,
     WizardStepDriverComponent,
     StepAttachmentsComponent,
