@@ -1047,6 +1047,37 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showNewLoadMenu = false;
   }
 
+  // ─── Hero CTA handlers (FN-743) ────────────────────────────────────────
+
+  /** Single PDF selected from hero upload zone — pre-fills the auto-create modal. */
+  onHeroSinglePdf(file: File): void {
+    this.autoPdfFile = file;
+    this.autoExtracting = false;
+    this.autoError = '';
+    this.autoExtraction = null;
+    this.showAutoModal = true;
+  }
+
+  /** Multiple PDFs selected from hero upload zone — pre-fills the bulk upload modal. */
+  onHeroBulkPdfs(files: File[]): void {
+    this.bulkPdfFiles = files.slice(0, 10);
+    this.bulkUploading = false;
+    this.bulkError = '';
+    this.bulkResults = [];
+    this.showBulkUploadModal = true;
+  }
+
+  /**
+   * Clone Existing Load — stub until the clone API endpoint is built.
+   * Will open a search/select dialog to pick the source load.
+   */
+  openCloneLoad(): void {
+    // TODO: open clone-load dialog when backend endpoint lands (FN-724 sibling subtask)
+    this.successMessage = '';
+    this.errorMessage = 'Clone load is coming soon.';
+    setTimeout(() => { this.errorMessage = ''; }, 3000);
+  }
+
   closeBulkUploadModal(): void {
     this.showBulkUploadModal = false;
     this.bulkPdfFiles = [];

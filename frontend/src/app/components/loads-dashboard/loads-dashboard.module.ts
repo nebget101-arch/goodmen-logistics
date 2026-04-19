@@ -21,6 +21,7 @@ import { InlineDateFilterComponent } from '../shared/inline-date-filter/inline-d
 import { StepStopsComponent } from './load-wizard/step-stops/step-stops.component';
 import { WizardStepDriverComponent } from './load-wizard/step-driver/step-driver.component';
 import { StepAttachmentsComponent } from './load-wizard/step-attachments/step-attachments.component';
+import { LoadsHeroCtaComponent } from './loads-hero-cta/loads-hero-cta.component';
 
 const routes: Routes = [
   {
@@ -46,7 +47,8 @@ const routes: Routes = [
     InlineDateFilterComponent,
     StepStopsComponent,
     WizardStepDriverComponent,
-    StepAttachmentsComponent
+    StepAttachmentsComponent,
+    LoadsHeroCtaComponent
   ],
   imports: [
     CommonModule,
