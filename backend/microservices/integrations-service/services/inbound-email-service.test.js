@@ -18,7 +18,9 @@ const {
   parseToAddresses,
   buildLoc,
   normalizeDate,
-  verifyWebhookSecret
+  verifyWebhookSecret,
+  matchesTestPendingRow,
+  TEST_PENDING_WINDOW_MS
 } = require('./inbound-email-helpers');
 
 describe('parseAddress', () => {
@@ -167,5 +169,85 @@ describe('verifyWebhookSecret', () => {
       if (prev === undefined) delete process.env.INBOUND_EMAIL_WEBHOOK_SECRET;
       else process.env.INBOUND_EMAIL_WEBHOOK_SECRET = prev;
     }
+  });
+});
+
+describe('matchesTestPendingRow (FN-782 reconciliation)', () => {
+  const SUBJECT = 'FleetNeuron pipeline self-test';
+  const NOW = Date.parse('2026-04-19T12:00:00Z');
+
+  it('matches a fresh test_pending row with identical subject', () => {
+    const row = {
+      id: 'row-1',
+      processing_status: 'test_pending',
+      received_at: new Date(NOW - 30 * 1000).toISOString(),
+      subject: SUBJECT
+    };
+    assert.equal(matchesTestPendingRow(row, { subject: SUBJECT, nowMs: NOW }), true);
+  });
+
+  it('is case-insensitive and trims subject whitespace', () => {
+    const row = {
+      processing_status: 'test_pending',
+      received_at: new Date(NOW - 10 * 1000).toISOString(),
+      subject: '  FLEETNEURON pipeline self-test  '
+    };
+    assert.equal(
+      matchesTestPendingRow(row, { subject: 'fleetneuron PIPELINE self-test', nowMs: NOW }),
+      true
+    );
+  });
+
+  it('does not match when subject differs', () => {
+    const row = {
+      processing_status: 'test_pending',
+      received_at: new Date(NOW - 10 * 1000).toISOString(),
+      subject: 'Rate confirmation — Load 12345'
+    };
+    assert.equal(matchesTestPendingRow(row, { subject: SUBJECT, nowMs: NOW }), false);
+  });
+
+  it('does not match when row is outside the reconciliation window', () => {
+    const stale = {
+      processing_status: 'test_pending',
+      received_at: new Date(NOW - (TEST_PENDING_WINDOW_MS + 1000)).toISOString(),
+      subject: SUBJECT
+    };
+    assert.equal(matchesTestPendingRow(stale, { subject: SUBJECT, nowMs: NOW }), false);
+  });
+
+  it('does not match rows in terminal states (success / rejected)', () => {
+    for (const status of ['success', 'rejected', 'failed', 'pending']) {
+      const row = {
+        processing_status: status,
+        received_at: new Date(NOW - 5 * 1000).toISOString(),
+        subject: SUBJECT
+      };
+      assert.equal(
+        matchesTestPendingRow(row, { subject: SUBJECT, nowMs: NOW }),
+        false,
+        `status=${status} should not reconcile`
+      );
+    }
+  });
+
+  it('returns false for null / malformed inputs', () => {
+    assert.equal(matchesTestPendingRow(null, { subject: SUBJECT, nowMs: NOW }), false);
+    assert.equal(
+      matchesTestPendingRow(
+        { processing_status: 'test_pending', subject: SUBJECT },
+        { subject: SUBJECT, nowMs: NOW }
+      ),
+      false,
+      'missing received_at should not reconcile'
+    );
+    assert.equal(
+      matchesTestPendingRow(
+        { processing_status: 'test_pending', received_at: new Date(NOW).toISOString(), subject: '' },
+        { subject: SUBJECT, nowMs: NOW }
+      ),
+      false,
+      'empty candidate subject should not reconcile'
+    );
   });
 });

@@ -31,7 +31,9 @@ const {
   normalizeDate,
   todayIso,
   tomorrowIso,
-  verifyWebhookSecret
+  verifyWebhookSecret,
+  matchesTestPendingRow,
+  TEST_PENDING_WINDOW_MS
 } = require('./inbound-email-helpers');
 const { applySecurityChecks } = require('./inbound-email-security');
 
@@ -44,6 +46,25 @@ const LOAD_ATTACHMENT_TYPES = new Set([
   'PROOF_OF_DELIVERY',
   'ROADSIDE_MAINTENANCE_RECEIPT'
 ]);
+
+// ---------------------------------------------------------------------------
+// Test-pending reconciliation (FN-782)
+// ---------------------------------------------------------------------------
+
+async function findTestPendingRow(tenantId, subject, { nowMs = Date.now(), windowMs = TEST_PENDING_WINDOW_MS } = {}) {
+  const hasTable = await knex.schema.hasTable('inbound_emails').catch(() => false);
+  if (!hasTable) return null;
+  const since = new Date(nowMs - windowMs);
+  const row = await knex('inbound_emails')
+    .where({ tenant_id: tenantId, processing_status: 'test_pending' })
+    .andWhere('received_at', '>=', since)
+    .orderBy('received_at', 'desc')
+    .select('id', 'subject', 'received_at', 'processing_status')
+    .first()
+    .catch(() => null);
+  if (!matchesTestPendingRow(row, { subject, nowMs, windowMs })) return null;
+  return row;
+}
 
 // ---------------------------------------------------------------------------
 // Tenant + log table helpers (defensive: no-op if schema missing)
@@ -443,19 +464,28 @@ async function processInboundEmail(input) {
 
   const tenant = await resolveTenantByInboundAddress(toAddresses);
   if (!tenant) {
-    dtLogger.warn('inbound_email_tenant_not_found', {
+    // FN-782: surface tenant_not_found at error level so it lights up
+    // dashboards — insertion into inbound_emails is not possible without a
+    // tenant_id (FK NOT NULL), so logs are the only audit trail.
+    dtLogger.error('inbound_email_tenant_not_found', new Error('tenant_not_found'), {
       to: toAddresses,
       from: parseAddress(fromRaw) || fromRaw
     });
     return { received: false, status: 'rejected', reason: 'tenant_not_found' };
   }
 
-  const logEntry = await insertInboundEmailLog(tenant.id, {
-    from_email: parseAddress(fromRaw) || fromRaw,
-    subject,
-    body_text: textBody,
-    body_html: htmlBody
-  });
+  // FN-782: if a recent test_pending placeholder exists for this tenant with
+  // the same subject, reuse its row so the admin UI shows a single "test
+  // email" entry that transitions from test_pending → success/rejected.
+  const reconcileRow = await findTestPendingRow(tenant.id, subject);
+  const logEntry = reconcileRow
+    ? { id: reconcileRow.id, reconciled: true }
+    : await insertInboundEmailLog(tenant.id, {
+        from_email: parseAddress(fromRaw) || fromRaw,
+        subject,
+        body_text: textBody,
+        body_html: htmlBody
+      });
 
   // Security layer (FN-761): rate limit, whitelist, virus scan. Runs after
   // the log row is created so rejection reasons stay on the audit trail.
@@ -602,5 +632,6 @@ module.exports = {
   updateInboundEmailLog,
   createDraftLoadFromExtraction,
   createDraftLoadFromBody,
-  notifyDispatchers
+  notifyDispatchers,
+  findTestPendingRow
 };
