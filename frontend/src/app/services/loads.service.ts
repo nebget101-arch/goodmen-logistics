@@ -106,6 +106,24 @@ export class LoadsService {
     return this.http.put<{ success: boolean; data: LoadDetail }>(`${this.baseUrl}/loads/${id}`, payload);
   }
 
+  /**
+   * FN-756: Returns a draft payload cloned from the given load.
+   * Dates cleared, status=DRAFT, PO cleared, new load_number. Nothing persisted
+   * until the user saves from the wizard.
+   */
+  cloneLoad(id: string): Observable<{ success: boolean; data: LoadDetail }> {
+    return this.http.post<{ success: boolean; data: LoadDetail }>(`${this.baseUrl}/loads/${id}/clone`, {});
+  }
+
+  /**
+   * FN-756: Returns a draft payload for a return-load derived from the given load.
+   * Stops reversed, rate cleared, dates cleared, status=DRAFT, broker/driver/equipment kept.
+   * Nothing persisted until the user saves from the wizard.
+   */
+  returnLoad(id: string): Observable<{ success: boolean; data: LoadDetail }> {
+    return this.http.post<{ success: boolean; data: LoadDetail }>(`${this.baseUrl}/loads/${id}/return-load`, {});
+  }
+
   uploadAttachment(loadId: string, file: File, type: LoadAttachmentType, notes?: string): Observable<{ success: boolean; data: LoadAttachment }> {
     const form = new FormData();
     form.append('file', file);

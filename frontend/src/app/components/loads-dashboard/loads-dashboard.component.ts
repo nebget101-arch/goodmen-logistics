@@ -2076,6 +2076,105 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     };
   }
 
+  /**
+   * FN-756: Clone an existing load — backend returns a draft-ready payload
+   * (dates cleared, status=DRAFT, PO cleared, new load_number). We pre-fill the
+   * inline new-load form; nothing persists until the user saves.
+   */
+  cloneLoad(load: LoadListItem): void {
+    if (!load?.id) return;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.loadsService.cloneLoad(load.id).subscribe({
+      next: (res) => {
+        const draft = res?.data;
+        if (!draft) {
+          this.errorMessage = 'Failed to clone load.';
+          return;
+        }
+        this.applyDraftToManualForm(draft);
+        this.successMessage = 'Cloned load — set the pickup/delivery dates and save.';
+        setTimeout(() => { this.successMessage = ''; }, 5000);
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to clone load.';
+      }
+    });
+  }
+
+  /**
+   * FN-756: Create a Return Load — backend returns a draft-ready payload with
+   * stops reversed, rate cleared, dates cleared, broker/driver/equipment kept,
+   * status=DRAFT. Nothing persists until the user saves.
+   */
+  createReturnLoad(load: LoadListItem): void {
+    if (!load?.id) return;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.loadsService.returnLoad(load.id).subscribe({
+      next: (res) => {
+        const draft = res?.data;
+        if (!draft) {
+          this.errorMessage = 'Failed to create return load.';
+          return;
+        }
+        this.applyDraftToManualForm(draft);
+        this.successMessage = 'Return load ready — review stops, set dates and rate, then save.';
+        setTimeout(() => { this.successMessage = ''; }, 5000);
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to create return load.';
+      }
+    });
+  }
+
+  /**
+   * FN-756: Seed the inline new-load form from a clone/return-load draft payload.
+   * The backend is authoritative for what carries over (dates, rate, PO, etc.);
+   * this function just patches whatever the server returned.
+   */
+  private applyDraftToManualForm(draft: LoadDetail): void {
+    this.openManualEntry();
+
+    const stops = (draft.stops || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const pickup = stops.find((s) => (s.stop_type || '').toString().toUpperCase() === 'PICKUP') || stops[0];
+    const delivery = [...stops].reverse().find((s) => (s.stop_type || '').toString().toUpperCase() === 'DELIVERY') || stops[stops.length - 1];
+
+    this.manualLoadForm.patchValue({
+      status: draft.status || 'DRAFT',
+      billingStatus: draft.billing_status || 'PENDING',
+      brokerId: draft.broker_id || '',
+      brokerName: draft.broker_display_name || draft.broker_name || '',
+      driverId: draft.driver_id || '',
+      truckId: draft.truck_id || '',
+      trailerId: draft.trailer_id || '',
+      poNumber: draft.po_number || '',
+      rate: draft.rate != null ? draft.rate : '',
+      notes: draft.notes || '',
+      pickupDate: draft.pickup_date ? String(draft.pickup_date).slice(0, 10) : '',
+      pickupCity: pickup?.city || '',
+      pickupState: pickup?.state || '',
+      pickupZip: pickup?.zip || '',
+      deliveryDate: draft.delivery_date ? String(draft.delivery_date).slice(0, 10) : '',
+      deliveryCity: delivery?.city || '',
+      deliveryState: delivery?.state || '',
+      deliveryZip: delivery?.zip || ''
+    });
+
+    // Preserve intermediate stops when there are more than two
+    if (stops.length > 2) {
+      this.sortedStops = stops.map((s, i) => ({
+        stop_type: (s.stop_type as 'PICKUP' | 'DELIVERY') || (i === 0 ? 'PICKUP' : 'DELIVERY'),
+        stop_date: s.stop_date ?? null,
+        city: s.city || null,
+        state: s.state || null,
+        zip: s.zip || null,
+        address1: s.address1 || null,
+        sequence: s.sequence ?? i + 1
+      }));
+    }
+  }
+
   private populateFormFromDetail(detail: LoadDetail): void {
     const normalizeDate = (value: unknown): string => {
       if (!value) return '';
