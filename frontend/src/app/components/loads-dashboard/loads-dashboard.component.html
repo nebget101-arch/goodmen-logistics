@@ -1794,18 +1794,40 @@
   (saveAndNew)="onWizardSaveAndNew()"
   (cancel)="closeWizard()"
 >
-  <!-- Step content will be projected here by FN-733 through FN-736 sub-tasks.
-       Each step component will be wrapped in *ngIf="wizardActiveStep === n" -->
-  <div class="wizard-step-placeholder" *ngIf="wizardActiveStep === 0">
-    <p class="wiz-placeholder-text">Step 1: Basics — coming in FN-733</p>
-  </div>
-  <div class="wizard-step-placeholder" *ngIf="wizardActiveStep === 1">
-    <p class="wiz-placeholder-text">Step 2: Stops — coming in FN-734</p>
-  </div>
-  <div class="wizard-step-placeholder" *ngIf="wizardActiveStep === 2">
-    <p class="wiz-placeholder-text">Step 3: Driver &amp; Equipment — coming in FN-735</p>
-  </div>
-  <div class="wizard-step-placeholder" *ngIf="wizardActiveStep === 3">
-    <p class="wiz-placeholder-text">Step 4: Attachments — coming in FN-736</p>
-  </div>
+  <!-- FN-778: Real step components projected into the wizard shell's <ng-content>. -->
+  <app-step-basics
+    *ngIf="wizardActiveStep === 0"
+    [data]="wizardBasics"
+    [aiPrefilledFields]="wizardAiPrefilledFields"
+    (dataChange)="onWizardBasicsChange($event)"
+    (valid)="onWizardBasicsValid($event)"
+  ></app-step-basics>
+
+  <app-step-stops
+    *ngIf="wizardActiveStep === 1"
+    [stops]="wizardStops"
+    [rate]="wizardBasics.rate"
+    (stopsChange)="onWizardStopsChange($event)"
+    (validChange)="onWizardStopsValid($event)"
+  ></app-step-stops>
+
+  <app-wizard-step-driver
+    *ngIf="wizardActiveStep === 2"
+    [driverId]="wizardDriverId"
+    [truckId]="wizardTruckId"
+    [trailerId]="wizardTrailerId"
+    (driverIdChange)="onWizardDriverChange($event)"
+    (truckIdChange)="onWizardTruckChange($event)"
+    (trailerIdChange)="onWizardTrailerChange($event)"
+    (validChange)="onWizardDriverValid($event)"
+  ></app-wizard-step-driver>
+
+  <app-step-attachments
+    *ngIf="wizardActiveStep === 3"
+    [attachments]="wizardAttachments"
+    [aiExtractedPdf]="wizardAiExtractedPdf"
+    (attachmentsChange)="onWizardAttachmentsChange($event)"
+    (save)="onWizardSave()"
+    (saveAndNew)="onWizardSaveAndNew()"
+  ></app-step-attachments>
 </app-load-wizard>
