@@ -482,6 +482,26 @@
                   <span class="material-symbols-outlined">content_copy</span>
                   <span>Copy Load</span>
                 </button>
+                <button
+                  type="button"
+                  class="actions-menu-item"
+                  *appHasPermission="'loads.create'"
+                  (click)="cloneLoad(load); actionsOpenLoadId = null"
+                  title="Duplicate this load with dates cleared; review and save as a new draft"
+                >
+                  <span class="material-symbols-outlined">file_copy</span>
+                  <span>Clone Load</span>
+                </button>
+                <button
+                  type="button"
+                  class="actions-menu-item"
+                  *appHasPermission="'loads.create'"
+                  (click)="createReturnLoad(load); actionsOpenLoadId = null"
+                  title="Create a return trip with stops reversed and rate cleared"
+                >
+                  <span class="material-symbols-outlined">swap_horiz</span>
+                  <span>Create Return Load</span>
+                </button>
                 <button type="button" class="actions-menu-item" (click)="openEditAndShowMap(load); actionsOpenLoadId = null">
                   <span class="material-symbols-outlined">map</span>
                   <span>Show on Map</span>
@@ -748,6 +768,26 @@
           <button type="button" class="trip-action-link trip-action-link--disabled" (click)="dispatchInfoToDriver()" title="Coming later">
             <span class="material-symbols-outlined trip-action-icon">send</span>
             <span>Dispatch info to driver</span>
+          </button>
+          <button
+            type="button"
+            class="trip-action-link"
+            *appHasPermission="'loads.create'"
+            (click)="cloneLoad(editingLoadDetail!)"
+            title="Duplicate this load with dates cleared"
+          >
+            <span class="material-symbols-outlined trip-action-icon">file_copy</span>
+            <span>Clone</span>
+          </button>
+          <button
+            type="button"
+            class="trip-action-link"
+            *appHasPermission="'loads.create'"
+            (click)="createReturnLoad(editingLoadDetail!)"
+            title="Create a return trip with stops reversed and rate cleared"
+          >
+            <span class="material-symbols-outlined trip-action-icon">swap_horiz</span>
+            <span>Create Return Load</span>
           </button>
         </div>
       </div>
