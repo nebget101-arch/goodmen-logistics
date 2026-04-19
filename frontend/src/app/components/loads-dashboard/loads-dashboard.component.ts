@@ -1,6 +1,6 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subject, debounceTime, distinctUntilChanged, takeUntil, forkJoin, of } from 'rxjs';
 import { map, catchError, switchMap } from 'rxjs/operators';
@@ -16,6 +16,7 @@ import {
   LoadAiEndpointExtraction
 } from '../../models/load-dashboard.model';
 import { LoadsService, BrokerOption } from '../../services/loads.service';
+import { LoadTemplatesService } from '../../services/load-templates.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
@@ -56,6 +57,16 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   showBulkUploadModal = false;
   showDetailsModal = false;
   showInlineNewLoad = false;
+
+  // ─── Load Templates (FN-755) ────────────────────────────────────────────
+  /** Save-As-Template dialog state. */
+  showSaveAsTemplateModal = false;
+  saveAsTemplateName = '';
+  saveAsTemplateDescription = '';
+  saveAsTemplateSubmitting = false;
+  saveAsTemplateError = '';
+  /** Load ID the save-as-template dialog is tied to. */
+  private saveAsTemplateLoadId: string | null = null;
   showRouteModal = false;
   showNewStopModal = false;
   selectedLoad: LoadDetail | null = null;
@@ -439,8 +450,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     private loadsService: LoadsService,
     private fb: FormBuilder,
     private route: ActivatedRoute,
+    private router: Router,
     private sanitizer: DomSanitizer,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private loadTemplatesService: LoadTemplatesService
   ) {
     this.manualLoadForm = this.fb.group({
       status: ['NEW', Validators.required],
@@ -547,6 +560,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.billingFilterOptions = this.billingOptions.map(b => ({ value: b, label: this.getBillingLabel(b) }));
     this.loadDropdownData();
     this.loadLoads();
+    this.applyUseTemplateFromRouterState();
 
     this.search$
       .pipe(debounceTime(300), distinctUntilChanged(), takeUntil(this.destroy$))
@@ -1059,6 +1073,120 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         this.wizardPrefilledData = null;
       }
     });
+  }
+
+  // ─── Load Templates (FN-755) ───────────────────────────────────────────
+
+  /** Navigate to the Load Templates admin page. */
+  navigateToTemplates(): void {
+    this.router.navigate(['/loads/templates']);
+  }
+
+  /**
+   * Open the Save-As-Template prompt for the given load ID.
+   * Defaults to the currently-open editing load when no id is passed.
+   */
+  openSaveAsTemplateModal(loadId?: string): void {
+    const id = loadId ?? this.editingLoadId;
+    if (!id) return;
+    this.saveAsTemplateLoadId = id;
+    this.saveAsTemplateName = '';
+    this.saveAsTemplateDescription = '';
+    this.saveAsTemplateError = '';
+    this.saveAsTemplateSubmitting = false;
+    this.showSaveAsTemplateModal = true;
+  }
+
+  closeSaveAsTemplateModal(): void {
+    if (this.saveAsTemplateSubmitting) return;
+    this.showSaveAsTemplateModal = false;
+    this.saveAsTemplateLoadId = null;
+    this.saveAsTemplateError = '';
+  }
+
+  submitSaveAsTemplate(): void {
+    const name = (this.saveAsTemplateName || '').trim();
+    if (!this.saveAsTemplateLoadId) return;
+    if (!name) {
+      this.saveAsTemplateError = 'Name is required.';
+      return;
+    }
+    this.saveAsTemplateSubmitting = true;
+    this.saveAsTemplateError = '';
+    this.loadTemplatesService.create({
+      load_id: this.saveAsTemplateLoadId,
+      name,
+      description: (this.saveAsTemplateDescription || '').trim() || null
+    }).subscribe({
+      next: () => {
+        this.saveAsTemplateSubmitting = false;
+        this.showSaveAsTemplateModal = false;
+        this.saveAsTemplateLoadId = null;
+        this.successMessage = `Template "${name}" saved.`;
+        setTimeout(() => (this.successMessage = ''), 3500);
+      },
+      error: (err) => {
+        this.saveAsTemplateSubmitting = false;
+        const serverMsg = err?.error?.error || err?.error?.message;
+        this.saveAsTemplateError = serverMsg || 'Failed to save template.';
+      }
+    });
+  }
+
+  /**
+   * Apply template data to the inline new-load form.
+   * Dates are intentionally NOT pre-filled — templates are reusable snapshots
+   * that should prompt the user to set new dates for each trip.
+   */
+  private applyTemplateToManualForm(data: any): void {
+    if (!data) return;
+    this.openManualEntry();
+
+    const stops: LoadStop[] = Array.isArray(data?.stops) ? data.stops : [];
+    const firstPickup = stops.find(s => (s.stop_type || '').toUpperCase() === 'PICKUP') || stops[0] || {} as LoadStop;
+    const lastDelivery = [...stops].reverse().find(s => (s.stop_type || '').toUpperCase() === 'DELIVERY') || stops[stops.length - 1] || {} as LoadStop;
+
+    this.manualLoadForm.patchValue({
+      status: 'DRAFT',
+      billingStatus: 'PENDING',
+      brokerId: data.broker_id || '',
+      brokerName: data.broker_name || data.broker_display_name || '',
+      driverId: data.driver_id || '',
+      truckId: data.truck_id || '',
+      trailerId: data.trailer_id || '',
+      rate: data.rate != null ? data.rate : '',
+      notes: data.notes || '',
+      pickupCity: firstPickup?.city || '',
+      pickupState: firstPickup?.state || '',
+      pickupZip: firstPickup?.zip || '',
+      deliveryCity: lastDelivery?.city || '',
+      deliveryState: lastDelivery?.state || '',
+      deliveryZip: lastDelivery?.zip || ''
+    });
+
+    if (stops.length > 2) {
+      this.sortedStops = stops.map((s, i) => ({
+        stop_type: (s.stop_type as 'PICKUP' | 'DELIVERY') || (i === 0 ? 'PICKUP' : 'DELIVERY'),
+        stop_date: null,
+        city: s.city || null,
+        state: s.state || null,
+        zip: s.zip || null,
+        address1: s.address1 || null,
+        sequence: s.sequence ?? i + 1
+      })).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    }
+  }
+
+  /** If the current router navigation carried a `useTemplate` state, pre-fill the form. */
+  private applyUseTemplateFromRouterState(): void {
+    const state = (typeof history !== 'undefined' ? history.state : null) as any;
+    const useTemplate = state?.useTemplate;
+    if (!useTemplate?.data) return;
+    this.applyTemplateToManualForm(useTemplate.data);
+    this.successMessage = `Using template "${useTemplate.name || 'load template'}". Dates and PO were cleared — fill them in and save.`;
+    // Clear the state so a browser back/forward doesn't re-trigger this.
+    try { history.replaceState({}, '', window.location.pathname + window.location.search); } catch { /* noop */ }
+    setTimeout(() => (this.successMessage = ''), 6000);
   }
 
   /** Close the wizard and reset its state. */
