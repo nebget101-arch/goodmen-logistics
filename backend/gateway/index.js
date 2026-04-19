@@ -429,6 +429,7 @@ app.use('/api/lease-agreements', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'))
 app.use('/api/lease-financing', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/ifta', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/loads', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/load-templates', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/brokers', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/locations', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/geo', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
