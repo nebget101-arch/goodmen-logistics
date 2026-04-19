@@ -47,6 +47,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   wizardStepValid: boolean[] = [false, false, false, false];
   /** True when the user has made unsaved edits inside the wizard. */
   wizardDirty = false;
+  /** FN-749: True when the wizard is editing an existing load. */
+  wizardEditMode = false;
+  /** FN-749: The load ID being edited in the wizard (null for new loads). */
+  wizardEditLoadId: string | null = null;
+  /** FN-749: Pre-filled wizard data from loaded existing load. */
+  wizardPrefilledData: any = null;
   showBulkUploadModal = false;
   showDetailsModal = false;
   showInlineNewLoad = false;
@@ -1031,11 +1037,38 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showNewLoadMenu = false;
   }
 
+  /**
+   * FN-749: Open the wizard in edit mode with data pre-filled from an existing load.
+   * All steps are freely jumpable — no step validation gating.
+   */
+  openLoadWizardForEdit(loadId: string): void {
+    this.wizardEditMode = true;
+    this.wizardEditLoadId = loadId;
+    this.wizardActiveStep = 0;
+    this.wizardStepValid = [true, true, true, true]; // all valid — existing load
+    this.wizardDirty = false;
+    this.showLoadWizard = true;
+
+    // Load the existing load detail and pre-fill wizard data
+    this.loadsService.getLoad(loadId).subscribe({
+      next: (res: any) => {
+        const load = res?.data || res;
+        this.wizardPrefilledData = load;
+      },
+      error: () => {
+        this.wizardPrefilledData = null;
+      }
+    });
+  }
+
   /** Close the wizard and reset its state. */
   closeWizard(): void {
     this.showLoadWizard = false;
     this.wizardActiveStep = 0;
     this.wizardDirty = false;
+    this.wizardEditMode = false;
+    this.wizardEditLoadId = null;
+    this.wizardPrefilledData = null;
   }
 
   /** Called when the wizard emits (save). Creates the load and closes the wizard. */

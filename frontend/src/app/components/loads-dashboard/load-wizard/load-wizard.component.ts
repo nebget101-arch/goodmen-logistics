@@ -58,6 +58,17 @@ export class LoadWizardComponent {
   /** Wizard modal title shown in the header bar. */
   @Input() title = 'New Load';
 
+  /**
+   * FN-749: When true, the wizard is editing an existing load.
+   * - Step gating is relaxed (all steps jumpable)
+   * - Title shows "Edit Load"
+   * - Save uses PATCH instead of POST (handled by parent)
+   */
+  @Input() editMode = false;
+
+  /** The load ID being edited (null for new loads). */
+  @Input() editLoadId: string | null = null;
+
   // ─── Outputs ──────────────────────────────────────────────────────────────
 
   /** Emitted whenever the active step index changes. Use with banana-in-a-box: [(activeStep)]. */
@@ -114,9 +125,11 @@ export class LoadWizardComponent {
 
   /**
    * Returns true when the user may click step `index` in the progress bar.
-   * Backward (or same): always. Forward: all prior steps must be valid.
+   * - Edit mode (FN-749): all steps freely jumpable
+   * - Create mode: backward always, forward requires prior steps valid
    */
   canJumpTo(index: number): boolean {
+    if (this.editMode) { return true; }
     if (index <= this.activeStep) { return true; }
     return this.stepValid.slice(0, index).every(Boolean);
   }
