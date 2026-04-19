@@ -23,11 +23,18 @@ import { StepStopsComponent } from './load-wizard/step-stops/step-stops.componen
 import { WizardStepDriverComponent } from './load-wizard/step-driver/step-driver.component';
 import { StepAttachmentsComponent } from './load-wizard/step-attachments/step-attachments.component';
 import { LoadsHeroCtaComponent } from './loads-hero-cta/loads-hero-cta.component';
+import { LoadTemplatesComponent } from './load-templates/load-templates.component';
 
 const routes: Routes = [
   {
     path: '',
     component: LoadsDashboardComponent,
+    canActivate: [AuthGuard, PlanGuard],
+    data: { planPath: '/loads' }
+  },
+  {
+    path: 'templates',
+    component: LoadTemplatesComponent,
     canActivate: [AuthGuard, PlanGuard],
     data: { planPath: '/loads' }
   }
@@ -50,7 +57,8 @@ const routes: Routes = [
     StepStopsComponent,
     WizardStepDriverComponent,
     StepAttachmentsComponent,
-    LoadsHeroCtaComponent
+    LoadsHeroCtaComponent,
+    LoadTemplatesComponent
   ],
   imports: [
     CommonModule,

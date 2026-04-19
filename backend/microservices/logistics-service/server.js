@@ -42,6 +42,7 @@ const swaggerOptions = buildSwaggerOptions({
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const loadsRouter = require(path.join(sharedRoot, 'routes', 'loads'));
+const loadTemplatesRouter = require(path.join(sharedRoot, 'routes', 'load-templates'));
 const fuelRouter = require(path.join(sharedRoot, 'routes', 'fuel'));
 const tollsRouter = require(path.join(sharedRoot, 'routes', 'tolls'));
 const brokersRouter = require(path.join(sharedRoot, 'routes', 'brokers'));
@@ -88,6 +89,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/fuel', authMiddleware, tenantContextMiddleware, fuelRouter);
 app.use('/api/tolls', authMiddleware, tenantContextMiddleware, tollsRouter);
 app.use('/api/loads', authMiddleware, tenantContextMiddleware, loadsRouter);
+app.use('/api/load-templates', authMiddleware, tenantContextMiddleware, loadTemplatesRouter);
 app.use('/api/brokers', authMiddleware, tenantContextMiddleware, brokersRouter);
 app.use('/api/locations', authMiddleware, tenantContextMiddleware, locationsRouter);
 app.use('/api', authMiddleware, tenantContextMiddleware, userLocationsRouter);

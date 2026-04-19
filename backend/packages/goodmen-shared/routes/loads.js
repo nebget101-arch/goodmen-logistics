@@ -2601,4 +2601,136 @@ router.delete('/:id/stops/:stopId', requireRole(['admin', 'dispatch']), async (r
   }
 });
 
+/** Build a wizard-compatible draft payload (camelCase) from a source load + its stops. */
+function buildDraftFromLoad(sourceLoad, sourceStops, { clearBroker = false, clearPo = true, clearRate = false, newLoadNumber = null, flipStops = false } = {}) {
+  const stops = (sourceStops || []).map((s) => ({
+    stopType: normalizeEnum(s.stop_type || s.stopType),
+    sequence: s.sequence,
+    city: s.city || null,
+    state: s.state || null,
+    zip: s.zip || null,
+    address1: s.address1 || null,
+    address2: s.address2 || null,
+    date: null,
+    stopDate: null,
+    stop_date: null
+  }));
+
+  let finalStops = stops;
+  if (flipStops) {
+    // Reverse order so last delivery → first, and toggle each stop type so the
+    // return trip picks up where the original dropped off and delivers to the origin.
+    finalStops = stops
+      .slice()
+      .reverse()
+      .map((s, idx) => ({
+        ...s,
+        stopType: s.stopType === 'DELIVERY' ? 'PICKUP' : 'DELIVERY',
+        sequence: idx + 1
+      }));
+  } else {
+    finalStops = stops.map((s, idx) => ({ ...s, sequence: idx + 1 }));
+  }
+
+  return {
+    loadNumber: newLoadNumber,
+    status: 'DRAFT',
+    billingStatus: 'PENDING',
+    poNumber: clearPo ? null : (sourceLoad.po_number || null),
+    rate: clearRate ? null : (sourceLoad.rate != null ? Number(sourceLoad.rate) : null),
+    notes: sourceLoad.notes || null,
+    brokerId: clearBroker ? null : (sourceLoad.broker_id || null),
+    brokerName: clearBroker ? null : (sourceLoad.broker_name || null),
+    driverId: sourceLoad.driver_id || null,
+    truckId: sourceLoad.truck_id || null,
+    trailerId: sourceLoad.trailer_id || null,
+    completedDate: null,
+    stops: finalStops
+  };
+}
+
+/**
+ * @openapi
+ * /api/loads/{id}/clone:
+ *   post:
+ *     summary: Return a clone-ready draft payload (does not persist)
+ *     tags:
+ *       - Loads
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Clone draft payload
+ *       404:
+ *         description: Source load not found
+ */
+router.post('/:id/clone', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const loadId = req.params.id;
+  const client = await getClient();
+  try {
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    if (!detail) return res.status(404).json({ success: false, error: 'Load not found' });
+    const newLoadNumber = await generateLoadNumber(client);
+    const draft = buildDraftFromLoad(detail, detail.stops, {
+      clearBroker: false,
+      clearPo: true,
+      clearRate: false,
+      newLoadNumber,
+      flipStops: false
+    });
+    draft.source_load_id = detail.id;
+    res.json({ success: true, data: draft });
+  } catch (error) {
+    dtLogger.error('loads_clone_failed', error, { loadId });
+    res.status(500).json({ success: false, error: 'Failed to build clone payload' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}/return-load:
+ *   post:
+ *     summary: Return a return-load draft payload with flipped stops (does not persist)
+ *     tags:
+ *       - Loads
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Return-load draft payload
+ *       404:
+ *         description: Source load not found
+ */
+router.post('/:id/return-load', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const loadId = req.params.id;
+  const client = await getClient();
+  try {
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    if (!detail) return res.status(404).json({ success: false, error: 'Load not found' });
+    const newLoadNumber = await generateLoadNumber(client);
+    const draft = buildDraftFromLoad(detail, detail.stops, {
+      clearBroker: false,
+      clearPo: true,
+      clearRate: true,
+      newLoadNumber,
+      flipStops: true
+    });
+    draft.source_load_id = detail.id;
+    res.json({ success: true, data: draft });
+  } catch (error) {
+    dtLogger.error('loads_return_load_failed', error, { loadId });
+    res.status(500).json({ success: false, error: 'Failed to build return-load payload' });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;

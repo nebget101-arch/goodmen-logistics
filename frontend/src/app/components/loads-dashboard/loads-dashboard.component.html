@@ -9,6 +9,15 @@
         <div class="search-box ai-search-box">
         <input type="text" class="ai-search-input" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
       </div>
+      <button
+        type="button"
+        class="btn btn-secondary btn-templates"
+        (click)="navigateToTemplates()"
+        *ngIf="!isDriverRole"
+      >
+        <span class="material-symbols-outlined">bookmark</span>
+        Templates
+      </button>
     </div>
   </div>
 
@@ -482,6 +491,26 @@
                   <span class="material-symbols-outlined">content_copy</span>
                   <span>Copy Load</span>
                 </button>
+                <button
+                  type="button"
+                  class="actions-menu-item"
+                  *appHasPermission="'loads.create'"
+                  (click)="cloneLoad(load); actionsOpenLoadId = null"
+                  title="Duplicate this load with dates cleared; review and save as a new draft"
+                >
+                  <span class="material-symbols-outlined">file_copy</span>
+                  <span>Clone Load</span>
+                </button>
+                <button
+                  type="button"
+                  class="actions-menu-item"
+                  *appHasPermission="'loads.create'"
+                  (click)="createReturnLoad(load); actionsOpenLoadId = null"
+                  title="Create a return trip with stops reversed and rate cleared"
+                >
+                  <span class="material-symbols-outlined">swap_horiz</span>
+                  <span>Create Return Load</span>
+                </button>
                 <button type="button" class="actions-menu-item" (click)="openEditAndShowMap(load); actionsOpenLoadId = null">
                   <span class="material-symbols-outlined">map</span>
                   <span>Show on Map</span>
@@ -748,6 +777,26 @@
           <button type="button" class="trip-action-link trip-action-link--disabled" (click)="dispatchInfoToDriver()" title="Coming later">
             <span class="material-symbols-outlined trip-action-icon">send</span>
             <span>Dispatch info to driver</span>
+          </button>
+          <button
+            type="button"
+            class="trip-action-link"
+            *appHasPermission="'loads.create'"
+            (click)="cloneLoad(editingLoadDetail!)"
+            title="Duplicate this load with dates cleared"
+          >
+            <span class="material-symbols-outlined trip-action-icon">file_copy</span>
+            <span>Clone</span>
+          </button>
+          <button
+            type="button"
+            class="trip-action-link"
+            *appHasPermission="'loads.create'"
+            (click)="createReturnLoad(editingLoadDetail!)"
+            title="Create a return trip with stops reversed and rate cleared"
+          >
+            <span class="material-symbols-outlined trip-action-icon">swap_horiz</span>
+            <span>Create Return Load</span>
           </button>
         </div>
       </div>
@@ -1138,6 +1187,17 @@
           <ng-container *ngIf="!editingLoadDetail || !isDraftLoad(editingLoadDetail)">
             <button class="btn btn-primary" type="submit" [disabled]="creatingLoad">
               {{ creatingLoad ? (editingLoadId ? 'Saving...' : 'Creating...') : (editingLoadId ? 'Save Changes' : 'Create Load') }}
+            </button>
+            <button
+              *ngIf="editingLoadId"
+              class="btn btn-secondary"
+              type="button"
+              (click)="openSaveAsTemplateModal()"
+              [disabled]="creatingLoad"
+              title="Save this load as a reusable template"
+            >
+              <span class="material-symbols-outlined">bookmark_add</span>
+              Save as Template
             </button>
             <button class="btn btn-secondary" type="button" (click)="closeManualModal()" [disabled]="creatingLoad">Close</button>
           </ng-container>
@@ -1660,6 +1720,61 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" (click)="closeDetails()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── FN-755: Save As Template prompt ─────────────────────────────────── -->
+  <div class="modal-backdrop" *ngIf="showSaveAsTemplateModal" (click)="closeSaveAsTemplateModal()">
+    <div class="modal save-template-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Save as Template</h3>
+        <button class="close" type="button" (click)="closeSaveAsTemplateModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted">
+          Snapshot this load's broker, stops, rate, and equipment so you can reuse them later.
+          Dates and PO number are not carried over.
+        </p>
+        <label class="save-template-field">
+          Name
+          <input
+            type="text"
+            [(ngModel)]="saveAsTemplateName"
+            [ngModelOptions]="{ standalone: true }"
+            placeholder="e.g. Dallas to Chicago weekly"
+            maxlength="100"
+          />
+        </label>
+        <label class="save-template-field">
+          Description
+          <textarea
+            rows="3"
+            [(ngModel)]="saveAsTemplateDescription"
+            [ngModelOptions]="{ standalone: true }"
+            placeholder="Optional notes about this template"
+            maxlength="500"
+          ></textarea>
+        </label>
+        <div *ngIf="saveAsTemplateError" class="alert alert-error">{{ saveAsTemplateError }}</div>
+      </div>
+      <div class="modal-footer">
+        <button
+          class="btn btn-primary"
+          type="button"
+          (click)="submitSaveAsTemplate()"
+          [disabled]="saveAsTemplateSubmitting"
+        >
+          {{ saveAsTemplateSubmitting ? 'Saving…' : 'Save template' }}
+        </button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          (click)="closeSaveAsTemplateModal()"
+          [disabled]="saveAsTemplateSubmitting"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   </div>
