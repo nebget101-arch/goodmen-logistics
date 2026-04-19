@@ -7,6 +7,7 @@
  * tenantContextMiddleware.
  *
  *   GET    /                  -> current tenant's inbound address + basic settings
+ *   POST   /test              -> send a test email to the tenant's inbound address
  *   GET    /logs              -> recent inbound emails for the tenant (paged)
  *   GET    /whitelist         -> tenant's sender whitelist (FN-761)
  *   POST   /whitelist         -> add a sender or domain to the whitelist
@@ -15,6 +16,7 @@
 
 const express = require('express');
 const knex = require('../config/knex');
+const { sendEmail } = require('../services/notification-service');
 
 const router = express.Router();
 
@@ -63,6 +65,69 @@ router.get('/', async (req, res) => {
       address,
       is_active: !!address
     }
+  });
+});
+
+router.post('/test', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ success: false, error: 'Forbidden: tenant context required' });
+  }
+
+  const hasColumn = await knex.schema
+    .hasColumn('tenants', 'inbound_email_address')
+    .catch(() => false);
+  if (!hasColumn) {
+    return res.status(503).json({
+      success: false,
+      error: 'Inbound email feature not yet provisioned'
+    });
+  }
+
+  const row = await knex('tenants')
+    .where({ id: tenantId })
+    .select('inbound_email_address', 'name')
+    .first()
+    .catch(() => null);
+  const address = row?.inbound_email_address;
+  if (!address) {
+    return res.status(400).json({
+      success: false,
+      error: 'No inbound email address configured for this tenant'
+    });
+  }
+
+  const userEmail = (req.user?.email || '').trim() || null;
+  const subject = 'FleetNeuron inbound email — pipeline test';
+  const text = [
+    'This is an automated test email sent from your FleetNeuron admin UI.',
+    '',
+    `It was delivered to ${address} via SendGrid Inbound Parse.`,
+    'If the pipeline is healthy, within ~15 seconds this email should appear',
+    'in the "Recent emails" table on /admin/inbound-email with status = succeeded',
+    '(or failed + an error message if extraction rejected it).',
+    '',
+    userEmail ? `Triggered by: ${userEmail}` : 'Triggered by: (unknown user)',
+    `Tenant: ${row?.name || tenantId}`
+  ].join('\n');
+
+  const result = await sendEmail({
+    to: address,
+    subject,
+    text,
+    replyTo: userEmail || undefined
+  });
+
+  if (!result.sent) {
+    return res.status(502).json({
+      success: false,
+      error: result.error || 'Failed to send test email'
+    });
+  }
+
+  return res.json({
+    success: true,
+    message: `Test email sent to ${address}. It should appear in the log within ~15 seconds.`
   });
 });
 
