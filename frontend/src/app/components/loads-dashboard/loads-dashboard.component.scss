@@ -709,9 +709,16 @@
     }
   }
 
+  /* FN-773: actions cell must escape td overflow:hidden so the
+     dropdown menu can render outside the row. */
+  td.actions-cell {
+    overflow: visible;
+  }
+
   .actions-dropdown .dropdown-menu {
     right: 0;
     left: auto;
+    z-index: 30;
   }
 
   .actions-trigger {
