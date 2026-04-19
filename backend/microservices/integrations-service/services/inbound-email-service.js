@@ -33,6 +33,7 @@ const {
   tomorrowIso,
   verifyWebhookSecret
 } = require('./inbound-email-helpers');
+const { applySecurityChecks } = require('./inbound-email-security');
 
 const LOAD_ATTACHMENT_TYPES = new Set([
   'RATE_CONFIRMATION',
@@ -455,6 +456,36 @@ async function processInboundEmail(input) {
     body_text: textBody,
     body_html: htmlBody
   });
+
+  // Security layer (FN-761): rate limit, whitelist, virus scan. Runs after
+  // the log row is created so rejection reasons stay on the audit trail.
+  const security = await applySecurityChecks({
+    tenantId: tenant.id,
+    fromEmail: fromRaw,
+    files
+  });
+  if (!security.ok) {
+    const reason = security.rejection?.reason || 'rejected';
+    const detail = security.rejection?.detail || null;
+    await updateInboundEmailLog(logEntry.id, {
+      load_id: null,
+      processing_status: 'rejected',
+      error_message: [reason, detail].filter(Boolean).join(': ')
+    });
+    dtLogger.warn('inbound_email_rejected', {
+      tenantId: tenant.id,
+      reason,
+      detail,
+      from: parseAddress(fromRaw) || fromRaw
+    });
+    return {
+      received: true,
+      tenantId: tenant.id,
+      status: 'rejected',
+      reason,
+      detail
+    };
+  }
 
   const defaultEntity = await knex('operating_entities')
     .where({ tenant_id: tenant.id, is_active: true })

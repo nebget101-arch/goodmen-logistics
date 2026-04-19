@@ -1,16 +1,16 @@
 'use strict';
 
 /**
- * Tenant-facing inbound-email routes — FN-760
+ * Tenant-facing inbound-email routes — FN-760 + FN-761
  *
  * Mounted at /api/tenants/me/inbound-email behind authMiddleware +
  * tenantContextMiddleware.
  *
- *   GET  /            -> current tenant's inbound address + basic settings
- *   GET  /logs        -> recent inbound emails for the tenant (paged)
- *
- * The POST /whitelist endpoint is owned by FN-761 (security layer) and is
- * intentionally not implemented here.
+ *   GET    /                  -> current tenant's inbound address + basic settings
+ *   GET    /logs              -> recent inbound emails for the tenant (paged)
+ *   GET    /whitelist         -> tenant's sender whitelist (FN-761)
+ *   POST   /whitelist         -> add a sender or domain to the whitelist
+ *   DELETE /whitelist/:id     -> remove an entry from the whitelist
  */
 
 const express = require('express');
@@ -19,6 +19,14 @@ const knex = require('../config/knex');
 const router = express.Router();
 
 const MAX_LIMIT = 100;
+
+function normalizeWhitelistPattern(raw) {
+  const trimmed = (raw || '').toString().trim().toLowerCase();
+  if (!trimmed) return null;
+  const isDomain = trimmed.startsWith('@');
+  if (!trimmed.includes('@')) return null;
+  return { pattern: trimmed, isDomain };
+}
 
 router.get('/', async (req, res) => {
   const tenantId = req.context?.tenantId || req.tenantId;
@@ -96,6 +104,93 @@ router.get('/logs', async (req, res) => {
     total: Number(count) || 0,
     configured: true
   });
+});
+
+// ---------------------------------------------------------------------------
+// Whitelist CRUD — FN-761
+// ---------------------------------------------------------------------------
+
+router.get('/whitelist', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Forbidden: tenant context required' });
+  }
+  const hasTable = await knex.schema
+    .hasTable('inbound_email_whitelist')
+    .catch(() => false);
+  if (!hasTable) {
+    return res.json({ success: true, data: [], configured: false });
+  }
+  const rows = await knex('inbound_email_whitelist')
+    .where('tenant_id', tenantId)
+    .orderBy('created_at', 'asc')
+    .select('id', 'pattern', 'is_domain', 'created_by_user_id', 'created_at');
+  return res.json({ success: true, data: rows, configured: true });
+});
+
+router.post('/whitelist', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Forbidden: tenant context required' });
+  }
+  const hasTable = await knex.schema
+    .hasTable('inbound_email_whitelist')
+    .catch(() => false);
+  if (!hasTable) {
+    return res
+      .status(503)
+      .json({ success: false, error: 'Whitelist table not provisioned' });
+  }
+
+  const parsed = normalizeWhitelistPattern(req.body?.pattern);
+  if (!parsed) {
+    return res.status(400).json({
+      success: false,
+      error: 'Pattern must be a valid email address or `@domain.com`'
+    });
+  }
+
+  try {
+    const [row] = await knex('inbound_email_whitelist')
+      .insert({
+        tenant_id: tenantId,
+        pattern: parsed.pattern,
+        is_domain: parsed.isDomain,
+        created_by_user_id: req.user?.id || null
+      })
+      .returning(['id', 'pattern', 'is_domain', 'created_by_user_id', 'created_at']);
+    return res.status(201).json({ success: true, data: row });
+  } catch (err) {
+    // Postgres unique-violation code
+    if (err?.code === '23505') {
+      return res
+        .status(409)
+        .json({ success: false, error: 'Pattern already exists for this tenant' });
+    }
+    return res
+      .status(500)
+      .json({ success: false, error: 'Failed to add whitelist entry' });
+  }
+});
+
+router.delete('/whitelist/:id', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Forbidden: tenant context required' });
+  }
+  const hasTable = await knex.schema
+    .hasTable('inbound_email_whitelist')
+    .catch(() => false);
+  if (!hasTable) {
+    return res.status(404).json({ success: false, error: 'Not found' });
+  }
+  const deleted = await knex('inbound_email_whitelist')
+    .where({ tenant_id: tenantId, id: req.params.id })
+    .del();
+  if (!deleted) {
+    return res.status(404).json({ success: false, error: 'Whitelist entry not found' });
+  }
+  return res.json({ success: true });
 });
 
 module.exports = router;
