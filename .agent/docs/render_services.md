@@ -30,11 +30,22 @@ coding agents should consult when writing "Deployment Handoff" sections.
 | MX record | `inbound.fleetneuron.ai` → `mx.sendgrid.net` priority `10` |
 | DKIM records (3 CNAMEs, all DNS-only on Cloudflare) | `em<auto>.inbound.fleetneuron.ai` → SendGrid wl-host; `s1._domainkey.inbound.fleetneuron.ai` → `s1.domainkey.<sendgrid-user>.wl<N>.sendgrid.net`; `s2._domainkey.inbound.fleetneuron.ai` → `s2.domainkey.<sendgrid-user>.wl<N>.sendgrid.net` |
 | SPF record | `fleetneuron.ai` TXT `v=spf1 include:sendgrid.net ~all` |
-| Webhook destination URL (SendGrid side) | `https://fleetneuron-logistics-gateway.onrender.com/api/webhooks/email-inbound?secret=<INBOUND_EMAIL_WEBHOOK_SECRET>` |
-| Webhook receiver (code) | `POST /api/webhooks/email-inbound` on `fleetneuron-logistics-gateway` → `fleetneuron-integrations-service` |
+| Webhook destination URL (SendGrid side, dev) | `https://fleetneuron-logistics-gateway-dev.onrender.com/api/webhooks/email-inbound?secret=<INBOUND_EMAIL_WEBHOOK_SECRET>` |
+| Webhook destination URL (SendGrid side, prod) | `https://fleetneuron-logistics-gateway.onrender.com/api/webhooks/email-inbound?secret=<INBOUND_EMAIL_WEBHOOK_SECRET>` |
+| Webhook receiver (code) | `POST /api/webhooks/email-inbound` on `fleetneuron-logistics-gateway[-dev]` → `fleetneuron-integrations-service[-dev]` |
+| Webhook secret delivery (either works) | `?secret=<value>` query param **or** `x-webhook-secret: <value>` header — see `verifyWebhookSecret()` in `inbound-email-helpers.js` |
 | SendGrid options | "Check incoming emails for spam" ✅; "POST raw, full MIME message" ❌ |
 | DNS host | Cloudflare (zone `fleetneuron.ai`) |
 | Tenant addressing scheme | `loads-<tenant-slug>@inbound.fleetneuron.ai` (resolved in FN-759 `tenants.inbound_email_address`) |
+
+**Last verified (FN-781, 2026-04-19 — dev):**
+
+- `dig MX inbound.fleetneuron.ai +short` → `10 mx.sendgrid.net.` ✅
+- `POST https://fleetneuron-logistics-gateway-dev.onrender.com/api/webhooks/email-inbound` with no secret → `401 {"error":"Unauthorized"}` ✅ (secret enforced, gateway→service route reachable)
+- `POST https://fleetneuron-integrations-service-dev.onrender.com/api/webhooks/email-inbound` direct, no secret → `401 {"error":"Unauthorized"}` ✅ (service publicly reachable)
+- `POST ...?secret=bogus` → `401` ✅ (wrong secret rejected)
+- `GET https://fleetneuron-logistics-gateway-dev.onrender.com/health` → `200 {"status":"ok", integrations: fleetneuron-integrations-service-dev.onrender.com}` ✅
+- Not verifiable from CLI (dashboard-gated): SendGrid Inbound Parse host/destination URL value, SendGrid `?secret=` value vs. Render env var `INBOUND_EMAIL_WEBHOOK_SECRET` on `fleetneuron-integrations-service-dev`, SendGrid Activity log, Render live logs during a test send.
 
 **Env vars required on `fleetneuron-integrations-service`:**
 - `INBOUND_EMAIL_WEBHOOK_SECRET` — shared secret; must match the `?secret=` value in the SendGrid destination URL. When unset, the webhook accepts unsigned requests (dev fallback only). Store value in Render env vars — **never** in this file or in the repo.
