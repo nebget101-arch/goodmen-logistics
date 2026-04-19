@@ -1,0 +1,186 @@
+<!-- FN-745: Bulk Extraction Grid Modal -->
+<div class="beg-backdrop" (click)="onClose()">
+  <div class="beg-modal" (click)="stopPropagation($event)">
+
+    <!-- Header -->
+    <div class="beg-header">
+      <div class="beg-header-left">
+        <span class="beg-hero-pill">
+          <span class="material-symbols-outlined">auto_awesome</span> AI Batch
+        </span>
+        <h3>
+          <span class="material-symbols-outlined beg-title-icon">neurology</span>
+          Bulk Extraction
+        </h3>
+      </div>
+      <button class="beg-close" type="button" (click)="onClose()" [disabled]="processing">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <!-- Progress bar (always visible during processing) -->
+    <div class="beg-progress-bar-container" *ngIf="processing || completed">
+      <div class="beg-progress-track">
+        <div class="beg-progress-fill"
+             [style.width.%]="progressPercent"
+             [class.beg-progress-fill--complete]="completed"></div>
+      </div>
+      <span class="beg-progress-label">{{ processedCount }}/{{ totalCount }} processed</span>
+    </div>
+
+    <!-- Body -->
+    <div class="beg-body">
+
+      <!-- ===== Phase 1: Progress Grid ===== -->
+      <div class="beg-grid" *ngIf="!completed">
+        <p class="beg-desc">
+          Processing <span class="beg-cyan">{{ totalCount }}</span> files.
+          Each PDF is being analyzed by our <span class="beg-cyan">AI</span> engine.
+        </p>
+        <table class="beg-table">
+          <thead>
+            <tr>
+              <th class="beg-th-num">#</th>
+              <th class="beg-th-file">File</th>
+              <th class="beg-th-status">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of rows; let i = index"
+                [class.beg-row--active]="processing && currentIndex === i"
+                [class.beg-row--success]="row.status === 'SUCCESS'"
+                [class.beg-row--failed]="row.status === 'FAILED'">
+              <td class="beg-cell-num">{{ i + 1 }}</td>
+              <td class="beg-cell-file" [title]="row.file.name">
+                <span class="material-symbols-outlined beg-file-icon">description</span>
+                {{ truncateFilename(row.file.name) }}
+              </td>
+              <td class="beg-cell-status">
+                <!-- Queued -->
+                <span *ngIf="row.status === 'QUEUED'" class="beg-badge beg-badge--queued">
+                  <span class="material-symbols-outlined">schedule</span> Queued
+                </span>
+                <!-- Extracting -->
+                <span *ngIf="row.status === 'EXTRACTING'" class="beg-badge beg-badge--extracting">
+                  <span class="material-symbols-outlined beg-spin">neurology</span> Extracting
+                </span>
+                <!-- Creating -->
+                <span *ngIf="row.status === 'CREATING'" class="beg-badge beg-badge--extracting">
+                  <span class="material-symbols-outlined beg-spin">sync</span> Creating
+                </span>
+                <!-- Success -->
+                <span *ngIf="row.status === 'SUCCESS' && row.autoApproved" class="beg-badge beg-badge--success">
+                  <span class="material-symbols-outlined">check_circle</span> Auto-approved
+                </span>
+                <span *ngIf="row.status === 'SUCCESS' && !row.autoApproved" class="beg-badge beg-badge--draft">
+                  <span class="material-symbols-outlined">edit_note</span> Draft
+                </span>
+                <!-- Failed -->
+                <span *ngIf="row.status === 'FAILED'" class="beg-badge beg-badge--failed">
+                  <span class="material-symbols-outlined">cancel</span> Failed
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ===== Phase 2: Summary Screen ===== -->
+      <div class="beg-summary" *ngIf="completed">
+        <div class="beg-summary-icon-row">
+          <span class="material-symbols-outlined beg-summary-check"
+                *ngIf="failedCount === 0">task_alt</span>
+          <span class="material-symbols-outlined beg-summary-warn"
+                *ngIf="failedCount > 0">info</span>
+        </div>
+
+        <h4 class="beg-summary-title">Processing Complete</h4>
+
+        <div class="beg-summary-stats">
+          <div class="beg-stat" *ngIf="autoApprovedCount > 0">
+            <span class="beg-stat-number beg-stat--green">{{ autoApprovedCount }}</span>
+            <span class="beg-stat-label">auto-approved</span>
+          </div>
+          <div class="beg-stat" *ngIf="needsReviewCount > 0">
+            <span class="beg-stat-number beg-stat--amber">{{ needsReviewCount }}</span>
+            <span class="beg-stat-label">need review</span>
+          </div>
+          <div class="beg-stat" *ngIf="failedCount > 0">
+            <span class="beg-stat-number beg-stat--red">{{ failedCount }}</span>
+            <span class="beg-stat-label">failed</span>
+          </div>
+        </div>
+
+        <!-- Detailed results table -->
+        <table class="beg-table beg-table--summary">
+          <thead>
+            <tr>
+              <th class="beg-th-num">#</th>
+              <th class="beg-th-file">File</th>
+              <th class="beg-th-status">Result</th>
+              <th class="beg-th-action">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of rows; let i = index"
+                [class.beg-row--success]="row.status === 'SUCCESS'"
+                [class.beg-row--failed]="row.status === 'FAILED'">
+              <td class="beg-cell-num">{{ i + 1 }}</td>
+              <td class="beg-cell-file" [title]="row.file.name">
+                <span class="material-symbols-outlined beg-file-icon">description</span>
+                {{ truncateFilename(row.file.name) }}
+              </td>
+              <td class="beg-cell-status">
+                <span *ngIf="row.status === 'SUCCESS' && row.autoApproved" class="beg-badge beg-badge--success">
+                  <span class="material-symbols-outlined">check_circle</span>
+                  Load #{{ row.load?.load_number || '--' }}
+                </span>
+                <span *ngIf="row.status === 'SUCCESS' && !row.autoApproved" class="beg-badge beg-badge--draft">
+                  <span class="material-symbols-outlined">edit_note</span>
+                  Draft #{{ row.load?.load_number || '--' }}
+                </span>
+                <span *ngIf="row.status === 'FAILED'" class="beg-badge beg-badge--failed"
+                      [title]="row.errorMessage">
+                  <span class="material-symbols-outlined">cancel</span>
+                  {{ row.errorMessage || 'Failed' }}
+                </span>
+                <!-- Retrying states -->
+                <span *ngIf="row.status === 'EXTRACTING' || row.status === 'CREATING'" class="beg-badge beg-badge--extracting">
+                  <span class="material-symbols-outlined beg-spin">sync</span> Retrying
+                </span>
+                <span *ngIf="row.status === 'QUEUED'" class="beg-badge beg-badge--queued">
+                  <span class="material-symbols-outlined">schedule</span> Queued
+                </span>
+              </td>
+              <td class="beg-cell-action">
+                <button *ngIf="row.status === 'FAILED'"
+                        class="beg-retry-btn"
+                        type="button"
+                        (click)="retryFile(i)">
+                  <span class="material-symbols-outlined">refresh</span> Retry
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="beg-footer">
+      <button *ngIf="completed && needsReviewCount > 0"
+              class="beg-btn beg-btn--review"
+              type="button"
+              (click)="onReviewNow()">
+        <span class="material-symbols-outlined">rate_review</span>
+        Review Now
+      </button>
+      <button class="beg-btn beg-btn--done"
+              type="button"
+              (click)="onClose()"
+              [disabled]="processing">
+        {{ completed ? 'Done' : 'Cancel' }}
+      </button>
+    </div>
+  </div>
+</div>

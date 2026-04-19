@@ -15,6 +15,7 @@ import { SharedModule } from '../../shared/shared.module';
 import { LoadWizardModule } from './load-wizard/load-wizard.module';
 
 import { LoadsDashboardComponent } from './loads-dashboard.component';
+import { BulkExtractionGridComponent } from './bulk-extraction-grid/bulk-extraction-grid.component';
 import { StatusPillComponent } from '../shared/status-pill/status-pill.component';
 import { AttachmentChipComponent } from '../shared/attachment-chip/attachment-chip.component';
 import { InlineDateFilterComponent } from '../shared/inline-date-filter/inline-date-filter.component';
@@ -42,6 +43,7 @@ const routes: Routes = [
 @NgModule({
   declarations: [
     LoadsDashboardComponent,
+    BulkExtractionGridComponent,
     StatusPillComponent,
     AttachmentChipComponent,
     InlineDateFilterComponent,
