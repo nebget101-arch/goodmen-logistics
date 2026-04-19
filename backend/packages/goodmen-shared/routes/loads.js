@@ -8,6 +8,7 @@ const dtLogger = require('../utils/logger');
 const { query, getClient } = require('../internal/db');
 const { extractLoadFromPdf } = require('../services/load-ai-extractor');
 const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
+const { calculateTripMetrics } = require('../services/trip-metrics');
 
 const LOAD_STATUSES = ['DRAFT', 'NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
 const BILLING_STATUSES = ['PENDING', 'CANCELLED', 'CANCELED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
@@ -57,6 +58,13 @@ async function getDrivingDistanceMiles(fromZip, toZip) {
   }
 }
 
+/**
+ * Resolve lat/lon for each stop using OSRM-backed driving distance when
+ * possible, falling back to the pure Haversine helper in trip-metrics.js.
+ *
+ * This wrapper keeps all DB and network I/O in the route file while the
+ * actual metric arithmetic lives in the shared service.
+ */
 async function computeTripMetrics(exec, loadId, loadRow, stops) {
   const stopList = stops || [];
   const pickups = stopList.filter((s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'PICKUP');
@@ -67,12 +75,12 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
   const pickupZip = (firstPickup?.zip || '').toString().trim() || null;
   const deliveryZip = (lastDelivery?.zip || '').toString().trim() || null;
 
+  // ── Look up the driver's previous delivery location (DB I/O) ──────────────
   let prevZip = null;
   let prevCity = null;
   let prevState = null;
   if (loadRow?.driver_id) {
     try {
-      // Find the effective date of the current load (earliest pickup stop or load created_at)
       const currentLoadDate = firstPickup?.stop_date || loadRow.pickup_date || loadRow.created_at || null;
 
       const prevResult = await exec(
@@ -98,6 +106,9 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
     }
   }
 
+  // ── Use OSRM for driving distances (network I/O) ──────────────────────────
+  // OSRM gives road-distance accuracy; the pure Haversine helper in
+  // trip-metrics.js is used elsewhere when OSRM is unavailable.
   let emptyMiles = 0;
   let loadedMiles = 0;
 
@@ -110,7 +121,9 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
 
   const totalMiles = (emptyMiles || 0) + (loadedMiles || 0);
   const rateValue = loadRow && loadRow.rate != null ? Number(loadRow.rate) : null;
-  const ratePerMile = totalMiles > 0 && rateValue != null ? Number(rateValue) / totalMiles : null;
+  const ratePerMile = totalMiles > 0 && rateValue != null
+    ? Number((Number(rateValue) / totalMiles).toFixed(2))
+    : null;
 
   return {
     prev_zip: prevZip,
