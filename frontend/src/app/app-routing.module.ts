@@ -29,6 +29,7 @@ import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
 import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
+import { InboundEmailSettingsComponent } from './components/admin/inbound-email-settings/inbound-email-settings.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 import { EmployerResponseComponent } from './public/components/employer-response/employer-response.component';
@@ -239,6 +240,12 @@ const routes: Routes = [
     component: LocationsListComponent,
     canActivate: [AuthGuard, PermissionGuard],
     data: { anyPermission: [PERMISSIONS.LOCATIONS_MANAGE, PERMISSIONS.LOCATIONS_VIEW] }
+  },
+  {
+    path: 'admin/inbound-email',
+    component: InboundEmailSettingsComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: [PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.USERS_EDIT] }
   },
   { path: 'login', component: LoginComponent },
   { path: 'forgot-password', component: ForgotPasswordComponent },

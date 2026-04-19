@@ -25,6 +25,8 @@ export interface LoadFilters {
   sortDir?: 'asc' | 'desc';
   /** FN-746: when true, fetches only loads with needs_review = true. */
   needsReview?: boolean;
+  /** FN-762: filter by load source (e.g. 'email') — how the load was created. */
+  source?: string;
 }
 
 export interface DriverOption {
