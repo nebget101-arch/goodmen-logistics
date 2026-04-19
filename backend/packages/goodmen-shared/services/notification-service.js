@@ -109,7 +109,7 @@ async function sendEmail(options) {
     ? attachments.filter((item) => item && item.content && item.filename)
     : [];
   try {
-    await sgMail.send({
+    const sendResult = await sgMail.send({
       to: toList,
       from: FROM_EMAIL,
       subject,
@@ -119,7 +119,10 @@ async function sendEmail(options) {
       ...(text ? { text } : {}),
       html: html || (text ? text.replace(/\n/g, '<br>') : subject)
     });
-    return { sent: true };
+    const firstResponse = Array.isArray(sendResult) ? sendResult[0] : sendResult;
+    const headers = firstResponse?.headers || {};
+    const messageId = headers['x-message-id'] || headers['X-Message-Id'] || null;
+    return { sent: true, messageId };
   } catch (err) {
     const message = err.response?.body?.errors?.[0]?.message || err.message || String(err);
     return { sent: false, error: message };
