@@ -1,0 +1,167 @@
+<div class="step-basics">
+  <!-- Validation Errors -->
+  <div class="validation-errors" *ngIf="validationErrors.length">
+    <div class="alert alert-danger">
+      <strong>Please fix the following:</strong>
+      <ul>
+        <li *ngFor="let err of validationErrors">{{ err }}</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Row 1: Load Number + Status + Billing Status -->
+  <div class="form-row">
+    <div class="form-group">
+      <label>
+        Load Number *
+        <span class="ai-sparkle" *ngIf="isAiPrefilled('loadNumber')" title="AI-prefilled">&#10024;</span>
+      </label>
+      <input
+        type="text"
+        class="form-control"
+        [(ngModel)]="data.loadNumber"
+        (ngModelChange)="onFieldChange()"
+        placeholder="LD-250417-1234"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Status *</label>
+      <select class="form-control" [(ngModel)]="data.status" (ngModelChange)="onFieldChange()">
+        <option *ngFor="let s of statusOptions" [value]="s">{{ s }}</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Billing Status *</label>
+      <select class="form-control" [(ngModel)]="data.billingStatus" (ngModelChange)="onFieldChange()">
+        <option *ngFor="let s of billingStatusOptions" [value]="s">{{ s }}</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Row 2: Broker + PO Number -->
+  <div class="form-row">
+    <div class="form-group form-group-wide">
+      <label>
+        Broker
+        <span class="ai-sparkle" *ngIf="isAiPrefilled('broker')" title="AI-prefilled">&#10024;</span>
+      </label>
+      <div class="broker-autocomplete">
+        <input
+          type="text"
+          class="form-control"
+          [value]="brokerSearch"
+          (input)="onBrokerSearch($any($event.target).value)"
+          (focus)="onBrokerSearch(brokerSearch)"
+          placeholder="Search broker..."
+          autocomplete="off"
+        />
+        <button
+          type="button"
+          class="btn-clear"
+          *ngIf="data.brokerId"
+          (click)="clearBroker()"
+          title="Clear broker"
+        >&times;</button>
+
+        <div class="broker-dropdown" *ngIf="showBrokerDropdown">
+          <div
+            class="broker-item"
+            *ngFor="let b of filteredBrokers"
+            (click)="selectBroker(b)"
+          >
+            {{ b.company_name || b.name }}
+          </div>
+        </div>
+      </div>
+      <button type="button" class="btn-link" (click)="openQuickBroker()">+ Create New Broker</button>
+    </div>
+
+    <div class="form-group">
+      <label>
+        PO Number
+        <span class="ai-sparkle" *ngIf="isAiPrefilled('poNumber')" title="AI-prefilled">&#10024;</span>
+      </label>
+      <input
+        type="text"
+        class="form-control"
+        [(ngModel)]="data.poNumber"
+        (ngModelChange)="onFieldChange()"
+        placeholder="PO-12345"
+      />
+    </div>
+  </div>
+
+  <!-- Row 3: Rate + Dispatcher -->
+  <div class="form-row">
+    <div class="form-group">
+      <label>
+        Rate ($)
+        <span class="ai-sparkle" *ngIf="isAiPrefilled('rate')" title="AI-prefilled">&#10024;</span>
+      </label>
+      <input
+        type="number"
+        class="form-control"
+        [(ngModel)]="data.rate"
+        (blur)="formatRate()"
+        placeholder="0.00"
+        step="0.01"
+        min="0"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Dispatcher</label>
+      <input
+        type="text"
+        class="form-control"
+        [value]="data.dispatcher"
+        readonly
+      />
+    </div>
+  </div>
+
+  <!-- Collapsible Notes -->
+  <div class="notes-section">
+    <button type="button" class="btn-collapse" (click)="toggleNotes()">
+      <span class="collapse-icon" [class.open]="showNotes">&#9654;</span>
+      Notes
+    </button>
+    <div *ngIf="showNotes" class="notes-body">
+      <textarea
+        class="form-control"
+        [(ngModel)]="data.notes"
+        (ngModelChange)="onFieldChange()"
+        rows="3"
+        placeholder="Internal notes..."
+      ></textarea>
+    </div>
+  </div>
+
+  <!-- Quick-Create Broker Modal -->
+  <div class="quick-broker-overlay" *ngIf="showQuickBroker">
+    <div class="quick-broker-modal">
+      <h4>Create New Broker</h4>
+      <div class="form-group">
+        <label>Company Name *</label>
+        <input
+          type="text"
+          class="form-control"
+          [(ngModel)]="quickBrokerName"
+          placeholder="Broker company name"
+          autofocus
+        />
+      </div>
+      <div class="quick-broker-actions">
+        <button type="button" class="btn btn-secondary" (click)="cancelQuickBroker()">Cancel</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="!quickBrokerName.trim()"
+          (click)="saveQuickBroker()"
+        >Create</button>
+      </div>
+    </div>
+  </div>
+</div>
