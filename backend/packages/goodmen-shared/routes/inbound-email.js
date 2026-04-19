@@ -126,7 +126,8 @@ router.get('/whitelist', async (req, res) => {
     .where('tenant_id', tenantId)
     .orderBy('created_at', 'asc')
     .select('id', 'pattern', 'is_domain', 'created_by_user_id', 'created_at');
-  return res.json({ success: true, data: rows, configured: true });
+  const data = rows.map((r) => ({ ...r, sender_email: r.pattern }));
+  return res.json({ success: true, data, configured: true });
 });
 
 router.post('/whitelist', async (req, res) => {
@@ -143,7 +144,8 @@ router.post('/whitelist', async (req, res) => {
       .json({ success: false, error: 'Whitelist table not provisioned' });
   }
 
-  const parsed = normalizeWhitelistPattern(req.body?.pattern);
+  const rawPattern = req.body?.sender_email ?? req.body?.pattern;
+  const parsed = normalizeWhitelistPattern(rawPattern);
   if (!parsed) {
     return res.status(400).json({
       success: false,
@@ -160,7 +162,10 @@ router.post('/whitelist', async (req, res) => {
         created_by_user_id: req.user?.id || null
       })
       .returning(['id', 'pattern', 'is_domain', 'created_by_user_id', 'created_at']);
-    return res.status(201).json({ success: true, data: row });
+    return res.status(201).json({
+      success: true,
+      data: { ...row, sender_email: row.pattern }
+    });
   } catch (err) {
     // Postgres unique-violation code
     if (err?.code === '23505') {
