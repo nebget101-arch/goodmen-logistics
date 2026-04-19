@@ -173,11 +173,14 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     billingStatus: string;
     driverId: string;
     q: string;
+    /** FN-746: shows only loads flagged for dispatcher review. */
+    needsReview: boolean;
   } = {
     status: '',
     billingStatus: '',
     driverId: '',
-    q: ''
+    q: '',
+    needsReview: false
   };
 
   sortBy: 'load_number' | 'pickup_date' | 'rate' | 'completed_date' = 'pickup_date';
@@ -835,7 +838,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         page: this.page,
         pageSize: this.pageSize,
         sortBy: this.sortBy,
-        sortDir: this.sortDir
+        sortDir: this.sortDir,
+        needsReview: this.filters.needsReview || undefined
       })
       .subscribe({
         next: (res) => {
@@ -872,6 +876,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   setStatusFilter(value: string): void {
     this.filters.status = value;
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  /** FN-746: toggle the Needs Review filter chip. */
+  toggleNeedsReview(): void {
+    this.filters.needsReview = !this.filters.needsReview;
     this.page = 1;
     this.loadLoads();
   }
@@ -2630,13 +2641,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     key: string;
     label: string;
     value: string;
-    kind: 'header' | 'status' | 'billing' | 'driver';
+    kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review';
   }> {
     const chips: Array<{
       key: string;
       label: string;
       value: string;
-      kind: 'header' | 'status' | 'billing' | 'driver';
+      kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review';
     }> = [];
 
     // Header filters
@@ -2682,10 +2693,20 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       });
     }
 
+    // FN-746: Needs review filter
+    if (this.filters.needsReview) {
+      chips.push({
+        key: 'needsReview',
+        label: 'Filter',
+        value: 'Needs review',
+        kind: 'needs_review'
+      });
+    }
+
     return chips;
   }
 
-  clearFilterChip(chip: { key: string; kind: 'header' | 'status' | 'billing' | 'driver' }): void {
+  clearFilterChip(chip: { key: string; kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review' }): void {
     if (chip.kind === 'header') {
       this.headerFilters = {
         ...this.headerFilters,
@@ -2712,6 +2733,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       this.filters.driverId = '';
       this.page = 1;
       this.loadLoads();
+      return;
+    }
+
+    if (chip.kind === 'needs_review') {
+      this.filters.needsReview = false;
+      this.page = 1;
+      this.loadLoads();
     }
   }
 
@@ -2734,7 +2762,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       ...this.filters,
       status: '',
       billingStatus: '',
-      driverId: ''
+      driverId: '',
+      needsReview: false
     };
 
     this.page = 1;

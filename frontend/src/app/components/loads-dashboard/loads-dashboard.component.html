@@ -72,6 +72,20 @@
     </div>
   </div>
 
+  <!-- FN-746: Needs review toggle chip -->
+  <div class="quick-filter-row" *ngIf="!isDriverRole">
+    <button
+      type="button"
+      class="quick-filter-chip"
+      [class.quick-filter-chip--active]="filters.needsReview"
+      (click)="toggleNeedsReview()"
+      title="Show only loads that need dispatcher review"
+    >
+      <span class="material-symbols-outlined">warning</span>
+      Needs review
+    </button>
+  </div>
+
   <!-- Active filters summary -->
   <div class="active-filters" *ngIf="activeFilterChips.length">
     <span class="active-filters__label">Filters</span>
@@ -417,6 +431,14 @@
         <tr *ngFor="let load of filteredLoads" [ngClass]="rowClass(load)">
           <td [title]="load.load_number || ''">
             <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
+            <!-- FN-746: needs_review badge -->
+            <span
+              *ngIf="load.needs_review"
+              class="review-badge"
+              title="Needs review"
+            >
+              <span class="material-symbols-outlined">warning</span>
+            </span>
           </td>
           <td [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
           <td [title]="load.driver_name || '--'">{{ load.driver_name || '--' }}</td>
