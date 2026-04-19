@@ -78,6 +78,7 @@ import { LocationsAdminModule } from './components/locations-admin/locations-adm
 // StepAttachmentsComponent moved into LoadsDashboardModule (lazy-loaded).
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
+import { AiExtractionFlowComponent } from './components/loads-dashboard/ai-extraction-flow/ai-extraction-flow.component';
 
 @NgModule({
   declarations: [
@@ -128,7 +129,8 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
     DisqualificationHistoryComponent,
     IdleTruckAlertsComponent,
     InventoryItemEditDialogComponent,
-    AutoReplenishmentComponent
+    AutoReplenishmentComponent,
+    AiExtractionFlowComponent
   ],
   imports: [
     BrowserModule,
