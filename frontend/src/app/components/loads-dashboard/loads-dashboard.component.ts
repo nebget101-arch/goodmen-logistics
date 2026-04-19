@@ -3076,7 +3076,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return chips;
   }
 
-  clearFilterChip(chip: { key: string; kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review' }): void {
+  clearFilterChip(chip: { key: string; kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review' | 'source' }): void {
     if (chip.kind === 'header') {
       this.headerFilters = {
         ...this.headerFilters,
