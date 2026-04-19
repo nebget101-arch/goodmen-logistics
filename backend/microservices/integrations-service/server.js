@@ -40,10 +40,23 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 const scanBridgeRouter = require('@goodmen/shared/routes/scan-bridge');
 const fmcsaRouter = require('@goodmen/shared/routes/fmcsa');
 const fmcsaSafetyRouter = require('@goodmen/shared/routes/fmcsa-safety');
+const inboundEmailWebhookRouter = require('./routes/inbound-email-webhook');
+const inboundEmailRouter = require('@goodmen/shared/routes/inbound-email');
 
 app.use('/api/scan-bridge', scanBridgeRouter);
 app.use('/api/fmcsa', fmcsaRouter);
 app.use('/api/fmcsa/safety', authMiddleware, tenantContextMiddleware, fmcsaSafetyRouter);
+
+// Inbound email provider webhook — public endpoint, auth via shared secret.
+app.use('/api/webhooks/email-inbound', inboundEmailWebhookRouter);
+
+// Tenant-facing inbound-email settings and logs (authenticated).
+app.use(
+  '/api/tenants/me/inbound-email',
+  authMiddleware,
+  tenantContextMiddleware,
+  inboundEmailRouter
+);
 
 app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));

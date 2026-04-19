@@ -51,6 +51,8 @@ export interface LoadListItem {
   notes?: string | null;
   /** FN-746: true when AI-created load needs dispatcher review before approval. */
   needs_review?: boolean;
+  /** FN-762: how this load was created — e.g. 'manual', 'ai', 'email', 'import'. */
+  source?: string | null;
 }
 
 export interface LoadStop {
@@ -113,6 +115,15 @@ export interface LoadDetail extends LoadListItem {
   prev_delivery_city?: string | null;
   /** Previous load's last delivery state (for empty miles origin context). */
   prev_delivery_state?: string | null;
+  /** FN-762: inbound email preview for loads with source = 'email'. */
+  inbound_email?: {
+    id?: string;
+    from_email?: string | null;
+    subject?: string | null;
+    received_at?: string | null;
+    body_text?: string | null;
+    body_html?: string | null;
+  } | null;
 }
 
 export interface LoadsListResponse {

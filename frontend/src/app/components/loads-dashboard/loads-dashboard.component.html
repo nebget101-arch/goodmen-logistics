@@ -93,6 +93,18 @@
       <span class="material-symbols-outlined">warning</span>
       Needs review
     </button>
+
+    <!-- FN-762: Source = Email toggle chip -->
+    <button
+      type="button"
+      class="quick-filter-chip"
+      [class.quick-filter-chip--active]="filters.source === 'email'"
+      (click)="toggleEmailSource()"
+      title="Show only loads created from a forwarded email"
+    >
+      <span class="material-symbols-outlined">alternate_email</span>
+      Source: Email
+    </button>
   </div>
 
   <!-- Active filters summary -->
@@ -447,6 +459,15 @@
               title="Needs review"
             >
               <span class="material-symbols-outlined">warning</span>
+            </span>
+            <!-- FN-762: email-sourced load badge -->
+            <span
+              *ngIf="load.source === 'email'"
+              class="email-source-badge"
+              title="Created from a forwarded email"
+            >
+              <span class="material-symbols-outlined">alternate_email</span>
+              Email
             </span>
           </td>
           <td [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
@@ -1687,6 +1708,15 @@
         <button class="close" (click)="closeDetails()">×</button>
       </div>
       <div class="modal-body" *ngIf="selectedLoad">
+        <!-- FN-762: "Created from email" badge + email preview -->
+        <div
+          class="email-source-banner"
+          *ngIf="selectedLoad.source === 'email'"
+          title="This load was auto-created from a forwarded email"
+        >
+          <span class="material-symbols-outlined">alternate_email</span>
+          <span>📧 Created from email</span>
+        </div>
         <div class="detail-grid">
           <div><strong>Load #:</strong> {{ selectedLoad.load_number }}</div>
           <div><strong>Status:</strong> <app-status-pill [status]="selectedLoad.status"></app-status-pill></div>
@@ -1696,6 +1726,25 @@
           <div><strong>Rate:</strong> ${{ (selectedLoad.rate != null ? selectedLoad.rate : 0) | number:'1.2-2' }}</div>
           <div><strong>PO #:</strong> {{ selectedLoad.po_number || '--' }}</div>
           <div><strong>Notes:</strong> {{ selectedLoad.notes || '--' }}</div>
+        </div>
+
+        <!-- FN-762: Email preview panel -->
+        <div class="detail-section email-preview" *ngIf="selectedLoad.source === 'email' && selectedLoad.inbound_email">
+          <h4>
+            <span class="material-symbols-outlined">mail</span>
+            Original email
+          </h4>
+          <dl class="email-preview__meta">
+            <dt>From</dt>
+            <dd>{{ selectedLoad.inbound_email.from_email || '—' }}</dd>
+            <dt>Subject</dt>
+            <dd>{{ selectedLoad.inbound_email.subject || '—' }}</dd>
+            <dt>Received</dt>
+            <dd>{{ selectedLoad.inbound_email.received_at ? (selectedLoad.inbound_email.received_at | date:'medium') : '—' }}</dd>
+          </dl>
+          <div class="email-preview__body" *ngIf="selectedLoad.inbound_email.body_text">
+            <pre>{{ selectedLoad.inbound_email.body_text }}</pre>
+          </div>
         </div>
         <div class="detail-section" *ngIf="selectedLoad.stops && selectedLoad.stops.length">
           <h4>Stops</h4>

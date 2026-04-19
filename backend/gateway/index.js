@@ -315,6 +315,8 @@ app.use('/api/reports', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/audit', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/scan-bridge', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/fmcsa', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
+app.use('/api/webhooks/email-inbound', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
+app.use('/api/tenants/me/inbound-email', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/auth', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/stripe', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/users', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));

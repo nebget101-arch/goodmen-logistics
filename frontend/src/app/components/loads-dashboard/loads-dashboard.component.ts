@@ -204,12 +204,15 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     q: string;
     /** FN-746: shows only loads flagged for dispatcher review. */
     needsReview: boolean;
+    /** FN-762: restricts to loads created from a given source (e.g. 'email'). */
+    source: string;
   } = {
     status: '',
     billingStatus: '',
     driverId: '',
     q: '',
-    needsReview: false
+    needsReview: false,
+    source: ''
   };
 
   sortBy: 'load_number' | 'pickup_date' | 'rate' | 'completed_date' = 'pickup_date';
@@ -871,7 +874,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         pageSize: this.pageSize,
         sortBy: this.sortBy,
         sortDir: this.sortDir,
-        needsReview: this.filters.needsReview || undefined
+        needsReview: this.filters.needsReview || undefined,
+        source: this.filters.source || undefined
       })
       .subscribe({
         next: (res) => {
@@ -915,6 +919,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   /** FN-746: toggle the Needs Review filter chip. */
   toggleNeedsReview(): void {
     this.filters.needsReview = !this.filters.needsReview;
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  /** FN-762: toggle the "Source: Email" filter chip. */
+  toggleEmailSource(): void {
+    this.filters.source = this.filters.source === 'email' ? '' : 'email';
     this.page = 1;
     this.loadLoads();
   }
@@ -2990,13 +3001,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     key: string;
     label: string;
     value: string;
-    kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review';
+    kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review' | 'source';
   }> {
     const chips: Array<{
       key: string;
       label: string;
       value: string;
-      kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review';
+      kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review' | 'source';
     }> = [];
 
     // Header filters
@@ -3052,6 +3063,16 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       });
     }
 
+    // FN-762: Source filter (email-sourced loads)
+    if (this.filters.source) {
+      chips.push({
+        key: 'source',
+        label: 'Source',
+        value: this.filters.source === 'email' ? 'Email' : this.filters.source,
+        kind: 'source'
+      });
+    }
+
     return chips;
   }
 
@@ -3089,6 +3110,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       this.filters.needsReview = false;
       this.page = 1;
       this.loadLoads();
+      return;
+    }
+
+    if (chip.kind === 'source') {
+      this.filters.source = '';
+      this.page = 1;
+      this.loadLoads();
     }
   }
 
@@ -3112,7 +3140,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       status: '',
       billingStatus: '',
       driverId: '',
-      needsReview: false
+      needsReview: false,
+      source: ''
     };
 
     this.page = 1;
