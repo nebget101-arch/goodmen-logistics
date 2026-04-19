@@ -1,0 +1,238 @@
+<div class="inbound-email-admin ai-admin-shell">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">FleetNeuron Admin</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">alternate_email</span>
+        Inbound Email
+      </h1>
+      <p class="subtitle">
+        Forward rate confirmation emails to your tenant address. FleetNeuron parses the email and its
+        PDF attachments to create DRAFT loads automatically.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn btn-secondary" [disabled]="loadingLogs" (click)="refreshAll()">
+        <span class="material-symbols-outlined">refresh</span>
+        {{ loadingLogs ? 'Refreshing…' : 'Refresh' }}
+      </button>
+    </div>
+  </header>
+
+  <div *ngIf="message" class="alert alert-success">
+    <span class="material-symbols-outlined">check_circle</span>
+    <span>{{ message }}</span>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ error }}</span>
+  </div>
+
+  <!-- Unique address panel -->
+  <section class="panel ai-panel address-panel">
+    <div *ngIf="loadingAddress && !address" class="loading ai-loading">Loading inbound address…</div>
+
+    <div *ngIf="address" class="address-card">
+      <div class="address-card__meta">
+        <p class="address-card__label">Your tenant's inbound email address</p>
+        <div class="address-card__value-row">
+          <code class="address-card__value">{{ address.address }}</code>
+          <button type="button" class="btn btn-primary btn-sm" (click)="copyAddress()" title="Copy address">
+            <span class="material-symbols-outlined">content_copy</span>
+            Copy
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            (click)="sendTestEmail()"
+            [disabled]="sendingTest"
+            title="Send a test email to this address so you can verify the pipeline is working"
+          >
+            <span class="material-symbols-outlined">send</span>
+            {{ sendingTest ? 'Sending…' : 'Send test email' }}
+          </button>
+        </div>
+        <p *ngIf="!address.is_active" class="address-card__inactive">
+          <span class="material-symbols-outlined">warning</span>
+          This address is currently inactive. Contact support to re-activate.
+        </p>
+      </div>
+
+      <div class="address-card__instructions">
+        <h3>How to forward rate confirmations</h3>
+        <ol>
+          <li>Open the broker's rate confirmation email in your mailbox.</li>
+          <li>Forward it to <strong>{{ address.address }}</strong>.</li>
+          <li>Keep the PDF attachment — FleetNeuron extracts load details from it.</li>
+          <li>A DRAFT load will appear in your Loads list with the 📧 "Created from email" badge.</li>
+          <li>Open the load to review and approve before dispatching.</li>
+        </ol>
+        <p class="address-card__tip">
+          <strong>Tip:</strong> Add your dispatchers' email addresses to the whitelist below so their
+          forwarded emails are accepted.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recent emails -->
+  <section class="panel ai-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">inbox</span>
+        Recent emails
+      </h2>
+      <span class="panel-hint">Most recent {{ logs.length }} email(s)</span>
+    </div>
+
+    <div *ngIf="loadingLogs && logs.length === 0" class="loading ai-loading">Loading emails…</div>
+
+    <div class="table-wrap" *ngIf="!loadingLogs || logs.length > 0">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Sender</th>
+            <th scope="col">Subject</th>
+            <th scope="col">Date</th>
+            <th scope="col">Load created</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let log of logs"
+            [class.row-selected]="selectedLog?.id === log.id"
+            (click)="selectLog(log)"
+          >
+            <td>{{ log.from_email }}</td>
+            <td class="subject-cell" [title]="log.subject || ''">{{ log.subject || '—' }}</td>
+            <td>{{ formatDate(log.received_at) }}</td>
+            <td>
+              <span *ngIf="log.load_number; else noLoad">{{ log.load_number }}</span>
+              <ng-template #noLoad><span class="muted">—</span></ng-template>
+            </td>
+            <td>
+              <span [class]="statusClass(log.processing_status)">
+                {{ statusLabel(log.processing_status) }}
+              </span>
+            </td>
+          </tr>
+          <tr *ngIf="logs.length === 0">
+            <td colspan="5" class="empty">
+              No forwarded emails yet. Forward a rate confirmation to
+              <strong *ngIf="address">{{ address.address }}</strong> to get started.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Selected log detail -->
+    <aside class="log-detail" *ngIf="selectedLog">
+      <div class="log-detail__header">
+        <h3>Email details</h3>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="selectedLog = null" title="Close">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <dl class="log-detail__meta">
+        <dt>Sender</dt><dd>{{ selectedLog.from_email }}</dd>
+        <dt>Subject</dt><dd>{{ selectedLog.subject || '—' }}</dd>
+        <dt>Received</dt><dd>{{ formatDate(selectedLog.received_at) }}</dd>
+        <dt>Status</dt>
+        <dd>
+          <span [class]="statusClass(selectedLog.processing_status)">
+            {{ statusLabel(selectedLog.processing_status) }}
+          </span>
+        </dd>
+        <ng-container *ngIf="selectedLog.load_number">
+          <dt>Load</dt>
+          <dd>
+            <a [routerLink]="['/loads']" [queryParams]="{ loadId: selectedLog.load_id }">
+              {{ selectedLog.load_number }}
+            </a>
+          </dd>
+        </ng-container>
+        <ng-container *ngIf="selectedLog.error_message">
+          <dt>Error</dt><dd class="log-detail__error">{{ selectedLog.error_message }}</dd>
+        </ng-container>
+      </dl>
+      <div class="log-detail__body" *ngIf="selectedLog.body_text">
+        <h4>Body preview</h4>
+        <pre>{{ selectedLog.body_text }}</pre>
+      </div>
+    </aside>
+  </section>
+
+  <!-- Whitelist management -->
+  <section class="panel ai-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">verified_user</span>
+        Sender whitelist
+      </h2>
+      <span class="panel-hint">
+        Only emails from whitelisted senders are processed. Rate-limited to 100/day per tenant.
+      </span>
+    </div>
+
+    <form class="whitelist-form" (ngSubmit)="addWhitelistSender()">
+      <label for="senderEmail" class="visually-hidden">Sender email</label>
+      <input
+        id="senderEmail"
+        name="senderEmail"
+        type="email"
+        class="form-input"
+        placeholder="dispatcher@example.com"
+        [(ngModel)]="newSenderEmail"
+        [disabled]="addingSender"
+        required
+      />
+      <button type="submit" class="btn btn-primary" [disabled]="addingSender">
+        <span class="material-symbols-outlined">add</span>
+        {{ addingSender ? 'Adding…' : 'Add sender' }}
+      </button>
+    </form>
+
+    <div *ngIf="whitelistError" class="alert alert-danger inline-alert">
+      <span class="material-symbols-outlined">error</span>
+      <span>{{ whitelistError }}</span>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">Sender</th>
+            <th scope="col">Added</th>
+            <th scope="col" class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let entry of whitelist">
+            <td>{{ entry.sender_email }}</td>
+            <td>{{ formatDate(entry.created_at) }}</td>
+            <td class="actions-col">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm btn-danger"
+                [disabled]="removingSenderId === entry.id"
+                (click)="removeWhitelistSender(entry)"
+              >
+                <span class="material-symbols-outlined">delete</span>
+                {{ removingSenderId === entry.id ? 'Removing…' : 'Remove' }}
+              </button>
+            </td>
+          </tr>
+          <tr *ngIf="!loadingWhitelist && whitelist.length === 0">
+            <td colspan="3" class="empty">
+              No whitelisted senders yet. Add your dispatchers' email addresses above.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
