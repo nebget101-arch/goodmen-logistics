@@ -1668,10 +1668,12 @@
 <!-- ─── Load Creation Wizard (FN-732) ────────────────────────────────────── -->
 <app-load-wizard
   *ngIf="showLoadWizard"
-  [title]="'New Load'"
+  [title]="wizardEditMode ? 'Edit Load' : 'New Load'"
   [activeStep]="wizardActiveStep"
   [stepValid]="wizardStepValid"
   [isDirty]="wizardDirty"
+  [editMode]="wizardEditMode"
+  [editLoadId]="wizardEditLoadId"
   (activeStepChange)="wizardActiveStep = $event"
   (save)="onWizardSave()"
   (saveAndNew)="onWizardSaveAndNew()"
