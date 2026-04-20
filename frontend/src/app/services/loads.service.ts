@@ -261,4 +261,58 @@ export class LoadsService {
       form
     );
   }
+
+  /**
+   * FN-795: Fetch the AI insights list for the Intelligence Panel.
+   * The backend is delivered by FN-793; while that endpoint is missing (404 in dev
+   * environments) this returns an empty list so the UI degrades gracefully.
+   */
+  getAiInsights(period: string): Observable<{ success: boolean; data: AiInsight[] }> {
+    const params = new HttpParams().set('period', period || 'all');
+    return this.http
+      .get<{ success: boolean; data: AiInsight[] }>(`${this.baseUrl}/loads/ai-insights`, { params })
+      .pipe(
+        map((res) => ({
+          success: !!res?.success,
+          data: Array.isArray(res?.data) ? res.data : [],
+        })),
+        catchError(() => of({ success: false, data: [] as AiInsight[] }))
+      );
+  }
+}
+
+/**
+ * FN-795 / FN-793 shared contract for an individual insight card. The backend
+ * endpoint may emit additional optional fields; only the fields listed here
+ * are consumed by the Intelligence Panel today.
+ */
+export type AiInsightSeverity = 'low' | 'medium' | 'high';
+export type AiInsightType =
+  | 'overdue'
+  | 'missing_docs'
+  | 'high_risk'
+  | 'reminder'
+  | 'billing'
+  | 'driver'
+  | 'info';
+
+export interface AiInsight {
+  id: string;
+  type: AiInsightType;
+  severity: AiInsightSeverity;
+  title: string;
+  /** Short secondary line under the title (optional). */
+  subtitle?: string;
+  /** Material-Symbols icon name (optional; falls back to a type-based default). */
+  icon?: string;
+  /** Optional SPA route to navigate to when the user taps the card. */
+  href?: string;
+  /**
+   * Optional inline action — when present the card renders a right-aligned
+   * button. The consumer emits `event` back to the parent so app-specific
+   * handlers can fire (e.g. "open-wizard", "dismiss", etc.).
+   */
+  action?: { label: string; event: string };
+  /** Millisecond timestamp for when this insight was generated (optional). */
+  generatedAt?: number;
 }

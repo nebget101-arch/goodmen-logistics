@@ -1,0 +1,46 @@
+<section class="intel-insights">
+  <header class="intel-insights__header">
+    <span class="material-symbols-outlined intel-insights__header-icon">auto_awesome</span>
+    <h3 class="intel-insights__title">AI insights</h3>
+    <span class="intel-insights__spinner" *ngIf="loading" aria-label="Refreshing insights"></span>
+  </header>
+
+  <ul class="intel-insights__list" *ngIf="insights.length; else emptyTpl">
+    <li
+      *ngFor="let insight of insights; trackBy: trackById"
+      class="intel-insights__item"
+      [attr.data-severity]="insight.severity"
+    >
+      <span class="material-symbols-outlined intel-insights__icon">{{ iconFor(insight) }}</span>
+      <div class="intel-insights__body">
+        <a *ngIf="insight.href; else plainTitle"
+           [routerLink]="insight.href"
+           class="intel-insights__title-link">
+          {{ insight.title }}
+        </a>
+        <ng-template #plainTitle>
+          <div class="intel-insights__item-title">{{ insight.title }}</div>
+        </ng-template>
+        <div class="intel-insights__subtitle" *ngIf="insight.subtitle">{{ insight.subtitle }}</div>
+      </div>
+      <button
+        *ngIf="insight.action"
+        type="button"
+        class="intel-insights__action"
+        (click)="onAction(insight)"
+      >
+        {{ insight.action.label }}
+      </button>
+    </li>
+  </ul>
+
+  <ng-template #emptyTpl>
+    <div class="intel-insights__empty" *ngIf="hasFetched">
+      <span class="material-symbols-outlined">check_circle</span>
+      <span>No insights for this period — everything looks healthy.</span>
+    </div>
+    <div class="intel-insights__empty intel-insights__empty--loading" *ngIf="!hasFetched">
+      <span>Loading insights…</span>
+    </div>
+  </ng-template>
+</section>

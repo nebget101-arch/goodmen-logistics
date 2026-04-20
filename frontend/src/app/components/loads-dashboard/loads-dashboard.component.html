@@ -46,7 +46,13 @@
     (needsAttentionClick)="onIntelligenceNeedsAttentionClick()"
   ></app-intelligence-panel>
 
-  <div class="status-summary-bar" *ngIf="!loading">
+  <!-- FN-795: AI insights list (60s refresh) — visually paired with the intelligence panel -->
+  <app-intelligence-insights
+    *ngIf="!isDriverRole"
+    [period]="intelligencePeriod"
+  ></app-intelligence-insights>
+
+  <div class="status-summary-bar status-summary-bar--collapsible" *ngIf="!loading">
     <div class="status-summary-bar__header">
       <div class="status-summary-bar__period">
         <button
@@ -62,33 +68,83 @@
       <div class="status-summary-bar__total">
         TOTAL: ${{ summaryTotals.totalGross | number:'1.0-2' }}
       </div>
-    </div>
-    <div class="status-summary-bar__track">
-      <div
-        *ngFor="let seg of statusBarSegments"
-        class="status-summary-bar__segment"
-        [style.width.%]="seg.pct"
-        [style.background]="seg.color"
-        [title]="seg.label + ': $' + (seg.amount | number:'1.0-2')"
-        (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
-        [class.active]="filters.status === seg.status"
-      >
-        <span class="segment-label" *ngIf="seg.pct > 8">{{ seg.label }}</span>
-        <span class="segment-value" *ngIf="seg.pct > 5">${{ seg.amount | number:'1.0-0' }}</span>
-      </div>
-    </div>
-    <div class="status-summary-bar__legend">
+      <!-- FN-795: collapsible toggle for the status/billing chip rows -->
       <button
         type="button"
-        class="legend-item"
-        *ngFor="let seg of statusBarSegments"
-        [class.active]="filters.status === seg.status"
-        (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
+        class="status-summary-bar__toggle"
+        [class.status-summary-bar__toggle--open]="chipRowsOpen"
+        [attr.aria-expanded]="chipRowsOpen"
+        (click)="toggleChipRows()"
       >
-        <span class="legend-dot" [style.background]="seg.color"></span>
-        <span class="legend-label">{{ seg.label }}</span>
-        <span class="legend-value">${{ seg.amount | number:'1.0-2' }}</span>
+        <span class="material-symbols-outlined">{{ chipRowsOpen ? 'expand_less' : 'expand_more' }}</span>
+        <span>{{ chipRowsOpen ? 'Hide' : 'Show' }} breakdown</span>
       </button>
+    </div>
+
+    <div class="status-summary-bar__collapsible" *ngIf="chipRowsOpen">
+      <!-- Status breakdown -->
+      <div class="status-summary-bar__section">
+        <div class="status-summary-bar__section-label">Status</div>
+        <div class="status-summary-bar__track">
+          <div
+            *ngFor="let seg of statusBarSegments"
+            class="status-summary-bar__segment"
+            [style.width.%]="seg.pct"
+            [style.background]="seg.color"
+            [title]="seg.label + ': $' + (seg.amount | number:'1.0-2')"
+            (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
+            [class.active]="filters.status === seg.status"
+          >
+            <span class="segment-label" *ngIf="seg.pct > 8">{{ seg.label }}</span>
+            <span class="segment-value" *ngIf="seg.pct > 5">${{ seg.amount | number:'1.0-0' }}</span>
+          </div>
+        </div>
+        <div class="status-summary-bar__legend">
+          <button
+            type="button"
+            class="legend-item"
+            *ngFor="let seg of statusBarSegments"
+            [class.active]="filters.status === seg.status"
+            (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
+          >
+            <span class="legend-dot" [style.background]="seg.color"></span>
+            <span class="legend-label">{{ seg.label }}</span>
+            <span class="legend-value">${{ seg.amount | number:'1.0-2' }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- FN-795: Billing breakdown (same layout, using byBilling totals) -->
+      <div class="status-summary-bar__section" *ngIf="billingBarSegments.length">
+        <div class="status-summary-bar__section-label">Billing</div>
+        <div class="status-summary-bar__track">
+          <div
+            *ngFor="let seg of billingBarSegments"
+            class="status-summary-bar__segment"
+            [style.width.%]="seg.pct"
+            [style.background]="seg.color"
+            [title]="seg.label + ': $' + (seg.amount | number:'1.0-2')"
+            (click)="setBillingFilter(filters.billingStatus === seg.status ? '' : seg.status)"
+            [class.active]="filters.billingStatus === seg.status"
+          >
+            <span class="segment-label" *ngIf="seg.pct > 8">{{ seg.label }}</span>
+            <span class="segment-value" *ngIf="seg.pct > 5">${{ seg.amount | number:'1.0-0' }}</span>
+          </div>
+        </div>
+        <div class="status-summary-bar__legend">
+          <button
+            type="button"
+            class="legend-item"
+            *ngFor="let seg of billingBarSegments"
+            [class.active]="filters.billingStatus === seg.status"
+            (click)="setBillingFilter(filters.billingStatus === seg.status ? '' : seg.status)"
+          >
+            <span class="legend-dot" [style.background]="seg.color"></span>
+            <span class="legend-label">{{ seg.label }}</span>
+            <span class="legend-value">${{ seg.amount | number:'1.0-2' }}</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

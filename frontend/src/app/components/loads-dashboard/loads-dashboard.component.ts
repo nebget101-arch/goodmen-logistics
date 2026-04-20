@@ -198,6 +198,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   pageSize = 25;
   total = 0;
 
+  /** FN-795: collapsible status/billing chip rows — collapsed by default. */
+  chipRowsOpen = false;
+
   /** True when current user has role driver (sees only their loads, can upload docs). */
   isDriverRole = false;
 
@@ -359,6 +362,38 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         pct: ((this.summaryTotals.byStatus[s] || 0) / total) * 100,
         color: this.statusColorMap[s] || '#64748b'
       }));
+  }
+
+  // FN-795: color palette for billing breakdown chips.
+  private billingColorMap: Record<string, string> = {
+    PENDING: '#6366f1',
+    BOL_RECEIVED: '#38bdf8',
+    INVOICED: '#22c55e',
+    SENT_TO_FACTORING: '#a78bfa',
+    FUNDED: '#10b981',
+    PAID: '#059669',
+    CANCELLED: '#ef4444',
+    CANCELED: '#ef4444',
+  };
+
+  /** FN-795: billing-status segments for the collapsible breakdown section. */
+  get billingBarSegments(): { status: string; label: string; amount: number; pct: number; color: string }[] {
+    const total = this.summaryTotals.totalGross || 0;
+    if (total <= 0) return [];
+    return this.billingOptions
+      .filter(s => (this.summaryTotals.byBilling[s] || 0) > 0)
+      .map(s => ({
+        status: s,
+        label: this.getBillingLabel(s),
+        amount: this.summaryTotals.byBilling[s] || 0,
+        pct: ((this.summaryTotals.byBilling[s] || 0) / total) * 100,
+        color: this.billingColorMap[s] || '#64748b'
+      }));
+  }
+
+  /** FN-795: toggle the collapsible Status/Billing breakdown panel. */
+  toggleChipRows(): void {
+    this.chipRowsOpen = !this.chipRowsOpen;
   }
 
   private headerFilterLabels: { [K in keyof typeof this.headerFilters]: string } = {
