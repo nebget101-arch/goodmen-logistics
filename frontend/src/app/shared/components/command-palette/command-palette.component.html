@@ -1,0 +1,57 @@
+<div
+  *ngIf="open"
+  class="cp-backdrop"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="cp-title"
+  (click)="onBackdropClick($event)"
+>
+  <div class="cp-modal" (click)="$event.stopPropagation()">
+    <header class="cp-header">
+      <span class="cp-search-icon material-symbols-outlined" aria-hidden="true">search</span>
+      <input
+        #searchInput
+        id="cp-title"
+        type="text"
+        class="cp-input"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="Search loads, jump to a page, or run an action…"
+        [value]="query"
+        (input)="onQueryChange($any($event.target).value)"
+        (keydown)="onKeydown($event)"
+      />
+      <button type="button" class="cp-close" aria-label="Close" (click)="close()">&times;</button>
+    </header>
+
+    <div class="cp-body">
+      <p *ngIf="!visibleItems.length" class="cp-empty">
+        No results. Try a different query.
+      </p>
+
+      <ng-container *ngFor="let item of visibleItems; let i = index; trackBy: trackByIndex">
+        <div *ngIf="isFirstOfGroup(i)" class="cp-group-title">{{ item.groupLabel }}</div>
+        <button
+          type="button"
+          class="cp-item"
+          [class.cp-item-selected]="i === selectedIndex"
+          (mouseenter)="selectedIndex = i"
+          (click)="activateItem(item)"
+        >
+          <span class="cp-item-icon material-symbols-outlined" aria-hidden="true">{{ item.icon }}</span>
+          <span class="cp-item-text">
+            <span class="cp-item-label">{{ item.label }}</span>
+            <span *ngIf="item.hint" class="cp-item-hint">{{ item.hint }}</span>
+          </span>
+          <span *ngIf="i === selectedIndex" class="cp-item-enter" aria-hidden="true">↵</span>
+        </button>
+      </ng-container>
+    </div>
+
+    <footer class="cp-footer">
+      <span><kbd class="cp-kbd">↑</kbd><kbd class="cp-kbd">↓</kbd> navigate</span>
+      <span><kbd class="cp-kbd">↵</kbd> select</span>
+      <span><kbd class="cp-kbd">Esc</kbd> close</span>
+    </footer>
+  </div>
+</div>

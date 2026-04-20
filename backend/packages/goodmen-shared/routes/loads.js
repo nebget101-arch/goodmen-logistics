@@ -339,6 +339,288 @@ function parseSmartFilterList(value) {
 }
 // ------------------------------------------------------------------------
 
+/** FN-801: parsed NLQ filter cache per tenant (not list results). */
+const NLQ_FILTER_CACHE_TTL_MS = 5 * 60 * 1000;
+const nlqFilterCache = new Map();
+
+function nlqCacheKey(tenantId, queryText) {
+  return `${tenantId || 'none'}::${String(queryText).trim().toLowerCase()}`;
+}
+
+function getNlqCached(tenantId, queryText) {
+  const k = nlqCacheKey(tenantId, queryText);
+  const row = nlqFilterCache.get(k);
+  if (!row) return null;
+  if (Date.now() > row.expiresAt) {
+    nlqFilterCache.delete(k);
+    return null;
+  }
+  return row.value;
+}
+
+function setNlqCached(tenantId, queryText, value) {
+  nlqFilterCache.set(nlqCacheKey(tenantId, queryText), {
+    value,
+    expiresAt: Date.now() + NLQ_FILTER_CACHE_TTL_MS
+  });
+}
+
+/**
+ * Shared loads list for GET /api/loads and POST /api/loads/search/nlq (FN-801).
+ * @returns {Promise<{ ok: true, data: any[], meta: { page: number, pageSize: number, total: number } } | { ok: false, status: number, error: string }>}
+ */
+async function executeLoadsListQuery(listSpec) {
+  const {
+    context,
+    role,
+    user,
+    status: statusRaw,
+    billingStatus: billingRaw,
+    driverId: driverIdRaw,
+    brokerId: brokerIdRaw,
+    q: qRaw,
+    dateFrom: dateFromRaw,
+    dateTo: dateToRaw,
+    needsReview,
+    smartFilterQuery,
+    page: pageRaw,
+    pageSize: pageSizeRaw,
+    sortBy: sortByRaw,
+    sortDir: sortDirRaw,
+    keywordIncludesNotes,
+    nlqContains
+  } = listSpec;
+
+  const isDriver = role === 'driver';
+  if (isDriver && !user?.driver_id) {
+    return { ok: false, status: 403, error: 'Driver account not linked to a driver record' };
+  }
+
+  const status = normalizeEnum(statusRaw);
+  const billingStatus = normalizeEnum(billingRaw);
+  let driverId = (driverIdRaw || '').toString().trim();
+  if (isDriver) driverId = (user.driver_id || '').toString().trim();
+  const brokerId = (brokerIdRaw || '').toString().trim();
+  const q = (qRaw || '').toString().trim();
+  const dateFrom = (dateFromRaw || '').toString().trim();
+  const dateTo = (dateToRaw || '').toString().trim();
+
+  if (status && !LOAD_STATUSES.includes(status)) {
+    return { ok: false, status: 400, error: 'Invalid status filter' };
+  }
+  if (billingStatus && !BILLING_STATUSES.includes(billingStatus)) {
+    return { ok: false, status: 400, error: 'Invalid billing status filter' };
+  }
+
+  const page = Math.max(parseInt(pageRaw || '1', 10), 1);
+  const pageSize = Math.min(Math.max(parseInt(pageSizeRaw || '25', 10), 1), 200);
+  const sortBy = (sortByRaw || '').toString().trim().toLowerCase();
+  const defaultSortDir = sortBy === 'pickup_date' ? 'asc' : 'desc';
+  const sortDirLow = (sortDirRaw || defaultSortDir).toString().trim().toLowerCase();
+  const sortDir = sortDirLow === 'asc' ? 'asc' : 'desc';
+  const offset = (page - 1) * pageSize;
+
+  const where = [];
+  const params = [];
+
+  applyLoadScope(where, params, context || null);
+
+  if (status) {
+    params.push(status);
+    where.push(`UPPER(l.status::text) = $${params.length}`);
+  }
+  if (billingStatus) {
+    params.push(billingStatus);
+    where.push(`UPPER(l.billing_status::text) = $${params.length}`);
+  }
+  if (driverId) {
+    params.push(driverId);
+    where.push(`l.driver_id = $${params.length}`);
+  }
+  if (brokerId) {
+    params.push(brokerId);
+    where.push(`l.broker_id = $${params.length}`);
+  }
+  if (q) {
+    params.push(`%${q}%`);
+    const idx = params.length;
+    const noteClause = keywordIncludesNotes ? `OR l.notes ILIKE $${idx}` : '';
+    where.push(`(
+        l.load_number ILIKE $${idx}
+        OR COALESCE(b.legal_name, b.name, l.broker_name, '') ILIKE $${idx}
+        OR concat_ws(' ', d.first_name, d.last_name) ILIKE $${idx}
+        ${noteClause}
+      )`);
+  }
+
+  const n = nlqContains && typeof nlqContains === 'object' ? nlqContains : {};
+  if (n.loadNumberContains) {
+    params.push(`%${String(n.loadNumberContains).trim()}%`);
+    where.push(`l.load_number ILIKE $${params.length}`);
+  }
+  if (n.brokerNameContains) {
+    params.push(`%${String(n.brokerNameContains).trim()}%`);
+    where.push(`COALESCE(b.legal_name, b.name, l.broker_name, '') ILIKE $${params.length}`);
+  }
+  if (n.driverNameContains) {
+    params.push(`%${String(n.driverNameContains).trim()}%`);
+    where.push(`concat_ws(' ', d.first_name, d.last_name) ILIKE $${params.length}`);
+  }
+  if (n.pickupState) {
+    params.push(String(n.pickupState).trim().toUpperCase().slice(0, 2));
+    where.push(`UPPER(TRIM(COALESCE(pickup.state::text, ''))) = $${params.length}`);
+  }
+  if (n.deliveryState) {
+    params.push(String(n.deliveryState).trim().toUpperCase().slice(0, 2));
+    where.push(`UPPER(TRIM(COALESCE(delivery.state::text, ''))) = $${params.length}`);
+  }
+  if (n.pickupCity) {
+    params.push(`%${String(n.pickupCity).trim()}%`);
+    where.push(`pickup.city ILIKE $${params.length}`);
+  }
+  if (n.deliveryCity) {
+    params.push(`%${String(n.deliveryCity).trim()}%`);
+    where.push(`delivery.city ILIKE $${params.length}`);
+  }
+  if (n.rateMin != null && Number.isFinite(Number(n.rateMin))) {
+    params.push(Number(n.rateMin));
+    where.push(`l.rate >= $${params.length}`);
+  }
+  if (n.rateMax != null && Number.isFinite(Number(n.rateMax))) {
+    params.push(Number(n.rateMax));
+    where.push(`l.rate <= $${params.length}`);
+  }
+
+  if (needsReview) {
+    where.push('l.needs_review = true');
+  }
+
+  const smartFilters = parseSmartFilterList(smartFilterQuery);
+  const smartFilterCtx = {
+    tenantId: context?.tenantId || null,
+    operatingEntityId: context?.operatingEntityId || null,
+    userId: user?.id || null
+  };
+  for (const chip of smartFilters) {
+    const predicate = buildSmartFilterPredicate(chip, params, smartFilterCtx);
+    if (predicate) where.push(predicate);
+  }
+
+  if (dateFrom && dateTo) {
+    params.push(dateFrom);
+    const idxFrom = params.length;
+    params.push(dateTo);
+    const idxTo = params.length;
+    where.push(`(
+        (pickup.stop_date::date >= $${idxFrom} AND pickup.stop_date::date <= $${idxTo})
+        OR (COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${idxFrom} AND COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${idxTo})
+      )`);
+  } else if (dateFrom) {
+    params.push(dateFrom);
+    where.push(`(pickup.stop_date::date >= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${params.length})`);
+  } else if (dateTo) {
+    params.push(dateTo);
+    where.push(`(pickup.stop_date::date <= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${params.length})`);
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const baseSql = `
+      FROM loads l
+      LEFT JOIN drivers d ON l.driver_id = d.id AND d.tenant_id = l.tenant_id AND (l.operating_entity_id IS NULL OR d.operating_entity_id = l.operating_entity_id)
+      LEFT JOIN brokers b ON l.broker_id = b.id
+      LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id
+      LEFT JOIN LATERAL (
+        SELECT city, state, zip, stop_date
+        FROM load_stops
+        WHERE load_id = l.id AND stop_type = 'PICKUP'
+        ORDER BY sequence ASC
+        LIMIT 1
+      ) pickup ON true
+      LEFT JOIN LATERAL (
+        SELECT city, state, zip, stop_date
+        FROM load_stops
+        WHERE load_id = l.id AND stop_type = 'DELIVERY'
+        ORDER BY sequence DESC
+        LIMIT 1
+      ) delivery ON true
+      LEFT JOIN (
+        SELECT load_id,
+               COUNT(*) as attachment_count,
+               array_agg(DISTINCT type) as attachment_types
+        FROM load_attachments
+        GROUP BY load_id
+      ) att ON att.load_id = l.id
+      ${whereClause}
+    `;
+
+  try {
+    const countResult = await query(`SELECT COUNT(*) as total ${baseSql}`, params);
+    const total = parseInt(countResult.rows[0].total, 10) || 0;
+
+    params.push(pageSize);
+    params.push(offset);
+    const sortMap = {
+      load_number: 'l.load_number',
+      pickup_date: 'pickup.stop_date',
+      rate: 'l.rate',
+      completed_date: 'COALESCE(delivery.stop_date, l.completed_date, l.created_at)',
+      created_at: 'l.created_at'
+    };
+    const orderBy = sortMap[sortBy] || 'l.created_at';
+    const draftFirst = !status ? 'CASE WHEN UPPER(l.status::text) = \'DRAFT\' THEN 0 ELSE 1 END, ' : '';
+
+    const dataSql = `
+      SELECT
+        l.id,
+        l.driver_id,
+        l.load_number,
+        UPPER(l.status::text) as status,
+        UPPER(l.billing_status::text) as billing_status,
+        l.rate,
+        l.completed_date,
+        pickup.stop_date as pickup_date,
+        delivery.stop_date as delivery_date,
+        pickup.city as pickup_city,
+        pickup.state as pickup_state,
+        pickup.zip as pickup_zip,
+        delivery.city as delivery_city,
+        delivery.state as delivery_state,
+        delivery.zip as delivery_zip,
+        concat_ws(' ', d.first_name, d.last_name) as driver_name,
+        COALESCE(b.legal_name, b.name, l.broker_name) as broker_name,
+        l.po_number,
+        l.notes,
+        l.operating_entity_id,
+        oe.name as operating_entity_name,
+        COALESCE(att.attachment_count, 0) as attachment_count,
+        COALESCE(att.attachment_types, ARRAY[]::text[]) as attachment_types,
+        COALESCE(l.needs_review, false) as needs_review
+      ${baseSql}
+      ORDER BY ${draftFirst}${orderBy} ${sortDir}
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
+    const result = await query(dataSql, params);
+    return {
+      ok: true,
+      data: result.rows || [],
+      meta: { page, pageSize, total }
+    };
+  } catch (error) {
+    const message = (error && error.message) ? String(error.message) : '';
+    const code = error && error.code ? String(error.code) : '';
+    if (code === '42P01' || message.includes('relation') || message.includes('does not exist')) {
+      return {
+        ok: true,
+        data: [],
+        meta: { page, pageSize, total: 0 }
+      };
+    }
+    dtLogger.error('loads_list_failed', error);
+    return { ok: false, status: 500, error: 'Failed to fetch loads' };
+  }
+}
+
 async function getLoadDetail(clientOrQuery, loadId, context = null) {
   const exec = clientOrQuery.query ? clientOrQuery.query.bind(clientOrQuery) : query;
   const detailParams = [loadId];
@@ -526,203 +808,179 @@ router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
     const role = (req.user?.role || '').toString().trim().toLowerCase();
-    const isDriver = role === 'driver';
-    if (isDriver && !req.user?.driver_id) {
-      return res.status(403).json({ success: false, error: 'Driver account not linked to a driver record' });
-    }
-    const status = normalizeEnum(req.query.status);
-    const billingStatus = normalizeEnum(req.query.billingStatus);
-    let driverId = (req.query.driverId || '').toString().trim();
-    if (isDriver) driverId = (req.user.driver_id || '').toString().trim();
-    const brokerId = (req.query.brokerId || '').toString().trim();
-    const q = (req.query.q || '').toString().trim();
-    const dateFrom = (req.query.dateFrom || '').toString().trim();
-    const dateTo = (req.query.dateTo || '').toString().trim();
-    // FN-746: needs_review filter — true string activates filter
-    const needsReview = req.query.needsReview === 'true';
-
-    if (status && !LOAD_STATUSES.includes(status)) {
-      return res.status(400).json({ success: false, error: 'Invalid status filter' });
-    }
-    if (billingStatus && !BILLING_STATUSES.includes(billingStatus)) {
-      return res.status(400).json({ success: false, error: 'Invalid billing status filter' });
-    }
-
-    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
-    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '25', 10), 1), 200);
-    const sortBy = (req.query.sortBy || '').toString().trim().toLowerCase();
-    // Default pickup_date to asc so nearest (earliest) date appears first
-    const defaultSortDir = sortBy === 'pickup_date' ? 'asc' : 'desc';
-    const sortDirRaw = (req.query.sortDir || defaultSortDir).toString().trim().toLowerCase();
-    const sortDir = sortDirRaw === 'asc' ? 'asc' : 'desc';
-    const offset = (page - 1) * pageSize;
-
-    const where = [];
-    const params = [];
-
-    applyLoadScope(where, params, req.context || null);
-
-    if (status) {
-      params.push(status);
-      where.push(`UPPER(l.status::text) = $${params.length}`);
-    }
-    if (billingStatus) {
-      params.push(billingStatus);
-      where.push(`UPPER(l.billing_status::text) = $${params.length}`);
-    }
-    if (driverId) {
-      params.push(driverId);
-      where.push(`l.driver_id = $${params.length}`);
-    }
-    if (brokerId) {
-      params.push(brokerId);
-      where.push(`l.broker_id = $${params.length}`);
-    }
-    if (q) {
-      params.push(`%${q}%`);
-      where.push(`(
-        l.load_number ILIKE $${params.length}
-        OR COALESCE(b.legal_name, b.name, l.broker_name, '') ILIKE $${params.length}
-        OR concat_ws(' ', d.first_name, d.last_name) ILIKE $${params.length}
-      )`);
-    }
-    // FN-746: filter to loads flagged for review
-    if (needsReview) {
-      where.push('l.needs_review = true');
-    }
-
-    // FN-797: smart_filter chips (comma-separated). Multiple chips AND'd.
-    const smartFilters = parseSmartFilterList(req.query.smart_filter);
-    const smartFilterCtx = {
-      tenantId: req.context?.tenantId || null,
-      operatingEntityId: req.context?.operatingEntityId || null,
-      userId: req.user?.id || null
+    const listSpec = {
+      context: req.context || null,
+      role,
+      user: req.user,
+      status: req.query.status,
+      billingStatus: req.query.billingStatus,
+      driverId: req.query.driverId,
+      brokerId: req.query.brokerId,
+      q: req.query.q,
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo,
+      needsReview: req.query.needsReview === 'true',
+      smartFilterQuery: req.query.smart_filter,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+      sortBy: req.query.sortBy,
+      sortDir: req.query.sortDir,
+      keywordIncludesNotes: false,
+      nlqContains: null
     };
-    for (const chip of smartFilters) {
-      const predicate = buildSmartFilterPredicate(chip, params, smartFilterCtx);
-      if (predicate) where.push(predicate);
+
+    const result = await executeLoadsListQuery(listSpec);
+    if (!result.ok) {
+      const duration = Date.now() - startTime;
+      dtLogger.trackRequest('GET', '/api/loads', result.status, duration);
+      return res.status(result.status).json({ success: false, error: result.error });
     }
-
-    if (dateFrom && dateTo) {
-      params.push(dateFrom);
-      const idxFrom = params.length;
-      params.push(dateTo);
-      const idxTo = params.length;
-      where.push(`(
-        (pickup.stop_date::date >= $${idxFrom} AND pickup.stop_date::date <= $${idxTo})
-        OR (COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${idxFrom} AND COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${idxTo})
-      )`);
-    } else if (dateFrom) {
-      params.push(dateFrom);
-      where.push(`(pickup.stop_date::date >= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${params.length})`);
-    } else if (dateTo) {
-      params.push(dateTo);
-      where.push(`(pickup.stop_date::date <= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${params.length})`);
-    }
-
-    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-
-    const baseSql = `
-      FROM loads l
-      LEFT JOIN drivers d ON l.driver_id = d.id AND d.tenant_id = l.tenant_id AND (l.operating_entity_id IS NULL OR d.operating_entity_id = l.operating_entity_id)
-      LEFT JOIN brokers b ON l.broker_id = b.id
-      LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id
-      LEFT JOIN LATERAL (
-        SELECT city, state, zip, stop_date
-        FROM load_stops
-        WHERE load_id = l.id AND stop_type = 'PICKUP'
-        ORDER BY sequence ASC
-        LIMIT 1
-      ) pickup ON true
-      LEFT JOIN LATERAL (
-        SELECT city, state, zip, stop_date
-        FROM load_stops
-        WHERE load_id = l.id AND stop_type = 'DELIVERY'
-        ORDER BY sequence DESC
-        LIMIT 1
-      ) delivery ON true
-      LEFT JOIN (
-        SELECT load_id,
-               COUNT(*) as attachment_count,
-               array_agg(DISTINCT type) as attachment_types
-        FROM load_attachments
-        GROUP BY load_id
-      ) att ON att.load_id = l.id
-      ${whereClause}
-    `;
-
-    const countResult = await query(`SELECT COUNT(*) as total ${baseSql}`, params);
-    const total = parseInt(countResult.rows[0].total, 10) || 0;
-
-    params.push(pageSize);
-    params.push(offset);
-    const sortMap = {
-      load_number: 'l.load_number',
-      pickup_date: 'pickup.stop_date',
-      rate: 'l.rate',
-      // Sort "Completed" by delivery date when present, then completed_date, then created_at
-      completed_date: 'COALESCE(delivery.stop_date, l.completed_date, l.created_at)',
-      created_at: 'l.created_at'
-    };
-    const orderBy = sortMap[sortBy] || 'l.created_at';
-    // Put DRAFT loads first when viewing all statuses
-    const draftFirst = !status ? 'CASE WHEN UPPER(l.status::text) = \'DRAFT\' THEN 0 ELSE 1 END, ' : '';
-
-    const dataSql = `
-      SELECT
-        l.id,
-        l.driver_id,
-        l.load_number,
-        UPPER(l.status::text) as status,
-        UPPER(l.billing_status::text) as billing_status,
-        l.rate,
-        l.completed_date,
-        pickup.stop_date as pickup_date,
-        delivery.stop_date as delivery_date,
-        pickup.city as pickup_city,
-        pickup.state as pickup_state,
-        pickup.zip as pickup_zip,
-        delivery.city as delivery_city,
-        delivery.state as delivery_state,
-        delivery.zip as delivery_zip,
-        concat_ws(' ', d.first_name, d.last_name) as driver_name,
-        COALESCE(b.legal_name, b.name, l.broker_name) as broker_name,
-        l.po_number,
-        l.notes,
-        l.operating_entity_id,
-        oe.name as operating_entity_name,
-        COALESCE(att.attachment_count, 0) as attachment_count,
-        COALESCE(att.attachment_types, ARRAY[]::text[]) as attachment_types,
-        COALESCE(l.needs_review, false) as needs_review
-      ${baseSql}
-      ORDER BY ${draftFirst}${orderBy} ${sortDir}
-      LIMIT $${params.length - 1} OFFSET $${params.length}
-    `;
-    const result = await query(dataSql, params);
 
     const duration = Date.now() - startTime;
-    dtLogger.trackRequest('GET', '/api/loads', 200, duration, { count: result.rows.length });
+    dtLogger.trackRequest('GET', '/api/loads', 200, duration, { count: result.data.length });
     res.json({
       success: true,
-      data: result.rows || [],
-      meta: { page, pageSize, total }
+      data: result.data,
+      meta: result.meta
     });
   } catch (error) {
     const duration = Date.now() - startTime;
-    const message = (error && error.message) ? String(error.message) : '';
-    const code = error && error.code ? String(error.code) : '';
-    // If loads tables/views are missing (not yet migrated), treat as "no data" instead of failing
-    if (code === '42P01' || message.includes('relation') || message.includes('does not exist')) {
-      dtLogger.trackRequest('GET', '/api/loads', 200, duration, { count: 0 });
-      return res.json({
-        success: true,
-        data: [],
-        meta: { page: 1, pageSize: parseInt(req.query.pageSize || '25', 10) || 25, total: 0 }
-      });
-    }
     dtLogger.error('loads_list_failed', error);
     dtLogger.trackRequest('GET', '/api/loads', 500, duration);
     res.status(500).json({ success: false, error: 'Failed to fetch loads' });
+  }
+});
+
+// POST /api/loads/search/nlq — FN-801 + FN-800 (ai-service snake_case filters)
+router.post('/search/nlq', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const role = (req.user?.role || '').toString().trim().toLowerCase();
+    const body = req.body || {};
+    const qText = (body.query || '').toString().trim();
+    if (!qText) {
+      return res.status(400).json({ success: false, error: 'query is required' });
+    }
+
+    const tenantId = req.context?.tenantId || null;
+    let nlqCacheHit = false;
+    let aiJson = getNlqCached(tenantId, qText);
+    if (aiJson) {
+      nlqCacheHit = true;
+    } else {
+      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+      const signal =
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(25000)
+          : undefined;
+      try {
+        const aiRes = await fetch(`${aiServiceUrl}/api/ai/loads/nlq`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: qText }),
+          signal
+        });
+        if (!aiRes.ok) {
+          const snippet = await aiRes.text().catch(() => '');
+          dtLogger.error('loads_nlq_ai_http', { status: aiRes.status, snippet: snippet.slice(0, 200) });
+          aiJson = { success: true, fallback: true, meta: { reason: `ai_http_${aiRes.status}` } };
+        } else {
+          aiJson = await aiRes.json();
+        }
+        if (aiJson && aiJson.success !== false) {
+          setNlqCached(tenantId, qText, aiJson);
+        }
+      } catch (fetchErr) {
+        dtLogger.error('loads_nlq_ai_fetch_failed', { err: fetchErr.message || String(fetchErr) });
+        aiJson = { success: true, fallback: true, meta: { reason: 'ai_unreachable' } };
+      }
+    }
+
+    const fallback = !!(aiJson && aiJson.fallback);
+    const aiFilters =
+      !fallback && aiJson && aiJson.filters && typeof aiJson.filters === 'object' ? aiJson.filters : {};
+
+    const page = Math.max(parseInt(body.page ?? '1', 10), 1);
+    const pageSize = Math.min(Math.max(parseInt(body.pageSize ?? '25', 10), 1), 200);
+    const sortBy = (body.sortBy || '').toString().trim().toLowerCase();
+    const defaultSortDir = sortBy === 'pickup_date' ? 'asc' : 'desc';
+    const sortDirRaw = (body.sortDir || defaultSortDir).toString().trim().toLowerCase();
+    const sortDir = sortDirRaw === 'asc' ? 'asc' : 'desc';
+
+    const f = aiFilters;
+    const nlqContains = {};
+    if (!fallback) {
+      const loadNum = f.loadNumberContains ?? f.load_number;
+      if (loadNum) nlqContains.loadNumberContains = loadNum;
+      const brokerN = f.brokerNameContains ?? f.broker_name;
+      if (brokerN) nlqContains.brokerNameContains = brokerN;
+      const driverN = f.driverNameContains ?? f.driver_name;
+      if (driverN) nlqContains.driverNameContains = driverN;
+      const pState = f.pickupState ?? f.pickup_state;
+      if (pState) nlqContains.pickupState = pState;
+      const dState = f.deliveryState ?? f.delivery_state;
+      if (dState) nlqContains.deliveryState = dState;
+      const pCity = f.pickupCity ?? f.pickup_city;
+      if (pCity) nlqContains.pickupCity = pCity;
+      const dCity = f.deliveryCity ?? f.delivery_city;
+      if (dCity) nlqContains.deliveryCity = dCity;
+      const rmin = f.rateMin ?? f.rate_min;
+      if (rmin != null) nlqContains.rateMin = rmin;
+      const rmax = f.rateMax ?? f.rate_max;
+      if (rmax != null) nlqContains.rateMax = rmax;
+    }
+
+    const listSpec = {
+      context: req.context || null,
+      role,
+      user: req.user,
+      status: fallback ? null : f.status || null,
+      billingStatus: fallback ? null : (f.billingStatus ?? f.billing_status || null),
+      driverId: fallback ? null : (f.driverId ?? null),
+      brokerId: fallback ? null : (f.brokerId ?? null),
+      q: fallback ? qText : (f.q || null),
+      dateFrom: fallback ? null : (f.dateFrom ?? f.date_from || null),
+      dateTo: fallback ? null : (f.dateTo ?? f.date_to || null),
+      needsReview: false,
+      smartFilterQuery: '',
+      page,
+      pageSize,
+      sortBy,
+      sortDir,
+      keywordIncludesNotes: fallback,
+      nlqContains: fallback ? null : nlqContains
+    };
+
+    const listResult = await executeLoadsListQuery(listSpec);
+    if (!listResult.ok) {
+      const duration = Date.now() - startTime;
+      dtLogger.trackRequest('POST', '/api/loads/search/nlq', listResult.status, duration);
+      return res.status(listResult.status).json({ success: false, error: listResult.error });
+    }
+
+    const filtersOut = fallback
+      ? { q: qText, keywordIncludesNotes: true }
+      : { ...aiFilters };
+
+    const duration = Date.now() - startTime;
+    dtLogger.trackRequest('POST', '/api/loads/search/nlq', 200, duration, {
+      count: listResult.data.length,
+      nlqCacheHit,
+      fallback
+    });
+
+    res.json({
+      success: true,
+      fallback,
+      filters: filtersOut,
+      loads: listResult.data,
+      meta: { ...listResult.meta, nlqCacheHit }
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    dtLogger.error('loads_nlq_failed', error);
+    dtLogger.trackRequest('POST', '/api/loads/search/nlq', 500, duration);
+    res.status(500).json({ success: false, error: 'Failed to search loads' });
   }
 });
 

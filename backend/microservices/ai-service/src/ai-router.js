@@ -12,6 +12,7 @@ const { handleMvrVision } = require('./handlers/mvr-vision-handler');
 const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handler');
 const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
+const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -1025,6 +1026,51 @@ function buildAiRouter(deps) {
   router.post('/settlements/insights', (req, res) =>
     handleSettlementInsights(req, res, deps)
   );
+
+  /**
+   * @openapi
+   * /api/ai/loads/nlq:
+   *   post:
+   *     summary: AI loads natural-language query parser (FN-800)
+   *     description: >
+   *       Converts free-text (e.g. "Smith's pending loads over $1000") into a validated
+   *       filter object for the loads list. Uses Anthropic Claude Haiku (temperature 0).
+   *       Returns `{ success: true, fallback: true }` when nothing extractable or on upstream
+   *       failure so callers can use keyword search.
+   *     tags:
+   *       - AI
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - query
+   *             properties:
+   *               query:
+   *                 type: string
+   *                 description: Natural-language question about loads
+   *     responses:
+   *       200:
+   *         description: Parsed filters, or fallback for keyword search
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 fallback:
+   *                   type: boolean
+   *                 filters:
+   *                   type: object
+   *                 meta:
+   *                   type: object
+   *       400:
+   *         description: Missing or invalid query
+   */
+  router.post('/loads/nlq', (req, res) => handleLoadsNlq(req, res, deps));
 
   return router;
 }

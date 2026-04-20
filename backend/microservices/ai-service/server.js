@@ -8,6 +8,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const path = require('path');
 const { OpenAI } = require('openai');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const { buildAiRouter } = require('./src/ai-router');
 
@@ -43,6 +44,13 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+let anthropic = null;
+if (process.env.ANTHROPIC_API_KEY) {
+  anthropic = new Anthropic.default({
+    apiKey: process.env.ANTHROPIC_API_KEY
+  });
+}
+
 /**
  * @openapi
  * /health:
@@ -61,7 +69,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.use('/api/ai', buildAiRouter({ openai }));
+app.use('/api/ai', buildAiRouter({ openai, anthropic }));
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
