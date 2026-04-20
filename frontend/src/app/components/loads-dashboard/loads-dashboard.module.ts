@@ -28,6 +28,7 @@ import { LoadsHeroCtaComponent } from './loads-hero-cta/loads-hero-cta.component
 import { LoadTemplatesComponent } from './load-templates/load-templates.component';
 import { IntelligencePanelComponent } from './intelligence-panel/intelligence-panel.component';
 import { IntelligenceInsightsComponent } from './intelligence-panel/intelligence-insights.component';
+import { SmartFiltersComponent } from './smart-filters/smart-filters.component';
 
 const routes: Routes = [
   {
@@ -65,7 +66,8 @@ const routes: Routes = [
     LoadsHeroCtaComponent,
     LoadTemplatesComponent,
     IntelligencePanelComponent,
-    IntelligenceInsightsComponent
+    IntelligenceInsightsComponent,
+    SmartFiltersComponent
   ],
   imports: [
     CommonModule,

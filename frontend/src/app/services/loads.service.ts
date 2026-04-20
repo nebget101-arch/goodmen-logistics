@@ -27,7 +27,21 @@ export interface LoadFilters {
   needsReview?: boolean;
   /** FN-762: filter by load source (e.g. 'email') — how the load was created. */
   source?: string;
+  /** FN-798: smart-filter chip keys (AND'd server-side). Array or comma-joined string. */
+  smartFilter?: string[] | string;
 }
+
+/** FN-798: canonical smart-filter chip keys. Must match backend SMART_FILTER_CHIPS. */
+export const SMART_FILTER_KEYS = [
+  'ai_drafts',
+  'overdue',
+  'high_value',
+  'from_email',
+  'missing_docs',
+  'my_drafts'
+] as const;
+export type SmartFilterKey = typeof SMART_FILTER_KEYS[number];
+export type SmartFilterCounts = Record<SmartFilterKey, number>;
 
 export interface DriverOption {
   id: string;
@@ -89,11 +103,24 @@ export class LoadsService {
   listLoads(filters: LoadFilters): Observable<LoadsListResponse> {
     let params = new HttpParams();
     Object.entries(filters || {}).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        params = params.set(key, String(value));
+      if (value === undefined || value === null || value === '') return;
+      // FN-798: `smartFilter` maps to the `smart_filter` query param;
+      // arrays are joined into the comma-separated form the backend expects.
+      if (key === 'smartFilter') {
+        const joined = Array.isArray(value) ? value.join(',') : String(value);
+        if (joined) params = params.set('smart_filter', joined);
+        return;
       }
+      params = params.set(key, String(value));
     });
     return this.http.get<LoadsListResponse>(`${this.baseUrl}/loads`, { params });
+  }
+
+  /** FN-798: per-chip aggregated counts for the smart-filters row. */
+  getSmartFilterCounts(): Observable<{ success: boolean; data: SmartFilterCounts }> {
+    return this.http.get<{ success: boolean; data: SmartFilterCounts }>(
+      `${this.baseUrl}/loads/smart-filter-counts`
+    );
   }
 
   getLoad(id: string): Observable<{ success: boolean; data: LoadDetail }> {
