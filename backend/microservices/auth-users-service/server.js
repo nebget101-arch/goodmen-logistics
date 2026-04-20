@@ -24,6 +24,7 @@ require('@goodmen/shared').setDatabase({
 const authRouter = require('@goodmen/shared/routes/auth');
 const usersRouter = require('@goodmen/shared/routes/users');
 const communicationPreferencesRouter = require('@goodmen/shared/routes/communication-preferences');
+const userPreferencesRouter = require('@goodmen/shared/routes/user-preferences');
 const rolesRouter = require('@goodmen/shared/routes/roles');
 const trialRequestsRouter = require('@goodmen/shared/routes/trial-requests');
 const billingRouter = require('./routes/billing');
@@ -61,6 +62,7 @@ app.use('/api/users', authMiddleware, tenantContextMiddleware, usersRouter);
 app.use('/api/roles', authMiddleware, tenantContextMiddleware, rolesRouter);
 app.use('/api/permissions', authMiddleware, tenantContextMiddleware, permissionsRouter);
 app.use('/api/communication-preferences', authMiddleware, tenantContextMiddleware, communicationPreferencesRouter);
+app.use('/api/user-preferences', authMiddleware, tenantContextMiddleware, userPreferencesRouter);
 app.use('/api/billing', billingRouter);
 
 // Public marketing endpoints – no auth middleware on the base route

@@ -318,141 +318,203 @@
     </div>
   </form>
 
+  <!-- FN-767: Loads table toolbar — column visibility picker + saved views -->
+  <div class="loads-table-toolbar" *ngIf="!isDriverRole">
+    <div class="loads-table-toolbar__group dropdown" (click)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        (click)="toggleSavedViewsMenu()"
+        title="Saved filter views"
+      >
+        <span class="material-symbols-outlined">view_list</span>
+        <span>Views</span>
+        <span class="material-symbols-outlined">expand_more</span>
+      </button>
+      <div class="dropdown-menu loads-views-menu" *ngIf="showSavedViewsMenu">
+        <div class="loads-views-menu__empty" *ngIf="savedViews.length === 0">No saved views yet.</div>
+        <button
+          type="button"
+          class="loads-views-menu__item"
+          *ngFor="let view of savedViews"
+          (click)="applySavedView(view); $event.stopPropagation()"
+        >
+          <span class="loads-views-menu__name">{{ view.name }}</span>
+          <span
+            class="loads-views-menu__delete material-symbols-outlined"
+            title="Delete saved view"
+            (click)="deleteSavedView(view.id); $event.stopPropagation()"
+          >close</span>
+        </button>
+        <div class="loads-views-menu__save">
+          <input
+            type="text"
+            placeholder="Save current view as…"
+            [(ngModel)]="newViewName"
+            (keyup.enter)="saveCurrentAsView()"
+          />
+          <button
+            type="button"
+            class="btn btn-primary btn-xs"
+            [disabled]="!newViewName.trim()"
+            (click)="saveCurrentAsView()"
+          >Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="loads-table-toolbar__group dropdown" (click)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        (click)="toggleColumnPicker()"
+        title="Show or hide columns"
+      >
+        <span class="material-symbols-outlined">view_column</span>
+        <span>Columns</span>
+        <span class="material-symbols-outlined">expand_more</span>
+      </button>
+      <div class="dropdown-menu loads-columns-menu" *ngIf="showColumnPicker">
+        <label
+          class="loads-columns-menu__item"
+          *ngFor="let col of columnDefs"
+          [class.loads-columns-menu__item--locked]="col.alwaysVisible"
+        >
+          <input
+            type="checkbox"
+            [checked]="isColVisible(col.key)"
+            [disabled]="col.alwaysVisible"
+            (change)="toggleColumnVisible(col.key)"
+          />
+          <span>{{ col.label }}</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
   <div class="table-card">
     <ng-container *ngIf="!loading">
     <div class="loads-table-container">
     <table class="table table--header">
       <colgroup>
-        <col style="width: 6%">   <!-- Load # -->
-        <col style="width: 7%">   <!-- Date -->
-        <col style="width: 8%">   <!-- Driver -->
-        <col style="width: 12%">  <!-- Broker -->
-        <col style="width: 7%">   <!-- PO # -->
-        <col style="width: 11%">  <!-- Pickup -->
-        <col style="width: 11%">  <!-- Delivery -->
-        <col style="width: 5%">   <!-- Rate -->
-        <col style="width: 8%">   <!-- Completed -->
-        <col style="width: 6%">   <!-- Status -->
-        <col style="width: 6%">   <!-- Billing -->
-        <col style="width: 8%">   <!-- Attachments -->
-        <col style="width: 5%">   <!-- Actions -->
+        <col *ngIf="isColVisible('load_number')" style="width: 6%">
+        <col *ngIf="isColVisible('pickup_date')" style="width: 7%">
+        <col *ngIf="isColVisible('driver')" style="width: 8%">
+        <col *ngIf="isColVisible('broker')" style="width: 12%">
+        <col *ngIf="isColVisible('po_number')" style="width: 7%">
+        <col *ngIf="isColVisible('pickup')" style="width: 11%">
+        <col *ngIf="isColVisible('delivery')" style="width: 11%">
+        <col *ngIf="isColVisible('rate')" style="width: 5%">
+        <col *ngIf="isColVisible('completed_date')" style="width: 8%">
+        <col *ngIf="isColVisible('status')" style="width: 6%">
+        <col *ngIf="isColVisible('billing')" style="width: 6%">
+        <col *ngIf="isColVisible('attachments')" style="width: 8%">
+        <col *ngIf="isColVisible('actions')" style="width: 5%">
       </colgroup>
       <thead>
         <tr>
-          <th (click)="toggleSort('load_number')">Load #</th>
-          <th (click)="toggleSort('pickup_date')">Pickup Date</th>
-          <th>Driver</th>
-          <th>Broker</th>
-          <th>PO #</th>
-          <th>Pickup</th>
-          <th>Delivery</th>
-          <th (click)="toggleSort('rate')">Rate</th>
-          <th (click)="toggleSort('completed_date')">Completed</th>
-          <th>Status</th>
-          <th>Billing</th>
-          <th>Attachments</th>
-          <th>Actions</th>
+          <th *ngIf="isColVisible('load_number')" (click)="toggleSort('load_number')">Load #</th>
+          <th *ngIf="isColVisible('pickup_date')" (click)="toggleSort('pickup_date')">Pickup Date</th>
+          <th *ngIf="isColVisible('driver')">Driver</th>
+          <th *ngIf="isColVisible('broker')">Broker</th>
+          <th *ngIf="isColVisible('po_number')">PO #</th>
+          <th *ngIf="isColVisible('pickup')">Pickup</th>
+          <th *ngIf="isColVisible('delivery')">Delivery</th>
+          <th *ngIf="isColVisible('rate')" (click)="toggleSort('rate')">Rate</th>
+          <th *ngIf="isColVisible('completed_date')" (click)="toggleSort('completed_date')">Completed</th>
+          <th *ngIf="isColVisible('status')">Status</th>
+          <th *ngIf="isColVisible('billing')">Billing</th>
+          <th *ngIf="isColVisible('attachments')">Attachments</th>
+          <th *ngIf="isColVisible('actions')">Actions</th>
         </tr>
         <tr class="header-filters">
-          <!-- Load # / search -->
-          <th>
+          <th *ngIf="isColVisible('load_number')">
             <input
               type="text"
               placeholder="Search load # / broker / driver"
               (input)="onSearch($any($event.target).value)"
             />
           </th>
-          <!-- Date (pickup or completed) -->
-          <th>
+          <th *ngIf="isColVisible('pickup_date')">
             <app-inline-date-filter
               [(value)]="headerFilters.date"
             ></app-inline-date-filter>
           </th>
-          <!-- Driver -->
-          <th>
+          <th *ngIf="isColVisible('driver')">
             <input
               type="text"
               placeholder="Driver"
               [(ngModel)]="headerFilters.driver"
             />
           </th>
-          <!-- Broker -->
-          <th>
+          <th *ngIf="isColVisible('broker')">
             <input
               type="text"
               placeholder="Broker"
               [(ngModel)]="headerFilters.broker"
             />
           </th>
-          <!-- PO # -->
-          <th>
+          <th *ngIf="isColVisible('po_number')">
             <input
               type="text"
               placeholder="PO #"
               [(ngModel)]="headerFilters.po"
             />
           </th>
-          <!-- Pickup -->
-          <th>
+          <th *ngIf="isColVisible('pickup')">
             <input
               type="text"
               placeholder="Pickup"
               [(ngModel)]="headerFilters.pickup"
             />
           </th>
-          <!-- Delivery -->
-          <th>
+          <th *ngIf="isColVisible('delivery')">
             <input
               type="text"
               placeholder="Delivery"
               [(ngModel)]="headerFilters.delivery"
             />
           </th>
-          <!-- Rate -->
-          <th>
+          <th *ngIf="isColVisible('rate')">
             <input
               type="text"
               placeholder="Rate"
               [(ngModel)]="headerFilters.rate"
             />
           </th>
-          <!-- Completed -->
-          <th>
+          <th *ngIf="isColVisible('completed_date')">
             <app-inline-date-filter
               [(value)]="headerFilters.completed"
             ></app-inline-date-filter>
           </th>
-          <!-- Status -->
-          <th>
+          <th *ngIf="isColVisible('status')">
             <input
               type="text"
               placeholder="Status"
               [(ngModel)]="headerFilters.status"
             />
           </th>
-          <!-- Billing -->
-          <th>
+          <th *ngIf="isColVisible('billing')">
             <input
               type="text"
               placeholder="Billing"
               [(ngModel)]="headerFilters.billingStatus"
             />
           </th>
-          <!-- Attachments -->
-          <th>
+          <th *ngIf="isColVisible('attachments')">
             <input
               type="text"
               placeholder="Attach."
               [(ngModel)]="headerFilters.attachmentType"
             />
           </th>
-          <!-- Actions -->
-          <th></th>
+          <th *ngIf="isColVisible('actions')"></th>
         </tr>
       </thead>
     </table>
 
     <!-- FN-766: virtualized body; shares colgroup widths with the header table. -->
+    <!-- FN-767: column visibility applied to <col> and <td> so hidden columns collapse end-to-end. -->
     <cdk-virtual-scroll-viewport
       [itemSize]="48"
       minBufferPx="400"
@@ -462,23 +524,23 @@
     >
       <table class="table table--body">
         <colgroup>
-          <col style="width: 6%">   <!-- Load # -->
-          <col style="width: 7%">   <!-- Date -->
-          <col style="width: 8%">   <!-- Driver -->
-          <col style="width: 12%">  <!-- Broker -->
-          <col style="width: 7%">   <!-- PO # -->
-          <col style="width: 11%">  <!-- Pickup -->
-          <col style="width: 11%">  <!-- Delivery -->
-          <col style="width: 5%">   <!-- Rate -->
-          <col style="width: 8%">   <!-- Completed -->
-          <col style="width: 6%">   <!-- Status -->
-          <col style="width: 6%">   <!-- Billing -->
-          <col style="width: 8%">   <!-- Attachments -->
-          <col style="width: 5%">   <!-- Actions -->
+          <col *ngIf="isColVisible('load_number')" style="width: 6%">
+          <col *ngIf="isColVisible('pickup_date')" style="width: 7%">
+          <col *ngIf="isColVisible('driver')" style="width: 8%">
+          <col *ngIf="isColVisible('broker')" style="width: 12%">
+          <col *ngIf="isColVisible('po_number')" style="width: 7%">
+          <col *ngIf="isColVisible('pickup')" style="width: 11%">
+          <col *ngIf="isColVisible('delivery')" style="width: 11%">
+          <col *ngIf="isColVisible('rate')" style="width: 5%">
+          <col *ngIf="isColVisible('completed_date')" style="width: 8%">
+          <col *ngIf="isColVisible('status')" style="width: 6%">
+          <col *ngIf="isColVisible('billing')" style="width: 6%">
+          <col *ngIf="isColVisible('attachments')" style="width: 8%">
+          <col *ngIf="isColVisible('actions')" style="width: 5%">
         </colgroup>
         <tbody>
         <tr *cdkVirtualFor="let load of filteredLoads; trackBy: trackByLoadId" [ngClass]="rowClass(load)">
-          <td [title]="load.load_number || ''">
+          <td *ngIf="isColVisible('load_number')" [title]="load.load_number || ''">
             <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
             <!-- FN-746: needs_review badge -->
             <span
@@ -498,17 +560,42 @@
               Email
             </span>
           </td>
-          <td [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
-          <td [title]="load.driver_name || '--'">{{ load.driver_name || '--' }}</td>
-          <td [title]="load.broker_name || '--'">{{ load.broker_name || '--' }}</td>
-          <td [title]="load.po_number || '--'">{{ load.po_number || '--' }}</td>
-          <td [title]="(load.pickup_city || '--') + ', ' + (load.pickup_state || '')">{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
-          <td [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
-          <td [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
-          <td [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
-          <td [title]="load.status || ''"><app-status-pill [status]="load.status"></app-status-pill></td>
-          <td [title]="load.billing_status || ''"><app-status-pill [status]="load.billing_status"></app-status-pill></td>
-          <td>
+          <td *ngIf="isColVisible('pickup_date')" [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
+          <td *ngIf="isColVisible('driver')" [title]="load.driver_name || '--'">{{ load.driver_name || '--' }}</td>
+          <td *ngIf="isColVisible('broker')" [title]="load.broker_name || '--'">{{ load.broker_name || '--' }}</td>
+          <td *ngIf="isColVisible('po_number')" [title]="load.po_number || '--'">{{ load.po_number || '--' }}</td>
+          <td *ngIf="isColVisible('pickup')" [title]="(load.pickup_city || '--') + ', ' + (load.pickup_state || '')">{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
+          <td *ngIf="isColVisible('delivery')" [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
+          <td *ngIf="isColVisible('rate')" [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
+          <td *ngIf="isColVisible('completed_date')" [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
+          <!-- FN-767: Inline status change — click pill to open dropdown, select to PATCH. -->
+          <td *ngIf="isColVisible('status')" [title]="load.status || ''" class="status-cell">
+            <div class="status-inline" (click)="$event.stopPropagation()">
+              <button
+                type="button"
+                class="status-inline__trigger"
+                (click)="openStatusMenu(load.id, $event)"
+                [attr.aria-expanded]="statusMenuLoadId === load.id"
+                [attr.aria-label]="'Change status (current: ' + (load.status || 'none') + ')'"
+              >
+                <app-status-pill [status]="load.status"></app-status-pill>
+                <span class="material-symbols-outlined status-inline__chevron">expand_more</span>
+              </button>
+              <div class="dropdown-menu status-inline__menu" *ngIf="statusMenuLoadId === load.id">
+                <button
+                  type="button"
+                  class="status-inline__option"
+                  *ngFor="let s of statusOptions"
+                  [class.status-inline__option--active]="load.status === s"
+                  (click)="changeLoadStatus(load, s, $event)"
+                >
+                  {{ getStatusLabel(s) }}
+                </button>
+              </div>
+            </div>
+          </td>
+          <td *ngIf="isColVisible('billing')" [title]="load.billing_status || ''"><app-status-pill [status]="load.billing_status"></app-status-pill></td>
+          <td *ngIf="isColVisible('attachments')">
             <div class="attachment-chips">
               <app-attachment-chip
                 *ngFor="let type of (load.attachment_types || [])"
@@ -522,7 +609,7 @@
               ></app-attachment-chip>
             </div>
           </td>
-          <td class="actions-cell">
+          <td *ngIf="isColVisible('actions')" class="actions-cell">
             <div class="dropdown actions-dropdown" (click)="$event.stopPropagation()">
               <button
                 class="actions-trigger"
