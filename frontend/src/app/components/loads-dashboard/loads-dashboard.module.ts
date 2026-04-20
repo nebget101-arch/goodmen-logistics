@@ -26,6 +26,7 @@ import { WizardStepDriverComponent } from './load-wizard/step-driver/step-driver
 import { StepAttachmentsComponent } from './load-wizard/step-attachments/step-attachments.component';
 import { LoadsHeroCtaComponent } from './loads-hero-cta/loads-hero-cta.component';
 import { LoadTemplatesComponent } from './load-templates/load-templates.component';
+import { SmartFiltersComponent } from './smart-filters/smart-filters.component';
 
 const routes: Routes = [
   {
@@ -61,7 +62,8 @@ const routes: Routes = [
     WizardStepDriverComponent,
     StepAttachmentsComponent,
     LoadsHeroCtaComponent,
-    LoadTemplatesComponent
+    LoadTemplatesComponent,
+    SmartFiltersComponent
   ],
   imports: [
     CommonModule,
