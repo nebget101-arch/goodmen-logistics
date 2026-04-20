@@ -12,6 +12,7 @@ const { handleMvrVision } = require('./handlers/mvr-vision-handler');
 const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handler');
 const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
+const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -1025,6 +1026,33 @@ function buildAiRouter(deps) {
   router.post('/settlements/insights', (req, res) =>
     handleSettlementInsights(req, res, deps)
   );
+
+  /**
+   * @openapi
+   * /api/ai/loads/nlq:
+   *   post:
+   *     summary: Parse natural-language load search (FN-801)
+   *     description: Returns structured filters or fallback for keyword search.
+   *     tags:
+   *       - AI
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - query
+   *             properties:
+   *               query:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Filters or fallback flag
+   *       400:
+   *         description: Bad request
+   */
+  router.post('/loads/nlq', (req, res) => handleLoadsNlq(req, res, deps));
 
   return router;
 }
