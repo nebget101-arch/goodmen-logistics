@@ -392,11 +392,87 @@
     </div>
   </div>
 
+  <!-- FN-768: Bulk actions toolbar (visible when any rows are selected) -->
+  <div class="bulk-actions-bar" *ngIf="selectedCount > 0 && !isDriverRole">
+    <div class="bulk-actions-summary">
+      <strong>{{ selectedCount }}</strong> selected
+      <button type="button" class="btn-link" (click)="clearSelection()">Clear</button>
+    </div>
+    <div class="bulk-actions-controls">
+      <div class="bulk-control">
+        <label class="bulk-control-label" for="bulkStatus">Change status</label>
+        <select
+          id="bulkStatus"
+          [(ngModel)]="bulkStatusToApply"
+          [disabled]="bulkActionInFlight"
+          (change)="applyBulkStatus()"
+        >
+          <option value="">Choose…</option>
+          <option *ngFor="let s of statusOptions" [value]="s">{{ getStatusLabel(s) }}</option>
+        </select>
+      </div>
+      <div class="bulk-control">
+        <label class="bulk-control-label" for="bulkDriver">Assign driver</label>
+        <select
+          id="bulkDriver"
+          [(ngModel)]="bulkDriverToApply"
+          [disabled]="bulkActionInFlight"
+          (change)="applyBulkDriver()"
+        >
+          <option value="">Choose…</option>
+          <option *ngFor="let d of drivers" [value]="d.id">{{ d.name }}</option>
+        </select>
+      </div>
+      <div class="bulk-control">
+        <label class="bulk-control-label" for="bulkTruck">Assign truck</label>
+        <select
+          id="bulkTruck"
+          [(ngModel)]="bulkTruckToApply"
+          [disabled]="bulkActionInFlight"
+          (change)="applyBulkTruck()"
+        >
+          <option value="">Choose…</option>
+          <option *ngFor="let t of trucks" [value]="t.id">{{ t.label }}</option>
+        </select>
+      </div>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        (click)="bulkApproveSelectedDrafts()"
+        [disabled]="bulkActionInFlight || !selectedDraftIds.length"
+        title="Approve only DRAFT rows in the selection"
+      >
+        <span class="material-symbols-outlined">task_alt</span>
+        Approve drafts
+      </button>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        (click)="bulkDeleteSelectedDrafts()"
+        [disabled]="bulkActionInFlight || !selectedDraftIds.length"
+        title="Delete only DRAFT rows in the selection"
+      >
+        <span class="material-symbols-outlined">delete</span>
+        Delete drafts
+      </button>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        (click)="exportSelectedToCsv()"
+        [disabled]="bulkActionInFlight"
+      >
+        <span class="material-symbols-outlined">download</span>
+        Export CSV
+      </button>
+    </div>
+  </div>
+
   <div class="table-card">
     <ng-container *ngIf="!loading">
     <div class="loads-table-container">
     <table class="table table--header">
       <colgroup>
+        <col *ngIf="!isDriverRole" style="width: 3%"><!-- FN-768 select -->
         <col *ngIf="isColVisible('load_number')" style="width: 6%">
         <col *ngIf="isColVisible('pickup_date')" style="width: 7%">
         <col *ngIf="isColVisible('driver')" style="width: 8%">
@@ -413,6 +489,15 @@
       </colgroup>
       <thead>
         <tr>
+          <th *ngIf="!isDriverRole" class="col-select">
+            <input
+              type="checkbox"
+              aria-label="Select all loads on this page"
+              [checked]="allVisibleSelected"
+              [indeterminate]="someVisibleSelected"
+              (change)="toggleSelectAll()"
+            />
+          </th>
           <th *ngIf="isColVisible('load_number')" (click)="toggleSort('load_number')">Load #</th>
           <th *ngIf="isColVisible('pickup_date')" (click)="toggleSort('pickup_date')">Pickup Date</th>
           <th *ngIf="isColVisible('driver')">Driver</th>
@@ -428,6 +513,7 @@
           <th *ngIf="isColVisible('actions')">Actions</th>
         </tr>
         <tr class="header-filters">
+          <th *ngIf="!isDriverRole"></th><!-- FN-768: no filter on select col -->
           <th *ngIf="isColVisible('load_number')">
             <input
               type="text"
@@ -524,6 +610,7 @@
     >
       <table class="table table--body">
         <colgroup>
+          <col *ngIf="!isDriverRole" style="width: 3%"><!-- FN-768 select -->
           <col *ngIf="isColVisible('load_number')" style="width: 6%">
           <col *ngIf="isColVisible('pickup_date')" style="width: 7%">
           <col *ngIf="isColVisible('driver')" style="width: 8%">
@@ -539,7 +626,16 @@
           <col *ngIf="isColVisible('actions')" style="width: 5%">
         </colgroup>
         <tbody>
-        <tr *cdkVirtualFor="let load of filteredLoads; trackBy: trackByLoadId" [ngClass]="rowClass(load)">
+        <tr *cdkVirtualFor="let load of filteredLoads; trackBy: trackByLoadId" [ngClass]="rowClass(load)" [class.row-selected]="isSelected(load)">
+          <td *ngIf="!isDriverRole" class="col-select" (click)="$event.stopPropagation()">
+            <input
+              type="checkbox"
+              [attr.aria-label]="'Select load ' + (load.load_number || load.id)"
+              [checked]="isSelected(load)"
+              (change)="toggleRowSelect(load, $event)"
+              (click)="$event.stopPropagation()"
+            />
+          </td>
           <td *ngIf="isColVisible('load_number')" [title]="load.load_number || ''">
             <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
             <!-- FN-746: needs_review badge -->

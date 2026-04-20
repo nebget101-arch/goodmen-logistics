@@ -202,6 +202,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   pageSize = 25;
   total = 0;
 
+  // ─── FN-768: Bulk selection + actions ─────────────────────────────────────
+  /** Set of load ids the user has checked for bulk operations. */
+  selectedIds = new Set<string>();
+  /** Value chosen in the bulk-status dropdown. Empty string = no action pending. */
+  bulkStatusToApply = '';
+  /** Value chosen in the bulk-driver dropdown. */
+  bulkDriverToApply = '';
+  /** Value chosen in the bulk-truck dropdown. */
+  bulkTruckToApply = '';
+  /** Whether a bulk operation network call is currently in flight. */
+  bulkActionInFlight = false;
+
   /** True when current user has role driver (sees only their loads, can upload docs). */
   isDriverRole = false;
 
@@ -1645,6 +1657,190 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   canDeleteLoad(load: LoadListItem): boolean {
     const s = (load.status || '').toString().toUpperCase();
     return s === 'DRAFT' || s === 'NEW';
+  }
+
+  // ─── FN-768: Bulk selection + actions ─────────────────────────────────────
+
+  /** Number of loads currently selected. Used by the toolbar. */
+  get selectedCount(): number { return this.selectedIds.size; }
+
+  /** True when every load on the current page is selected. */
+  get allVisibleSelected(): boolean {
+    const rows = this.filteredLoads;
+    return rows.length > 0 && rows.every((l) => this.selectedIds.has(l.id));
+  }
+
+  /** True when some — but not all — visible rows are selected (for the header checkbox). */
+  get someVisibleSelected(): boolean {
+    const rows = this.filteredLoads;
+    const selected = rows.filter((l) => this.selectedIds.has(l.id)).length;
+    return selected > 0 && selected < rows.length;
+  }
+
+  isSelected(load: LoadListItem): boolean { return this.selectedIds.has(load.id); }
+
+  toggleRowSelect(load: LoadListItem, event?: Event): void {
+    if (event) { event.stopPropagation(); }
+    if (this.selectedIds.has(load.id)) {
+      this.selectedIds.delete(load.id);
+    } else {
+      this.selectedIds.add(load.id);
+    }
+  }
+
+  /** Select or clear every load on the currently visible page. */
+  toggleSelectAll(): void {
+    const rows = this.filteredLoads;
+    if (this.allVisibleSelected) {
+      rows.forEach((l) => this.selectedIds.delete(l.id));
+    } else {
+      rows.forEach((l) => this.selectedIds.add(l.id));
+    }
+  }
+
+  clearSelection(): void {
+    this.selectedIds.clear();
+    this.bulkStatusToApply = '';
+    this.bulkDriverToApply = '';
+    this.bulkTruckToApply = '';
+  }
+
+  /** The subset of selected loads that are still present in the list cache. */
+  get selectedLoads(): LoadListItem[] {
+    return this.loads.filter((l) => this.selectedIds.has(l.id));
+  }
+
+  /** The subset of selected loads that are currently DRAFT. */
+  get selectedDraftIds(): string[] {
+    return this.selectedLoads.filter((l) => this.isDraftLoad(l)).map((l) => l.id);
+  }
+
+  applyBulkStatus(): void {
+    const status = (this.bulkStatusToApply || '').trim();
+    if (!status || !this.selectedCount || this.bulkActionInFlight) { return; }
+    this._bulkUpdate({ status }, `${this.selectedCount} load(s) status set to ${status}.`);
+  }
+
+  applyBulkDriver(): void {
+    const driverId = (this.bulkDriverToApply || '').trim();
+    if (!driverId || !this.selectedCount || this.bulkActionInFlight) { return; }
+    const name = this.drivers.find((d) => d.id === driverId)?.name || 'driver';
+    this._bulkUpdate({ driverId }, `Assigned ${name} to ${this.selectedCount} load(s).`);
+  }
+
+  applyBulkTruck(): void {
+    const truckId = (this.bulkTruckToApply || '').trim();
+    if (!truckId || !this.selectedCount || this.bulkActionInFlight) { return; }
+    const label = this.trucks.find((t) => t.id === truckId)?.label || 'truck';
+    this._bulkUpdate({ truckId }, `Assigned ${label} to ${this.selectedCount} load(s).`);
+  }
+
+  bulkDeleteSelectedDrafts(): void {
+    const ids = this.selectedDraftIds;
+    if (!ids.length) {
+      this.errorMessage = 'No DRAFT loads in the selection. Bulk delete only works on drafts.';
+      setTimeout(() => { this.errorMessage = ''; }, 4000);
+      return;
+    }
+    if (!confirm(`Delete ${ids.length} draft load(s)? This cannot be undone.`)) { return; }
+    this.bulkActionInFlight = true;
+    this.errorMessage = '';
+    this.loadsService.bulkDeleteDrafts(ids).subscribe({
+      next: (res) => {
+        this.bulkActionInFlight = false;
+        this.successMessage = `Deleted ${res.deleted} draft(s).`;
+        this.clearSelection();
+        this.loadLoads();
+        setTimeout(() => { this.successMessage = ''; }, 3000);
+      },
+      error: (err) => {
+        this.bulkActionInFlight = false;
+        this.errorMessage = err?.error?.error || 'Failed to delete drafts.';
+      }
+    });
+  }
+
+  bulkApproveSelectedDrafts(): void {
+    const ids = this.selectedDraftIds;
+    if (!ids.length) {
+      this.errorMessage = 'No DRAFT loads in the selection.';
+      setTimeout(() => { this.errorMessage = ''; }, 4000);
+      return;
+    }
+    if (!confirm(`Approve ${ids.length} draft(s)? They will move to NEW status.`)) { return; }
+    this._bulkUpdate({ status: 'NEW' }, `Approved ${ids.length} draft(s).`, ids);
+  }
+
+  /** Shared bulk-update pipeline: POST to backend, refresh list, clear selection. */
+  private _bulkUpdate(
+    changes: { status?: string; billingStatus?: string; driverId?: string | null; truckId?: string | null },
+    successMessage: string,
+    idsOverride?: string[]
+  ): void {
+    const ids = idsOverride || Array.from(this.selectedIds);
+    if (!ids.length) { return; }
+    this.bulkActionInFlight = true;
+    this.errorMessage = '';
+    this.loadsService.bulkUpdate(ids, changes).subscribe({
+      next: () => {
+        this.bulkActionInFlight = false;
+        this.successMessage = successMessage;
+        this.clearSelection();
+        this.loadLoads();
+        setTimeout(() => { this.successMessage = ''; }, 3000);
+      },
+      error: (err) => {
+        this.bulkActionInFlight = false;
+        this.errorMessage = err?.error?.error || 'Bulk update failed.';
+      }
+    });
+  }
+
+  /**
+   * Export the selected loads to a CSV file. Uses the already-loaded row data
+   * — no round-trip to the server — so exported columns match what the user
+   * sees in the table.
+   */
+  exportSelectedToCsv(): void {
+    const rows = this.selectedLoads;
+    if (!rows.length) { return; }
+    const header = [
+      'Load #', 'Status', 'Billing', 'Driver', 'Broker', 'PO #',
+      'Pickup City', 'Pickup State', 'Delivery City', 'Delivery State',
+      'Rate', 'Completed Date'
+    ];
+    const esc = (v: unknown): string => {
+      const s = v == null ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [header.join(',')];
+    for (const l of rows) {
+      const anyL = l as any;
+      lines.push([
+        esc(l.load_number),
+        esc(l.status),
+        esc(l.billing_status),
+        esc(anyL.driver_name || ''),
+        esc(anyL.broker_name || anyL.broker_display_name || ''),
+        esc(anyL.po_number || ''),
+        esc(anyL.pickup_city || ''),
+        esc(anyL.pickup_state || ''),
+        esc(anyL.delivery_city || ''),
+        esc(anyL.delivery_state || ''),
+        esc(l.rate != null ? l.rate : ''),
+        esc(anyL.completed_date || ''),
+      ].join(','));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `loads-${ts}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   getBulkFileNames(): string {
