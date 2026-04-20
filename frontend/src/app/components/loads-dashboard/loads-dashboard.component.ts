@@ -1174,8 +1174,67 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.wizardStepValid = [false, false, false, false];
     this.wizardDirty = false;
     this.resetWizardFormState();
+    this.applySmartDefaults();
     this.showLoadWizard = true;
     this.showNewLoadMenu = false;
+  }
+
+  /**
+   * FN-764: Pre-fill smart defaults on new loads.
+   *  - Dispatcher = current user
+   *  - Status = DRAFT, Billing = PENDING (already set in defaultBasics)
+   *  - Pickup = today, Delivery = today + 1
+   *  - Driver = most-recent driver per dispatcher (from UserPreferencesService)
+   */
+  private applySmartDefaults(): void {
+    this.wizardBasics = {
+      ...this.wizardBasics,
+      dispatcher: this.dispatcherName || this.wizardBasics.dispatcher || ''
+    };
+
+    const pickupIso = this.formatLocalDate(new Date());
+    const deliveryDate = new Date();
+    deliveryDate.setDate(deliveryDate.getDate() + 1);
+    const deliveryIso = this.formatLocalDate(deliveryDate);
+
+    this.wizardStops = this.wizardStops.map((stop) => {
+      if (stop.stop_type === 'PICKUP' && !stop.stop_date) {
+        return { ...stop, stop_date: pickupIso };
+      }
+      if (stop.stop_type === 'DELIVERY' && !stop.stop_date) {
+        return { ...stop, stop_date: deliveryIso };
+      }
+      return stop;
+    });
+    if (!this.wizardStops.length) {
+      this.wizardStops = [
+        {
+          stop_type: 'PICKUP', sequence: 0,
+          city: null, state: null, zip: null,
+          stop_date: pickupIso, stop_time: null,
+          facility_name: null, notes: null
+        },
+        {
+          stop_type: 'DELIVERY', sequence: 1,
+          city: null, state: null, zip: null,
+          stop_date: deliveryIso, stop_time: null,
+          facility_name: null, notes: null
+        }
+      ];
+    }
+
+    const recentDriverId = this.userPreferences.getRecentDriverId(this.dispatcherUserId);
+    if (recentDriverId) {
+      this.wizardDriverId = recentDriverId;
+    }
+  }
+
+  /** Format a Date as "YYYY-MM-DD" in local time (avoids UTC off-by-one). */
+  private formatLocalDate(d: Date): string {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   /**
@@ -1365,6 +1424,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   onWizardDriverChange(driverId: string | null): void {
     this.wizardDriverId = driverId;
     this.wizardDirty = true;
+    // FN-764: remember so next "New Load" suggests this driver by default.
+    if (driverId) {
+      this.userPreferences.setRecentDriverId(this.dispatcherUserId, driverId);
+    }
   }
 
   onWizardTruckChange(truckId: string | null): void {
@@ -1406,8 +1469,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   private defaultBasics(): StepBasicsData {
     return {
       loadNumber: '',
-      status: 'BOOKED',
-      billingStatus: 'UNBILLED',
+      // FN-764: new loads default to DRAFT / PENDING so dispatchers can
+      // capture-first-refine-later without accidentally advancing lifecycle.
+      status: 'DRAFT',
+      billingStatus: 'PENDING',
       brokerId: null,
       brokerName: '',
       poNumber: '',

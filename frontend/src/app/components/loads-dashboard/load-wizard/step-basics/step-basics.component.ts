@@ -16,6 +16,18 @@ export interface StepBasicsData {
   notes: string;
 }
 
+/**
+ * FN-764: Suggestions derived from recent loads for the selected broker.
+ * Displayed as a hint under the PO and Rate fields.
+ */
+export interface BrokerSuggestion {
+  poFormat: string | null;       // e.g. "PO-XXXXX" or "SF-XXXXXX"
+  rateMin: number | null;
+  rateMax: number | null;
+  rateAvg: number | null;
+  sampleSize: number;
+}
+
 @Component({
   selector: 'app-step-basics',
   templateUrl: './step-basics.component.html',
@@ -44,6 +56,10 @@ export class StepBasicsComponent implements OnInit {
   showNotes = false;
   validationErrors: string[] = [];
 
+  /** FN-764: Suggestion derived from recent loads for the current broker. */
+  brokerSuggestion: BrokerSuggestion | null = null;
+  loadingBrokerSuggestion = false;
+
   readonly statusOptions = [
     'BOOKED', 'DISPATCHED', 'IN_TRANSIT', 'AT_PICKUP', 'AT_DELIVERY',
     'DELIVERED', 'COMPLETED', 'CANCELED'
@@ -63,6 +79,10 @@ export class StepBasicsComponent implements OnInit {
     if (!this.data.dispatcher) {
       const user = JSON.parse(localStorage.getItem('fn_user') || '{}');
       this.data.dispatcher = user?.username || user?.first_name || '';
+    }
+    // FN-764: if broker was pre-filled (edit / clone / return), fetch suggestions.
+    if (this.data.brokerId) {
+      this.loadBrokerSuggestion(this.data.brokerId);
     }
   }
 
@@ -118,6 +138,7 @@ export class StepBasicsComponent implements OnInit {
     this.brokerSearch = this.data.brokerName;
     this.showBrokerDropdown = false;
     this.onFieldChange();
+    this.loadBrokerSuggestion(broker.id);
     this.cdr.markForCheck();
   }
 
@@ -125,8 +146,87 @@ export class StepBasicsComponent implements OnInit {
     this.data.brokerId = null;
     this.data.brokerName = '';
     this.brokerSearch = '';
+    this.brokerSuggestion = null;
     this.onFieldChange();
     this.cdr.markForCheck();
+  }
+
+  // ── FN-764: Broker history → PO format / rate range suggestions ──
+
+  private loadBrokerSuggestion(brokerId: string): void {
+    if (!brokerId) { return; }
+    this.loadingBrokerSuggestion = true;
+    this.brokerSuggestion = null;
+    this.loadsService.listLoads({ brokerId, page: 1, pageSize: 20, sortBy: 'created_at', sortDir: 'desc' }).subscribe({
+      next: (res: any) => {
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        this.brokerSuggestion = this.computeBrokerSuggestion(rows);
+        this.loadingBrokerSuggestion = false;
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.loadingBrokerSuggestion = false;
+        this.brokerSuggestion = null;
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  /** Returns hint text for the PO field, or '' when no suggestion is available. */
+  get poHint(): string {
+    const s = this.brokerSuggestion;
+    if (!s || !s.poFormat) { return ''; }
+    return `Typical format for this broker: ${s.poFormat}`;
+  }
+
+  /** Returns hint text for the Rate field, or '' when no suggestion is available. */
+  get rateHint(): string {
+    const s = this.brokerSuggestion;
+    if (!s || s.rateAvg == null) { return ''; }
+    const fmt = (n: number | null) => n == null ? '' : `$${Math.round(n).toLocaleString()}`;
+    if (s.rateMin != null && s.rateMax != null && s.rateMin !== s.rateMax) {
+      return `Recent rates: ${fmt(s.rateMin)}–${fmt(s.rateMax)} (avg ${fmt(s.rateAvg)}, ${s.sampleSize} load${s.sampleSize === 1 ? '' : 's'})`;
+    }
+    return `Recent rate: ${fmt(s.rateAvg)} (${s.sampleSize} load${s.sampleSize === 1 ? '' : 's'})`;
+  }
+
+  /** Aggregate PO format and rate stats from recent loads for a broker. */
+  private computeBrokerSuggestion(rows: any[]): BrokerSuggestion {
+    // PO format: take the most common non-digit prefix across PO numbers,
+    // then replace the digit tail with "X"s of the typical length.
+    const prefixCounts = new Map<string, number>();
+    const digitLengths: number[] = [];
+    for (const r of rows) {
+      const po = (r?.po_number || r?.poNumber || '').toString().trim();
+      if (!po) { continue; }
+      const match = po.match(/^([^\d]*)(\d+)/);
+      if (!match) { continue; }
+      const prefix = match[1];
+      const digits = match[2];
+      prefixCounts.set(prefix, (prefixCounts.get(prefix) || 0) + 1);
+      digitLengths.push(digits.length);
+    }
+    let poFormat: string | null = null;
+    if (prefixCounts.size) {
+      const topPrefix = [...prefixCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      const typicalLen = digitLengths.length
+        ? Math.round(digitLengths.reduce((a, b) => a + b, 0) / digitLengths.length)
+        : 5;
+      poFormat = `${topPrefix}${'X'.repeat(Math.max(1, typicalLen))}`;
+    }
+
+    // Rate stats (ignore null/0 rates).
+    const rates: number[] = rows
+      .map(r => Number(r?.rate))
+      .filter(n => Number.isFinite(n) && n > 0);
+    let rateMin: number | null = null, rateMax: number | null = null, rateAvg: number | null = null;
+    if (rates.length) {
+      rateMin = Math.min(...rates);
+      rateMax = Math.max(...rates);
+      rateAvg = rates.reduce((a, b) => a + b, 0) / rates.length;
+    }
+
+    return { poFormat, rateMin, rateMax, rateAvg, sampleSize: rows.length };
   }
 
   // ── Quick-create broker ──
