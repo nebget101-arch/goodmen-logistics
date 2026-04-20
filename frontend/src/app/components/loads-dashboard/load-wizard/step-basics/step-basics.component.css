@@ -33,6 +33,23 @@
   cursor: help;
 }
 
+/* FN-764: broker-history hint shown under PO / Rate fields */
+.field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.field-hint .hint-icon {
+  color: #38bdf8;
+  font-style: normal;
+  margin-right: 2px;
+  font-size: 12px;
+}
+
 /* Broker autocomplete */
 .broker-autocomplete {
   position: relative;
