@@ -17,6 +17,7 @@ import {
 } from '../../models/load-dashboard.model';
 import { LoadsService, BrokerOption } from '../../services/loads.service';
 import { LoadTemplatesService } from '../../services/load-templates.service';
+import { UserPreferencesService, LoadsSavedView } from '../../services/user-preferences.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
@@ -269,6 +270,34 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   statusOptions: LoadStatus[] = ['NEW', 'DRAFT', 'DISPATCHED', 'CANCELLED', 'TONU', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
   billingOptions: BillingStatus[] = ['PENDING', 'CANCELLED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
 
+  // ─── FN-767: Column visibility + saved views + inline status ───────────────
+  /** Ordered column metadata matching the loads table. `alwaysVisible` columns
+   *  cannot be hidden by the user (e.g. load number, actions). */
+  readonly columnDefs: { key: string; label: string; alwaysVisible?: boolean }[] = [
+    { key: 'load_number', label: 'Load #', alwaysVisible: true },
+    { key: 'pickup_date', label: 'Pickup Date' },
+    { key: 'driver', label: 'Driver' },
+    { key: 'broker', label: 'Broker' },
+    { key: 'po_number', label: 'PO #' },
+    { key: 'pickup', label: 'Pickup' },
+    { key: 'delivery', label: 'Delivery' },
+    { key: 'rate', label: 'Rate' },
+    { key: 'completed_date', label: 'Completed' },
+    { key: 'status', label: 'Status' },
+    { key: 'billing', label: 'Billing' },
+    { key: 'attachments', label: 'Attachments' },
+    { key: 'actions', label: 'Actions', alwaysVisible: true }
+  ];
+  /** Map of column key → visible. Defaults to all visible; overridden by loaded preferences. */
+  visibleColumns: Record<string, boolean> = {};
+  savedViews: LoadsSavedView[] = [];
+  showColumnPicker = false;
+  showSavedViewsMenu = false;
+  /** Name input buffer for "Save current view as…". */
+  newViewName = '';
+  /** ID of the load whose inline status dropdown is open. */
+  statusMenuLoadId: string | null = null;
+
   driverFilterOptions: AiSelectOption[] = [];
   statusFilterOptions: AiSelectOption[] = [];
   billingFilterOptions: AiSelectOption[] = [];
@@ -468,7 +497,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     private router: Router,
     private sanitizer: DomSanitizer,
     private operatingEntityContext: OperatingEntityContextService,
-    private loadTemplatesService: LoadTemplatesService
+    private loadTemplatesService: LoadTemplatesService,
+    private userPreferences: UserPreferencesService
   ) {
     this.manualLoadForm = this.fb.group({
       status: ['NEW', Validators.required],
@@ -573,9 +603,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     });
     this.statusFilterOptions = this.statusOptions.map(s => ({ value: s, label: this.getStatusLabel(s) }));
     this.billingFilterOptions = this.billingOptions.map(b => ({ value: b, label: this.getBillingLabel(b) }));
+    this.initColumnVisibility();
     this.loadDropdownData();
     this.loadLoads();
     this.applyUseTemplateFromRouterState();
+    this.loadUserPreferences();
 
     this.search$
       .pipe(debounceTime(300), distinctUntilChanged(), takeUntil(this.destroy$))
@@ -2805,6 +2837,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.driverDropdownOpen = false;
     this.truckDropdownOpen = false;
     this.trailerDropdownOpen = false;
+    this.showColumnPicker = false;
+    this.showSavedViewsMenu = false;
+    this.statusMenuLoadId = null;
   }
 
   // FN-745: Page-level drop handler for multi-PDF bulk extraction
@@ -3146,5 +3181,182 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
     this.page = 1;
     this.loadLoads();
+  }
+
+  // ─── FN-767: Column visibility + saved views + inline status ───────────────
+
+  private initColumnVisibility(): void {
+    this.visibleColumns = this.columnDefs.reduce<Record<string, boolean>>((acc, col) => {
+      acc[col.key] = true;
+      return acc;
+    }, {});
+  }
+
+  private loadUserPreferences(): void {
+    this.userPreferences.load().pipe(takeUntil(this.destroy$)).subscribe(() => {
+      const prefs = this.userPreferences.getLoadsDashboardPrefs();
+      if (prefs.columnVisibility) {
+        for (const col of this.columnDefs) {
+          if (col.alwaysVisible) {
+            this.visibleColumns[col.key] = true;
+            continue;
+          }
+          if (prefs.columnVisibility[col.key] === false) {
+            this.visibleColumns[col.key] = false;
+          }
+        }
+      }
+      this.savedViews = Array.isArray(prefs.savedViews) ? [...prefs.savedViews] : [];
+      if (this.savedViews.length === 0) {
+        this.savedViews = this.defaultSavedViews();
+      }
+    });
+  }
+
+  /** Default seed views shown on first use; not persisted until user saves/edits. */
+  private defaultSavedViews(): LoadsSavedView[] {
+    return [
+      {
+        id: 'default-my-drafts',
+        name: 'My Drafts',
+        filters: { status: 'DRAFT' },
+        sortBy: 'pickup_date',
+        sortDir: 'desc'
+      },
+      {
+        id: 'default-this-week',
+        name: 'This Week',
+        filters: {},
+        sortBy: 'pickup_date',
+        sortDir: 'desc'
+      },
+      {
+        id: 'default-unpaid',
+        name: 'Unpaid',
+        filters: { billingStatus: 'PENDING' },
+        sortBy: 'pickup_date',
+        sortDir: 'desc'
+      }
+    ];
+  }
+
+  isColVisible(key: string): boolean {
+    return this.visibleColumns[key] !== false;
+  }
+
+  /** Number of currently visible columns — used for empty-state colspan. */
+  get visibleColumnCount(): number {
+    return this.columnDefs.reduce((n, c) => n + (this.isColVisible(c.key) ? 1 : 0), 0);
+  }
+
+  toggleColumnPicker(): void {
+    this.showColumnPicker = !this.showColumnPicker;
+    if (this.showColumnPicker) this.showSavedViewsMenu = false;
+  }
+
+  toggleColumnVisible(key: string): void {
+    const def = this.columnDefs.find(c => c.key === key);
+    if (!def || def.alwaysVisible) return;
+    this.visibleColumns[key] = !this.isColVisible(key);
+    this.persistColumnVisibility();
+  }
+
+  private persistColumnVisibility(): void {
+    const payload: Record<string, boolean> = {};
+    for (const col of this.columnDefs) {
+      if (col.alwaysVisible) continue;
+      payload[col.key] = this.isColVisible(col.key);
+    }
+    this.userPreferences.patchLoadsDashboard({ columnVisibility: payload }).subscribe();
+  }
+
+  toggleSavedViewsMenu(): void {
+    this.showSavedViewsMenu = !this.showSavedViewsMenu;
+    if (this.showSavedViewsMenu) this.showColumnPicker = false;
+  }
+
+  applySavedView(view: LoadsSavedView): void {
+    this.filters = {
+      status: view.filters.status || '',
+      billingStatus: view.filters.billingStatus || '',
+      driverId: view.filters.driverId || '',
+      q: view.filters.q || '',
+      needsReview: !!view.filters.needsReview,
+      source: view.filters.source || ''
+    };
+    if (view.sortBy) this.sortBy = view.sortBy as any;
+    if (view.sortDir) this.sortDir = view.sortDir;
+    this.page = 1;
+    this.showSavedViewsMenu = false;
+    this.loadLoads();
+  }
+
+  saveCurrentAsView(): void {
+    const name = (this.newViewName || '').trim();
+    if (!name) return;
+    const view: LoadsSavedView = {
+      id: `view-${Date.now()}`,
+      name,
+      filters: {
+        status: this.filters.status || undefined,
+        billingStatus: this.filters.billingStatus || undefined,
+        driverId: this.filters.driverId || undefined,
+        q: this.filters.q || undefined,
+        needsReview: this.filters.needsReview || undefined,
+        source: this.filters.source || undefined
+      },
+      sortBy: this.sortBy,
+      sortDir: this.sortDir
+    };
+    this.savedViews = [...this.savedViews, view];
+    this.newViewName = '';
+    this.persistSavedViews();
+  }
+
+  deleteSavedView(id: string): void {
+    this.savedViews = this.savedViews.filter(v => v.id !== id);
+    this.persistSavedViews();
+  }
+
+  private persistSavedViews(): void {
+    this.userPreferences.patchLoadsDashboard({ savedViews: this.savedViews }).subscribe();
+  }
+
+  openStatusMenu(loadId: string | undefined | null, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!loadId) return;
+    this.statusMenuLoadId = this.statusMenuLoadId === loadId ? null : loadId;
+  }
+
+  /** Inline status change — PUTs a single-field update via LoadsService.updateLoad. */
+  changeLoadStatus(load: LoadListItem, newStatus: LoadStatus, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.statusMenuLoadId = null;
+    if (!load || !load.id) return;
+    if (load.status === newStatus) return;
+
+    const previousStatus = load.status;
+    load.status = newStatus; // optimistic UI update
+
+    this.loadsService.updateLoad(load.id, { status: newStatus }).subscribe({
+      next: (res) => {
+        if (res && res.data && res.data.status) {
+          load.status = res.data.status as LoadStatus;
+        }
+        this.successMessage = `Status updated to ${this.getStatusLabel(newStatus)}`;
+        setTimeout(() => { this.successMessage = ''; }, 2500);
+      },
+      error: (err) => {
+        load.status = previousStatus;
+        this.errorMessage = (err && err.error && err.error.error) || 'Failed to update load status';
+        setTimeout(() => { this.errorMessage = ''; }, 4000);
+      }
+    });
   }
 }
