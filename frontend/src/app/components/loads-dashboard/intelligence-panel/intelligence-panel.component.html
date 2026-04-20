@@ -1,0 +1,107 @@
+<section class="intel-panel" [class.intel-panel--loading]="loading">
+  <!-- Pill-shaped period selector -->
+  <div class="intel-period">
+    <button
+      type="button"
+      *ngFor="let p of periods"
+      class="intel-period__pill"
+      [class.active]="period === p.value"
+      (click)="setPeriod(p.value)"
+    >
+      {{ p.label }}
+    </button>
+  </div>
+
+  <!-- Metric cards -->
+  <div class="intel-cards">
+
+    <!-- Gross -->
+    <article class="intel-card intel-card--gross">
+      <header class="intel-card__header">
+        <span class="material-symbols-outlined intel-card__icon">payments</span>
+        <span class="intel-card__label">Gross</span>
+      </header>
+      <div class="intel-card__value">
+        ${{ (metrics?.gross?.current || 0) | number:'1.0-0' }}
+      </div>
+      <ng-container *ngIf="trend(metrics?.gross) as t">
+        <div class="intel-card__trend" [attr.data-direction]="t.direction">
+          <span class="material-symbols-outlined intel-card__arrow">
+            {{ t.direction === 'up' ? 'trending_up' : t.direction === 'down' ? 'trending_down' : 'trending_flat' }}
+          </span>
+          <span class="intel-card__delta">{{ t.percent | number:'1.0-1' }}%</span>
+          <span class="intel-card__vs">vs prev.</span>
+        </div>
+      </ng-container>
+    </article>
+
+    <!-- Delivered -->
+    <article class="intel-card intel-card--delivered">
+      <header class="intel-card__header">
+        <span class="material-symbols-outlined intel-card__icon">task_alt</span>
+        <span class="intel-card__label">Delivered</span>
+      </header>
+      <div class="intel-card__value">
+        {{ metrics?.delivered?.current || 0 }}
+      </div>
+      <ng-container *ngIf="trend(metrics?.delivered) as t">
+        <div class="intel-card__trend" [attr.data-direction]="t.direction">
+          <span class="material-symbols-outlined intel-card__arrow">
+            {{ t.direction === 'up' ? 'trending_up' : t.direction === 'down' ? 'trending_down' : 'trending_flat' }}
+          </span>
+          <span class="intel-card__delta">{{ t.percent | number:'1.0-1' }}%</span>
+          <span class="intel-card__vs">vs prev.</span>
+        </div>
+      </ng-container>
+    </article>
+
+    <!-- In Transit (with pulsing green dot) -->
+    <article class="intel-card intel-card--intransit">
+      <header class="intel-card__header">
+        <span class="intel-card__pulse" aria-hidden="true"></span>
+        <span class="intel-card__label">In Transit</span>
+      </header>
+      <div class="intel-card__value">
+        {{ metrics?.inTransit?.current || 0 }}
+      </div>
+      <ng-container *ngIf="trend(metrics?.inTransit) as t">
+        <div class="intel-card__trend" [attr.data-direction]="t.direction">
+          <span class="material-symbols-outlined intel-card__arrow">
+            {{ t.direction === 'up' ? 'trending_up' : t.direction === 'down' ? 'trending_down' : 'trending_flat' }}
+          </span>
+          <span class="intel-card__delta">{{ t.percent | number:'1.0-1' }}%</span>
+          <span class="intel-card__vs">vs prev.</span>
+        </div>
+      </ng-container>
+    </article>
+
+    <!-- Needs Attention (clickable → applies composite filter) -->
+    <button
+      type="button"
+      class="intel-card intel-card--attention"
+      [class.intel-card--active]="needsAttentionActive"
+      (click)="onNeedsAttention()"
+      [attr.aria-pressed]="needsAttentionActive"
+      title="Click to show drafts, overdue, and loads missing documents"
+    >
+      <header class="intel-card__header">
+        <span class="material-symbols-outlined intel-card__icon">priority_high</span>
+        <span class="intel-card__label">Needs Attention</span>
+      </header>
+      <div class="intel-card__value">
+        {{ metrics?.needsAttention?.current || 0 }}
+      </div>
+      <ng-container *ngIf="trend(metrics?.needsAttention) as t">
+        <div class="intel-card__trend" [attr.data-direction]="t.direction">
+          <!-- For attention, an "up" trend is bad — so we mark the card accordingly in CSS via data-direction inversion. -->
+          <span class="material-symbols-outlined intel-card__arrow">
+            {{ t.direction === 'up' ? 'trending_up' : t.direction === 'down' ? 'trending_down' : 'trending_flat' }}
+          </span>
+          <span class="intel-card__delta">{{ t.percent | number:'1.0-1' }}%</span>
+          <span class="intel-card__vs">vs prev.</span>
+        </div>
+      </ng-container>
+    </button>
+
+  </div>
+</section>

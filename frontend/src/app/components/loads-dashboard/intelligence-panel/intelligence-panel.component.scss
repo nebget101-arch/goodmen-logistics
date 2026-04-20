@@ -1,0 +1,182 @@
+:host {
+  display: block;
+  margin: 0 0 16px;
+}
+
+.intel-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.9));
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+
+  &--loading {
+    opacity: 0.65;
+  }
+}
+
+/* ─── Pill period selector ────────────────────────────────────────────────── */
+
+.intel-period {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(71, 85, 105, 0.8);
+  border-radius: 999px;
+}
+
+.intel-period__pill {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: rgba(203, 213, 225, 0.88);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    color: #f1f5f9;
+  }
+
+  &.active {
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+  }
+}
+
+/* ─── Card grid ───────────────────────────────────────────────────────────── */
+
+.intel-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.intel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: rgba(30, 41, 59, 0.72);
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  border-radius: 12px;
+  text-align: left;
+
+  // reset button defaults (Needs Attention uses <button>)
+  appearance: none;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+
+.intel-card--attention {
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    border-color: rgba(251, 146, 60, 0.7);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  }
+
+  &.intel-card--active {
+    border-color: #f97316;
+    box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.45), 0 10px 22px rgba(249, 115, 22, 0.22);
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.14), rgba(30, 41, 59, 0.72));
+  }
+}
+
+.intel-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(203, 213, 225, 0.85);
+}
+
+.intel-card__icon {
+  font-size: 18px;
+  color: #38bdf8;
+}
+
+.intel-card--gross     .intel-card__icon { color: #22c55e; }
+.intel-card--delivered .intel-card__icon { color: #38bdf8; }
+.intel-card--attention .intel-card__icon { color: #f97316; }
+
+/* Pulsing green dot for In Transit */
+.intel-card__pulse {
+  position: relative;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: #22c55e;
+  border-radius: 50%;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.5);
+    animation: intelPulse 1.6s ease-out infinite;
+  }
+}
+
+@keyframes intelPulse {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(2.0); opacity: 0;   }
+}
+
+.intel-card__label {
+  font-weight: 600;
+}
+
+.intel-card__value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ─── Trend row ───────────────────────────────────────────────────────────── */
+
+.intel-card__trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(148, 163, 184, 0.95);
+
+  &[data-direction="up"]   { color: #22c55e; }
+  &[data-direction="down"] { color: #ef4444; }
+  &[data-direction="flat"] { color: rgba(148, 163, 184, 0.9); }
+}
+
+/* Needs Attention inverts the semantics: "up" trend is bad. */
+.intel-card--attention .intel-card__trend {
+  &[data-direction="up"]   { color: #ef4444; }
+  &[data-direction="down"] { color: #22c55e; }
+}
+
+.intel-card__arrow {
+  font-size: 16px;
+}
+
+.intel-card__vs {
+  color: rgba(148, 163, 184, 0.8);
+  font-weight: 400;
+}

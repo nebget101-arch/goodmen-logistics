@@ -35,6 +35,17 @@
   <div *ngIf="errorMessage" class="alert alert-error">{{ errorMessage }}</div>
   <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
 
+  <!-- FN-794: Intelligence panel (Gross / Delivered / In Transit / Needs Attention + period pills) -->
+  <app-intelligence-panel
+    *ngIf="!isDriverRole"
+    [period]="intelligencePeriod"
+    [metrics]="intelligenceMetrics"
+    [loading]="loading"
+    [needsAttentionActive]="needsAttentionActive"
+    (periodChange)="onIntelligencePeriodChange($event)"
+    (needsAttentionClick)="onIntelligenceNeedsAttentionClick()"
+  ></app-intelligence-panel>
+
   <div class="status-summary-bar" *ngIf="!loading">
     <div class="status-summary-bar__header">
       <div class="status-summary-bar__period">
