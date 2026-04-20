@@ -3,9 +3,11 @@ import {
   Input,
   Output,
   EventEmitter,
-  HostListener,
   ChangeDetectorRef,
+  OnDestroy,
+  OnInit,
 } from '@angular/core';
+import { KeyboardShortcutsService } from '../../../shared/services/keyboard-shortcuts.service';
 
 export interface WizardStep {
   label: string;
@@ -29,7 +31,7 @@ export interface WizardStep {
   templateUrl: './load-wizard.component.html',
   styleUrls: ['./load-wizard.component.scss'],
 })
-export class LoadWizardComponent {
+export class LoadWizardComponent implements OnInit, OnDestroy {
 
   readonly STEPS: WizardStep[] = [
     { label: 'Basics',             icon: 'assignment' },
@@ -88,7 +90,66 @@ export class LoadWizardComponent {
   /** Controls visibility of the unsaved-changes confirmation dialog. */
   showUnsavedWarning = false;
 
-  constructor(private cdr: ChangeDetectorRef) {}
+  /** FN-765: unregister callback for the shortcut bindings owned by this component. */
+  private _unregisterShortcuts: (() => void) | null = null;
+
+  constructor(
+    private cdr: ChangeDetectorRef,
+    private shortcuts: KeyboardShortcutsService,
+  ) {}
+
+  ngOnInit(): void {
+    this._unregisterShortcuts = this.shortcuts.registerAll([
+      {
+        id: 'wizard.close',
+        key: 'Escape',
+        description: 'Close wizard (or dismiss unsaved-changes warning)',
+        group: 'Load wizard',
+        allowInInput: true,
+        handler: () => {
+          if (this.showUnsavedWarning) {
+            this.dismissUnsavedWarning();
+          } else {
+            this.requestClose();
+          }
+        },
+      },
+      {
+        id: 'wizard.saveAndNew',
+        key: 's',
+        ctrlOrCmd: true,
+        shift: true,
+        allowInInput: true,
+        description: 'Save & create another',
+        group: 'Load wizard',
+        handler: () => this.saveAndNew.emit(),
+      },
+      {
+        id: 'wizard.save',
+        key: 's',
+        ctrlOrCmd: true,
+        allowInInput: true,
+        description: 'Save load',
+        group: 'Load wizard',
+        handler: () => this.save.emit(),
+      },
+      {
+        id: 'wizard.next',
+        key: 'Enter',
+        description: 'Next step',
+        group: 'Load wizard',
+        // Intentionally NOT allowInInput — let Enter submit fields / newlines first.
+        handler: () => { if (!this.isLastStep) { this.next(); } },
+      },
+    ]);
+  }
+
+  ngOnDestroy(): void {
+    if (this._unregisterShortcuts) {
+      this._unregisterShortcuts();
+      this._unregisterShortcuts = null;
+    }
+  }
 
   // ─── Step navigation ──────────────────────────────────────────────────────
 
@@ -170,41 +231,7 @@ export class LoadWizardComponent {
   }
 
   // ─── Keyboard shortcuts ───────────────────────────────────────────────────
-
-  @HostListener('document:keydown', ['$event'])
-  onKeydown(event: KeyboardEvent): void {
-    const tag = ((event.target as HTMLElement)?.tagName || '').toLowerCase();
-    const inTextInput = ['input', 'textarea', 'select'].includes(tag);
-
-    // Esc: close warning overlay first, then wizard
-    if (event.key === 'Escape') {
-      if (this.showUnsavedWarning) {
-        this.dismissUnsavedWarning();
-      } else {
-        this.requestClose();
-      }
-      event.preventDefault();
-      return;
-    }
-
-    // Cmd/Ctrl + Shift + S → Save & New
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 's') {
-      this.saveAndNew.emit();
-      event.preventDefault();
-      return;
-    }
-
-    // Cmd/Ctrl + S → Save
-    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 's') {
-      this.save.emit();
-      event.preventDefault();
-      return;
-    }
-
-    // Enter → Next (skip if user is typing in a form field or on the last step)
-    if (event.key === 'Enter' && !inTextInput && !this.isLastStep) {
-      this.next();
-      event.preventDefault();
-    }
-  }
+  // FN-765: moved from inline @HostListener to KeyboardShortcutsService so the
+  // bindings appear in the global help modal (?) and unregister cleanly when
+  // the wizard is closed.
 }

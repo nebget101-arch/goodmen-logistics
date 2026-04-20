@@ -253,6 +253,30 @@ export class LoadsService {
     return this.http.delete<{ success: boolean }>(`${this.baseUrl}/loads/${loadId}`);
   }
 
+  /**
+   * FN-768: Apply the same field changes to many loads in a single transaction.
+   * Allowed keys on `changes`: status, billingStatus, driverId, truckId.
+   */
+  bulkUpdate(ids: string[], changes: {
+    status?: string;
+    billingStatus?: string;
+    driverId?: string | null;
+    truckId?: string | null;
+  }): Observable<{ success: boolean; updated: number }> {
+    return this.http.post<{ success: boolean; updated: number }>(
+      `${this.baseUrl}/loads/bulk-update`,
+      { ids, changes }
+    );
+  }
+
+  /** FN-768: Delete multiple DRAFT loads transactionally; rejects non-DRAFT rows. */
+  bulkDeleteDrafts(ids: string[]): Observable<{ success: boolean; deleted: number }> {
+    return this.http.post<{ success: boolean; deleted: number }>(
+      `${this.baseUrl}/loads/bulk-delete-drafts`,
+      { ids }
+    );
+  }
+
   aiExtractFromPdf(file: File): Observable<{ success: boolean; data: LoadAiEndpointExtraction }> {
     const form = new FormData();
     form.append('file', file);
