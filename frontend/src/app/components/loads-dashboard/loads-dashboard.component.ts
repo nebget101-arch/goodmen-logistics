@@ -15,7 +15,13 @@ import {
   LoadStop,
   LoadAiEndpointExtraction
 } from '../../models/load-dashboard.model';
-import { LoadsService, BrokerOption } from '../../services/loads.service';
+import {
+  LoadsService,
+  BrokerOption,
+  SmartFilterCounts,
+  SmartFilterKey,
+  SMART_FILTER_KEYS
+} from '../../services/loads.service';
 import { LoadTemplatesService } from '../../services/load-templates.service';
 import { KeyboardShortcutsService } from '../../shared/services/keyboard-shortcuts.service';
 import { UserPreferencesService, LoadsSavedView } from '../../services/user-preferences.service';
@@ -241,6 +247,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     needsReview: false,
     source: ''
   };
+
+  // FN-798: Smart filter chips (AND'd server-side). Each entry is a chip key
+  // from SMART_FILTER_KEYS. `smartFilterCounts` backs the badge numbers.
+  smartFilterKeys: SmartFilterKey[] = [];
+  smartFilterCounts: SmartFilterCounts | null = null;
+  smartFilterCountsLoading = false;
 
   sortBy: 'load_number' | 'pickup_date' | 'rate' | 'completed_date' = 'pickup_date';
   /** Default: newest pickups first on initial page load / refresh. */
@@ -1029,7 +1041,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         sortBy: this.sortBy,
         sortDir: this.sortDir,
         needsReview: this.filters.needsReview || undefined,
-        source: this.filters.source || undefined
+        source: this.filters.source || undefined,
+        smartFilter: this.smartFilterKeys.length ? this.smartFilterKeys : undefined
       })
       .subscribe({
         next: (res) => {
@@ -1044,6 +1057,44 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
           this.loading = false;
         }
       });
+    // FN-798: refresh chip counts alongside the list so badges stay in sync
+    // with the underlying data (counts are tenant/OE/driver-scoped, not filter-scoped).
+    this.loadSmartFilterCounts();
+  }
+
+  /** FN-798: pull per-chip counts. Non-blocking; failure silently leaves stale counts. */
+  private loadSmartFilterCounts(): void {
+    this.smartFilterCountsLoading = true;
+    this.loadsService.getSmartFilterCounts().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
+        this.smartFilterCounts = res?.data || null;
+        this.smartFilterCountsLoading = false;
+      },
+      error: () => {
+        this.smartFilterCountsLoading = false;
+      }
+    });
+  }
+
+  /** FN-798: toggle a smart-filter chip. Multiple active chips AND together. */
+  toggleSmartFilter(key: SmartFilterKey): void {
+    if (!SMART_FILTER_KEYS.includes(key)) return;
+    const idx = this.smartFilterKeys.indexOf(key);
+    if (idx >= 0) {
+      this.smartFilterKeys = this.smartFilterKeys.filter((k) => k !== key);
+    } else {
+      this.smartFilterKeys = [...this.smartFilterKeys, key];
+    }
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  /** FN-798: clear every active smart-filter chip and reload the list. */
+  clearSmartFilters(): void {
+    if (!this.smartFilterKeys.length) return;
+    this.smartFilterKeys = [];
+    this.page = 1;
+    this.loadLoads();
   }
 
   onSearch(value: string): void {
@@ -3697,6 +3748,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       needsReview: false,
       source: ''
     };
+
+    // FN-798: "Clear all" must also drop every active smart-filter chip.
+    this.smartFilterKeys = [];
 
     this.page = 1;
     this.loadLoads();

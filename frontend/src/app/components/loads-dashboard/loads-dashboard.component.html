@@ -148,6 +148,15 @@
     </div>
   </div>
 
+  <!-- FN-798: Smart filter chips (AND logic, teal active fill) -->
+  <app-smart-filters
+    [counts]="smartFilterCounts"
+    [active]="smartFilterKeys"
+    [loading]="smartFilterCountsLoading"
+    (toggle)="toggleSmartFilter($event)"
+    (clearAll)="clearSmartFilters()"
+  ></app-smart-filters>
+
   <!-- FN-746: Needs review toggle chip -->
   <div class="quick-filter-row" *ngIf="!isDriverRole">
     <button

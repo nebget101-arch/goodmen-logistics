@@ -1,0 +1,94 @@
+/* FN-798: Smart filter chips row (AND'd).
+   Active chip: teal fill per AC. Matches the existing quick-filter-chip
+   pill shape so it reads as a sibling of the FN-746 / FN-762 toggles. */
+
+.smart-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.smart-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 10px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  color: #94a3b8;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+
+  .material-symbols-outlined {
+    font-size: 0.95rem;
+  }
+
+  &:hover {
+    background: rgba(20, 184, 166, 0.08);
+    border-color: rgba(20, 184, 166, 0.35);
+    color: #5eead4;
+  }
+
+  &--active {
+    background: rgba(20, 184, 166, 0.18);
+    border-color: rgba(20, 184, 166, 0.6);
+    color: #2dd4bf;
+
+    .material-symbols-outlined {
+      color: #2dd4bf;
+    }
+
+    .smart-filter-chip__count {
+      background: rgba(20, 184, 166, 0.28);
+      color: #ccfbf1;
+    }
+  }
+
+  &__label {
+    line-height: 1;
+  }
+
+  &__count {
+    min-width: 18px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.1;
+    background: rgba(51, 65, 85, 0.55);
+    color: #cbd5e1;
+    text-align: center;
+
+    &--zero {
+      opacity: 0.55;
+    }
+  }
+}
+
+.smart-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #94a3b8;
+
+  .material-symbols-outlined {
+    font-size: 0.9rem;
+  }
+
+  &:hover {
+    color: #e2e8f0;
+    border-color: rgba(148, 163, 184, 0.65);
+  }
+}
