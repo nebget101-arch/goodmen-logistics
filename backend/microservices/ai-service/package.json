@@ -4,7 +4,8 @@
   "description": "FleetNeuron AI assistant service for chat and guided actions",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node src/handlers/__tests__/loads-nlq-handler.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

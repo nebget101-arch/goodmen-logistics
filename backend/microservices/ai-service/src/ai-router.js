@@ -1031,8 +1031,12 @@ function buildAiRouter(deps) {
    * @openapi
    * /api/ai/loads/nlq:
    *   post:
-   *     summary: Parse natural-language load search (FN-801)
-   *     description: Returns structured filters or fallback for keyword search.
+   *     summary: AI loads natural-language query parser (FN-800)
+   *     description: >
+   *       Converts free-text (e.g. "Smith's pending loads over $1000") into a validated
+   *       filter object for the loads list. Uses Anthropic Claude Haiku (temperature 0).
+   *       Returns `{ success: true, fallback: true }` when nothing extractable or on upstream
+   *       failure so callers can use keyword search.
    *     tags:
    *       - AI
    *     requestBody:
@@ -1046,11 +1050,25 @@ function buildAiRouter(deps) {
    *             properties:
    *               query:
    *                 type: string
+   *                 description: Natural-language question about loads
    *     responses:
    *       200:
-   *         description: Filters or fallback flag
+   *         description: Parsed filters, or fallback for keyword search
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 fallback:
+   *                   type: boolean
+   *                 filters:
+   *                   type: object
+   *                 meta:
+   *                   type: object
    *       400:
-   *         description: Bad request
+   *         description: Missing or invalid query
    */
   router.post('/loads/nlq', (req, res) => handleLoadsNlq(req, res, deps));
 

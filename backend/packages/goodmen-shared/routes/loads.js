@@ -851,7 +851,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/loads/search/nlq — FN-801 natural language load search
+// POST /api/loads/search/nlq — FN-801 + FN-800 (ai-service snake_case filters)
 router.post('/search/nlq', async (req, res) => {
   const startTime = Date.now();
   try {
@@ -907,30 +907,40 @@ router.post('/search/nlq', async (req, res) => {
     const sortDirRaw = (body.sortDir || defaultSortDir).toString().trim().toLowerCase();
     const sortDir = sortDirRaw === 'asc' ? 'asc' : 'desc';
 
+    const f = aiFilters;
     const nlqContains = {};
     if (!fallback) {
-      if (aiFilters.loadNumberContains) nlqContains.loadNumberContains = aiFilters.loadNumberContains;
-      if (aiFilters.brokerNameContains) nlqContains.brokerNameContains = aiFilters.brokerNameContains;
-      if (aiFilters.driverNameContains) nlqContains.driverNameContains = aiFilters.driverNameContains;
-      if (aiFilters.pickupState) nlqContains.pickupState = aiFilters.pickupState;
-      if (aiFilters.deliveryState) nlqContains.deliveryState = aiFilters.deliveryState;
-      if (aiFilters.pickupCity) nlqContains.pickupCity = aiFilters.pickupCity;
-      if (aiFilters.deliveryCity) nlqContains.deliveryCity = aiFilters.deliveryCity;
-      if (aiFilters.rateMin != null) nlqContains.rateMin = aiFilters.rateMin;
-      if (aiFilters.rateMax != null) nlqContains.rateMax = aiFilters.rateMax;
+      const loadNum = f.loadNumberContains ?? f.load_number;
+      if (loadNum) nlqContains.loadNumberContains = loadNum;
+      const brokerN = f.brokerNameContains ?? f.broker_name;
+      if (brokerN) nlqContains.brokerNameContains = brokerN;
+      const driverN = f.driverNameContains ?? f.driver_name;
+      if (driverN) nlqContains.driverNameContains = driverN;
+      const pState = f.pickupState ?? f.pickup_state;
+      if (pState) nlqContains.pickupState = pState;
+      const dState = f.deliveryState ?? f.delivery_state;
+      if (dState) nlqContains.deliveryState = dState;
+      const pCity = f.pickupCity ?? f.pickup_city;
+      if (pCity) nlqContains.pickupCity = pCity;
+      const dCity = f.deliveryCity ?? f.delivery_city;
+      if (dCity) nlqContains.deliveryCity = dCity;
+      const rmin = f.rateMin ?? f.rate_min;
+      if (rmin != null) nlqContains.rateMin = rmin;
+      const rmax = f.rateMax ?? f.rate_max;
+      if (rmax != null) nlqContains.rateMax = rmax;
     }
 
     const listSpec = {
       context: req.context || null,
       role,
       user: req.user,
-      status: fallback ? null : aiFilters.status || null,
-      billingStatus: fallback ? null : aiFilters.billingStatus || null,
-      driverId: fallback ? null : aiFilters.driverId || null,
-      brokerId: fallback ? null : aiFilters.brokerId || null,
-      q: fallback ? qText : aiFilters.q || null,
-      dateFrom: fallback ? null : aiFilters.dateFrom || null,
-      dateTo: fallback ? null : aiFilters.dateTo || null,
+      status: fallback ? null : f.status || null,
+      billingStatus: fallback ? null : (f.billingStatus ?? f.billing_status || null),
+      driverId: fallback ? null : (f.driverId ?? null),
+      brokerId: fallback ? null : (f.brokerId ?? null),
+      q: fallback ? qText : (f.q || null),
+      dateFrom: fallback ? null : (f.dateFrom ?? f.date_from || null),
+      dateTo: fallback ? null : (f.dateTo ?? f.date_to || null),
       needsReview: false,
       smartFilterQuery: '',
       page,

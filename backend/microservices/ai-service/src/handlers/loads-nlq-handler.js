@@ -1,13 +1,14 @@
 'use strict';
 
 /**
- * FN-801: Natural-language → structured filters for load search (logistics NLQ endpoint).
+ * FN-800: Natural-language query parser for loads (Anthropic Claude Haiku).
+ * Filter enums are aligned with `goodmen-shared/routes/loads.js` list query.
  */
 
+const Anthropic = require('@anthropic-ai/sdk');
 const { logAiInteraction } = require('../analytics/logger');
 
 const ROUTE = '/loads/nlq';
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const LOAD_STATUSES = [
   'DRAFT', 'NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP',
@@ -16,123 +17,144 @@ const LOAD_STATUSES = [
 const BILLING_STATUSES = [
   'PENDING', 'CANCELLED', 'CANCELED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'
 ];
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const STATE_RE = /^[A-Z]{2}$/;
 
-function parseAiJson(content) {
+const ALLOWED_FILTERS = Object.freeze({
+  driver_name: { type: 'string', min: 1, max: 100 },
+  broker_name: { type: 'string', min: 1, max: 100 },
+  load_number: { type: 'string', min: 1, max: 64 },
+  billing_status: { type: 'enum', values: BILLING_STATUSES, upper: true },
+  status: { type: 'enum', values: LOAD_STATUSES, upper: true },
+  pickup_state: { type: 'state' },
+  delivery_state: { type: 'state' },
+  pickup_city: { type: 'string', min: 1, max: 80 },
+  delivery_city: { type: 'string', min: 1, max: 80 },
+  rate_min: { type: 'positiveNumber' },
+  rate_max: { type: 'positiveNumber' },
+  date_from: { type: 'isoDate' },
+  date_to: { type: 'isoDate' }
+});
+
+let anthropicClient = null;
+function getAnthropicClient() {
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic.default({
+      apiKey: process.env.ANTHROPIC_API_KEY
+    });
+  }
+  return anthropicClient;
+}
+
+function buildSystemPrompt() {
+  return `You convert a fleet manager's natural-language question about loads into a JSON filter object.
+
+Return ONLY a JSON object. No prose, no markdown fences, no explanation.
+Omit any field you cannot confidently infer from the query. An empty object {} is valid.
+
+Allowed fields (use these exact names — any other field will be discarded):
+- driver_name: string, 1-100 chars (driver's name or partial name)
+- broker_name: string, 1-100 chars
+- load_number: string, 1-64 chars
+- billing_status: one of ${JSON.stringify(BILLING_STATUSES)}
+- status: load lifecycle status, one of ${JSON.stringify(LOAD_STATUSES)}
+- pickup_state: 2-letter uppercase US state code (e.g. "TX")
+- delivery_state: 2-letter uppercase US state code
+- pickup_city: string, 1-80 chars
+- delivery_city: string, 1-80 chars
+- rate_min: positive number (dollars; strip $ and commas)
+- rate_max: positive number
+- date_from: ISO date "YYYY-MM-DD"
+- date_to: ISO date "YYYY-MM-DD"
+
+Rules:
+- If the user mentions a dollar amount with "over" / "more than" / "above" / "at least", populate rate_min.
+- "under" / "less than" / "below" / "at most" populates rate_max.
+- Relative date ranges like "last month", "this week", "yesterday" must be resolved to concrete YYYY-MM-DD values for date_from and date_to.
+- If the query is gibberish or has no extractable filter, return {}.`;
+}
+
+function validateStringField(value, cfg) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length < cfg.min || trimmed.length > cfg.max) return undefined;
+  return trimmed;
+}
+
+function validateEnumField(value, cfg) {
+  if (typeof value !== 'string') return undefined;
+  const upper = cfg.upper ? value.trim().toUpperCase() : value.trim();
+  if (!cfg.values.includes(upper)) return undefined;
+  return upper;
+}
+
+function validateStateField(value) {
+  if (typeof value !== 'string') return undefined;
+  const upper = value.trim().toUpperCase();
+  if (!STATE_RE.test(upper)) return undefined;
+  return upper;
+}
+
+function validatePositiveNumber(value) {
+  const num = typeof value === 'number' ? value : parseFloat(value);
+  if (!Number.isFinite(num) || num <= 0) return undefined;
+  return num;
+}
+
+function validateIsoDate(value) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!ISO_DATE_RE.test(trimmed)) return undefined;
+  const d = new Date(`${trimmed}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return undefined;
+  if (d.toISOString().slice(0, 10) !== trimmed) return undefined;
+  return trimmed;
+}
+
+function validateFilters(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const key of Object.keys(ALLOWED_FILTERS)) {
+    if (!(key in raw)) continue;
+    const cfg = ALLOWED_FILTERS[key];
+    const value = raw[key];
+    let cleaned;
+    switch (cfg.type) {
+      case 'string':
+        cleaned = validateStringField(value, cfg);
+        break;
+      case 'enum':
+        cleaned = validateEnumField(value, cfg);
+        break;
+      case 'state':
+        cleaned = validateStateField(value);
+        break;
+      case 'positiveNumber':
+        cleaned = validatePositiveNumber(value);
+        break;
+      case 'isoDate':
+        cleaned = validateIsoDate(value);
+        break;
+      default:
+        cleaned = undefined;
+    }
+    if (cleaned !== undefined) {
+      out[key] = cleaned;
+    }
+  }
+  return out;
+}
+
+function parseAiResponse(content) {
   let cleaned = (content || '').trim();
   if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+    cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/```\s*$/, '').trim();
   }
   return JSON.parse(cleaned);
 }
 
-function trimStr(v, max) {
-  if (typeof v !== 'string') return '';
-  const t = v.trim();
-  if (!t) return '';
-  return t.slice(0, max);
-}
-
-function normalizeEnum(v) {
-  return trimStr(v, 80).toUpperCase().replace(/[\s-]+/g, '_');
-}
-
-function validateIsoDate(v) {
-  const s = trimStr(v, 12);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
-  const d = new Date(`${s}T00:00:00Z`);
-  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) return '';
-  return s;
-}
-
-/**
- * Normalize OpenAI JSON into safe filters or signal keyword fallback.
- */
-function normalizeNlqAiOutput(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { fallback: true, reason: 'invalid_root' };
-  }
-  if (raw.fallback === true) {
-    return { fallback: true, reason: 'model_fallback' };
-  }
-  const filtersRaw =
-    raw.filters && typeof raw.filters === 'object' && !Array.isArray(raw.filters) ? raw.filters : raw;
-
-  const out = {};
-  const st = normalizeEnum(filtersRaw.status);
-  if (st && LOAD_STATUSES.includes(st)) out.status = st;
-  const bs = normalizeEnum(filtersRaw.billingStatus);
-  if (bs && BILLING_STATUSES.includes(bs)) out.billingStatus = bs;
-
-  const did = trimStr(filtersRaw.driverId, 64);
-  if (did && UUID_RE.test(did)) out.driverId = did;
-  const bid = trimStr(filtersRaw.brokerId, 64);
-  if (bid && UUID_RE.test(bid)) out.brokerId = bid;
-
-  const q = trimStr(filtersRaw.q, 200);
-  if (q) out.q = q;
-
-  const df = validateIsoDate(filtersRaw.dateFrom);
-  if (df) out.dateFrom = df;
-  const dt = validateIsoDate(filtersRaw.dateTo);
-  if (dt) out.dateTo = dt;
-
-  const lnc = trimStr(filtersRaw.loadNumberContains, 80);
-  if (lnc) out.loadNumberContains = lnc;
-  const bnc = trimStr(filtersRaw.brokerNameContains, 120);
-  if (bnc) out.brokerNameContains = bnc;
-  const dnc = trimStr(filtersRaw.driverNameContains, 120);
-  if (dnc) out.driverNameContains = dnc;
-
-  const ps = trimStr(filtersRaw.pickupState, 4).toUpperCase();
-  if (/^[A-Z]{2}$/.test(ps)) out.pickupState = ps;
-  const ds = trimStr(filtersRaw.deliveryState, 4).toUpperCase();
-  if (/^[A-Z]{2}$/.test(ds)) out.deliveryState = ds;
-
-  const pc = trimStr(filtersRaw.pickupCity, 80);
-  if (pc) out.pickupCity = pc;
-  const dcity = trimStr(filtersRaw.deliveryCity, 80);
-  if (dcity) out.deliveryCity = dcity;
-
-  const rmin = typeof filtersRaw.rateMin === 'number' ? filtersRaw.rateMin : parseFloat(filtersRaw.rateMin);
-  if (Number.isFinite(rmin) && rmin > 0) out.rateMin = rmin;
-  const rmax = typeof filtersRaw.rateMax === 'number' ? filtersRaw.rateMax : parseFloat(filtersRaw.rateMax);
-  if (Number.isFinite(rmax) && rmax > 0) out.rateMax = rmax;
-
-  if (Object.keys(out).length === 0) {
-    return { fallback: true, reason: 'no_usable_filters' };
-  }
-  return { fallback: false, filters: out };
-}
-
-function buildSystemPrompt(todayIso) {
-  return `You convert natural language about trucking loads into structured JSON filters for a TMS.
-
-Today's date (UTC): ${todayIso}
-
-Respond with JSON only (no markdown). Shape:
-{ "fallback": true }
-OR
-{ "fallback": false, "filters": { ... } }
-
-Use "fallback": true when the text is unrelated, gibberish, or cannot be mapped reliably.
-
-When "fallback" is false, "filters" must include at least one valid field.
-
-Allowed keys inside "filters" (all optional; omit unknown keys):
-- status: one of ${LOAD_STATUSES.join(', ')}
-- billingStatus: one of ${BILLING_STATUSES.join(', ')}
-- driverId, brokerId: UUID only if explicitly given as an id
-- q: one short phrase searched across load number, broker, driver
-- dateFrom, dateTo: YYYY-MM-DD (resolve "this week", "last month", etc. using today's date)
-- loadNumberContains, brokerNameContains, driverNameContains: substring hints
-- pickupState, deliveryState: two uppercase US letters
-- pickupCity, deliveryCity: city names
-- rateMin, rateMax: positive numbers in USD ("over 3000" -> rateMin 3000)`;
-}
-
 async function handleLoadsNlq(req, res, deps) {
   const startedAt = Date.now();
-  const { openai } = deps;
   const { query } = req.body || {};
 
   if (typeof query !== 'string' || !query.trim()) {
@@ -143,31 +165,30 @@ async function handleLoadsNlq(req, res, deps) {
     });
   }
 
-  const trimmed = query.trim().slice(0, 500);
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const trimmedQuery = query.trim().slice(0, 500);
+  const client = (deps && deps.anthropic) || getAnthropicClient();
+  const model = process.env.ANTHROPIC_NLQ_MODEL || 'claude-haiku-4-5-20251001';
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
-      messages: [
-        { role: 'system', content: buildSystemPrompt(todayIso) },
-        { role: 'user', content: `User question about loads:\n${trimmed}` }
-      ],
-      temperature: 0.1,
-      response_format: { type: 'json_object' }
+    const message = await client.messages.create({
+      model,
+      max_tokens: 512,
+      temperature: 0,
+      system: buildSystemPrompt(),
+      messages: [{ role: 'user', content: trimmedQuery }]
     });
 
     const processingTimeMs = Date.now() - startedAt;
-    const aiContent = completion.choices[0]?.message?.content || '{}';
+    const aiContent = message.content?.[0]?.text || '{}';
 
     let parsed;
     try {
-      parsed = parseAiJson(aiContent);
-    } catch (_e) {
+      parsed = parseAiResponse(aiContent);
+    } catch (_parseErr) {
       logAiInteraction({
         userId: null,
         route: ROUTE,
-        message: `Loads NLQ parse failure: "${trimmed}"`,
+        message: `Loads NLQ parse failure: "${trimmedQuery}"`,
         conversationId: null,
         success: true,
         errorCode: 'AI_PARSE_FALLBACK',
@@ -176,32 +197,33 @@ async function handleLoadsNlq(req, res, deps) {
       return res.json({
         success: true,
         fallback: true,
-        meta: { reason: 'unparseable_model_output', processingTimeMs, model: completion.model }
+        meta: { reason: 'unparseable_model_output', processingTimeMs }
       });
     }
 
-    const normalized = normalizeNlqAiOutput(parsed);
-    if (normalized.fallback) {
+    const filters = validateFilters(parsed);
+
+    if (Object.keys(filters).length === 0) {
       logAiInteraction({
         userId: null,
         route: ROUTE,
-        message: `Loads NLQ fallback (${normalized.reason}): "${trimmed}"`,
+        message: `Loads NLQ no-filters fallback: "${trimmedQuery}"`,
         conversationId: null,
         success: true,
-        errorCode: normalized.reason,
+        errorCode: 'AI_EMPTY_FALLBACK',
         processingTimeMs
       });
       return res.json({
         success: true,
         fallback: true,
-        meta: { reason: normalized.reason, processingTimeMs, model: completion.model }
+        meta: { reason: 'no_filters_extracted', processingTimeMs }
       });
     }
 
     logAiInteraction({
       userId: null,
       route: ROUTE,
-      message: `Loads NLQ ok (${Object.keys(normalized.filters).length} fields): "${trimmed}"`,
+      message: `Loads NLQ ok (${Object.keys(filters).length} fields): "${trimmedQuery}"`,
       conversationId: null,
       success: true,
       errorCode: null,
@@ -211,8 +233,11 @@ async function handleLoadsNlq(req, res, deps) {
     return res.json({
       success: true,
       fallback: false,
-      filters: normalized.filters,
-      meta: { model: completion.model, processingTimeMs }
+      filters,
+      meta: {
+        model: message.model || model,
+        processingTimeMs
+      }
     });
   } catch (err) {
     const processingTimeMs = Date.now() - startedAt;
@@ -222,10 +247,10 @@ async function handleLoadsNlq(req, res, deps) {
     logAiInteraction({
       userId: null,
       route: ROUTE,
-      message: `Loads NLQ upstream failure: "${trimmed}"`,
+      message: `Loads NLQ upstream failure: "${trimmedQuery}"`,
       conversationId: null,
       success: false,
-      errorCode: 'AI_UNAVAILABLE',
+      errorCode: err.status ? `HTTP_${err.status}` : 'AI_UNAVAILABLE',
       processingTimeMs
     });
 
@@ -239,7 +264,10 @@ async function handleLoadsNlq(req, res, deps) {
 
 module.exports = {
   handleLoadsNlq,
-  normalizeNlqAiOutput,
+  ALLOWED_FILTERS,
+  validateFilters,
+  parseAiResponse,
+  buildSystemPrompt,
   LOAD_STATUSES,
   BILLING_STATUSES
 };
