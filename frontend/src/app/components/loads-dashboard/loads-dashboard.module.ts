@@ -27,6 +27,7 @@ import { StepAttachmentsComponent } from './load-wizard/step-attachments/step-at
 import { LoadsHeroCtaComponent } from './loads-hero-cta/loads-hero-cta.component';
 import { LoadTemplatesComponent } from './load-templates/load-templates.component';
 import { IntelligencePanelComponent } from './intelligence-panel/intelligence-panel.component';
+import { IntelligenceInsightsComponent } from './intelligence-panel/intelligence-insights.component';
 
 const routes: Routes = [
   {
@@ -63,7 +64,8 @@ const routes: Routes = [
     StepAttachmentsComponent,
     LoadsHeroCtaComponent,
     LoadTemplatesComponent,
-    IntelligencePanelComponent
+    IntelligencePanelComponent,
+    IntelligenceInsightsComponent
   ],
   imports: [
     CommonModule,
