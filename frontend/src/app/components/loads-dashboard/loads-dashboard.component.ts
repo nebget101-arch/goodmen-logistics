@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -17,6 +17,7 @@ import {
 } from '../../models/load-dashboard.model';
 import { LoadsService, BrokerOption } from '../../services/loads.service';
 import { LoadTemplatesService } from '../../services/load-templates.service';
+import { KeyboardShortcutsService } from '../../shared/services/keyboard-shortcuts.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
@@ -160,6 +161,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   selectedAttachmentFiles: FileList | null = null;
 
   search$ = new Subject<string>();
+
+  /** FN-765: reference to the header search input for `/` and Cmd/Ctrl+K shortcuts. */
+  @ViewChild('searchInput', { static: false }) searchInputRef?: ElementRef<HTMLInputElement>;
+
+  /** FN-765: unregister callback returned by KeyboardShortcutsService.registerAll. */
+  private _unregisterShortcuts: (() => void) | null = null;
   /** Broker search query – debounced and switchMap cancels in-flight requests. */
   private brokerSearch$ = new Subject<string>();
   private destroy$ = new Subject<void>();
@@ -468,7 +475,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     private router: Router,
     private sanitizer: DomSanitizer,
     private operatingEntityContext: OperatingEntityContextService,
-    private loadTemplatesService: LoadTemplatesService
+    private loadTemplatesService: LoadTemplatesService,
+    private keyboardShortcuts: KeyboardShortcutsService
   ) {
     this.manualLoadForm = this.fb.group({
       status: ['NEW', Validators.required],
@@ -576,6 +584,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.loadDropdownData();
     this.loadLoads();
     this.applyUseTemplateFromRouterState();
+    this.registerKeyboardShortcuts();
 
     this.search$
       .pipe(debounceTime(300), distinctUntilChanged(), takeUntil(this.destroy$))
@@ -609,8 +618,58 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this._unregisterShortcuts) {
+      this._unregisterShortcuts();
+      this._unregisterShortcuts = null;
+    }
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  // ─── FN-765: Keyboard shortcuts ─────────────────────────────────────────────
+
+  /**
+   * Register Loads-view shortcuts via KeyboardShortcutsService. Bindings are
+   * unregistered in ngOnDestroy so they don't leak to other views.
+   */
+  private registerKeyboardShortcuts(): void {
+    if (this._unregisterShortcuts) { return; }
+    this._unregisterShortcuts = this.keyboardShortcuts.registerAll([
+      {
+        id: 'loads.new',
+        key: 'n',
+        description: 'New load',
+        group: 'Loads',
+        handler: () => this.openLoadWizard(),
+      },
+      {
+        id: 'loads.quickSearch',
+        key: 'k',
+        ctrlOrCmd: true,
+        allowInInput: true,
+        description: 'Quick search loads',
+        group: 'Loads',
+        handler: () => this.focusSearch(),
+      },
+      {
+        id: 'loads.focusSearch',
+        key: '/',
+        description: 'Focus search bar',
+        group: 'Loads',
+        handler: () => this.focusSearch(),
+      },
+    ]);
+    // Wizard-specific shortcuts (Esc, Cmd+S, Cmd+Shift+S, Enter) are owned by
+    // LoadWizardComponent so they only appear in the help modal when the
+    // wizard is open.
+  }
+
+  /** Focus and select the contents of the header search input. */
+  focusSearch(): void {
+    const el = this.searchInputRef?.nativeElement;
+    if (!el) { return; }
+    el.focus();
+    try { el.select(); } catch { /* some browsers throw on non-text inputs */ }
   }
 
   private bindOperatingEntityContext(): void {

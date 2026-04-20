@@ -1,0 +1,33 @@
+<div
+  *ngIf="open"
+  class="ksh-backdrop"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="ksh-title"
+  (click)="onBackdropClick($event)"
+>
+  <div class="ksh-modal">
+    <header class="ksh-header">
+      <h3 id="ksh-title">Keyboard shortcuts</h3>
+      <button type="button" class="ksh-close" aria-label="Close" (click)="close()">&times;</button>
+    </header>
+
+    <div class="ksh-body">
+      <p *ngIf="!groups.length" class="ksh-empty">No shortcuts are active on this view.</p>
+
+      <section *ngFor="let g of groups" class="ksh-group">
+        <h4 class="ksh-group-title">{{ g.group }}</h4>
+        <ul class="ksh-list">
+          <li *ngFor="let item of g.items" class="ksh-item">
+            <kbd class="ksh-keys">{{ item.keys }}</kbd>
+            <span class="ksh-desc">{{ item.description }}</span>
+          </li>
+        </ul>
+      </section>
+    </div>
+
+    <footer class="ksh-footer">
+      <span>Press <kbd class="ksh-keys">?</kbd> again or <kbd class="ksh-keys">Esc</kbd> to close.</span>
+    </footer>
+  </div>
+</div>

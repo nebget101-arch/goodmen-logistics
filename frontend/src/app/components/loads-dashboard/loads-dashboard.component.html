@@ -7,7 +7,7 @@
     </div>
 <div class="header-actions">
         <div class="search-box ai-search-box">
-        <input type="text" class="ai-search-input" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
+        <input #searchInput type="text" class="ai-search-input" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
       </div>
       <button
         type="button"

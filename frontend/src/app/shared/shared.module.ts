@@ -11,6 +11,7 @@ import { AiSelectComponent } from './ai-select/ai-select.component';
 import { AiDatePickerComponent } from './ai-date-picker/ai-date-picker.component';
 import { BinPickerComponent } from './components/bin-picker/bin-picker.component';
 import { StopCardComponent } from './components/stop-card/stop-card.component';
+import { KeyboardShortcutsHelpComponent } from './components/keyboard-shortcuts-help/keyboard-shortcuts-help.component';
 import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives/has-permission.directive';
 
 @NgModule({
@@ -19,6 +20,7 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives
     AiDatePickerComponent,
     BinPickerComponent,
     StopCardComponent,
+    KeyboardShortcutsHelpComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective
   ],
@@ -38,6 +40,7 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives
     AiDatePickerComponent,
     BinPickerComponent,
     StopCardComponent,
+    KeyboardShortcutsHelpComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective
   ]
