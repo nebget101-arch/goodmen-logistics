@@ -24,6 +24,10 @@ import { OperatingEntityContextService } from '../../services/operating-entity-c
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 import { StepBasicsData } from './load-wizard/step-basics/step-basics.component';
 import { WizardAttachment } from './load-wizard/step-attachments/step-attachments.component';
+import {
+  IntelligenceMetrics,
+  IntelligencePeriod,
+} from './intelligence-panel/intelligence-panel.component';
 
 type SortDir = 'asc' | 'desc';
 
@@ -214,6 +218,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   /** Whether a bulk operation network call is currently in flight. */
   bulkActionInFlight = false;
 
+  /** FN-795: collapsible status/billing chip rows — collapsed by default. */
+  chipRowsOpen = false;
+
   /** True when current user has role driver (sees only their loads, can upload docs). */
   isDriverRole = false;
 
@@ -331,6 +338,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     { value: 'CONFIRMATION', label: 'Confirmation' }
   ];
 
+  // ─── FN-794: Intelligence panel state ────────────────────────────────────
+  /** Current period pill (Today / Week / Month / All). Drives list + cards. */
+  intelligencePeriod: IntelligencePeriod = 'all';
+  /** Metric payload passed to <app-intelligence-panel>. Re-built on each load. */
+  intelligenceMetrics: IntelligenceMetrics | null = null;
+  /** Raw aggregate for the previous period (used to compute trend). */
+  private prevIntelligenceAggregate: {
+    gross: number; delivered: number; inTransit: number; needsAttention: number;
+  } | null = null;
+  /** True when the Needs Attention card is active (client-side filter). */
+  needsAttentionActive = false;
+
   grossPeriod = 'all';
   grossPeriodOptions: { value: string; label: string }[] = [
     { value: 'all', label: 'All' },
@@ -391,6 +410,38 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         pct: ((this.summaryTotals.byStatus[s] || 0) / total) * 100,
         color: this.statusColorMap[s] || '#64748b'
       }));
+  }
+
+  // FN-795: color palette for billing breakdown chips.
+  private billingColorMap: Record<string, string> = {
+    PENDING: '#6366f1',
+    BOL_RECEIVED: '#38bdf8',
+    INVOICED: '#22c55e',
+    SENT_TO_FACTORING: '#a78bfa',
+    FUNDED: '#10b981',
+    PAID: '#059669',
+    CANCELLED: '#ef4444',
+    CANCELED: '#ef4444',
+  };
+
+  /** FN-795: billing-status segments for the collapsible breakdown section. */
+  get billingBarSegments(): { status: string; label: string; amount: number; pct: number; color: string }[] {
+    const total = this.summaryTotals.totalGross || 0;
+    if (total <= 0) return [];
+    return this.billingOptions
+      .filter(s => (this.summaryTotals.byBilling[s] || 0) > 0)
+      .map(s => ({
+        status: s,
+        label: this.getBillingLabel(s),
+        amount: this.summaryTotals.byBilling[s] || 0,
+        pct: ((this.summaryTotals.byBilling[s] || 0) / total) * 100,
+        color: this.billingColorMap[s] || '#64748b'
+      }));
+  }
+
+  /** FN-795: toggle the collapsible Status/Billing breakdown panel. */
+  toggleChipRows(): void {
+    this.chipRowsOpen = !this.chipRowsOpen;
   }
 
   private headerFilterLabels: { [K in keyof typeof this.headerFilters]: string } = {
@@ -986,6 +1037,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
           this.total = res?.meta?.total || 0;
           this.loading = false;
         this.recomputeSummaryTotals();
+        this.recomputeIntelligenceMetrics();
         },
         error: () => {
           this.errorMessage = 'Failed to load loads.';
@@ -3259,6 +3311,145 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  // ─── FN-794: Intelligence panel metrics + handlers ──────────────────────
+
+  /** Map an Intelligence period pill to the existing `grossPeriod` values. */
+  private mapIntelPeriodToGrossPeriod(p: IntelligencePeriod): string {
+    switch (p) {
+      case 'today': return 'today';
+      case 'week':  return 'this_week';
+      case 'month': return 'this_month';
+      case 'all':   return 'all';
+    }
+  }
+
+  /** True when a load should count as "needs attention" (drafts + overdue + needs_review). */
+  isNeedsAttention(load: LoadListItem): boolean {
+    const status = (load.status || '').toString().toUpperCase();
+    if (status === 'DRAFT') { return true; }
+    if ((load as any).needs_review) { return true; }
+    // Overdue: has a delivery date in the past but is still open.
+    const dDate = (load as any).delivery_date || (load as any).last_delivery_date;
+    if (dDate && status !== 'DELIVERED' && status !== 'COMPLETED' && status !== 'CANCELLED' && status !== 'CANCELED') {
+      const d = new Date(dDate);
+      if (!Number.isNaN(d.getTime())) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (d.getTime() < today.getTime()) { return true; }
+      }
+    }
+    return false;
+  }
+
+  /** Aggregate the 4 Intelligence metrics from a list of loads. */
+  private _aggregateIntelligence(loads: LoadListItem[]): {
+    gross: number; delivered: number; inTransit: number; needsAttention: number;
+  } {
+    let gross = 0;
+    let delivered = 0;
+    let inTransit = 0;
+    let needsAttention = 0;
+    for (const l of loads) {
+      const r = l.rate != null ? Number(l.rate) : 0;
+      gross += Number.isFinite(r) ? r : 0;
+      const s = (l.status || '').toString().toUpperCase();
+      if (s === 'DELIVERED' || s === 'COMPLETED') { delivered += 1; }
+      if (s === 'IN_TRANSIT' || s === 'EN_ROUTE' || s === 'PICKED_UP' || s === 'DISPATCHED') { inTransit += 1; }
+      if (this.isNeedsAttention(l)) { needsAttention += 1; }
+    }
+    return { gross, delivered, inTransit, needsAttention };
+  }
+
+  /** Build `intelligenceMetrics` from the current page + cached previous-period aggregate. */
+  private recomputeIntelligenceMetrics(): void {
+    const curr = this._aggregateIntelligence(this.loads || []);
+    const prev = this.prevIntelligenceAggregate;
+    this.intelligenceMetrics = {
+      gross:          { current: curr.gross,          previous: prev ? prev.gross          : null },
+      delivered:      { current: curr.delivered,      previous: prev ? prev.delivered      : null },
+      inTransit:      { current: curr.inTransit,      previous: prev ? prev.inTransit      : null },
+      needsAttention: { current: curr.needsAttention, previous: prev ? prev.needsAttention : null },
+    };
+  }
+
+  /** Fetch the previous equivalent period so trend arrows are meaningful. */
+  private fetchPreviousPeriodForTrend(): void {
+    const range = this._previousIntelligencePeriodRange();
+    if (!range) {
+      this.prevIntelligenceAggregate = null;
+      this.recomputeIntelligenceMetrics();
+      return;
+    }
+    // A single pass — pageSize 500 covers nearly every realistic period without paging.
+    this.loadsService.listLoads({
+      dateFrom: range.dateFrom,
+      dateTo:   range.dateTo,
+      page: 1,
+      pageSize: 500,
+    }).subscribe({
+      next: (res) => {
+        this.prevIntelligenceAggregate = this._aggregateIntelligence(res?.data || []);
+        this.recomputeIntelligenceMetrics();
+      },
+      error: () => {
+        this.prevIntelligenceAggregate = null;
+        this.recomputeIntelligenceMetrics();
+      }
+    });
+  }
+
+  /** Date range for the equivalent period immediately before `intelligencePeriod`. */
+  private _previousIntelligencePeriodRange(): { dateFrom: string; dateTo: string } | null {
+    const toStr = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    const now = new Date();
+    switch (this.intelligencePeriod) {
+      case 'today': {
+        const y = new Date(now);
+        y.setDate(y.getDate() - 1);
+        return { dateFrom: toStr(y), dateTo: toStr(y) };
+      }
+      case 'week': {
+        // Previous ISO-ish week (Mon–Sun before the current one).
+        const startOfThisWeek = new Date(now);
+        const dow = startOfThisWeek.getDay() || 7; // Sun=0 → 7
+        startOfThisWeek.setDate(startOfThisWeek.getDate() - (dow - 1));
+        const endPrev = new Date(startOfThisWeek);
+        endPrev.setDate(endPrev.getDate() - 1);
+        const startPrev = new Date(endPrev);
+        startPrev.setDate(startPrev.getDate() - 6);
+        return { dateFrom: toStr(startPrev), dateTo: toStr(endPrev) };
+      }
+      case 'month': {
+        const startPrev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const endPrev = new Date(now.getFullYear(), now.getMonth(), 0); // last day of prev month
+        return { dateFrom: toStr(startPrev), dateTo: toStr(endPrev) };
+      }
+      case 'all':
+      default:
+        return null;
+    }
+  }
+
+  /** Handler: user clicked a period pill. */
+  onIntelligencePeriodChange(period: IntelligencePeriod): void {
+    this.intelligencePeriod = period;
+    this.grossPeriod = this.mapIntelPeriodToGrossPeriod(period);
+    this.page = 1;
+    this.loadLoads();
+    this.fetchPreviousPeriodForTrend();
+  }
+
+  /** Handler: user clicked the Needs Attention card → toggle client-side filter. */
+  onIntelligenceNeedsAttentionClick(): void {
+    this.needsAttentionActive = !this.needsAttentionActive;
+    this.page = 1;
+  }
+
   // Recompute gross totals on the current page for dashboard summary
   private recomputeSummaryTotals(): void {
     const byStatus: { [key: string]: number } = {};
@@ -3294,6 +3485,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   get filteredLoads(): LoadListItem[] {
     const hf = this.headerFilters;
     return (this.loads || []).filter((load) => {
+      // FN-794: Needs Attention card filter (drafts + overdue + needs_review)
+      if (this.needsAttentionActive && !this.isNeedsAttention(load)) { return false; }
+
       // Date filter on pickup_date or delivery/completed date
       if (hf.date) {
         const filterStr = hf.date.toString();
