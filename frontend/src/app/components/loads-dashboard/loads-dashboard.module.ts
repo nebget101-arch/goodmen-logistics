@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { DragDropModule } from '@angular/cdk/drag-drop';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 
 import { AuthGuard } from '../../auth.guard';
 import { PlanGuard } from '../../guards/plan.guard';
@@ -72,6 +73,7 @@ const routes: Routes = [
     MatInputModule,
     MatButtonModule,
     DragDropModule,
+    ScrollingModule,
     SharedModule,
     LoadWizardModule,
     RouterModule.forChild(routes)
