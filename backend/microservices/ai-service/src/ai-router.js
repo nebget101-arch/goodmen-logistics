@@ -12,6 +12,7 @@ const { handleMvrVision } = require('./handlers/mvr-vision-handler');
 const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handler');
 const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
+const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -1025,6 +1026,60 @@ function buildAiRouter(deps) {
   router.post('/settlements/insights', (req, res) =>
     handleSettlementInsights(req, res, deps)
   );
+
+  /**
+   * @openapi
+   * /api/ai/loads/nlq:
+   *   post:
+   *     summary: AI loads natural-language query parser
+   *     description: Converts a free-text query (e.g. "Smith's pending loads over $1000") into a structured filter object for the loads list. Uses Anthropic Claude Haiku 4.5 (temperature 0, max 512 tokens). Returns `{ fallback: true }` if the model cannot extract usable filters so the caller can fall back to a keyword search.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - query
+   *             properties:
+   *               query:
+   *                 type: string
+   *                 description: Natural-language question about loads
+   *     responses:
+   *       200:
+   *         description: Parsed filters, or a fallback signal if nothing extractable
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 fallback:
+   *                   type: boolean
+   *                   description: Present and true when the backend should fall back to a keyword search
+   *                 filters:
+   *                   type: object
+   *                   description: Validated subset of ALLOWED_FILTERS
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     model:
+   *                       type: string
+   *                     processingTimeMs:
+   *                       type: number
+   *                     reason:
+   *                       type: string
+   *       400:
+   *         description: Missing or invalid query
+   *       401:
+   *         description: Unauthorized
+   */
+  router.post('/loads/nlq', (req, res) => handleLoadsNlq(req, res, deps));
 
   return router;
 }
