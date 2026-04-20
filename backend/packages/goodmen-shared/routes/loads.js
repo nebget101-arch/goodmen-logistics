@@ -259,6 +259,86 @@ function applyLoadScope(where, params, context) {
   }
 }
 
+// FN-797: Smart filter chips ---------------------------------------------
+// Pre-built one-click filters surfaced above the loads table.
+// Schema adaptations (no `loads.source`/`loads.created_by` columns exist):
+//   ai_drafts    -> needs_review = true AND status = 'DRAFT' (FN-746 convention)
+//   my_drafts    -> dispatcher_user_id = current_user AND status = 'DRAFT'
+//                   (dispatcher_user_id is set from req.user.id on create)
+//   from_email   -> EXISTS inbound_emails row (FN-759) linked to the load
+const SMART_FILTER_CHIPS = [
+  'ai_drafts',
+  'overdue',
+  'high_value',
+  'from_email',
+  'missing_docs',
+  'my_drafts'
+];
+
+// Returns a SQL predicate referencing the `l` (loads) alias, and in some
+// cases the `delivery` lateral join (last delivery stop). Callers must
+// provide those joins. May push bind parameters onto `params`.
+function buildSmartFilterPredicate(chip, params, ctx) {
+  switch (chip) {
+    case 'ai_drafts':
+      return `(l.needs_review = true AND UPPER(l.status::text) = 'DRAFT')`;
+    case 'overdue':
+      return `(
+        UPPER(l.status::text) NOT IN ('DELIVERED','COMPLETED','CANCELLED','CANCELED','TONU')
+        AND COALESCE(delivery.stop_date, l.completed_date) IS NOT NULL
+        AND COALESCE(delivery.stop_date, l.completed_date)::date < CURRENT_DATE
+      )`;
+    case 'high_value': {
+      // Compare rate against tenant's (+operating entity's) 75th-percentile
+      // rate over the last 30 days. Tenant/OE params are pushed here so the
+      // subquery stays self-contained regardless of outer WHERE param order.
+      params.push(ctx.tenantId || null);
+      const tenantIdx = params.length;
+      params.push(ctx.operatingEntityId || null);
+      const oeIdx = params.length;
+      return `(l.rate IS NOT NULL AND l.rate > COALESCE((
+        SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY rate)
+        FROM loads
+        WHERE ($${tenantIdx}::uuid IS NULL OR tenant_id = $${tenantIdx})
+          AND ($${oeIdx}::uuid IS NULL OR operating_entity_id = $${oeIdx})
+          AND created_at >= NOW() - INTERVAL '30 days'
+          AND rate IS NOT NULL AND rate > 0
+      ), 0))`;
+    }
+    case 'from_email':
+      return `EXISTS (SELECT 1 FROM inbound_emails ie WHERE ie.load_id = l.id)`;
+    case 'missing_docs':
+      return `(
+        (UPPER(l.status::text) IN ('DELIVERED','COMPLETED')
+         AND NOT EXISTS (
+           SELECT 1 FROM load_attachments la
+           WHERE la.load_id = l.id
+             AND UPPER(la.type::text) IN ('PROOF_OF_DELIVERY','POD')
+         ))
+        OR
+        (UPPER(l.status::text) IN ('PICKED_UP','IN_TRANSIT')
+         AND NOT EXISTS (
+           SELECT 1 FROM load_attachments la
+           WHERE la.load_id = l.id AND UPPER(la.type::text) = 'BOL'
+         ))
+      )`;
+    case 'my_drafts':
+      params.push(ctx.userId || null);
+      return `(UPPER(l.status::text) = 'DRAFT' AND l.dispatcher_user_id = $${params.length})`;
+    default:
+      return null;
+  }
+}
+
+function parseSmartFilterList(value) {
+  if (value == null) return [];
+  return String(value)
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => SMART_FILTER_CHIPS.includes(s));
+}
+// ------------------------------------------------------------------------
+
 async function getLoadDetail(clientOrQuery, loadId, context = null) {
   const exec = clientOrQuery.query ? clientOrQuery.query.bind(clientOrQuery) : query;
   const detailParams = [loadId];
@@ -392,6 +472,14 @@ async function getLoadDetail(clientOrQuery, loadId, context = null) {
  *           maximum: 200
  *         description: Number of loads per page (max 200)
  *       - in: query
+ *         name: smart_filter
+ *         schema:
+ *           type: string
+ *         description: >
+ *           FN-797: Comma-separated list of smart filter chips to AND together.
+ *           Allowed values: ai_drafts, overdue, high_value, from_email,
+ *           missing_docs, my_drafts. Unknown values are ignored.
+ *       - in: query
  *         name: sortBy
  *         schema:
  *           type: string
@@ -501,6 +589,18 @@ router.get('/', async (req, res) => {
     // FN-746: filter to loads flagged for review
     if (needsReview) {
       where.push('l.needs_review = true');
+    }
+
+    // FN-797: smart_filter chips (comma-separated). Multiple chips AND'd.
+    const smartFilters = parseSmartFilterList(req.query.smart_filter);
+    const smartFilterCtx = {
+      tenantId: req.context?.tenantId || null,
+      operatingEntityId: req.context?.operatingEntityId || null,
+      userId: req.user?.id || null
+    };
+    for (const chip of smartFilters) {
+      const predicate = buildSmartFilterPredicate(chip, params, smartFilterCtx);
+      if (predicate) where.push(predicate);
     }
 
     if (dateFrom && dateTo) {
@@ -1656,6 +1756,145 @@ router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   } catch (error) {
     dtLogger.error('loads_delete_failed', error, { loadId: req.params.id });
     res.status(500).json({ success: false, error: 'Failed to delete load' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/smart-filter-counts:
+ *   get:
+ *     summary: Aggregated counts for smart filter chips (FN-797)
+ *     description: >
+ *       Single round-trip endpoint returning per-chip counts for the pre-built
+ *       smart filter chips shown above the loads table. Tenant- and
+ *       operating-entity-scoped. Driver role is scoped to their own loads.
+ *       Chip definitions:
+ *         - ai_drafts: loads flagged needs_review with status DRAFT
+ *         - overdue: last delivery stop_date (or completed_date) < today AND
+ *           status not in (DELIVERED, COMPLETED, CANCELLED, CANCELED, TONU)
+ *         - high_value: rate above tenant's 75th-percentile rate computed
+ *           over loads created in the last 30 days (rate > 0)
+ *         - from_email: loads created from an inbound email (inbound_emails row)
+ *         - missing_docs: delivered/completed without POD, or picked-up/in-transit without BOL
+ *         - my_drafts: DRAFT loads where dispatcher_user_id = current user
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Per-chip counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     ai_drafts:    { type: integer }
+ *                     overdue:      { type: integer }
+ *                     high_value:   { type: integer }
+ *                     from_email:   { type: integer }
+ *                     missing_docs: { type: integer }
+ *                     my_drafts:    { type: integer }
+ *       403:
+ *         description: Forbidden - driver not linked
+ *       500:
+ *         description: Server error
+ */
+// GET /api/loads/smart-filter-counts — must be registered BEFORE /:id
+router.get('/smart-filter-counts', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const role = (req.user?.role || '').toString().trim().toLowerCase();
+    const isDriver = role === 'driver';
+    if (isDriver && !req.user?.driver_id) {
+      return res.status(403).json({ success: false, error: 'Driver account not linked to a driver record' });
+    }
+    const tenantId = req.context?.tenantId || null;
+    const operatingEntityId = req.context?.operatingEntityId || null;
+    const userId = req.user?.id || null;
+    const driverId = isDriver ? (req.user?.driver_id || null) : null;
+
+    const params = [];
+    const ctx = { tenantId, operatingEntityId, userId };
+
+    // Build each chip predicate (may push bind params for my_drafts/high_value).
+    const aiDraftsSql = buildSmartFilterPredicate('ai_drafts', params, ctx);
+    const overdueSql = buildSmartFilterPredicate('overdue', params, ctx);
+    const highValueSql = buildSmartFilterPredicate('high_value', params, ctx);
+    const fromEmailSql = buildSmartFilterPredicate('from_email', params, ctx);
+    const missingDocsSql = buildSmartFilterPredicate('missing_docs', params, ctx);
+    const myDraftsSql = buildSmartFilterPredicate('my_drafts', params, ctx);
+
+    // Scope params appended last so predicate indexes remain valid.
+    params.push(tenantId);
+    const tenantIdx = params.length;
+    params.push(operatingEntityId);
+    const oeIdx = params.length;
+    params.push(driverId);
+    const driverIdx = params.length;
+
+    const sql = `
+      SELECT
+        COUNT(*) FILTER (WHERE ${aiDraftsSql})   AS ai_drafts,
+        COUNT(*) FILTER (WHERE ${overdueSql})    AS overdue,
+        COUNT(*) FILTER (WHERE ${highValueSql})  AS high_value,
+        COUNT(*) FILTER (WHERE ${fromEmailSql})  AS from_email,
+        COUNT(*) FILTER (WHERE ${missingDocsSql}) AS missing_docs,
+        COUNT(*) FILTER (WHERE ${myDraftsSql})   AS my_drafts
+      FROM loads l
+      LEFT JOIN LATERAL (
+        SELECT stop_date
+        FROM load_stops
+        WHERE load_id = l.id AND stop_type = 'DELIVERY'
+        ORDER BY sequence DESC
+        LIMIT 1
+      ) delivery ON true
+      WHERE ($${tenantIdx}::uuid IS NULL OR l.tenant_id = $${tenantIdx})
+        AND ($${oeIdx}::uuid IS NULL OR l.operating_entity_id = $${oeIdx})
+        AND ($${driverIdx}::uuid IS NULL OR l.driver_id = $${driverIdx})
+    `;
+
+    const result = await query(sql, params);
+    const row = result.rows[0] || {};
+    const counts = {
+      ai_drafts: parseInt(row.ai_drafts, 10) || 0,
+      overdue: parseInt(row.overdue, 10) || 0,
+      high_value: parseInt(row.high_value, 10) || 0,
+      from_email: parseInt(row.from_email, 10) || 0,
+      missing_docs: parseInt(row.missing_docs, 10) || 0,
+      my_drafts: parseInt(row.my_drafts, 10) || 0
+    };
+
+    const duration = Date.now() - startTime;
+    dtLogger.trackRequest('GET', '/api/loads/smart-filter-counts', 200, duration);
+    res.json({ success: true, data: counts });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    const message = (error && error.message) ? String(error.message) : '';
+    const code = error && error.code ? String(error.code) : '';
+    // Graceful degradation if supporting tables aren't yet migrated
+    if (code === '42P01' || message.includes('relation') || message.includes('does not exist')) {
+      dtLogger.trackRequest('GET', '/api/loads/smart-filter-counts', 200, duration);
+      return res.json({
+        success: true,
+        data: {
+          ai_drafts: 0,
+          overdue: 0,
+          high_value: 0,
+          from_email: 0,
+          missing_docs: 0,
+          my_drafts: 0
+        }
+      });
+    }
+    dtLogger.error('loads_smart_filter_counts_failed', error);
+    dtLogger.trackRequest('GET', '/api/loads/smart-filter-counts', 500, duration);
+    res.status(500).json({ success: false, error: 'Failed to fetch smart-filter counts' });
   }
 });
 
