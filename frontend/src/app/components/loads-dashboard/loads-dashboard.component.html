@@ -319,7 +319,9 @@
   </form>
 
   <div class="table-card">
-    <table class="table" *ngIf="!loading">
+    <ng-container *ngIf="!loading">
+    <div class="loads-table-container">
+    <table class="table table--header">
       <colgroup>
         <col style="width: 6%">   <!-- Load # -->
         <col style="width: 7%">   <!-- Date -->
@@ -448,8 +450,34 @@
           <th></th>
         </tr>
       </thead>
-      <tbody>
-        <tr *ngFor="let load of filteredLoads" [ngClass]="rowClass(load)">
+    </table>
+
+    <!-- FN-766: virtualized body; shares colgroup widths with the header table. -->
+    <cdk-virtual-scroll-viewport
+      [itemSize]="48"
+      minBufferPx="400"
+      maxBufferPx="800"
+      class="loads-viewport"
+      *ngIf="filteredLoads.length > 0"
+    >
+      <table class="table table--body">
+        <colgroup>
+          <col style="width: 6%">   <!-- Load # -->
+          <col style="width: 7%">   <!-- Date -->
+          <col style="width: 8%">   <!-- Driver -->
+          <col style="width: 12%">  <!-- Broker -->
+          <col style="width: 7%">   <!-- PO # -->
+          <col style="width: 11%">  <!-- Pickup -->
+          <col style="width: 11%">  <!-- Delivery -->
+          <col style="width: 5%">   <!-- Rate -->
+          <col style="width: 8%">   <!-- Completed -->
+          <col style="width: 6%">   <!-- Status -->
+          <col style="width: 6%">   <!-- Billing -->
+          <col style="width: 8%">   <!-- Attachments -->
+          <col style="width: 5%">   <!-- Actions -->
+        </colgroup>
+        <tbody>
+        <tr *cdkVirtualFor="let load of filteredLoads; trackBy: trackByLoadId" [ngClass]="rowClass(load)">
           <td [title]="load.load_number || ''">
             <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
             <!-- FN-746: needs_review badge -->
@@ -555,11 +583,13 @@
             </div>
           </td>
         </tr>
-        <tr *ngIf="loads.length === 0">
-          <td colspan="14" class="empty">No loads found.</td>
-        </tr>
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </cdk-virtual-scroll-viewport>
+
+    <div class="empty-state" *ngIf="filteredLoads.length === 0">No loads found.</div>
+    </div>
+    </ng-container>
     <div *ngIf="loading" class="loading">Loading loads...</div>
   </div>
 

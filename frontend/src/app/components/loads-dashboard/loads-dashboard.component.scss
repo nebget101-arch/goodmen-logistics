@@ -443,6 +443,33 @@
     }
   }
 
+  /* FN-766: virtualized loads table — header + CDK viewport body
+     share colgroup widths so columns align between the two tables. */
+  .loads-table-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .loads-viewport {
+    display: block;
+    width: 100%;
+    height: calc(100vh - 420px);
+    min-height: 320px;
+  }
+
+  .table--body tbody tr:first-child td {
+    border-top: none;
+  }
+
+  .empty-state {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-light);
+    font-size: 13px;
+  }
+
   /* --- Column header labels: center-aligned --- */
   thead tr:first-child th {
     text-align: center;

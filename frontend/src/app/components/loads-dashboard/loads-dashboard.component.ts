@@ -2930,6 +2930,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     };
   }
 
+  // FN-766: stable identity for cdk-virtual-scroll-viewport row recycling
+  trackByLoadId(_index: number, load: LoadListItem): string {
+    return load.id;
+  }
+
   // Apply header row filters client-side on the current page of loads
   get filteredLoads(): LoadListItem[] {
     const hf = this.headerFilters;
