@@ -1407,6 +1407,402 @@ router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   }
 });
 
+// ─── FN-793: AI insights + intelligence-panel metrics ────────────────────────
+
+const AI_INSIGHTS_PERIODS = ['today', 'week', 'month', 'all'];
+const IN_TRANSIT_STATUSES = ['EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DISPATCHED'];
+const DELIVERED_STATUSES = ['DELIVERED', 'COMPLETED'];
+const EXCLUDED_FROM_OVERDUE = ['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'DRAFT', 'TONU'];
+
+function computeInsightsWindow(period) {
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+  const msDay = 24 * 60 * 60 * 1000;
+  const toIso = (d) => d.toISOString().slice(0, 10);
+
+  if (period === 'today') {
+    const from = startOfTodayUtc;
+    const to = startOfTodayUtc;
+    const prevFrom = new Date(from.getTime() - msDay);
+    const prevTo = new Date(to.getTime() - msDay);
+    return { from: toIso(from), to: toIso(to), prevFrom: toIso(prevFrom), prevTo: toIso(prevTo), days: 1 };
+  }
+  if (period === 'week') {
+    const from = new Date(startOfTodayUtc.getTime() - 6 * msDay);
+    const to = startOfTodayUtc;
+    const prevFrom = new Date(from.getTime() - 7 * msDay);
+    const prevTo = new Date(to.getTime() - 7 * msDay);
+    return { from: toIso(from), to: toIso(to), prevFrom: toIso(prevFrom), prevTo: toIso(prevTo), days: 7 };
+  }
+  if (period === 'month') {
+    const from = new Date(startOfTodayUtc.getTime() - 29 * msDay);
+    const to = startOfTodayUtc;
+    const prevFrom = new Date(from.getTime() - 30 * msDay);
+    const prevTo = new Date(to.getTime() - 30 * msDay);
+    return { from: toIso(from), to: toIso(to), prevFrom: toIso(prevFrom), prevTo: toIso(prevTo), days: 30 };
+  }
+  // 'all'
+  return { from: null, to: null, prevFrom: null, prevTo: null, days: null };
+}
+
+function deltaPct(current, previous) {
+  const cur = Number(current) || 0;
+  const prev = Number(previous) || 0;
+  if (prev === 0) return cur === 0 ? 0 : null;
+  return Number((((cur - prev) / prev) * 100).toFixed(2));
+}
+
+/**
+ * @openapi
+ * /api/loads/ai-insights:
+ *   get:
+ *     summary: Intelligence-panel metrics and rule-based insights
+ *     description: >
+ *       Returns the 4 dashboard metric cards (gross, delivered, in_transit,
+ *       needs_attention) with previous-period comparison plus a list of
+ *       rule-based insights (drafts_ready, overdue, rate_anomaly,
+ *       missing_documents, driver_idle, high_margin, low_margin). Queries
+ *       are tenant + operating-entity scoped via req.context.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [today, week, month, all]
+ *         description: Time window for metrics and period-scoped insights.
+ *     responses:
+ *       200:
+ *         description: Metrics + insights payload
+ *       400:
+ *         description: Invalid period
+ *       500:
+ *         description: Server error
+ */
+// GET /api/loads/ai-insights?period=today|week|month|all  (FN-793)
+router.get('/ai-insights', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const periodRaw = (req.query.period || 'week').toString().trim().toLowerCase();
+    const period = AI_INSIGHTS_PERIODS.includes(periodRaw) ? periodRaw : null;
+    if (!period) {
+      return res.status(400).json({ success: false, error: `Invalid period; expected one of ${AI_INSIGHTS_PERIODS.join(', ')}` });
+    }
+
+    const { from, to, prevFrom, prevTo } = computeInsightsWindow(period);
+
+    const tenantId = req.context?.tenantId || null;
+    const operatingEntityId = req.context?.operatingEntityId || null;
+
+    // ── Shared scope args: $1 = tenantId, $2 = operatingEntityId ────────────
+    // Every query below binds these two first; additional $ positions follow
+    // per query. Null scope args mean the caller is unscoped (dev/admin).
+    const scopeSql = `
+      (l.tenant_id = $1 OR $1::uuid IS NULL)
+      AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+    `;
+
+    // Effective "period anchor date" for a load: completed_date (for delivered)
+    // or first-pickup stop_date (otherwise) or created_at.
+    const effectiveDateSql = `
+      COALESCE(
+        l.completed_date,
+        (SELECT stop_date FROM load_stops s WHERE s.load_id = l.id AND s.stop_type = 'PICKUP' ORDER BY s.sequence ASC LIMIT 1)::date,
+        l.created_at::date
+      )
+    `;
+
+    const metricsSql = `
+      SELECT
+        COALESCE(SUM(
+          CASE WHEN UPPER(l.status::text) = ANY($3::text[])
+                AND ($4::date IS NULL OR ${effectiveDateSql} BETWEEN $4::date AND $5::date)
+               THEN l.rate ELSE 0 END
+        ), 0) AS gross,
+        COALESCE(SUM(
+          CASE WHEN UPPER(l.status::text) = ANY($3::text[])
+                AND ($6::date IS NULL OR ${effectiveDateSql} BETWEEN $6::date AND $7::date)
+               THEN l.rate ELSE 0 END
+        ), 0) AS gross_prev,
+        COUNT(*) FILTER (
+          WHERE UPPER(l.status::text) = ANY($3::text[])
+            AND ($4::date IS NULL OR ${effectiveDateSql} BETWEEN $4::date AND $5::date)
+        ) AS delivered,
+        COUNT(*) FILTER (
+          WHERE UPPER(l.status::text) = ANY($3::text[])
+            AND ($6::date IS NULL OR ${effectiveDateSql} BETWEEN $6::date AND $7::date)
+        ) AS delivered_prev,
+        COUNT(*) FILTER (
+          WHERE UPPER(l.status::text) = ANY($8::text[])
+            AND ($4::date IS NULL OR ${effectiveDateSql} BETWEEN $4::date AND $5::date)
+        ) AS in_transit,
+        COUNT(*) FILTER (
+          WHERE UPPER(l.status::text) = ANY($8::text[])
+            AND ($6::date IS NULL OR ${effectiveDateSql} BETWEEN $6::date AND $7::date)
+        ) AS in_transit_prev
+      FROM loads l
+      WHERE ${scopeSql}
+    `;
+    const metricsParams = [
+      tenantId, operatingEntityId,
+      DELIVERED_STATUSES,
+      from, to,
+      prevFrom, prevTo,
+      IN_TRANSIT_STATUSES
+    ];
+
+    // ── 1. drafts_ready: DRAFT + needs_review older than 2h ──────────────────
+    const draftsSql = `
+      SELECT COUNT(*)::int AS count
+      FROM loads l
+      WHERE ${scopeSql}
+        AND UPPER(l.status::text) = 'DRAFT'
+        AND l.needs_review = true
+        AND l.created_at < NOW() - INTERVAL '2 hours'
+    `;
+
+    // ── 2. overdue: past delivery date AND not delivered/cancelled ──────────
+    const overdueSql = `
+      SELECT COUNT(*)::int AS count
+      FROM loads l
+      LEFT JOIN LATERAL (
+        SELECT stop_date
+        FROM load_stops
+        WHERE load_id = l.id AND stop_type = 'DELIVERY'
+        ORDER BY sequence DESC
+        LIMIT 1
+      ) delivery ON true
+      WHERE ${scopeSql}
+        AND UPPER(l.status::text) <> ALL($3::text[])
+        AND delivery.stop_date IS NOT NULL
+        AND delivery.stop_date::date < NOW()::date
+    `;
+    const overdueParams = [tenantId, operatingEntityId, EXCLUDED_FROM_OVERDUE];
+
+    // ── 3. rate_anomaly: rate < 70% of broker's 30d avg (min 3 prior loads) ─
+    const rateAnomalySql = `
+      WITH scoped AS (
+        SELECT l.id, l.broker_id, l.rate, l.created_at
+        FROM loads l
+        WHERE ${scopeSql}
+          AND l.broker_id IS NOT NULL
+          AND l.rate IS NOT NULL
+          AND l.rate > 0
+          AND ($3::date IS NULL OR l.created_at::date BETWEEN $3::date AND $4::date)
+      ),
+      broker_stats AS (
+        SELECT l.broker_id, AVG(l.rate) AS avg_rate, COUNT(*) AS n
+        FROM loads l
+        WHERE ${scopeSql}
+          AND l.broker_id IS NOT NULL
+          AND l.rate IS NOT NULL
+          AND l.rate > 0
+          AND l.created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY l.broker_id
+        HAVING COUNT(*) >= 3
+      )
+      SELECT COUNT(*)::int AS count
+      FROM scoped s
+      JOIN broker_stats bs ON bs.broker_id = s.broker_id
+      WHERE s.rate < (bs.avg_rate * 0.7)
+    `;
+    const rateAnomalyParams = [tenantId, operatingEntityId, from, to];
+
+    // ── 4. missing_documents: delivered without POD OR picked-up without BOL ─
+    const missingDocsSql = `
+      SELECT COUNT(*)::int AS count
+      FROM loads l
+      WHERE ${scopeSql}
+        AND (
+          (UPPER(l.status::text) = 'DELIVERED'
+           AND NOT EXISTS (
+             SELECT 1 FROM load_attachments la
+             WHERE la.load_id = l.id AND la.type = 'PROOF_OF_DELIVERY'
+           ))
+          OR (UPPER(l.status::text) IN ('PICKED_UP', 'IN_TRANSIT', 'EN_ROUTE')
+              AND NOT EXISTS (
+                SELECT 1 FROM load_attachments la
+                WHERE la.load_id = l.id AND la.type = 'BOL'
+              ))
+        )
+    `;
+
+    // ── 5. driver_idle: active drivers with no non-draft load in last 24h ──
+    const driverIdleSql = `
+      SELECT COUNT(*)::int AS count
+      FROM drivers d
+      WHERE (d.tenant_id = $1 OR $1::uuid IS NULL)
+        AND (d.operating_entity_id = $2 OR $2::uuid IS NULL)
+        AND LOWER(COALESCE(d.status, '')) = 'active'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM loads l
+          WHERE l.driver_id = d.id
+            AND (l.tenant_id = $1 OR $1::uuid IS NULL)
+            AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+            AND UPPER(l.status::text) NOT IN ('DRAFT', 'CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED', 'TONU')
+            AND l.updated_at >= NOW() - INTERVAL '24 hours'
+        )
+    `;
+
+    // ── 6. high_margin / low_margin: fuel ratio on period-window loads ──────
+    // Margin proxy: fuel_total / rate. Low margin if >35%; high margin if <15%.
+    // Only considers loads that have at least one matched fuel transaction.
+    const marginSql = `
+      WITH load_fuel AS (
+        SELECT l.id, l.rate,
+               COALESCE(SUM(ft.amount), 0) AS fuel_total
+        FROM loads l
+        LEFT JOIN fuel_transactions ft
+          ON ft.load_id = l.id
+         AND (ft.tenant_id = $1 OR $1::uuid IS NULL)
+        WHERE ${scopeSql}
+          AND l.rate IS NOT NULL
+          AND l.rate > 0
+          AND ($3::date IS NULL OR ${effectiveDateSql} BETWEEN $3::date AND $4::date)
+        GROUP BY l.id, l.rate
+        HAVING COALESCE(SUM(ft.amount), 0) > 0
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE fuel_total / rate > 0.35)::int AS low_margin_count,
+        COUNT(*) FILTER (WHERE fuel_total / rate < 0.15)::int AS high_margin_count
+      FROM load_fuel
+    `;
+    const marginParams = [tenantId, operatingEntityId, from, to];
+
+    // Run queries. Margin query depends on fuel_transactions being present —
+    // gracefully degrade if the table isn't available yet.
+    const [
+      metricsRes,
+      draftsRes,
+      overdueRes,
+      rateAnomalyRes,
+      missingDocsRes,
+      driverIdleRes,
+      marginRes
+    ] = await Promise.all([
+      query(metricsSql, metricsParams),
+      query(draftsSql, [tenantId, operatingEntityId]),
+      query(overdueSql, overdueParams),
+      query(rateAnomalySql, rateAnomalyParams),
+      query(missingDocsSql, [tenantId, operatingEntityId]),
+      query(driverIdleSql, [tenantId, operatingEntityId]),
+      query(marginSql, marginParams).catch((err) => {
+        dtLogger.warn?.('loads_ai_insights_margin_degraded', { message: err.message });
+        return { rows: [{ low_margin_count: 0, high_margin_count: 0 }] };
+      })
+    ]);
+
+    const m = metricsRes.rows[0] || {};
+    const draftsCount = draftsRes.rows[0]?.count || 0;
+    const overdueCount = overdueRes.rows[0]?.count || 0;
+    const rateAnomalyCount = rateAnomalyRes.rows[0]?.count || 0;
+    const missingDocsCount = missingDocsRes.rows[0]?.count || 0;
+    const driverIdleCount = driverIdleRes.rows[0]?.count || 0;
+    const lowMarginCount = marginRes.rows[0]?.low_margin_count || 0;
+    const highMarginCount = marginRes.rows[0]?.high_margin_count || 0;
+
+    const needsAttention = draftsCount + overdueCount + missingDocsCount;
+
+    const insights = [];
+    if (draftsCount > 0) {
+      insights.push({
+        type: 'drafts_ready',
+        severity: 'info',
+        count: draftsCount,
+        message: `${draftsCount} AI draft${draftsCount === 1 ? '' : 's'} ready for review`,
+        action_url: '/loads?needsReview=true',
+        action_label: 'Review drafts'
+      });
+    }
+    if (overdueCount > 0) {
+      insights.push({
+        type: 'overdue',
+        severity: 'critical',
+        count: overdueCount,
+        message: `${overdueCount} load${overdueCount === 1 ? '' : 's'} past delivery date`,
+        action_url: '/loads?status=IN_TRANSIT',
+        action_label: 'View overdue'
+      });
+    }
+    if (rateAnomalyCount > 0) {
+      insights.push({
+        type: 'rate_anomaly',
+        severity: 'warn',
+        count: rateAnomalyCount,
+        message: `${rateAnomalyCount} load${rateAnomalyCount === 1 ? '' : 's'} priced >30% below broker average`,
+        action_url: '/loads',
+        action_label: 'Review rates'
+      });
+    }
+    if (missingDocsCount > 0) {
+      insights.push({
+        type: 'missing_documents',
+        severity: 'warn',
+        count: missingDocsCount,
+        message: `${missingDocsCount} load${missingDocsCount === 1 ? '' : 's'} missing POD or BOL`,
+        action_url: '/loads',
+        action_label: 'Upload documents'
+      });
+    }
+    if (driverIdleCount > 0) {
+      insights.push({
+        type: 'driver_idle',
+        severity: 'info',
+        count: driverIdleCount,
+        message: `${driverIdleCount} driver${driverIdleCount === 1 ? '' : 's'} idle >24h`,
+        action_url: '/drivers?status=available',
+        action_label: 'Assign load'
+      });
+    }
+    if (highMarginCount > 0) {
+      insights.push({
+        type: 'high_margin',
+        severity: 'info',
+        count: highMarginCount,
+        message: `${highMarginCount} high-margin load${highMarginCount === 1 ? '' : 's'} (fuel < 15% of rate)`,
+        action_url: '/loads',
+        action_label: 'View high-margin'
+      });
+    }
+    if (lowMarginCount > 0) {
+      insights.push({
+        type: 'low_margin',
+        severity: 'warn',
+        count: lowMarginCount,
+        message: `${lowMarginCount} low-margin load${lowMarginCount === 1 ? '' : 's'} (fuel > 35% of rate)`,
+        action_url: '/loads',
+        action_label: 'Review margin'
+      });
+    }
+
+    const gross = Number(m.gross) || 0;
+    const grossPrev = Number(m.gross_prev) || 0;
+    const delivered = Number(m.delivered) || 0;
+    const deliveredPrev = Number(m.delivered_prev) || 0;
+    const inTransit = Number(m.in_transit) || 0;
+    const inTransitPrev = Number(m.in_transit_prev) || 0;
+
+    return res.json({
+      success: true,
+      period,
+      window: { from, to, prev_from: prevFrom, prev_to: prevTo },
+      metrics: {
+        gross: { value: gross, previous: grossPrev, delta_pct: deltaPct(gross, grossPrev) },
+        delivered: { value: delivered, previous: deliveredPrev, delta_pct: deltaPct(delivered, deliveredPrev) },
+        in_transit: { value: inTransit, previous: inTransitPrev, delta_pct: deltaPct(inTransit, inTransitPrev) },
+        needs_attention: { value: needsAttention, previous: null, delta_pct: null }
+      },
+      insights
+    });
+  } catch (error) {
+    dtLogger.error('loads_ai_insights_failed', error, { period: req.query.period });
+    res.status(500).json({ success: false, error: 'Failed to compute insights' });
+  }
+});
+
 /**
  * @openapi
  * /api/loads/{id}:
