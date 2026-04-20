@@ -1350,6 +1350,258 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
 
 /**
  * @openapi
+ * /api/loads/bulk-update:
+ *   post:
+ *     summary: Bulk-update multiple loads transactionally (FN-768)
+ *     description: >
+ *       Apply the same field changes to many loads in a single transaction.
+ *       All loads must belong to the caller's tenant/operating entity; any
+ *       that do not are reported in `notFound` and the transaction is rolled
+ *       back. Supported fields: `status`, `billingStatus`, `driverId`, `truckId`.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids, changes]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string }
+ *                 minItems: 1
+ *                 maxItems: 500
+ *               changes:
+ *                 type: object
+ *                 properties:
+ *                   status:         { type: string }
+ *                   billingStatus:  { type: string }
+ *                   driverId:       { type: string, nullable: true }
+ *                   truckId:        { type: string, nullable: true }
+ *     responses:
+ *       200:
+ *         description: All loads updated
+ *       400:
+ *         description: Invalid payload (empty ids, unknown fields, invalid enum value, missing loads)
+ *       403:
+ *         description: Forbidden — insufficient role
+ *       500:
+ *         description: Server error
+ */
+// POST /api/loads/bulk-update — FN-768 (admin, dispatch only; transactional)
+router.post('/bulk-update', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const body = req.body || {};
+  const ids = Array.isArray(body.ids) ? body.ids.filter((id) => typeof id === 'string' && id.trim()) : [];
+  const changes = body.changes && typeof body.changes === 'object' ? body.changes : null;
+
+  if (!ids.length) {
+    return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+  }
+  if (ids.length > 500) {
+    return res.status(400).json({ success: false, error: 'At most 500 ids per request' });
+  }
+  if (!changes || !Object.keys(changes).length) {
+    return res.status(400).json({ success: false, error: 'changes must be a non-empty object' });
+  }
+
+  // Whitelist of allowed bulk-editable columns.
+  const fieldMap = {
+    status: 'status',
+    billingStatus: 'billing_status',
+    driverId: 'driver_id',
+    truckId: 'truck_id',
+  };
+
+  const status = changes.status != null ? normalizeEnum(changes.status) : null;
+  const billingStatus = changes.billingStatus != null ? normalizeEnum(changes.billingStatus) : null;
+  if (status != null && !LOAD_STATUSES.includes(status)) {
+    return res.status(400).json({ success: false, error: 'Invalid status' });
+  }
+  if (billingStatus != null && !BILLING_STATUSES.includes(billingStatus)) {
+    return res.status(400).json({ success: false, error: 'Invalid billing status' });
+  }
+
+  const updates = [];
+  const values = [];
+  let idx = 1;
+  for (const key of Object.keys(fieldMap)) {
+    if (changes[key] === undefined) { continue; }
+    const column = fieldMap[key];
+    let value;
+    if (key === 'status') { value = status; }
+    else if (key === 'billingStatus') { value = billingStatus; }
+    else { value = normalizeNullable(changes[key]); }
+    updates.push(`${column} = $${idx}`);
+    values.push(value);
+    idx += 1;
+  }
+  if (!updates.length) {
+    return res.status(400).json({ success: false, error: 'No editable fields in changes. Allowed: status, billingStatus, driverId, truckId' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    // Verify every id belongs to this tenant/operating entity before writing.
+    const idsParamIdx = idx;
+    const verifyRes = await client.query(
+      `SELECT id FROM loads
+         WHERE id = ANY($${idsParamIdx}::uuid[])
+           AND tenant_id = $${idsParamIdx + 1}
+           AND operating_entity_id = $${idsParamIdx + 2}`,
+      [ids, tenantId, operatingEntityId]
+    );
+    const foundIds = new Set(verifyRes.rows.map((r) => r.id));
+    const notFound = ids.filter((id) => !foundIds.has(id));
+    if (notFound.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: `Some loads were not found or belong to a different operating entity: ${notFound.join(', ')}`,
+        notFound,
+      });
+    }
+
+    // Apply the update to the full set in one statement — either every row
+    // changes or none do.
+    await client.query(
+      `UPDATE loads
+         SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ANY($${idsParamIdx}::uuid[])
+         AND tenant_id = $${idsParamIdx + 1}
+         AND operating_entity_id = $${idsParamIdx + 2}`,
+      [...values, ids, tenantId, operatingEntityId]
+    );
+
+    // Mirror the single-PUT behaviour: DELIVERED/COMPLETED auto-fills completed_date.
+    if (status === 'DELIVERED' || status === 'COMPLETED') {
+      await client.query(
+        `UPDATE loads
+           SET completed_date = COALESCE(completed_date, delivery_date, CURRENT_DATE),
+               updated_at = CURRENT_TIMESTAMP
+         WHERE id = ANY($1::uuid[]) AND completed_date IS NULL`,
+        [ids]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, updated: ids.length });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_bulk_update_failed', error, { ids, changes });
+    res.status(500).json({ success: false, error: 'Failed to bulk-update loads' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/bulk-delete-drafts:
+ *   post:
+ *     summary: Delete many DRAFT loads transactionally (FN-768)
+ *     description: >
+ *       Deletes only loads in DRAFT status. If any id refers to a load that is
+ *       missing, belongs to a different tenant, or is past DRAFT, the entire
+ *       transaction is rolled back and the offending ids are returned.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string }
+ *                 minItems: 1
+ *                 maxItems: 500
+ *     responses:
+ *       200:
+ *         description: All selected drafts deleted
+ *       400:
+ *         description: At least one id is not a DRAFT (or not found)
+ *       403:
+ *         description: Forbidden
+ *       500:
+ *         description: Server error
+ */
+// POST /api/loads/bulk-delete-drafts — FN-768 (admin, dispatch only; DRAFT only)
+router.post('/bulk-delete-drafts', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const body = req.body || {};
+  const ids = Array.isArray(body.ids) ? body.ids.filter((id) => typeof id === 'string' && id.trim()) : [];
+  if (!ids.length) {
+    return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+  }
+  if (ids.length > 500) {
+    return res.status(400).json({ success: false, error: 'At most 500 ids per request' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    const check = await client.query(
+      `SELECT id, status FROM loads
+         WHERE id = ANY($1::uuid[])
+           AND tenant_id = $2
+           AND operating_entity_id = $3`,
+      [ids, tenantId, operatingEntityId]
+    );
+    const foundIds = new Set(check.rows.map((r) => r.id));
+    const notFound = ids.filter((id) => !foundIds.has(id));
+    const nonDraft = check.rows
+      .filter((r) => normalizeEnum(r.status) !== 'DRAFT')
+      .map((r) => r.id);
+
+    if (notFound.length || nonDraft.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: 'Only DRAFT loads can be bulk-deleted',
+        notFound,
+        nonDraft,
+      });
+    }
+
+    await client.query(
+      `DELETE FROM loads
+         WHERE id = ANY($1::uuid[])
+           AND tenant_id = $2
+           AND operating_entity_id = $3
+           AND status = 'DRAFT'`,
+      [ids, tenantId, operatingEntityId]
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, deleted: ids.length });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_bulk_delete_drafts_failed', error, { ids });
+    res.status(500).json({ success: false, error: 'Failed to bulk-delete drafts' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
  * /api/loads/{id}:
  *   delete:
  *     summary: Delete a load
