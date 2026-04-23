@@ -38,15 +38,13 @@
           </form>
         </section>
 
-        <section *ngSwitchCase="'stops'" class="step-placeholder" data-testid="step-stops">
-          <h3>Stops</h3>
-          <p class="step-hint">Placeholder — real draggable list lands in FN-864.</p>
-          <ul class="stub-stops">
-            <li *ngFor="let stop of stops.controls; let i = index">
-              Stop {{ i + 1 }} — {{ stop.get('stop_type')?.value }}
-            </li>
-          </ul>
-        </section>
+        <app-load-wizard-stops
+          *ngSwitchCase="'stops'"
+          [stops]="stops"
+          [rate]="ratePerMileInput"
+          [mode]="mode"
+          data-testid="step-stops"
+        ></app-load-wizard-stops>
 
         <section *ngSwitchCase="'driver'" class="step-placeholder" data-testid="step-driver">
           <h3>Driver &amp; Equipment</h3>

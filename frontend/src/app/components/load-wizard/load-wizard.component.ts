@@ -29,6 +29,7 @@ import {
   LoadDetail,
   LoadStopType,
 } from '../../models/load-dashboard.model';
+import { LoadWizardStopsComponent } from './steps/stops/stops.component';
 
 export type LoadWizardMode = 'create' | 'edit' | 'view' | 'ai-extract';
 
@@ -46,7 +47,7 @@ type LoadWizardStepId = 'basics' | 'stops' | 'driver' | 'attachments';
 @Component({
   selector: 'app-load-wizard-v2',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, WizardShellComponent],
+  imports: [CommonModule, ReactiveFormsModule, WizardShellComponent, LoadWizardStopsComponent],
   templateUrl: './load-wizard.component.html',
   styleUrls: ['./load-wizard.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -129,6 +130,14 @@ export class LoadWizardComponent implements OnInit {
 
   get queuedAttachments(): FormArray<FormGroup> {
     return this.attachmentsGroup.get('queued') as FormArray<FormGroup>;
+  }
+
+  /** Numeric rate value passed into the Stops step for trip-metrics calc. */
+  get ratePerMileInput(): number | null {
+    const raw = this.basics.get('rate')?.value;
+    if (raw === null || raw === undefined || raw === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
   }
 
   get shellMode(): WizardMode {
