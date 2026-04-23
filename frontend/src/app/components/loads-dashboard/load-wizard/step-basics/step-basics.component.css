@@ -194,3 +194,21 @@
   justify-content: flex-end;
   margin-top: 16px;
 }
+
+/* FN-818 — align per-field sparkle inside the label row. */
+.form-group label app-ai-sparkle {
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* FN-818 — low-confidence field highlight (drawer opened via confidence chip). */
+.form-group.field--low-conf {
+  position: relative;
+  padding-left: 10px;
+  border-left: 3px solid #f97316;
+  background: rgba(249, 115, 22, 0.06);
+  border-radius: 0 6px 6px 0;
+}
+.form-group.field--low-conf > label {
+  color: #fdba74;
+}

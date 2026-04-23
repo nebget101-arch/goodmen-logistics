@@ -1,0 +1,13 @@
+<button
+  type="button"
+  class="confidence-badge"
+  [class.confidence-badge--high]="tier === 'high'"
+  [class.confidence-badge--medium]="tier === 'medium'"
+  [class.confidence-badge--low]="tier === 'low'"
+  [attr.title]="tooltip || null"
+  [attr.aria-label]="('AI extraction confidence: ' + computedLabel)"
+  (click)="onClick($event)"
+>
+  <span class="confidence-badge__glyph" aria-hidden="true">&#x2726;</span>
+  <span class="confidence-badge__label">{{ computedLabel }}</span>
+</button>

@@ -792,6 +792,14 @@
           </td>
           <td *ngIf="isColVisible('load_number')" [title]="load.load_number || ''">
             <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
+            <!-- FN-818: AI extraction sparkle — marks loads sourced from AI/email pipelines. -->
+            <app-ai-sparkle
+              *ngIf="isAiExtractedSource(load)"
+              class="row-ai-sparkle"
+              [confidence]="getOverallConfidence(load)"
+              [tooltip]="getSparkleTooltip(load)"
+              (sparkleClick)="onRowSparkleClick(load, $event)"
+            ></app-ai-sparkle>
             <!-- FN-746: needs_review badge -->
             <span
               *ngIf="load.needs_review"
@@ -895,6 +903,14 @@
                 </div>
               </ng-template>
             </div>
+            <!-- FN-818: AI confidence chip — surfaces on DRAFT/NEW rows that have ai_metadata. -->
+            <app-confidence-badge
+              *ngIf="shouldShowConfidenceBadge(load)"
+              class="row-confidence-badge"
+              [confidence]="getOverallConfidence(load)"
+              [tooltip]="getSparkleTooltip(load)"
+              (chipClick)="onConfidenceBadgeClick(load, $event)"
+            ></app-confidence-badge>
           </td>
           <!-- FN-805/FN-854: Inline billing change — same CDK Overlay pattern. -->
           <td *ngIf="isColVisible('billing')" [title]="load.billing_status || ''" class="billing-cell">
@@ -2396,6 +2412,7 @@
   [width]="drawerWidth"
   [hasPrev]="drawerHasPrev"
   [hasNext]="drawerHasNext"
+  [focusLowConfidence]="drawerFocusLowConfidence"
   (close)="closeLoadDrawer()"
   (prev)="onDrawerPrev()"
   (next)="onDrawerNext()"
