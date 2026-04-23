@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import { ScrollingModule } from '@angular/cdk/scrolling';
+import { OverlayModule } from '@angular/cdk/overlay';
 
 import { AuthGuard } from '../../auth.guard';
 import { PlanGuard } from '../../guards/plan.guard';
@@ -82,6 +83,7 @@ const routes: Routes = [
     MatButtonModule,
     DragDropModule,
     ScrollingModule,
+    OverlayModule,
     SharedModule,
     LoadWizardModule,
     RouterModule.forChild(routes)

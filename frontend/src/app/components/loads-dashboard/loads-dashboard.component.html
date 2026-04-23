@@ -852,11 +852,15 @@
           <td *ngIf="isColVisible('delivery')" [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
           <td *ngIf="isColVisible('rate')" [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
           <td *ngIf="isColVisible('completed_date')" [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
-          <!-- FN-767/FN-805: Inline status change — click pill to open dropdown,
-               shows only valid next transitions for the current status. -->
+          <!-- FN-767/FN-805/FN-854: Inline status change — click pill to open
+               a CDK Overlay dropdown (portaled to body so the cdk-virtual-scroll
+               viewport's overflow:auto doesn't clip it). Menu shows only valid
+               next transitions for the current status. -->
           <td *ngIf="isColVisible('status')" [title]="load.status || ''" class="status-cell">
             <div class="status-inline" (click)="$event.stopPropagation()">
               <button
+                #statusTrigger="cdkOverlayOrigin"
+                cdkOverlayOrigin
                 type="button"
                 class="status-inline__trigger"
                 (click)="openStatusMenu(load.id, $event)"
@@ -869,22 +873,35 @@
                   *ngIf="getValidStatusTransitions(load).length > 0"
                 >expand_more</span>
               </button>
-              <div class="dropdown-menu status-inline__menu" *ngIf="statusMenuLoadId === load.id && getValidStatusTransitions(load).length > 0">
-                <button
-                  type="button"
-                  class="status-inline__option"
-                  *ngFor="let s of getValidStatusTransitions(load)"
-                  (click)="changeLoadStatus(load, s, $event)"
-                >
-                  {{ getStatusLabel(s) }}
-                </button>
-              </div>
+              <ng-template
+                cdkConnectedOverlay
+                [cdkConnectedOverlayOrigin]="statusTrigger"
+                [cdkConnectedOverlayOpen]="statusMenuLoadId === load.id && getValidStatusTransitions(load).length > 0"
+                [cdkConnectedOverlayPositions]="inlineMenuPositions"
+                [cdkConnectedOverlayScrollStrategy]="inlineMenuScrollStrategy"
+                [cdkConnectedOverlayPanelClass]="'loads-inline-menu-panel'"
+                (overlayOutsideClick)="closeStatusMenu()"
+                (detach)="closeStatusMenu()"
+              >
+                <div class="loads-inline-menu" (click)="$event.stopPropagation()">
+                  <button
+                    type="button"
+                    class="loads-inline-menu__option"
+                    *ngFor="let s of getValidStatusTransitions(load)"
+                    (click)="changeLoadStatus(load, s, $event)"
+                  >
+                    {{ getStatusLabel(s) }}
+                  </button>
+                </div>
+              </ng-template>
             </div>
           </td>
-          <!-- FN-805: Inline billing change — same pattern as status. -->
+          <!-- FN-805/FN-854: Inline billing change — same CDK Overlay pattern. -->
           <td *ngIf="isColVisible('billing')" [title]="load.billing_status || ''" class="billing-cell">
             <div class="status-inline" (click)="$event.stopPropagation()">
               <button
+                #billingTrigger="cdkOverlayOrigin"
+                cdkOverlayOrigin
                 type="button"
                 class="status-inline__trigger"
                 (click)="openBillingMenu(load.id, $event)"
@@ -897,16 +914,27 @@
                   *ngIf="getValidBillingTransitions(load).length > 0"
                 >expand_more</span>
               </button>
-              <div class="dropdown-menu status-inline__menu" *ngIf="billingMenuLoadId === load.id && getValidBillingTransitions(load).length > 0">
-                <button
-                  type="button"
-                  class="status-inline__option"
-                  *ngFor="let b of getValidBillingTransitions(load)"
-                  (click)="changeLoadBilling(load, b, $event)"
-                >
-                  {{ getBillingLabel(b) }}
-                </button>
-              </div>
+              <ng-template
+                cdkConnectedOverlay
+                [cdkConnectedOverlayOrigin]="billingTrigger"
+                [cdkConnectedOverlayOpen]="billingMenuLoadId === load.id && getValidBillingTransitions(load).length > 0"
+                [cdkConnectedOverlayPositions]="inlineMenuPositions"
+                [cdkConnectedOverlayScrollStrategy]="inlineMenuScrollStrategy"
+                [cdkConnectedOverlayPanelClass]="'loads-inline-menu-panel'"
+                (overlayOutsideClick)="closeBillingMenu()"
+                (detach)="closeBillingMenu()"
+              >
+                <div class="loads-inline-menu" (click)="$event.stopPropagation()">
+                  <button
+                    type="button"
+                    class="loads-inline-menu__option"
+                    *ngFor="let b of getValidBillingTransitions(load)"
+                    (click)="changeLoadBilling(load, b, $event)"
+                  >
+                    {{ getBillingLabel(b) }}
+                  </button>
+                </div>
+              </ng-template>
             </div>
           </td>
           <!-- FN-805: Inline notes edit — Esc cancels, Enter/blur saves. -->

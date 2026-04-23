@@ -1,4 +1,5 @@
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ConnectedPosition, ScrollStrategy, ScrollStrategyOptions } from '@angular/cdk/overlay';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -347,6 +348,16 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   newViewName = '';
   /** ID of the load whose inline status dropdown is open. */
   statusMenuLoadId: string | null = null;
+
+  // FN-854: Inline Status/Billing dropdowns render through a CDK Overlay
+  // portal. Rendering inline inside the <td> gets clipped by the parent
+  // cdk-virtual-scroll-viewport's overflow:auto, so the menu was never
+  // visible to the user.
+  readonly inlineMenuPositions: ConnectedPosition[] = [
+    { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 4 },
+    { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -4 },
+  ];
+  inlineMenuScrollStrategy!: ScrollStrategy;
 
   // ─── FN-805: Hover toolbar + inline billing/notes editing ───────────────
   /** ID of the load whose inline billing dropdown is open. */
@@ -743,8 +754,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     private operatingEntityContext: OperatingEntityContextService,
     private loadTemplatesService: LoadTemplatesService,
     private keyboardShortcuts: KeyboardShortcutsService,
-    private userPreferences: UserPreferencesService
+    private userPreferences: UserPreferencesService,
+    private scrollStrategies: ScrollStrategyOptions
   ) {
+    // Close the inline menu when any ancestor scrolls — the virtual-scroll
+    // viewport may recycle the trigger row while the menu is open.
+    this.inlineMenuScrollStrategy = this.scrollStrategies.close();
     this.manualLoadForm = this.fb.group({
       status: ['NEW', Validators.required],
       billingStatus: ['PENDING', Validators.required],
@@ -3417,6 +3432,17 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return url ? this.sanitizer.bypassSecurityTrustResourceUrl(url) : this.sanitizer.bypassSecurityTrustResourceUrl('about:blank');
   }
 
+  // FN-854: Esc closes the inline Status/Billing dropdown. The menu is
+  // portaled via CDK Overlay, so keydown does not bubble through the
+  // component host — listen at document level, act only if a menu is open.
+  @HostListener('document:keydown.escape')
+  onDocumentEscape(): void {
+    if (this.statusMenuLoadId || this.billingMenuLoadId) {
+      this.statusMenuLoadId = null;
+      this.billingMenuLoadId = null;
+    }
+  }
+
   @HostListener('document:click')
   onDocumentClick(): void {
     this.showNewLoadMenu = false;
@@ -4160,6 +4186,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     }
     if (!loadId) return;
     this.statusMenuLoadId = this.statusMenuLoadId === loadId ? null : loadId;
+    this.billingMenuLoadId = null;
+  }
+
+  closeStatusMenu(): void {
+    this.statusMenuLoadId = null;
   }
 
   /** Inline status change — PUTs a single-field update via LoadsService.updateLoad. */
@@ -4201,6 +4232,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     if (!loadId) return;
     this.billingMenuLoadId = this.billingMenuLoadId === loadId ? null : loadId;
     this.statusMenuLoadId = null;
+  }
+
+  closeBillingMenu(): void {
+    this.billingMenuLoadId = null;
   }
 
   /** Inline billing change — same PUT pattern as status. */
