@@ -1,0 +1,40 @@
+:host.hp-host {
+  display: inline-block;
+  position: relative;
+}
+
+.hp-trigger {
+  display: inline-block;
+}
+
+.hp-popover {
+  position: fixed;
+  z-index: 1080;
+  padding: 8px 10px;
+  background: #1f2937;
+  color: #f9fafb;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  pointer-events: auto;
+  white-space: normal;
+  word-break: break-word;
+
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 100ms ease-out, transform 100ms ease-out;
+
+  &--visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  &[data-placement='top'] {
+    transform: translateY(-2px);
+
+    &.hp-popover--visible {
+      transform: translateY(0);
+    }
+  }
+}

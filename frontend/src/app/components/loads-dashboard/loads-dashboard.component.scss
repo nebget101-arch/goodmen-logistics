@@ -3412,6 +3412,259 @@
       }
     }
   }
+
+  // ─── FN-805: Row-hover toolbar + inline notes editor ─────────────────────
+  // The toolbar is opacity: 0 by default and fades in when the row is hovered.
+  // 100ms transition matches the AC and the FN-804 hover-popover timing.
+  td.actions-cell {
+    overflow: visible;
+  }
+
+  .row-toolbar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    opacity: 0;
+    transform: translateY(1px);
+    transition: opacity 100ms ease-out, transform 100ms ease-out;
+    pointer-events: none;
+  }
+
+  // Keep the toolbar discoverable for keyboard users: show it when any button
+  // inside is focused.
+  .row-toolbar:focus-within {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  tr:hover .row-toolbar {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .row-toolbar__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(226, 232, 240, 0.85);
+    cursor: pointer;
+    padding: 0;
+    transition: background 100ms ease-out, border-color 100ms ease-out, color 100ms ease-out;
+
+    .material-symbols-outlined {
+      font-size: 18px;
+    }
+
+    &:hover {
+      background: rgba(45, 212, 191, 0.12);
+      border-color: rgba(45, 212, 191, 0.45);
+      color: #f0fdfa;
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(45, 212, 191, 0.6);
+      outline-offset: 1px;
+    }
+
+    &--danger {
+      color: #fca5a5;
+
+      &:hover {
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.5);
+        color: #fecaca;
+      }
+    }
+  }
+
+  .billing-cell,
+  .notes-cell {
+    overflow: visible;
+  }
+
+  .notes-inline__trigger {
+    display: inline-block;
+    max-width: 100%;
+    padding: 4px 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: inherit;
+    font-size: inherit;
+    text-align: left;
+    cursor: text;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &:hover {
+      border-color: rgba(148, 163, 184, 0.35);
+      background: rgba(148, 163, 184, 0.08);
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(59, 130, 246, 0.6);
+      outline-offset: 1px;
+    }
+
+    &--empty {
+      color: rgba(148, 163, 184, 0.7);
+      font-style: italic;
+    }
+  }
+
+  .notes-inline__textarea {
+    width: 100%;
+    min-height: 48px;
+    padding: 6px 8px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+
+    &:focus {
+      outline: none;
+      border-color: rgba(59, 130, 246, 0.8);
+    }
+  }
+
+  // ─── FN-806: Hover-preview triggers for driver / broker / attachments ───
+  // Cells need overflow:visible so the popover can escape the <td> clip.
+  .preview-cell {
+    overflow: visible;
+  }
+
+  .preview-trigger {
+    display: inline-block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+  }
+
+  .preview-cell .attachment-chips.preview-trigger {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+// ─── FN-806: Shared hover-preview card styles. Defined at the root so the
+// templates rendered by <app-hover-popover> (which uses position:fixed and
+// ng-content projection) pick up the styles regardless of where the popover
+// element ends up in the DOM. ───────────────────────────────────────────────
+.hover-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  color: #f8fafc;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.hover-preview__title,
+.hover-preview__name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #f1f5f9;
+  margin-bottom: 2px;
+}
+
+.hover-preview__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hover-preview__label {
+  color: rgba(203, 213, 225, 0.75);
+}
+
+.hover-preview__value {
+  font-weight: 500;
+  color: #f8fafc;
+
+  &--muted {
+    color: rgba(203, 213, 225, 0.75);
+    font-weight: 400;
+    font-style: italic;
+  }
+}
+
+.hover-preview__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+
+  &--ok {
+    background: rgba(34, 197, 94, 0.2);
+    color: #bbf7d0;
+  }
+  &--danger {
+    background: rgba(239, 68, 68, 0.25);
+    color: #fecaca;
+  }
+}
+
+.hover-preview__footnote {
+  color: rgba(203, 213, 225, 0.75);
+  font-style: italic;
+  font-size: 11px;
+}
+
+.hover-preview__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hover-preview__list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hover-preview__icon {
+  font-size: 14px;
+  color: rgba(148, 163, 184, 0.85);
+  flex-shrink: 0;
+}
+
+.hover-preview__file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hover-preview__file-type {
+  font-size: 10px;
+  color: rgba(203, 213, 225, 0.75);
+  padding: 1px 6px;
+  background: rgba(148, 163, 184, 0.18);
+  border-radius: 4px;
 }
 
 /* FN-768: Bulk actions toolbar + row selection styling */

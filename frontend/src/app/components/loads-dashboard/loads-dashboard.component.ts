@@ -323,6 +323,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     { key: 'completed_date', label: 'Completed' },
     { key: 'status', label: 'Status' },
     { key: 'billing', label: 'Billing' },
+    { key: 'notes', label: 'Notes' },
     { key: 'attachments', label: 'Attachments' },
     { key: 'actions', label: 'Actions', alwaysVisible: true }
   ];
@@ -335,6 +336,156 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   newViewName = '';
   /** ID of the load whose inline status dropdown is open. */
   statusMenuLoadId: string | null = null;
+
+  // ─── FN-805: Hover toolbar + inline billing/notes editing ───────────────
+  /** ID of the load whose inline billing dropdown is open. */
+  billingMenuLoadId: string | null = null;
+  /** ID of the load whose notes cell is in inline-edit mode. */
+  editingNotesLoadId: string | null = null;
+  /** Buffer for the in-flight notes edit (committed to the row on save). */
+  editingNotesDraft = '';
+  /** Latched on blur so a subsequent (keydown.enter) doesn't double-save. */
+  private notesSaveInFlight = false;
+
+  /**
+   * Valid NEXT status transitions per current status. Cancel/TONU are
+   * terminal-escape branches available from any live state.
+   * Happy path: DRAFT → NEW → DISPATCHED → IN_TRANSIT → DELIVERED.
+   */
+  private readonly statusTransitions: Record<string, LoadStatus[]> = {
+    DRAFT: ['NEW', 'CANCELLED'],
+    NEW: ['DISPATCHED', 'CANCELLED'],
+    DISPATCHED: ['EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'CANCELLED', 'TONU'],
+    EN_ROUTE: ['PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'],
+    PICKED_UP: ['IN_TRANSIT', 'DELIVERED', 'CANCELLED'],
+    IN_TRANSIT: ['DELIVERED', 'CANCELLED'],
+    DELIVERED: [],
+    CANCELLED: [],
+    CANCELED: [],
+    TONU: []
+  };
+
+  /** Valid NEXT billing transitions per current billing_status. */
+  private readonly billingTransitions: Record<string, BillingStatus[]> = {
+    PENDING: ['BOL_RECEIVED', 'CANCELLED'],
+    BOL_RECEIVED: ['INVOICED', 'CANCELLED'],
+    INVOICED: ['SENT_TO_FACTORING', 'PAID', 'CANCELLED'],
+    SENT_TO_FACTORING: ['FUNDED', 'PAID', 'CANCELLED'],
+    FUNDED: ['PAID'],
+    PAID: [],
+    CANCELLED: [],
+    CANCELED: []
+  };
+
+  /** Valid next statuses for a given load; hides options that would be no-ops. */
+  getValidStatusTransitions(load: LoadListItem): LoadStatus[] {
+    const current = (load.status || '').toString().toUpperCase();
+    return this.statusTransitions[current] ?? [];
+  }
+
+  /** Valid next billing statuses for a given load. */
+  getValidBillingTransitions(load: LoadListItem): BillingStatus[] {
+    const current = (load.billing_status || '').toString().toUpperCase();
+    return this.billingTransitions[current] ?? [];
+  }
+
+  // ─── FN-806: Hover-preview state (driver / broker / attachments / notes) ─
+  /**
+   * Cache of per-load LoadDetail fetched on hover. `null` means fetch is
+   * in-flight or failed; a concrete value means we have data to display.
+   */
+  private loadPreviewCache = new Map<string, LoadDetail | null>();
+  /** Cache of broker details keyed by broker_id. */
+  private brokerPreviewCache = new Map<string, BrokerOption | null>();
+  /** The load whose hover preview is currently the focus. */
+  previewLoadId: string | null = null;
+
+  /**
+   * Kicks off a lazy fetch for driver/broker/attachment preview data when
+   * the user hovers a driver/broker/attachments cell. Safe to call on every
+   * mouseenter — the cache guards against duplicate requests.
+   */
+  prefetchLoadPreview(load: LoadListItem): void {
+    if (!load || !load.id) return;
+    this.previewLoadId = load.id;
+    if (this.loadPreviewCache.has(load.id)) {
+      const cached = this.loadPreviewCache.get(load.id);
+      if (cached) this.prefetchBroker(cached);
+      return;
+    }
+    this.loadPreviewCache.set(load.id, null);
+    this.loadsService.getLoad(load.id).subscribe({
+      next: (res) => {
+        const detail = res?.data ?? null;
+        this.loadPreviewCache.set(load.id, detail);
+        if (detail) this.prefetchBroker(detail);
+      },
+      error: () => {
+        this.loadPreviewCache.delete(load.id);
+      }
+    });
+  }
+
+  /** Secondary fetch: look up full broker details for credit/terms line. */
+  private prefetchBroker(detail: LoadDetail): void {
+    const id = detail.broker_id;
+    if (!id || this.brokerPreviewCache.has(id)) return;
+    this.brokerPreviewCache.set(id, null);
+    const searchHint = detail.broker_display_name || detail.broker_name || '';
+    this.loadsService.getBrokers(searchHint, 1, 50).subscribe({
+      next: (res) => {
+        const found = (res?.data || []).find((b) => b.id === id) ?? null;
+        this.brokerPreviewCache.set(id, found);
+      },
+      error: () => {
+        this.brokerPreviewCache.delete(id);
+      }
+    });
+  }
+
+  /** The currently-hovered load's details (or null while loading / on error). */
+  get previewLoad(): LoadDetail | null {
+    if (!this.previewLoadId) return null;
+    return this.loadPreviewCache.get(this.previewLoadId) ?? null;
+  }
+
+  /** The broker record for the currently-hovered load (null until loaded). */
+  get previewBroker(): BrokerOption | null {
+    const detail = this.previewLoad;
+    if (!detail?.broker_id) return null;
+    return this.brokerPreviewCache.get(detail.broker_id) ?? null;
+  }
+
+  /** Display string for "City, ST" position lines, or empty when unavailable. */
+  getPreviewDriverPosition(): string {
+    const detail = this.previewLoad;
+    if (!detail) return '';
+    const city = detail.driver_position_city || '';
+    const state = detail.driver_position_state || '';
+    if (city && state) return `${city}, ${state}`;
+    return city || state || '';
+  }
+
+  /** Combine payment rating + credit score into one short line. */
+  getBrokerCreditLabel(broker: BrokerOption | null): string {
+    if (!broker) return '';
+    const rating = (broker.payment_rating || '').toString().trim();
+    const score = broker.credit_score != null ? String(broker.credit_score).trim() : '';
+    if (rating && score) return `${rating} · ${score}`;
+    return rating || score || '';
+  }
+
+  /** First N attachments from LoadDetail for the hover list. */
+  getPreviewAttachments(max = 4): LoadAttachment[] {
+    const atts = this.previewLoad?.attachments || [];
+    return atts.slice(0, max);
+  }
+
+  /** Overflow count for the "+N more" line on the attachments popover. */
+  getPreviewAttachmentOverflow(max = 4): number {
+    const total = this.previewLoad?.attachments?.length ?? 0;
+    return Math.max(0, total - max);
+  }
 
   driverFilterOptions: AiSelectOption[] = [];
   statusFilterOptions: AiSelectOption[] = [];
@@ -3263,6 +3414,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showColumnPicker = false;
     this.showSavedViewsMenu = false;
     this.statusMenuLoadId = null;
+    this.billingMenuLoadId = null;
+    // Notes editor commits on blur, which fires before this handler — safe to
+    // clear here too in case blur was skipped (e.g. clicking a non-focusable area).
+    this.editingNotesLoadId = null;
+    this.editingNotesDraft = '';
   }
 
   // FN-745: Page-level drop handler for multi-PDF bulk extraction
@@ -3929,6 +4085,132 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         load.status = previousStatus;
         this.errorMessage = (err && err.error && err.error.error) || 'Failed to update load status';
         setTimeout(() => { this.errorMessage = ''; }, 4000);
+      }
+    });
+  }
+
+  // ─── FN-805: Inline billing dropdown ──────────────────────────────────────
+
+  openBillingMenu(loadId: string | undefined | null, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!loadId) return;
+    this.billingMenuLoadId = this.billingMenuLoadId === loadId ? null : loadId;
+    this.statusMenuLoadId = null;
+  }
+
+  /** Inline billing change — same PUT pattern as status. */
+  changeLoadBilling(load: LoadListItem, newBilling: BillingStatus, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.billingMenuLoadId = null;
+    if (!load || !load.id) return;
+    if (load.billing_status === newBilling) return;
+
+    const previousBilling = load.billing_status;
+    load.billing_status = newBilling;
+
+    this.loadsService.updateLoad(load.id, { billingStatus: newBilling }).subscribe({
+      next: (res) => {
+        if (res && res.data && res.data.billing_status) {
+          load.billing_status = res.data.billing_status as BillingStatus;
+        }
+        this.successMessage = `Billing updated to ${this.getBillingLabel(newBilling)}`;
+        setTimeout(() => { this.successMessage = ''; }, 2500);
+      },
+      error: (err) => {
+        load.billing_status = previousBilling;
+        this.errorMessage = (err && err.error && err.error.error) || 'Failed to update billing status';
+        setTimeout(() => { this.errorMessage = ''; }, 4000);
+      }
+    });
+  }
+
+  // ─── FN-805: Inline notes edit ────────────────────────────────────────────
+
+  openNotesEditor(load: LoadListItem, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!load || !load.id) return;
+    this.editingNotesLoadId = load.id;
+    this.editingNotesDraft = load.notes ?? '';
+    this.notesSaveInFlight = false;
+    this.statusMenuLoadId = null;
+    this.billingMenuLoadId = null;
+    // Focus the textarea after Angular mounts it via *ngIf.
+    setTimeout(() => {
+      const el = document.querySelector('.notes-inline__textarea') as HTMLTextAreaElement | null;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }, 0);
+  }
+
+  /** Cancel inline notes edit without saving (Esc). */
+  cancelNotesEdit(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.editingNotesLoadId = null;
+    this.editingNotesDraft = '';
+    this.notesSaveInFlight = false;
+  }
+
+  /** Commit inline notes edit (Enter or blur). Skips network when unchanged. */
+  saveNotesEdit(load: LoadListItem, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      // Enter should commit, not insert a newline.
+      if ((event as KeyboardEvent).key === 'Enter') {
+        event.preventDefault();
+      }
+    }
+    if (this.notesSaveInFlight) return;
+    if (!load || !load.id) { this.cancelNotesEdit(); return; }
+    if (this.editingNotesLoadId !== load.id) return;
+
+    const next = (this.editingNotesDraft ?? '').trim();
+    const current = (load.notes ?? '').trim();
+    if (next === current) {
+      this.cancelNotesEdit();
+      return;
+    }
+
+    this.notesSaveInFlight = true;
+    const previous = load.notes ?? null;
+    load.notes = next.length ? next : null;
+    const loadId = load.id;
+
+    this.loadsService.updateLoad(loadId, { notes: load.notes }).subscribe({
+      next: (res) => {
+        if (res && res.data) {
+          load.notes = res.data.notes ?? null;
+        }
+        this.successMessage = 'Notes updated';
+        setTimeout(() => { this.successMessage = ''; }, 2000);
+        if (this.editingNotesLoadId === loadId) {
+          this.editingNotesLoadId = null;
+          this.editingNotesDraft = '';
+        }
+        this.notesSaveInFlight = false;
+      },
+      error: (err) => {
+        load.notes = previous;
+        this.errorMessage = (err && err.error && err.error.error) || 'Failed to update notes';
+        setTimeout(() => { this.errorMessage = ''; }, 4000);
+        if (this.editingNotesLoadId === loadId) {
+          this.editingNotesLoadId = null;
+          this.editingNotesDraft = '';
+        }
+        this.notesSaveInFlight = false;
       }
     });
   }
