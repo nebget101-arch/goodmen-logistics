@@ -49,6 +49,20 @@
         <span class="load-drawer__load-number">
           {{ loadDetail?.load_number || '—' }}
         </span>
+        <!-- FN-818: header AI marker + confidence chip when the load originated from an AI source. -->
+        <app-ai-sparkle
+          *ngIf="isAiExtractedSource()"
+          class="load-drawer__ai-sparkle"
+          size="md"
+          [confidence]="drawerOverallConfidence"
+          [tooltip]="drawerSparkleTooltip"
+        ></app-ai-sparkle>
+        <app-confidence-badge
+          *ngIf="drawerOverallConfidence != null"
+          class="load-drawer__confidence-badge"
+          [confidence]="drawerOverallConfidence"
+          [tooltip]="drawerSparkleTooltip"
+        ></app-confidence-badge>
         <app-status-pill
           *ngIf="loadStatusForPill"
           [status]="loadStatusForPill"
@@ -105,6 +119,8 @@
     <app-step-basics
       *ngIf="activeTab === 'basics' && !loading"
       [data]="basics"
+      [aiMetadata]="loadDetail?.ai_metadata ?? null"
+      [focusLowConfidence]="focusLowConfidence"
       (dataChange)="onBasicsChange($event)"
     ></app-step-basics>
 

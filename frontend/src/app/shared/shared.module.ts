@@ -14,6 +14,8 @@ import { StopCardComponent } from './components/stop-card/stop-card.component';
 import { KeyboardShortcutsHelpComponent } from './components/keyboard-shortcuts-help/keyboard-shortcuts-help.component';
 import { CommandPaletteComponent } from './components/command-palette/command-palette.component';
 import { HoverPopoverComponent } from './components/hover-popover/hover-popover.component';
+import { AiSparkleComponent } from './components/ai-sparkle/ai-sparkle.component';
+import { ConfidenceBadgeComponent } from './components/confidence-badge/confidence-badge.component';
 import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives/has-permission.directive';
 
 @NgModule({
@@ -25,6 +27,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives
     KeyboardShortcutsHelpComponent,
     CommandPaletteComponent,
     HoverPopoverComponent,
+    AiSparkleComponent,
+    ConfidenceBadgeComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective
   ],
@@ -47,6 +51,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives
     KeyboardShortcutsHelpComponent,
     CommandPaletteComponent,
     HoverPopoverComponent,
+    AiSparkleComponent,
+    ConfidenceBadgeComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective
   ]

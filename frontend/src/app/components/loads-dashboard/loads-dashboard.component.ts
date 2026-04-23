@@ -222,6 +222,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   drawerLoadId: string | null = null;
   /** Drawer width in px (persisted via UserPreferences). */
   drawerWidth: number = DRAWER_DEFAULT_WIDTH;
+  /** FN-818: when the drawer was opened via the confidence badge, highlight low-conf fields. */
+  drawerFocusLowConfidence = false;
+
+  // ─── FN-818: AI extraction visual markers ───────────────────────────────
+  /** Loads whose IDs are brand-new AI-sourced rows — receive a one-off glow on first render. */
+  newAiLoadIds = new Set<string>();
+  /** Tracks which load IDs were already present in the list so we can diff on refresh. */
+  private previousLoadIds = new Set<string>();
+  /** First list load: suppress glow so the initial render isn't a spotlight of everything. */
+  private seenFirstLoadsResponse = false;
+  /** Handle for the timer that clears the glow after the animation completes. */
+  private newAiGlowTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ─── FN-768: Bulk selection + actions ─────────────────────────────────────
   /** Set of load ids the user has checked for bulk operations. */
@@ -1211,6 +1223,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
           this.loads = res?.data || [];
           this.total = res?.meta?.total || 0;
           this.loading = false;
+          this.trackNewAiLoads(this.loads);
         this.recomputeSummaryTotals();
         this.recomputeIntelligenceMetrics();
         },
@@ -3375,7 +3388,90 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     if (status === 'CANCELLED') classes.push('row-cancelled');
     // FN-808: teal left-border highlight on the active drawer row.
     if (this.isDrawerActive(load)) classes.push('row-drawer-active');
+    // FN-818: one-off glow when a new AI-extracted load lands in the list.
+    if (this.newAiLoadIds.has(load.id)) classes.push('row-new-ai');
     return classes.join(' ');
+  }
+
+  // ─── FN-818: AI extraction helpers ─────────────────────────────────────────
+
+  /** True when the load was created by an AI extraction pipeline (PDF or email). */
+  isAiExtractedSource(load: LoadListItem): boolean {
+    const src = (load.source || '').toLowerCase();
+    return src === 'ai_extraction' || src === 'ai' || src === 'email';
+  }
+
+  /** Overall confidence as 0–100 pulled from ai_metadata (null when missing). */
+  getOverallConfidence(load: LoadListItem): number | null {
+    const raw = load.ai_metadata?.overall_confidence;
+    if (raw == null || !Number.isFinite(raw)) return null;
+    // Accept 0–1 floats from some extractors; normalise to percent.
+    return raw <= 1 ? raw * 100 : raw;
+  }
+
+  /** Hover copy for the row sparkle. Matches FN-789 spec. */
+  getSparkleTooltip(load: LoadListItem): string {
+    const meta = load.ai_metadata;
+    const when = meta?.extracted_at ? new Date(meta.extracted_at as string) : null;
+    const whenStr = when && !isNaN(when.getTime()) ? when.toLocaleDateString() : null;
+    const label = (meta?.source_label as string | undefined)
+      || (load.source === 'email' ? 'forwarded email' : 'rate confirmation PDF');
+    return whenStr
+      ? `Auto-extracted from ${label} on ${whenStr}`
+      : `Auto-extracted from ${label}`;
+  }
+
+  /** Whether to surface the confidence chip in the status column (DRAFT + confidence present). */
+  shouldShowConfidenceBadge(load: LoadListItem): boolean {
+    const status = (load.status || '').toUpperCase();
+    if (status !== 'DRAFT' && status !== 'NEW') return false;
+    return this.getOverallConfidence(load) != null;
+  }
+
+  /** Confidence chip click → open the drawer focused on low-confidence fields. */
+  onConfidenceBadgeClick(load: LoadListItem, event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.openLoadDrawer(load.id, true);
+  }
+
+  /** Row sparkle click → open the drawer on the AI-extracted load. */
+  onRowSparkleClick(load: LoadListItem, event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.openLoadDrawer(load.id);
+  }
+
+  /**
+   * FN-818 — diff the incoming list against the last snapshot; any AI-sourced IDs
+   * that weren't present before get flagged so the `<tr>` picks up a one-off glow
+   * class via `rowClass`. We deliberately skip the very first response so users
+   * don't see every existing AI load light up on page load.
+   */
+  private trackNewAiLoads(loads: LoadListItem[]): void {
+    const currentIds = new Set(loads.map((l) => l.id));
+    if (!this.seenFirstLoadsResponse) {
+      this.seenFirstLoadsResponse = true;
+      this.previousLoadIds = currentIds;
+      return;
+    }
+    const freshAiIds = loads
+      .filter((l) => this.isAiExtractedSource(l) && !this.previousLoadIds.has(l.id))
+      .map((l) => l.id);
+    if (freshAiIds.length) {
+      freshAiIds.forEach((id) => this.newAiLoadIds.add(id));
+      if (this.newAiGlowTimer) clearTimeout(this.newAiGlowTimer);
+      // 3.2s ≈ glow CSS animation duration + small buffer.
+      this.newAiGlowTimer = setTimeout(() => {
+        this.newAiLoadIds.clear();
+        this.newAiGlowTimer = null;
+      }, 3200);
+    }
+    this.previousLoadIds = currentIds;
   }
 
   /** Build full URL for attachment download (backend serves /uploads). */
@@ -3980,12 +4076,14 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.openLoadDrawer(load.id);
   }
 
-  openLoadDrawer(loadId: string): void {
+  openLoadDrawer(loadId: string, focusLowConfidence = false): void {
+    this.drawerFocusLowConfidence = focusLowConfidence;
     this.drawerLoadId = loadId;
   }
 
   closeLoadDrawer(): void {
     this.drawerLoadId = null;
+    this.drawerFocusLowConfidence = false;
   }
 
   /** Step to the previous load in the currently filtered list (wraps). */

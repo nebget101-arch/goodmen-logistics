@@ -140,6 +140,14 @@ $teal: #14b8a6;
   max-width: 240px;
 }
 
+/* FN-818 — header AI marker + confidence chip spacing. */
+.load-drawer__ai-sparkle {
+  line-height: 0;
+}
+.load-drawer__confidence-badge {
+  line-height: 0;
+}
+
 .load-drawer__tabs {
   display: flex;
   gap: 4px;

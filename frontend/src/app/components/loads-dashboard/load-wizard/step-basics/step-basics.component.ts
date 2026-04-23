@@ -1,8 +1,10 @@
 import {
   Component, Input, Output, EventEmitter,
-  ChangeDetectionStrategy, ChangeDetectorRef, OnInit
+  ChangeDetectionStrategy, ChangeDetectorRef, OnInit, OnChanges, SimpleChanges
 } from '@angular/core';
 import { LoadsService } from '../../../../services/loads.service';
+import { AiMetadata } from '../../../../models/load-dashboard.model';
+import { AiSparkleComponent } from '../../../../shared/components/ai-sparkle/ai-sparkle.component';
 
 export interface StepBasicsData {
   loadNumber: string;
@@ -34,7 +36,7 @@ export interface BrokerSuggestion {
   styleUrls: ['./step-basics.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class StepBasicsComponent implements OnInit {
+export class StepBasicsComponent implements OnInit, OnChanges {
   @Input() data: StepBasicsData = {
     loadNumber: '', status: 'BOOKED', billingStatus: 'UNBILLED',
     brokerId: null, brokerName: '', poNumber: '',
@@ -44,8 +46,22 @@ export class StepBasicsComponent implements OnInit {
   /** Set of field names that were AI-prefilled — shows sparkle icon */
   @Input() aiPrefilledFields: Set<string> = new Set();
 
+  /**
+   * FN-818 — persisted AI confidence payload for this load. When present,
+   * each key in `fields` renders a per-field sparkle (colour driven by its
+   * confidence score). Editing a field locally clears its sparkle until the
+   * drawer re-populates from the API after save.
+   */
+  @Input() aiMetadata: AiMetadata | null = null;
+
+  /** FN-818 — when true, low-confidence fields (<80) get a subtle highlight. */
+  @Input() focusLowConfidence = false;
+
   @Output() valid = new EventEmitter<boolean>();
   @Output() dataChange = new EventEmitter<StepBasicsData>();
+
+  /** FN-818 — field names whose values have been edited locally; hides the sparkle. */
+  private locallyEditedFields = new Set<string>();
 
   brokers: any[] = [];
   brokerSearch = '';
@@ -86,8 +102,57 @@ export class StepBasicsComponent implements OnInit {
     }
   }
 
+  /**
+   * FN-818 — drawer/parent may pass a fresh LoadDetail (via `aiMetadata` or the
+   * reset wizard data). Clear the locally-edited set so sparkles return for the
+   * newly-populated fields, matching the "save clears marker" AC.
+   */
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['aiMetadata'] || changes['data']) {
+      this.locallyEditedFields.clear();
+    }
+  }
+
   isAiPrefilled(field: string): boolean {
-    return this.aiPrefilledFields.has(field);
+    if (this.locallyEditedFields.has(field)) return false;
+    if (this.aiPrefilledFields.has(field)) return true;
+    const score = this.aiMetadata?.fields?.[field];
+    return score != null && Number.isFinite(score);
+  }
+
+  /** FN-818 — confidence (0–100) for the per-field sparkle colour. Null when unknown. */
+  aiFieldConfidence(field: string): number | null {
+    if (this.locallyEditedFields.has(field)) return null;
+    const raw = this.aiMetadata?.fields?.[field];
+    if (raw == null || !Number.isFinite(raw)) return null;
+    return raw <= 1 ? raw * 100 : raw;
+  }
+
+  /** FN-818 — per-field tooltip with the confidence reading. */
+  aiFieldTooltip(field: string): string {
+    const conf = this.aiFieldConfidence(field);
+    if (conf == null) return 'AI-prefilled';
+    return `AI confidence: ${Math.round(conf)}%`;
+  }
+
+  /** FN-818 — low-confidence <80 field highlight when the drawer was opened via the chip. */
+  isLowConfidenceField(field: string): boolean {
+    if (!this.focusLowConfidence) return false;
+    const conf = this.aiFieldConfidence(field);
+    return conf != null && conf < 80;
+  }
+
+  /** FN-818 — markerless path for tier colour in template bindings. */
+  aiFieldTier(field: string): 'high' | 'medium' | 'low' {
+    return AiSparkleComponent.tierFor(this.aiFieldConfidence(field));
+  }
+
+  /** FN-818 — hide the sparkle after the user edits the field. */
+  markFieldEdited(field: string): void {
+    if (!this.locallyEditedFields.has(field)) {
+      this.locallyEditedFields.add(field);
+      this.cdr.markForCheck();
+    }
   }
 
   get isValid(): boolean {
@@ -109,7 +174,8 @@ export class StepBasicsComponent implements OnInit {
     return errors;
   }
 
-  onFieldChange(): void {
+  onFieldChange(field?: string): void {
+    if (field) this.markFieldEdited(field);
     this.dataChange.emit({ ...this.data });
     this.valid.emit(this.isValid);
   }
@@ -137,7 +203,7 @@ export class StepBasicsComponent implements OnInit {
     this.data.brokerName = broker.company_name || broker.name || '';
     this.brokerSearch = this.data.brokerName;
     this.showBrokerDropdown = false;
-    this.onFieldChange();
+    this.onFieldChange('broker');
     this.loadBrokerSuggestion(broker.id);
     this.cdr.markForCheck();
   }
@@ -147,7 +213,7 @@ export class StepBasicsComponent implements OnInit {
     this.data.brokerName = '';
     this.brokerSearch = '';
     this.brokerSuggestion = null;
-    this.onFieldChange();
+    this.onFieldChange('broker');
     this.cdr.markForCheck();
   }
 
@@ -289,7 +355,7 @@ export class StepBasicsComponent implements OnInit {
     if (this.data.rate != null && !isNaN(this.data.rate)) {
       this.data.rate = Math.round(this.data.rate * 100) / 100;
     }
-    this.onFieldChange();
+    this.onFieldChange('rate');
   }
 
   toggleNotes(): void {
