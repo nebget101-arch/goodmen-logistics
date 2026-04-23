@@ -6,7 +6,7 @@ const axios = require('axios');
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const { query, getClient } = require('../internal/db');
-const { extractLoadFromPdf } = require('../services/load-ai-extractor');
+const { extractLoadFromPdf, buildAiMetadata } = require('../services/load-ai-extractor');
 const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 const { calculateTripMetrics } = require('../services/trip-metrics');
 
@@ -595,7 +595,8 @@ async function executeLoadsListQuery(listSpec) {
         oe.name as operating_entity_name,
         COALESCE(att.attachment_count, 0) as attachment_count,
         COALESCE(att.attachment_types, ARRAY[]::text[]) as attachment_types,
-        COALESCE(l.needs_review, false) as needs_review
+        COALESCE(l.needs_review, false) as needs_review,
+        l.ai_metadata
       ${baseSql}
       ORDER BY ${draftFirst}${orderBy} ${sortDir}
       LIMIT $${params.length - 1} OFFSET $${params.length}
@@ -1338,6 +1339,20 @@ async function processSingleRateConfirmation(file, req, dispatcherUserId) {
   } finally {
     // Always release the client back to the pool before the R2 upload
     try { client.release(); } catch (_) {}
+  }
+
+  // Step 2b: Persist AI confidence payload (FN-817). Separate UPDATE so a
+  // missing `ai_metadata` column (migration lag) does not roll back the load.
+  try {
+    const aiMetadata = buildAiMetadata(data, file.originalname || null);
+    if (aiMetadata) {
+      await query(
+        'UPDATE loads SET ai_metadata = $1::jsonb WHERE id = $2',
+        [JSON.stringify(aiMetadata), loadId]
+      );
+    }
+  } catch (metaErr) {
+    dtLogger.warn('loads_ai_metadata_write_failed', { loadId, error: metaErr?.message });
   }
 
   // Step 3: Upload PDF to R2 — DB connection already returned to pool
@@ -2811,6 +2826,36 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    // FN-817: When the user edits a field that carries an AI confidence score,
+    // strip that field from ai_metadata.fields so the ✦ sparkle disappears
+    // (manually verified). `stops`/`pickup`/`delivery` input clears both pickup
+    // and delivery confidence since both derive from the stops array.
+    try {
+      const editedConfidenceKeys = new Set();
+      const bodyEditableToConfidenceKey = {
+        brokerName: 'brokerName',
+        brokerId: 'brokerName', // broker swap counts as manual broker confirmation
+        poNumber: 'poNumber',
+        rate: 'rate',
+      };
+      for (const bodyKey of Object.keys(bodyEditableToConfidenceKey)) {
+        if (body[bodyKey] !== undefined) editedConfidenceKeys.add(bodyEditableToConfidenceKey[bodyKey]);
+      }
+      if (stopsInput) {
+        editedConfidenceKeys.add('pickup');
+        editedConfidenceKeys.add('delivery');
+      }
+      for (const key of editedConfidenceKeys) {
+        await client.query(
+          'UPDATE loads SET ai_metadata = ai_metadata #- $1::text[] WHERE id = $2 AND ai_metadata IS NOT NULL',
+          [['fields', key], req.params.id]
+        );
+      }
+    } catch (metaErr) {
+      dtLogger.warn('loads_ai_metadata_clear_failed', { loadId: req.params.id, error: metaErr?.message });
+    }
+
     const updated = await getLoadDetail(client, req.params.id, req.context || null);
     if (!updated) {
       return res.status(404).json({ success: false, error: 'Load not found' });

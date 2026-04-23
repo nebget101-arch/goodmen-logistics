@@ -19,7 +19,7 @@
 const path = require('path');
 const knex = require('@goodmen/shared/config/knex');
 const dtLogger = require('@goodmen/shared/utils/logger');
-const { extractLoadFromPdf } = require('@goodmen/shared/services/load-ai-extractor');
+const { extractLoadFromPdf, buildAiMetadata } = require('@goodmen/shared/services/load-ai-extractor');
 const { uploadBuffer } = require('@goodmen/shared/storage/r2-storage');
 const {
   sendInAppNotificationsToUsers
@@ -266,6 +266,7 @@ async function createDraftLoadFromExtraction({ tenantId, operatingEntityId, data
   const loadNumber = refValue ? refValue.slice(0, 50) : await generateLoadNumber();
 
   const hasSourceColumn = await knex.schema.hasColumn('loads', 'source').catch(() => false);
+  const hasAiMetadataColumn = await knex.schema.hasColumn('loads', 'ai_metadata').catch(() => false);
 
   const insertPayload = {
     tenant_id: tenantId,
@@ -284,6 +285,10 @@ async function createDraftLoadFromExtraction({ tenantId, operatingEntityId, data
     delivery_date: deliveryDate
   };
   if (hasSourceColumn) insertPayload.source = 'email';
+  if (hasAiMetadataColumn) {
+    const aiMetadata = buildAiMetadata(data, data.source_document || null);
+    if (aiMetadata) insertPayload.ai_metadata = JSON.stringify(aiMetadata);
+  }
 
   // Not every deployment has pickup_location/pickup_date columns yet; drop them
   // if the schema is older.
