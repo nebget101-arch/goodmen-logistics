@@ -24,6 +24,8 @@ export interface LoadsSavedView {
 export interface LoadsDashboardPrefs {
   columnVisibility?: Record<string, boolean>;
   savedViews?: LoadsSavedView[];
+  /** FN-808: Load Detail Drawer width in px (clamped to 600–800). */
+  drawerWidth?: number;
 }
 
 /**

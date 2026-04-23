@@ -73,7 +73,7 @@
   </div>
 </ng-template>
 
-<div class="loads-dashboard">
+<div class="loads-dashboard" [class.has-drawer]="drawerLoadId" [style.padding-right.px]="drawerLoadId ? drawerWidth : null">
   <div class="header">
     <div>
       <h1>{{ isDriverRole ? 'My Loads' : 'Loads' }}</h1>
@@ -780,7 +780,7 @@
           <col *ngIf="isColVisible('actions')" style="width: 5%">
         </colgroup>
         <tbody>
-        <tr *cdkVirtualFor="let load of filteredLoads; trackBy: trackByLoadId" [ngClass]="rowClass(load)" [class.row-selected]="isSelected(load)">
+        <tr *cdkVirtualFor="let load of filteredLoads; trackBy: trackByLoadId" [ngClass]="rowClass(load)" [class.row-selected]="isSelected(load)" (click)="onRowClick(load, $event)">
           <td *ngIf="!isDriverRole" class="col-select" (click)="$event.stopPropagation()">
             <input
               type="checkbox"
@@ -2360,3 +2360,18 @@
     (saveAndNew)="onWizardSaveAndNew()"
   ></app-step-attachments>
 </app-load-wizard>
+
+<!-- FN-808: Load Detail Side Drawer ──────────────────────────────────────── -->
+<app-load-detail-drawer
+  *ngIf="drawerLoadId"
+  [loadId]="drawerLoadId"
+  [width]="drawerWidth"
+  [hasPrev]="drawerHasPrev"
+  [hasNext]="drawerHasNext"
+  (close)="closeLoadDrawer()"
+  (prev)="onDrawerPrev()"
+  (next)="onDrawerNext()"
+  (expand)="onDrawerExpand()"
+  (widthChange)="onDrawerWidthChange($event)"
+  (savedLoad)="onDrawerSaved()"
+></app-load-detail-drawer>

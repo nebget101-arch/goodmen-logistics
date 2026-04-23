@@ -1,0 +1,178 @@
+<!--
+  FN-808 — Load Detail Side Drawer
+  Slide-out panel anchored to the right; sibling table width adjusts via
+  parent grid layout (the drawer does NOT render a backdrop that blocks
+  the list — clicks on the list navigate between loads).
+-->
+<aside
+  #drawerPanel
+  class="load-drawer"
+  role="dialog"
+  aria-modal="false"
+  [attr.aria-label]="'Load ' + (loadDetail?.load_number || '') + ' detail'"
+  [style.width.px]="width"
+>
+  <!-- Left edge drag handle for resize (600–800 px) -->
+  <div
+    class="load-drawer__resize-handle"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="Resize drawer"
+    (mousedown)="onResizeHandleMouseDown($event)"
+    title="Drag to resize (600–800 px)"
+  ></div>
+
+  <!-- ── Header ───────────────────────────────────────────────────────────── -->
+  <header class="load-drawer__header">
+    <div class="load-drawer__header-left">
+      <button
+        type="button"
+        class="load-drawer__nav-btn"
+        (click)="onPrev()"
+        [disabled]="!hasPrev"
+        title="Previous load"
+        aria-label="Previous load"
+      >
+        <span class="material-symbols-outlined">chevron_left</span>
+      </button>
+      <button
+        type="button"
+        class="load-drawer__nav-btn"
+        (click)="onNext()"
+        [disabled]="!hasNext"
+        title="Next load"
+        aria-label="Next load"
+      >
+        <span class="material-symbols-outlined">chevron_right</span>
+      </button>
+      <div class="load-drawer__title">
+        <span class="load-drawer__load-number">
+          {{ loadDetail?.load_number || '—' }}
+        </span>
+        <app-status-pill
+          *ngIf="loadStatusForPill"
+          [status]="loadStatusForPill"
+        ></app-status-pill>
+      </div>
+    </div>
+
+    <div class="load-drawer__header-right">
+      <button
+        type="button"
+        class="load-drawer__icon-btn"
+        (click)="expand.emit()"
+        title="Expand to full modal"
+        aria-label="Expand to full modal"
+      >
+        <span class="material-symbols-outlined">open_in_full</span>
+      </button>
+      <button
+        type="button"
+        class="load-drawer__icon-btn"
+        (click)="requestClose()"
+        title="Close (Esc)"
+        aria-label="Close drawer"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Tabs ─────────────────────────────────────────────────────────────── -->
+  <nav class="load-drawer__tabs" role="tablist" aria-label="Load sections">
+    <button
+      *ngFor="let tab of tabs"
+      type="button"
+      role="tab"
+      class="load-drawer__tab"
+      [class.is-active]="activeTab === tab.id"
+      [attr.aria-selected]="activeTab === tab.id"
+      (click)="selectTab(tab.id)"
+    >
+      <span class="material-symbols-outlined">{{ tab.icon }}</span>
+      <span>{{ tab.label }}</span>
+    </button>
+  </nav>
+
+  <!-- ── Loading / Error banner ──────────────────────────────────────────── -->
+  <div class="load-drawer__banner" *ngIf="loading">Loading load…</div>
+  <div class="load-drawer__banner load-drawer__banner--error" *ngIf="errorMessage">
+    {{ errorMessage }}
+  </div>
+
+  <!-- ── Body: tab panels ─────────────────────────────────────────────────── -->
+  <div class="load-drawer__body" [class.is-loading]="loading">
+    <app-step-basics
+      *ngIf="activeTab === 'basics' && !loading"
+      [data]="basics"
+      (dataChange)="onBasicsChange($event)"
+    ></app-step-basics>
+
+    <app-step-stops
+      *ngIf="activeTab === 'stops' && !loading"
+      [stops]="stops"
+      [rate]="basics.rate"
+      (stopsChange)="onStopsChange($event)"
+    ></app-step-stops>
+
+    <app-wizard-step-driver
+      *ngIf="activeTab === 'driver' && !loading"
+      [driverId]="driverId"
+      [truckId]="truckId"
+      [trailerId]="trailerId"
+      (driverIdChange)="onDriverChange($event)"
+      (truckIdChange)="onTruckChange($event)"
+      (trailerIdChange)="onTrailerChange($event)"
+    ></app-wizard-step-driver>
+
+    <app-step-attachments
+      *ngIf="activeTab === 'attachments' && !loading"
+      [attachments]="attachments"
+      (attachmentsChange)="onAttachmentsChange($event)"
+    ></app-step-attachments>
+  </div>
+
+  <!-- ── Footer ───────────────────────────────────────────────────────────── -->
+  <footer class="load-drawer__footer">
+    <button
+      type="button"
+      class="btn btn-ghost"
+      (click)="requestClose()"
+      [disabled]="saving"
+    >
+      Cancel
+    </button>
+    <button
+      type="button"
+      class="btn btn-primary"
+      (click)="onSaveClick()"
+      [disabled]="saving || loading || !loadDetail"
+    >
+      <span *ngIf="!saving" class="material-symbols-outlined">save</span>
+      <span *ngIf="saving" class="material-symbols-outlined spin">progress_activity</span>
+      {{ saving ? 'Saving…' : 'Save' }}
+    </button>
+  </footer>
+
+  <!-- ── Unsaved-changes dialog ───────────────────────────────────────────── -->
+  <div
+    class="load-drawer__unsaved-overlay"
+    *ngIf="showUnsavedWarning"
+    role="alertdialog"
+    aria-modal="true"
+  >
+    <div class="load-drawer__unsaved-dialog">
+      <span class="material-symbols-outlined load-drawer__unsaved-icon">warning</span>
+      <h3>Unsaved changes</h3>
+      <p>You have unsaved changes. Close without saving?</p>
+      <div class="load-drawer__unsaved-actions">
+        <button type="button" class="btn btn-secondary" (click)="dismissUnsavedWarning()">
+          Keep editing
+        </button>
+        <button type="button" class="btn btn-danger" (click)="confirmDiscard()">
+          Discard changes
+        </button>
+      </div>
+    </div>
+  </div>
+</aside>
