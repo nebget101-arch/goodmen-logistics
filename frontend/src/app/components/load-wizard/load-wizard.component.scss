@@ -124,6 +124,18 @@
   font-size: 0.85rem;
 }
 
+/* FN-881: Attachments step is owned by `app-load-wizard-attachments`; the
+   wizard only hosts per-submit status messages below it. */
+.step-attachments {
+  display: flex;
+  flex-direction: column;
+
+  .submit-error,
+  .submitting-hint {
+    margin: 0 32px 20px;
+  }
+}
+
 @media (max-width: 600px) {
   .load-wizard-overlay { padding: 0; align-items: stretch; }
 
@@ -134,4 +146,11 @@
   }
 
   .step-placeholder { padding: 20px 16px; }
+
+  .step-attachments {
+    .submit-error,
+    .submitting-hint {
+      margin: 0 16px 16px;
+    }
+  }
 }

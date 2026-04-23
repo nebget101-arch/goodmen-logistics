@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpRequest, HttpEventType } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
@@ -159,6 +159,45 @@ export class LoadsService {
     form.append('type', type);
     if (notes) form.append('notes', notes);
     return this.http.post<{ success: boolean; data: LoadAttachment }>(`${this.baseUrl}/loads/${loadId}/attachments`, form);
+  }
+
+  /**
+   * FN-881 — same endpoint as `uploadAttachment` but streams upload progress via
+   * `HttpRequest(reportProgress)`. Emits `{ progress }` during the upload and a
+   * final `{ progress: 100, result }` when the server responds.
+   */
+  uploadAttachmentWithProgress(
+    loadId: string,
+    file: File,
+    type: LoadAttachmentType,
+    notes?: string,
+  ): Observable<{ progress: number; result: { success: boolean; data: LoadAttachment } | null }> {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('type', type);
+    if (notes) form.append('notes', notes);
+
+    const req = new HttpRequest<FormData>(
+      'POST',
+      `${this.baseUrl}/loads/${loadId}/attachments`,
+      form,
+      { reportProgress: true },
+    );
+
+    return this.http.request<{ success: boolean; data: LoadAttachment }>(req).pipe(
+      map((event) => {
+        if (event.type === HttpEventType.UploadProgress) {
+          const progress = event.total
+            ? Math.round((100 * event.loaded) / event.total)
+            : 0;
+          return { progress, result: null };
+        }
+        if (event.type === HttpEventType.Response) {
+          return { progress: 100, result: event.body };
+        }
+        return { progress: 0, result: null };
+      }),
+    );
   }
 
   getAttachments(loadId: string): Observable<{ success: boolean; data: LoadAttachment[] }> {

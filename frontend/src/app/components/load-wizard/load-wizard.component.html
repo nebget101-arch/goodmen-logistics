@@ -53,12 +53,15 @@
           <p class="step-hint">Placeholder — real driver/truck/trailer selects land in FN-865.</p>
         </section>
 
-        <section *ngSwitchCase="'attachments'" class="step-placeholder" data-testid="step-attachments">
-          <h3>Attachments</h3>
-          <p class="step-hint">
-            Placeholder — drag-and-drop + queue controls land in FN-866.
-            {{ queuedAttachments.length }} file(s) queued.
-          </p>
+        <div *ngSwitchCase="'attachments'" class="step-attachments" data-testid="step-attachments">
+          <app-load-wizard-attachments
+            [attachmentsGroup]="attachmentsGroup"
+            [mode]="mode"
+            [loadId]="loadId"
+            [existingAttachments]="existingAttachments"
+            (attachmentUploaded)="onAttachmentUploaded($event)"
+            (existingDeleted)="onExistingDeleted($event)"
+          ></app-load-wizard-attachments>
 
           <div class="submit-error" *ngIf="errorMessage" role="alert" data-testid="submit-error">
             {{ errorMessage }}
@@ -67,7 +70,7 @@
           <div class="submitting-hint" *ngIf="submitting" aria-live="polite">
             Saving load…
           </div>
-        </section>
+        </div>
       </ng-container>
     </app-wizard-shell>
   </div>

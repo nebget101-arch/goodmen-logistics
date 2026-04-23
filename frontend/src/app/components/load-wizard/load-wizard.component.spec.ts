@@ -39,6 +39,9 @@ describe('LoadWizardComponent (FN-862)', () => {
     loadsService = jasmine.createSpyObj<LoadsService>('LoadsService', [
       'createLoad',
       'uploadAttachment',
+      // FN-881: attachments step immediate-upload + delete paths.
+      'uploadAttachmentWithProgress',
+      'deleteAttachment',
     ]);
 
     await TestBed.configureTestingModule({
