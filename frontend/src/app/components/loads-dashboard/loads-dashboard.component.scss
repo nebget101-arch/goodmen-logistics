@@ -3412,6 +3412,133 @@
       }
     }
   }
+
+  // ─── FN-805: Row-hover toolbar + inline notes editor ─────────────────────
+  // The toolbar is opacity: 0 by default and fades in when the row is hovered.
+  // 100ms transition matches the AC and the FN-804 hover-popover timing.
+  td.actions-cell {
+    overflow: visible;
+  }
+
+  .row-toolbar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    opacity: 0;
+    transform: translateY(1px);
+    transition: opacity 100ms ease-out, transform 100ms ease-out;
+    pointer-events: none;
+  }
+
+  // Keep the toolbar discoverable for keyboard users: show it when any button
+  // inside is focused.
+  .row-toolbar:focus-within {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  tr:hover .row-toolbar {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .row-toolbar__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(226, 232, 240, 0.85);
+    cursor: pointer;
+    padding: 0;
+    transition: background 100ms ease-out, border-color 100ms ease-out, color 100ms ease-out;
+
+    .material-symbols-outlined {
+      font-size: 18px;
+    }
+
+    &:hover {
+      background: rgba(45, 212, 191, 0.12);
+      border-color: rgba(45, 212, 191, 0.45);
+      color: #f0fdfa;
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(45, 212, 191, 0.6);
+      outline-offset: 1px;
+    }
+
+    &--danger {
+      color: #fca5a5;
+
+      &:hover {
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.5);
+        color: #fecaca;
+      }
+    }
+  }
+
+  .billing-cell,
+  .notes-cell {
+    overflow: visible;
+  }
+
+  .notes-inline__trigger {
+    display: inline-block;
+    max-width: 100%;
+    padding: 4px 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: inherit;
+    font-size: inherit;
+    text-align: left;
+    cursor: text;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &:hover {
+      border-color: rgba(148, 163, 184, 0.35);
+      background: rgba(148, 163, 184, 0.08);
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(59, 130, 246, 0.6);
+      outline-offset: 1px;
+    }
+
+    &--empty {
+      color: rgba(148, 163, 184, 0.7);
+      font-style: italic;
+    }
+  }
+
+  .notes-inline__textarea {
+    width: 100%;
+    min-height: 48px;
+    padding: 6px 8px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+
+    &:focus {
+      outline: none;
+      border-color: rgba(59, 130, 246, 0.8);
+    }
+  }
 }
 
 /* FN-768: Bulk actions toolbar + row selection styling */
