@@ -10,6 +10,7 @@
     "src/app/guards/permission.guard.spec.ts",
     "src/app/services/access-control.service.spec.ts",
     "src/app/services/permission-helper.service.spec.ts",
+    "src/app/shared/components/hover-popover/hover-popover.component.spec.ts",
     "src/environments/environment.prod.ts"
   ]
 }
