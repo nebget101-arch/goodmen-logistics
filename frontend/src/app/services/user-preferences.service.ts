@@ -26,6 +26,8 @@ export interface LoadsDashboardPrefs {
   savedViews?: LoadsSavedView[];
   /** FN-808: Load Detail Drawer width in px (clamped to 600–800). */
   drawerWidth?: number;
+  /** FN-821: row density mode — drives row height and padding on the list table. */
+  density?: 'compact' | 'comfortable' | 'spacious';
 }
 
 /**
