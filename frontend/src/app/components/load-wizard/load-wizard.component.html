@@ -1,0 +1,74 @@
+<!-- FN-862 / S2: 4-step load wizard shell. Step bodies are placeholders filled by S3–S6. -->
+<div class="load-wizard-overlay" role="dialog" aria-modal="true" aria-label="Load wizard">
+  <div class="load-wizard-backdrop" (click)="onClose()"></div>
+
+  <div class="load-wizard-panel">
+    <app-wizard-shell
+      [steps]="steps"
+      [currentStepId]="currentStepId"
+      [canProceed]="canProceed"
+      [mode]="shellMode"
+      (stepChange)="onStepChange($event)"
+      (back)="onBack()"
+      (next)="onNext()"
+      (submit)="onSubmit()"
+      (close)="onClose()"
+    >
+      <!-- ── Step bodies (placeholders for S2) ─────────────────────────── -->
+      <ng-container [ngSwitch]="currentStepId">
+        <section *ngSwitchCase="'basics'" class="step-placeholder" data-testid="step-basics">
+          <h3>Basics</h3>
+          <p class="step-hint">
+            Placeholder — real controls land in FN-863. Required fields stub-wired
+            below so create-submit can be exercised.
+          </p>
+          <form [formGroup]="basics" class="stub-form">
+            <label>
+              <span>Status</span>
+              <input type="text" formControlName="status" />
+            </label>
+            <label>
+              <span>Billing status</span>
+              <input type="text" formControlName="billingStatus" />
+            </label>
+            <label>
+              <span>Rate</span>
+              <input type="number" formControlName="rate" min="0" />
+            </label>
+          </form>
+        </section>
+
+        <section *ngSwitchCase="'stops'" class="step-placeholder" data-testid="step-stops">
+          <h3>Stops</h3>
+          <p class="step-hint">Placeholder — real draggable list lands in FN-864.</p>
+          <ul class="stub-stops">
+            <li *ngFor="let stop of stops.controls; let i = index">
+              Stop {{ i + 1 }} — {{ stop.get('stop_type')?.value }}
+            </li>
+          </ul>
+        </section>
+
+        <section *ngSwitchCase="'driver'" class="step-placeholder" data-testid="step-driver">
+          <h3>Driver &amp; Equipment</h3>
+          <p class="step-hint">Placeholder — real driver/truck/trailer selects land in FN-865.</p>
+        </section>
+
+        <section *ngSwitchCase="'attachments'" class="step-placeholder" data-testid="step-attachments">
+          <h3>Attachments</h3>
+          <p class="step-hint">
+            Placeholder — drag-and-drop + queue controls land in FN-866.
+            {{ queuedAttachments.length }} file(s) queued.
+          </p>
+
+          <div class="submit-error" *ngIf="errorMessage" role="alert" data-testid="submit-error">
+            {{ errorMessage }}
+          </div>
+
+          <div class="submitting-hint" *ngIf="submitting" aria-live="polite">
+            Saving load…
+          </div>
+        </section>
+      </ng-container>
+    </app-wizard-shell>
+  </div>
+</div>

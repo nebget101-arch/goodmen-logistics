@@ -114,6 +114,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   // ─── Load Wizard (FN-732) ───────────────────────────────────────────────
   /** Whether the 4-step load creation wizard is open. */
   showLoadWizard = false;
+  /**
+   * FN-862 — new shell-based load wizard (create-only at this stage).
+   * Runs alongside the legacy modal until FN-869 (S10) retires it.
+   */
+  showLoadWizardV2 = false;
   /** Index of the currently active wizard step (0-based, 0–3). */
   wizardActiveStep = 0;
   /** Validity state of each wizard step — used by the progress bar jump guard. */
@@ -1939,6 +1944,27 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.wizardEditMode = false;
     this.wizardEditLoadId = null;
     this.wizardPrefilledData = null;
+  }
+
+  // ─── FN-862: new shell-based load wizard (create-only at this stage) ─────
+
+  /** Open the FN-862 wizard in create mode (alongside the legacy modal). */
+  openLoadWizardV2(): void {
+    this.showLoadWizardV2 = true;
+    this.showNewLoadMenu = false;
+  }
+
+  /** Close the FN-862 wizard (emitted from `closed`). */
+  closeLoadWizardV2(): void {
+    this.showLoadWizardV2 = false;
+  }
+
+  /** Handle `created` output from the FN-862 wizard — reload grid, show toast. */
+  onLoadWizardV2Created(load: LoadDetail): void {
+    this.showLoadWizardV2 = false;
+    this.successMessage = `Load ${load?.load_number || load?.id || ''} created.`;
+    this.loadLoads();
+    setTimeout(() => (this.successMessage = ''), 4000);
   }
 
   /** Called when the wizard emits (save). Creates the load and closes the wizard. */
@@ -3978,7 +4004,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   @HostListener('document:drop', ['$event'])
   onPageDrop(event: DragEvent): void {
     // Skip if a modal is already open or we're inside a specific dropzone
-    if (this.showBulkUploadModal || this.showAutoModal || this.showBulkExtractionGrid || this.showManualModal || this.showLoadWizard) {
+    if (this.showBulkUploadModal || this.showAutoModal || this.showBulkExtractionGrid || this.showManualModal || this.showLoadWizard || this.showLoadWizardV2) {
       return;
     }
     const files = event.dataTransfer?.files;
