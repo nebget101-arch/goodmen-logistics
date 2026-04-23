@@ -81,6 +81,28 @@
       <p class="subtitle" *ngIf="activeOperatingEntityName">Company: {{ activeOperatingEntityName }}</p>
     </div>
 <div class="header-actions">
+        <!-- FN-813: realtime presence + connection status -->
+        <div class="realtime-presence" *ngIf="presenceUsers.length > 0" aria-label="Other users viewing this page">
+          <div
+            class="realtime-presence__avatar"
+            *ngFor="let u of presenceUsers | slice:0:4; trackBy: trackByPresence"
+            [title]="u.displayName"
+          >
+            <img *ngIf="u.avatarUrl" [src]="u.avatarUrl" [alt]="u.displayName" />
+            <span *ngIf="!u.avatarUrl">{{ presenceInitials(u) }}</span>
+          </div>
+          <div class="realtime-presence__more" *ngIf="presenceUsers.length > 4">
+            +{{ presenceUsers.length - 4 }}
+          </div>
+        </div>
+        <span
+          class="realtime-status"
+          [class.realtime-status--connected]="wsStatus === 'connected'"
+          [class.realtime-status--reconnecting]="wsStatus === 'reconnecting'"
+          [class.realtime-status--disconnected]="wsStatus === 'disconnected'"
+          [title]="wsStatus === 'connected' ? 'Live updates on' : wsStatus === 'reconnecting' ? 'Reconnecting…' : 'Live updates offline'"
+          aria-hidden="true"
+        ></span>
         <div class="search-box ai-search-box">
         <input #searchInput type="text" class="ai-search-input" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
       </div>
@@ -94,6 +116,12 @@
         Templates
       </button>
     </div>
+  </div>
+
+  <!-- FN-813: reconnecting banner while the WS is retrying -->
+  <div class="realtime-banner" *ngIf="wsStatus === 'reconnecting'" role="status" aria-live="polite">
+    <span class="realtime-banner__dot"></span>
+    Reconnecting to live updates…
   </div>
 
   <!-- FN-743: Hero CTA panel — replaces old "New Load" dropdown -->
@@ -877,6 +905,11 @@
                 [attr.aria-label]="'Change status (current: ' + (load.status || 'none') + ')'"
               >
                 <app-status-pill [status]="load.status"></app-status-pill>
+                <!-- FN-813: pulsing indicator + live ETA countdown for in-transit loads -->
+                <span class="in-transit-dot" *ngIf="isInTransit(load)" aria-hidden="true"></span>
+                <span class="in-transit-eta" *ngIf="isInTransit(load) && etaLabel(load)">
+                  {{ etaLabel(load) }}
+                </span>
                 <span
                   class="material-symbols-outlined status-inline__chevron"
                   *ngIf="getValidStatusTransitions(load).length > 0"
