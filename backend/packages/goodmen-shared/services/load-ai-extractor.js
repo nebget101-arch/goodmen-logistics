@@ -550,6 +550,57 @@ function preParseHints(text) {
 }
 
 // ---------------------------------------------------------------------------
+// ai_metadata persistence payload (FN-817)
+// ---------------------------------------------------------------------------
+/**
+ * Canonical list of per-field confidence keys the extractor emits and that
+ * callers are expected to persist into `loads.ai_metadata.fields`.
+ */
+const AI_METADATA_FIELD_KEYS = ['brokerName', 'poNumber', 'rate', 'pickup', 'delivery'];
+
+/**
+ * Build the `loads.ai_metadata` JSONB payload from an `extractLoadFromPdf`
+ * result. Shape matches the FN-816 migration docstring:
+ *   {
+ *     overall_confidence: number | null,
+ *     overall_confidence_tier: "green"|"yellow"|"red" | null,
+ *     extracted_at:   ISO8601,
+ *     source_document: filename | null,
+ *     fields: { brokerName, poNumber, rate, pickup, delivery }  // numeric 0–1
+ *   }
+ *
+ * Field keys mirror the extractor's `confidence` object so the PUT handler
+ * can clear a single field via `ai_metadata #- '{fields,<key>}'` when the
+ * user edits and saves.
+ *
+ * Returns null when the input carries no confidence signal — callers can
+ * skip the column write and leave the row's ai_metadata NULL.
+ * @param {object|null|undefined} data
+ * @param {string} [sourceDocument]
+ * @returns {object|null}
+ */
+function buildAiMetadata(data, sourceDocument) {
+  if (!data || typeof data !== 'object') return null;
+  const confidence = data.confidence && typeof data.confidence === 'object' ? data.confidence : {};
+  const fields = {};
+  for (const key of AI_METADATA_FIELD_KEYS) {
+    const value = confidence[key];
+    if (typeof value === 'number' && Number.isFinite(value)) fields[key] = value;
+  }
+  const overall = typeof data.overall_confidence === 'number' && Number.isFinite(data.overall_confidence)
+    ? data.overall_confidence
+    : null;
+  if (overall === null && Object.keys(fields).length === 0) return null;
+  return {
+    overall_confidence: overall,
+    overall_confidence_tier: data.overall_confidence_tier || (overall != null ? confidenceTier(overall) : null),
+    extracted_at: new Date().toISOString(),
+    source_document: sourceDocument || null,
+    fields,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // PDF hash cache helpers (FN-741)
 // ---------------------------------------------------------------------------
 
@@ -1028,4 +1079,6 @@ module.exports = {
   getCachedExtraction,
   storeCachedExtraction,
   CACHE_TTL_DAYS,
+  buildAiMetadata,
+  AI_METADATA_FIELD_KEYS,
 };
