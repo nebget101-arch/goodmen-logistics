@@ -1,0 +1,73 @@
+<div class="wizard-shell">
+  <div class="progress-rail" role="tablist" aria-label="Wizard steps">
+    <div class="rail-inner">
+      <div
+        *ngFor="let step of steps; let i = index; trackBy: trackByStepId"
+        class="rail-step"
+        role="tab"
+        [attr.aria-selected]="isActive(i)"
+        [attr.aria-current]="isActive(i) ? 'step' : null"
+        [class.active]="isActive(i)"
+        [class.done]="isDone(i)"
+        [class.clickable]="isClickable(i)"
+        (click)="onStepClick(step, i)"
+      >
+        <div class="rail-bubble">
+          <span class="material-symbols-outlined" *ngIf="isDone(i)">check</span>
+          <span class="material-symbols-outlined" *ngIf="!isDone(i) && step.icon">{{ step.icon }}</span>
+          <span *ngIf="!isDone(i) && !step.icon">{{ i + 1 }}</span>
+        </div>
+        <span class="rail-label">{{ step.label }}</span>
+        <div class="rail-line" *ngIf="i < steps.length - 1"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wizard-body">
+    <div class="step-panel">
+      <ng-content></ng-content>
+
+      <div class="step-footer">
+        <ng-container *ngIf="isView; else editFooter">
+          <button type="button" class="btn-primary" (click)="onClose()" data-testid="wizard-close">
+            <span class="material-symbols-outlined">close</span> Close
+          </button>
+        </ng-container>
+
+        <ng-template #editFooter>
+          <button
+            type="button"
+            class="btn-ghost"
+            (click)="onBack()"
+            [disabled]="isFirstStep"
+            data-testid="wizard-back"
+          >
+            <span class="material-symbols-outlined">arrow_back</span> Back
+          </button>
+
+          <button
+            *ngIf="!isFinalStep"
+            type="button"
+            class="btn-primary"
+            (click)="onNext()"
+            [disabled]="!canProceed"
+            data-testid="wizard-next"
+          >
+            Continue <span class="material-symbols-outlined">arrow_forward</span>
+          </button>
+
+          <button
+            *ngIf="isFinalStep"
+            type="button"
+            class="btn-primary"
+            (click)="onSubmit()"
+            [disabled]="!canProceed"
+            data-testid="wizard-submit"
+          >
+            <span class="material-symbols-outlined">check</span> Submit
+          </button>
+        </ng-template>
+      </div>
+    </div>
+  </div>
+</div>
