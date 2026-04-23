@@ -4229,3 +4229,38 @@ app-status-pill.status-pill--pulse {
     transform: none;
   }
 }
+
+/* FN-862: beta trigger for the new shell-based load wizard. Removed by FN-869. */
+.load-wizard-v2-trigger {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 4px 10px;
+}
+
+.load-wizard-v2-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 999px;
+  color: #7dd3fc;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+  .material-symbols-outlined { font-size: 0.95rem; }
+
+  &:hover {
+    background: rgba(56, 189, 248, 0.16);
+    border-color: #38bdf8;
+    color: #e0f2fe;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #38bdf8;
+    outline-offset: 2px;
+  }
+}

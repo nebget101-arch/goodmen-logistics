@@ -1,0 +1,137 @@
+/* FN-862 / S2 — LoadWizardComponent modal shell. */
+
+:host {
+  display: contents;
+}
+
+.load-wizard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+.load-wizard-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 25, 0.82);
+  backdrop-filter: blur(4px);
+  z-index: 0;
+}
+
+.load-wizard-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 860px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.07), transparent 55%),
+    rgba(10, 17, 34, 0.98);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 60px rgba(5, 10, 25, 0.9),
+    0 0 0 1px rgba(10, 17, 34, 1);
+  overflow: hidden;
+  min-height: 520px;
+}
+
+.step-placeholder {
+  padding: 28px 32px;
+  color: #e2e8f0;
+  min-height: 280px;
+
+  h3 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #38bdf8;
+    letter-spacing: 0.01em;
+  }
+
+  .step-hint {
+    margin: 0 0 18px;
+    font-size: 0.875rem;
+    color: #94a3b8;
+    line-height: 1.5;
+  }
+}
+
+.stub-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: #94a3b8;
+  }
+
+  input {
+    padding: 8px 10px;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(51, 65, 85, 0.7);
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 0.875rem;
+
+    &:focus {
+      outline: none;
+      border-color: #38bdf8;
+      background: rgba(15, 23, 42, 0.95);
+    }
+  }
+}
+
+.stub-stops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  li {
+    padding: 8px 12px;
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(51, 65, 85, 0.6);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+  }
+}
+
+.submit-error {
+  margin-top: 18px;
+  padding: 10px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.submitting-hint {
+  margin-top: 14px;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 600px) {
+  .load-wizard-overlay { padding: 0; align-items: stretch; }
+
+  .load-wizard-panel {
+    border-radius: 0;
+    min-height: 100dvh;
+    max-width: 100%;
+  }
+
+  .step-placeholder { padding: 20px 16px; }
+}
