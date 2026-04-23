@@ -1,0 +1,23 @@
+<div class="loads-skeleton" role="status" aria-live="polite" aria-label="Loading loads">
+  <table class="loads-skeleton__table">
+    <colgroup>
+      <col *ngIf="showSelect" style="width: 3%">
+      <col *ngFor="let col of columns" [class.loads-skeleton__col-hidden]="!col.visible" [style.width]="col.width">
+    </colgroup>
+    <tbody>
+      <tr class="loads-skeleton__row" *ngFor="let r of rows; trackBy: trackByIndex">
+        <td *ngIf="showSelect" class="loads-skeleton__cell loads-skeleton__cell--select">
+          <span class="loads-skeleton__bar loads-skeleton__bar--checkbox"></span>
+        </td>
+        <td
+          *ngFor="let col of columns"
+          class="loads-skeleton__cell"
+          [class.loads-skeleton__cell--hidden]="!col.visible"
+        >
+          <span class="loads-skeleton__bar" [attr.data-col]="col.key"></span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <span class="sr-only">Loading loads…</span>
+</div>

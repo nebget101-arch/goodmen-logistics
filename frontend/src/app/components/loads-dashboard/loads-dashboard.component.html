@@ -73,7 +73,15 @@
   </div>
 </ng-template>
 
-<div class="loads-dashboard" [class.has-drawer]="drawerLoadId" [style.padding-right.px]="drawerLoadId ? drawerWidth : null">
+<div
+  class="loads-dashboard"
+  [class.has-drawer]="drawerLoadId"
+  [class.loads-dashboard--compact]="densityMode === 'compact'"
+  [class.loads-dashboard--comfortable]="densityMode === 'comfortable'"
+  [class.loads-dashboard--spacious]="densityMode === 'spacious'"
+  [style.--loads-row-height]="rowHeightPx + 'px'"
+  [style.padding-right.px]="drawerLoadId ? drawerWidth : null"
+>
   <div class="header">
     <div>
       <h1>{{ isDriverRole ? 'My Loads' : 'Loads' }}</h1>
@@ -134,6 +142,19 @@
       (cloneLoadClick)="openCloneLoad()"
     ></app-loads-hero-cta>
   </ng-container>
+
+  <!-- FN-821: WebSocket disconnected warning banner (wired by FN-790 once the WS client lands on dev). -->
+  <div
+    class="loads-ws-banner"
+    role="status"
+    *ngIf="wsDisconnected"
+    aria-live="polite"
+  >
+    <span class="material-symbols-outlined loads-ws-banner__icon">wifi_off</span>
+    <span class="loads-ws-banner__text">
+      Live updates paused. Reconnecting… the list will refresh automatically.
+    </span>
+  </div>
 
   <div *ngIf="errorMessage" class="alert alert-error">{{ errorMessage }}</div>
   <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
@@ -569,6 +590,36 @@
         </label>
       </div>
     </div>
+
+    <!-- FN-821: density mode toggle — persisted per-user in UserPreferences. -->
+    <div class="loads-table-toolbar__group dropdown" (click)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        (click)="toggleDensityMenu()"
+        title="Row height"
+        [attr.aria-expanded]="densityMenuOpen"
+      >
+        <span class="material-symbols-outlined">
+          {{ densityMode === 'compact' ? 'density_small' : densityMode === 'spacious' ? 'density_large' : 'density_medium' }}
+        </span>
+        <span>Density</span>
+        <span class="material-symbols-outlined">expand_more</span>
+      </button>
+      <div class="dropdown-menu loads-density-menu" *ngIf="densityMenuOpen">
+        <button
+          type="button"
+          class="loads-density-menu__item"
+          *ngFor="let opt of densityOptions"
+          [class.loads-density-menu__item--active]="densityMode === opt.value"
+          (click)="setDensity(opt.value); $event.stopPropagation()"
+        >
+          <span class="material-symbols-outlined">{{ opt.icon }}</span>
+          <span class="loads-density-menu__label">{{ opt.label }}</span>
+          <span class="loads-density-menu__meta">{{ opt.heightPx }}px</span>
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- FN-768: Bulk actions toolbar (visible when any rows are selected) -->
@@ -647,6 +698,15 @@
   </div>
 
   <div class="table-card">
+    <!-- FN-821: shimmer skeleton while a list fetch is in flight. -->
+    <app-loads-loading-skeleton
+      *ngIf="loading"
+      class="loads-skeleton-slot"
+      [columns]="skeletonColumns"
+      [showSelect]="!isDriverRole"
+      [rowCount]="10"
+    ></app-loads-loading-skeleton>
+
     <ng-container *ngIf="!loading">
     <div class="loads-table-container">
     <table class="table table--header">
@@ -783,12 +843,14 @@
 
     <!-- FN-766: virtualized body; shares colgroup widths with the header table. -->
     <!-- FN-767: column visibility applied to <col> and <td> so hidden columns collapse end-to-end. -->
+    <!-- FN-821: itemSize tracks the active density mode so the viewport math stays accurate. -->
     <cdk-virtual-scroll-viewport
-      [itemSize]="48"
+      [itemSize]="rowHeightPx"
       minBufferPx="400"
       maxBufferPx="800"
       class="loads-viewport"
-      *ngIf="filteredLoads.length > 0"
+      [class.loads-viewport--filter-pulse]="filterPulseActive"
+      *ngIf="filteredLoads.length > 0 && !loadError"
     >
       <table class="table table--body">
         <colgroup>
@@ -1115,10 +1177,27 @@
       </table>
     </cdk-virtual-scroll-viewport>
 
-    <div class="empty-state" *ngIf="filteredLoads.length === 0">No loads found.</div>
+    <app-loads-empty-state
+      *ngIf="filteredLoads.length === 0 || loadError"
+      [mode]="emptyStateMode"
+      [smartFilterLabel]="activeSmartFilterLabel"
+      [errorDetail]="loadErrorDetail"
+      (clearFilters)="onEmptyStateClearFilters()"
+      (createLoad)="onEmptyStateCreateLoad()"
+      (importFromPdf)="onEmptyStateImportFromPdf()"
+      (retry)="onEmptyStateRetry()"
+    ></app-loads-empty-state>
+    <!-- FN-821: hidden file picker driving the empty-state "Import from PDF" CTA. -->
+    <input
+      #emptyStateBulkInput
+      type="file"
+      multiple
+      accept="application/pdf"
+      class="loads-empty-hidden-input"
+      (change)="onEmptyStateBulkPdfsChange($event)"
+    />
     </div>
     </ng-container>
-    <div *ngIf="loading" class="loading">Loading loads...</div>
   </div>
 
   <div class="pagination">
@@ -2385,6 +2464,20 @@
       </div>
     </div>
   </div>
+
+  <!-- FN-821: scroll-to-top floating button — shown after the user scrolls > 300px. -->
+  <button
+    type="button"
+    class="loads-scroll-top"
+    [class.loads-scroll-top--visible]="showScrollTop"
+    (click)="scrollToTop()"
+    title="Back to top"
+    aria-label="Scroll to top"
+    [attr.aria-hidden]="!showScrollTop"
+    [attr.tabindex]="showScrollTop ? 0 : -1"
+  >
+    <span class="material-symbols-outlined">arrow_upward</span>
+  </button>
 </div>
 
 <!-- ─── Load Creation Wizard (FN-732) ────────────────────────────────────── -->
