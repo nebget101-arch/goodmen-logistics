@@ -15,6 +15,9 @@ import { AuthGuard } from '../../auth.guard';
 import { PlanGuard } from '../../guards/plan.guard';
 import { SharedModule } from '../../shared/shared.module';
 import { LoadWizardModule } from './load-wizard/load-wizard.module';
+// FN-862: new shell-based wizard, runs alongside the legacy LoadWizardModule
+// until S10 (FN-869) retires the latter.
+import { LoadWizardComponent as LoadWizardV2Component } from '../load-wizard/load-wizard.component';
 
 import { LoadsDashboardComponent } from './loads-dashboard.component';
 import { BulkExtractionGridComponent } from './bulk-extraction-grid/bulk-extraction-grid.component';
@@ -90,6 +93,7 @@ const routes: Routes = [
     OverlayModule,
     SharedModule,
     LoadWizardModule,
+    LoadWizardV2Component,
     RouterModule.forChild(routes)
   ]
 })

@@ -141,6 +141,19 @@
       (manualCreateClick)="openLoadWizard()"
       (cloneLoadClick)="openCloneLoad()"
     ></app-loads-hero-cta>
+
+    <!-- FN-862: preview trigger for the new shell-based wizard (alongside legacy). -->
+    <div class="load-wizard-v2-trigger" *appHasPermission="'loads.create'">
+      <button
+        type="button"
+        class="load-wizard-v2-btn"
+        data-testid="open-load-wizard-v2"
+        (click)="openLoadWizardV2()"
+      >
+        <span class="material-symbols-outlined">auto_awesome</span>
+        Try new wizard (beta)
+      </button>
+    </div>
   </ng-container>
 
   <!-- FN-821: WebSocket disconnected warning banner (wired by FN-790 once the WS client lands on dev). -->
@@ -2531,6 +2544,14 @@
     (saveAndNew)="onWizardSaveAndNew()"
   ></app-step-attachments>
 </app-load-wizard>
+
+<!-- FN-862: new shell-based load wizard (alongside legacy until S10/FN-869). -->
+<app-load-wizard-v2
+  *ngIf="showLoadWizardV2"
+  mode="create"
+  (created)="onLoadWizardV2Created($event)"
+  (closed)="closeLoadWizardV2()"
+></app-load-wizard-v2>
 
 <!-- FN-808: Load Detail Side Drawer ──────────────────────────────────────── -->
 <app-load-detail-drawer
