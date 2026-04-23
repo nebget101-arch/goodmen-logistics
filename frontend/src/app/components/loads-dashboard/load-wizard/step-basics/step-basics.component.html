@@ -11,16 +11,20 @@
 
   <!-- Row 1: Load Number + Status + Billing Status -->
   <div class="form-row">
-    <div class="form-group">
+    <div class="form-group" [class.field--low-conf]="isLowConfidenceField('loadNumber')">
       <label>
         Load Number *
-        <span class="ai-sparkle" *ngIf="isAiPrefilled('loadNumber')" title="AI-prefilled">&#10024;</span>
+        <app-ai-sparkle
+          *ngIf="isAiPrefilled('loadNumber')"
+          [confidence]="aiFieldConfidence('loadNumber')"
+          [tooltip]="aiFieldTooltip('loadNumber')"
+        ></app-ai-sparkle>
       </label>
       <input
         type="text"
         class="form-control"
         [(ngModel)]="data.loadNumber"
-        (ngModelChange)="onFieldChange()"
+        (ngModelChange)="onFieldChange('loadNumber')"
         placeholder="LD-250417-1234"
       />
     </div>
@@ -42,10 +46,14 @@
 
   <!-- Row 2: Broker + PO Number -->
   <div class="form-row">
-    <div class="form-group form-group-wide">
+    <div class="form-group form-group-wide" [class.field--low-conf]="isLowConfidenceField('broker') || isLowConfidenceField('brokerName')">
       <label>
         Broker
-        <span class="ai-sparkle" *ngIf="isAiPrefilled('broker')" title="AI-prefilled">&#10024;</span>
+        <app-ai-sparkle
+          *ngIf="isAiPrefilled('broker') || isAiPrefilled('brokerName')"
+          [confidence]="aiFieldConfidence('broker') ?? aiFieldConfidence('brokerName')"
+          [tooltip]="aiFieldTooltip('broker')"
+        ></app-ai-sparkle>
       </label>
       <div class="broker-autocomplete">
         <input
@@ -78,16 +86,20 @@
       <button type="button" class="btn-link" (click)="openQuickBroker()">+ Create New Broker</button>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" [class.field--low-conf]="isLowConfidenceField('poNumber')">
       <label>
         PO Number
-        <span class="ai-sparkle" *ngIf="isAiPrefilled('poNumber')" title="AI-prefilled">&#10024;</span>
+        <app-ai-sparkle
+          *ngIf="isAiPrefilled('poNumber')"
+          [confidence]="aiFieldConfidence('poNumber')"
+          [tooltip]="aiFieldTooltip('poNumber')"
+        ></app-ai-sparkle>
       </label>
       <input
         type="text"
         class="form-control"
         [(ngModel)]="data.poNumber"
-        (ngModelChange)="onFieldChange()"
+        (ngModelChange)="onFieldChange('poNumber')"
         placeholder="PO-12345"
       />
       <!-- FN-764: broker history hint -->
@@ -99,10 +111,14 @@
 
   <!-- Row 3: Rate + Dispatcher -->
   <div class="form-row">
-    <div class="form-group">
+    <div class="form-group" [class.field--low-conf]="isLowConfidenceField('rate')">
       <label>
         Rate ($)
-        <span class="ai-sparkle" *ngIf="isAiPrefilled('rate')" title="AI-prefilled">&#10024;</span>
+        <app-ai-sparkle
+          *ngIf="isAiPrefilled('rate')"
+          [confidence]="aiFieldConfidence('rate')"
+          [tooltip]="aiFieldTooltip('rate')"
+        ></app-ai-sparkle>
       </label>
       <input
         type="number"
@@ -140,7 +156,7 @@
       <textarea
         class="form-control"
         [(ngModel)]="data.notes"
-        (ngModelChange)="onFieldChange()"
+        (ngModelChange)="onFieldChange('notes')"
         rows="3"
         placeholder="Internal notes..."
       ></textarea>

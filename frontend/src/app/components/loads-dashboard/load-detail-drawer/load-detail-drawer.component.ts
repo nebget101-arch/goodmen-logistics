@@ -55,6 +55,12 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
   /** Whether next arrow is enabled. */
   @Input() hasNext = false;
 
+  /**
+   * FN-818 — when the drawer was opened via the row-level confidence badge,
+   * step-basics highlights any field with confidence < 80. Clears on save.
+   */
+  @Input() focusLowConfidence = false;
+
   @Output() close = new EventEmitter<void>();
   @Output() prev = new EventEmitter<void>();
   @Output() next = new EventEmitter<void>();
@@ -351,5 +357,32 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
 
   get loadStatusForPill(): LoadStatus | null {
     return (this.loadDetail?.status as LoadStatus) ?? null;
+  }
+
+  // ─── FN-818: AI extraction header helpers ─────────────────────────────────
+
+  /** True when the current load was created by an AI extractor or inbound email. */
+  isAiExtractedSource(): boolean {
+    const src = (this.loadDetail?.source || '').toLowerCase();
+    return src === 'ai_extraction' || src === 'ai' || src === 'email';
+  }
+
+  /** Overall confidence on 0–100 scale, null when the load has no ai_metadata. */
+  get drawerOverallConfidence(): number | null {
+    const raw = this.loadDetail?.ai_metadata?.overall_confidence;
+    if (raw == null || !Number.isFinite(raw)) return null;
+    return raw <= 1 ? raw * 100 : raw;
+  }
+
+  /** Hover copy used by both the header sparkle and the chip. */
+  get drawerSparkleTooltip(): string {
+    const meta = this.loadDetail?.ai_metadata;
+    const when = meta?.extracted_at ? new Date(meta.extracted_at as string) : null;
+    const whenStr = when && !isNaN(when.getTime()) ? when.toLocaleDateString() : null;
+    const label = (meta?.source_label as string | undefined)
+      || (this.loadDetail?.source === 'email' ? 'forwarded email' : 'rate confirmation PDF');
+    return whenStr
+      ? `Auto-extracted from ${label} on ${whenStr}`
+      : `Auto-extracted from ${label}`;
   }
 }

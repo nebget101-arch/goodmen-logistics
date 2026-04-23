@@ -51,8 +51,28 @@ export interface LoadListItem {
   notes?: string | null;
   /** FN-746: true when AI-created load needs dispatcher review before approval. */
   needs_review?: boolean;
-  /** FN-762: how this load was created — e.g. 'manual', 'ai', 'email', 'import'. */
+  /** FN-762: how this load was created — e.g. 'manual', 'ai_extraction', 'email', 'import'. */
   source?: string | null;
+  /** FN-789 / FN-818: persisted confidence from AI extraction (populated by FN-816/FN-817). */
+  ai_metadata?: AiMetadata | null;
+}
+
+/**
+ * FN-789 / FN-818 — AI extraction confidence payload stored on loads.ai_metadata (JSONB).
+ * Populated by the AI extractor when a load originates from `source='ai_extraction'` or `'email'`.
+ * Shape is intentionally loose since the DB column is JSONB and future extractors may add fields.
+ */
+export interface AiMetadata {
+  /** 0–100 overall confidence of the extraction. */
+  overall_confidence?: number | null;
+  /** Per-field confidence keyed by camelCase StepBasicsData / LoadListItem field name. */
+  fields?: Record<string, number> | null;
+  /** Source document descriptor — e.g. 'rate confirmation PDF', inbound email subject, etc. */
+  source_label?: string | null;
+  /** ISO timestamp of extraction, used in tooltips. */
+  extracted_at?: string | null;
+  /** Allow forward-compatible additions without breaking the type. */
+  [key: string]: unknown;
 }
 
 export interface LoadStop {
