@@ -48,10 +48,12 @@
           </ul>
         </section>
 
-        <section *ngSwitchCase="'driver'" class="step-placeholder" data-testid="step-driver">
-          <h3>Driver &amp; Equipment</h3>
-          <p class="step-hint">Placeholder — real driver/truck/trailer selects land in FN-865.</p>
-        </section>
+        <app-load-wizard-driver-equipment
+          *ngSwitchCase="'driver'"
+          data-testid="step-driver"
+          [driverEquipment]="driverEquipment"
+          [mode]="mode"
+        ></app-load-wizard-driver-equipment>
 
         <section *ngSwitchCase="'attachments'" class="step-placeholder" data-testid="step-attachments">
           <h3>Attachments</h3>

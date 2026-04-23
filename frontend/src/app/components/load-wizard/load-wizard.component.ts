@@ -23,6 +23,7 @@ import {
   WizardStepDef,
   WizardMode,
 } from '../shared/wizard/wizard-shell.component';
+import { LoadWizardDriverEquipmentComponent } from './steps/driver-equipment/driver-equipment.component';
 import { LoadsService } from '../../services/loads.service';
 import {
   LoadAttachmentType,
@@ -46,7 +47,12 @@ type LoadWizardStepId = 'basics' | 'stops' | 'driver' | 'attachments';
 @Component({
   selector: 'app-load-wizard-v2',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, WizardShellComponent],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    WizardShellComponent,
+    LoadWizardDriverEquipmentComponent,
+  ],
   templateUrl: './load-wizard.component.html',
   styleUrls: ['./load-wizard.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

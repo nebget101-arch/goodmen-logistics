@@ -39,7 +39,12 @@ describe('LoadWizardComponent (FN-862)', () => {
     loadsService = jasmine.createSpyObj<LoadsService>('LoadsService', [
       'createLoad',
       'uploadAttachment',
+      'getActiveDrivers',
+      'getEquipment',
     ]);
+    // Default stubs for the driver-equipment sub-component (FN-879).
+    loadsService.getActiveDrivers.and.returnValue(of([]));
+    loadsService.getEquipment.and.returnValue(of({ success: true, data: [] }));
 
     await TestBed.configureTestingModule({
       imports: [LoadWizardComponent, ReactiveFormsModule],
@@ -84,8 +89,23 @@ describe('LoadWizardComponent (FN-862)', () => {
       expect(component.canProceed).toBe(false);
     });
 
-    it('driver step is always reachable (no required fields)', () => {
+    it('driver step requires driver + truck selection (FN-879)', () => {
       component.currentStepId = 'driver';
+      fixture.detectChanges(); // mounts the child so Validators.required attach
+      expect(component.canProceed).toBe(false);
+
+      component.driverEquipment.get('driverId')!.setValue('driver-1');
+      component.driverEquipment.get('truckId')!.setValue('truck-1');
+      expect(component.canProceed).toBe(true);
+    });
+
+    it('driver step stays valid without a trailer (optional, FN-879)', () => {
+      component.currentStepId = 'driver';
+      fixture.detectChanges();
+      component.driverEquipment.get('driverId')!.setValue('driver-1');
+      component.driverEquipment.get('truckId')!.setValue('truck-1');
+      // Trailer deliberately null — canProceed must still be true.
+      expect(component.driverEquipment.get('trailerId')!.value).toBeNull();
       expect(component.canProceed).toBe(true);
     });
 
