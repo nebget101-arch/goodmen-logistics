@@ -1,6 +1,13 @@
 .loads-dashboard {
   padding: 8px 16px 16px;
   width: 100%;
+  /* FN-808: smooth table reflow when the detail drawer opens/closes. */
+  transition: padding-right 280ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  &.has-drawer {
+    /* padding-right is applied inline via [style.padding-right.px] so the
+     * value tracks the user-adjustable drawer width. */
+  }
 
   .header {
     display: flex;
@@ -636,6 +643,19 @@
 
   .row-cancelled {
     background: rgba(198, 40, 40, 0.04);
+  }
+
+  /* FN-808: Drawer row states.
+   * - Hover/pointer cue so users discover rows are clickable.
+   * - Active row gets a teal left border when its load is open in the drawer. */
+  tbody tr {
+    cursor: pointer;
+  }
+  tr.row-drawer-active > td:first-child {
+    box-shadow: inset 3px 0 0 0 #14b8a6;
+  }
+  tr.row-drawer-active > td {
+    background: rgba(20, 184, 166, 0.06);
   }
 
   .attachment-chips {

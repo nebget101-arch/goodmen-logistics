@@ -34,6 +34,11 @@ import {
   IntelligenceMetrics,
   IntelligencePeriod,
 } from './intelligence-panel/intelligence-panel.component';
+import {
+  DRAWER_DEFAULT_WIDTH,
+  DRAWER_MAX_WIDTH,
+  DRAWER_MIN_WIDTH,
+} from './load-detail-drawer/load-detail-drawer.component';
 
 type SortDir = 'asc' | 'desc';
 
@@ -211,6 +216,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   page = 1;
   pageSize = 25;
   total = 0;
+
+  // ─── FN-808: Load Detail Side Drawer ────────────────────────────────────
+  /** When non-null, the drawer is open and shows the detail for this load. */
+  drawerLoadId: string | null = null;
+  /** Drawer width in px (persisted via UserPreferences). */
+  drawerWidth: number = DRAWER_DEFAULT_WIDTH;
 
   // ─── FN-768: Bulk selection + actions ─────────────────────────────────────
   /** Set of load ids the user has checked for bulk operations. */
@@ -3208,9 +3219,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   rowClass(load: LoadListItem): string {
     const status = (load.status || '').toString().toUpperCase();
-    if (status === 'DELIVERED') return 'row-delivered';
-    if (status === 'CANCELLED') return 'row-cancelled';
-    return '';
+    const classes: string[] = [];
+    if (status === 'DELIVERED') classes.push('row-delivered');
+    if (status === 'CANCELLED') classes.push('row-cancelled');
+    // FN-808: teal left-border highlight on the active drawer row.
+    if (this.isDrawerActive(load)) classes.push('row-drawer-active');
+    return classes.join(' ');
   }
 
   /** Build full URL for attachment download (backend serves /uploads). */
@@ -3783,7 +3797,95 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       if (this.savedViews.length === 0) {
         this.savedViews = this.defaultSavedViews();
       }
+      // FN-808: restore persisted drawer width if within supported range.
+      if (typeof prefs.drawerWidth === 'number') {
+        const w = Math.min(DRAWER_MAX_WIDTH, Math.max(DRAWER_MIN_WIDTH, Math.round(prefs.drawerWidth)));
+        this.drawerWidth = w;
+      }
     });
+  }
+
+  // ─── FN-808: Load Detail Side Drawer handlers ─────────────────────────────
+
+  /**
+   * Row-click handler. Opens the drawer for the given load unless the click
+   * originated inside an interactive control (checkbox, action button,
+   * status dropdown, etc.) — those stop propagation at their own cell.
+   */
+  onRowClick(load: LoadListItem, event: Event): void {
+    // Guard: if the event bubbled up from an interactive target, ignore it.
+    // Individual cells (checkbox, actions, status dropdown) already call
+    // $event.stopPropagation(), but we also defensively ignore clicks on
+    // <a>, <button>, <input>, <select>, <textarea>.
+    const target = event.target as HTMLElement | null;
+    if (target && target.closest('a, button, input, select, textarea, [role="button"]')) {
+      return;
+    }
+    this.openLoadDrawer(load.id);
+  }
+
+  openLoadDrawer(loadId: string): void {
+    this.drawerLoadId = loadId;
+  }
+
+  closeLoadDrawer(): void {
+    this.drawerLoadId = null;
+  }
+
+  /** Step to the previous load in the currently filtered list (wraps). */
+  onDrawerPrev(): void {
+    if (!this.drawerLoadId) { return; }
+    const rows = this.filteredLoads;
+    if (!rows.length) { return; }
+    const idx = rows.findIndex((l) => l.id === this.drawerLoadId);
+    const prevIdx = idx <= 0 ? rows.length - 1 : idx - 1;
+    this.drawerLoadId = rows[prevIdx].id;
+  }
+
+  /** Step to the next load in the currently filtered list (wraps). */
+  onDrawerNext(): void {
+    if (!this.drawerLoadId) { return; }
+    const rows = this.filteredLoads;
+    if (!rows.length) { return; }
+    const idx = rows.findIndex((l) => l.id === this.drawerLoadId);
+    const nextIdx = idx < 0 || idx === rows.length - 1 ? 0 : idx + 1;
+    this.drawerLoadId = rows[nextIdx].id;
+  }
+
+  /** Drawer header "expand to modal" — hand off to the existing wizard flow. */
+  onDrawerExpand(): void {
+    if (!this.drawerLoadId) { return; }
+    const id = this.drawerLoadId;
+    this.closeLoadDrawer();
+    this.openLoadWizardForEdit(id);
+  }
+
+  /** Persist the new width once the user finishes dragging the resize handle. */
+  onDrawerWidthChange(width: number): void {
+    this.drawerWidth = width;
+    this.userPreferences.patchLoadsDashboard({ drawerWidth: width }).subscribe();
+  }
+
+  /** After drawer save, refresh the list so card changes are reflected. */
+  onDrawerSaved(): void {
+    this.successMessage = 'Load saved.';
+    setTimeout(() => (this.successMessage = ''), 2500);
+    this.loadLoads();
+  }
+
+  /** True when the current drawerLoadId is the first row of filteredLoads. */
+  get drawerHasPrev(): boolean {
+    return !!this.drawerLoadId && this.filteredLoads.length > 1;
+  }
+
+  /** True when the current drawerLoadId is not the last row of filteredLoads. */
+  get drawerHasNext(): boolean {
+    return !!this.drawerLoadId && this.filteredLoads.length > 1;
+  }
+
+  /** Returns true when `load` is the active row highlighted with the teal border. */
+  isDrawerActive(load: LoadListItem): boolean {
+    return !!this.drawerLoadId && load.id === this.drawerLoadId;
   }
 
   /** Default seed views shown on first use; not persisted until user saves/edits. */
