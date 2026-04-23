@@ -3,8 +3,19 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
+const jwt = require('jsonwebtoken');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const swaggerUi = require('swagger-ui-express');
+
+let SocketIoServer = null;
+try {
+  SocketIoServer = require('socket.io').Server;
+} catch (err) {
+  // socket.io optional: if not installed, WS endpoints are disabled but HTTP proxy keeps working.
+  // eslint-disable-next-line no-console
+  console.warn('[gateway] socket.io not installed, WebSocket disabled:', err.message);
+}
 
 const app = express();
 
@@ -74,6 +85,44 @@ if (!isProd) {
     next();
   });
 }
+
+// ── FN-811: Internal WS emit endpoint ───────────────────────────────
+// Microservices POST here to broadcast events to a tenant's Socket.IO room.
+// Authenticated by INTERNAL_WS_SECRET header `X-Internal-Token`. Kept above
+// the proxy routes so it resolves locally. Uses its own express.json parser
+// since the rest of the gateway is proxy-only and has no body parsing.
+const INTERNAL_WS_SECRET = process.env.INTERNAL_WS_SECRET || '';
+let ioInstance = null;
+
+app.post(
+  '/internal/ws/emit',
+  express.json({ limit: '1mb' }),
+  (req, res) => {
+    if (!INTERNAL_WS_SECRET) {
+      return res.status(503).json({ error: 'Internal WS emit disabled (no secret configured)' });
+    }
+    const header = req.headers['x-internal-token'];
+    if (!header || header !== INTERNAL_WS_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const body = req.body || {};
+    const { tenantId, event } = body;
+    if (!tenantId || !event) {
+      return res.status(400).json({ error: 'Missing tenantId or event' });
+    }
+    if (!ioInstance) {
+      return res.status(503).json({ error: 'WebSocket server not initialized' });
+    }
+    try {
+      ioInstance.to(`tenant:${tenantId}`).emit(event, body);
+      return res.json({ delivered: true });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[gateway] internal emit failed:', err.message);
+      return res.status(500).json({ error: 'Emit failed' });
+    }
+  }
+);
 
 // Simple health endpoint on the gateway itself
 app.get('/health', (req, res) => {
@@ -456,10 +505,89 @@ app.use('/api/barcodes', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/shop-clients', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/ai', buildProxy(AI_SERVICE_URL, 'ai'));
 
-app.listen(PORT, () => {
+const httpServer = http.createServer(app);
+
+// ── FN-811: Socket.IO attach + JWT handshake auth + tenant rooms ─────
+function initWebSocket(server) {
+  if (!SocketIoServer) {
+    return null;
+  }
+  const io = new SocketIoServer(server, {
+    path: '/socket.io',
+    cors: {
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(new Error(`CORS blocked for origin: ${origin}`));
+      },
+      credentials: true
+    }
+  });
+
+  const jwtSecret = process.env.JWT_SECRET || 'dev_secret';
+
+  io.use((socket, next) => {
+    try {
+      const auth = socket.handshake?.auth || {};
+      const query = socket.handshake?.query || {};
+      const header = socket.handshake?.headers?.authorization || '';
+      let token = null;
+      if (auth.token) {
+        token = String(auth.token);
+      } else if (header.startsWith('Bearer ')) {
+        token = header.substring(7);
+      } else if (query.token) {
+        token = String(query.token);
+      }
+      if (!token) {
+        return next(new Error('Unauthorized: missing token'));
+      }
+      let decoded;
+      try {
+        decoded = jwt.verify(token, jwtSecret);
+      } catch (err) {
+        return next(new Error('Unauthorized: invalid token'));
+      }
+      const userId = decoded.sub || decoded.id;
+      const tenantId = decoded.tenant_id || decoded.tenantId;
+      if (!userId || !tenantId) {
+        // Without a tenant claim the socket cannot be scoped; reject.
+        return next(new Error('Unauthorized: tenant context missing'));
+      }
+      socket.data.userId = userId;
+      socket.data.tenantId = tenantId;
+      socket.data.role = decoded.role || null;
+      return next();
+    } catch (err) {
+      return next(new Error('Unauthorized'));
+    }
+  });
+
+  io.on('connection', (socket) => {
+    const tenantId = socket.data.tenantId;
+    const room = `tenant:${tenantId}`;
+    socket.join(room);
+    if (!isProd) {
+      // eslint-disable-next-line no-console
+      console.log(`[gateway] ws connected user=${socket.data.userId} tenant=${tenantId}`);
+    }
+    socket.on('disconnect', (reason) => {
+      if (!isProd) {
+        // eslint-disable-next-line no-console
+        console.log(`[gateway] ws disconnected user=${socket.data.userId} reason=${reason}`);
+      }
+    });
+  });
+
+  return io;
+}
+
+ioInstance = initWebSocket(httpServer);
+
+httpServer.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(
-    `FleetNeuron API Gateway listening on port ${PORT}`
+    `FleetNeuron API Gateway listening on port ${PORT}${ioInstance ? ' (WebSocket enabled)' : ''}`
   );
 });
 
