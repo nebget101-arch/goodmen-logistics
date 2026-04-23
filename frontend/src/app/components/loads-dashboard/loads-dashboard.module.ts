@@ -31,6 +31,8 @@ import { LoadTemplatesComponent } from './load-templates/load-templates.componen
 import { IntelligencePanelComponent } from './intelligence-panel/intelligence-panel.component';
 import { IntelligenceInsightsComponent } from './intelligence-panel/intelligence-insights.component';
 import { SmartFiltersComponent } from './smart-filters/smart-filters.component';
+import { LoadsLoadingSkeletonComponent } from './loading-skeleton/loading-skeleton.component';
+import { LoadsEmptyStateComponent } from './empty-state/empty-state.component';
 
 const routes: Routes = [
   {
@@ -70,7 +72,9 @@ const routes: Routes = [
     LoadTemplatesComponent,
     IntelligencePanelComponent,
     IntelligenceInsightsComponent,
-    SmartFiltersComponent
+    SmartFiltersComponent,
+    LoadsLoadingSkeletonComponent,
+    LoadsEmptyStateComponent
   ],
   imports: [
     CommonModule,

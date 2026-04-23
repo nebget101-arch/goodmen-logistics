@@ -45,6 +45,10 @@ import {
   DRAWER_MAX_WIDTH,
   DRAWER_MIN_WIDTH,
 } from './load-detail-drawer/load-detail-drawer.component';
+import { EmptyStateMode } from './empty-state/empty-state.component';
+import { SkeletonColumn } from './loading-skeleton/loading-skeleton.component';
+
+type DensityMode = 'compact' | 'comfortable' | 'spacious';
 
 type SortDir = 'asc' | 'desc';
 
@@ -58,6 +62,49 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   loading = true;
   errorMessage = '';
   successMessage = '';
+
+  // ─── FN-821: list-level error + empty state flags ───────────────────────────
+  /** True when the last list fetch failed. Drives the empty-state error card. */
+  loadError = false;
+  /** 403 variant of loadError — shows the permission-denied empty-state instead. */
+  permissionDenied = false;
+  /** Detail string surfaced on the error card (under the headline). */
+  loadErrorDetail = '';
+  /** FN-821: WebSocket banner — wired by FN-790 when WS client service lands on dev. */
+  wsDisconnected = false;
+  /** FN-821: brief fade-in pulse on `.loads-viewport` whenever filters/sort change. */
+  filterPulseActive = false;
+  private filterPulseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ─── FN-821: density mode ──────────────────────────────────────────────────
+  densityMode: DensityMode = 'comfortable';
+  densityMenuOpen = false;
+  readonly densityOptions: { value: DensityMode; label: string; icon: string; heightPx: number }[] = [
+    { value: 'compact', label: 'Compact', icon: 'density_small', heightPx: 36 },
+    { value: 'comfortable', label: 'Comfortable', icon: 'density_medium', heightPx: 52 },
+    { value: 'spacious', label: 'Spacious', icon: 'density_large', heightPx: 72 },
+  ];
+
+  // ─── FN-821: scroll-to-top button ──────────────────────────────────────────
+  showScrollTop = false;
+
+  /** Column width map mirroring the <col> widths in the template. */
+  private readonly columnWidthMap: Record<string, string> = {
+    load_number: '6%',
+    pickup_date: '7%',
+    driver: '8%',
+    broker: '12%',
+    po_number: '7%',
+    pickup: '11%',
+    delivery: '11%',
+    rate: '5%',
+    completed_date: '8%',
+    status: '6%',
+    billing: '6%',
+    notes: '10%',
+    attachments: '8%',
+    actions: '5%',
+  };
   activeOperatingEntityName = '';
 
   showNewLoadMenu = false;
@@ -186,6 +233,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   /** FN-765: reference to the header search input for `/` and Cmd/Ctrl+K shortcuts. */
   @ViewChild('searchInput', { static: false }) searchInputRef?: ElementRef<HTMLInputElement>;
+
+  /** FN-821: hidden file input used by the "Import from PDF" empty-state action. */
+  @ViewChild('emptyStateBulkInput', { static: false }) emptyStateBulkInput?: ElementRef<HTMLInputElement>;
 
   /** FN-765: unregister callback returned by KeyboardShortcutsService.registerAll. */
   private _unregisterShortcuts: (() => void) | null = null;
@@ -1110,11 +1160,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       this._unregisterShortcuts();
       this._unregisterShortcuts = null;
     }
-    // FN-813: announce we're leaving the loads page and tear down timers.
     this.websocket.send('presence:leave', { page: 'loads' });
     this.stopEtaTicker();
     this.animationTimers.forEach((t) => clearTimeout(t));
     this.animationTimers.clear();
+    if (this.filterPulseTimer) {
+      clearTimeout(this.filterPulseTimer);
+      this.filterPulseTimer = null;
+    }
+    if (this.newAiGlowTimer) {
+      clearTimeout(this.newAiGlowTimer);
+      this.newAiGlowTimer = null;
+    }
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -1413,6 +1470,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   loadLoads(): void {
     this.loading = true;
     this.errorMessage = '';
+    this.loadError = false;
+    this.permissionDenied = false;
+    this.loadErrorDetail = '';
+    this.triggerFilterPulse();
     const range = this.getGrossPeriodDateRange();
     this.loadsService
       .listLoads({
@@ -1439,8 +1500,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         this.recomputeSummaryTotals();
         this.recomputeIntelligenceMetrics();
         },
-        error: () => {
-          this.errorMessage = 'Failed to load loads.';
+        error: (err: any) => {
+          this.loadError = true;
+          this.permissionDenied = err?.status === 403;
+          this.loadErrorDetail = err?.error?.error || err?.message || '';
+          // FN-821: empty-state card carries the user-visible retry CTA —
+          // suppress the redundant transient toast.
+          this.errorMessage = '';
           this.loading = false;
         }
       });
@@ -3593,6 +3659,148 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     }, 4000);
   }
 
+  // ─── FN-821: empty-state + error-state helpers ─────────────────────────────
+
+  /** Active smart-filter / header-filter / status-filter surface. */
+  get hasActiveListFilters(): boolean {
+    const f = this.filters;
+    if (f.status || f.billingStatus || f.driverId || f.q || f.needsReview || f.source) return true;
+    if (this.smartFilterKeys.length > 0) return true;
+    const hf = this.headerFilters;
+    return !!(hf.date || hf.driver || hf.broker || hf.po || hf.pickup || hf.delivery
+      || hf.rate || hf.completed || hf.status || hf.billingStatus || hf.attachmentType);
+  }
+
+  /** Which empty-state variant the card should render right now. */
+  get emptyStateMode(): EmptyStateMode {
+    if (this.loadError) {
+      return this.permissionDenied ? 'permission-denied' : 'api-error';
+    }
+    // Smart-filter returning zero gets the celebratory variant when the
+    // chip's semantics are "bad things" (overdue, needs review) — otherwise
+    // fall through to the regular filtered empty.
+    if (this.smartFilterKeys.length > 0 && this.isCelebratorySmartFilter(this.smartFilterKeys[0])) {
+      return 'smart-filter-celebrate';
+    }
+    if (this.hasActiveListFilters) return 'filtered';
+    return 'no-loads';
+  }
+
+  /** Friendly label of the first active smart-filter chip, for celebrate mode copy. */
+  get activeSmartFilterLabel(): string {
+    if (!this.smartFilterKeys.length) return '';
+    const key = this.smartFilterKeys[0];
+    const labels: Record<string, string> = {
+      overdue: 'overdue',
+      needs_review: 'loads needing review',
+      missing_pod: 'loads missing POD',
+      unpaid: 'unpaid',
+      upcoming: 'upcoming',
+    };
+    return labels[key as string] || (key as string).replace(/_/g, ' ');
+  }
+
+  /** Smart filters whose "0 matches" reads as good news rather than empty. */
+  private isCelebratorySmartFilter(key: string): boolean {
+    return key === 'overdue' || key === 'needs_review' || key === 'missing_pod';
+  }
+
+  /** Skeleton row column config derived from columnDefs + visibility + width map. */
+  get skeletonColumns(): SkeletonColumn[] {
+    return this.columnDefs.map((c) => ({
+      key: c.key,
+      width: this.columnWidthMap[c.key] || 'auto',
+      visible: this.isColVisible(c.key),
+    }));
+  }
+
+  /** Empty-state: "Clear filters" action — reuses the existing clearAllFilters. */
+  onEmptyStateClearFilters(): void {
+    this.clearAllFilters();
+  }
+
+  /** Empty-state: "Create your first load" — opens the standard wizard. */
+  onEmptyStateCreateLoad(): void {
+    this.openLoadWizard();
+  }
+
+  /** Empty-state: "Import from PDF" — trigger the hidden file picker. */
+  onEmptyStateImportFromPdf(): void {
+    this.emptyStateBulkInput?.nativeElement?.click();
+  }
+
+  /** Hidden file input change → route through the existing hero-bulk handler. */
+  onEmptyStateBulkPdfsChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = input?.files;
+    if (!files || files.length === 0) return;
+    this.onHeroBulkPdfs(Array.from(files));
+    // Reset so the same file can be re-selected later.
+    input.value = '';
+  }
+
+  /** Empty-state: "Try again" after an API failure. */
+  onEmptyStateRetry(): void {
+    this.loadLoads();
+  }
+
+  // ─── FN-821: filter-applied fade pulse ─────────────────────────────────────
+
+  private triggerFilterPulse(): void {
+    this.filterPulseActive = true;
+    if (this.filterPulseTimer) {
+      clearTimeout(this.filterPulseTimer);
+    }
+    // Matches the CSS animation duration (280ms) + small buffer.
+    this.filterPulseTimer = setTimeout(() => {
+      this.filterPulseActive = false;
+      this.filterPulseTimer = null;
+    }, 320);
+  }
+
+  // ─── FN-821: density mode ──────────────────────────────────────────────────
+
+  /** Row height in px for both CSS vars and the cdk-virtual-scroll itemSize. */
+  get rowHeightPx(): number {
+    return this.densityOptions.find((o) => o.value === this.densityMode)?.heightPx ?? 52;
+  }
+
+  toggleDensityMenu(): void {
+    this.densityMenuOpen = !this.densityMenuOpen;
+    if (this.densityMenuOpen) {
+      this.showColumnPicker = false;
+      this.showSavedViewsMenu = false;
+    }
+  }
+
+  setDensity(mode: DensityMode): void {
+    if (this.densityMode === mode) {
+      this.densityMenuOpen = false;
+      return;
+    }
+    this.densityMode = mode;
+    this.densityMenuOpen = false;
+    this.userPreferences.patchLoadsDashboard({ density: mode }).subscribe();
+  }
+
+  // ─── FN-821: scroll-to-top button ──────────────────────────────────────────
+
+  @HostListener('window:scroll')
+  onWindowScroll(): void {
+    const y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    const next = y > 300;
+    if (next !== this.showScrollTop) {
+      this.showScrollTop = next;
+    }
+  }
+
+  scrollToTop(): void {
+    const reduceMotion = typeof window !== 'undefined'
+      && window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+
   rowClass(load: LoadListItem): string {
     const status = (load.status || '').toString().toUpperCase();
     const classes: string[] = [];
@@ -3751,6 +3959,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.trailerDropdownOpen = false;
     this.showColumnPicker = false;
     this.showSavedViewsMenu = false;
+    this.densityMenuOpen = false;
     this.statusMenuLoadId = null;
     this.billingMenuLoadId = null;
     // Notes editor commits on blur, which fires before this handler — safe to
@@ -4281,6 +4490,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       if (typeof prefs.drawerWidth === 'number') {
         const w = Math.min(DRAWER_MAX_WIDTH, Math.max(DRAWER_MIN_WIDTH, Math.round(prefs.drawerWidth)));
         this.drawerWidth = w;
+      }
+      // FN-821: restore persisted density mode; defaults to 'comfortable' otherwise.
+      if (prefs.density === 'compact' || prefs.density === 'comfortable' || prefs.density === 'spacious') {
+        this.densityMode = prefs.density;
       }
     });
   }

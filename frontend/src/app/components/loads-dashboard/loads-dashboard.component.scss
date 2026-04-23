@@ -131,6 +131,10 @@
       font-weight: 700;
       letter-spacing: 0.04em;
       white-space: nowrap;
+      // FN-821: subtle glow on headline totals for dark-theme pop.
+      text-shadow:
+        0 0 16px rgba(45, 212, 191, 0.35),
+        0 1px 0 rgba(15, 23, 42, 0.9);
     }
 
     &__track {
@@ -3920,4 +3924,308 @@
 @keyframes loadsRealtimeReconnectBlink {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.35; }
+}
+
+/* ============================================================================
+ * FN-821 — Visual Polish Phase 2
+ * ----------------------------------------------------------------------------
+ * Loading skeleton slot, empty-state fit, WebSocket banner, micro-animations,
+ * density modes, scroll-to-top, and dark-theme refinements.
+ * All motion runs via the shared ease `cubic-bezier(0.4, 0, 0.2, 1)` so the
+ * list feels tactile without tripping motion-sensitive users — every named
+ * keyframe below is paired with a `prefers-reduced-motion` override.
+ * ==========================================================================*/
+
+$fn-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+// ── Loading skeleton + empty-state placement ────────────────────────────────
+.loads-skeleton-slot {
+  display: block;
+  width: 100%;
+}
+
+// Empty-state card sits inside the .table-card container.
+app-loads-empty-state {
+  display: block;
+}
+
+// Hidden file input driving the empty-state "Import from PDF" action.
+.loads-empty-hidden-input {
+  display: none;
+}
+
+// ── WebSocket disconnected banner ───────────────────────────────────────────
+.loads-ws-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.18), transparent 60%),
+    rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  color: #fde68a;
+  font-size: 13px;
+  animation: fn821-banner-slide 260ms $fn-ease;
+
+  &__icon {
+    font-size: 20px;
+    color: #facc15;
+  }
+
+  &__text {
+    flex: 1;
+  }
+}
+
+@keyframes fn821-banner-slide {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+// ── Density toggle menu ─────────────────────────────────────────────────────
+.loads-density-menu {
+  min-width: 200px;
+  padding: 6px;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    color: #e2e8f0;
+    cursor: pointer;
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: left;
+    transition: background 140ms $fn-ease, color 140ms $fn-ease;
+
+    .material-symbols-outlined {
+      font-size: 18px;
+      color: rgba(148, 163, 184, 0.85);
+    }
+
+    &:hover {
+      background: rgba(45, 212, 191, 0.12);
+    }
+
+    &--active {
+      background: rgba(45, 212, 191, 0.18);
+      color: #2dd4bf;
+
+      .material-symbols-outlined { color: #2dd4bf; }
+    }
+  }
+
+  &__label {
+    flex: 1;
+  }
+
+  &__meta {
+    font-size: 11px;
+    color: rgba(148, 163, 184, 0.75);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// ── Density-driven row height on the real table ─────────────────────────────
+// The cdk-virtual-scroll-viewport's itemSize is bound to rowHeightPx in TS;
+// here we align padding/line-height to the same target so rows actually
+// look compact/comfortable/spacious rather than just sharing the measurement.
+.loads-dashboard {
+  --loads-row-height: 52px;
+
+  .table--body tbody tr > td {
+    height: var(--loads-row-height);
+    transition: background 140ms $fn-ease;
+  }
+
+  &--compact .table--body tbody tr > td {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+
+  &--comfortable .table--body tbody tr > td {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  &--spacious .table--body tbody tr > td {
+    padding-top: 20px;
+    padding-bottom: 20px;
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+}
+
+// ── Row micro-animations ────────────────────────────────────────────────────
+// Row hover — subtle lift + teal border glow via a left-edge accent so we
+// don't redraw the whole row's box-shadow every frame (cheaper on long lists).
+.table--body tbody tr {
+  position: relative;
+  transition:
+    background 160ms $fn-ease,
+    box-shadow 180ms $fn-ease,
+    transform 180ms $fn-ease;
+
+  &:hover {
+    background: rgba(45, 212, 191, 0.06);
+    box-shadow: inset 3px 0 0 rgba(45, 212, 191, 0.55);
+    transform: translateZ(0);
+  }
+}
+
+// New row — slide in from top. Added by the parent to each fresh row via
+// a class applied on the list entry. Lives here so virtual-scroll item
+// recycling doesn't strand the animation mid-frame.
+.table--body tbody tr.row-new,
+.table--body tbody tr.row-just-created {
+  animation: fn821-row-slide-in 320ms $fn-ease both;
+}
+
+// Row delete — fade + collapse before the row leaves the list.
+.table--body tbody tr.row-deleting,
+.table--body tbody tr.row-just-deleted {
+  animation: fn821-row-fade-out 280ms $fn-ease both;
+  pointer-events: none;
+}
+
+@keyframes fn821-row-slide-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fn821-row-fade-out {
+  from { opacity: 1; transform: translateY(0) scaleY(1); }
+  to   { opacity: 0; transform: translateY(0) scaleY(0.9); }
+}
+
+// Status-badge change pulse — applied briefly after an inline status update.
+.status-inline__trigger.status-inline__trigger--pulse,
+app-status-pill.status-pill--pulse {
+  animation: fn821-status-pulse 520ms $fn-ease;
+}
+
+@keyframes fn821-status-pulse {
+  0%   { filter: brightness(1); transform: scale(1); }
+  40%  { filter: brightness(1.25) drop-shadow(0 0 6px rgba(45, 212, 191, 0.65)); transform: scale(1.06); }
+  100% { filter: brightness(1); transform: scale(1); }
+}
+
+// Filter applied — rows fade out → fade in pulse on the viewport.
+.loads-viewport {
+  &--filter-pulse {
+    animation: fn821-viewport-fade 280ms $fn-ease;
+  }
+}
+
+@keyframes fn821-viewport-fade {
+  0%   { opacity: 1; }
+  40%  { opacity: 0.55; }
+  100% { opacity: 1; }
+}
+
+// ── Hover card gradient border (FN-821 dark-theme refinement) ───────────────
+.hover-preview {
+  position: relative;
+  // The existing popover has its own background; we add a teal→blue gradient
+  // edge via an absolutely-positioned pseudo-element so the gradient doesn't
+  // fight with the fill.
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(45, 212, 191, 0.55), rgba(59, 130, 246, 0.4));
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
+// ── Scroll-to-top button ────────────────────────────────────────────────────
+.loads-scroll-top {
+  position: fixed;
+  right: 24px;
+  bottom: 28px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(45, 212, 191, 0.5);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(45, 212, 191, 0.35), transparent 60%),
+    rgba(15, 23, 42, 0.95);
+  color: #2dd4bf;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.55);
+  transition:
+    opacity 180ms $fn-ease,
+    transform 220ms $fn-ease,
+    border-color 180ms $fn-ease,
+    box-shadow 180ms $fn-ease;
+  z-index: 40;
+
+  .material-symbols-outlined {
+    font-size: 22px;
+  }
+
+  &:hover {
+    border-color: rgba(45, 212, 191, 0.85);
+    box-shadow: 0 16px 32px rgba(45, 212, 191, 0.35);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.45);
+  }
+
+  &--visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+}
+
+// ── Reduced-motion override ─────────────────────────────────────────────────
+@media (prefers-reduced-motion: reduce) {
+  .loads-ws-banner,
+  .table--body tbody tr.row-new,
+  .table--body tbody tr.row-just-created,
+  .table--body tbody tr.row-deleting,
+  .table--body tbody tr.row-just-deleted,
+  .status-inline__trigger--pulse,
+  app-status-pill.status-pill--pulse,
+  .loads-viewport--filter-pulse {
+    animation: none !important;
+  }
+
+  .table--body tbody tr {
+    transition: none;
+
+    &:hover {
+      transform: none;
+    }
+  }
+
+  .loads-scroll-top {
+    transition: opacity 80ms linear;
+    transform: none;
+  }
 }
