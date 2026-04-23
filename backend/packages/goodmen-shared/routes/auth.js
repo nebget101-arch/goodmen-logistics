@@ -72,8 +72,27 @@ router.post('/login', async (req, res) => {
     }
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+
+    // FN-811: include tenant_id in JWT so gateway WS handshake can scope
+    // sockets to `tenant:<id>` without a DB round-trip.
+    let tenantId = user.tenant_id || null;
+    if (!tenantId) {
+      try {
+        const defaultCtx = await tenantContextService.getDefaultContextForUser(knex, user.id);
+        tenantId = defaultCtx?.tenant?.tenant_id || defaultCtx?.tenant?.id || null;
+      } catch (ctxErr) {
+        // Fall through with null tenantId; WS connect will fail gracefully.
+      }
+    }
+
     const token = jwt.sign(
-      { id: user.id, role: user.role, username: user.username, driver_id: user.driver_id || null },
+      {
+        id: user.id,
+        role: user.role,
+        username: user.username,
+        driver_id: user.driver_id || null,
+        tenant_id: tenantId
+      },
       JWT_SECRET,
       { expiresIn: '8h' }
     );

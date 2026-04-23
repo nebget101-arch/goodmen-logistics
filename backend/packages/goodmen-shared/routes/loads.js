@@ -9,6 +9,19 @@ const { query, getClient } = require('../internal/db');
 const { extractLoadFromPdf, buildAiMetadata } = require('../services/load-ai-extractor');
 const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 const { calculateTripMetrics } = require('../services/trip-metrics');
+const { emitToTenant } = require('../services/websocket.service');
+
+// FN-811: fire-and-forget WS emit. emitToTenant never throws, but wrap in
+// Promise.resolve().then so the response path stays zero-latency even if the
+// gateway bridge is slow or unreachable.
+function emitLoadEvent(tenantId, event, payload) {
+  if (!tenantId || !event) return;
+  Promise.resolve()
+    .then(() => emitToTenant({ tenantId, event, payload }))
+    .catch((err) => {
+      dtLogger.warn('load_ws_emit_failed', { event, tenantId, error: err?.message });
+    });
+}
 
 const LOAD_STATUSES = ['DRAFT', 'NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
 const BILLING_STATUSES = ['PENDING', 'CANCELLED', 'CANCELED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
@@ -1196,6 +1209,7 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
 
     await client.query('COMMIT');
     const created = await getLoadDetail(client, loadId);
+    emitLoadEvent(tenantId, 'load:created', created);
     const duration = Date.now() - startTime;
     dtLogger.trackRequest('POST', '/api/loads', 201, duration);
     res.status(201).json({ success: true, data: created });
@@ -1711,6 +1725,15 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
 
     await client.query('COMMIT');
     const data = await getLoadDetail(client, req.params.id);
+    // FN-811: DRAFT → DISPATCHED is always a status transition
+    const tenantId = req.context?.tenantId || null;
+    emitLoadEvent(tenantId, 'load:status_changed', {
+      id: req.params.id,
+      previousStatus: 'DRAFT',
+      status: 'DISPATCHED',
+      load: data
+    });
+    emitLoadEvent(tenantId, 'load:updated', data);
     res.json({ success: true, data });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -1866,6 +1889,15 @@ router.post('/bulk-update', requireRole(['admin', 'dispatch']), async (req, res)
     }
 
     await client.query('COMMIT');
+    // FN-811: emit one load:updated per affected id; emit load:status_changed
+    // too when the bulk op changed status (full payload not fetched here to
+    // avoid N round-trips — subscribers that need detail refetch on event).
+    for (const id of ids) {
+      emitLoadEvent(tenantId, 'load:updated', { id, changes });
+      if (status) {
+        emitLoadEvent(tenantId, 'load:status_changed', { id, status });
+      }
+    }
     res.json({ success: true, updated: ids.length });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -1963,6 +1995,10 @@ router.post('/bulk-delete-drafts', requireRole(['admin', 'dispatch']), async (re
     );
 
     await client.query('COMMIT');
+    // FN-811: emit one load:deleted per affected id
+    for (const id of ids) {
+      emitLoadEvent(tenantId, 'load:deleted', { id });
+    }
     res.json({ success: true, deleted: ids.length });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -2024,7 +2060,10 @@ router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
     if (status !== 'DRAFT' && status !== 'NEW') {
       return res.status(400).json({ success: false, error: 'Only New or Draft loads can be deleted' });
     }
-    await query('DELETE FROM loads WHERE id = $1 AND tenant_id = $2 AND operating_entity_id = $3', [req.params.id, req.context?.tenantId || null, req.context?.operatingEntityId || null]);
+    const tenantId = req.context?.tenantId || null;
+    await query('DELETE FROM loads WHERE id = $1 AND tenant_id = $2 AND operating_entity_id = $3', [req.params.id, tenantId, req.context?.operatingEntityId || null]);
+    // FN-811: emit load:deleted after successful delete
+    emitLoadEvent(tenantId, 'load:deleted', { id: req.params.id });
     res.json({ success: true });
   } catch (error) {
     dtLogger.error('loads_delete_failed', error, { loadId: req.params.id });
@@ -2741,6 +2780,17 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid billing status' });
     }
 
+    // FN-811: capture prior status before the update so we can emit
+    // `load:status_changed` only on an actual transition.
+    let priorStatus = null;
+    if (status) {
+      const priorRow = await client.query(
+        'SELECT status FROM loads WHERE id = $1 AND tenant_id = $2 AND operating_entity_id = $3',
+        [req.params.id, req.context?.tenantId || null, req.context?.operatingEntityId || null]
+      );
+      priorStatus = priorRow.rows[0]?.status ? normalizeEnum(priorRow.rows[0].status) : null;
+    }
+
     const fieldMap = {
       loadNumber: 'load_number',
       status: 'status',
@@ -2859,6 +2909,17 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
     const updated = await getLoadDetail(client, req.params.id, req.context || null);
     if (!updated) {
       return res.status(404).json({ success: false, error: 'Load not found' });
+    }
+    // FN-811: emit updated + (conditionally) status_changed
+    const tenantId = req.context?.tenantId || null;
+    emitLoadEvent(tenantId, 'load:updated', updated);
+    if (status && priorStatus && priorStatus !== status) {
+      emitLoadEvent(tenantId, 'load:status_changed', {
+        id: req.params.id,
+        previousStatus: priorStatus,
+        status,
+        load: updated
+      });
     }
     res.json({ success: true, data: updated });
   } catch (error) {
