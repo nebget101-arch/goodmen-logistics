@@ -3402,11 +3402,16 @@
     // escapes the cdk-virtual-scroll-viewport overflow:auto clip.
   }
 
-  // ─── FN-805: Row-hover toolbar + inline notes editor ─────────────────────
+  // ─── FN-805 / FN-855: Row-hover toolbar + inline notes editor ───────────
   // The toolbar is opacity: 0 by default and fades in when the row is hovered.
-  // 100ms transition matches the AC and the FN-804 hover-popover timing.
+  // FN-855: broadened the reveal triggers to cover rows where tr:hover alone
+  // dropped — portaled hover-popovers (FN-806 Driver/Broker/Notes/Attachments)
+  // steal the pointer outside the <tr> DOM subtree, and the detail drawer
+  // (FN-808) leaves its active row without a hover state while the drawer
+  // sits over the grid.
   td.actions-cell {
     overflow: visible;
+    min-width: 0;
   }
 
   .row-toolbar {
@@ -3414,21 +3419,18 @@
     align-items: center;
     justify-content: flex-end;
     gap: 4px;
+    min-height: 28px;
     opacity: 0;
     transform: translateY(1px);
     transition: opacity 100ms ease-out, transform 100ms ease-out;
     pointer-events: none;
   }
 
-  // Keep the toolbar discoverable for keyboard users: show it when any button
-  // inside is focused.
+  .table--body tr:hover .row-toolbar,
+  .table--body tr:focus-within .row-toolbar,
+  .table--body tr.row-drawer-active .row-toolbar,
+  .row-toolbar:hover,
   .row-toolbar:focus-within {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
-  }
-
-  tr:hover .row-toolbar {
     opacity: 1;
     transform: translateY(0);
     pointer-events: auto;
