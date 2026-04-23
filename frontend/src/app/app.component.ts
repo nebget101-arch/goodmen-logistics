@@ -6,6 +6,7 @@ import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.s
 import { AccessControlService } from './services/access-control.service';
 import { OperatingEntityContextService } from './services/operating-entity-context.service';
 import { ReferenceDataService } from './services/reference-data.service';
+import { WebsocketService } from './services/websocket.service';
 import { NAV_TOP_LINKS, NAV_SECTIONS, NavSection, NavLink } from './config/nav.config';
 import { PERMISSIONS } from './models/access-control.model';
 import { AiSelectOption } from './shared/ai-select/ai-select.component';
@@ -50,7 +51,8 @@ export class AppComponent implements OnInit {
     private aiChatService: AiChatService,
     public access: AccessControlService,
     public operatingEntityContext: OperatingEntityContextService,
-    private referenceDataService: ReferenceDataService
+    private referenceDataService: ReferenceDataService,
+    private websocket: WebsocketService
   ) {}
 
   isLoggedIn(): boolean {
@@ -190,6 +192,7 @@ export class AppComponent implements OnInit {
   }
 
   logout(): void {
+    this.websocket.disconnect();
     localStorage.removeItem('token');
     localStorage.removeItem('role');
     this.access.clearAccess();
@@ -251,6 +254,9 @@ export class AppComponent implements OnInit {
           // Non-blocking preload; dispatch board and other screens can retry on demand.
         }
       });
+      // FN-813: open the realtime WS so the loads dashboard (and future views)
+      // can subscribe without each component re-initiating the handshake.
+      this.websocket.connect();
     }
     this.operatingEntityContext.bootstrapFromSessionIfNeeded(this.isLoggedIn());
     this.operatingEntityContext.context$().subscribe(() => this.rebuildOperatingEntityOptions());

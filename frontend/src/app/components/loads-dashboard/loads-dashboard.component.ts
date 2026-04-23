@@ -26,6 +26,11 @@ import {
 import { LoadTemplatesService } from '../../services/load-templates.service';
 import { KeyboardShortcutsService } from '../../shared/services/keyboard-shortcuts.service';
 import { UserPreferencesService, LoadsSavedView } from '../../services/user-preferences.service';
+import {
+  WebsocketService,
+  ConnectionStatus,
+  WS_EVENTS,
+} from '../../services/websocket.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
@@ -188,6 +193,23 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   private brokerSearch$ = new Subject<string>();
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
+
+  // ─── FN-813: realtime (WebSocket) state ──────────────────────────────────
+  /** Current websocket status — drives the header dot and reconnecting banner. */
+  wsStatus: ConnectionStatus = 'disconnected';
+  /** Users currently viewing the loads page (via `presence:join` / `presence:leave`). */
+  presenceUsers: Array<{ userId: string; displayName: string; avatarUrl?: string | null }> = [];
+  /** Load IDs that should animate fade-in ("just created"). */
+  private recentlyCreatedIds = new Set<string>();
+  /** Load IDs that should pulse ("just updated"). */
+  private recentlyUpdatedIds = new Set<string>();
+  /** Load IDs that should fade out ("just deleted") before being removed. */
+  private recentlyDeletedIds = new Set<string>();
+  /** Timers for clearing animation markers. Keyed by loadId + suffix. */
+  private animationTimers = new Map<string, any>();
+  /** 60s tick counter used to refresh ETA countdown labels without full CD runs. */
+  etaTick = 0;
+  private etaIntervalId: any = null;
 
   // Inline searchable combos for driver / truck / trailer
   driverSearch = '';
@@ -767,7 +789,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     private loadTemplatesService: LoadTemplatesService,
     private keyboardShortcuts: KeyboardShortcutsService,
     private userPreferences: UserPreferencesService,
-    private scrollStrategies: ScrollStrategyOptions
+    private scrollStrategies: ScrollStrategyOptions,
+    private websocket: WebsocketService
   ) {
     // Close the inline menu when any ancestor scrolls — the virtual-scroll
     // viewport may recycle the trigger row while the menu is open.
@@ -911,13 +934,187 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         }));
         this.brokerSearchLoading = false;
       });
+
+    this.subscribeRealtime();
+    this.startEtaTicker();
+    // Announce presence on the loads page. Server broadcasts to tenant room.
+    this.websocket.send('presence:join', { page: 'loads' });
   }
+
+  /**
+   * FN-813: wire WebSocket event streams to in-place list mutations. Each
+   * handler applies a short-lived animation class to the affected row so the
+   * user sees the change land (fade-in / pulse / fade-out).
+   */
+  private subscribeRealtime(): void {
+    this.websocket.status$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((s) => { this.wsStatus = s; });
+
+    this.websocket.on<LoadListItem>(WS_EVENTS.LOAD_CREATED)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((load) => this.handleLoadCreated(load));
+
+    this.websocket.on<LoadListItem>(WS_EVENTS.LOAD_UPDATED)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((load) => this.handleLoadUpdated(load));
+
+    this.websocket.on<LoadListItem>(WS_EVENTS.LOAD_STATUS_CHANGED)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((load) => this.handleLoadUpdated(load));
+
+    this.websocket.on<{ id: string }>(WS_EVENTS.LOAD_DELETED)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((payload) => this.handleLoadDeleted(payload?.id));
+
+    this.websocket.on<{ userId: string; displayName?: string; avatarUrl?: string; page?: string }>(
+      WS_EVENTS.PRESENCE_JOIN
+    )
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((p) => this.handlePresenceJoin(p));
+
+    this.websocket.on<{ userId: string }>(WS_EVENTS.PRESENCE_LEAVE)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((p) => this.handlePresenceLeave(p?.userId));
+
+    this.websocket.pollTick$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.loadLoads());
+  }
+
+  /** FN-813: refresh ETA countdown strings every minute for in-transit rows. */
+  private startEtaTicker(): void {
+    if (this.etaIntervalId) return;
+    this.etaIntervalId = setInterval(() => { this.etaTick++; }, 60_000);
+  }
+
+  private stopEtaTicker(): void {
+    if (this.etaIntervalId) { clearInterval(this.etaIntervalId); this.etaIntervalId = null; }
+  }
+
+  private handleLoadCreated(load: LoadListItem | null | undefined): void {
+    if (!load || !load.id) return;
+    // Replace if it somehow already exists; otherwise prepend so the new row
+    // is visible at the top of the virtual-scroll viewport.
+    const idx = this.loads.findIndex((l) => l.id === load.id);
+    if (idx >= 0) {
+      this.loads = this.loads.map((l) => (l.id === load.id ? { ...l, ...load } : l));
+    } else {
+      this.loads = [load, ...this.loads];
+      this.total = (this.total || 0) + 1;
+    }
+    this.markRecent(this.recentlyCreatedIds, load.id, 1500);
+    this.recomputeSummaryTotals();
+    this.recomputeIntelligenceMetrics();
+  }
+
+  private handleLoadUpdated(load: LoadListItem | null | undefined): void {
+    if (!load || !load.id) return;
+    const idx = this.loads.findIndex((l) => l.id === load.id);
+    if (idx < 0) return;
+    this.loads = this.loads.map((l) => (l.id === load.id ? { ...l, ...load } : l));
+    this.markRecent(this.recentlyUpdatedIds, load.id, 1200);
+    this.recomputeSummaryTotals();
+    this.recomputeIntelligenceMetrics();
+  }
+
+  private handleLoadDeleted(id: string | null | undefined): void {
+    if (!id) return;
+    const idx = this.loads.findIndex((l) => l.id === id);
+    if (idx < 0) return;
+    // Apply fade-out class for 400ms, then splice the row out.
+    this.markRecent(this.recentlyDeletedIds, id, 450);
+    const timerKey = `delete:${id}`;
+    this.clearAnimationTimer(timerKey);
+    this.animationTimers.set(timerKey, setTimeout(() => {
+      this.loads = this.loads.filter((l) => l.id !== id);
+      this.total = Math.max(0, (this.total || 0) - 1);
+      this.recentlyDeletedIds.delete(id);
+      this.animationTimers.delete(timerKey);
+      this.recomputeSummaryTotals();
+      this.recomputeIntelligenceMetrics();
+    }, 400));
+  }
+
+  private handlePresenceJoin(p: { userId: string; displayName?: string; avatarUrl?: string; page?: string } | null | undefined): void {
+    if (!p || !p.userId) return;
+    if (p.page && p.page !== 'loads') return;
+    if (this.presenceUsers.some((u) => u.userId === p.userId)) return;
+    this.presenceUsers = [
+      ...this.presenceUsers,
+      { userId: p.userId, displayName: p.displayName || 'Teammate', avatarUrl: p.avatarUrl || null }
+    ];
+  }
+
+  private handlePresenceLeave(userId: string | null | undefined): void {
+    if (!userId) return;
+    this.presenceUsers = this.presenceUsers.filter((u) => u.userId !== userId);
+  }
+
+  private markRecent(set: Set<string>, id: string, ms: number): void {
+    set.add(id);
+    const key = `anim:${id}:${set === this.recentlyCreatedIds ? 'c' : set === this.recentlyUpdatedIds ? 'u' : 'd'}`;
+    this.clearAnimationTimer(key);
+    this.animationTimers.set(key, setTimeout(() => {
+      set.delete(id);
+      this.animationTimers.delete(key);
+    }, ms));
+  }
+
+  private clearAnimationTimer(key: string): void {
+    const existing = this.animationTimers.get(key);
+    if (existing) { clearTimeout(existing); this.animationTimers.delete(key); }
+  }
+
+  /** True when a load is currently in transit — controls the pulsing dot + ETA. */
+  isInTransit(load: LoadListItem): boolean {
+    const s = (load?.status || '').toString().toUpperCase();
+    return s === 'IN_TRANSIT' || s === 'EN_ROUTE' || s === 'PICKED_UP';
+  }
+
+  /**
+   * Short ETA countdown string for in-transit rows. Uses `delivery_date` as
+   * the target; returns '' when the date is missing or not parseable. The
+   * `etaTick` field is read here purely to create a change-detection
+   * dependency so the label refreshes each minute.
+   */
+  etaLabel(load: LoadListItem): string {
+    void this.etaTick; // CD dependency
+    if (!this.isInTransit(load)) return '';
+    const target = load.delivery_date ? new Date(load.delivery_date) : null;
+    if (!target || Number.isNaN(target.getTime())) return '';
+    const diffMs = target.getTime() - Date.now();
+    if (diffMs <= 0) return 'Due now';
+    const minutes = Math.floor(diffMs / 60_000);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ${minutes % 60}m`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h`;
+  }
+
+  /** 2-letter initials for presence avatars when no image is available. */
+  presenceInitials(u: { displayName: string }): string {
+    const name = (u?.displayName || '').trim();
+    if (!name) return '?';
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  /** Stable trackBy for the presence avatar list. */
+  trackByPresence(_i: number, u: { userId: string }): string { return u.userId; }
 
   ngOnDestroy(): void {
     if (this._unregisterShortcuts) {
       this._unregisterShortcuts();
       this._unregisterShortcuts = null;
     }
+    // FN-813: announce we're leaving the loads page and tear down timers.
+    this.websocket.send('presence:leave', { page: 'loads' });
+    this.stopEtaTicker();
+    this.animationTimers.forEach((t) => clearTimeout(t));
+    this.animationTimers.clear();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -3405,6 +3602,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     if (this.isDrawerActive(load)) classes.push('row-drawer-active');
     // FN-818: one-off glow when a new AI-extracted load lands in the list.
     if (this.newAiLoadIds.has(load.id)) classes.push('row-new-ai');
+    // FN-813: realtime animation classes. Cleared automatically by the
+    // timers in handleLoadCreated / handleLoadUpdated / handleLoadDeleted.
+    if (this.recentlyCreatedIds.has(load.id)) classes.push('row-just-created');
+    if (this.recentlyUpdatedIds.has(load.id)) classes.push('row-just-updated');
+    if (this.recentlyDeletedIds.has(load.id)) classes.push('row-just-deleted');
     return classes.join(' ');
   }
 
