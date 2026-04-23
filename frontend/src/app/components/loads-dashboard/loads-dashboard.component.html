@@ -1,3 +1,78 @@
+<!-- FN-806: Hover-preview templates shared across every row. The preview
+     reads from `previewLoad` / `previewBroker`, populated by
+     prefetchLoadPreview(load) on mouseenter. -->
+<ng-template #driverPreviewTpl>
+  <div class="hover-preview hover-preview--driver">
+    <div class="hover-preview__name">
+      {{ previewLoad?.driver_name || '—' }}
+    </div>
+    <div class="hover-preview__row">
+      <span class="hover-preview__label">Position</span>
+      <span class="hover-preview__value">{{ getPreviewDriverPosition() || 'Unavailable' }}</span>
+    </div>
+    <div class="hover-preview__row">
+      <span class="hover-preview__label">HOS</span>
+      <span class="hover-preview__value hover-preview__value--muted">Data unavailable</span>
+    </div>
+    <div class="hover-preview__footnote" *ngIf="!previewLoad">Loading…</div>
+  </div>
+</ng-template>
+
+<ng-template #brokerPreviewTpl>
+  <div class="hover-preview hover-preview--broker">
+    <div class="hover-preview__name">
+      {{ previewLoad?.broker_display_name || previewLoad?.broker_name || '—' }}
+    </div>
+    <ng-container *ngIf="previewBroker as broker; else brokerFallback">
+      <div class="hover-preview__row">
+        <span class="hover-preview__label">Payment terms</span>
+        <span class="hover-preview__value">{{ broker.payment_rating || 'Unknown' }}</span>
+      </div>
+      <div class="hover-preview__row">
+        <span class="hover-preview__label">Credit score</span>
+        <span class="hover-preview__value">
+          {{ broker.credit_score != null && broker.credit_score !== '' ? broker.credit_score : 'Unknown' }}
+        </span>
+      </div>
+      <div class="hover-preview__row" *ngIf="broker.is_blocked">
+        <span class="hover-preview__badge hover-preview__badge--danger">Blocked</span>
+      </div>
+      <div class="hover-preview__row" *ngIf="broker.is_preferred && !broker.is_blocked">
+        <span class="hover-preview__badge hover-preview__badge--ok">Preferred</span>
+      </div>
+    </ng-container>
+    <ng-template #brokerFallback>
+      <div class="hover-preview__footnote">
+        {{ previewLoad ? 'Broker details unavailable' : 'Loading…' }}
+      </div>
+    </ng-template>
+  </div>
+</ng-template>
+
+<ng-template #attachmentsPreviewTpl>
+  <div class="hover-preview hover-preview--attachments">
+    <div class="hover-preview__title">Attachments</div>
+    <ng-container *ngIf="previewLoad; else attLoading">
+      <ul class="hover-preview__list" *ngIf="getPreviewAttachments().length; else attEmpty">
+        <li class="hover-preview__list-item" *ngFor="let att of getPreviewAttachments()">
+          <span class="material-symbols-outlined hover-preview__icon">description</span>
+          <span class="hover-preview__file-name">{{ att.file_name || att.type }}</span>
+          <span class="hover-preview__file-type">{{ att.type }}</span>
+        </li>
+      </ul>
+      <div class="hover-preview__footnote" *ngIf="getPreviewAttachmentOverflow() > 0">
+        +{{ getPreviewAttachmentOverflow() }} more
+      </div>
+      <ng-template #attEmpty>
+        <div class="hover-preview__footnote">No attachments</div>
+      </ng-template>
+    </ng-container>
+    <ng-template #attLoading>
+      <div class="hover-preview__footnote">Loading…</div>
+    </ng-template>
+  </div>
+</ng-template>
+
 <div class="loads-dashboard">
   <div class="header">
     <div>
@@ -736,8 +811,42 @@
             </span>
           </td>
           <td *ngIf="isColVisible('pickup_date')" [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
-          <td *ngIf="isColVisible('driver')" [title]="load.driver_name || '--'">{{ load.driver_name || '--' }}</td>
-          <td *ngIf="isColVisible('broker')" [title]="load.broker_name || '--'">{{ load.broker_name || '--' }}</td>
+          <!-- FN-806: Driver hover preview — position (from LoadDetail) + HOS
+               placeholder; lazy-fetched on hover via prefetchLoadPreview(load). -->
+          <td *ngIf="isColVisible('driver')" class="preview-cell">
+            <app-hover-popover
+              [content]="driverPreviewTpl"
+              [showDelay]="200"
+              [hideDelay]="120"
+              [disabled]="!load.driver_name"
+              [maxWidth]="260"
+            >
+              <span
+                class="preview-trigger"
+                (mouseenter)="prefetchLoadPreview(load)"
+                (focusin)="prefetchLoadPreview(load)"
+                [title]="load.driver_name || '--'"
+              >{{ load.driver_name || '--' }}</span>
+            </app-hover-popover>
+          </td>
+          <!-- FN-806: Broker hover preview — payment terms + credit score from
+               BrokerOption (looked up by broker_id after LoadDetail resolves). -->
+          <td *ngIf="isColVisible('broker')" class="preview-cell">
+            <app-hover-popover
+              [content]="brokerPreviewTpl"
+              [showDelay]="200"
+              [hideDelay]="120"
+              [disabled]="!load.broker_name"
+              [maxWidth]="280"
+            >
+              <span
+                class="preview-trigger"
+                (mouseenter)="prefetchLoadPreview(load)"
+                (focusin)="prefetchLoadPreview(load)"
+                [title]="load.broker_name || '--'"
+              >{{ load.broker_name || '--' }}</span>
+            </app-hover-popover>
+          </td>
           <td *ngIf="isColVisible('po_number')" [title]="load.po_number || '--'">{{ load.po_number || '--' }}</td>
           <td *ngIf="isColVisible('pickup')" [title]="(load.pickup_city || '--') + ', ' + (load.pickup_state || '')">{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
           <td *ngIf="isColVisible('delivery')" [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
@@ -817,29 +926,50 @@
               ></textarea>
             </ng-container>
             <ng-template #notesDisplay>
-              <button
-                type="button"
-                class="notes-inline__trigger"
-                [class.notes-inline__trigger--empty]="!load.notes"
-                (click)="openNotesEditor(load, $event)"
-                [attr.aria-label]="load.notes ? 'Edit notes' : 'Add notes'"
-                [title]="load.notes || 'Add notes'"
-              >{{ load.notes || '—' }}</button>
+              <!-- FN-806: Hover preview shows full notes when truncated. -->
+              <app-hover-popover
+                [text]="load.notes"
+                [showDelay]="200"
+                [hideDelay]="120"
+                [disabled]="!load.notes"
+                [maxWidth]="320"
+              >
+                <button
+                  type="button"
+                  class="notes-inline__trigger"
+                  [class.notes-inline__trigger--empty]="!load.notes"
+                  (click)="openNotesEditor(load, $event)"
+                  [attr.aria-label]="load.notes ? 'Edit notes' : 'Add notes'"
+                >{{ load.notes || '—' }}</button>
+              </app-hover-popover>
             </ng-template>
           </td>
-          <td *ngIf="isColVisible('attachments')">
-            <div class="attachment-chips">
-              <app-attachment-chip
-                *ngFor="let type of (load.attachment_types || [])"
-                [type]="type"
-                class="attachment-chip--download"
-                role="button"
-                tabindex="0"
-                [title]="'Download ' + type"
-                (click)="downloadAttachmentByType(load, type); $event.stopPropagation()"
-                (keydown.enter)="downloadAttachmentByType(load, type); $event.stopPropagation()"
-              ></app-attachment-chip>
-            </div>
+          <!-- FN-806: Attachments hover preview — file list with overflow +N,
+               lazy-fetched via prefetchLoadPreview(load). -->
+          <td *ngIf="isColVisible('attachments')" class="preview-cell">
+            <app-hover-popover
+              [content]="attachmentsPreviewTpl"
+              [showDelay]="200"
+              [hideDelay]="120"
+              [disabled]="!(load.attachment_types && load.attachment_types.length)"
+              [maxWidth]="300"
+            >
+              <div
+                class="attachment-chips preview-trigger"
+                (mouseenter)="prefetchLoadPreview(load)"
+              >
+                <app-attachment-chip
+                  *ngFor="let type of (load.attachment_types || [])"
+                  [type]="type"
+                  class="attachment-chip--download"
+                  role="button"
+                  tabindex="0"
+                  [title]="'Download ' + type"
+                  (click)="downloadAttachmentByType(load, type); $event.stopPropagation()"
+                  (keydown.enter)="downloadAttachmentByType(load, type); $event.stopPropagation()"
+                ></app-attachment-chip>
+              </div>
+            </app-hover-popover>
           </td>
           <!-- FN-805: Row-hover toolbar replaces the ⋮ dropdown. -->
           <td *ngIf="isColVisible('actions')" class="actions-cell">

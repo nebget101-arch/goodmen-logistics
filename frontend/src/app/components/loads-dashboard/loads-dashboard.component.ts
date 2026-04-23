@@ -389,6 +389,104 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return this.billingTransitions[current] ?? [];
   }
 
+  // ─── FN-806: Hover-preview state (driver / broker / attachments / notes) ─
+  /**
+   * Cache of per-load LoadDetail fetched on hover. `null` means fetch is
+   * in-flight or failed; a concrete value means we have data to display.
+   */
+  private loadPreviewCache = new Map<string, LoadDetail | null>();
+  /** Cache of broker details keyed by broker_id. */
+  private brokerPreviewCache = new Map<string, BrokerOption | null>();
+  /** The load whose hover preview is currently the focus. */
+  previewLoadId: string | null = null;
+
+  /**
+   * Kicks off a lazy fetch for driver/broker/attachment preview data when
+   * the user hovers a driver/broker/attachments cell. Safe to call on every
+   * mouseenter — the cache guards against duplicate requests.
+   */
+  prefetchLoadPreview(load: LoadListItem): void {
+    if (!load || !load.id) return;
+    this.previewLoadId = load.id;
+    if (this.loadPreviewCache.has(load.id)) {
+      const cached = this.loadPreviewCache.get(load.id);
+      if (cached) this.prefetchBroker(cached);
+      return;
+    }
+    this.loadPreviewCache.set(load.id, null);
+    this.loadsService.getLoad(load.id).subscribe({
+      next: (res) => {
+        const detail = res?.data ?? null;
+        this.loadPreviewCache.set(load.id, detail);
+        if (detail) this.prefetchBroker(detail);
+      },
+      error: () => {
+        this.loadPreviewCache.delete(load.id);
+      }
+    });
+  }
+
+  /** Secondary fetch: look up full broker details for credit/terms line. */
+  private prefetchBroker(detail: LoadDetail): void {
+    const id = detail.broker_id;
+    if (!id || this.brokerPreviewCache.has(id)) return;
+    this.brokerPreviewCache.set(id, null);
+    const searchHint = detail.broker_display_name || detail.broker_name || '';
+    this.loadsService.getBrokers(searchHint, 1, 50).subscribe({
+      next: (res) => {
+        const found = (res?.data || []).find((b) => b.id === id) ?? null;
+        this.brokerPreviewCache.set(id, found);
+      },
+      error: () => {
+        this.brokerPreviewCache.delete(id);
+      }
+    });
+  }
+
+  /** The currently-hovered load's details (or null while loading / on error). */
+  get previewLoad(): LoadDetail | null {
+    if (!this.previewLoadId) return null;
+    return this.loadPreviewCache.get(this.previewLoadId) ?? null;
+  }
+
+  /** The broker record for the currently-hovered load (null until loaded). */
+  get previewBroker(): BrokerOption | null {
+    const detail = this.previewLoad;
+    if (!detail?.broker_id) return null;
+    return this.brokerPreviewCache.get(detail.broker_id) ?? null;
+  }
+
+  /** Display string for "City, ST" position lines, or empty when unavailable. */
+  getPreviewDriverPosition(): string {
+    const detail = this.previewLoad;
+    if (!detail) return '';
+    const city = detail.driver_position_city || '';
+    const state = detail.driver_position_state || '';
+    if (city && state) return `${city}, ${state}`;
+    return city || state || '';
+  }
+
+  /** Combine payment rating + credit score into one short line. */
+  getBrokerCreditLabel(broker: BrokerOption | null): string {
+    if (!broker) return '';
+    const rating = (broker.payment_rating || '').toString().trim();
+    const score = broker.credit_score != null ? String(broker.credit_score).trim() : '';
+    if (rating && score) return `${rating} · ${score}`;
+    return rating || score || '';
+  }
+
+  /** First N attachments from LoadDetail for the hover list. */
+  getPreviewAttachments(max = 4): LoadAttachment[] {
+    const atts = this.previewLoad?.attachments || [];
+    return atts.slice(0, max);
+  }
+
+  /** Overflow count for the "+N more" line on the attachments popover. */
+  getPreviewAttachmentOverflow(max = 4): number {
+    const total = this.previewLoad?.attachments?.length ?? 0;
+    return Math.max(0, total - max);
+  }
+
   driverFilterOptions: AiSelectOption[] = [];
   statusFilterOptions: AiSelectOption[] = [];
   billingFilterOptions: AiSelectOption[] = [];
