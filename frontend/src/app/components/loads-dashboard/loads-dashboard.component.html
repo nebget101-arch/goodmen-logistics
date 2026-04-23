@@ -560,6 +560,7 @@
         <col *ngIf="isColVisible('completed_date')" style="width: 8%">
         <col *ngIf="isColVisible('status')" style="width: 6%">
         <col *ngIf="isColVisible('billing')" style="width: 6%">
+        <col *ngIf="isColVisible('notes')" style="width: 10%">
         <col *ngIf="isColVisible('attachments')" style="width: 8%">
         <col *ngIf="isColVisible('actions')" style="width: 5%">
       </colgroup>
@@ -585,6 +586,7 @@
           <th *ngIf="isColVisible('completed_date')" (click)="toggleSort('completed_date')">Completed</th>
           <th *ngIf="isColVisible('status')">Status</th>
           <th *ngIf="isColVisible('billing')">Billing</th>
+          <th *ngIf="isColVisible('notes')">Notes</th>
           <th *ngIf="isColVisible('attachments')">Attachments</th>
           <th *ngIf="isColVisible('actions')">Actions</th>
         </tr>
@@ -663,6 +665,7 @@
               [(ngModel)]="headerFilters.billingStatus"
             />
           </th>
+          <th *ngIf="isColVisible('notes')"></th>
           <th *ngIf="isColVisible('attachments')">
             <input
               type="text"
@@ -740,7 +743,8 @@
           <td *ngIf="isColVisible('delivery')" [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
           <td *ngIf="isColVisible('rate')" [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
           <td *ngIf="isColVisible('completed_date')" [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
-          <!-- FN-767: Inline status change — click pill to open dropdown, select to PATCH. -->
+          <!-- FN-767/FN-805: Inline status change — click pill to open dropdown,
+               shows only valid next transitions for the current status. -->
           <td *ngIf="isColVisible('status')" [title]="load.status || ''" class="status-cell">
             <div class="status-inline" (click)="$event.stopPropagation()">
               <button
@@ -751,14 +755,16 @@
                 [attr.aria-label]="'Change status (current: ' + (load.status || 'none') + ')'"
               >
                 <app-status-pill [status]="load.status"></app-status-pill>
-                <span class="material-symbols-outlined status-inline__chevron">expand_more</span>
+                <span
+                  class="material-symbols-outlined status-inline__chevron"
+                  *ngIf="getValidStatusTransitions(load).length > 0"
+                >expand_more</span>
               </button>
-              <div class="dropdown-menu status-inline__menu" *ngIf="statusMenuLoadId === load.id">
+              <div class="dropdown-menu status-inline__menu" *ngIf="statusMenuLoadId === load.id && getValidStatusTransitions(load).length > 0">
                 <button
                   type="button"
                   class="status-inline__option"
-                  *ngFor="let s of statusOptions"
-                  [class.status-inline__option--active]="load.status === s"
+                  *ngFor="let s of getValidStatusTransitions(load)"
                   (click)="changeLoadStatus(load, s, $event)"
                 >
                   {{ getStatusLabel(s) }}
@@ -766,7 +772,61 @@
               </div>
             </div>
           </td>
-          <td *ngIf="isColVisible('billing')" [title]="load.billing_status || ''"><app-status-pill [status]="load.billing_status"></app-status-pill></td>
+          <!-- FN-805: Inline billing change — same pattern as status. -->
+          <td *ngIf="isColVisible('billing')" [title]="load.billing_status || ''" class="billing-cell">
+            <div class="status-inline" (click)="$event.stopPropagation()">
+              <button
+                type="button"
+                class="status-inline__trigger"
+                (click)="openBillingMenu(load.id, $event)"
+                [attr.aria-expanded]="billingMenuLoadId === load.id"
+                [attr.aria-label]="'Change billing status (current: ' + (load.billing_status || 'none') + ')'"
+              >
+                <app-status-pill [status]="load.billing_status"></app-status-pill>
+                <span
+                  class="material-symbols-outlined status-inline__chevron"
+                  *ngIf="getValidBillingTransitions(load).length > 0"
+                >expand_more</span>
+              </button>
+              <div class="dropdown-menu status-inline__menu" *ngIf="billingMenuLoadId === load.id && getValidBillingTransitions(load).length > 0">
+                <button
+                  type="button"
+                  class="status-inline__option"
+                  *ngFor="let b of getValidBillingTransitions(load)"
+                  (click)="changeLoadBilling(load, b, $event)"
+                >
+                  {{ getBillingLabel(b) }}
+                </button>
+              </div>
+            </div>
+          </td>
+          <!-- FN-805: Inline notes edit — Esc cancels, Enter/blur saves. -->
+          <td *ngIf="isColVisible('notes')" class="notes-cell" (click)="$event.stopPropagation()">
+            <ng-container *ngIf="editingNotesLoadId === load.id; else notesDisplay">
+              <textarea
+                #notesInlineEditor
+                class="notes-inline__textarea"
+                rows="2"
+                [(ngModel)]="editingNotesDraft"
+                [ngModelOptions]="{standalone: true}"
+                (keydown.escape)="cancelNotesEdit($event)"
+                (keydown.enter)="saveNotesEdit(load, $event)"
+                (blur)="saveNotesEdit(load)"
+                (click)="$event.stopPropagation()"
+                aria-label="Edit notes"
+              ></textarea>
+            </ng-container>
+            <ng-template #notesDisplay>
+              <button
+                type="button"
+                class="notes-inline__trigger"
+                [class.notes-inline__trigger--empty]="!load.notes"
+                (click)="openNotesEditor(load, $event)"
+                [attr.aria-label]="load.notes ? 'Edit notes' : 'Add notes'"
+                [title]="load.notes || 'Add notes'"
+              >{{ load.notes || '—' }}</button>
+            </ng-template>
+          </td>
           <td *ngIf="isColVisible('attachments')">
             <div class="attachment-chips">
               <app-attachment-chip
@@ -781,64 +841,65 @@
               ></app-attachment-chip>
             </div>
           </td>
+          <!-- FN-805: Row-hover toolbar replaces the ⋮ dropdown. -->
           <td *ngIf="isColVisible('actions')" class="actions-cell">
-            <div class="dropdown actions-dropdown" (click)="$event.stopPropagation()">
+            <div class="row-toolbar" (click)="$event.stopPropagation()">
               <button
-                class="actions-trigger"
                 type="button"
-                (click)="actionsOpenLoadId = actionsOpenLoadId === load.id ? null : load.id"
+                class="row-toolbar__btn"
+                (click)="openDetails(load)"
+                title="View"
+                aria-label="View load"
               >
-                <span class="material-symbols-outlined">more_vert</span>
+                <span class="material-symbols-outlined">visibility</span>
               </button>
-              <div class="dropdown-menu actions-menu" *ngIf="actionsOpenLoadId === load.id">
-                <button type="button" class="actions-menu-item" (click)="openEdit(load); actionsOpenLoadId = null">
-                  <span class="material-symbols-outlined">edit</span>
-                  <span>Edit Load</span>
-                </button>
-                <button type="button" class="actions-menu-item" (click)="copyLoad(load); actionsOpenLoadId = null">
-                  <span class="material-symbols-outlined">content_copy</span>
-                  <span>Copy Load</span>
-                </button>
-                <button
-                  type="button"
-                  class="actions-menu-item"
-                  *appHasPermission="'loads.create'"
-                  (click)="cloneLoad(load); actionsOpenLoadId = null"
-                  title="Duplicate this load with dates cleared; review and save as a new draft"
-                >
-                  <span class="material-symbols-outlined">file_copy</span>
-                  <span>Clone Load</span>
-                </button>
-                <button
-                  type="button"
-                  class="actions-menu-item"
-                  *appHasPermission="'loads.create'"
-                  (click)="createReturnLoad(load); actionsOpenLoadId = null"
-                  title="Create a return trip with stops reversed and rate cleared"
-                >
-                  <span class="material-symbols-outlined">swap_horiz</span>
-                  <span>Create Return Load</span>
-                </button>
-                <button type="button" class="actions-menu-item" (click)="openEditAndShowMap(load); actionsOpenLoadId = null">
-                  <span class="material-symbols-outlined">map</span>
-                  <span>Show on Map</span>
-                </button>
-                <button
-                  type="button"
-                  class="actions-menu-item actions-menu-item-danger"
-                  *ngIf="canDeleteLoad(load)"
-                  (click)="deleteLoadFromTable(load); actionsOpenLoadId = null"
-                >
-                  <span class="material-symbols-outlined">delete</span>
-                  <span>Delete Load</span>
-                </button>
-                <ng-container *ngIf="isDraftLoad(load)">
-                  <button type="button" class="actions-menu-item actions-menu-item-success" (click)="approveDraftLoad(load); actionsOpenLoadId = null">
-                    <span class="material-symbols-outlined">check_circle</span>
-                    <span>Approve</span>
-                  </button>
-                </ng-container>
-              </div>
+              <button
+                type="button"
+                class="row-toolbar__btn"
+                (click)="openEdit(load)"
+                title="Edit"
+                aria-label="Edit load"
+              >
+                <span class="material-symbols-outlined">edit</span>
+              </button>
+              <button
+                type="button"
+                class="row-toolbar__btn"
+                *appHasPermission="'loads.create'"
+                (click)="cloneLoad(load)"
+                title="Clone"
+                aria-label="Clone load"
+              >
+                <span class="material-symbols-outlined">file_copy</span>
+              </button>
+              <button
+                type="button"
+                class="row-toolbar__btn"
+                (click)="openEditAndShowMap(load)"
+                title="Show on map"
+                aria-label="Show load on map"
+              >
+                <span class="material-symbols-outlined">map</span>
+              </button>
+              <button
+                type="button"
+                class="row-toolbar__btn"
+                (click)="dispatchInfoToDriver()"
+                title="Dispatch info"
+                aria-label="Dispatch info to driver"
+              >
+                <span class="material-symbols-outlined">local_shipping</span>
+              </button>
+              <button
+                type="button"
+                class="row-toolbar__btn row-toolbar__btn--danger"
+                *ngIf="canDeleteLoad(load)"
+                (click)="deleteLoadFromTable(load)"
+                title="Delete"
+                aria-label="Delete load"
+              >
+                <span class="material-symbols-outlined">delete</span>
+              </button>
             </div>
           </td>
         </tr>
