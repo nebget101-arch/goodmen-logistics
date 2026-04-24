@@ -31,6 +31,8 @@ import { LoadWizardBasicsComponent } from './steps/basics/basics.component';
 import { LoadWizardDriverEquipmentComponent } from './steps/driver-equipment/driver-equipment.component';
 import { LoadWizardAttachmentsComponent } from './steps/attachments/attachments.component';
 import { LoadsService } from '../../services/loads.service';
+import { AccessControlService } from '../../services/access-control.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 import {
   LoadAttachment,
   LoadAttachmentType,
@@ -51,6 +53,11 @@ type LoadWizardStepId = 'basics' | 'stops' | 'driver' | 'attachments';
  * wizard fetches the LoadDetail via `LoadsService.getLoad` (or accepts a
  * pre-fetched `loadDetail`), prefills all four step FormGroups, exposes the
  * source rate-confirmation PDF on Step 4, and submits via `updateLoad`.
+ *
+ * View-mode wiring (FN-868 / S8): same prefill pipeline runs for `mode='view'`;
+ * the form is eagerly disabled so unmounted steps stay read-only, and a
+ * permission-gated header Edit button flips into edit mode in place while
+ * preserving the current step.
  *
  * Co-exists with the legacy `<app-load-wizard>` modal (S10 removes it).
  */
@@ -111,6 +118,7 @@ export class LoadWizardComponent implements OnInit {
     private fb: FormBuilder,
     private loadsService: LoadsService,
     private sanitizer: DomSanitizer,
+    private access: AccessControlService,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -144,6 +152,11 @@ export class LoadWizardComponent implements OnInit {
     // Re-run CD whenever validity changes so canProceed flips in the shell footer.
     this.form.statusChanges.subscribe(() => this.cdr.markForCheck());
 
+    // FN-868: eagerly disable every step in view mode so inputs on not-yet-mounted
+    // steps are already read-only if the user navigates to them before the
+    // server prefill resolves.
+    this.applyViewDisableState();
+
     // FN-867: edit/view prefill — use pre-supplied detail if present, else fetch.
     if ((this.mode === 'edit' || this.mode === 'view') && this.loadId) {
       if (this.loadDetail && this.loadDetail.id === this.loadId) {
@@ -151,6 +164,16 @@ export class LoadWizardComponent implements OnInit {
       } else {
         this.fetchLoadForPrefill(this.loadId);
       }
+    }
+  }
+
+  /** Disable (view) / enable (non-view) every sub-FormGroup from the parent. */
+  private applyViewDisableState(): void {
+    if (!this.form) return;
+    if (this.mode === 'view') {
+      this.form.disable({ emitEvent: false });
+    } else {
+      this.form.enable({ emitEvent: false });
     }
   }
 
@@ -237,6 +260,21 @@ export class LoadWizardComponent implements OnInit {
 
   onClose(): void {
     this.closed.emit();
+  }
+
+  // ─── View → Edit toggle (FN-868 / FN-885) ───────────────────────────────
+
+  /** True when the current user can flip a view-mode wizard into edit mode. */
+  get canEdit(): boolean {
+    return this.access.hasPermission(PERMISSIONS.LOADS_EDIT);
+  }
+
+  /** Header Edit button: flip to edit mode in place, preserving the current step. */
+  onEditClick(): void {
+    if (this.mode !== 'view' || !this.canEdit) return;
+    this.mode = 'edit';
+    this.applyViewDisableState();
+    this.cdr.markForCheck();
   }
 
   // ─── Attachment queue helpers ───────────────────────────────────────────
@@ -546,6 +584,10 @@ export class LoadWizardComponent implements OnInit {
     // Attachments (existing list + source PDF viewer URL).
     this.existingAttachments = [...(detail.attachments || [])];
     this.refreshSourcePdfUrl();
+
+    // FN-868: re-apply view-disable after rebuilding the stops FormArray so
+    // newly pushed rows inherit the disabled state in view mode.
+    this.applyViewDisableState();
 
     this.cdr.markForCheck();
   }

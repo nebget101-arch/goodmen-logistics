@@ -76,7 +76,8 @@ export class WizardShellComponent {
   }
 
   onNext(): void {
-    if (!this.canProceed) return;
+    // View mode is read-only — no validation gate on step navigation.
+    if (!this.isView && !this.canProceed) return;
     this.next.emit();
   }
 
