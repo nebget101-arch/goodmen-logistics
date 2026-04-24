@@ -2,10 +2,12 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  ElementRef,
   EventEmitter,
   Input,
   OnInit,
   Output,
+  ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
@@ -15,9 +17,11 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { forkJoin, of } from 'rxjs';
 import { catchError, finalize } from 'rxjs/operators';
 
+import { environment } from '../../../environments/environment';
 import {
   WizardShellComponent,
   WizardStepDef,
@@ -31,6 +35,7 @@ import {
   LoadAttachment,
   LoadAttachmentType,
   LoadDetail,
+  LoadStop,
   LoadStopType,
 } from '../../models/load-dashboard.model';
 import { LoadWizardStopsComponent } from './steps/stops/stops.component';
@@ -42,9 +47,10 @@ type LoadWizardStepId = 'basics' | 'stops' | 'driver' | 'attachments';
 /**
  * LoadWizardComponent (FN-862 / S2) — 4-step load wizard built on `app-wizard-shell`.
  *
- * Step bodies are placeholders at this stage; stories S3–S6 (FN-863..FN-866) fill
- * them in. The shell owns all form state so later steps only need to render
- * controls bound to the nested FormGroup exposed here.
+ * Edit-mode wiring (FN-867 / S7): when `mode='edit'` with a `loadId`, the
+ * wizard fetches the LoadDetail via `LoadsService.getLoad` (or accepts a
+ * pre-fetched `loadDetail`), prefills all four step FormGroups, exposes the
+ * source rate-confirmation PDF on Step 4, and submits via `updateLoad`.
  *
  * Co-exists with the legacy `<app-load-wizard>` modal (S10 removes it).
  */
@@ -70,13 +76,21 @@ export class LoadWizardComponent implements OnInit {
   /**
    * FN-881: existing attachments rendered in the Attachments step for
    * edit / view / ai-extract flows. Sourced from `LoadDetail.attachments` by
-   * the caller once FN-867 / FN-868 wire up the load-detail prefill.
+   * the caller; also populated automatically when edit-mode prefill runs.
    */
   @Input() existingAttachments: LoadAttachment[] = [];
+  /**
+   * FN-867: optional pre-fetched LoadDetail for edit/view mode. When provided,
+   * the wizard skips its own `getLoad` call and prefills immediately. Useful
+   * for callers that already have the detail (e.g. dashboard row drawer).
+   */
+  @Input() loadDetail: LoadDetail | null = null;
 
   @Output() created = new EventEmitter<LoadDetail>();
   @Output() updated = new EventEmitter<LoadDetail>();
   @Output() closed = new EventEmitter<void>();
+
+  @ViewChild('pdfFrame') pdfFrame?: ElementRef<HTMLIFrameElement>;
 
   readonly steps: WizardStepDef[] = [
     { id: 'basics',      label: 'Basics',             icon: 'assignment' },
@@ -87,13 +101,16 @@ export class LoadWizardComponent implements OnInit {
 
   currentStepId: LoadWizardStepId = 'basics';
   submitting = false;
+  loading = false;
   errorMessage = '';
+  sourcePdfUrl: SafeResourceUrl | null = null;
 
   form!: FormGroup;
 
   constructor(
     private fb: FormBuilder,
     private loadsService: LoadsService,
+    private sanitizer: DomSanitizer,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -126,6 +143,15 @@ export class LoadWizardComponent implements OnInit {
 
     // Re-run CD whenever validity changes so canProceed flips in the shell footer.
     this.form.statusChanges.subscribe(() => this.cdr.markForCheck());
+
+    // FN-867: edit/view prefill — use pre-supplied detail if present, else fetch.
+    if ((this.mode === 'edit' || this.mode === 'view') && this.loadId) {
+      if (this.loadDetail && this.loadDetail.id === this.loadId) {
+        this.applyLoadDetail(this.loadDetail);
+      } else {
+        this.fetchLoadForPrefill(this.loadId);
+      }
+    }
   }
 
   // ─── Public accessors ───────────────────────────────────────────────────
@@ -161,6 +187,11 @@ export class LoadWizardComponent implements OnInit {
   get shellMode(): WizardMode {
     // The shell understands create/edit/view; ai-extract acts like create.
     return this.mode === 'view' ? 'view' : this.mode === 'edit' ? 'edit' : 'create';
+  }
+
+  /** True when the current step is 4 and a source PDF is available to render. */
+  get showSourcePdf(): boolean {
+    return this.currentStepId === 'attachments' && !!this.sourcePdfUrl;
   }
 
   /**
@@ -232,13 +263,30 @@ export class LoadWizardComponent implements OnInit {
   /** Mirror an immediate-mode upload success back into the LoadDetail cache. */
   onAttachmentUploaded(att: LoadAttachment): void {
     this.existingAttachments = [att, ...this.existingAttachments];
+    this.refreshSourcePdfUrl();
     this.cdr.markForCheck();
   }
 
   /** Mirror a delete of an existing attachment back into the LoadDetail cache. */
   onExistingDeleted(attachmentId: string): void {
     this.existingAttachments = this.existingAttachments.filter((a) => a.id !== attachmentId);
+    this.refreshSourcePdfUrl();
     this.cdr.markForCheck();
+  }
+
+  // ─── Timeline summary (FN-867 / S7) ────────────────────────────────────
+
+  /** Click from the Step 2 timeline — scroll the target row into view. */
+  onTimelineStopClick(index: number): void {
+    if (index < 0 || index >= this.stops.length) return;
+    const row = document.querySelector<HTMLElement>(
+      `[data-wizard-stop-row="${index}"]`,
+    );
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.classList.add('stop-row--focus-flash');
+      setTimeout(() => row.classList.remove('stop-row--focus-flash'), 1200);
+    }
   }
 
   // ─── Submit ─────────────────────────────────────────────────────────────
@@ -251,8 +299,10 @@ export class LoadWizardComponent implements OnInit {
 
     if (this.mode === 'create' || this.mode === 'ai-extract') {
       this.submitCreate();
+    } else if (this.mode === 'edit' && this.loadId) {
+      this.submitUpdate();
     }
-    // Edit / view submit paths land in FN-867 / FN-868.
+    // view mode is read-only — Submit is disabled by the shell.
   }
 
   private submitCreate(): void {
@@ -276,6 +326,35 @@ export class LoadWizardComponent implements OnInit {
         this.submitting = false;
         const serverMsg = err?.error?.error || err?.error?.message;
         this.errorMessage = serverMsg || 'Failed to create load.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  private submitUpdate(): void {
+    if (!this.loadId) return;
+    this.submitting = true;
+    this.errorMessage = '';
+
+    const payload = this.buildUpdatePayload();
+
+    this.loadsService.updateLoad(this.loadId, payload).subscribe({
+      next: (res) => {
+        const load = res?.data;
+        this.submitting = false;
+        if (!load?.id) {
+          this.errorMessage = 'Failed to update load.';
+          this.cdr.markForCheck();
+          return;
+        }
+        this.loadDetail = load;
+        this.updated.emit(load);
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        this.submitting = false;
+        const serverMsg = err?.error?.error || err?.error?.message;
+        this.errorMessage = serverMsg || 'Failed to update load.';
         this.cdr.markForCheck();
       },
     });
@@ -349,6 +428,146 @@ export class LoadWizardComponent implements OnInit {
     };
   }
 
+  /**
+   * FN-867: update payload preserves the server-side `id` on each stop so the
+   * backend can match existing rows (update in place) vs. new rows (insert)
+   * vs. removed rows (delete — any stop id in the original detail that isn't
+   * present here). Matches the legacy dashboard `updateLoad` payload shape.
+   */
+  private buildUpdatePayload(): Record<string, unknown> {
+    const basics = this.basics.value;
+    const driver = this.driverEquipment.value;
+    const stops = this.stops.controls.map((g, i) => {
+      const v = g.value as Record<string, unknown>;
+      const row: Record<string, unknown> = {
+        stop_type:     v['stop_type'],
+        stop_date:     v['stop_date'] || null,
+        stop_time:     v['stop_time'] || null,
+        city:          v['city'] || null,
+        state:         v['state'] || null,
+        zip:           v['zip'] || null,
+        address1:      v['address1'] || null,
+        facility_name: v['facility_name'] || null,
+        notes:         v['notes'] || null,
+        sequence:      i + 1,
+      };
+      if (v['id']) row['id'] = v['id'];
+      return row;
+    });
+
+    return {
+      status:           basics.status,
+      billingStatus:    basics.billingStatus,
+      dispatcherUserId: basics.dispatcherId || null,
+      driverId:         driver.driverId || null,
+      truckId:          driver.truckId || null,
+      trailerId:        driver.trailerId || null,
+      brokerId:         basics.brokerId || null,
+      loadNumber:       basics.loadNumber || null,
+      poNumber:         basics.poNumber || null,
+      rate:             basics.rate != null && basics.rate !== '' ? Number(basics.rate) : 0,
+      notes:            basics.notes || null,
+      stops,
+    };
+  }
+
+  // ─── Edit-mode prefill (FN-867 / S7) ───────────────────────────────────
+
+  private fetchLoadForPrefill(id: string): void {
+    this.loading = true;
+    this.cdr.markForCheck();
+    this.loadsService.getLoad(id).subscribe({
+      next: (res) => {
+        const detail = res?.data;
+        this.loading = false;
+        if (!detail) {
+          this.errorMessage = 'Failed to load details.';
+          this.cdr.markForCheck();
+          return;
+        }
+        this.loadDetail = detail;
+        this.applyLoadDetail(detail);
+      },
+      error: (err) => {
+        this.loading = false;
+        const serverMsg = err?.error?.error || err?.error?.message;
+        this.errorMessage = serverMsg || 'Failed to load details.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  /**
+   * Map a LoadDetail from the server onto each step's FormGroup/Array and the
+   * attachments cache. Rebuilds the stops FormArray from scratch so drag-drop
+   * indices and sequences match the server row ordering.
+   */
+  private applyLoadDetail(detail: LoadDetail): void {
+    // Basics
+    this.basics.patchValue({
+      loadNumber:    detail.load_number ?? '',
+      status:        detail.status,
+      billingStatus: detail.billing_status,
+      brokerId:      detail.broker_id ?? null,
+      poNumber:      detail.po_number ?? '',
+      rate:          detail.rate ?? 0,
+      dispatcherId:  detail.dispatcher_user_id ?? null,
+      notes:         detail.notes ?? '',
+    });
+
+    // Stops — rebuild from server list, preserving ids for diff on submit.
+    while (this.stops.length > 0) {
+      this.stops.removeAt(0, { emitEvent: false });
+    }
+    const sortedStops = [...(detail.stops || [])].sort(
+      (a, b) => (a.sequence ?? 0) - (b.sequence ?? 0),
+    );
+    sortedStops.forEach((stop, i) => {
+      this.stops.push(this.buildStopFromServer(stop, i + 1), { emitEvent: false });
+    });
+    // Guarantee minimum 2 stops (wizard invariant).
+    if (this.stops.length < 2) {
+      while (this.stops.length < 2) {
+        const type: LoadStopType = this.stops.length === 0 ? 'PICKUP' : 'DELIVERY';
+        this.stops.push(this.buildStop(type, this.stops.length + 1), { emitEvent: false });
+      }
+    }
+    this.stops.updateValueAndValidity();
+
+    // Driver / Equipment — show all trucks so a pre-selected truck that's not
+    // on the driver's assignment is still visible in the dropdown.
+    this.driverEquipment.patchValue({
+      driverId:      detail.driver_id ?? null,
+      truckId:       detail.truck_id ?? null,
+      trailerId:     detail.trailer_id ?? null,
+      showAllTrucks: true,
+    });
+
+    // Attachments (existing list + source PDF viewer URL).
+    this.existingAttachments = [...(detail.attachments || [])];
+    this.refreshSourcePdfUrl();
+
+    this.cdr.markForCheck();
+  }
+
+  private refreshSourcePdfUrl(): void {
+    const rateCon = this.existingAttachments.find(
+      (a) => a.type === 'RATE_CONFIRMATION' && !!a.file_url,
+    );
+    if (!rateCon || !rateCon.file_url) {
+      this.sourcePdfUrl = null;
+      return;
+    }
+    const abs = this.resolveAttachmentUrl(rateCon.file_url);
+    this.sourcePdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(abs);
+  }
+
+  private resolveAttachmentUrl(fileUrl: string): string {
+    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) return fileUrl;
+    const base = environment.apiUrl.replace(/\/api\/?$/, '');
+    return base + (fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl);
+  }
+
   // ─── Form builders ──────────────────────────────────────────────────────
 
   private buildStop(type: LoadStopType, sequence: number): FormGroup {
@@ -363,6 +582,24 @@ export class LoadWizardComponent implements OnInit {
       facility_name: [null as string | null],
       notes:         [null as string | null],
       sequence:      [sequence],
+      id:            [null as string | null],
+    });
+  }
+
+  /** Build a stop FormGroup from an existing server row (preserves `id`). */
+  private buildStopFromServer(stop: LoadStop, sequence: number): FormGroup {
+    return this.fb.group({
+      stop_type:     [stop.stop_type as LoadStopType, Validators.required],
+      stop_date:     [stop.stop_date ?? null],
+      stop_time:     [stop.stop_time ?? null],
+      city:          [stop.city ?? null],
+      state:         [stop.state ?? null],
+      zip:           [stop.zip ?? null],
+      address1:      [stop.address1 ?? null],
+      facility_name: [stop.facility_name ?? null],
+      notes:         [stop.notes ?? null],
+      sequence:      [sequence],
+      id:            [stop.id ?? null],
     });
   }
 
