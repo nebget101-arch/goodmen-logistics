@@ -24,6 +24,7 @@ import {
   WizardMode,
 } from '../shared/wizard/wizard-shell.component';
 import { LoadWizardBasicsComponent } from './steps/basics/basics.component';
+import { LoadWizardDriverEquipmentComponent } from './steps/driver-equipment/driver-equipment.component';
 import { LoadsService } from '../../services/loads.service';
 import {
   LoadAttachmentType,
@@ -54,6 +55,7 @@ type LoadWizardStepId = 'basics' | 'stops' | 'driver' | 'attachments';
     WizardShellComponent,
     LoadWizardBasicsComponent,
     LoadWizardStopsComponent,
+    LoadWizardDriverEquipmentComponent,
   ],
   templateUrl: './load-wizard.component.html',
   styleUrls: ['./load-wizard.component.scss'],
