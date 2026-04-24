@@ -7,7 +7,7 @@ import { of, throwError } from 'rxjs';
 import { LoadWizardComponent } from './load-wizard.component';
 import { LoadsService } from '../../services/loads.service';
 import { AccessControlService } from '../../services/access-control.service';
-import { LoadAttachment, LoadDetail, LoadStop } from '../../models/load-dashboard.model';
+import { LoadAiEndpointExtraction, LoadAttachment, LoadDetail, LoadStop } from '../../models/load-dashboard.model';
 
 const makeFile = (name = 'rc.pdf'): File =>
   new File([new Blob([''])], name, { type: 'application/pdf' });
@@ -121,6 +121,8 @@ describe('LoadWizardComponent (FN-862)', () => {
       // FN-881: attachments step immediate-upload + delete paths.
       'uploadAttachmentWithProgress',
       'deleteAttachment',
+      // FN-888: ai-extract Step 0 calls the backend extractor.
+      'aiExtractFromPdf',
     ]);
     // FN-875: Step 1 basics sub-component eagerly fetches brokers on init.
     loadsService.getBrokers.and.returnValue(of({ success: true, data: [] }));
@@ -659,6 +661,204 @@ describe('LoadWizardComponent (FN-862)', () => {
       expect(component.basics.enabled).toBe(true);
       expect(component.stops.enabled).toBe(true);
       expect(component.driverEquipment.enabled).toBe(true);
+    });
+  });
+
+  describe('FN-888 AI-Extract flow', () => {
+    const mockExtraction: LoadAiEndpointExtraction = {
+      brokerName: 'ACME Logistics',
+      poNumber: 'PO-4242',
+      loadId: 'EXT-9001',
+      rate: 2500,
+      pickup: {
+        date: '2026-05-01',
+        city: 'Chicago',
+        state: 'IL',
+        zip: '60601',
+        address1: '100 S Wacker Dr',
+      },
+      delivery: {
+        date: '2026-05-03',
+        city: 'Dallas',
+        state: 'TX',
+        zip: '75201',
+        address1: '500 N Akard St',
+      },
+      notes: null,
+      fieldConfidences: {
+        brokerName: 0.55,  // red — "Needs review"
+        poNumber: 0.92,    // none (hidden)
+        rate: 0.72,        // amber — "Verify"
+        loadNumber: 0.5,
+        'stops[0].city': 0.4,
+        'stops[1].date': 0.78,
+      },
+    };
+
+    const makePdf = (name = 'rate-con.pdf') =>
+      new File([new Blob(['pdf'])], name, { type: 'application/pdf' });
+
+    beforeEach(() => {
+      component.mode = 'ai-extract';
+      loadsService.createLoad.and.returnValue(of({ success: true, data: mockCreatedLoad }));
+      loadsService.uploadAttachment.and.returnValue(
+        of({ success: true, data: { id: 'att-1' } as any }),
+      );
+    });
+
+    it('showExtractStep is true until extraction completes in ai-extract mode', () => {
+      expect(component.showExtractStep).toBe(true);
+      component.extractionComplete = true;
+      expect(component.showExtractStep).toBe(false);
+    });
+
+    it('showExtractStep is false in create/edit/view modes', () => {
+      component.mode = 'create';
+      expect(component.showExtractStep).toBe(false);
+      component.mode = 'edit';
+      expect(component.showExtractStep).toBe(false);
+      component.mode = 'view';
+      expect(component.showExtractStep).toBe(false);
+    });
+
+    it('rejects non-PDF files with an inline error (does not call the service)', () => {
+      const txt = new File([new Blob(['hi'])], 'readme.txt', { type: 'text/plain' });
+      component.onPdfSelected(txt);
+      expect(loadsService.aiExtractFromPdf).not.toHaveBeenCalled();
+      expect(component.extractionError).toContain('PDF');
+      expect(component.sourcePdfFile).toBeNull();
+    });
+
+    it('extracts, prefills Basics + Stops, sets field confidences, advances to Step 1', () => {
+      loadsService.aiExtractFromPdf.and.returnValue(
+        of({ success: true, data: mockExtraction }),
+      );
+
+      component.onPdfSelected(makePdf());
+
+      expect(loadsService.aiExtractFromPdf).toHaveBeenCalledTimes(1);
+      expect(component.extractionComplete).toBe(true);
+      expect(component.extracting).toBe(false);
+      expect(component.currentStepId).toBe('basics');
+      expect(component.showExtractStep).toBe(false);
+
+      expect(component.basics.get('loadNumber')!.value).toBe('EXT-9001');
+      expect(component.basics.get('poNumber')!.value).toBe('PO-4242');
+      expect(component.basics.get('rate')!.value).toBe(2500);
+
+      expect(component.aiBrokerNameHint).toBe('ACME Logistics');
+
+      expect(component.stops.length).toBe(2);
+      expect(component.stops.at(0).get('stop_type')!.value).toBe('PICKUP');
+      expect(component.stops.at(0).get('city')!.value).toBe('Chicago');
+      expect(component.stops.at(0).get('zip')!.value).toBe('60601');
+      expect(component.stops.at(1).get('stop_type')!.value).toBe('DELIVERY');
+      expect(component.stops.at(1).get('city')!.value).toBe('Dallas');
+      expect(component.stops.at(1).get('stop_date')!.value).toBe('2026-05-03');
+
+      expect(component.fieldConfidences['brokerName']).toBe(0.55);
+      expect(component.fieldConfidences['rate']).toBe(0.72);
+      expect(component.fieldConfidences['stops[0].city']).toBe(0.4);
+    });
+
+    it('uses explicit stops[] over top-level pickup/delivery when provided', () => {
+      const data: LoadAiEndpointExtraction = {
+        ...mockExtraction,
+        stops: [
+          { type: 'PICKUP',   sequence: 1, date: '2026-06-01', city: 'Atlanta', state: 'GA', zip: '30301', address1: null },
+          { type: 'PICKUP',   sequence: 2, date: '2026-06-02', city: 'Nashville', state: 'TN', zip: '37201', address1: null },
+          { type: 'DELIVERY', sequence: 3, date: '2026-06-03', city: 'St. Louis', state: 'MO', zip: '63101', address1: null },
+        ],
+      };
+      loadsService.aiExtractFromPdf.and.returnValue(of({ success: true, data }));
+
+      component.onPdfSelected(makePdf());
+
+      expect(component.stops.length).toBe(3);
+      expect(component.stops.at(0).get('city')!.value).toBe('Atlanta');
+      expect(component.stops.at(1).get('city')!.value).toBe('Nashville');
+      expect(component.stops.at(2).get('city')!.value).toBe('St. Louis');
+      expect(component.stops.at(2).get('stop_type')!.value).toBe('DELIVERY');
+    });
+
+    it('surfaces extraction error with retry and preserves the selected PDF for retry', () => {
+      loadsService.aiExtractFromPdf.and.returnValue(
+        throwError(() => ({ error: { warning: 'OCR timed out' } })),
+      );
+
+      const file = makePdf();
+      component.onPdfSelected(file);
+
+      expect(component.extractionComplete).toBe(false);
+      expect(component.extracting).toBe(false);
+      expect(component.extractionError).toBe('OCR timed out');
+      expect(component.sourcePdfFile).toBe(file);
+      expect(component.showExtractStep).toBe(true);
+      expect(loadsService.aiExtractFromPdf).toHaveBeenCalledTimes(1);
+
+      // Retry with the same file succeeds the second time.
+      loadsService.aiExtractFromPdf.and.returnValue(
+        of({ success: true, data: mockExtraction }),
+      );
+      component.onExtractionRetry();
+
+      expect(loadsService.aiExtractFromPdf).toHaveBeenCalledTimes(2);
+      expect(component.extractionComplete).toBe(true);
+      expect(component.extractionError).toBe('');
+    });
+
+    it('onPdfClear drops the selected file so the user can pick a different one', () => {
+      loadsService.aiExtractFromPdf.and.returnValue(
+        throwError(() => new Error('boom')),
+      );
+      component.onPdfSelected(makePdf('bad.pdf'));
+      expect(component.sourcePdfFile).toBeTruthy();
+
+      component.onPdfClear();
+      expect(component.sourcePdfFile).toBeNull();
+      expect(component.extractionError).toBe('');
+    });
+
+    it('submitCreate auto-queues the source PDF as RATE_CONFIRMATION in ai-extract mode', () => {
+      loadsService.aiExtractFromPdf.and.returnValue(
+        of({ success: true, data: mockExtraction }),
+      );
+      const pdf = makePdf('rc.pdf');
+      component.onPdfSelected(pdf);
+
+      // Walk to the final step and submit.
+      component.currentStepId = 'attachments';
+      component.driverEquipment.get('driverId')!.setValue('driver-1');
+      component.driverEquipment.get('truckId')!.setValue('truck-1');
+
+      const createdSpy = jasmine.createSpy('created');
+      component.created.subscribe(createdSpy);
+      component.onSubmit();
+
+      expect(loadsService.createLoad).toHaveBeenCalledTimes(1);
+      expect(loadsService.uploadAttachment).toHaveBeenCalledTimes(1);
+      const args = loadsService.uploadAttachment.calls.mostRecent().args;
+      expect(args[1]).toBe(pdf);
+      expect(args[2]).toBe('RATE_CONFIRMATION');
+      expect(createdSpy).toHaveBeenCalledWith(mockCreatedLoad);
+    });
+
+    it('submitCreate does not double-queue the PDF if the user already attached the same file', () => {
+      loadsService.aiExtractFromPdf.and.returnValue(
+        of({ success: true, data: mockExtraction }),
+      );
+      const pdf = makePdf('rc.pdf');
+      component.onPdfSelected(pdf);
+
+      // User manually attached the same file on Step 4.
+      component.queueAttachment(pdf, 'RATE_CONFIRMATION');
+      component.currentStepId = 'attachments';
+      component.driverEquipment.get('driverId')!.setValue('driver-1');
+      component.driverEquipment.get('truckId')!.setValue('truck-1');
+
+      component.onSubmit();
+
+      expect(loadsService.uploadAttachment).toHaveBeenCalledTimes(1);
     });
   });
 });

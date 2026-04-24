@@ -31,8 +31,124 @@
       Loading load details…
     </div>
 
+    <!-- ── FN-888 Step 0: AI-Extract dropzone (ai-extract mode only) ────── -->
+    <section
+      *ngIf="showExtractStep"
+      class="ai-extract-step"
+      data-testid="step-ai-extract"
+      aria-live="polite"
+    >
+      <header class="ai-extract-step__header">
+        <h3 class="ai-extract-step__title">Extract load from PDF</h3>
+        <button
+          type="button"
+          class="ai-extract-step__close"
+          (click)="onClose()"
+          [disabled]="extracting"
+          aria-label="Close wizard"
+        >&times;</button>
+      </header>
+      <p class="ai-extract-step__hint">
+        Upload a rate confirmation PDF. We'll pre-fill Basics and Stops for you — you can review and edit every field before submitting.
+      </p>
+
+      <!-- Dropzone (shown when idle, or when a PDF is already selected but extraction hasn't started) -->
+      <div
+        *ngIf="!extracting && !sourcePdfFile"
+        class="ai-dropzone"
+        (dragover)="onPdfDragOver($event)"
+        (dragleave)="onPdfDragOver($event)"
+        (drop)="onPdfDrop($event)"
+        data-testid="ai-dropzone"
+      >
+        <svg class="ai-dropzone__icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p class="ai-dropzone__title">Drop a PDF here</p>
+        <p class="ai-dropzone__subtitle">or</p>
+        <label class="ai-dropzone__browse">
+          <span>Choose file</span>
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            (change)="onPdfSelected($any($event.target).files?.[0])"
+            data-testid="ai-dropzone-input"
+          />
+        </label>
+      </div>
+
+      <!-- Selected file summary + progress list while extracting -->
+      <div *ngIf="sourcePdfFile" class="ai-extract-file" data-testid="ai-extract-file">
+        <div class="ai-extract-file__row">
+          <span class="ai-extract-file__icon" aria-hidden="true">&#128196;</span>
+          <span class="ai-extract-file__name">{{ sourcePdfFile.name }}</span>
+          <span class="ai-extract-file__size">{{ (sourcePdfFile.size / 1024).toFixed(0) }} KB</span>
+          <button
+            type="button"
+            class="ai-extract-file__remove"
+            (click)="onPdfClear()"
+            [disabled]="extracting"
+            *ngIf="!extracting"
+            data-testid="ai-extract-file-remove"
+            aria-label="Remove file"
+          >&times;</button>
+        </div>
+      </div>
+
+      <ul
+        *ngIf="extracting || (sourcePdfFile && extractionStepIndex > -1 && !extractionError)"
+        class="ai-extract-steps"
+        data-testid="ai-extract-progress"
+      >
+        <li
+          *ngFor="let label of extractionStepLabels; let i = index"
+          class="ai-extract-steps__item"
+          [class.ai-extract-steps__item--active]="i === extractionStepIndex && extracting"
+          [class.ai-extract-steps__item--done]="i < extractionStepIndex || (!extracting && extractionStepIndex === extractionStepLabels.length - 1)"
+        >
+          <span class="ai-extract-steps__indicator" aria-hidden="true">
+            <span
+              *ngIf="i < extractionStepIndex || (!extracting && i <= extractionStepIndex)"
+              class="ai-extract-steps__check"
+            >&#10003;</span>
+            <span
+              *ngIf="i === extractionStepIndex && extracting"
+              class="ai-extract-steps__spinner"
+            ></span>
+          </span>
+          <span class="ai-extract-steps__label">{{ label }}</span>
+        </li>
+      </ul>
+
+      <!-- Error + retry -->
+      <div
+        *ngIf="extractionError && !extracting"
+        class="ai-extract-error"
+        role="alert"
+        data-testid="ai-extract-error"
+      >
+        <div class="ai-extract-error__message">{{ extractionError }}</div>
+        <div class="ai-extract-error__actions">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            (click)="onPdfClear()"
+            data-testid="ai-extract-choose-different"
+          >Choose different file</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="onExtractionRetry()"
+            [disabled]="!sourcePdfFile"
+            data-testid="ai-extract-retry"
+          >Retry</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 4-step wizard shell (hidden while loading or Step 0 is active) ── -->
     <app-wizard-shell
-      *ngIf="!loading"
+      *ngIf="!loading && !showExtractStep"
       [steps]="steps"
       [currentStepId]="currentStepId"
       [canProceed]="canProceed"
@@ -50,6 +166,8 @@
           data-testid="step-basics"
           [basics]="basics"
           [mode]="mode"
+          [fieldConfidences]="fieldConfidences"
+          [aiBrokerNameHint]="aiBrokerNameHint"
         ></app-load-wizard-basics>
 
         <div *ngSwitchCase="'stops'" class="step-stops-wrap" data-testid="step-stops">
@@ -95,6 +213,7 @@
             [stops]="stops"
             [rate]="ratePerMileInput"
             [mode]="mode"
+            [fieldConfidences]="fieldConfidences"
           ></app-load-wizard-stops>
         </div>
 
