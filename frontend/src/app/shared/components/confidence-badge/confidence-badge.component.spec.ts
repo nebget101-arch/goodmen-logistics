@@ -4,6 +4,32 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
 import { ConfidenceBadgeComponent } from './confidence-badge.component';
 
+describe('ConfidenceBadgeComponent.fieldTierFor (FN-887)', () => {
+  it('returns "red" for score < 0.6', () => {
+    expect(ConfidenceBadgeComponent.fieldTierFor(0)).toBe('red');
+    expect(ConfidenceBadgeComponent.fieldTierFor(0.3)).toBe('red');
+    expect(ConfidenceBadgeComponent.fieldTierFor(0.599)).toBe('red');
+  });
+
+  it('returns "amber" for score in [0.6, 0.85)', () => {
+    expect(ConfidenceBadgeComponent.fieldTierFor(0.6)).toBe('amber');
+    expect(ConfidenceBadgeComponent.fieldTierFor(0.75)).toBe('amber');
+    expect(ConfidenceBadgeComponent.fieldTierFor(0.849)).toBe('amber');
+  });
+
+  it('returns "none" for score ≥ 0.85', () => {
+    expect(ConfidenceBadgeComponent.fieldTierFor(0.85)).toBe('none');
+    expect(ConfidenceBadgeComponent.fieldTierFor(0.95)).toBe('none');
+    expect(ConfidenceBadgeComponent.fieldTierFor(1)).toBe('none');
+  });
+
+  it('returns "none" when score is null/undefined/NaN', () => {
+    expect(ConfidenceBadgeComponent.fieldTierFor(null)).toBe('none');
+    expect(ConfidenceBadgeComponent.fieldTierFor(undefined)).toBe('none');
+    expect(ConfidenceBadgeComponent.fieldTierFor(Number.NaN)).toBe('none');
+  });
+});
+
 describe('ConfidenceBadgeComponent.tierFor', () => {
   it('returns "high" for confidence ≥ 95', () => {
     expect(ConfidenceBadgeComponent.tierFor(95)).toBe('high');
@@ -81,6 +107,41 @@ describe('ConfidenceBadgeComponent', () => {
     fixture.detectChanges();
     const btn = fixture.nativeElement.querySelector('.confidence-badge') as HTMLElement;
     expect(btn.textContent).toContain('83% — review');
+  });
+
+  it('renders a red field-variant pill for score < 0.6', () => {
+    component.variant = 'field';
+    component.score = 0.42;
+    fixture.detectChanges();
+    const pill = fixture.nativeElement.querySelector('.confidence-badge--field') as HTMLElement;
+    expect(pill).toBeTruthy();
+    expect(pill.classList).toContain('confidence-badge--field-red');
+    expect(pill.textContent).toContain('Needs review');
+  });
+
+  it('renders an amber field-variant pill for score in [0.6, 0.85)', () => {
+    component.variant = 'field';
+    component.score = 0.72;
+    fixture.detectChanges();
+    const pill = fixture.nativeElement.querySelector('.confidence-badge--field') as HTMLElement;
+    expect(pill).toBeTruthy();
+    expect(pill.classList).toContain('confidence-badge--field-amber');
+    expect(pill.textContent).toContain('Verify');
+  });
+
+  it('hides the field-variant pill for score ≥ 0.85', () => {
+    component.variant = 'field';
+    component.score = 0.92;
+    fixture.detectChanges();
+    const pill = fixture.nativeElement.querySelector('.confidence-badge--field') as HTMLElement;
+    expect(pill.classList).toContain('confidence-badge--field-hidden');
+  });
+
+  it('field variant does not render the card button', () => {
+    component.variant = 'field';
+    component.score = 0.5;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button.confidence-badge')).toBeNull();
   });
 
   it('emits chipClick and stops propagation when clicked', () => {

@@ -1,7 +1,17 @@
-/* FN-818 — AI confidence chip */
+/* FN-818 — AI confidence chip (card variant)
+   FN-887 — per-field inline variant next to wizard field labels */
 
 .confidence-badge-host {
   display: inline-flex;
+}
+
+.confidence-badge-host--field {
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.confidence-badge-host--hidden {
+  display: none;
 }
 
 .confidence-badge {
@@ -51,12 +61,49 @@
     --badge-bg: rgba(249, 115, 22, 0.12);
     --badge-border: rgba(249, 115, 22, 0.4);
   }
+
+  /* FN-887 field variant — presentational pill, no button affordance */
+  &--field {
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: default;
+    transition: none;
+
+    &:hover { transform: none; background: var(--badge-bg); }
+    &:focus-visible { outline: none; }
+  }
+
+  &--field-red {
+    --badge-fg: #dc2626;                     /* red-600 */
+    --badge-bg: rgba(220, 38, 38, 0.12);
+    --badge-border: rgba(220, 38, 38, 0.4);
+  }
+
+  &--field-amber {
+    --badge-fg: #b45309;                     /* amber-700 */
+    --badge-bg: rgba(245, 158, 11, 0.14);
+    --badge-border: rgba(245, 158, 11, 0.45);
+  }
+
+  &--field-hidden {
+    display: none;
+  }
 }
 
 .confidence-badge__glyph {
   animation: confidence-badge-shimmer 2s ease-in-out infinite;
   text-shadow: 0 0 6px color-mix(in srgb, var(--badge-fg) 45%, transparent);
   will-change: opacity;
+}
+
+.confidence-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--badge-fg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--badge-fg) 30%, transparent);
 }
 
 @keyframes confidence-badge-shimmer {

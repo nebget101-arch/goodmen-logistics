@@ -196,6 +196,13 @@ export interface LoadAiEndpointExtraction {
     pickup?: number;
     delivery?: number;
   };
+  /**
+   * FN-887 — per-field confidence scores (0–1 range) used by the AI-Extract
+   * wizard flow to render `<app-confidence-badge variant="field">` next to
+   * low-confidence field labels. Keys are form field paths (e.g. `brokerName`,
+   * `pickup.city`, `stops[0].date`). Tiers: red < 0.6, amber 0.6–0.85, none ≥ 0.85.
+   */
+  fieldConfidences?: Record<string, number>;
   rawTextSnippet?: string | null;
   provider?: string;
   model?: string;

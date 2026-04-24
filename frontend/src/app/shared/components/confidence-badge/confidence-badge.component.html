@@ -1,13 +1,32 @@
-<button
-  type="button"
-  class="confidence-badge"
-  [class.confidence-badge--high]="tier === 'high'"
-  [class.confidence-badge--medium]="tier === 'medium'"
-  [class.confidence-badge--low]="tier === 'low'"
-  [attr.title]="tooltip || null"
-  [attr.aria-label]="('AI extraction confidence: ' + computedLabel)"
-  (click)="onClick($event)"
->
-  <span class="confidence-badge__glyph" aria-hidden="true">&#x2726;</span>
-  <span class="confidence-badge__label">{{ computedLabel }}</span>
-</button>
+<ng-container [ngSwitch]="variant">
+  <!-- FN-818 card-level chip -->
+  <button
+    *ngSwitchCase="'card'"
+    type="button"
+    class="confidence-badge"
+    [class.confidence-badge--high]="tier === 'high'"
+    [class.confidence-badge--medium]="tier === 'medium'"
+    [class.confidence-badge--low]="tier === 'low'"
+    [attr.title]="tooltip || null"
+    [attr.aria-label]="('AI extraction confidence: ' + computedLabel)"
+    (click)="onClick($event)"
+  >
+    <span class="confidence-badge__glyph" aria-hidden="true">&#x2726;</span>
+    <span class="confidence-badge__label">{{ computedLabel }}</span>
+  </button>
+
+  <!-- FN-887 per-field inline badge (presentational) -->
+  <span
+    *ngSwitchCase="'field'"
+    class="confidence-badge confidence-badge--field"
+    [class.confidence-badge--field-red]="fieldTier === 'red'"
+    [class.confidence-badge--field-amber]="fieldTier === 'amber'"
+    [class.confidence-badge--field-hidden]="fieldTier === 'none'"
+    [attr.title]="computedTooltip"
+    [attr.aria-label]="fieldTier === 'none' ? null : ('AI confidence: ' + computedLabel)"
+    role="status"
+  >
+    <span class="confidence-badge__dot" aria-hidden="true"></span>
+    <span class="confidence-badge__label">{{ computedLabel }}</span>
+  </span>
+</ng-container>
