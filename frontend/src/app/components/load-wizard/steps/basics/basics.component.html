@@ -2,7 +2,14 @@
   <!-- Row 1: Load number / Status / Billing status ─────────────────────── -->
   <div class="form-row">
     <div class="form-field" [class.invalid]="isInvalid('loadNumber')">
-      <label for="basics-load-number">Load number <span class="req">*</span></label>
+      <label for="basics-load-number">
+        Load number <span class="req">*</span>
+        <app-confidence-badge
+          variant="field"
+          [score]="fieldConfidences?.['loadNumber'] ?? null"
+          data-testid="badge-loadNumber"
+        ></app-confidence-badge>
+      </label>
       <input
         id="basics-load-number"
         type="text"
@@ -42,7 +49,14 @@
   <!-- Row 2: Broker (combo + sub-modal trigger) / PO number ─────────────── -->
   <div class="form-row">
     <div class="form-field form-field--wide broker-combo">
-      <label for="basics-broker">Broker</label>
+      <label for="basics-broker">
+        Broker
+        <app-confidence-badge
+          variant="field"
+          [score]="fieldConfidences?.['brokerName'] ?? null"
+          data-testid="badge-brokerName"
+        ></app-confidence-badge>
+      </label>
 
       <div class="broker-input-wrap">
         <input
@@ -88,7 +102,14 @@
     </div>
 
     <div class="form-field">
-      <label for="basics-po">PO number</label>
+      <label for="basics-po">
+        PO number
+        <app-confidence-badge
+          variant="field"
+          [score]="fieldConfidences?.['poNumber'] ?? null"
+          data-testid="badge-poNumber"
+        ></app-confidence-badge>
+      </label>
       <input
         id="basics-po"
         type="text"
@@ -103,7 +124,14 @@
   <!-- Row 3: Rate / Dispatcher ──────────────────────────────────────────── -->
   <div class="form-row">
     <div class="form-field" [class.invalid]="isInvalid('rate')">
-      <label for="basics-rate">Rate ($) <span class="req">*</span></label>
+      <label for="basics-rate">
+        Rate ($) <span class="req">*</span>
+        <app-confidence-badge
+          variant="field"
+          [score]="fieldConfidences?.['rate'] ?? null"
+          data-testid="badge-rate"
+        ></app-confidence-badge>
+      </label>
       <input
         id="basics-rate"
         type="number"

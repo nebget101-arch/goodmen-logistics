@@ -82,7 +82,14 @@
 
         <div class="stop-row__row">
           <label class="field field--zip">
-            <span class="field__label">Zip</span>
+            <span class="field__label">
+              Zip
+              <app-confidence-badge
+                variant="field"
+                [score]="scoreFor(i, 'zip')"
+                [attr.data-testid]="'badge-stop-' + i + '-zip'"
+              ></app-confidence-badge>
+            </span>
             <input
               type="text"
               formControlName="zip"
@@ -96,7 +103,14 @@
           </label>
 
           <label class="field field--city">
-            <span class="field__label">City</span>
+            <span class="field__label">
+              City
+              <app-confidence-badge
+                variant="field"
+                [score]="scoreFor(i, 'city')"
+                [attr.data-testid]="'badge-stop-' + i + '-city'"
+              ></app-confidence-badge>
+            </span>
             <input
               type="text"
               formControlName="city"
@@ -107,7 +121,14 @@
           </label>
 
           <label class="field field--state">
-            <span class="field__label">State</span>
+            <span class="field__label">
+              State
+              <app-confidence-badge
+                variant="field"
+                [score]="scoreFor(i, 'state')"
+                [attr.data-testid]="'badge-stop-' + i + '-state'"
+              ></app-confidence-badge>
+            </span>
             <input
               type="text"
               formControlName="state"
@@ -121,7 +142,14 @@
 
         <div class="stop-row__row">
           <label class="field field--address">
-            <span class="field__label">Address</span>
+            <span class="field__label">
+              Address
+              <app-confidence-badge
+                variant="field"
+                [score]="scoreFor(i, 'address1')"
+                [attr.data-testid]="'badge-stop-' + i + '-address1'"
+              ></app-confidence-badge>
+            </span>
             <input
               type="text"
               formControlName="address1"
@@ -132,7 +160,14 @@
           </label>
 
           <label class="field field--date">
-            <span class="field__label">Date</span>
+            <span class="field__label">
+              Date
+              <app-confidence-badge
+                variant="field"
+                [score]="scoreFor(i, 'date')"
+                [attr.data-testid]="'badge-stop-' + i + '-date'"
+              ></app-confidence-badge>
+            </span>
             <input type="date" formControlName="stop_date" data-testid="stop-date" />
           </label>
 

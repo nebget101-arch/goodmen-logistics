@@ -31,6 +31,7 @@ import { catchError, debounceTime, map, switchMap, takeUntil } from 'rxjs/operat
 import { LoadsService } from '../../../../services/loads.service';
 import { LoadStopType } from '../../../../models/load-dashboard.model';
 import { LoadWizardMode } from '../../load-wizard.component';
+import { ConfidenceBadgeComponent } from '../../../../shared/components/confidence-badge/confidence-badge.component';
 
 /** Trip metrics computed from stop coordinates + rate. */
 interface TripMetrics {
@@ -60,6 +61,7 @@ interface TripMetrics {
     CdkDropList,
     CdkDrag,
     CdkDragPlaceholder,
+    ConfidenceBadgeComponent,
   ],
   templateUrl: './stops.component.html',
   styleUrls: ['./stops.component.scss'],
@@ -69,6 +71,21 @@ export class LoadWizardStopsComponent implements OnInit, OnChanges {
   @Input({ required: true }) stops!: FormArray<FormGroup>;
   @Input() rate: number | null = null;
   @Input() mode: LoadWizardMode = 'create';
+
+  /**
+   * FN-888 — per-field confidence scores (0–1) keyed by `stops[<index>].<field>`
+   * (e.g. `stops[0].city`). Populates inline field badges when < 0.85. Unused
+   * outside ai-extract; an empty record causes every badge to auto-hide.
+   */
+  @Input() fieldConfidences: Record<string, number> | null = null;
+
+  /** Template helper — returns the score for `stops[index].field` or null. */
+  scoreFor(index: number, field: string): number | null {
+    if (!this.fieldConfidences) return null;
+    const key = `stops[${index}].${field}`;
+    const raw = this.fieldConfidences[key];
+    return typeof raw === 'number' ? raw : null;
+  }
 
   readonly stopTypeOptions: Array<{ value: LoadStopType; label: string }> = [
     { value: 'PICKUP', label: 'Pickup' },
