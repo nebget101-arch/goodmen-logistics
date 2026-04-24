@@ -35,6 +35,7 @@
       [formGroup]="asFormGroup(ctrl)"
       cdkDrag
       [cdkDragDisabled]="isView()"
+      [attr.data-wizard-stop-row]="i"
       data-testid="stop-row"
     >
       <div class="stop-row__drag-placeholder" *cdkDragPlaceholder></div>

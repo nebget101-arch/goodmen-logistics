@@ -335,3 +335,15 @@
     grid-column: 3;
   }
 }
+
+/* FN-867: pulse highlight applied imperatively when a Step 2 timeline item
+   is clicked — see LoadWizardComponent.onTimelineStopClick. */
+.stop-row--focus-flash {
+  animation: stop-row-focus-flash 1.2s ease-out;
+}
+
+@keyframes stop-row-focus-flash {
+  0%   { box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.75); }
+  60%  { box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25); }
+  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+}
