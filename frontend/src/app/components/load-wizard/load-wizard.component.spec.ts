@@ -39,7 +39,11 @@ describe('LoadWizardComponent (FN-862)', () => {
     loadsService = jasmine.createSpyObj<LoadsService>('LoadsService', [
       'createLoad',
       'uploadAttachment',
+      'getBrokers',
+      'createBroker',
     ]);
+    // FN-875: Step 1 basics sub-component eagerly fetches brokers on init.
+    loadsService.getBrokers.and.returnValue(of({ success: true, data: [] }));
 
     await TestBed.configureTestingModule({
       imports: [LoadWizardComponent, ReactiveFormsModule],

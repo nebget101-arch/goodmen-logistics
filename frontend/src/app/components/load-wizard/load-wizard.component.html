@@ -16,27 +16,12 @@
     >
       <!-- ── Step bodies (placeholders for S2) ─────────────────────────── -->
       <ng-container [ngSwitch]="currentStepId">
-        <section *ngSwitchCase="'basics'" class="step-placeholder" data-testid="step-basics">
-          <h3>Basics</h3>
-          <p class="step-hint">
-            Placeholder — real controls land in FN-863. Required fields stub-wired
-            below so create-submit can be exercised.
-          </p>
-          <form [formGroup]="basics" class="stub-form">
-            <label>
-              <span>Status</span>
-              <input type="text" formControlName="status" />
-            </label>
-            <label>
-              <span>Billing status</span>
-              <input type="text" formControlName="billingStatus" />
-            </label>
-            <label>
-              <span>Rate</span>
-              <input type="number" formControlName="rate" min="0" />
-            </label>
-          </form>
-        </section>
+        <app-load-wizard-basics
+          *ngSwitchCase="'basics'"
+          data-testid="step-basics"
+          [basics]="basics"
+          [mode]="mode"
+        ></app-load-wizard-basics>
 
         <section *ngSwitchCase="'stops'" class="step-placeholder" data-testid="step-stops">
           <h3>Stops</h3>

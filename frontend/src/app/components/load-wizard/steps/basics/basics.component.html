@@ -1,0 +1,198 @@
+<section class="basics-step" [formGroup]="basics" data-testid="basics-step">
+  <!-- Row 1: Load number / Status / Billing status ─────────────────────── -->
+  <div class="form-row">
+    <div class="form-field" [class.invalid]="isInvalid('loadNumber')">
+      <label for="basics-load-number">Load number <span class="req">*</span></label>
+      <input
+        id="basics-load-number"
+        type="text"
+        formControlName="loadNumber"
+        placeholder="LD-260423-1234"
+        autocomplete="off"
+        data-testid="basics-load-number"
+      />
+      <small class="field-error" *ngIf="hasError('loadNumber', 'required')">
+        Load number is required.
+      </small>
+    </div>
+
+    <div class="form-field">
+      <label for="basics-status">Status <span class="req">*</span></label>
+      <select
+        id="basics-status"
+        formControlName="status"
+        data-testid="basics-status"
+      >
+        <option *ngFor="let s of statusOptions" [value]="s">{{ s }}</option>
+      </select>
+    </div>
+
+    <div class="form-field">
+      <label for="basics-billing-status">Billing status <span class="req">*</span></label>
+      <select
+        id="basics-billing-status"
+        formControlName="billingStatus"
+        data-testid="basics-billing-status"
+      >
+        <option *ngFor="let s of billingStatusOptions" [value]="s">{{ s }}</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Row 2: Broker (combo + sub-modal trigger) / PO number ─────────────── -->
+  <div class="form-row">
+    <div class="form-field form-field--wide broker-combo">
+      <label for="basics-broker">Broker</label>
+
+      <div class="broker-input-wrap">
+        <input
+          id="basics-broker"
+          type="text"
+          [value]="brokerSearch"
+          (input)="onBrokerSearch($any($event.target).value)"
+          (focus)="onBrokerInputFocus()"
+          [disabled]="isView() || loadingBrokers"
+          placeholder="Search broker by name…"
+          autocomplete="off"
+          data-testid="basics-broker-search"
+        />
+        <button
+          type="button"
+          class="btn-clear"
+          *ngIf="basics.get('brokerId')?.value && !isView()"
+          (click)="clearBroker()"
+          aria-label="Clear broker"
+          title="Clear broker"
+        >&times;</button>
+
+        <div class="broker-dropdown" *ngIf="showBrokerDropdown && filteredBrokers.length">
+          <button
+            type="button"
+            class="broker-item"
+            *ngFor="let b of filteredBrokers"
+            (click)="selectBroker(b)"
+            data-testid="basics-broker-option"
+          >
+            {{ brokerLabel(b) }}
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="btn-create-broker"
+        *ngIf="!isView()"
+        (click)="openBrokerModal()"
+        data-testid="basics-broker-create"
+      >+ Create new broker</button>
+    </div>
+
+    <div class="form-field">
+      <label for="basics-po">PO number</label>
+      <input
+        id="basics-po"
+        type="text"
+        formControlName="poNumber"
+        placeholder="PO-12345"
+        autocomplete="off"
+        data-testid="basics-po"
+      />
+    </div>
+  </div>
+
+  <!-- Row 3: Rate / Dispatcher ──────────────────────────────────────────── -->
+  <div class="form-row">
+    <div class="form-field" [class.invalid]="isInvalid('rate')">
+      <label for="basics-rate">Rate ($) <span class="req">*</span></label>
+      <input
+        id="basics-rate"
+        type="number"
+        formControlName="rate"
+        (blur)="formatRate()"
+        min="0"
+        step="0.01"
+        placeholder="0.00"
+        data-testid="basics-rate"
+      />
+      <small class="field-error" *ngIf="hasError('rate', 'required')">Rate is required.</small>
+      <small class="field-error" *ngIf="hasError('rate', 'numeric')">Rate must be a number.</small>
+      <small class="field-error" *ngIf="hasError('rate', 'min')">Rate must be 0 or greater.</small>
+    </div>
+
+    <div class="form-field">
+      <label for="basics-dispatcher">Dispatcher</label>
+      <input
+        id="basics-dispatcher"
+        type="text"
+        [value]="currentUserDisplay"
+        readonly
+        aria-readonly="true"
+        data-testid="basics-dispatcher"
+      />
+      <small class="field-hint">Defaults to the current user.</small>
+    </div>
+  </div>
+
+  <!-- Row 4: Notes ──────────────────────────────────────────────────────── -->
+  <div class="form-row">
+    <div class="form-field form-field--full">
+      <label for="basics-notes">Notes</label>
+      <textarea
+        id="basics-notes"
+        formControlName="notes"
+        rows="3"
+        placeholder="Internal notes…"
+        data-testid="basics-notes"
+      ></textarea>
+    </div>
+  </div>
+
+  <!-- ── Inline "+ Create New Broker" sub-modal (stacked over wizard) ─── -->
+  <div
+    class="broker-modal-overlay"
+    *ngIf="showBrokerModal"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Create new broker"
+    data-testid="basics-broker-modal"
+  >
+    <div class="broker-modal-backdrop" (click)="closeBrokerModal()"></div>
+
+    <div class="broker-modal">
+      <h4>Create new broker</h4>
+      <div class="form-field">
+        <label for="basics-new-broker-name">Company name <span class="req">*</span></label>
+        <input
+          id="basics-new-broker-name"
+          type="text"
+          [(ngModel)]="newBrokerName"
+          [ngModelOptions]="{ standalone: true }"
+          placeholder="Broker company name"
+          autocomplete="off"
+          data-testid="basics-new-broker-name"
+        />
+      </div>
+
+      <div class="broker-modal-error" *ngIf="brokerCreateError" role="alert">
+        {{ brokerCreateError }}
+      </div>
+
+      <div class="broker-modal-actions">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="closeBrokerModal()"
+          [disabled]="creatingBroker"
+          data-testid="basics-broker-modal-cancel"
+        >Cancel</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="saveNewBroker()"
+          [disabled]="!newBrokerName.trim() || creatingBroker"
+          data-testid="basics-broker-modal-save"
+        >{{ creatingBroker ? 'Creating…' : 'Create' }}</button>
+      </div>
+    </div>
+  </div>
+</section>
