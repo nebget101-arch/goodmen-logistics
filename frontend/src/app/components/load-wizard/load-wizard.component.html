@@ -7,6 +7,20 @@
     [class.load-wizard-panel--with-pdf]="showSourcePdf"
     data-testid="load-wizard-panel"
   >
+    <!-- FN-868 / FN-885: Edit toggle — view mode only, permission-gated on loads.edit. -->
+    <div class="load-wizard-header" *ngIf="mode === 'view'">
+      <button
+        *ngIf="canEdit"
+        type="button"
+        class="load-wizard-edit-btn"
+        (click)="onEditClick()"
+        data-testid="load-wizard-edit"
+        aria-label="Edit load"
+      >
+        <span class="material-symbols-outlined">edit</span> Edit
+      </button>
+    </div>
+
     <div
       *ngIf="loading"
       class="load-wizard-loading"

@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 
 import { LoadWizardComponent } from './load-wizard.component';
 import { LoadsService } from '../../services/loads.service';
+import { AccessControlService } from '../../services/access-control.service';
 import { LoadAttachment, LoadDetail, LoadStop } from '../../models/load-dashboard.model';
 
 const makeFile = (name = 'rc.pdf'): File =>
@@ -105,6 +106,7 @@ describe('LoadWizardComponent (FN-862)', () => {
   let fixture: ComponentFixture<LoadWizardComponent>;
   let component: LoadWizardComponent;
   let loadsService: jasmine.SpyObj<LoadsService>;
+  let access: jasmine.SpyObj<AccessControlService>;
 
   beforeEach(async () => {
     loadsService = jasmine.createSpyObj<LoadsService>('LoadsService', [
@@ -126,9 +128,18 @@ describe('LoadWizardComponent (FN-862)', () => {
     loadsService.getActiveDrivers.and.returnValue(of([]));
     loadsService.getEquipment.and.returnValue(of({ success: true, data: [] }));
 
+    // FN-885: AccessControlService drives the Edit button permission gate.
+    access = jasmine.createSpyObj<AccessControlService>('AccessControlService', [
+      'hasPermission',
+    ]);
+    access.hasPermission.and.returnValue(true);
+
     await TestBed.configureTestingModule({
       imports: [LoadWizardComponent, ReactiveFormsModule],
-      providers: [{ provide: LoadsService, useValue: loadsService }],
+      providers: [
+        { provide: LoadsService, useValue: loadsService },
+        { provide: AccessControlService, useValue: access },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LoadWizardComponent);
@@ -509,5 +520,145 @@ describe('LoadWizardComponent (FN-862)', () => {
     expect(component.shellMode).toBe('view');
     component.mode = 'edit';
     expect(component.shellMode).toBe('edit');
+  });
+
+  describe('view mode (FN-868 / FN-885)', () => {
+    const mockLoad: LoadDetail = {
+      id: 'load-view-1',
+      load_number: 'L-VIEW-1',
+      status: 'DISPATCHED',
+      billing_status: 'PENDING',
+      rate: 2500,
+      completed_date: null,
+      pickup_city: 'Chicago',
+      pickup_state: 'IL',
+      delivery_city: 'Dallas',
+      delivery_state: 'TX',
+      driver_name: 'Jane Doe',
+      broker_name: 'Acme Brokers',
+      attachment_count: 1,
+      attachment_types: ['BOL'],
+      po_number: 'PO-42',
+      notes: 'Read-only test',
+      broker_id: 'broker-1',
+      dispatcher_user_id: 'disp-1',
+      driver_id: 'driver-1',
+      truck_id: 'truck-1',
+      trailer_id: 'trailer-1',
+      stops: [
+        { stop_type: 'PICKUP',   city: 'Chicago', state: 'IL', zip: '60601', sequence: 1 },
+        { stop_type: 'DELIVERY', city: 'Dallas',  state: 'TX', zip: '75201', sequence: 2 },
+      ],
+      attachments: [
+        {
+          id: 'att-1',
+          load_id: 'load-view-1',
+          type: 'BOL',
+          file_name: 'bol.pdf',
+          file_url: 'https://example.com/bol.pdf',
+          mime_type: 'application/pdf',
+          size_bytes: 1024,
+          created_at: '2026-04-20T00:00:00Z',
+        },
+      ],
+    };
+
+    function initViewMode(): void {
+      loadsService.getLoad.and.returnValue(of({ success: true, data: mockLoad }));
+      fixture = TestBed.createComponent(LoadWizardComponent);
+      component = fixture.componentInstance;
+      component.mode = 'view';
+      component.loadId = 'load-view-1';
+      fixture.detectChanges();
+    }
+
+    it('calls getLoad and disables every step FormGroup', () => {
+      initViewMode();
+
+      expect(loadsService.getLoad).toHaveBeenCalledWith('load-view-1');
+      expect(component.basics.disabled).toBe(true);
+      expect(component.stops.disabled).toBe(true);
+      expect(component.driverEquipment.disabled).toBe(true);
+      expect(component.form.disabled).toBe(true);
+    });
+
+    it('prefills basics/stops/driverEquipment/existingAttachments from the load detail', () => {
+      initViewMode();
+
+      expect(component.basics.get('loadNumber')!.value).toBe('L-VIEW-1');
+      expect(component.basics.get('status')!.value).toBe('DISPATCHED');
+      expect(component.basics.get('brokerId')!.value).toBe('broker-1');
+      expect(component.basics.get('rate')!.value).toBe(2500);
+      expect(component.basics.get('dispatcherId')!.value).toBe('disp-1');
+      expect(component.basics.get('poNumber')!.value).toBe('PO-42');
+
+      expect(component.stops.length).toBe(2);
+      expect(component.stops.at(0).get('zip')!.value).toBe('60601');
+      expect(component.stops.at(1).get('zip')!.value).toBe('75201');
+
+      expect(component.driverEquipment.get('driverId')!.value).toBe('driver-1');
+      expect(component.driverEquipment.get('truckId')!.value).toBe('truck-1');
+      expect(component.driverEquipment.get('trailerId')!.value).toBe('trailer-1');
+
+      expect(component.existingAttachments.length).toBe(1);
+      expect(component.existingAttachments[0].id).toBe('att-1');
+    });
+
+    it('renders the Edit button when canEdit is true and flips mode to edit on click', () => {
+      access.hasPermission.and.returnValue(true);
+      initViewMode();
+
+      const editBtn = fixture.nativeElement.querySelector(
+        '[data-testid="load-wizard-edit"]',
+      ) as HTMLButtonElement;
+      expect(editBtn).toBeTruthy();
+
+      editBtn.click();
+      fixture.detectChanges();
+
+      expect(component.mode).toBe('edit');
+      expect(component.shellMode).toBe('edit');
+      const editBtnAfter = fixture.nativeElement.querySelector(
+        '[data-testid="load-wizard-edit"]',
+      );
+      expect(editBtnAfter).toBeNull();
+    });
+
+    it('preserves the current step when flipping from view → edit', () => {
+      access.hasPermission.and.returnValue(true);
+      initViewMode();
+
+      component.currentStepId = 'driver';
+      fixture.detectChanges();
+
+      component.onEditClick();
+      expect(component.mode).toBe('edit');
+      expect(component.currentStepId).toBe('driver');
+    });
+
+    it('hides the Edit button when the user lacks loads.edit permission', () => {
+      access.hasPermission.and.returnValue(false);
+      initViewMode();
+
+      const editBtn = fixture.nativeElement.querySelector(
+        '[data-testid="load-wizard-edit"]',
+      );
+      expect(editBtn).toBeNull();
+      component.onEditClick();
+      expect(component.mode).toBe('view');
+    });
+
+    it('re-enables step FormGroups after flipping to edit mode', () => {
+      access.hasPermission.and.returnValue(true);
+      initViewMode();
+      expect(component.basics.disabled).toBe(true);
+
+      component.onEditClick();
+      fixture.detectChanges();
+
+      expect(component.basics.enabled).toBe(true);
+      expect(component.stops.enabled).toBe(true);
+      expect(component.driverEquipment.enabled).toBe(true);
+    });
   });
 });

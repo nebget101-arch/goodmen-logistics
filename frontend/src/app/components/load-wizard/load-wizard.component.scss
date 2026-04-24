@@ -53,6 +53,45 @@
   text-align: center;
 }
 
+/* FN-868 / FN-885 — View mode header with the Edit toggle. */
+.load-wizard-header {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.load-wizard-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 8px;
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  .material-symbols-outlined {
+    font-size: 16px;
+  }
+
+  &:hover {
+    background: rgba(251, 191, 36, 0.25);
+    border-color: #fbbf24;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #fbbf24;
+    outline-offset: 2px;
+  }
+}
+
 .step-placeholder {
   padding: 28px 32px;
   color: #e2e8f0;

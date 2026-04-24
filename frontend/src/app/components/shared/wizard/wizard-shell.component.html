@@ -28,45 +28,47 @@
       <ng-content></ng-content>
 
       <div class="step-footer">
-        <ng-container *ngIf="isView; else editFooter">
-          <button type="button" class="btn-primary" (click)="onClose()" data-testid="wizard-close">
-            <span class="material-symbols-outlined">close</span> Close
-          </button>
-        </ng-container>
+        <button
+          type="button"
+          class="btn-ghost"
+          (click)="onBack()"
+          [disabled]="isFirstStep"
+          data-testid="wizard-back"
+        >
+          <span class="material-symbols-outlined">arrow_back</span> Back
+        </button>
 
-        <ng-template #editFooter>
-          <button
-            type="button"
-            class="btn-ghost"
-            (click)="onBack()"
-            [disabled]="isFirstStep"
-            data-testid="wizard-back"
-          >
-            <span class="material-symbols-outlined">arrow_back</span> Back
-          </button>
+        <button
+          *ngIf="!isFinalStep"
+          type="button"
+          class="btn-primary"
+          (click)="onNext()"
+          [disabled]="isView ? false : !canProceed"
+          data-testid="wizard-next"
+        >
+          Continue <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
 
-          <button
-            *ngIf="!isFinalStep"
-            type="button"
-            class="btn-primary"
-            (click)="onNext()"
-            [disabled]="!canProceed"
-            data-testid="wizard-next"
-          >
-            Continue <span class="material-symbols-outlined">arrow_forward</span>
-          </button>
+        <button
+          *ngIf="isFinalStep && !isView"
+          type="button"
+          class="btn-primary"
+          (click)="onSubmit()"
+          [disabled]="!canProceed"
+          data-testid="wizard-submit"
+        >
+          <span class="material-symbols-outlined">check</span> Submit
+        </button>
 
-          <button
-            *ngIf="isFinalStep"
-            type="button"
-            class="btn-primary"
-            (click)="onSubmit()"
-            [disabled]="!canProceed"
-            data-testid="wizard-submit"
-          >
-            <span class="material-symbols-outlined">check</span> Submit
-          </button>
-        </ng-template>
+        <button
+          *ngIf="isView"
+          type="button"
+          class="btn-ghost"
+          (click)="onClose()"
+          data-testid="wizard-close"
+        >
+          <span class="material-symbols-outlined">close</span> Close
+        </button>
       </div>
     </div>
   </div>
