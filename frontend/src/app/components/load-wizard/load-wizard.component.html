@@ -1,9 +1,24 @@
-<!-- FN-862 / S2: 4-step load wizard shell. Step bodies are placeholders filled by S3–S6. -->
+<!-- FN-862 / S2: 4-step load wizard shell. FN-867 / S7: edit-mode prefill + PDF/timeline fold-in. -->
 <div class="load-wizard-overlay" role="dialog" aria-modal="true" aria-label="Load wizard">
   <div class="load-wizard-backdrop" (click)="onClose()"></div>
 
-  <div class="load-wizard-panel">
+  <div
+    class="load-wizard-panel"
+    [class.load-wizard-panel--with-pdf]="showSourcePdf"
+    data-testid="load-wizard-panel"
+  >
+    <div
+      *ngIf="loading"
+      class="load-wizard-loading"
+      role="status"
+      aria-live="polite"
+      data-testid="load-wizard-loading"
+    >
+      Loading load details…
+    </div>
+
     <app-wizard-shell
+      *ngIf="!loading"
       [steps]="steps"
       [currentStepId]="currentStepId"
       [canProceed]="canProceed"
@@ -14,7 +29,7 @@
       (submit)="onSubmit()"
       (close)="onClose()"
     >
-      <!-- ── Step bodies (placeholders for S2) ─────────────────────────── -->
+      <!-- ── Step bodies ────────────────────────────────────────────────── -->
       <ng-container [ngSwitch]="currentStepId">
         <app-load-wizard-basics
           *ngSwitchCase="'basics'"
@@ -23,13 +38,51 @@
           [mode]="mode"
         ></app-load-wizard-basics>
 
-        <app-load-wizard-stops
-          *ngSwitchCase="'stops'"
-          [stops]="stops"
-          [rate]="ratePerMileInput"
-          [mode]="mode"
-          data-testid="step-stops"
-        ></app-load-wizard-stops>
+        <div *ngSwitchCase="'stops'" class="step-stops-wrap" data-testid="step-stops">
+          <!-- FN-867: Trip timeline summary panel — clicking a stop jumps focus to the form row. -->
+          <aside
+            *ngIf="stops.length > 0"
+            class="trip-timeline-summary"
+            data-testid="trip-timeline-summary"
+            aria-label="Trip timeline summary"
+          >
+            <h4 class="trip-timeline-summary__title">Trip timeline</h4>
+            <ol class="trip-timeline-summary__list">
+              <li
+                *ngFor="let stop of stops.controls; let i = index"
+                class="trip-timeline-summary__item"
+                [class.trip-timeline-summary__item--pickup]="stop.get('stop_type')?.value === 'PICKUP'"
+                [class.trip-timeline-summary__item--delivery]="stop.get('stop_type')?.value === 'DELIVERY'"
+              >
+                <button
+                  type="button"
+                  class="trip-timeline-summary__btn"
+                  (click)="onTimelineStopClick(i)"
+                  [attr.aria-label]="'Jump to stop ' + (i + 1)"
+                  data-testid="trip-timeline-item"
+                >
+                  <span class="trip-timeline-summary__seq">{{ i + 1 }}</span>
+                  <span class="trip-timeline-summary__body">
+                    <span class="trip-timeline-summary__type">
+                      {{ stop.get('stop_type')?.value === 'PICKUP' ? 'Pickup' : 'Delivery' }}
+                    </span>
+                    <span class="trip-timeline-summary__loc">
+                      {{ stop.get('city')?.value || '—' }}<ng-container
+                        *ngIf="stop.get('state')?.value"
+                      >, {{ stop.get('state')?.value }}</ng-container>
+                    </span>
+                  </span>
+                </button>
+              </li>
+            </ol>
+          </aside>
+
+          <app-load-wizard-stops
+            [stops]="stops"
+            [rate]="ratePerMileInput"
+            [mode]="mode"
+          ></app-load-wizard-stops>
+        </div>
 
         <app-load-wizard-driver-equipment
           *ngSwitchCase="'driver'"
@@ -38,22 +91,43 @@
           [mode]="mode"
         ></app-load-wizard-driver-equipment>
 
-        <div *ngSwitchCase="'attachments'" class="step-attachments" data-testid="step-attachments">
-          <app-load-wizard-attachments
-            [attachmentsGroup]="attachmentsGroup"
-            [mode]="mode"
-            [loadId]="loadId"
-            [existingAttachments]="existingAttachments"
-            (attachmentUploaded)="onAttachmentUploaded($event)"
-            (existingDeleted)="onExistingDeleted($event)"
-          ></app-load-wizard-attachments>
-
-          <div class="submit-error" *ngIf="errorMessage" role="alert" data-testid="submit-error">
-            {{ errorMessage }}
+        <div
+          *ngSwitchCase="'attachments'"
+          class="step-attachments"
+          [class.step-attachments--split]="showSourcePdf"
+          data-testid="step-attachments"
+        >
+          <!-- FN-867: source rate-confirmation PDF viewer (folded draft-review). -->
+          <div
+            *ngIf="showSourcePdf"
+            class="step-attachments__pdf"
+            data-testid="source-pdf-viewer"
+          >
+            <iframe
+              #pdfFrame
+              [src]="sourcePdfUrl"
+              class="step-attachments__pdf-frame"
+              title="Source rate confirmation PDF"
+            ></iframe>
           </div>
 
-          <div class="submitting-hint" *ngIf="submitting" aria-live="polite">
-            Saving load…
+          <div class="step-attachments__main">
+            <app-load-wizard-attachments
+              [attachmentsGroup]="attachmentsGroup"
+              [mode]="mode"
+              [loadId]="loadId"
+              [existingAttachments]="existingAttachments"
+              (attachmentUploaded)="onAttachmentUploaded($event)"
+              (existingDeleted)="onExistingDeleted($event)"
+            ></app-load-wizard-attachments>
+
+            <div class="submit-error" *ngIf="errorMessage" role="alert" data-testid="submit-error">
+              {{ errorMessage }}
+            </div>
+
+            <div class="submitting-hint" *ngIf="submitting" aria-live="polite">
+              {{ mode === 'edit' ? 'Saving changes…' : 'Saving load…' }}
+            </div>
           </div>
         </div>
       </ng-container>

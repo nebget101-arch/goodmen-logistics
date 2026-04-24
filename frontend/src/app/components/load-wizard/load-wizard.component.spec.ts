@@ -6,7 +6,7 @@ import { of, throwError } from 'rxjs';
 
 import { LoadWizardComponent } from './load-wizard.component';
 import { LoadsService } from '../../services/loads.service';
-import { LoadDetail } from '../../models/load-dashboard.model';
+import { LoadAttachment, LoadDetail, LoadStop } from '../../models/load-dashboard.model';
 
 const makeFile = (name = 'rc.pdf'): File =>
   new File([new Blob([''])], name, { type: 'application/pdf' });
@@ -30,6 +30,77 @@ const mockCreatedLoad: LoadDetail = {
   attachments: [],
 };
 
+// FN-867: a fully-populated LoadDetail used for edit-mode prefill tests.
+const mockEditLoad: LoadDetail = {
+  id: 'load-edit-1',
+  load_number: 'LD-250101-AAAA',
+  status: 'NEW',
+  billing_status: 'PENDING',
+  rate: 3400,
+  completed_date: null,
+  pickup_city: 'Dallas',
+  pickup_state: 'TX',
+  delivery_city: 'Atlanta',
+  delivery_state: 'GA',
+  driver_name: 'Jane Driver',
+  broker_name: 'Acme Logistics',
+  attachment_count: 2,
+  attachment_types: ['RATE_CONFIRMATION', 'BOL'],
+  po_number: 'PO-987',
+  notes: 'Handle with care.',
+  driver_id: 'driver-42',
+  truck_id: 'truck-7',
+  trailer_id: 'trailer-9',
+  broker_id: 'broker-abc',
+  dispatcher_user_id: 'dispatcher-1',
+  stops: [
+    {
+      id: 'stop-1',
+      stop_type: 'PICKUP',
+      city: 'Dallas',
+      state: 'TX',
+      zip: '75201',
+      sequence: 1,
+      stop_date: '2026-05-01',
+      stop_time: '09:00',
+      facility_name: 'Warehouse A',
+    } as LoadStop,
+    {
+      id: 'stop-2',
+      stop_type: 'DELIVERY',
+      city: 'Atlanta',
+      state: 'GA',
+      zip: '30301',
+      sequence: 2,
+      stop_date: '2026-05-03',
+      stop_time: '14:00',
+      facility_name: 'Store 5',
+    } as LoadStop,
+  ],
+  attachments: [
+    {
+      id: 'att-rc',
+      load_id: 'load-edit-1',
+      type: 'RATE_CONFIRMATION',
+      file_name: 'ratecon.pdf',
+      file_url: '/uploads/loads/load-edit-1/ratecon.pdf',
+      mime_type: 'application/pdf',
+      size_bytes: 1024,
+      created_at: '2026-04-20T12:00:00Z',
+    } as LoadAttachment,
+    {
+      id: 'att-bol',
+      load_id: 'load-edit-1',
+      type: 'BOL',
+      file_name: 'bol.pdf',
+      file_url: '/uploads/loads/load-edit-1/bol.pdf',
+      mime_type: 'application/pdf',
+      size_bytes: 2048,
+      created_at: '2026-04-20T12:05:00Z',
+    } as LoadAttachment,
+  ],
+};
+
 describe('LoadWizardComponent (FN-862)', () => {
   let fixture: ComponentFixture<LoadWizardComponent>;
   let component: LoadWizardComponent;
@@ -38,6 +109,8 @@ describe('LoadWizardComponent (FN-862)', () => {
   beforeEach(async () => {
     loadsService = jasmine.createSpyObj<LoadsService>('LoadsService', [
       'createLoad',
+      'updateLoad',
+      'getLoad',
       'uploadAttachment',
       'getBrokers',
       'createBroker',
@@ -233,6 +306,192 @@ describe('LoadWizardComponent (FN-862)', () => {
 
       expect(createdSpy).toHaveBeenCalledWith(mockCreatedLoad);
       expect(component.errorMessage).toContain('1 attachment upload(s) failed');
+    });
+  });
+
+  // ─── FN-867 / S7: Edit-mode prefill + updateLoad submit ────────────────
+  describe('edit-mode prefill (FN-867)', () => {
+    /** Build a fresh component instance in edit mode with the given hooks. */
+    const buildEditComponent = (opts: {
+      preload?: LoadDetail | null;
+      getLoadResponse?: any;
+    } = {}): { fx: ComponentFixture<LoadWizardComponent>; cmp: LoadWizardComponent } => {
+      loadsService.getLoad.and.returnValue(
+        opts.getLoadResponse ?? of({ success: true, data: mockEditLoad }),
+      );
+      const fx = TestBed.createComponent(LoadWizardComponent);
+      const cmp = fx.componentInstance;
+      cmp.mode = 'edit';
+      cmp.loadId = 'load-edit-1';
+      if (opts.preload !== undefined) cmp.loadDetail = opts.preload;
+      fx.detectChanges();
+      return { fx, cmp };
+    };
+
+    it('calls getLoad and prefills all four steps from the response', () => {
+      const { cmp } = buildEditComponent();
+
+      expect(loadsService.getLoad).toHaveBeenCalledOnceWith('load-edit-1');
+      expect(cmp.basics.get('loadNumber')!.value).toBe('LD-250101-AAAA');
+      expect(cmp.basics.get('status')!.value).toBe('NEW');
+      expect(cmp.basics.get('billingStatus')!.value).toBe('PENDING');
+      expect(cmp.basics.get('rate')!.value).toBe(3400);
+      expect(cmp.basics.get('brokerId')!.value).toBe('broker-abc');
+      expect(cmp.basics.get('poNumber')!.value).toBe('PO-987');
+      expect(cmp.basics.get('dispatcherId')!.value).toBe('dispatcher-1');
+      expect(cmp.basics.get('notes')!.value).toBe('Handle with care.');
+
+      expect(cmp.stops.length).toBe(2);
+      expect(cmp.stops.at(0).get('stop_type')!.value).toBe('PICKUP');
+      expect(cmp.stops.at(0).get('city')!.value).toBe('Dallas');
+      expect(cmp.stops.at(0).get('zip')!.value).toBe('75201');
+      expect(cmp.stops.at(0).get('id')!.value).toBe('stop-1');
+      expect(cmp.stops.at(1).get('stop_type')!.value).toBe('DELIVERY');
+      expect(cmp.stops.at(1).get('city')!.value).toBe('Atlanta');
+      expect(cmp.stops.at(1).get('id')!.value).toBe('stop-2');
+
+      expect(cmp.driverEquipment.get('driverId')!.value).toBe('driver-42');
+      expect(cmp.driverEquipment.get('truckId')!.value).toBe('truck-7');
+      expect(cmp.driverEquipment.get('trailerId')!.value).toBe('trailer-9');
+      expect(cmp.driverEquipment.get('showAllTrucks')!.value).toBe(true);
+
+      expect(cmp.existingAttachments.length).toBe(2);
+      expect(cmp.sourcePdfUrl).toBeTruthy(); // RATE_CONFIRMATION attachment present
+    });
+
+    it('skips getLoad when loadDetail is preloaded with the matching id', () => {
+      const { cmp } = buildEditComponent({ preload: mockEditLoad });
+
+      expect(loadsService.getLoad).not.toHaveBeenCalled();
+      expect(cmp.basics.get('loadNumber')!.value).toBe('LD-250101-AAAA');
+      expect(cmp.stops.length).toBe(2);
+    });
+
+    it('falls back to fetching when the preloaded detail is for a different load', () => {
+      const other: LoadDetail = { ...mockEditLoad, id: 'load-other' };
+      buildEditComponent({ preload: other });
+      expect(loadsService.getLoad).toHaveBeenCalledOnceWith('load-edit-1');
+    });
+
+    it('surfaces an error when getLoad fails', () => {
+      const { cmp } = buildEditComponent({
+        getLoadResponse: throwError(() => ({ error: { error: 'Not found' } })),
+      });
+      expect(cmp.errorMessage).toBe('Not found');
+      expect(cmp.loading).toBe(false);
+    });
+
+    it('does not set sourcePdfUrl when no RATE_CONFIRMATION attachment exists', () => {
+      const detail: LoadDetail = {
+        ...mockEditLoad,
+        attachments: [mockEditLoad.attachments[1]], // only BOL
+      };
+      const { cmp } = buildEditComponent({ preload: detail });
+      expect(cmp.sourcePdfUrl).toBeNull();
+    });
+
+    it('refreshes sourcePdfUrl when a new RATE_CONFIRMATION is uploaded in edit mode', () => {
+      const detail: LoadDetail = { ...mockEditLoad, attachments: [] };
+      const { cmp } = buildEditComponent({ preload: detail });
+      expect(cmp.sourcePdfUrl).toBeNull();
+
+      cmp.onAttachmentUploaded({
+        id: 'att-new',
+        load_id: 'load-edit-1',
+        type: 'RATE_CONFIRMATION',
+        file_name: 'new-rc.pdf',
+        file_url: '/uploads/loads/load-edit-1/new-rc.pdf',
+        created_at: '2026-04-23T12:00:00Z',
+      } as LoadAttachment);
+
+      expect(cmp.sourcePdfUrl).toBeTruthy();
+    });
+
+    it('clears sourcePdfUrl when the source RATE_CONFIRMATION is deleted', () => {
+      const { cmp } = buildEditComponent();
+      expect(cmp.sourcePdfUrl).toBeTruthy();
+
+      cmp.onExistingDeleted('att-rc');
+
+      expect(cmp.sourcePdfUrl).toBeNull();
+    });
+
+    it('showSourcePdf is only true on the attachments step with a PDF present', () => {
+      const { cmp } = buildEditComponent();
+      cmp.currentStepId = 'basics';
+      expect(cmp.showSourcePdf).toBe(false);
+      cmp.currentStepId = 'attachments';
+      expect(cmp.showSourcePdf).toBe(true);
+    });
+  });
+
+  // ─── FN-867 / S7: updateLoad submit ────────────────────────────────────
+  describe('edit-mode submit (FN-867)', () => {
+    beforeEach(() => {
+      loadsService.getLoad.and.returnValue(of({ success: true, data: mockEditLoad }));
+      fixture = TestBed.createComponent(LoadWizardComponent);
+      component = fixture.componentInstance;
+      component.mode = 'edit';
+      component.loadId = 'load-edit-1';
+      component.loadDetail = mockEditLoad;
+      fixture.detectChanges();
+      component.currentStepId = 'attachments';
+    });
+
+    it('calls updateLoad with a payload that preserves stop ids and sequence', () => {
+      loadsService.updateLoad.and.returnValue(of({ success: true, data: mockEditLoad }));
+      const updatedSpy = jasmine.createSpy('updated');
+      component.updated.subscribe(updatedSpy);
+
+      component.onSubmit();
+
+      expect(loadsService.updateLoad).toHaveBeenCalledOnceWith(
+        'load-edit-1',
+        jasmine.any(Object),
+      );
+      const [passedId, payload] = loadsService.updateLoad.calls.mostRecent().args;
+      expect(passedId).toBe('load-edit-1');
+      expect(payload.status).toBe('NEW');
+      expect(payload.rate).toBe(3400);
+      expect(payload.driverId).toBe('driver-42');
+      expect(Array.isArray(payload.stops)).toBe(true);
+      expect(payload.stops.length).toBe(2);
+      expect(payload.stops[0].id).toBe('stop-1');
+      expect(payload.stops[0].sequence).toBe(1);
+      expect(payload.stops[1].id).toBe('stop-2');
+      expect(payload.stops[1].sequence).toBe(2);
+
+      expect(updatedSpy).toHaveBeenCalledWith(mockEditLoad);
+      expect(component.submitting).toBe(false);
+    });
+
+    it('does not call createLoad in edit mode', () => {
+      loadsService.updateLoad.and.returnValue(of({ success: true, data: mockEditLoad }));
+      component.onSubmit();
+      expect(loadsService.createLoad).not.toHaveBeenCalled();
+    });
+
+    it('surfaces inline error on updateLoad failure and preserves form state', () => {
+      loadsService.updateLoad.and.returnValue(
+        throwError(() => ({ error: { error: 'Update rejected' } })),
+      );
+      const updatedSpy = jasmine.createSpy('updated');
+      component.updated.subscribe(updatedSpy);
+
+      component.onSubmit();
+
+      expect(component.submitting).toBe(false);
+      expect(component.errorMessage).toBe('Update rejected');
+      expect(updatedSpy).not.toHaveBeenCalled();
+      // Form state still intact
+      expect(component.basics.get('rate')!.value).toBe(3400);
+      expect(component.stops.length).toBe(2);
+    });
+
+    it('onTimelineStopClick does not throw when the target row is missing from the DOM', () => {
+      // The Stops step isn't mounted here (we're on attachments), so no row
+      // with the data-attribute exists. The handler must be a safe no-op.
+      expect(() => component.onTimelineStopClick(0)).not.toThrow();
     });
   });
 
