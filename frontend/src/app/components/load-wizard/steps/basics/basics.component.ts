@@ -20,6 +20,7 @@ import {
 
 import { LoadsService, BrokerOption } from '../../../../services/loads.service';
 import { LoadWizardMode } from '../../load-wizard.component';
+import { ConfidenceBadgeComponent } from '../../../../shared/components/confidence-badge/confidence-badge.component';
 
 /**
  * FN-863 / FN-875 — Step 1 (Basics) sub-component for `<app-load-wizard-v2>`.
@@ -31,7 +32,7 @@ import { LoadWizardMode } from '../../load-wizard.component';
 @Component({
   selector: 'app-load-wizard-basics',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, FormsModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, ConfidenceBadgeComponent],
   templateUrl: './basics.component.html',
   styleUrls: ['./basics.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,6 +40,21 @@ import { LoadWizardMode } from '../../load-wizard.component';
 export class LoadWizardBasicsComponent implements OnInit, OnChanges {
   @Input({ required: true }) basics!: FormGroup;
   @Input() mode: LoadWizardMode = 'create';
+
+  /**
+   * FN-888 — per-field confidence scores from `LoadAiEndpointExtraction`.
+   * Renders an inline `<app-confidence-badge variant="field">` next to each
+   * pre-filled field label when its score is < 0.85. Untouched for create /
+   * edit / view flows (empty record → every badge auto-hides).
+   */
+  @Input() fieldConfidences: Record<string, number> | null = null;
+
+  /**
+   * FN-888 — broker display name parsed from the PDF. Used only to seed the
+   * broker search input so the user sees what the extractor pulled; the user
+   * still must pick or create a broker record so `brokerId` gets linked.
+   */
+  @Input() aiBrokerNameHint: string | null = null;
 
   /** Status options visible in the dropdown for the current `mode`. */
   statusOptions: string[] = [];
@@ -101,6 +117,7 @@ export class LoadWizardBasicsComponent implements OnInit, OnChanges {
     this.loadBrokers();
     this.prefillDispatcher();
     this.syncBrokerSearchFromValue();
+    this.applyAiBrokerHint();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -108,6 +125,12 @@ export class LoadWizardBasicsComponent implements OnInit, OnChanges {
       this.applyStatusOptions();
       this.applyModeState();
       this.cdr.markForCheck();
+    }
+    if (
+      changes['aiBrokerNameHint'] &&
+      !changes['aiBrokerNameHint'].firstChange
+    ) {
+      this.applyAiBrokerHint();
     }
   }
 
@@ -225,6 +248,22 @@ export class LoadWizardBasicsComponent implements OnInit, OnChanges {
     if (!id) return;
     const found = this.brokers.find((b) => b.id === id);
     if (found) this.brokerSearch = this.brokerLabel(found);
+  }
+
+  /**
+   * FN-888 — when the AI extractor supplies a broker name and the user hasn't
+   * picked a broker yet, surface the name in the search input as a hint. We
+   * deliberately don't auto-select a broker record — the user still has to
+   * confirm / create the correct one so `brokerId` is linked properly.
+   */
+  private applyAiBrokerHint(): void {
+    const hint = (this.aiBrokerNameHint || '').trim();
+    if (!hint) return;
+    const brokerId = this.basics.get('brokerId')?.value;
+    if (brokerId) return; // User already picked a broker — don't clobber.
+    if (this.brokerSearch && this.brokerSearch.trim()) return;
+    this.brokerSearch = hint;
+    this.cdr.markForCheck();
   }
 
   brokerLabel(b: BrokerOption): string {

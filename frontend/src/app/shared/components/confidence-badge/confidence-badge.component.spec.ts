@@ -61,8 +61,7 @@ describe('ConfidenceBadgeComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [CommonModule],
-      declarations: [ConfidenceBadgeComponent]
+      imports: [CommonModule, ConfidenceBadgeComponent]
     }).compileComponents();
 
     fixture = TestBed.createComponent(ConfidenceBadgeComponent);

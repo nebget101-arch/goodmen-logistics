@@ -28,7 +28,6 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives
     CommandPaletteComponent,
     HoverPopoverComponent,
     AiSparkleComponent,
-    ConfidenceBadgeComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective
   ],
@@ -41,7 +40,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
-    DragDropModule
+    DragDropModule,
+    ConfidenceBadgeComponent
   ],
   exports: [
     AiSelectComponent,

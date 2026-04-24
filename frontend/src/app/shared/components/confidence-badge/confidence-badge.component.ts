@@ -6,6 +6,7 @@ import {
   Input,
   Output
 } from '@angular/core';
+import { CommonModule } from '@angular/common';
 
 export type ConfidenceTier = 'high' | 'medium' | 'low';
 
@@ -41,6 +42,8 @@ export type ConfidenceBadgeVariant = 'card' | 'field';
  */
 @Component({
   selector: 'app-confidence-badge',
+  standalone: true,
+  imports: [CommonModule],
   templateUrl: './confidence-badge.component.html',
   styleUrls: ['./confidence-badge.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush

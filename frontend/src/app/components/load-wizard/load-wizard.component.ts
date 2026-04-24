@@ -4,6 +4,7 @@ import {
   Component,
   EventEmitter,
   Input,
+  OnDestroy,
   OnInit,
   Output,
 } from '@angular/core';
@@ -28,6 +29,7 @@ import { LoadWizardDriverEquipmentComponent } from './steps/driver-equipment/dri
 import { LoadWizardAttachmentsComponent } from './steps/attachments/attachments.component';
 import { LoadsService } from '../../services/loads.service';
 import {
+  LoadAiEndpointExtraction,
   LoadAttachment,
   LoadAttachmentType,
   LoadDetail,
@@ -64,7 +66,7 @@ type LoadWizardStepId = 'basics' | 'stops' | 'driver' | 'attachments';
   styleUrls: ['./load-wizard.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class LoadWizardComponent implements OnInit {
+export class LoadWizardComponent implements OnInit, OnDestroy {
   @Input() mode: LoadWizardMode = 'create';
   @Input() loadId: string | null = null;
   /**
@@ -90,6 +92,30 @@ export class LoadWizardComponent implements OnInit {
   errorMessage = '';
 
   form!: FormGroup;
+
+  // ─── FN-888 AI-Extract flow state ──────────────────────────────────────
+  /** Source rate-confirmation PDF selected in Step 0. Preserved across retries. */
+  sourcePdfFile: File | null = null;
+  /** True while an `aiExtractFromPdf` request is in flight. */
+  extracting = false;
+  /** True once extraction has succeeded and Steps 1–2 have been pre-filled. */
+  extractionComplete = false;
+  /** Inline error message shown under the dropzone when extraction fails. */
+  extractionError = '';
+  /** Per-field confidence scores (0–1) passed to Basics + Stops for field badges. */
+  fieldConfidences: Record<string, number> = {};
+  /** Broker display name parsed from the PDF — seeds the Basics combo search input. */
+  aiBrokerNameHint: string | null = null;
+  /** Progressive UI labels shown while extraction is running. */
+  readonly extractionStepLabels: string[] = [
+    'Extracting text from PDF',
+    'Identifying broker & references',
+    'Parsing stops & addresses',
+    'Calculating rate & confidence',
+  ];
+  /** Index of the step currently animating; -1 = idle. */
+  extractionStepIndex = -1;
+  private extractionStepTimer: number | null = null;
 
   constructor(
     private fb: FormBuilder,
@@ -128,6 +154,10 @@ export class LoadWizardComponent implements OnInit {
     this.form.statusChanges.subscribe(() => this.cdr.markForCheck());
   }
 
+  ngOnDestroy(): void {
+    this.stopExtractionTimer();
+  }
+
   // ─── Public accessors ───────────────────────────────────────────────────
 
   get basics(): FormGroup {
@@ -161,6 +191,16 @@ export class LoadWizardComponent implements OnInit {
   get shellMode(): WizardMode {
     // The shell understands create/edit/view; ai-extract acts like create.
     return this.mode === 'view' ? 'view' : this.mode === 'edit' ? 'edit' : 'create';
+  }
+
+  /**
+   * FN-888 — Step 0 PDF dropzone gate. Renders ahead of the wizard shell while
+   * in `ai-extract` mode and the extraction hasn't completed yet. Once
+   * extraction succeeds, `extractionComplete` flips and the normal 4-step shell
+   * takes over with Steps 1–2 pre-filled.
+   */
+  get showExtractStep(): boolean {
+    return this.mode === 'ai-extract' && !this.extractionComplete;
   }
 
   /**
@@ -206,6 +246,205 @@ export class LoadWizardComponent implements OnInit {
 
   onClose(): void {
     this.closed.emit();
+  }
+
+  // ─── FN-888 AI-Extract flow ─────────────────────────────────────────────
+
+  /** File input / drag-drop handler for the Step 0 dropzone. */
+  onPdfSelected(file: File | null | undefined): void {
+    if (!file) return;
+    if (!this.isPdfFile(file)) {
+      this.extractionError = 'Only PDF files are supported.';
+      this.cdr.markForCheck();
+      return;
+    }
+    this.sourcePdfFile = file;
+    this.extractionError = '';
+    this.runExtraction();
+  }
+
+  onPdfDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const file = event.dataTransfer?.files?.[0] ?? null;
+    this.onPdfSelected(file);
+  }
+
+  onPdfDragOver(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  /** Re-run extraction for the already-selected PDF, preserving any form edits. */
+  onExtractionRetry(): void {
+    if (!this.sourcePdfFile || this.extracting) return;
+    this.extractionError = '';
+    this.runExtraction();
+  }
+
+  /** Clear the selected PDF so the user can pick a different file. */
+  onPdfClear(): void {
+    if (this.extracting) return;
+    this.sourcePdfFile = null;
+    this.extractionError = '';
+    this.extractionStepIndex = -1;
+    this.cdr.markForCheck();
+  }
+
+  private runExtraction(): void {
+    if (!this.sourcePdfFile) return;
+    this.extracting = true;
+    this.extractionError = '';
+    this.extractionStepIndex = 0;
+    this.cdr.markForCheck();
+
+    // Animate the progress-step list so the user sees motion while the single
+    // backend request is in flight.
+    this.stopExtractionTimer();
+    this.extractionStepTimer = window.setInterval(() => {
+      if (this.extractionStepIndex < this.extractionStepLabels.length - 2) {
+        this.extractionStepIndex += 1;
+        this.cdr.markForCheck();
+      }
+    }, 700);
+
+    this.loadsService.aiExtractFromPdf(this.sourcePdfFile).subscribe({
+      next: (res) => {
+        this.stopExtractionTimer();
+        this.extractionStepIndex = this.extractionStepLabels.length - 1;
+        const data = res?.data;
+        if (!data) {
+          this.extracting = false;
+          this.extractionError = 'Extraction returned no data. Please try again.';
+          this.cdr.markForCheck();
+          return;
+        }
+        this.applyExtraction(data);
+        this.extracting = false;
+        this.extractionComplete = true;
+        // AC: "wizard focuses Step 1" after extraction.
+        this.currentStepId = 'basics';
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        this.stopExtractionTimer();
+        this.extracting = false;
+        const serverMsg =
+          err?.error?.warning || err?.error?.message || err?.message;
+        this.extractionError =
+          serverMsg || 'Extraction failed. Please try again.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  private stopExtractionTimer(): void {
+    if (this.extractionStepTimer != null) {
+      clearInterval(this.extractionStepTimer);
+      this.extractionStepTimer = null;
+    }
+  }
+
+  /**
+   * Map an `LoadAiEndpointExtraction` payload into the wizard's FormGroups.
+   * Broker is surfaced as a search-input hint (basics has no `brokerName`
+   * control — the user still picks/creates a broker record to link `brokerId`).
+   */
+  private applyExtraction(data: LoadAiEndpointExtraction): void {
+    const loadNumber =
+      data.loadId ??
+      data.orderId ??
+      data.proNumber ??
+      '';
+    this.basics.patchValue({
+      loadNumber: loadNumber || this.basics.get('loadNumber')?.value || '',
+      poNumber: data.poNumber || '',
+      rate: data.rate != null ? data.rate : (this.basics.get('rate')?.value ?? 0),
+      notes: this.basics.get('notes')?.value || data.notes || '',
+    });
+    this.aiBrokerNameHint = data.brokerName && data.brokerName.trim()
+      ? data.brokerName.trim()
+      : null;
+
+    this.applyExtractionStops(data);
+
+    this.fieldConfidences = data.fieldConfidences
+      ? { ...data.fieldConfidences }
+      : {};
+  }
+
+  private applyExtractionStops(data: LoadAiEndpointExtraction): void {
+    const extractedStops: Array<Partial<{
+      type: LoadStopType;
+      date: string | null;
+      city: string | null;
+      state: string | null;
+      zip: string | null;
+      address1: string | null;
+    }>> = [];
+
+    if (Array.isArray(data.stops) && data.stops.length > 0) {
+      const sorted = [...data.stops].sort(
+        (a, b) => (a.sequence ?? 0) - (b.sequence ?? 0),
+      );
+      for (const s of sorted) {
+        extractedStops.push({
+          type: (s.type ?? 'PICKUP') as LoadStopType,
+          date: s.date ?? null,
+          city: s.city ?? null,
+          state: s.state ?? null,
+          zip: s.zip ?? null,
+          address1: s.address1 ?? null,
+        });
+      }
+    } else {
+      const pickup = data.pickup;
+      const delivery = data.delivery;
+      if (pickup) {
+        extractedStops.push({
+          type: 'PICKUP',
+          date: pickup.date,
+          city: pickup.city,
+          state: pickup.state,
+          zip: pickup.zip,
+          address1: pickup.address1,
+        });
+      }
+      if (delivery) {
+        extractedStops.push({
+          type: 'DELIVERY',
+          date: delivery.date,
+          city: delivery.city,
+          state: delivery.state,
+          zip: delivery.zip,
+          address1: delivery.address1,
+        });
+      }
+    }
+
+    if (extractedStops.length < 2) return;
+
+    // Rebuild the stops FormArray in place so we can pre-fill N stops without
+    // leaving stale rows (default form has exactly 2 rows).
+    while (this.stops.length > 0) this.stops.removeAt(0);
+    extractedStops.forEach((s, i) => {
+      const row = this.buildStop((s.type ?? 'PICKUP') as LoadStopType, i + 1);
+      row.patchValue({
+        stop_date: s.date ?? null,
+        city: s.city ?? null,
+        state: s.state ?? null,
+        zip: s.zip ?? null,
+        address1: s.address1 ?? null,
+      });
+      this.stops.push(row);
+    });
+  }
+
+  private isPdfFile(file: File): boolean {
+    if (file.type === 'application/pdf') return true;
+    // Some browsers (or drag-drop from the OS) report an empty MIME; fall back
+    // to the extension so we don't reject a valid PDF.
+    return /\.pdf$/i.test(file.name);
   }
 
   // ─── Attachment queue helpers ───────────────────────────────────────────
@@ -258,6 +497,19 @@ export class LoadWizardComponent implements OnInit {
   private submitCreate(): void {
     this.submitting = true;
     this.errorMessage = '';
+
+    // FN-888: in ai-extract mode, automatically attach the source rate-con
+    // PDF that drove the extraction. Skip if the user already queued a copy
+    // (same file reference) so we don't upload it twice.
+    if (
+      this.mode === 'ai-extract' &&
+      this.sourcePdfFile &&
+      !this.queuedAttachments.controls.some(
+        (g) => g.get('file')?.value === this.sourcePdfFile,
+      )
+    ) {
+      this.queueAttachment(this.sourcePdfFile, 'RATE_CONFIRMATION');
+    }
 
     const payload = this.buildCreatePayload();
 
