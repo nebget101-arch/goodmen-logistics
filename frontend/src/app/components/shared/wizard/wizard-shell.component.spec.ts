@@ -159,7 +159,7 @@ describe('WizardShellComponent', () => {
       fixture.detectChanges();
     });
 
-    it('shows only a Close button in the footer', () => {
+    it('shows Back / Next / Close in the footer (no Submit)', () => {
       const close = fixture.nativeElement.querySelector(
         '[data-testid="wizard-close"]'
       );
@@ -169,8 +169,8 @@ describe('WizardShellComponent', () => {
         '[data-testid="wizard-submit"]'
       );
       expect(close).toBeTruthy();
-      expect(back).toBeNull();
-      expect(next).toBeNull();
+      expect(back).toBeTruthy();
+      expect(next).toBeTruthy();
       expect(submit).toBeNull();
     });
 
@@ -186,6 +186,21 @@ describe('WizardShellComponent', () => {
       );
       expect(submit).toBeNull();
       expect(close).toBeTruthy();
+    });
+
+    it('keeps Next enabled regardless of canProceed and navigates steps', () => {
+      component.canProceed = false;
+      fixture.detectChanges();
+
+      const nextBtn = fixture.nativeElement.querySelector(
+        '[data-testid="wizard-next"]'
+      ) as HTMLButtonElement;
+      expect(nextBtn.disabled).toBe(false);
+
+      const spy = jasmine.createSpy('next');
+      component.next.subscribe(spy);
+      nextBtn.click();
+      expect(spy).toHaveBeenCalledTimes(1);
     });
 
     it('emits close when Close is clicked', () => {
