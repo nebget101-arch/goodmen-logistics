@@ -25,8 +25,10 @@ import {
 } from '../shared/wizard/wizard-shell.component';
 import { LoadWizardBasicsComponent } from './steps/basics/basics.component';
 import { LoadWizardDriverEquipmentComponent } from './steps/driver-equipment/driver-equipment.component';
+import { LoadWizardAttachmentsComponent } from './steps/attachments/attachments.component';
 import { LoadsService } from '../../services/loads.service';
 import {
+  LoadAttachment,
   LoadAttachmentType,
   LoadDetail,
   LoadStopType,
@@ -56,6 +58,7 @@ type LoadWizardStepId = 'basics' | 'stops' | 'driver' | 'attachments';
     LoadWizardBasicsComponent,
     LoadWizardStopsComponent,
     LoadWizardDriverEquipmentComponent,
+    LoadWizardAttachmentsComponent,
   ],
   templateUrl: './load-wizard.component.html',
   styleUrls: ['./load-wizard.component.scss'],
@@ -64,6 +67,12 @@ type LoadWizardStepId = 'basics' | 'stops' | 'driver' | 'attachments';
 export class LoadWizardComponent implements OnInit {
   @Input() mode: LoadWizardMode = 'create';
   @Input() loadId: string | null = null;
+  /**
+   * FN-881: existing attachments rendered in the Attachments step for
+   * edit / view / ai-extract flows. Sourced from `LoadDetail.attachments` by
+   * the caller once FN-867 / FN-868 wire up the load-detail prefill.
+   */
+  @Input() existingAttachments: LoadAttachment[] = [];
 
   @Output() created = new EventEmitter<LoadDetail>();
   @Output() updated = new EventEmitter<LoadDetail>();
@@ -218,6 +227,20 @@ export class LoadWizardComponent implements OnInit {
     }
   }
 
+  // ─── Attachment step callbacks (FN-881) ────────────────────────────────
+
+  /** Mirror an immediate-mode upload success back into the LoadDetail cache. */
+  onAttachmentUploaded(att: LoadAttachment): void {
+    this.existingAttachments = [att, ...this.existingAttachments];
+    this.cdr.markForCheck();
+  }
+
+  /** Mirror a delete of an existing attachment back into the LoadDetail cache. */
+  onExistingDeleted(attachmentId: string): void {
+    this.existingAttachments = this.existingAttachments.filter((a) => a.id !== attachmentId);
+    this.cdr.markForCheck();
+  }
+
   // ─── Submit ─────────────────────────────────────────────────────────────
 
   onSubmit(): void {
@@ -351,6 +374,10 @@ export class LoadWizardComponent implements OnInit {
       uploading: [false],
       uploaded:  [false],
       error:     [null as string | null],
+      // FN-881: progress (0–100) during immediate-mode upload; null when idle.
+      progress:  [null as number | null],
+      // Stable id for trackBy so FormArray re-renders don't thrash DOM on progress ticks.
+      uid:       [`att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`],
     });
   }
 

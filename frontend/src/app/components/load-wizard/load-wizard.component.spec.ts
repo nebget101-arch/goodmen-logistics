@@ -43,6 +43,9 @@ describe('LoadWizardComponent (FN-862)', () => {
       'createBroker',
       'getActiveDrivers',
       'getEquipment',
+      // FN-881: attachments step immediate-upload + delete paths.
+      'uploadAttachmentWithProgress',
+      'deleteAttachment',
     ]);
     // FN-875: Step 1 basics sub-component eagerly fetches brokers on init.
     loadsService.getBrokers.and.returnValue(of({ success: true, data: [] }));
