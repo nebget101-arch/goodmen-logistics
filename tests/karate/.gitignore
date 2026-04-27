@@ -1,0 +1,36 @@
+# Maven build output
+target/
+**/target/
+
+# Karate / Allure / Surefire reports
+karate-reports/
+**/karate-reports/
+allure-results/
+**/allure-results/
+allure-report/
+**/allure-report/
+surefire-reports/
+**/surefire-reports/
+cucumber-html-reports/
+**/cucumber-html-reports/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env overrides
+*.local
+.env.local
