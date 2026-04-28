@@ -60,7 +60,20 @@ If the scope genuinely exceeds what one agent can reasonably deliver in a single
 **Other requirements:**
 - QA subtasks should describe what to validate and what evidence to capture. If automation tests are needed, specify that in the description.
 - Subtask branch naming: `<agent>/FN-XXX/<slug>` where FN-XXX is the subtask key
-- Story branch (merge target): `<agent>/FN-STORY/<slug>` where FN-STORY is the parent story key
+- **Subtasks branch off `origin/integration/FN-STORY`, NOT `origin/dev`** (integration-branch model — see CLAUDE.md)
+- The integration branch `integration/FN-STORY` is created by the first implementing agent if it doesn't exist; intake just declares its name in the story doc
+
+**Each subtask MUST declare expected Files Touched in its Jira description.** This is consumed by `/pick-next-task` for cross-task conflict detection. Add this section to every subtask description:
+
+```
+## Files Touched (expected)
+- src/app/feature/foo.component.ts
+- src/app/feature/foo.service.ts
+- services/load-service/routes/foo.js
+- (paths or glob patterns; be honest about shared files like modules, routing, index.ts)
+```
+
+The list does not need to be exhaustive — it's a conflict-detection signal. If two subtasks declare overlapping files, `/pick-next-task` will refuse to pick the second one while the first is in progress, forcing serial execution. If you have no files to declare (e.g., pure config), write `_none_`.
 
 ### 4. Define Dependencies
 - Identify which stories/subtasks must complete before others can start
@@ -87,12 +100,15 @@ For each Story, create `docs/stories/FN-XXX.md` using this template:
 ## Agent
 [frontend | backend | ai | database | devops]
 
+## Integration Branch
+`integration/FN-XXX` (created by first subtask agent from `origin/dev`; subtasks branch off this; story PR merges to `dev`)
+
 ## Subtasks
-| Key | Summary | Agent | Branch | Status |
-|-----|---------|-------|--------|--------|
-| FN-AAA | [subtask description] | frontend | `frontend/FN-AAA/<slug>` | Pending |
-| FN-BBB | [subtask description] | backend | `backend/FN-BBB/<slug>` | Pending |
-| FN-CCC | QA validation | qa | _manual_ | Pending |
+| Key | Summary | Agent | Branch | Files Touched | Status |
+|-----|---------|-------|--------|---------------|--------|
+| FN-AAA | [subtask description] | frontend | `frontend/FN-AAA/<slug>` | `src/app/foo/**` | Pending |
+| FN-BBB | [subtask description] | backend | `backend/FN-BBB/<slug>` | `services/load-service/routes/foo.js` | Pending |
+| FN-CCC | QA validation | qa | _manual_ | — | Pending |
 
 ## Implementation Summary
 _To be filled by implementing agent_
