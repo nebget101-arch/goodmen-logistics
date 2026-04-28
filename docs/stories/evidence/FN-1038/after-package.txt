@@ -1,0 +1,32 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------< ai.fleetneuron.tests:karate-core >------------------
+[INFO] Building FleetNeuron Karate Core 1.0.0-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- maven-resources-plugin:3.3.1:resources (default-resources) @ karate-core ---
+[INFO] skip non existing resourceDirectory /Users/nebyougetaneh/Desktop/FleetNeuronAPP/tests/karate/karate-core/src/main/resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.13.0:compile (default-compile) @ karate-core ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- maven-resources-plugin:3.3.1:testResources (default-testResources) @ karate-core ---
+[INFO] skip non existing resourceDirectory /Users/nebyougetaneh/Desktop/FleetNeuronAPP/tests/karate/karate-core/src/test/resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.13.0:testCompile (default-testCompile) @ karate-core ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- maven-surefire-plugin:3.2.5:test (default-test) @ karate-core ---
+[INFO] Tests are skipped.
+[INFO] 
+[INFO] --- maven-jar-plugin:3.4.1:jar (default-jar) @ karate-core ---
+[INFO] Building jar: /Users/nebyougetaneh/Desktop/FleetNeuronAPP/tests/karate/karate-core/target/karate-core-1.0.0-SNAPSHOT.jar
+[INFO] 
+[INFO] --- maven-jar-plugin:3.4.1:test-jar (default) @ karate-core ---
+[INFO] Building jar: /Users/nebyougetaneh/Desktop/FleetNeuronAPP/tests/karate/karate-core/target/karate-core-1.0.0-SNAPSHOT-tests.jar
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  3.148 s
+[INFO] Finished at: 2026-04-27T18:56:11-05:00
+[INFO] ------------------------------------------------------------------------
