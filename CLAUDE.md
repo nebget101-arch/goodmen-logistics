@@ -9,13 +9,21 @@
 ## FleetNeuronAPP integration branch: `dev`
 **ALWAYS** branch from `origin/dev` and create PRs targeting `dev`. Never target `main` unless the user explicitly says otherwise.
 
-### Branching workflow (all sessions must follow):
+### Branching workflow — Story WITHOUT subtasks (or single-agent task):
 1. `git fetch origin dev` — get latest dev
-2. `git checkout -b <branch-name> origin/dev` — create new branch from dev
-3. Make changes, commit
-4. `git push -u origin <branch-name>` — push branch
+2. `git worktree add .claude/worktrees/<slug> -b <agent>/<jira-key>/<slug> origin/dev` — isolated worktree per agent
+3. Make changes, commit (stage explicit paths: `git add <file>`)
+4. `git push -u origin <agent>/<jira-key>/<slug>` — push branch
 5. `gh pr create --base dev` — PR always targets dev
-6. If merge conflicts arise: `git fetch origin dev && git merge origin/dev` and resolve
+6. If `dev` advances mid-work: `git fetch origin dev && git rebase origin/dev` — **NEVER `git merge origin/dev`** (merge can silently absorb uncommitted work during conflict resolution; rebase fails loudly)
+
+### Branching workflow — Story WITH subtasks (integration-branch model):
+1. **First subtask agent** creates `integration/FN-STORY` from `origin/dev` if it doesn't exist (see `.claude/skills/implement-ticket/SKILL.md`)
+2. Each subtask: `git worktree add .claude/worktrees/<slug> -b <agent>/FN-XXX/<slug> origin/integration/FN-STORY`
+3. When subtask is done: `git fetch && git rebase origin/integration/FN-STORY` (resolve conflicts here, where the agent knows the code), then ff-merge into `integration/FN-STORY` and push
+4. When all subtasks Done: `/create-pr FN-STORY` rebases the integration branch on latest `dev` and opens **one PR**: `integration/FN-STORY → dev`
+
+**Why integration branch:** siblings share a base, so each subtask sees prior subtasks' changes. Conflicts surface incrementally and are resolved by the agent who wrote the code, not at PR-assembly time when no one has full context.
 
 ## Which agent may edit FleetNeuronAPP?
 
@@ -94,9 +102,10 @@ All **prompt and config** files live in `.agent/`. The TPM agent never creates, 
 
 ## Parallel agents / git safety
 
-- **Separate working trees**: Use `git worktree add` for parallel agent sessions so each has its own folder and branch.
+- **Mandatory worktree per active agent**: every agent runs in its own `git worktree add` directory under `.claude/worktrees/<slug>`. Never share a working tree between agents — stash collisions silently lose work. Use `git checkout -b` only inside a fresh worktree, never in the main checkout.
+- **Rebase, not merge, when syncing**: `git rebase origin/dev` (or `origin/integration/FN-X`). Never `git merge origin/dev` mid-implementation — merge can silently consume uncommitted work during conflict resolution; rebase fails loudly.
 - **Clean tree before branch switches**: Run `git status` first. If not clean, stash and tell the user.
-- **Intentional commits only**: Stage with explicit paths (`git add <files>`). Run `git diff --cached` before `git commit`.
+- **Intentional commits only**: Stage with explicit paths (`git add <files>`) — never `git add .` or `git add -A`. Run `git diff --cached` before `git commit`.
 - **One branch per agent/task**: `agent/frontend/…`, `agent/backend/…`, etc. Never reset or reuse another agent's branch.
 
 ## Jira Status Lifecycle
@@ -117,30 +126,40 @@ Cloud ID: `aff43a9d-6456-476c-9aa5-1b3da163f242`
 ### Lifecycle by Issue Type
 
 **Subtask**: `Backlog → Selected for Dev → In Progress → Done`
-- Each subtask gets its own branch: `<agent>/FN-XXX/<slug>`
-- No individual PR — subtask branches merge into the story branch
-- Transition to Done when implementation is committed and pushed
+- Each subtask gets its own branch: `<agent>/FN-XXX/<slug>` branched from `origin/integration/FN-PARENT` (NOT `origin/dev`)
+- No individual PR — subtask rebases on the integration branch, then ff-merges into `integration/FN-PARENT`
+- Transition to Done when subtask is integrated and pushed
 
 **Story**: `Backlog → Selected for Dev → In Progress → Code Review → QA → Done`
-- If story has subtasks: implement subtasks first, then `/create-pr` merges all subtask branches
-- If story has no subtasks: standard single-branch workflow
-- Story branch (merge target): `<agent>/FN-STORY/<slug>`
+- If story has subtasks: the integration branch `integration/FN-STORY` is the merge target; subtasks merge into it; final PR is `integration/FN-STORY → dev`
+- If story has no subtasks: standard single-branch workflow off `dev`
+- A story with subtasks does **not** have its own implementation branch — the integration branch IS the PR head
 
 **Epic**: `Backlog → In Progress (auto) → Done (auto)`
 - Auto-transitions to In Progress when first child story starts
 - Auto-transitions to Done when ALL child stories are Done
 
-### Subtask Branch & Merge Strategy
+### Subtask Branch & Merge Strategy (integration-branch model)
 ```
 Epic: FN-100
-  Story: FN-101 → branch: frontend/FN-101/feature-name (merge target)
-    Subtask: FN-102 → branch: frontend/FN-102/component-work
-    Subtask: FN-103 → branch: backend/FN-103/api-endpoint
-    Subtask: FN-104 → branch: qa/FN-104/validation (only if automation)
+  Story: FN-101 → integration/FN-101 (created by first subtask agent from origin/dev)
+    Subtask: FN-102 → frontend/FN-102/<slug> (branched off integration/FN-101)
+    Subtask: FN-103 → backend/FN-103/<slug>  (branched off integration/FN-101)
+    Subtask: FN-104 → qa/FN-104/<slug>       (only if automation)
+
+Each subtask on completion:
+  git fetch origin integration/FN-101
+  git rebase origin/integration/FN-101         # surface conflicts on the subtask side
+  git push --force-with-lease origin HEAD
+  git checkout integration/FN-101
+  git merge --ff-only <subtask-branch>
+  git push origin integration/FN-101
 
 When all subtasks Done:
-  /create-pr FN-101 → merges FN-102 + FN-103 branches → single PR → dev
+  /create-pr FN-101 → rebases integration/FN-101 on latest dev → single PR: integration/FN-101 → dev
 ```
+
+**Anti-pattern (forbidden):** branching subtasks off `origin/dev` independently and merging them with `--no-ff` into a fresh story branch at PR time. This is the pattern that caused historical lost-changes incidents — siblings have stale, divergent bases and conflict resolution at PR time has no agent context.
 
 ### QA Evidence
 - Screenshots saved to `docs/stories/evidence/FN-XXX/`

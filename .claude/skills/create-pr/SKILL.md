@@ -35,28 +35,51 @@ The argument is the Jira key (e.g., `FN-42`). This should be a **Story** key, no
 - Run `git diff dev...HEAD --stat` for changed files summary
 - Proceed to step 3
 
-#### Story WITH subtasks (merge flow)
-- Verify ALL subtasks are in "Done" status. If any are not Done:
-  - Print: "Cannot create PR — these subtasks are not Done: FN-XXX (status), FN-YYY (status)"
-  - STOP
-- Collect all subtask branch names from Jira comments or story doc
-- Create the story-level merge branch and merge subtask branches:
-  ```
-  git checkout dev
-  git pull origin dev
-  git checkout -b <agent>/$ARGS/<slug>
-  ```
-- For each subtask branch (in dependency order):
-  ```
-  git merge origin/<subtask-branch> --no-ff -m "Merge FN-XXX: <subtask summary>"
-  ```
-- If merge conflicts occur, resolve them. If conflicts are complex, STOP and report to user.
-- Run `git log dev..HEAD --oneline` to see all merged commits
-- Run `git diff dev...HEAD --stat` for combined changed files summary
-- Proceed to step 3
+#### Story WITH subtasks (integration-branch flow)
+
+**Pre-flight guards — run all of these before touching git:**
+
+1. **All subtasks Done?** If any are not Done:
+   - Print: "Cannot create PR — these subtasks are not Done: FN-XXX (status), FN-YYY (status)"
+   - STOP
+
+2. **Duplicate-agent guard.** Count subtasks by `agent:*` label, excluding `agent:qa`. If two or more non-QA subtasks share the same agent label:
+   - Print: "Story $ARGS has multiple subtasks with label `agent:<label>`. This violates the one-subtask-per-agent rule (.claude/skills/intake/SKILL.md). Split this into separate stories or collapse the subtasks before creating the PR."
+   - STOP
+
+3. **Integration branch exists?**
+   ```
+   git fetch origin integration/$ARGS
+   git rev-parse --verify origin/integration/$ARGS
+   ```
+   If not found:
+   - Print: "Integration branch `integration/$ARGS` not found. This story was implemented under the legacy fan-merge model. Either: (a) reconstruct integration manually with `git checkout -b integration/$ARGS origin/dev && git merge --ff-only <each-subtask>` if subtasks were rebased before completion, or (b) escalate to user."
+   - STOP
+
+**Rebase the integration branch on latest dev:**
+```
+git fetch origin dev integration/$ARGS
+git worktree add .claude/worktrees/$ARGS-pr -B integration/$ARGS origin/integration/$ARGS
+cd .claude/worktrees/$ARGS-pr
+git rebase origin/dev
+```
+
+If conflicts surface during the dev-rebase:
+- These are conflicts between the story's accumulated changes and other PRs that landed on dev since intake. The agent who wrote the conflicting subtask code may not be available.
+- If conflicts are within a single subtask's diff: resolve carefully and document in the PR body.
+- If conflicts span multiple subtasks: STOP and report to user — this needs human review.
+
+```
+git push --force-with-lease origin integration/$ARGS
+```
+
+Run `git log origin/dev..HEAD --oneline` to see all integrated subtask commits.
+Run `git diff origin/dev...HEAD --stat` for combined changed files summary.
+
+**The PR head is `integration/$ARGS`.** Skip step 3 (rebase already done) and step 4 (already pushed). Proceed directly to step 5 with `--head integration/$ARGS`.
 
 ### 3. Rebase on Dev (standard flow only)
-Skip this step for the merge flow (subtask branches already merged from dev-based branches).
+Skip this step for the integration-branch flow (already rebased in step 2).
 
 For standard flow:
 ```
@@ -65,13 +88,18 @@ git rebase origin/dev
 ```
 Resolve conflicts if any. If conflicts are complex, STOP and report to user.
 
-### 4. Push Branch
+### 4. Push Branch (standard flow only)
+Skip for integration-branch flow (already pushed in step 2).
+
 ```
 git push -u origin HEAD
 ```
 
 ### 5. Create PR
-Use `gh pr create --base dev` with this format (PRs always target `dev`, never `main`):
+Use `gh pr create --base dev` with this format (PRs always target `dev`, never `main`).
+
+**Standard flow:** `gh pr create --base dev` (uses current branch as head)
+**Integration-branch flow:** `gh pr create --base dev --head integration/$ARGS`
 
 **Title**: `[$ARGS] <Jira summary>`
 
@@ -102,7 +130,7 @@ Use `gh pr create --base dev` with this format (PRs always target `dev`, never `
 Jira: $ARGS
 ```
 
-**Body** (merge flow — add subtask section):
+**Body** (integration-branch flow — add subtask section):
 ```markdown
 ## Summary
 <1-3 bullet points of what changed and why>
@@ -144,5 +172,6 @@ Jira: $ARGS
 Print:
 - PR URL
 - Jira key and new status
-- Subtask branches merged (if merge flow)
+- PR head branch (e.g., `integration/$ARGS` for integration-branch flow)
+- Subtask branches merged into integration (if integration-branch flow)
 - Next step: `/review-ticket $ARGS`

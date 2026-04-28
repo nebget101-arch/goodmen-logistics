@@ -38,10 +38,37 @@ When multiple candidates are eligible, prefer:
 2. **Higher priority tasks**
 3. **Older tasks** (created first)
 
-### 4. Check for Conflicts
-- Review the candidate's affected files/modules
-- Check if any "In Progress" task for another agent touches the same area
-- Skip if conflict detected
+### 4. Check for Conflicts (file-overlap check — must be mechanical, not vibes)
+
+For each candidate task in priority order:
+
+1. **Get the candidate's declared Files Touched** from the Jira description (`## Files Touched (expected)` section) or the parent story doc subtask table. If the candidate has no declaration:
+   - Skip this candidate
+   - Note in output: "FN-XXX skipped — no Files Touched declaration; ask TPM to add one"
+
+2. **List all in-progress sibling tasks** (any agent, any story):
+   ```
+   project = FN AND status = "In Progress"
+   ```
+
+3. **For each in-progress task**, find its branch from Jira comments (`Branch: <agent>/FN-XXX/<slug>`) and run:
+   ```
+   git fetch origin
+   git diff --name-only origin/dev...origin/<branch>
+   ```
+   This is the actual file-set the in-progress task is modifying.
+
+4. **Compare** candidate's declared Files Touched against each in-progress branch's diff:
+   - Literal path match → conflict
+   - Candidate glob (`src/app/foo/**`) matches an in-progress file → conflict
+   - In-progress file matches a candidate glob → conflict
+
+5. **If any overlap, skip the candidate** and move to the next one. Surface the reason:
+   ```
+   FN-XXX skipped — files overlap with in-progress FN-YYY (files: <list>)
+   ```
+
+6. **If no candidate is conflict-free**, return NO ELIGIBLE TASKS with the conflict reasons listed.
 
 ### 5. Return Result
 
