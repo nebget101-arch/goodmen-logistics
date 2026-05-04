@@ -75,25 +75,42 @@ export class BulkExtractionGridComponent implements OnInit, OnDestroy {
   completed = false;
   /** Index of the file currently being processed (for the progress indicator). */
   currentIndex = 0;
+  /** Inline notice shown in the review panel (e.g. file added, max reached). */
+  reviewNotice = '';
 
   private destroyed = false;
+
+  /** Maximum files allowed in a single bulk extraction batch. */
+  static readonly MAX_FILES = 10;
 
   constructor(
     private loadsService: LoadsService,
     private cdr: ChangeDetectorRef
   ) {}
 
+  // FN-1083: review phase — `processing`/`completed` both false while the user
+  // is reviewing the queued files. Derived so existing template guards still work.
+  get inReview(): boolean {
+    return !this.processing && !this.completed;
+  }
+
   ngOnInit(): void {
-    this.rows = this.files.map((file) => ({
+    this.rows = this.files.map((file) => this.buildRow(file));
+    // FN-1083: do NOT auto-start. The user must click "Start extraction" in
+    // the review panel — this prevents AI calls from firing on an accidental
+    // drop and gives them a chance to remove or add files first.
+  }
+
+  private buildRow(file: File): FileExtractionRow {
+    return {
       file,
-      status: 'QUEUED' as FileExtractionStatus,
+      status: 'QUEUED',
       autoApproved: false,
       load: null,
       extraction: null,
       errorMessage: '',
       attachmentError: ''
-    }));
-    this.startProcessing();
+    };
   }
 
   ngOnDestroy(): void {
@@ -360,6 +377,70 @@ export class BulkExtractionGridComponent implements OnInit, OnDestroy {
     if (allDone && !this.processing) {
       this.completed = true;
     }
+    this.cdr.markForCheck();
+  }
+
+  // ── Review-phase actions (FN-1083) ──────────────────────────────────────
+
+  /** Start extraction. No-op once processing has begun. */
+  onStartExtraction(): void {
+    if (!this.inReview || this.rows.length === 0) return;
+    this.reviewNotice = '';
+    this.startProcessing();
+  }
+
+  /** Remove a queued file from the review list. */
+  onRemoveReviewFile(index: number): void {
+    if (!this.inReview) return;
+    if (index < 0 || index >= this.rows.length) return;
+    this.rows = this.rows.filter((_, i) => i !== index);
+    this.reviewNotice = '';
+    if (this.rows.length === 0) {
+      // No files left to extract — close the modal so the user can start over.
+      this.close.emit();
+      return;
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** Drag-drop additional PDFs into the review panel before starting. */
+  onReviewDrop(event: DragEvent): void {
+    event.preventDefault();
+    if (!this.inReview) return;
+    const files = event.dataTransfer?.files;
+    if (files?.length) this.addReviewFiles(files);
+  }
+
+  onReviewDragOver(event: DragEvent): void {
+    event.preventDefault();
+  }
+
+  /** Click-to-add file input handler in the review panel. */
+  onReviewFileInput(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    if (!input?.files) return;
+    this.addReviewFiles(input.files);
+    input.value = '';
+  }
+
+  private addReviewFiles(files: FileList): void {
+    const pdfs = Array.from(files).filter((f) => f.type === 'application/pdf');
+    if (pdfs.length === 0) {
+      this.reviewNotice = 'PDFs only — non-PDF files were skipped.';
+      this.cdr.markForCheck();
+      return;
+    }
+    const remaining = Math.max(0, BulkExtractionGridComponent.MAX_FILES - this.rows.length);
+    if (remaining === 0) {
+      this.reviewNotice = `Maximum ${BulkExtractionGridComponent.MAX_FILES} files. Remove one to add more.`;
+      this.cdr.markForCheck();
+      return;
+    }
+    const toAdd = pdfs.slice(0, remaining);
+    this.rows = [...this.rows, ...toAdd.map((f) => this.buildRow(f))];
+    this.reviewNotice = pdfs.length > remaining
+      ? `Added ${toAdd.length} file(s). Maximum ${BulkExtractionGridComponent.MAX_FILES}; ${pdfs.length - remaining} not added.`
+      : `Added ${toAdd.length} file(s).`;
     this.cdr.markForCheck();
   }
 

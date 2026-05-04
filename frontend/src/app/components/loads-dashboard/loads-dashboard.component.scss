@@ -1300,6 +1300,63 @@
     margin: 0;
   }
 
+  /* FN-1083: replace-vs-add inline confirm prompt */
+  .bulk-ai-replace-prompt {
+    padding: 14px;
+    border-radius: 10px;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+  }
+
+  .bulk-ai-replace-prompt-text {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: #e2e8f0;
+    line-height: 1.5;
+
+    .material-symbols-outlined {
+      font-size: 18px;
+      color: #67e8f9;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    strong { color: #67e8f9; font-weight: 700; }
+  }
+
+  .bulk-ai-replace-prompt-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .bulk-ai-btn--ghost {
+    background: rgba(15, 23, 42, 0.6);
+    color: #e2e8f0;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    padding: 6px 12px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+
+    .material-symbols-outlined { font-size: 15px; color: #67e8f9; }
+
+    &:hover:not(:disabled) {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.6);
+    }
+
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
+
   .bulk-ai-error {
     display: flex;
     align-items: center;

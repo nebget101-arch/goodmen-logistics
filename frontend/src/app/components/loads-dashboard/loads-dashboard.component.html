@@ -2400,17 +2400,36 @@
           </ul>
         </div>
 
+        <!-- FN-1083: replace-vs-add inline confirm prompt -->
+        <div class="bulk-ai-replace-prompt" *ngIf="bulkPendingAddFiles.length > 0">
+          <p class="bulk-ai-replace-prompt-text">
+            <span class="material-symbols-outlined">help</span>
+            You already have <strong>{{ bulkPdfFiles.length }}</strong> file(s) queued.
+            Replace them with the <strong>{{ bulkPendingAddFiles.length }}</strong> new file(s),
+            or add the new file(s) to your existing queue?
+          </p>
+          <div class="bulk-ai-replace-prompt-actions">
+            <button type="button" class="bulk-ai-btn bulk-ai-btn--ghost" (click)="confirmBulkReplace()" [disabled]="bulkUploading">
+              <span class="material-symbols-outlined">swap_horiz</span> Replace queue
+            </button>
+            <button type="button" class="bulk-ai-btn bulk-ai-btn--ghost" (click)="confirmBulkAdd()" [disabled]="bulkUploading">
+              <span class="material-symbols-outlined">add</span> Add to queue
+            </button>
+            <button type="button" class="btn btn-link" (click)="cancelBulkPending()" [disabled]="bulkUploading">Cancel</button>
+          </div>
+        </div>
+
         <!-- Dropzone -->
         <div
           class="bulk-ai-dropzone"
           (drop)="onBulkDrop($event)"
           (dragover)="allowDrop($event)"
-          *ngIf="bulkPdfFiles.length < 10"
+          *ngIf="bulkPdfFiles.length < 10 && bulkPendingAddFiles.length === 0"
         >
           <span class="material-symbols-outlined bulk-ai-dropzone-icon" *ngIf="bulkPdfFiles.length === 0">cloud_upload</span>
           <span class="material-symbols-outlined bulk-ai-dropzone-icon" *ngIf="bulkPdfFiles.length > 0">add_circle</span>
           <p *ngIf="bulkPdfFiles.length === 0">Drag & drop PDFs here or click to upload</p>
-          <p *ngIf="bulkPdfFiles.length > 0">Add more PDFs</p>
+          <p *ngIf="bulkPdfFiles.length > 0">Add more PDFs — you'll be asked whether to replace or add</p>
           <input #bulkFileInput type="file" accept="application/pdf" multiple (change)="onBulkFilesSelected($any($event.target).files, bulkFileInput)">
         </div>
         <p class="bulk-ai-max-notice" *ngIf="bulkPdfFiles.length >= 10">Maximum 10 files reached. Remove a file to add more.</p>

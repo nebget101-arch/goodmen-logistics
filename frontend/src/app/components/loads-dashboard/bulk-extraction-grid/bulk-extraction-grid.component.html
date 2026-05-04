@@ -31,8 +31,51 @@
     <!-- Body -->
     <div class="beg-body">
 
+      <!-- ===== Phase 0: Review Files (FN-1083) ===== -->
+      <div class="beg-review" *ngIf="inReview">
+        <p class="beg-desc">
+          Review your <span class="beg-cyan">{{ rows.length }}</span> file(s) below, then click
+          <span class="beg-cyan">Start extraction</span> to run the
+          <span class="beg-cyan">AI</span>. Nothing is sent until you confirm.
+        </p>
+
+        <ul class="beg-review-list">
+          <li *ngFor="let row of rows; let i = index" class="beg-review-item">
+            <span class="beg-review-num">{{ i + 1 }}</span>
+            <span class="material-symbols-outlined beg-file-icon">description</span>
+            <span class="beg-review-name" [title]="row.file.name">{{ truncateFilename(row.file.name, 48) }}</span>
+            <button class="beg-review-remove"
+                    type="button"
+                    (click)="onRemoveReviewFile(i)"
+                    [attr.aria-label]="'Remove ' + row.file.name"
+                    [title]="'Remove ' + row.file.name">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </li>
+        </ul>
+
+        <label class="beg-review-add"
+               *ngIf="rows.length < 10"
+               (drop)="onReviewDrop($event)"
+               (dragover)="onReviewDragOver($event)">
+          <span class="material-symbols-outlined beg-review-add-icon">add_circle</span>
+          <span class="beg-review-add-text">Drag &amp; drop more PDFs here, or click to browse</span>
+          <input type="file"
+                 accept="application/pdf"
+                 multiple
+                 (change)="onReviewFileInput($event)">
+        </label>
+        <p class="beg-review-max" *ngIf="rows.length >= 10">
+          Maximum 10 files reached. Remove one to add more.
+        </p>
+
+        <p class="beg-review-notice" *ngIf="reviewNotice">
+          <span class="material-symbols-outlined">info</span> {{ reviewNotice }}
+        </p>
+      </div>
+
       <!-- ===== Phase 1: Progress Grid ===== -->
-      <div class="beg-grid" *ngIf="!completed">
+      <div class="beg-grid" *ngIf="!inReview && !completed">
         <p class="beg-desc">
           Processing <span class="beg-cyan">{{ totalCount }}</span> files.
           Each PDF is being analyzed by our <span class="beg-cyan">AI</span> engine.
@@ -190,6 +233,14 @@
 
     <!-- Footer -->
     <div class="beg-footer">
+      <button *ngIf="inReview"
+              class="beg-btn beg-btn--review"
+              type="button"
+              (click)="onStartExtraction()"
+              [disabled]="rows.length === 0">
+        <span class="material-symbols-outlined">auto_awesome</span>
+        Start extraction
+      </button>
       <button *ngIf="completed && needsReviewCount > 0"
               class="beg-btn beg-btn--review"
               type="button"
