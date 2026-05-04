@@ -1,0 +1,118 @@
+<section
+  class="insights-card"
+  role="region"
+  aria-labelledby="insights-heading"
+  [attr.aria-busy]="loading || refreshing ? 'true' : 'false'"
+>
+  <header class="insights-card__header">
+    <div class="insights-card__title">
+      <span class="insights-card__pill">Predictive insights</span>
+      <h2 id="insights-heading">7-day trends</h2>
+      <p class="insights-card__subtitle" *ngIf="response && !loading">
+        Generated {{ response.generatedAt | date: 'shortTime' }}
+        <span *ngIf="response.cached" class="insights-card__cached" title="Cached for this tenant">cached</span>
+      </p>
+    </div>
+    <button
+      type="button"
+      class="insights-card__refresh"
+      (click)="refresh()"
+      [disabled]="loading || refreshing"
+      [attr.aria-label]="refreshing ? 'Refreshing predictive insights' : 'Refresh predictive insights'"
+    >
+      <span class="insights-card__refresh-icon" [class.is-spinning]="refreshing" aria-hidden="true">↻</span>
+      <span class="insights-card__refresh-text">{{ refreshing ? 'Refreshing…' : 'Refresh' }}</span>
+    </button>
+  </header>
+
+  <div *ngIf="loading" class="insights-card__skeleton" aria-hidden="true">
+    <div class="insights-card__skeleton-cell" *ngFor="let c of cards; trackBy: trackByCard">
+      <div class="insights-card__skeleton-line insights-card__skeleton-line--short"></div>
+      <div class="insights-card__skeleton-line insights-card__skeleton-line--tall"></div>
+      <div class="insights-card__skeleton-line"></div>
+    </div>
+  </div>
+  <p *ngIf="loading" class="sr-only" role="status">Loading predictive insights.</p>
+
+  <div *ngIf="!loading && errorMessage" class="insights-card__error" role="alert">
+    <span class="insights-card__error-icon" aria-hidden="true">⚠</span>
+    <div>
+      <p class="insights-card__error-headline">{{ errorMessage }}</p>
+      <button type="button" class="insights-card__error-retry" (click)="refresh()">Try again</button>
+    </div>
+  </div>
+
+  <ul
+    *ngIf="!loading && !errorMessage && response"
+    class="insights-card__grid"
+    role="list"
+  >
+    <li
+      *ngFor="let card of cards; trackBy: trackByCard"
+      class="insights-card__cell"
+      [attr.data-icon]="card.icon"
+      [attr.aria-label]="card.label"
+    >
+      <ng-container *ngIf="getSeries(card.id) as series">
+        <ng-container *ngIf="computeStats(series) as stats">
+          <div class="insights-card__cell-head">
+            <span class="insights-card__cell-icon" aria-hidden="true">
+              <ng-container [ngSwitch]="card.icon">
+                <span *ngSwitchCase="'volume'">⌬</span>
+                <span *ngSwitchCase="'wrench'">⚙</span>
+                <span *ngSwitchCase="'clock'">◷</span>
+                <span *ngSwitchCase="'fuel'">⛽</span>
+              </ng-container>
+            </span>
+            <p class="insights-card__cell-label">{{ card.label }}</p>
+            <span
+              *ngIf="hasUpstreamError(card.id)"
+              class="insights-card__cell-stale"
+              role="note"
+              aria-label="Source temporarily unavailable"
+              title="Source temporarily unavailable"
+            >stale</span>
+          </div>
+
+          <ng-container *ngIf="hasData(series); else emptyState">
+            <p class="insights-card__cell-value">{{ formatValue(stats, card.unit) }}</p>
+
+            <p
+              class="insights-card__cell-delta"
+              [ngClass]="directionClass(stats.direction, card.id)"
+              [attr.aria-label]="'Change vs. start of window: ' + formatDelta(stats, card.unit)"
+            >
+              <span class="insights-card__cell-delta-glyph" aria-hidden="true">{{ directionGlyph(stats.direction) }}</span>
+              <span class="insights-card__cell-delta-text">{{ formatDelta(stats, card.unit) }}</span>
+              <span class="insights-card__cell-delta-suffix">vs last week</span>
+            </p>
+
+            <ng-container *ngIf="buildSparkline(series) as path">
+              <svg
+                *ngIf="path.hasPoints"
+                class="insights-card__sparkline"
+                [attr.viewBox]="'0 0 ' + sparklineWidth + ' ' + sparklineHeight"
+                [attr.width]="sparklineWidth"
+                [attr.height]="sparklineHeight"
+                role="img"
+                [attr.aria-label]="card.label + ' sparkline'"
+                preserveAspectRatio="none"
+              >
+                <path *ngIf="path.actual" [attr.d]="path.actual" class="spark-actual" fill="none" />
+                <path *ngIf="path.predicted" [attr.d]="path.predicted" class="spark-predicted" fill="none" />
+              </svg>
+            </ng-container>
+
+            <p class="insights-card__cell-desc">{{ card.description }}</p>
+          </ng-container>
+
+          <ng-template #emptyState>
+            <p class="insights-card__cell-empty" role="status">
+              Not enough data yet — collecting baseline.
+            </p>
+          </ng-template>
+        </ng-container>
+      </ng-container>
+    </li>
+  </ul>
+</section>
