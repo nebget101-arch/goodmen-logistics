@@ -8,13 +8,25 @@
       <p>{{ config.subtitle }}</p>
     </div>
     <div class="report-actions">
-      <button type="button" class="btn btn-export" (click)="exportAs('csv')">
-        <span class="material-symbols-outlined">table_view</span>
-        Export CSV
+      <button
+        type="button"
+        class="btn btn-export"
+        (click)="exportAs('csv')"
+        [disabled]="isExporting.csv"
+        [attr.aria-busy]="isExporting.csv ? 'true' : null"
+      >
+        <span class="material-symbols-outlined">{{ isExporting.csv ? 'progress_activity' : 'table_view' }}</span>
+        {{ isExporting.csv ? 'Exporting…' : 'Export CSV' }}
       </button>
-      <button type="button" class="btn btn-export" (click)="exportAs('pdf')">
-        <span class="material-symbols-outlined">picture_as_pdf</span>
-        Export PDF
+      <button
+        type="button"
+        class="btn btn-export"
+        (click)="exportAs('pdf')"
+        [disabled]="isExporting.pdf"
+        [attr.aria-busy]="isExporting.pdf ? 'true' : null"
+      >
+        <span class="material-symbols-outlined">{{ isExporting.pdf ? 'progress_activity' : 'picture_as_pdf' }}</span>
+        {{ isExporting.pdf ? 'Generating PDF…' : 'Export PDF' }}
       </button>
     </div>
   </header>
