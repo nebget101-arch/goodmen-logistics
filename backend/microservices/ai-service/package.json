@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node src/handlers/__tests__/loads-nlq-handler.test.js && node src/handlers/__tests__/briefing-handler.test.js && node src/handlers/__tests__/ask-handler.test.js"
+    "test": "node src/handlers/__tests__/loads-nlq-handler.test.js && node src/handlers/__tests__/briefing-handler.test.js && node src/handlers/__tests__/ask-handler.test.js && node src/handlers/__tests__/score-alert-handler.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
