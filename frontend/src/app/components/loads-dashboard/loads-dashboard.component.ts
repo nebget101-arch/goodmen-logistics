@@ -177,6 +177,22 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   showDetailsModal = false;
   showInlineNewLoad = false;
 
+  // ─── FN-1063: Clone Existing Load picker ─────────────────────────────────
+  /** Picker visibility (driven by `openCloneLoad()` and the close button). */
+  showCloneLoadPickerModal = false;
+  /** Search query (debounced — re-fetches the picker results). */
+  cloneLoadPickerQuery = '';
+  /** Latest picker results (top 20 matches). */
+  cloneLoadPickerResults: LoadListItem[] = [];
+  /** True while picker results are being fetched. */
+  cloneLoadPickerLoading = false;
+  /** Picker error banner. */
+  cloneLoadPickerError = '';
+  /** Subject driving debounced picker queries. */
+  private cloneLoadPickerSearch$ = new Subject<string>();
+  /** True while the cloned load is being persisted (between row click and drawer open). */
+  cloneLoadPickerSubmitting = false;
+
   // ─── Load Templates (FN-755) ────────────────────────────────────────────
   /** Save-As-Template dialog state. */
   showSaveAsTemplateModal = false;
@@ -325,7 +341,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   private routeTileLayers: { map: L.TileLayer; satellite: L.TileLayer } | null = null;
 
   page = 1;
-  pageSize = 25;
+  pageSize = 100;
+  /** FN-1063: rows-per-page options surfaced next to the paginator. */
+  readonly pageSizeOptions: ReadonlyArray<number> = [25, 50, 100, 200];
   total = 0;
 
   // ─── FN-808: Load Detail Side Drawer ────────────────────────────────────
@@ -335,6 +353,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   drawerWidth: number = DRAWER_DEFAULT_WIDTH;
   /** FN-818: when the drawer was opened via the confidence badge, highlight low-conf fields. */
   drawerFocusLowConfidence = false;
+  /** FN-1063: which mode the drawer should open in — 'view' for load-number / View row button, 'edit' for Edit row button. */
+  drawerInitialMode: 'view' | 'edit' = 'view';
 
   // ─── FN-818: AI extraction visual markers ───────────────────────────────
   /** Loads whose IDs are brand-new AI-sourced rows — receive a one-off glow on first render. */
@@ -1000,6 +1020,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         this.page = 1;
         this.loadLoads();
       });
+
+    // FN-1063: debounced clone-picker search.
+    this.cloneLoadPickerSearch$
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntil(this.destroy$))
+      .subscribe((value) => this.fetchCloneLoadPickerResults(value));
 
     this.brokerSearch$
       .pipe(
@@ -1744,6 +1769,17 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.loadLoads();
   }
 
+  /** FN-1063: rows-per-page selector — resets to page 1, re-fetches, persists. */
+  onPageSizeChange(next: number | string): void {
+    const size = Number(next);
+    if (!Number.isFinite(size) || !this.pageSizeOptions.includes(size)) return;
+    if (size === this.pageSize) return;
+    this.pageSize = size;
+    this.page = 1;
+    this.loadLoads();
+    this.userPreferences.patchLoadsDashboard({ pageSize: size }).subscribe();
+  }
+
   openManualEntry(): void {
     this.editingLoadId = null;
     this.editingLoadDetail = null;
@@ -2137,14 +2173,95 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Clone Existing Load — stub until the clone API endpoint is built.
-   * Will open a search/select dialog to pick the source load.
+   * FN-1063: Clone Existing Load — opens a picker (search + paginated
+   * results). On selection, calls `loadsService.cloneLoad(id)` then
+   * persists the returned draft via `createLoad` and opens the side
+   * drawer in edit mode on the new row.
    */
   openCloneLoad(): void {
-    // TODO: open clone-load dialog when backend endpoint lands (FN-724 sibling subtask)
     this.successMessage = '';
-    this.errorMessage = 'Clone load is coming soon.';
-    setTimeout(() => { this.errorMessage = ''; }, 3000);
+    this.errorMessage = '';
+    this.cloneLoadPickerQuery = '';
+    this.cloneLoadPickerResults = [];
+    this.cloneLoadPickerError = '';
+    this.cloneLoadPickerSubmitting = false;
+    this.showCloneLoadPickerModal = true;
+    this.showNewLoadMenu = false;
+    // Seed results with the most recent loads so the picker is useful even
+    // before the user types anything.
+    this.fetchCloneLoadPickerResults('');
+  }
+
+  closeCloneLoadPickerModal(): void {
+    this.showCloneLoadPickerModal = false;
+    this.cloneLoadPickerQuery = '';
+    this.cloneLoadPickerResults = [];
+    this.cloneLoadPickerError = '';
+    this.cloneLoadPickerLoading = false;
+    this.cloneLoadPickerSubmitting = false;
+  }
+
+  onCloneLoadPickerQueryChange(value: string): void {
+    this.cloneLoadPickerQuery = value;
+    this.cloneLoadPickerSearch$.next(value);
+  }
+
+  private fetchCloneLoadPickerResults(query: string): void {
+    this.cloneLoadPickerLoading = true;
+    this.cloneLoadPickerError = '';
+    this.loadsService
+      .listLoads({ q: query, page: 1, pageSize: 20 } as any)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.cloneLoadPickerResults = res?.data || [];
+          this.cloneLoadPickerLoading = false;
+        },
+        error: () => {
+          this.cloneLoadPickerError = 'Failed to load search results.';
+          this.cloneLoadPickerLoading = false;
+        }
+      });
+  }
+
+  /** Picker selection → clone via backend → persist → open drawer in edit. */
+  selectCloneLoadPickerLoad(load: LoadListItem): void {
+    if (!load?.id || this.cloneLoadPickerSubmitting) return;
+    this.cloneLoadPickerSubmitting = true;
+    this.cloneLoadPickerError = '';
+    this.loadsService.cloneLoad(load.id).subscribe({
+      next: (res) => {
+        const draft = res?.data as any;
+        if (!draft) {
+          this.cloneLoadPickerError = 'Failed to clone load.';
+          this.cloneLoadPickerSubmitting = false;
+          return;
+        }
+        this.loadsService.createLoad(draft).subscribe({
+          next: (created) => {
+            const newId = created?.data?.id;
+            this.cloneLoadPickerSubmitting = false;
+            if (!newId) {
+              this.cloneLoadPickerError = 'Failed to save cloned draft.';
+              return;
+            }
+            this.closeCloneLoadPickerModal();
+            this.loadLoads();
+            this.successMessage = 'Cloned — set the pickup/delivery dates and save.';
+            setTimeout(() => { this.successMessage = ''; }, 5000);
+            this.openLoadDrawer(newId, false, 'edit');
+          },
+          error: (err) => {
+            this.cloneLoadPickerError = err?.error?.error || 'Failed to save cloned draft.';
+            this.cloneLoadPickerSubmitting = false;
+          }
+        });
+      },
+      error: (err) => {
+        this.cloneLoadPickerError = err?.error?.error || 'Failed to clone load.';
+        this.cloneLoadPickerSubmitting = false;
+      }
+    });
   }
 
   closeBulkUploadModal(): void {
@@ -3161,9 +3278,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * FN-756: Clone an existing load — backend returns a draft-ready payload
-   * (dates cleared, status=DRAFT, PO cleared, new load_number). We pre-fill the
-   * inline new-load form; nothing persists until the user saves.
+   * FN-756 / FN-1063: Clone an existing load. The backend returns an
+   * in-memory draft payload (no `id`); we persist it via `createLoad` so a
+   * real DRAFT exists in the list, then open the side drawer on the new
+   * row in edit mode. The legacy modal flow (`applyDraftToManualForm`) is
+   * retained for `createReturnLoad`.
    */
   cloneLoad(load: LoadListItem): void {
     if (!load?.id) return;
@@ -3171,17 +3290,38 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.successMessage = '';
     this.loadsService.cloneLoad(load.id).subscribe({
       next: (res) => {
-        const draft = res?.data;
+        const draft = res?.data as any;
         if (!draft) {
           this.errorMessage = 'Failed to clone load.';
           return;
         }
-        this.applyDraftToManualForm(draft);
-        this.successMessage = 'Cloned load — set the pickup/delivery dates and save.';
-        setTimeout(() => { this.successMessage = ''; }, 5000);
+        this.persistClonedDraftAndOpenDrawer(draft);
       },
       error: (err) => {
         this.errorMessage = err?.error?.error || 'Failed to clone load.';
+      }
+    });
+  }
+
+  /**
+   * FN-1063: Persist a clone draft as a real DRAFT load, then open the
+   * side drawer on the new row in edit mode.
+   */
+  private persistClonedDraftAndOpenDrawer(draft: any): void {
+    this.loadsService.createLoad(draft).subscribe({
+      next: (created) => {
+        const newId = created?.data?.id;
+        if (!newId) {
+          this.errorMessage = 'Failed to save cloned draft.';
+          return;
+        }
+        this.loadLoads();
+        this.successMessage = 'Cloned — set the pickup/delivery dates and save.';
+        setTimeout(() => { this.successMessage = ''; }, 5000);
+        this.openLoadDrawer(newId, false, 'edit');
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to save cloned draft.';
       }
     });
   }
@@ -4628,6 +4768,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       if (prefs.density === 'compact' || prefs.density === 'comfortable' || prefs.density === 'spacious') {
         this.densityMode = prefs.density;
       }
+      // FN-1063: restore persisted rows-per-page (only when valid + different).
+      if (typeof prefs.pageSize === 'number' && this.pageSizeOptions.includes(prefs.pageSize) && prefs.pageSize !== this.pageSize) {
+        this.pageSize = prefs.pageSize;
+        this.page = 1;
+        this.loadLoads();
+      }
       // FN-1059: restore per-column widths over the px defaults.
       this.columnWidths = { ...this.columnWidthDefaultsPx };
       const stored = prefs.columnWidths;
@@ -4701,8 +4847,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.openLoadDrawer(load.id);
   }
 
-  openLoadDrawer(loadId: string, focusLowConfidence = false): void {
+  openLoadDrawer(loadId: string, focusLowConfidence = false, mode: 'view' | 'edit' = 'view'): void {
     this.drawerFocusLowConfidence = focusLowConfidence;
+    this.drawerInitialMode = mode;
     this.drawerLoadId = loadId;
   }
 

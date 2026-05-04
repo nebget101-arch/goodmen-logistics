@@ -976,7 +976,8 @@
             />
           </td>
           <td *ngIf="isColVisible('load_number')" [title]="load.load_number || ''">
-            <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
+            <!-- FN-1063: load-number opens the side drawer in view mode (was: openEdit modal). -->
+            <a class="link" (click)="openLoadDrawer(load.id)">{{ load.load_number }}</a>
             <!-- FN-818: AI extraction sparkle — marks loads sourced from AI/email pipelines. -->
             <app-ai-sparkle
               *ngIf="isAiExtractedSource(load)"
@@ -1211,7 +1212,7 @@
               <button
                 type="button"
                 class="row-toolbar__btn"
-                (click)="openDetails(load)"
+                (click)="openLoadDrawer(load.id)"
                 title="View"
                 aria-label="View load"
               >
@@ -1220,7 +1221,7 @@
               <button
                 type="button"
                 class="row-toolbar__btn"
-                (click)="openEdit(load)"
+                (click)="openLoadDrawer(load.id, false, 'edit')"
                 title="Edit"
                 aria-label="Edit load"
               >
@@ -1312,6 +1313,18 @@
       <span>Next</span>
       <span class="material-symbols-outlined">chevron_right</span>
     </button>
+    <!-- FN-1063: rows-per-page selector. -->
+    <label class="page-size-control">
+      <span class="page-size-control__label">Rows</span>
+      <select
+        class="page-size-control__select"
+        [ngModel]="pageSize"
+        (ngModelChange)="onPageSizeChange($event)"
+        aria-label="Rows per page"
+      >
+        <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
+      </select>
+    </label>
   </div>
 
   <!-- Manual Load Entry Modal (draft: PDF left, load details right; non-draft: single column) -->
@@ -2279,6 +2292,64 @@
     </div>
   </div>
 
+  <!-- FN-1063: Clone Existing Load picker — search + result list. -->
+  <div class="modal-backdrop" *ngIf="showCloneLoadPickerModal" (click)="closeCloneLoadPickerModal()">
+    <div class="modal clone-picker-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Clone existing load">
+      <header class="clone-picker-modal__header">
+        <h3>
+          <span class="material-symbols-outlined">file_copy</span>
+          Clone existing load
+        </h3>
+        <button type="button" class="clone-picker-modal__close" (click)="closeCloneLoadPickerModal()" aria-label="Close">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </header>
+      <div class="clone-picker-modal__body">
+        <p class="clone-picker-modal__hint">
+          Pick a load to clone — its stops, broker, equipment and notes carry over;
+          dates and PO are cleared. The clone opens in the side drawer for you to refine.
+        </p>
+        <div class="clone-picker-modal__search">
+          <span class="material-symbols-outlined">search</span>
+          <input
+            type="text"
+            class="clone-picker-modal__search-input"
+            placeholder="Search by load number, broker, or city…"
+            [ngModel]="cloneLoadPickerQuery"
+            (ngModelChange)="onCloneLoadPickerQueryChange($event)"
+            [disabled]="cloneLoadPickerSubmitting"
+            autofocus
+          />
+        </div>
+        <div class="clone-picker-modal__error" *ngIf="cloneLoadPickerError">{{ cloneLoadPickerError }}</div>
+        <div class="clone-picker-modal__loading" *ngIf="cloneLoadPickerLoading">Searching…</div>
+        <ul class="clone-picker-modal__results" *ngIf="!cloneLoadPickerLoading && cloneLoadPickerResults.length">
+          <li
+            *ngFor="let pickerLoad of cloneLoadPickerResults"
+            class="clone-picker-modal__result"
+            [class.is-disabled]="cloneLoadPickerSubmitting"
+            (click)="selectCloneLoadPickerLoad(pickerLoad)"
+            tabindex="0"
+            (keydown.enter)="selectCloneLoadPickerLoad(pickerLoad)"
+          >
+            <span class="clone-picker-modal__result-num">{{ pickerLoad.load_number || '—' }}</span>
+            <span class="clone-picker-modal__result-broker">{{ pickerLoad.broker_name || '' }}</span>
+            <span class="clone-picker-modal__result-route">
+              {{ pickerLoad.pickup_city || '?' }} → {{ pickerLoad.delivery_city || '?' }}
+            </span>
+            <span class="clone-picker-modal__result-status">{{ pickerLoad.status || '' }}</span>
+          </li>
+        </ul>
+        <div
+          class="clone-picker-modal__empty"
+          *ngIf="!cloneLoadPickerLoading && !cloneLoadPickerResults.length"
+        >
+          No loads found.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Bulk Upload Rate Confirmations modal — AI themed -->
   <div class="modal-backdrop" *ngIf="showBulkUploadModal">
     <div class="modal bulk-ai-modal" (click)="$event.stopPropagation()">
@@ -2672,6 +2743,7 @@
   [hasPrev]="drawerHasPrev"
   [hasNext]="drawerHasNext"
   [focusLowConfidence]="drawerFocusLowConfidence"
+  [initialMode]="drawerInitialMode"
   (close)="closeLoadDrawer()"
   (prev)="onDrawerPrev()"
   (next)="onDrawerNext()"
