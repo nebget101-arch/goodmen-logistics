@@ -1,0 +1,75 @@
+<section
+  class="briefing-card"
+  role="region"
+  aria-labelledby="briefing-heading"
+  [attr.aria-busy]="loading || refreshing ? 'true' : 'false'"
+>
+  <header class="briefing-card__header">
+    <div class="briefing-card__title">
+      <span class="briefing-card__pill">AI briefing</span>
+      <h2 id="briefing-heading">Daily fleet briefing</h2>
+      <p class="briefing-card__subtitle" *ngIf="response && !loading">
+        For {{ response.date }}
+        <span *ngIf="response.cached" class="briefing-card__cached" title="Cached for today">cached</span>
+      </p>
+    </div>
+    <button
+      type="button"
+      class="briefing-card__refresh"
+      (click)="refresh()"
+      [disabled]="loading || refreshing"
+      [attr.aria-label]="refreshing ? 'Refreshing daily briefing' : 'Refresh daily briefing'"
+    >
+      <span class="briefing-card__refresh-icon" [class.is-spinning]="refreshing" aria-hidden="true">↻</span>
+      <span class="briefing-card__refresh-text">{{ refreshing ? 'Refreshing…' : 'Refresh' }}</span>
+    </button>
+  </header>
+
+  <div *ngIf="loading" class="briefing-card__skeleton" aria-hidden="true">
+    <div class="briefing-card__skeleton-row" *ngFor="let s of sections; trackBy: trackBySection">
+      <div class="briefing-card__skeleton-icon"></div>
+      <div class="briefing-card__skeleton-text">
+        <div class="briefing-card__skeleton-line briefing-card__skeleton-line--short"></div>
+        <div class="briefing-card__skeleton-line"></div>
+      </div>
+    </div>
+  </div>
+  <p *ngIf="loading" class="sr-only" role="status">Loading daily briefing.</p>
+
+  <div *ngIf="!loading && errorMessage" class="briefing-card__error" role="alert">
+    <span class="briefing-card__error-icon" aria-hidden="true">⚠</span>
+    <div>
+      <p class="briefing-card__error-headline">{{ errorMessage }}</p>
+      <button type="button" class="briefing-card__error-retry" (click)="refresh()">Try again</button>
+    </div>
+  </div>
+
+  <ul
+    *ngIf="!loading && !errorMessage && response"
+    class="briefing-card__sections"
+    role="list"
+  >
+    <li
+      *ngFor="let section of sections; trackBy: trackBySection"
+      class="briefing-card__section"
+      [attr.data-icon]="section.icon"
+      [attr.aria-label]="section.label"
+    >
+      <div class="briefing-card__section-icon" aria-hidden="true">
+        <span class="briefing-card__section-icon-glyph">{{ section.icon === 'spark' ? '✦' : '●' }}</span>
+      </div>
+      <div class="briefing-card__section-body">
+        <p class="briefing-card__section-label">{{ section.label }}</p>
+        <p class="briefing-card__section-headline">{{ getSection(section.id)?.headline }}</p>
+        <p
+          *ngIf="getSection(section.id)?.detail as detail"
+          class="briefing-card__section-detail"
+        >{{ detail }}</p>
+        <p
+          *ngIf="getSection(section.id)?.metric as metric"
+          class="briefing-card__section-metric"
+        >{{ metric }}</p>
+      </div>
+    </li>
+  </ul>
+</section>
