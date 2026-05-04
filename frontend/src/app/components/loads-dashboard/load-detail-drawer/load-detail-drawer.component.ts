@@ -84,6 +84,16 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
   trailerId: string | null = null;
   attachments: WizardAttachment[] = [];
 
+  /**
+   * FN-1054 — Server-computed trip metrics from `getLoadDetail()`. Forwarded
+   * to `<app-step-stops>` so its Trip Metrics panel renders real numbers
+   * instead of "--". The frontend never recomputes these — `computeTripMetrics`
+   * on the backend is the source of truth.
+   */
+  totalMiles: number | null = null;
+  emptyMiles: number | null = null;
+  loadedMiles: number | null = null;
+
   dirty = false;
   showUnsavedWarning = false;
 
@@ -156,6 +166,9 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
       this.truckId = null;
       this.trailerId = null;
       this.attachments = [];
+      this.totalMiles = null;
+      this.emptyMiles = null;
+      this.loadedMiles = null;
       return;
     }
     this.basics = {
@@ -176,7 +189,22 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
     this.truckId = d.truck_id || null;
     this.trailerId = d.trailer_id || null;
     this.attachments = [];
+    this.totalMiles = this.toFiniteNumber(d.total_miles);
+    this.emptyMiles = this.toFiniteNumber(d.empty_miles);
+    this.loadedMiles = this.toFiniteNumber(d.loaded_miles);
     this.dirty = false;
+  }
+
+  /**
+   * FN-1054 — Coerce a possibly-stringified numeric value (Postgres NUMERIC
+   * deserializes as string) to a finite number, or null if missing/invalid.
+   * Keeps the Trip Metrics panel safe from NaN renders when the load has no
+   * computed metrics yet (e.g. missing ZIPs).
+   */
+  private toFiniteNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
   }
 
   private defaultBasics(): StepBasicsData {
