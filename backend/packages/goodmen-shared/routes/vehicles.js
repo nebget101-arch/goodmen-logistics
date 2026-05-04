@@ -635,6 +635,112 @@ router.get('/risk/top', async (req, res) => {
   }
 });
 
+// FN-1309: parse `?limit=N` for the Smart Alerts upstream routes. Default 20,
+// clamp to [1, 100], reject anything non-numeric so callers get 400.
+function parseAlertsTopLimit(raw) {
+  if (raw === undefined || raw === null || raw === '') return 20;
+  const trimmed = String(raw).trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(1, Math.min(100, n));
+}
+
+/**
+ * @openapi
+ * /api/vehicles/inspections/overdue:
+ *   get:
+ *     summary: Vehicles with an overdue annual/DOT inspection (FN-1309)
+ *     description: >
+ *       Returns vehicles whose `inspection_expiry` date is in the past.
+ *       Used by the Smart Alerts aggregator (FN-1161). Tenant-scoped via
+ *       `req.context.tenantId` when the underlying `vehicles` table has
+ *       the column.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Number of vehicles to return (default 20, max 100)
+ *     responses:
+ *       200:
+ *         description: Overdue-inspection vehicle list
+ *       400:
+ *         description: Invalid limit
+ *       500:
+ *         description: Server error
+ */
+router.get('/inspections/overdue', async (req, res) => {
+  const limit = parseAlertsTopLimit(req.query.limit);
+  if (limit === null) {
+    return res.status(400).json({ message: 'Invalid limit; expected positive integer' });
+  }
+
+  try {
+    const vehicleSource = await resolveVehicleSource();
+    if (vehicleSource === 'none') return res.json([]);
+
+    const vehicleColumns = await getRelationColumns(vehicleSource);
+    if (!vehicleColumns.has('inspection_expiry')) return res.json([]);
+    const hasTenantCol = vehicleColumns.has('tenant_id');
+    const hasUnitNumber = vehicleColumns.has('unit_number');
+
+    const params = [];
+    params.push(req.context?.tenantId || null);
+    const tenantIdx = params.length;
+    params.push(limit);
+    const limitIdx = params.length;
+
+    // When the vehicle source has no tenant_id column we still need a
+    // bound positional placeholder for $1 — match the FN-1303 risk-top
+    // pattern: emit a no-op predicate so $1 stays referenced.
+    const tenantPredicate = hasTenantCol
+      ? `(v.tenant_id = $${tenantIdx} OR $${tenantIdx}::uuid IS NULL)`
+      : `($${tenantIdx}::uuid IS NULL OR TRUE)`;
+
+    const sql = `
+      SELECT
+        v.id AS vehicle_id,
+        ${hasUnitNumber ? 'v.unit_number' : "''::text AS unit_number"},
+        v.inspection_expiry,
+        (NOW()::date - v.inspection_expiry)::int AS days_overdue
+      FROM ${vehicleSource} v
+      WHERE ${tenantPredicate}
+        AND v.inspection_expiry IS NOT NULL
+        AND v.inspection_expiry < NOW()::date
+      ORDER BY v.inspection_expiry ASC
+      LIMIT $${limitIdx}
+    `;
+
+    const result = await query(sql, params);
+    const data = result.rows.map((row) => ({
+      vehicleId: row.vehicle_id,
+      unit: row.unit_number || '',
+      daysOverdue: Number(row.days_overdue) || 0,
+      // The schema only tracks a single `inspection_expiry`, which on most
+      // fleets is the annual DOT inspection (49 CFR 396.17). Until the model
+      // splits annual vs. periodic vs. roadside, label all of them 'annual'.
+      inspectionType: 'annual'
+    }));
+    return res.json(data);
+  } catch (error) {
+    const code = error?.code ? String(error.code) : '';
+    const message = error?.message ? String(error.message) : '';
+    if (code === '42P01' || message.includes('does not exist')) {
+      dtLogger.warn?.('vehicles_inspections_overdue_table_missing', { message });
+      return res.json([]);
+    }
+    dtLogger.error('vehicles_inspections_overdue_failed', error);
+    return res.status(500).json({ message: 'Failed to fetch overdue vehicle inspections' });
+  }
+});
+
 /**
  * @openapi
  * /api/vehicles/{id}:

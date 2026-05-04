@@ -268,6 +268,118 @@ function safeParseJson(s) {
   try { return JSON.parse(s); } catch { return null; }
 }
 
+// FN-1309: parse `?limit=N` for the Smart Alerts upstream routes. Default 20,
+// clamp to [1, 100], reject anything non-numeric so callers get 400, not a
+// silent fallback that masks a coding bug in the aggregator.
+function parseAlertsTopLimit(raw) {
+  if (raw === undefined || raw === null || raw === '') return 20;
+  const trimmed = String(raw).trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(1, Math.min(100, n));
+}
+
+/**
+ * @openapi
+ * /api/drivers/fatigue/top:
+ *   get:
+ *     summary: Top-N drivers by fatigue score (FN-1309)
+ *     description: >
+ *       Heuristic ranking of drivers most likely to be fatigued, derived from
+ *       the latest hos_records row per driver. There is no dedicated fatigue
+ *       table; computing this inline keeps the endpoint synchronous and
+ *       cheap. Used by the Smart Alerts aggregator (FN-1161). Tenant-scoped
+ *       via `req.context.tenantId`.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Number of drivers to return (default 20, max 100)
+ *     responses:
+ *       200:
+ *         description: Top-fatigue driver list
+ *       400:
+ *         description: Invalid limit
+ *       500:
+ *         description: Server error
+ */
+// FN-1309: fatigue heuristic. Latest hos_records per driver provides
+// `on_duty_hours` and `driving_hours` for the most recent shift. We score
+// fatigue as a 70/30 weighted blend of duty-hour and drive-hour saturation
+// against the federal 14h/11h caps, scaled to 0-100. The 70/30 split is
+// deliberate: hours-on-duty correlates more strongly with fatigue research
+// than drive-only minutes (cumulative cognitive load vs. wheel time). When
+// `hos_records` is absent on a partial dev schema we degrade to `[]` so the
+// aggregator's `upstreamErrors` stays clean.
+router.get('/fatigue/top', async (req, res) => {
+  const limit = parseAlertsTopLimit(req.query.limit);
+  if (limit === null) {
+    return res.status(400).json({ success: false, error: 'Invalid limit; expected positive integer' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+
+  const sql = `
+    WITH latest AS (
+      SELECT DISTINCT ON (hr.driver_id)
+        hr.driver_id, hr.record_date, hr.driving_hours, hr.on_duty_hours
+      FROM hos_records hr
+      JOIN drivers d ON hr.driver_id = d.id
+      WHERE (d.tenant_id = $1 OR $1::uuid IS NULL)
+      ORDER BY hr.driver_id, hr.record_date DESC
+    )
+    SELECT
+      l.driver_id,
+      d.first_name,
+      d.last_name,
+      COALESCE(l.on_duty_hours, 0)::numeric AS on_duty_hours,
+      COALESCE(l.driving_hours, 0)::numeric AS driving_hours,
+      LEAST(
+        100,
+        ROUND(
+          (COALESCE(l.on_duty_hours, 0) / 14.0) * 70
+          + (COALESCE(l.driving_hours, 0) / 11.0) * 30
+        )
+      )::int AS fatigue_score
+    FROM latest l
+    JOIN drivers d ON d.id = l.driver_id
+    WHERE COALESCE(l.on_duty_hours, 0) > 0 OR COALESCE(l.driving_hours, 0) > 0
+    ORDER BY fatigue_score DESC, l.record_date DESC
+    LIMIT $2
+  `;
+
+  try {
+    const result = await query(sql, [tenantId, limit]);
+    const data = result.rows.map((row) => {
+      const driverName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || null;
+      return {
+        driverId: row.driver_id,
+        driverName,
+        fatigueScore: Number(row.fatigue_score) || 0,
+        consecutiveDutyHours: Number(row.on_duty_hours) || 0
+      };
+    });
+    return res.json(data);
+  } catch (error) {
+    const code = error?.code ? String(error.code) : '';
+    const message = error?.message ? String(error.message) : '';
+    if (code === '42P01' || message.includes('does not exist')) {
+      dtLogger.warn?.('drivers_fatigue_top_table_missing', { message });
+      return res.json([]);
+    }
+    dtLogger.error('drivers_fatigue_top_failed', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch top driver fatigue' });
+  }
+});
+
 /**
  * @openapi
  * /api/drivers:
