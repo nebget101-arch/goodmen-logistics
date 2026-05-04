@@ -253,6 +253,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   bulkError = '';
   bulkResults: Array<{ success: boolean; data?: LoadDetail; error?: string; filename: string }> = [];
 
+  // FN-1083: when files are already queued and the user picks/drops more,
+  // hold the new selection here and show an inline confirm prompt asking
+  // whether to replace or add to the existing queue.
+  bulkPendingAddFiles: File[] = [];
+
   // FN-745: Bulk extraction grid
   showBulkExtractionGrid = false;
   bulkExtractionFiles: File[] = [];
@@ -2365,6 +2370,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showBulkUploadModal = false;
     this.bulkPdfFiles = [];
     this.bulkResults = [];
+    this.bulkPendingAddFiles = [];
   }
 
   // ─── FN-745: Bulk Extraction Grid ─────────────────────────────────────
@@ -2396,11 +2402,27 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     const pdfs = Array.from(files).filter((f) => f.type === 'application/pdf');
     if (files.length > 0 && pdfs.length === 0) {
       this.bulkError = 'Please select PDF files only.';
+      if (inputEl) inputEl.value = '';
       return;
     }
+    // FN-1083: if files are already queued, ask whether to replace or add
+    // instead of silently appending. User confirms via the inline prompt.
+    if (this.bulkPdfFiles.length > 0) {
+      this.bulkPendingAddFiles = pdfs;
+      if (inputEl) inputEl.value = '';
+      return;
+    }
+    this.appendBulkFiles(pdfs);
+    if (inputEl) inputEl.value = '';
+  }
+
+  /**
+   * Append PDFs to the bulk queue, capped at 10. Shared by the initial
+   * selection path and the FN-1083 "Add to queue" confirm action.
+   */
+  private appendBulkFiles(pdfs: File[]): void {
     const maxTotal = 10;
-    const current = this.bulkPdfFiles.length;
-    const remaining = Math.max(0, maxTotal - current);
+    const remaining = Math.max(0, maxTotal - this.bulkPdfFiles.length);
     if (remaining === 0) {
       this.bulkError = 'Maximum 10 rate confirmations. Remove one to add more.';
       return;
@@ -2410,7 +2432,30 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     if (pdfs.length > remaining) {
       this.bulkError = `Added ${toAdd.length} file(s). Maximum 10 total; ${pdfs.length - remaining} not added.`;
     }
-    if (inputEl) inputEl.value = '';
+  }
+
+  // FN-1083: replace-vs-add confirm actions for the bulk-upload modal.
+
+  /** Replace the existing queue with the pending selection. */
+  confirmBulkReplace(): void {
+    if (this.bulkPendingAddFiles.length === 0) return;
+    this.bulkError = '';
+    this.bulkPdfFiles = [];
+    this.appendBulkFiles(this.bulkPendingAddFiles);
+    this.bulkPendingAddFiles = [];
+  }
+
+  /** Append the pending selection to the existing queue. */
+  confirmBulkAdd(): void {
+    if (this.bulkPendingAddFiles.length === 0) return;
+    this.bulkError = '';
+    this.appendBulkFiles(this.bulkPendingAddFiles);
+    this.bulkPendingAddFiles = [];
+  }
+
+  /** Discard the pending selection without changing the queue. */
+  cancelBulkPending(): void {
+    this.bulkPendingAddFiles = [];
   }
 
   removeBulkFile(index: number): void {

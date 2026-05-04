@@ -1,28 +1,32 @@
 /// <reference types="jasmine" />
 
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of, throwError } from 'rxjs';
 
 import { BulkExtractionGridComponent } from './bulk-extraction-grid.component';
+import { LoadsService } from '../../../services/loads.service';
 import {
   LoadAiEndpointExtraction,
   LoadDetail
 } from '../../../models/load-dashboard.model';
 
-/**
- * FN-1085 — coverage for the missing RATE_CONFIRMATION attachment fix.
- *
- * `processFile` previously stopped after `createLoad`, which left bulk-
- * extracted loads with zero attachments. The fix calls `uploadAttachment`
- * after the load is created and surfaces a PARTIAL_SUCCESS state when the
- * upload fails (so the user sees the load link plus a warning rather than a
- * green tick).
- *
- * Construction is side-effect-free; we instantiate with `new` and stub
- * dependencies. ngOnInit kicks off processing, so each test wires its
- * `files` input before invoking `startProcessing` directly.
- */
+// ───────────────────────────────────────────────────────────────────────────
+// FN-1085 — coverage for the missing RATE_CONFIRMATION attachment fix.
+//
+// `processFile` previously stopped after `createLoad`, which left bulk-
+// extracted loads with zero attachments. The fix calls `uploadAttachment`
+// after the load is created and surfaces a PARTIAL_SUCCESS state when the
+// upload fails (so the user sees the load link plus a warning rather than a
+// green tick).
+//
+// Construction is side-effect-free; we instantiate with `new` and stub
+// dependencies. After FN-1083 ngOnInit no longer auto-starts processing,
+// each test still wires its `files`/`rows` input before invoking
+// `startProcessing` directly.
+// ───────────────────────────────────────────────────────────────────────────
 
-function makePdf(name = 'rate-conf.pdf'): File {
+function makePdfFn1085(name = 'rate-conf.pdf'): File {
   return new File([new Blob(['%PDF-1.4'], { type: 'application/pdf' })], name, {
     type: 'application/pdf'
   });
@@ -86,7 +90,7 @@ describe('BulkExtractionGridComponent — processFile attachment upload (FN-1085
     aiExtractSpy = jasmine.createSpy('aiExtractFromPdf');
     createLoadSpy = jasmine.createSpy('createLoad');
     uploadAttachmentSpy = jasmine.createSpy('uploadAttachment');
-    pdf = makePdf();
+    pdf = makePdfFn1085();
     component = makeComponent({
       aiExtractFromPdf: aiExtractSpy,
       createLoad: createLoadSpy,
@@ -178,5 +182,171 @@ describe('BulkExtractionGridComponent — processFile attachment upload (FN-1085
     expect(row.errorMessage).toBe('duplicate po_number');
     expect(component.failedCount).toBe(1);
     expect(component.partialSuccessCount).toBe(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// FN-1083: review-gate behavior. The grid must NOT auto-start extraction on
+// open — the user must explicitly click "Start extraction" after reviewing
+// the queued files (and may add/remove files first).
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('BulkExtractionGridComponent — review gate (FN-1083)', () => {
+  let component: BulkExtractionGridComponent;
+  let fixture: ComponentFixture<BulkExtractionGridComponent>;
+  let aiExtractSpy: jasmine.Spy;
+  let createLoadSpy: jasmine.Spy;
+
+  function makePdf(name: string): File {
+    return new File([new Blob(['%PDF-1.4'])], name, { type: 'application/pdf' });
+  }
+
+  function makeFileList(files: File[]): FileList {
+    const dt = new DataTransfer();
+    files.forEach((f) => dt.items.add(f));
+    return dt.files;
+  }
+
+  beforeEach(async () => {
+    aiExtractSpy = jasmine.createSpy('aiExtractFromPdf').and.returnValue(of({ data: null }));
+    createLoadSpy = jasmine.createSpy('createLoad').and.returnValue(of({ data: null }));
+
+    const loadsServiceStub = {
+      aiExtractFromPdf: aiExtractSpy,
+      createLoad: createLoadSpy,
+    };
+
+    await TestBed.configureTestingModule({
+      declarations: [BulkExtractionGridComponent],
+      providers: [{ provide: LoadsService, useValue: loadsServiceStub }],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(BulkExtractionGridComponent);
+    component = fixture.componentInstance;
+  });
+
+  describe('ngOnInit()', () => {
+    it('builds rows from inputs but does NOT call startProcessing() — user must confirm', () => {
+      const startSpy = spyOn(component, 'startProcessing').and.callThrough();
+      component.files = [makePdf('a.pdf'), makePdf('b.pdf')];
+
+      fixture.detectChanges(); // triggers ngOnInit
+
+      expect(component.rows.length).toBe(2);
+      expect(component.rows[0].file.name).toBe('a.pdf');
+      expect(component.rows.every((r) => r.status === 'QUEUED')).toBeTrue();
+      expect(component.processing).toBeFalse();
+      expect(component.completed).toBeFalse();
+      expect(component.inReview).toBeTrue();
+      expect(startSpy).not.toHaveBeenCalled();
+      expect(aiExtractSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onStartExtraction()', () => {
+    it('calls startProcessing() when in review with queued rows', () => {
+      const startSpy = spyOn(component, 'startProcessing').and.returnValue(Promise.resolve());
+      component.files = [makePdf('a.pdf'), makePdf('b.pdf')];
+      fixture.detectChanges();
+
+      component.onStartExtraction();
+
+      expect(startSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('is a no-op when there are no rows', () => {
+      const startSpy = spyOn(component, 'startProcessing').and.returnValue(Promise.resolve());
+      component.files = [];
+      fixture.detectChanges();
+
+      component.onStartExtraction();
+
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op once processing has begun', () => {
+      const startSpy = spyOn(component, 'startProcessing').and.returnValue(Promise.resolve());
+      component.files = [makePdf('a.pdf')];
+      fixture.detectChanges();
+      component.processing = true;
+
+      component.onStartExtraction();
+
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onRemoveReviewFile()', () => {
+    it('removes the row at the given index', () => {
+      component.files = [makePdf('a.pdf'), makePdf('b.pdf'), makePdf('c.pdf')];
+      fixture.detectChanges();
+
+      component.onRemoveReviewFile(1);
+
+      expect(component.rows.length).toBe(2);
+      expect(component.rows.map((r) => r.file.name)).toEqual(['a.pdf', 'c.pdf']);
+    });
+
+    it('emits close when removing the last row', () => {
+      const closeSpy = spyOn(component.close, 'emit');
+      component.files = [makePdf('a.pdf')];
+      fixture.detectChanges();
+
+      component.onRemoveReviewFile(0);
+
+      expect(component.rows.length).toBe(0);
+      expect(closeSpy).toHaveBeenCalled();
+    });
+
+    it('ignores out-of-range indices', () => {
+      component.files = [makePdf('a.pdf')];
+      fixture.detectChanges();
+
+      component.onRemoveReviewFile(5);
+      component.onRemoveReviewFile(-1);
+
+      expect(component.rows.length).toBe(1);
+    });
+
+    it('does nothing once processing has begun', () => {
+      component.files = [makePdf('a.pdf'), makePdf('b.pdf')];
+      fixture.detectChanges();
+      component.processing = true;
+
+      component.onRemoveReviewFile(0);
+
+      expect(component.rows.length).toBe(2);
+    });
+  });
+
+  describe('onReviewFileInput()', () => {
+    it('appends additional PDFs to the review list', () => {
+      component.files = [makePdf('a.pdf')];
+      fixture.detectChanges();
+
+      const newPdfs = makeFileList([makePdf('b.pdf'), makePdf('c.pdf')]);
+      const inputEl = document.createElement('input');
+      Object.defineProperty(inputEl, 'files', { value: newPdfs, configurable: true });
+
+      component.onReviewFileInput({ target: inputEl } as unknown as Event);
+
+      expect(component.rows.map((r) => r.file.name)).toEqual(['a.pdf', 'b.pdf', 'c.pdf']);
+      expect(component.reviewNotice).toContain('Added 2 file');
+    });
+
+    it('caps additions at MAX_FILES (10) and reports overflow', () => {
+      component.files = Array.from({ length: 9 }, (_, i) => makePdf(`f${i}.pdf`));
+      fixture.detectChanges();
+
+      const newPdfs = makeFileList([makePdf('x.pdf'), makePdf('y.pdf'), makePdf('z.pdf')]);
+      const inputEl = document.createElement('input');
+      Object.defineProperty(inputEl, 'files', { value: newPdfs, configurable: true });
+
+      component.onReviewFileInput({ target: inputEl } as unknown as Event);
+
+      expect(component.rows.length).toBe(10);
+      expect(component.reviewNotice).toContain('not added');
+    });
   });
 });
