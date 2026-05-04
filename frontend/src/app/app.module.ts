@@ -83,6 +83,7 @@ import { AiExtractionFlowComponent } from './components/loads-dashboard/ai-extra
 import { DailyBriefingComponent } from './components/control-center/daily-briefing/daily-briefing.component';
 import { AskBarComponent } from './components/control-center/ask-bar/ask-bar.component';
 import { PredictiveInsightsComponent } from './components/control-center/predictive-insights/predictive-insights.component';
+import { SmartAlertsComponent } from './components/control-center/smart-alerts/smart-alerts.component';
 
 @NgModule({
   declarations: [
@@ -155,7 +156,8 @@ import { PredictiveInsightsComponent } from './components/control-center/predict
     LocationsAdminModule,
     DailyBriefingComponent,
     AskBarComponent,
-    PredictiveInsightsComponent
+    PredictiveInsightsComponent,
+    SmartAlertsComponent
   ],
   providers: [
     { provide: ErrorHandler, useClass: GlobalErrorHandler },

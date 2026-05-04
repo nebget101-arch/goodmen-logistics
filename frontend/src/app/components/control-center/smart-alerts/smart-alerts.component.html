@@ -1,0 +1,99 @@
+<section
+  class="smart-alerts"
+  role="region"
+  aria-labelledby="smart-alerts-heading"
+  [attr.aria-busy]="loading ? 'true' : 'false'"
+>
+  <header class="smart-alerts__header">
+    <div class="smart-alerts__title">
+      <span class="smart-alerts__pill">AI ranked</span>
+      <h2 id="smart-alerts-heading">Smart Alerts</h2>
+      <p class="smart-alerts__subtitle">
+        Top 5 by severity — live across HOS, inspections, late loads, and fatigue.
+      </p>
+    </div>
+  </header>
+
+  <div *ngIf="loading" class="smart-alerts__skeleton" aria-hidden="true">
+    <div class="smart-alerts__skeleton-row" *ngFor="let _ of [0,1,2,3,4]">
+      <div class="smart-alerts__skeleton-badge"></div>
+      <div class="smart-alerts__skeleton-text">
+        <div class="smart-alerts__skeleton-line smart-alerts__skeleton-line--short"></div>
+        <div class="smart-alerts__skeleton-line"></div>
+      </div>
+    </div>
+  </div>
+  <p *ngIf="loading" class="sr-only" role="status">Loading smart alerts.</p>
+
+  <div *ngIf="!loading && errorMessage" class="smart-alerts__error" role="alert">
+    <span class="smart-alerts__error-icon" aria-hidden="true">⚠</span>
+    <div>
+      <p class="smart-alerts__error-headline">{{ errorMessage }}</p>
+      <button type="button" class="smart-alerts__error-retry" (click)="retry()">Try again</button>
+    </div>
+  </div>
+
+  <div
+    *ngIf="!loading && !errorMessage && topAlerts.length === 0"
+    class="smart-alerts__empty"
+  >
+    <div class="smart-alerts__empty-icon" aria-hidden="true">✓</div>
+    <p>No urgent signals right now.</p>
+    <span>FleetNeuron is monitoring HOS, inspections, late loads, and fatigue.</span>
+  </div>
+
+  <ul
+    *ngIf="!loading && !errorMessage && topAlerts.length > 0"
+    class="smart-alerts__list"
+    role="list"
+  >
+    <li
+      *ngFor="let alert of topAlerts; trackBy: trackById"
+      class="smart-alerts__row"
+      [attr.data-severity]="alert.bucket"
+    >
+      <span
+        class="smart-alerts__badge"
+        [attr.data-severity]="alert.bucket"
+        [attr.aria-label]="alert.bucketLabel + ' severity, score ' + alert.severity"
+      >
+        <span class="smart-alerts__badge-text">{{ alert.bucketLabel }}</span>
+        <span class="smart-alerts__badge-score" aria-hidden="true">{{ alert.severity }}</span>
+      </span>
+
+      <div class="smart-alerts__body">
+        <p class="smart-alerts__title-line">{{ alert.title }}</p>
+        <p class="smart-alerts__detail">{{ alert.detail }}</p>
+
+        <ng-container *ngIf="alert.action as action">
+          <a
+            *ngIf="action.routerLink as link"
+            class="smart-alerts__action"
+            [routerLink]="link"
+            [queryParams]="action.queryParams || null"
+          >
+            {{ action.label }} →
+          </a>
+          <a
+            *ngIf="!action.routerLink && action.href as href"
+            class="smart-alerts__action"
+            [href]="href"
+            rel="noopener"
+          >
+            {{ action.label }} →
+          </a>
+        </ng-container>
+      </div>
+
+      <button
+        type="button"
+        class="smart-alerts__dismiss"
+        [attr.aria-label]="'Dismiss alert: ' + alert.title"
+        [disabled]="dismissing.has(alert.id)"
+        (click)="dismiss(alert.id, $event)"
+      >
+        <span aria-hidden="true">{{ dismissing.has(alert.id) ? '…' : '×' }}</span>
+      </button>
+    </li>
+  </ul>
+</section>
