@@ -765,9 +765,13 @@
               (change)="toggleSelectAll()"
             />
           </th>
-          <!-- FN-1059: load_number + actions are alwaysVisible (pinned),
-               so they intentionally do NOT carry the appResizableColumn handle. -->
-          <th *ngIf="isColVisible('load_number')" (click)="toggleSort('load_number')">Load #</th>
+          <th *ngIf="isColVisible('load_number')"
+              [appResizableColumn]="'load_number'"
+              [currentWidth]="getColWidth('load_number')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('load_number', $event)"
+              (click)="toggleSort('load_number')">Load #</th>
           <th *ngIf="isColVisible('pickup_date')"
               [appResizableColumn]="'pickup_date'"
               [currentWidth]="getColWidth('pickup_date')"
@@ -843,7 +847,12 @@
               [minWidth]="COL_WIDTH_MIN_PX"
               [maxWidth]="COL_WIDTH_MAX_PX"
               (widthChange)="onColumnWidthChange('attachments', $event)">Attachments</th>
-          <th *ngIf="isColVisible('actions')">Actions</th>
+          <th *ngIf="isColVisible('actions')"
+              [appResizableColumn]="'actions'"
+              [currentWidth]="getColWidth('actions')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('actions', $event)">Actions</th>
         </tr>
         <tr class="header-filters">
           <th *ngIf="!isDriverRole"></th><!-- FN-768: no filter on select col -->
