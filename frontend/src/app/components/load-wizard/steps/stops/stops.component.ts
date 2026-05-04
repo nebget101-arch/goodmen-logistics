@@ -194,7 +194,6 @@ export class LoadWizardStopsComponent implements OnInit, OnChanges {
     if (this.isView()) return;
     const raw = (row.get('zip')?.value ?? '').toString().trim();
     if (!raw) return;
-    // Skip if city/state already filled for this zip (avoid clobbering user edits).
     this.zipLoading.set(row, true);
     this.cdr.markForCheck();
     this.loadsService
@@ -204,13 +203,15 @@ export class LoadWizardStopsComponent implements OnInit, OnChanges {
         next: (res) => {
           const d = res?.data;
           if (d?.city || d?.state) {
-            row.patchValue(
-              {
-                city: d.city || row.get('city')?.value || null,
-                state: d.state || row.get('state')?.value || null,
-              },
-              { emitEvent: true },
-            );
+            // FN-1087: setValue on individual controls + updateValueAndValidity
+            // — patchValue from inside subscribe was unreliable under OnPush,
+            // leaving the State input visually unsynced even when the
+            // FormControl held the correct value.
+            const cityCtrl = row.get('city');
+            const stateCtrl = row.get('state');
+            cityCtrl?.setValue(d.city || cityCtrl.value || null);
+            stateCtrl?.setValue(d.state || stateCtrl.value || null);
+            row.updateValueAndValidity();
           }
           this.zipLoading.set(row, false);
           this.cdr.markForCheck();
