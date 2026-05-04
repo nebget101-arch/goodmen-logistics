@@ -3010,6 +3010,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.autoIsDragOver = false;
   }
 
+  clearAutoPdf(): void {
+    this.autoPdfFile = null;
+    this.autoError = '';
+    this.autoExtraction = null;
+  }
+
   openDetails(load: LoadListItem): void {
     this.loadsService.getLoad(load.id).subscribe({
       next: (res) => {
