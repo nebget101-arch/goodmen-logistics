@@ -19,6 +19,7 @@
     (ngModelChange)="onDateChange($event)"
     (blur)="onBlur()"
     [attr.aria-label]="ariaLabel || label || placeholder || 'Select date'"
+    [attr.aria-describedby]="ariaDescribedBy || null"
     autocomplete="off"
   />
   <mat-datepicker-toggle matSuffix [for]="picker" [disabled]="disabled"></mat-datepicker-toggle>

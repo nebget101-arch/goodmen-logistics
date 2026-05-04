@@ -1,3 +1,29 @@
 <div class="report-chart">
-  <canvas #chartCanvas></canvas>
+  <canvas
+    #chartCanvas
+    role="img"
+    [attr.aria-label]="title || 'Report chart'"
+    [attr.aria-describedby]="srTableId"
+  ></canvas>
+
+  <!--
+    FN-1191 — screen-reader-only <table> fallback. Charts paint to <canvas>
+    which is opaque to assistive tech, so we expose the same series as a
+    semantic table the SR can read; sighted users never see it.
+  -->
+  <table *ngIf="labels?.length && data?.length" class="sr-only" [id]="srTableId">
+    <caption>{{ title || 'Report data' }}</caption>
+    <thead>
+      <tr>
+        <th scope="col">Label</th>
+        <th scope="col">Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let label of labels; let i = index">
+        <th scope="row">{{ label }}</th>
+        <td>{{ data[i] }}</td>
+      </tr>
+    </tbody>
+  </table>
 </div>

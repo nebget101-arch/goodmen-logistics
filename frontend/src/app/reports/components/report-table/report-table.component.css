@@ -3,5 +3,18 @@
 .report-table .table-responsive { overflow-x: auto; }
 .report-table .pagination { margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
 .report-table tr.drilldown-row { cursor: pointer; }
-.report-table tr.drilldown-row:hover { background-color: rgba(13, 110, 253, 0.08); }
-.report-table tr.drilldown-row:focus { outline: 2px solid #0d6efd; outline-offset: -2px; }
+.report-table tr.drilldown-row:hover { background-color: rgba(59, 130, 246, 0.08); }
+.report-table tr.drilldown-row:focus { outline: 2px solid var(--ai-accent-info); outline-offset: -2px; }
+
+/* FN-1191 — visually-hidden caption (still announced by screen readers). */
+.report-table caption.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
