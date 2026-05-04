@@ -29,6 +29,7 @@ const rolesRouter = require('@goodmen/shared/routes/roles');
 const trialRequestsRouter = require('@goodmen/shared/routes/trial-requests');
 const billingRouter = require('./routes/billing');
 const stripeWebhookRouter = require('./routes/stripe');
+const createDashboardLayoutRouter = require('./routes/dashboard-layout');
 const permissionsRouter = require('@goodmen/shared/routes/permissions');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
@@ -58,6 +59,7 @@ app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/auth', authRouter);
+app.use('/api/users/me/dashboard-layout', authMiddleware, tenantContextMiddleware, createDashboardLayoutRouter());
 app.use('/api/users', authMiddleware, tenantContextMiddleware, usersRouter);
 app.use('/api/roles', authMiddleware, tenantContextMiddleware, rolesRouter);
 app.use('/api/permissions', authMiddleware, tenantContextMiddleware, permissionsRouter);
