@@ -2536,6 +2536,13 @@
           <span class="material-symbols-outlined">auto_awesome</span>
           {{ autoExtracting ? 'Extracting...' : 'Run Extraction' }}
         </button>
+        <!-- FN-1078: error-state escape hatch — opens the 4-step wizard with the PDF queued (no prefill). -->
+        <button class="ai-btn-secondary" type="button"
+                *ngIf="autoError && autoPdfFile && !autoExtracting"
+                (click)="continueAutoManually()">
+          <span class="material-symbols-outlined">edit_note</span>
+          Continue manually
+        </button>
         <button class="ai-btn-secondary" type="button" (click)="closeAutoModal()">Close</button>
       </div>
     </div>

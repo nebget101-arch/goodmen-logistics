@@ -1820,6 +1820,103 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * FN-1078: open the 4-step wizard with optional AI prefill + the source PDF
+   * queued for attachment. Keeps the existing reset → smart-defaults sequence
+   * so untouched fields still get sensible defaults; extraction overrides are
+   * layered on top.
+   */
+  private openLoadWizardWithExtraction(opts: {
+    extraction: LoadAiEndpointExtraction | null;
+    pdfFile: File;
+  }): void {
+    this.wizardActiveStep = 0;
+    this.wizardStepValid = [false, false, false, false];
+    this.wizardDirty = false;
+    this.resetWizardFormState();
+    this.applySmartDefaults();
+    if (opts.extraction) {
+      this.applyExtractionToWizard(opts.extraction);
+    }
+    this.wizardAiExtractedPdf = opts.pdfFile;
+    this.showLoadWizard = true;
+    this.showNewLoadMenu = false;
+  }
+
+  /**
+   * FN-1078: mirror of `applyExtractionToForm` but writes into the wizard's
+   * step state. Builds `wizardAiPrefilledFields` so step-basics renders the
+   * FN-818 sparkle on AI-derived fields.
+   */
+  private applyExtractionToWizard(extraction: LoadAiEndpointExtraction): void {
+    const pickup = extraction.pickup || ({} as any);
+    const delivery = extraction.delivery || ({} as any);
+
+    const poNumber = extraction.poNumber
+      || (extraction.loadId || extraction.orderId || extraction.proNumber || '').toString()
+      || '';
+
+    this.wizardBasics = {
+      ...this.wizardBasics,
+      brokerName: extraction.brokerName || this.wizardBasics.brokerName || '',
+      poNumber,
+      rate: extraction.rate != null ? extraction.rate : this.wizardBasics.rate,
+      notes: extraction.notes || this.wizardBasics.notes || ''
+    };
+
+    const prefilled = new Set<string>();
+    if (extraction.brokerName) prefilled.add('brokerName');
+    if (poNumber) prefilled.add('poNumber');
+    if (extraction.rate != null) prefilled.add('rate');
+    if (extraction.notes) prefilled.add('notes');
+    this.wizardAiPrefilledFields = prefilled;
+
+    const rawStops = extraction.stops && Array.isArray(extraction.stops) ? extraction.stops : [];
+    if (rawStops.length > 0) {
+      this.wizardStops = rawStops
+        .map((s, i) => ({
+          stop_type: (s.type || (i === 0 ? 'PICKUP' : 'DELIVERY')) as 'PICKUP' | 'DELIVERY',
+          sequence: s.sequence ?? i + 1,
+          stop_date: s.date || null,
+          stop_time: null,
+          city: s.city || null,
+          state: s.state || null,
+          zip: s.zip || null,
+          address1: s.address1 || null,
+          facility_name: null,
+          notes: null
+        }) as LoadStop)
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+      return;
+    }
+
+    // No structured stops — fold the legacy pickup/delivery objects onto the
+    // smart-default stops so the user sees city/state/zip prefilled.
+    this.wizardStops = this.wizardStops.map((stop) => {
+      if (stop.stop_type === 'PICKUP') {
+        return {
+          ...stop,
+          stop_date: pickup.date || stop.stop_date,
+          city: pickup.city || stop.city,
+          state: pickup.state || stop.state,
+          zip: pickup.zip || stop.zip,
+          address1: pickup.address1 || stop.address1
+        };
+      }
+      if (stop.stop_type === 'DELIVERY') {
+        return {
+          ...stop,
+          stop_date: delivery.date || stop.stop_date,
+          city: delivery.city || stop.city,
+          state: delivery.state || stop.state,
+          zip: delivery.zip || stop.zip,
+          address1: delivery.address1 || stop.address1
+        };
+      }
+      return stop;
+    });
+  }
+
+  /**
    * FN-764: Pre-fill smart defaults on new loads.
    *  - Dispatcher = current user
    *  - Status = DRAFT, Billing = PENDING (already set in defaultBasics)
@@ -4249,6 +4346,19 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       return;
     }
     if (capped) this._notifyPdfsCapped();
+    // FN-1078: when a PDF is already queued and the user picks more, route to
+    // the bulk-extraction grid instead of silently overwriting the first one.
+    if (this.autoPdfFile && pdfs.length >= 1) {
+      const queued = this.autoPdfFile;
+      const merged: File[] = [queued, ...pdfs.filter((p) => p !== queued)].slice(0, 10);
+      if (merged.length >= 2) {
+        this.showAutoModal = false;
+        this.autoPdfFile = null;
+        this.autoExtraction = null;
+        this.openBulkExtractionGrid(merged);
+        return;
+      }
+    }
     if (pdfs.length === 1) {
       this.autoPdfFile = pdfs[0];
       return;
@@ -4276,66 +4386,74 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       this.autoError = 'Please select a PDF file first.';
       return;
     }
+    const pdfFile = this.autoPdfFile;
     this.autoExtracting = true;
-    this.loadsService.aiExtractFromPdf(this.autoPdfFile).subscribe({
+    this.loadsService.aiExtractFromPdf(pdfFile).subscribe({
       next: (res) => {
         this.autoExtracting = false;
         const data = res?.data;
+
+        // FN-1078: every successful response routes through the 4-step wizard.
+        // Surface "no data" / vision-only as transient banners instead of the
+        // legacy manual modal so the user lands in a single creation surface.
         if (!data) {
-          this.autoError = 'Extraction returned no data. You can continue with manual entry.';
-          // Queue attachment and open manual entry anyway
-          this.pendingAttachments.push({
-            file: this.autoPdfFile as File,
-            type: 'RATE_CONFIRMATION',
-            notes: 'Uploaded via Auto-Create'
-          });
-          this.showAutoModal = false;
-          this.showManualModal = true;
+          this.errorMessage = 'Extraction returned no data — continuing with manual entry. Your PDF is queued.';
+          setTimeout(() => {
+            if (this.errorMessage.startsWith('Extraction returned no data')) this.errorMessage = '';
+          }, 6000);
+          this._continueAutoToWizard(pdfFile, null);
           return;
         }
         this.autoExtraction = data;
 
-        // If the backend reports no text / vision-only PDF, surface that clearly.
         if (data.provider === 'none' && data.warning) {
-          this.autoError = data.warning;
-          // Attach the PDF but keep the user in manual mode.
-          this.pendingAttachments.push({
-            file: this.autoPdfFile as File,
-            type: 'RATE_CONFIRMATION',
-            notes: 'Rate confirmation (scanned PDF - manual entry)'
-          });
-          this.showAutoModal = false;
-          this.showManualModal = true;
+          this.errorMessage = data.warning;
+          setTimeout(() => {
+            if (this.errorMessage === data.warning) this.errorMessage = '';
+          }, 6000);
+          this._continueAutoToWizard(pdfFile, null);
           return;
         }
 
-        // Normal case: we have structured extraction to apply.
-        this.pendingAttachments.push({
-          file: this.autoPdfFile as File,
-          type: 'RATE_CONFIRMATION',
-          notes: 'Rate confirmation (Auto-Create PDF)'
-        });
-        this.applyExtractionToForm(data);
-        this.showAutoModal = false;
-        this.showManualModal = true;
+        // Normal case: hand the extraction off to the wizard with prefill.
+        this._continueAutoToWizard(pdfFile, data);
       },
       error: (err) => {
         console.error('AI extract failed', err);
         this.autoExtracting = false;
+        // FN-1078: keep the user in the Auto-Create modal so they can retry,
+        // close, or use the new "Continue manually" button. The button routes
+        // to the same 4-step wizard with the PDF queued and no prefill.
         this.autoError =
-          'Failed to extract from PDF. You can still create the load manually and the PDF will be attached.';
-        // Still attach the PDF and open manual entry so the user can continue.
-        if (this.autoPdfFile) {
-          this.pendingAttachments.push({
-            file: this.autoPdfFile,
-            type: 'RATE_CONFIRMATION',
-            notes: 'Rate confirmation (Auto-Create PDF)'
-          });
-        }
-        this.showAutoModal = false;
-        this.showManualModal = true;
+          'Failed to extract from PDF. Click "Continue manually" to enter the load by hand — the PDF will be attached.';
       }
     });
+  }
+
+  /**
+   * FN-1078: bridge from the Auto-Create modal into the 4-step wizard.
+   * Closes the modal, queues the PDF on the wizard's attachment slot, and
+   * (when extraction is present) prefills wizard step state with confidence
+   * markers for FN-818 per-field highlighting.
+   */
+  private _continueAutoToWizard(pdfFile: File, extraction: LoadAiEndpointExtraction | null): void {
+    this.showAutoModal = false;
+    this.openLoadWizardWithExtraction({ extraction, pdfFile });
+    // Reset modal state so a fresh re-open starts clean.
+    this.autoPdfFile = null;
+    this.autoError = '';
+    this.autoExtraction = null;
+    this.autoIsDragOver = false;
+  }
+
+  /**
+   * FN-1078: error-state escape hatch — open the wizard with just the PDF
+   * queued (no prefill) when extraction failed but the user still wants to
+   * record the load.
+   */
+  continueAutoManually(): void {
+    if (!this.autoPdfFile) return;
+    this._continueAutoToWizard(this.autoPdfFile, null);
   }
 
   // ─── FN-794: Intelligence panel metrics + handlers ──────────────────────
