@@ -1,8 +1,9 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, switchMap, takeUntil } from 'rxjs';
-import { ReportAnomaly, ReportCard, ReportColumn, ReportFilters, ReportKey, ReportNarrative, ReportPageConfig } from '../../reports.models';
+import { DrilldownTarget, ReportAnomaly, ReportCard, ReportColumn, ReportFilters, ReportKey, ReportNarrative, ReportPageConfig } from '../../reports.models';
 import { ReportsService } from '../../services/reports.service';
+import { DrilldownService } from '../../services/drilldown.service';
 import { OperatingEntityContextService } from '../../../services/operating-entity-context.service';
 
 const REPORT_CONFIG: Record<ReportKey, ReportPageConfig> = {
@@ -188,6 +189,12 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   isChatOpen = false;
   isExporting: { csv: boolean; pdf: boolean } = { csv: false, pdf: false };
 
+  // FN-1183: pre-resolved drill-down targets. Computed once per fetch so
+  // routerLink bindings see stable references — see FN-317 RCA on getter
+  // bindings causing change-detection thrash.
+  displayCards: Array<{ card: ReportCard; target: DrilldownTarget | null }> = [];
+  displayRows: Array<{ row: Record<string, unknown>; target: DrilldownTarget | null }> = [];
+
   narrative: ReportNarrative | null = null;
   narrativeLoading = false;
   narrativeFailed = false;
@@ -195,7 +202,8 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private reportsService: ReportsService,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private drilldownService: DrilldownService
   ) {}
 
   ngOnInit(): void {
@@ -337,6 +345,7 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         this.cards = resp.cards || [];
         this.rows = resp.data || [];
         this.reportSummary = (resp.summary || {}) as Record<string, unknown>;
+        this.recomputeDrilldowns(filters);
         this.isLoading = false;
         this.fetchAnomalies(filters);
         this.fetchNarrative(filters);
@@ -345,6 +354,8 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         this.error = err?.error?.error || 'Unable to load report data.';
         this.rows = [];
         this.cards = [];
+        this.displayCards = [];
+        this.displayRows = [];
         this.reportSummary = {};
         this.anomalies = [];
         this.isLoading = false;
@@ -353,6 +364,24 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         this.narrativeFailed = true;
       }
     });
+  }
+
+  /** FN-1183: pre-resolve drill-down targets so template bindings stay stable. */
+  private recomputeDrilldowns(filters: ReportFilters): void {
+    const reportKey = this.config?.key;
+    if (!reportKey) {
+      this.displayCards = this.cards.map((card) => ({ card, target: null }));
+      this.displayRows = this.rows.map((row) => ({ row, target: null }));
+      return;
+    }
+    this.displayCards = this.cards.map((card) => ({
+      card,
+      target: this.drilldownService.getCardTarget(reportKey, card.key, filters)
+    }));
+    this.displayRows = this.rows.map((row) => ({
+      row,
+      target: this.drilldownService.getRowTarget(reportKey, row, filters)
+    }));
   }
 
   private fetchAnomalies(filters: ReportFilters): void {

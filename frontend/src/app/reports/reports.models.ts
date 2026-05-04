@@ -63,6 +63,20 @@ export interface ReportPageConfig {
   columns: ReportColumn[];
 }
 
+// FN-1183: Drill-down deep-link contracts. URL contracts are documented in
+// docs/reports/drilldown-contracts.md. A null target means "no drill-down" —
+// callers should render the cell/card plain (no hover affordance).
+export type DrilldownDestination = 'loads' | 'drivers' | 'customers';
+
+export interface DrilldownTarget {
+  destination: DrilldownDestination;
+  commands: unknown[];
+  queryParams?: Record<string, string>;
+}
+
+export type RowDrilldownFn = (row: Record<string, unknown>) => DrilldownTarget | null;
+export type CardDrilldownFn = (card: ReportCard | { key: string }) => DrilldownTarget | null;
+
 export type ReportAnomalySeverity = 'info' | 'warning' | 'critical';
 
 export interface ReportAnomaly {

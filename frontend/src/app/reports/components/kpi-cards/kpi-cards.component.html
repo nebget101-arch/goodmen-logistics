@@ -1,6 +1,18 @@
 <div class="kpi-cards">
-  <div class="kpi-card" *ngFor="let kpi of kpis">
-    <span class="kpi-label">{{ kpi.label }}</span>
-    <span class="kpi-value">{{ kpi.value }}</span>
-  </div>
+  <ng-container *ngFor="let kpi of kpis">
+    <a *ngIf="targetFor(kpi) as target; else plainCard"
+       class="kpi-card kpi-card--drillable"
+       [routerLink]="target.commands"
+       [queryParams]="target.queryParams"
+       [attr.data-drilldown]="target.destination">
+      <span class="kpi-label">{{ kpi.label }}</span>
+      <span class="kpi-value">{{ kpi.value }}</span>
+    </a>
+    <ng-template #plainCard>
+      <div class="kpi-card">
+        <span class="kpi-label">{{ kpi.label }}</span>
+        <span class="kpi-value">{{ kpi.value }}</span>
+      </div>
+    </ng-template>
+  </ng-container>
 </div>

@@ -47,12 +47,25 @@
     [failed]="narrativeFailed"
   ></app-report-narrative>
 
-  <div class="cards" *ngIf="cards.length">
-    <article class="kpi-card" *ngFor="let card of cards">
-      <span class="kpi-label">{{ card.label }}</span>
-      <span class="kpi-value">{{ format(card.value, 'currency') }}</span>
-      <small *ngIf="card.changePct !== undefined" [class.neg]="card.changePct < 0">{{ card.changePct }}%</small>
-    </article>
+  <div class="cards" *ngIf="displayCards.length">
+    <ng-container *ngFor="let entry of displayCards">
+      <a *ngIf="entry.target; else plainCard"
+         class="kpi-card kpi-card--drillable"
+         [routerLink]="entry.target.commands"
+         [queryParams]="entry.target.queryParams"
+         [attr.data-drilldown]="entry.target.destination">
+        <span class="kpi-label">{{ entry.card.label }}</span>
+        <span class="kpi-value">{{ format(entry.card.value, 'currency') }}</span>
+        <small *ngIf="entry.card.changePct !== undefined" [class.neg]="entry.card.changePct < 0">{{ entry.card.changePct }}%</small>
+      </a>
+      <ng-template #plainCard>
+        <article class="kpi-card">
+          <span class="kpi-label">{{ entry.card.label }}</span>
+          <span class="kpi-value">{{ format(entry.card.value, 'currency') }}</span>
+          <small *ngIf="entry.card.changePct !== undefined" [class.neg]="entry.card.changePct < 0">{{ entry.card.changePct }}%</small>
+        </article>
+      </ng-template>
+    </ng-container>
   </div>
 
   <p class="error" *ngIf="error"><span class="material-symbols-outlined">error</span> {{ error }}</p>
@@ -83,9 +96,22 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let row of rows; trackBy: trackByIndex">
-          <td *ngFor="let c of asColumns()">{{ format(row[c.key], c.type) }}</td>
-        </tr>
+        <ng-container *ngFor="let entry of displayRows; trackBy: trackByIndex">
+          <tr *ngIf="entry.target; else plainRow"
+              class="drilldown-row"
+              [routerLink]="entry.target.commands"
+              [queryParams]="entry.target.queryParams"
+              [attr.data-drilldown]="entry.target.destination"
+              role="link"
+              tabindex="0">
+            <td *ngFor="let c of asColumns()">{{ format(entry.row[c.key], c.type) }}</td>
+          </tr>
+          <ng-template #plainRow>
+            <tr>
+              <td *ngFor="let c of asColumns()">{{ format(entry.row[c.key], c.type) }}</td>
+            </tr>
+          </ng-template>
+        </ng-container>
       </tbody>
     </table>
     <div class="empty" *ngIf="rows.length === 0">No records found for selected filters.</div>
