@@ -10,9 +10,6 @@ const swaggerUi = require('swagger-ui-express');
 const { buildBriefingAggregator } = require('./services/briefing-aggregator');
 const { buildAskForwarder } = require('./services/ask-forwarder');
 const { buildAiRouter } = require('./routes/ai');
-const { buildTrendCache } = require('./services/trend-cache');
-const { buildTrendAggregator } = require('./services/trend-aggregator');
-const { buildInsightsRouter } = require('./routes/insights');
 
 let SocketIoServer = null;
 try {
@@ -368,6 +365,7 @@ function buildProxy(target, label) {
 app.use('/api/dashboard', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/reports', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/audit', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
+app.use('/api/insights', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/scan-bridge', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/fmcsa', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/webhooks/email-inbound', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
@@ -537,23 +535,6 @@ app.use(
   })
 );
 app.use('/api/ai', buildProxy(AI_SERVICE_URL, 'ai'));
-
-// FN-1152: gateway-local /api/insights/trends — derives 4 predictive trend
-// series (load volume, maintenance, on-time %, fuel cost) from existing
-// tables. Cached 10 min per tenant. Sparse data returns nulls, not errors.
-const trendKnex = require('../packages/goodmen-shared/config/knex');
-const trendCache = buildTrendCache();
-const trendAggregator = buildTrendAggregator({
-  knex: trendKnex,
-  cache: trendCache
-});
-app.use(
-  '/api/insights',
-  buildInsightsRouter({
-    aggregator: trendAggregator,
-    jwtSecret: process.env.JWT_SECRET || 'dev_secret'
-  })
-);
 
 const httpServer = http.createServer(app);
 

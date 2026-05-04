@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * FN-1152: Predictive Insights & Trends aggregator.
+ * FN-1152 / FN-1306: Predictive Insights & Trends aggregator.
  *
  * Derives 4 trend series for a tenant from existing tables:
  *   - loadVolume   : count of completed loads per day

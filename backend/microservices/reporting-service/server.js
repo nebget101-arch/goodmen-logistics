@@ -44,6 +44,10 @@ const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-conte
 const { loadUserRbac } = require('@goodmen/shared/middleware/rbac-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
 
+const { buildTrendCache } = require('./services/trend-cache');
+const { buildTrendAggregator } = require('./services/trend-aggregator');
+const { buildInsightsRouter } = require('./routes/insights');
+
 const requireReportsPlan = requirePlanAccess('/reports');
 
 app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
@@ -52,6 +56,18 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/dashboard', authMiddleware, tenantContextMiddleware, dashboardRouter);
 app.use('/api/reports', authMiddleware, tenantContextMiddleware, requireReportsPlan, reportsRouter);
 app.use('/api/audit', authMiddleware, tenantContextMiddleware, loadUserRbac, auditRouter);
+
+// FN-1306: Predictive Insights & Trends — relocated from gateway. Caches per-tenant
+// trend bundles for 10 min in-memory; sparse-data tolerant (returns nulls, not errors).
+const trendCache = buildTrendCache();
+const trendAggregator = buildTrendAggregator({ knex, cache: trendCache });
+app.use(
+  '/api/insights',
+  buildInsightsRouter({
+    aggregator: trendAggregator,
+    jwtSecret: process.env.JWT_SECRET || 'dev_secret'
+  })
+);
 
 /**
  * @openapi

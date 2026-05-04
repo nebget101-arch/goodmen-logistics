@@ -1,10 +1,11 @@
 'use strict';
 
 /**
- * FN-1152: Tests for the gateway-local /api/insights/trends route, the
- * trend-aggregator service, and trend-cache. Runs standalone with `node`:
+ * FN-1306: Tests for the reporting-service /api/insights/trends route, the
+ * trend-aggregator service, and trend-cache. Relocated from the gateway.
+ * Runs standalone with `node`:
  *
- *   node backend/gateway/__tests__/insights.test.js
+ *   node backend/microservices/reporting-service/__tests__/insights.test.js
  */
 
 const assert = require('node:assert/strict');
@@ -44,7 +45,7 @@ function makeFakeKnex(handlers) {
   return { raw, calls };
 }
 
-function startGatewayUnderTest(aggregator) {
+function startServiceUnderTest(aggregator) {
   const app = express();
   app.use('/api/insights', buildInsightsRouter({ aggregator, jwtSecret: JWT_SECRET }));
   return new Promise((resolve) => {
@@ -213,7 +214,7 @@ async function testUnauthorized() {
   const cache = buildTrendCache({ now: () => Date.now() });
   const knex = fullFixtureKnex();
   const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
-  const server = await startGatewayUnderTest(aggregator);
+  const server = await startServiceUnderTest(aggregator);
   try {
     const noToken = await getJson(`${server.baseUrl}/api/insights/trends`);
     assert.equal(noToken.status, 401, 'no token → 401');
@@ -239,7 +240,7 @@ async function testHappyPath() {
   const cache = buildTrendCache({ now: () => Date.now() });
   const knex = fullFixtureKnex();
   const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
-  const server = await startGatewayUnderTest(aggregator);
+  const server = await startServiceUnderTest(aggregator);
   try {
     const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
     const { status, body } = await getJson(`${server.baseUrl}/api/insights/trends?range=7d`, {
@@ -297,7 +298,7 @@ async function testCacheServesSecondCall() {
   const cache = buildTrendCache({ now: () => Date.now() });
   const knex = fullFixtureKnex();
   const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
-  const server = await startGatewayUnderTest(aggregator);
+  const server = await startServiceUnderTest(aggregator);
   try {
     const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
     const headers = { Authorization: `Bearer ${token}` };
@@ -330,7 +331,7 @@ async function testTenantIsolation() {
   const cache = buildTrendCache({ now: () => Date.now() });
   const knex = fullFixtureKnex();
   const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
-  const server = await startGatewayUnderTest(aggregator);
+  const server = await startServiceUnderTest(aggregator);
   try {
     const tokenA = tokenFor({ sub: 'u1', tenant_id: 'tenant-a' });
     const tokenB = tokenFor({ sub: 'u2', tenant_id: 'tenant-b' });
@@ -371,7 +372,7 @@ async function testSparseTenantNoErrors() {
     { match: /.*/i, respond: () => [] }
   ]);
   const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
-  const server = await startGatewayUnderTest(aggregator);
+  const server = await startServiceUnderTest(aggregator);
   try {
     const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
     const { status, body } = await getJson(`${server.baseUrl}/api/insights/trends`, {
@@ -420,7 +421,7 @@ async function testSeriesQueryFailureIsolated() {
     }
   ]);
   const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
-  const server = await startGatewayUnderTest(aggregator);
+  const server = await startServiceUnderTest(aggregator);
   try {
     const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
     const { status, body } = await getJson(`${server.baseUrl}/api/insights/trends`, {
@@ -450,7 +451,7 @@ async function testUnsupportedRange() {
   const cache = buildTrendCache({ now: () => Date.now() });
   const knex = fullFixtureKnex();
   const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
-  const server = await startGatewayUnderTest(aggregator);
+  const server = await startServiceUnderTest(aggregator);
   try {
     const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
     const { status, body } = await getJson(
