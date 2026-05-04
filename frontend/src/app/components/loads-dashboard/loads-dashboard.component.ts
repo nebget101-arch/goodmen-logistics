@@ -47,6 +47,7 @@ import {
 } from './load-detail-drawer/load-detail-drawer.component';
 import { EmptyStateMode } from './empty-state/empty-state.component';
 import { SkeletonColumn } from './loading-skeleton/loading-skeleton.component';
+import { selectPdfs } from '../../utils/pdf-upload.util';
 
 type DensityMode = 'compact' | 'comfortable' | 'spacious';
 
@@ -197,6 +198,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   autoExtracting = false;
   autoError = '';
   autoExtraction: LoadAiEndpointExtraction | null = null;
+  autoIsDragOver = false;
 
   // Bulk upload rate confirmations
   bulkPdfFiles: File[] = [];
@@ -2964,6 +2966,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   closeAutoModal(): void {
     this.showAutoModal = false;
+    this.autoIsDragOver = false;
   }
 
   openDetails(load: LoadListItem): void {
@@ -4019,8 +4022,65 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   // Auto-create from PDF handlers
 
   onAutoFileSelected(files: FileList | null): void {
+    this._handleAutoModalFiles(files);
+  }
+
+  onAutoFileDragOver(event: DragEvent): void {
+    if (this.autoExtracting) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.autoIsDragOver = true;
+  }
+
+  onAutoFileDragLeave(event: DragEvent): void {
+    event.stopPropagation();
+    this.autoIsDragOver = false;
+  }
+
+  onAutoFileDropped(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.autoIsDragOver = false;
+    if (this.autoExtracting) return;
+    this._handleAutoModalFiles(event.dataTransfer?.files ?? null);
+  }
+
+  // FN-1057: Hero CTA emits this when 11+ PDFs were selected and capped to 10.
+  onPdfsCapped(): void {
+    this._notifyPdfsCapped();
+  }
+
+  private _handleAutoModalFiles(files: FileList | null): void {
     this.autoError = '';
-    this.autoPdfFile = files && files.length > 0 ? files[0] : null;
+    if (!files || files.length === 0) return;
+    const hasNonPdf = Array.from(files).some((f) => f.type !== 'application/pdf');
+    const { pdfs, capped } = selectPdfs(files);
+    if (pdfs.length === 0) {
+      this.autoError = hasNonPdf
+        ? 'Please select PDF files only.'
+        : 'Please select a PDF file.';
+      return;
+    }
+    if (capped) this._notifyPdfsCapped();
+    if (pdfs.length === 1) {
+      this.autoPdfFile = pdfs[0];
+      return;
+    }
+    // 2–10 PDFs → close Auto-Create modal and route to the bulk flow,
+    // matching the hero CTA's bulkPdfsSelected behavior.
+    this.showAutoModal = false;
+    this.autoPdfFile = null;
+    this.autoExtraction = null;
+    this.onHeroBulkPdfs(pdfs);
+  }
+
+  private _notifyPdfsCapped(): void {
+    this.errorMessage = 'Maximum 10 PDFs. Extra files were not added.';
+    setTimeout(() => {
+      if (this.errorMessage === 'Maximum 10 PDFs. Extra files were not added.') {
+        this.errorMessage = '';
+      }
+    }, 4000);
   }
 
   runAutoExtraction(): void {
