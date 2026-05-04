@@ -17,6 +17,7 @@ const { handleBriefingGenerate } = require('./handlers/briefing-handler');
 const { handleAsk } = require('./handlers/ask-handler');
 const { handleScoreAlert } = require('./handlers/score-alert-handler');
 const { handleExplain } = require('./handlers/explain-handler');
+const { handleReportsNarrative } = require('./handlers/reports-narrative-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -1377,6 +1378,96 @@ function buildAiRouter(deps) {
    *         description: Token not found or expired
    */
   router.get('/explain/:token', (req, res) => handleExplain(req, res, deps));
+
+  /**
+   * @openapi
+   * /api/ai/reports/{reportKey}/narrative:
+   *   post:
+   *     summary: Generate a narrative for a financial report (FN-1123)
+   *     description: >
+   *       Produces a 2–3 sentence plain-prose narrative explaining the headline
+   *       movement in a financial report (revenue-by-driver, fuel-spend-by-truck,
+   *       load-margin, or any other report key). Uses Anthropic Claude Sonnet 4.6
+   *       (temperature 0.2, max 400 tokens) with **prompt caching** on two static
+   *       blocks: the role/style system prompt and the per-report schema block.
+   *       The dynamic payload (cards, data rows, filters, prior-period values) is
+   *       sent in the user message and is NOT cached.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: reportKey
+   *         required: true
+   *         schema:
+   *           type: string
+   *           pattern: '^[a-z0-9-]{1,64}$'
+   *         description: Report identifier (e.g. revenue-by-driver, fuel-spend-by-truck, load-margin)
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               cards:
+   *                 type: array
+   *                 description: KPI cards displayed on the report
+   *                 items:
+   *                   type: object
+   *               data:
+   *                 type: array
+   *                 description: Raw data rows underlying the report (truncated to 200 for prompt size)
+   *                 items:
+   *                   type: object
+   *               filters:
+   *                 type: object
+   *                 description: Active filters applied to the report
+   *               priorPeriod:
+   *                 oneOf:
+   *                   - type: object
+   *                   - type: array
+   *                 description: Prior-period values for delta comparisons
+   *     responses:
+   *       200:
+   *         description: Generated narrative
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 narrative:
+   *                   type: string
+   *                   description: 2–3 sentence plain-prose narrative
+   *                 generatedAt:
+   *                   type: string
+   *                   format: date-time
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     model:
+   *                       type: string
+   *                     cacheReadTokens:
+   *                       type: integer
+   *                     cacheCreationTokens:
+   *                       type: integer
+   *                     processingTimeMs:
+   *                       type: number
+   *       400:
+   *         description: Invalid reportKey or request body
+   *       403:
+   *         description: Missing or invalid bearer token, or insufficient role
+   *       413:
+   *         description: Request body exceeds 256KB
+   *       502:
+   *         description: AI upstream unavailable
+   */
+  router.post('/reports/:reportKey/narrative', (req, res) =>
+    handleReportsNarrative(req, res, deps)
+  );
 
   return router;
 }
