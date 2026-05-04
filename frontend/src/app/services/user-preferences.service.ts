@@ -28,6 +28,9 @@ export interface LoadsDashboardPrefs {
   drawerWidth?: number;
   /** FN-821: row density mode — drives row height and padding on the list table. */
   density?: 'compact' | 'comfortable' | 'spacious';
+  /** FN-1059: per-column widths in px keyed by `columnDefs[].key`. Empty
+   *  object means "use defaults"; hidden columns retain their stored width. */
+  columnWidths?: Record<string, number>;
 }
 
 /**

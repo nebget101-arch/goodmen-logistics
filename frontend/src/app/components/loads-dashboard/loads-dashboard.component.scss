@@ -496,6 +496,30 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+
+      // FN-1059: drag handle injected by app-resizable-column directive.
+      // The directive sets `position: relative` on the host th so this
+      // anchors to the right edge.
+      .app-resize-handle {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 6px;
+        height: 100%;
+        cursor: col-resize;
+        user-select: none;
+        touch-action: none;
+        background: transparent;
+        z-index: 2;
+        transition: background 120ms ease;
+
+        &:hover,
+        &:focus,
+        &:focus-visible {
+          background: rgba(20, 184, 166, 0.55);
+          outline: none;
+        }
+      }
     }
 
     td {
@@ -3407,6 +3431,37 @@
           accent-color: #3b82f6;
         }
       }
+
+      // FN-1059: divider + reset action below the visibility checklist.
+      &__divider {
+        height: 1px;
+        margin: 6px 0;
+        background: rgba(148, 163, 184, 0.18);
+      }
+
+      &__action {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 10px;
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        color: #e2e8f0;
+        font-size: 13px;
+        cursor: pointer;
+        text-align: left;
+
+        .material-symbols-outlined {
+          font-size: 18px;
+          color: rgba(148, 163, 184, 0.85);
+        }
+
+        &:hover {
+          background: rgba(148, 163, 184, 0.12);
+        }
+      }
     }
   }
 
@@ -4271,4 +4326,12 @@ app-status-pill.status-pill--pulse {
     outline: 2px solid #38bdf8;
     outline-offset: 2px;
   }
+}
+
+/* FN-1059 — while a column resize drag is in flight, kill text selection
+ * across the entire page so the drag stays smooth. ::ng-deep breaks out
+ * of Emulated view encapsulation so the rule reaches <body>. */
+::ng-deep body.app-col-resizing {
+  user-select: none;
+  cursor: col-resize;
 }
