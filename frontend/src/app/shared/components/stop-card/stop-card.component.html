@@ -77,8 +77,8 @@
       <div class="sc-field">
         <label class="sc-label">State</label>
         <select class="sc-select"
-                [value]="stop.state || ''"
-                (change)="onFieldChange('state', $any($event.target).value)">
+                [value]="normalizedState"
+                (change)="onStateChange($any($event.target).value)">
           <option value="">--</option>
           <option *ngFor="let st of stateList" [value]="st">{{ st }}</option>
         </select>

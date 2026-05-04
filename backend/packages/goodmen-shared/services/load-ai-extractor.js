@@ -7,6 +7,7 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const pdfParse = require('pdf-parse');
 const dtLogger = require('../utils/logger');
+const { normalizeStateCode } = require('../utils/state-code');
 
 const execFileAsync = promisify(execFile);
 
@@ -788,7 +789,7 @@ async function extractLoadFromPdf(buffer, filename, opts = {}) {
         stops = visionResult.stops.map((s, idx) => ({
           type: (s.type || '').toString().trim().toUpperCase() === 'DELIVERY' ? 'DELIVERY' : 'PICKUP',
           sequence: typeof s.sequence === 'number' ? s.sequence : idx + 1,
-          date: s.date ?? null, city: s.city ?? null, state: s.state ?? null,
+          date: s.date ?? null, city: s.city ?? null, state: normalizeStateCode(s.state),
           zip: s.zip != null ? String(s.zip).trim() : null, address1: s.address1 ?? null,
           appointment_time_from: s.appointment_time_from ?? null,
           appointment_time_to: s.appointment_time_to ?? null,
@@ -808,12 +809,12 @@ async function extractLoadFromPdf(buffer, filename, opts = {}) {
         rate: visionResult.rate != null ? Number(visionResult.rate) : null,
         pickup: {
           date: visionResult.pickup?.date ?? null, city: visionResult.pickup?.city ?? null,
-          state: visionResult.pickup?.state ?? null, zip: visionResult.pickup?.zip ?? null,
+          state: normalizeStateCode(visionResult.pickup?.state), zip: visionResult.pickup?.zip ?? null,
           address1: visionResult.pickup?.address1 ?? null
         },
         delivery: {
           date: visionResult.delivery?.date ?? null, city: visionResult.delivery?.city ?? null,
-          state: visionResult.delivery?.state ?? null, zip: visionResult.delivery?.zip ?? null,
+          state: normalizeStateCode(visionResult.delivery?.state), zip: visionResult.delivery?.zip ?? null,
           address1: visionResult.delivery?.address1 ?? null
         },
         stops,
@@ -941,7 +942,7 @@ async function extractLoadFromPdf(buffer, filename, opts = {}) {
         sequence: typeof s.sequence === 'number' ? s.sequence : idx + 1,
         date: s.date ?? null,
         city: s.city ?? null,
-        state: s.state ?? null,
+        state: normalizeStateCode(s.state),
         zip: s.zip != null ? String(s.zip).trim() : null,
         address1: s.address1 ?? null,
         appointment_time_from: s.appointment_time_from ?? null,
@@ -964,7 +965,7 @@ async function extractLoadFromPdf(buffer, filename, opts = {}) {
         sequence: 1,
         date: p.date ?? null,
         city: p.city ?? null,
-        state: p.state ?? null,
+        state: normalizeStateCode(p.state),
         zip: p.zip != null ? String(p.zip).trim() : null,
         address1: p.address1 ?? null,
         appointment_time_from: null,
@@ -981,7 +982,7 @@ async function extractLoadFromPdf(buffer, filename, opts = {}) {
         sequence: 2,
         date: d.date ?? null,
         city: d.city ?? null,
-        state: d.state ?? null,
+        state: normalizeStateCode(d.state),
         zip: d.zip != null ? String(d.zip).trim() : null,
         address1: d.address1 ?? null,
         appointment_time_from: null,
@@ -1004,14 +1005,14 @@ async function extractLoadFromPdf(buffer, filename, opts = {}) {
     pickup: {
       date: parsed.pickup?.date ?? null,
       city: parsed.pickup?.city ?? null,
-      state: parsed.pickup?.state ?? null,
+      state: normalizeStateCode(parsed.pickup?.state),
       zip: parsed.pickup?.zip ?? null,
       address1: parsed.pickup?.address1 ?? null
     },
     delivery: {
       date: parsed.delivery?.date ?? null,
       city: parsed.delivery?.city ?? null,
-      state: parsed.delivery?.state ?? null,
+      state: normalizeStateCode(parsed.delivery?.state),
       zip: parsed.delivery?.zip ?? null,
       address1: parsed.delivery?.address1 ?? null
     },

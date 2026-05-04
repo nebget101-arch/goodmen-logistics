@@ -204,6 +204,8 @@ function normalizeNullable(value) {
   return value;
 }
 
+const { normalizeStateCode } = require('../utils/state-code');
+
 async function generateLoadNumber(client) {
   for (let i = 0; i < 10; i += 1) {
     const candidate = Math.floor(100000 + Math.random() * 900000).toString();
@@ -1202,7 +1204,7 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
           stopType,
           normalizeNullable(stop.date || stop.stopDate || stop.stop_date),
           normalizeNullable(stop.city),
-          normalizeNullable(stop.state),
+          normalizeStateCode(stop.state),
           normalizeNullable(stop.zip),
           normalizeNullable(stop.address1),
           normalizeNullable(stop.address2),
@@ -1346,7 +1348,7 @@ async function processSingleRateConfirmation(file, req, dispatcherUserId) {
       await client.query(
         `INSERT INTO load_stops (load_id, stop_type, stop_date, city, state, zip, address1, sequence)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [loadId, stop.stopType, normalizeNullable(stop.date), normalizeNullable(stop.city), normalizeNullable(stop.state), normalizeNullable(stop.zip), normalizeNullable(stop.address1 || null), stop.sequence]
+        [loadId, stop.stopType, normalizeNullable(stop.date), normalizeNullable(stop.city), normalizeStateCode(stop.state), normalizeNullable(stop.zip), normalizeNullable(stop.address1 || null), stop.sequence]
       );
     }
 
@@ -1687,7 +1689,7 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
               stopType,
               normalizeNullable(stopDate),
               normalizeNullable(stop.city),
-              normalizeNullable(stop.state),
+              normalizeStateCode(stop.state),
               normalizeNullable(stop.zip),
               normalizeNullable(stop.address1),
               normalizeNullable(stop.address2),
@@ -2859,7 +2861,7 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
             stopType,
             normalizeNullable(stopDate),
             normalizeNullable(stop.city),
-            normalizeNullable(stop.state),
+            normalizeStateCode(stop.state),
             normalizeNullable(stop.zip),
             normalizeNullable(stop.address1),
             normalizeNullable(stop.address2),
@@ -3564,7 +3566,7 @@ router.post('/:id/stops', requireRole(['admin', 'dispatch']), async (req, res) =
         stopType,
         body.stop_date || body.stopDate || null,
         body.city || null,
-        body.state || null,
+        normalizeStateCode(body.state),
         body.zip || null,
         body.address1 || null,
         body.address2 || null,
@@ -3758,7 +3760,7 @@ router.patch('/:id/stops/:stopId', requireRole(['admin', 'dispatch']), async (re
       addField('stop_date', body.stop_date ?? body.stopDate ?? null);
     }
     if (body.city !== undefined) addField('city', body.city || null);
-    if (body.state !== undefined) addField('state', body.state || null);
+    if (body.state !== undefined) addField('state', normalizeStateCode(body.state));
     if (body.zip !== undefined) addField('zip', body.zip || null);
     if (body.address1 !== undefined) addField('address1', body.address1 || null);
     if (body.address2 !== undefined) addField('address2', body.address2 || null);
