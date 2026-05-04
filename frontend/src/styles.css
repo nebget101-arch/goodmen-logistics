@@ -2178,3 +2178,29 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
   border-radius: 12px;
   overflow: hidden;
 }
+
+/* FN-1179 — [appAiExplainable] trigger styling.
+   Lives globally so the dotted underline / help cursor render even before the
+   ExplainPanelComponent (mounted at app root) instantiates. */
+.ai-explainable {
+  cursor: help;
+  text-decoration: underline dotted rgba(96, 165, 250, 0.7);
+  text-underline-offset: 3px;
+  transition: color 0.12s ease, text-decoration-color 0.12s ease;
+}
+
+.ai-explainable:hover {
+  color: #93c5fd;
+  text-decoration-color: #93c5fd;
+}
+
+.ai-explainable:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.ai-explainable--inactive {
+  cursor: default;
+  text-decoration: none;
+}

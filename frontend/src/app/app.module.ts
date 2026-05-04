@@ -84,6 +84,7 @@ import { DailyBriefingComponent } from './components/control-center/daily-briefi
 import { AskBarComponent } from './components/control-center/ask-bar/ask-bar.component';
 import { PredictiveInsightsComponent } from './components/control-center/predictive-insights/predictive-insights.component';
 import { SmartAlertsComponent } from './components/control-center/smart-alerts/smart-alerts.component';
+import { ExplainPanelComponent } from './components/control-center/explain-panel/explain-panel.component';
 
 @NgModule({
   declarations: [
@@ -157,7 +158,8 @@ import { SmartAlertsComponent } from './components/control-center/smart-alerts/s
     DailyBriefingComponent,
     AskBarComponent,
     PredictiveInsightsComponent,
-    SmartAlertsComponent
+    SmartAlertsComponent,
+    ExplainPanelComponent
   ],
   providers: [
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
