@@ -492,6 +492,149 @@ router.get('/', async (req, res) => {
   }
 });
 
+// FN-1303: parse `?limit=N` for the briefing risk-top route. Default 1,
+// clamp to [1, 25], reject anything non-numeric so callers get 400.
+function parseRiskTopLimit(raw) {
+  if (raw === undefined || raw === null || raw === '') return 1;
+  const trimmed = String(raw).trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(1, Math.min(25, n));
+}
+
+/**
+ * @openapi
+ * /api/vehicles/risk/top:
+ *   get:
+ *     summary: Top-N vehicles by composite maintenance risk (FN-1303)
+ *     description: >
+ *       Composite "risk" score derived from pending maintenance, overdue
+ *       service intervals, and recent high-priority work. Used by the Daily
+ *       AI Briefing aggregator. Tenant-scoped via `req.context.tenantId`
+ *       when the underlying `vehicles` table has the column.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 25
+ *         description: Number of vehicles to return (default 1, max 25)
+ *     responses:
+ *       200:
+ *         description: Top-risk vehicle list
+ *       400:
+ *         description: Invalid limit
+ *       500:
+ *         description: Server error
+ */
+router.get('/risk/top', async (req, res) => {
+  const limit = parseRiskTopLimit(req.query.limit);
+  if (limit === null) {
+    return res.status(400).json({ success: false, error: 'Invalid limit; expected positive integer' });
+  }
+
+  try {
+    const vehicleSource = await resolveVehicleSource();
+    if (vehicleSource === 'none') return res.json({ success: true, data: [] });
+    const hasMaintenance = await relationExists('maintenance_records');
+    if (!hasMaintenance) return res.json({ success: true, data: [] });
+
+    const vehicleColumns = await getRelationColumns(vehicleSource);
+    const hasTenantCol = vehicleColumns.has('tenant_id');
+    const hasUnitNumber = vehicleColumns.has('unit_number');
+
+    const params = [];
+    params.push(req.context?.tenantId || null);
+    const tenantIdx = params.length;
+    params.push(limit);
+    const limitIdx = params.length;
+
+    const tenantPredicate = hasTenantCol
+      ? `(v.tenant_id = $${tenantIdx} OR $${tenantIdx}::uuid IS NULL)`
+      : '$' + tenantIdx + '::uuid IS NULL OR TRUE'; // no-op when vehicles has no tenant scoping yet
+
+    const sql = `
+      WITH maint AS (
+        SELECT
+          mr.vehicle_id,
+          COUNT(*) FILTER (WHERE LOWER(COALESCE(mr.status, '')) = 'pending')::int AS pending_count,
+          COUNT(*) FILTER (
+            WHERE mr.next_service_due IS NOT NULL
+              AND mr.next_service_due < NOW()::date
+              AND LOWER(COALESCE(mr.status, '')) <> 'completed'
+          )::int AS overdue_count,
+          COUNT(*) FILTER (
+            WHERE LOWER(COALESCE(mr.priority, '')) IN ('high', 'critical', 'urgent')
+              AND mr.created_at >= NOW() - INTERVAL '30 days'
+          )::int AS breakdown_count
+        FROM maintenance_records mr
+        GROUP BY mr.vehicle_id
+      )
+      SELECT
+        v.id AS vehicle_id,
+        ${hasUnitNumber ? 'v.unit_number' : "''::text AS unit_number"}${hasUnitNumber ? '' : ''},
+        COALESCE(m.pending_count, 0) AS pending_count,
+        COALESCE(m.overdue_count, 0) AS overdue_count,
+        COALESCE(m.breakdown_count, 0) AS breakdown_count
+      FROM ${vehicleSource} v
+      LEFT JOIN maint m ON m.vehicle_id = v.id
+      WHERE ${tenantPredicate}
+        AND (
+          COALESCE(m.pending_count, 0) > 0
+          OR COALESCE(m.overdue_count, 0) > 0
+          OR COALESCE(m.breakdown_count, 0) > 0
+        )
+      ORDER BY (
+        LEAST(60, COALESCE(m.pending_count, 0) * 15)
+        + LEAST(60, COALESCE(m.overdue_count, 0) * 20)
+        + LEAST(50, COALESCE(m.breakdown_count, 0) * 25)
+      ) DESC
+      LIMIT $${limitIdx}
+    `;
+
+    const result = await query(sql, params);
+    const data = result.rows.map((row) => {
+      const factors = {
+        overdue_maintenance: Math.min(60, (Number(row.overdue_count) || 0) * 20),
+        pending_maintenance: Math.min(60, (Number(row.pending_count) || 0) * 15),
+        recent_breakdowns: Math.min(50, (Number(row.breakdown_count) || 0) * 25)
+      };
+      const composite = Math.min(
+        100,
+        factors.overdue_maintenance + factors.pending_maintenance + factors.recent_breakdowns
+      );
+      let topFactor = null;
+      let bestVal = -Infinity;
+      for (const [k, v] of Object.entries(factors)) {
+        if (v > bestVal) { bestVal = v; topFactor = k; }
+      }
+      if (bestVal <= 0) topFactor = null;
+      return {
+        vehicleId: row.vehicle_id,
+        unitNumber: row.unit_number || '',
+        riskScore: composite,
+        topFactor
+      };
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    const code = error?.code ? String(error.code) : '';
+    const message = error?.message ? String(error.message) : '';
+    if (code === '42P01' || message.includes('does not exist')) {
+      dtLogger.warn?.('vehicles_risk_top_table_missing', { message });
+      return res.json({ success: true, data: [] });
+    }
+    dtLogger.error('vehicles_risk_top_failed', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch top vehicle risk' });
+  }
+});
+
 /**
  * @openapi
  * /api/vehicles/{id}:

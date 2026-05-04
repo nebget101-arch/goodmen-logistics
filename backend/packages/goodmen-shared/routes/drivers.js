@@ -150,6 +150,124 @@ async function findDriverByCdl(client, state, number) {
   return result.rows[0] || null;
 }
 
+// FN-1303: shape-check ids before they reach SQL so a static path mistake
+// (e.g. `/api/drivers/risk`) returns 404 instead of crashing the UUID cast.
+const DRIVER_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// FN-1303: parse `?limit=N` for the briefing risk-top routes. Default 1,
+// clamp to [1, 25], reject anything non-numeric so callers get 400, not a
+// silent fallback that masks a coding bug in the aggregator.
+function parseRiskTopLimit(raw) {
+  if (raw === undefined || raw === null || raw === '') return 1;
+  const trimmed = String(raw).trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(1, Math.min(25, n));
+}
+
+/**
+ * @openapi
+ * /api/drivers/risk/top:
+ *   get:
+ *     summary: Top-N drivers by composite risk score (FN-1303)
+ *     description: >
+ *       Returns the highest-risk drivers for the current tenant using the
+ *       latest `driver_risk_scores` row per driver (FN-479 scoring engine).
+ *       Used by the Daily AI Briefing aggregator. Tenant-scoped via
+ *       `req.context.tenantId`.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 25
+ *         description: Number of drivers to return (default 1, max 25)
+ *     responses:
+ *       200:
+ *         description: Top-risk driver list
+ *       400:
+ *         description: Invalid limit
+ *       500:
+ *         description: Server error
+ */
+router.get('/risk/top', async (req, res) => {
+  const limit = parseRiskTopLimit(req.query.limit);
+  if (limit === null) {
+    return res.status(400).json({ success: false, error: 'Invalid limit; expected positive integer' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+
+  const sql = `
+    SELECT
+      drs.driver_id,
+      drs.score,
+      drs.category_scores,
+      d.first_name,
+      d.last_name
+    FROM (
+      SELECT DISTINCT ON (driver_id)
+        driver_id, tenant_id, score, category_scores, calculated_at
+      FROM driver_risk_scores
+      WHERE (tenant_id = $1 OR $1::uuid IS NULL)
+      ORDER BY driver_id, calculated_at DESC
+    ) drs
+    JOIN drivers d ON d.id = drs.driver_id
+    WHERE (d.tenant_id = $1 OR $1::uuid IS NULL)
+    ORDER BY drs.score DESC NULLS LAST, drs.calculated_at DESC
+    LIMIT $2
+  `;
+
+  try {
+    const result = await query(sql, [tenantId, limit]);
+    const data = result.rows.map((row) => {
+      let topFactor = null;
+      const cats = row.category_scores;
+      const parsed = (typeof cats === 'string') ? safeParseJson(cats) : (cats || null);
+      if (parsed && typeof parsed === 'object') {
+        let bestKey = null;
+        let bestVal = -Infinity;
+        for (const [k, v] of Object.entries(parsed)) {
+          const num = Number(v);
+          if (Number.isFinite(num) && num > bestVal) {
+            bestVal = num;
+            bestKey = k;
+          }
+        }
+        if (bestKey && bestVal > 0) topFactor = bestKey;
+      }
+      return {
+        driverId: row.driver_id,
+        name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || null,
+        riskScore: Number(row.score) || 0,
+        topFactor
+      };
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    // Graceful degrade: if driver_risk_scores hasn't been migrated yet, return
+    // an empty list so the briefing aggregator's upstreamErrors stays clean.
+    const code = error?.code ? String(error.code) : '';
+    const message = error?.message ? String(error.message) : '';
+    if (code === '42P01' || message.includes('does not exist')) {
+      dtLogger.warn?.('drivers_risk_top_table_missing', { message });
+      return res.json({ success: true, data: [] });
+    }
+    dtLogger.error('drivers_risk_top_failed', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch top driver risk' });
+  }
+});
+
+function safeParseJson(s) {
+  try { return JSON.parse(s); } catch { return null; }
+}
+
 /**
  * @openapi
  * /api/drivers:
