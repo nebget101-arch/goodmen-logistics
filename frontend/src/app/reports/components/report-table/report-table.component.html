@@ -17,11 +17,27 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let row of pagedRows">
-          <td *ngFor="let col of columns">
-            {{ col.format ? col.format(row[col.key]) : row[col.key] }}
-          </td>
-        </tr>
+        <ng-container *ngFor="let row of pagedRows">
+          <ng-container *ngIf="targetFor(row) as target; else plainRow">
+            <tr class="drilldown-row"
+                [routerLink]="target.commands"
+                [queryParams]="target.queryParams"
+                [attr.data-drilldown]="target.destination"
+                role="link"
+                tabindex="0">
+              <td *ngFor="let col of columns">
+                {{ col.format ? col.format(row[col.key]) : row[col.key] }}
+              </td>
+            </tr>
+          </ng-container>
+          <ng-template #plainRow>
+            <tr>
+              <td *ngFor="let col of columns">
+                {{ col.format ? col.format(row[col.key]) : row[col.key] }}
+              </td>
+            </tr>
+          </ng-template>
+        </ng-container>
         <tr *ngIf="!pagedRows || pagedRows.length === 0">
           <td [attr.colspan]="columns.length || 1" class="text-center text-muted" style="padding: 16px;">
             No data for the selected filters.

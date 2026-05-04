@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 import { SharedModule } from '../shared/shared.module';
 import { ReportsRoutingModule } from './reports-routing.module';
 import { ReportsShellComponent } from './pages/reports-shell/reports-shell.component';
@@ -27,6 +28,6 @@ import { ReportsPageComponent } from './pages/reports-page/reports-page.componen
     ReportChatDrawerComponent,
     ReportsPageComponent
   ],
-  imports: [CommonModule, FormsModule, SharedModule, ReportsRoutingModule]
+  imports: [CommonModule, FormsModule, RouterModule, SharedModule, ReportsRoutingModule]
 })
 export class ReportsModule {}
