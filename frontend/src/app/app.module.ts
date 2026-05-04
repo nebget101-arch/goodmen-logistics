@@ -85,6 +85,7 @@ import { AskBarComponent } from './components/control-center/ask-bar/ask-bar.com
 import { PredictiveInsightsComponent } from './components/control-center/predictive-insights/predictive-insights.component';
 import { SmartAlertsComponent } from './components/control-center/smart-alerts/smart-alerts.component';
 import { ExplainPanelComponent } from './components/control-center/explain-panel/explain-panel.component';
+import { ControlCenterComponent } from './components/control-center/control-center.component';
 
 @NgModule({
   declarations: [
@@ -159,7 +160,8 @@ import { ExplainPanelComponent } from './components/control-center/explain-panel
     AskBarComponent,
     PredictiveInsightsComponent,
     SmartAlertsComponent,
-    ExplainPanelComponent
+    ExplainPanelComponent,
+    ControlCenterComponent
   ],
   providers: [
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
