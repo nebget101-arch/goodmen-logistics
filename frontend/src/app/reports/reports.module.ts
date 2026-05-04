@@ -11,6 +11,7 @@ import { ReportFiltersComponent } from './components/report-filters/report-filte
 import { KpiCardsComponent } from './components/kpi-cards/kpi-cards.component';
 import { ReportAnomaliesComponent } from './components/report-anomalies/report-anomalies.component';
 import { ReportNarrativeComponent } from './components/report-narrative/report-narrative.component';
+import { ReportChatDrawerComponent } from './components/report-chat-drawer/report-chat-drawer.component';
 import { ReportsPageComponent } from './pages/reports-page/reports-page.component';
 
 @NgModule({
@@ -23,6 +24,7 @@ import { ReportsPageComponent } from './pages/reports-page/reports-page.componen
     KpiCardsComponent,
     ReportAnomaliesComponent,
     ReportNarrativeComponent,
+    ReportChatDrawerComponent,
     ReportsPageComponent
   ],
   imports: [CommonModule, FormsModule, SharedModule, ReportsRoutingModule]

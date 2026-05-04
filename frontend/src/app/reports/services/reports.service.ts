@@ -5,6 +5,8 @@ import { environment } from '../../../environments/environment';
 import {
   ReportAnomaliesRequest,
   ReportAnomaliesResponse,
+  ReportChatRequest,
+  ReportChatResponse,
   ReportFilters,
   ReportKey,
   ReportNarrative,
@@ -24,6 +26,10 @@ export class ReportsService {
       `${this.aiBaseUrl}/${encodeURIComponent(reportKey)}/anomalies`,
       payload
     );
+  }
+
+  chatWithReport(payload: ReportChatRequest): Observable<ReportChatResponse> {
+    return this.http.post<ReportChatResponse>(`${this.aiBaseUrl}/chat`, payload);
   }
 
   invalidateCache(): void {
