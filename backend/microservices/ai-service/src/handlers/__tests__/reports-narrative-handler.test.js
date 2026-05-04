@@ -11,9 +11,13 @@ const jwt = require('jsonwebtoken');
 const {
   handleReportsNarrative,
   buildReportSchemaBlock,
+  buildUserMessage,
+  resolveVariant,
   SYSTEM_PROMPT,
   REPORT_KEY_RE,
-  ALLOWED_ROLES
+  ALLOWED_ROLES,
+  VARIANTS,
+  DEFAULT_VARIANT
 } = require('../reports-narrative-handler');
 
 const TEST_JWT_SECRET = 'dev_secret'; // matches the handler's fallback
@@ -67,12 +71,13 @@ function makeThrowingAnthropic(err) {
   };
 }
 
-function makeReq({ reportKey = 'revenue-by-driver', body = {}, user = { role: 'manager', id: 'u-1' }, headers = {} } = {}) {
+function makeReq({ reportKey = 'revenue-by-driver', body = {}, user = { role: 'manager', id: 'u-1' }, headers = {}, query = {} } = {}) {
   return {
     params: { reportKey },
     body,
     user,
-    headers
+    headers,
+    query
   };
 }
 
@@ -434,6 +439,147 @@ async function main() {
     assert.equal(res.body.code, 'AI_FORBIDDEN');
     // eslint-disable-next-line no-console
     console.log('  ok  FN-1315: JWT without role -> 403');
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // FN-1173: variant=long for PDF embedding (server-to-server)
+  // ──────────────────────────────────────────────────────────────────────
+
+  // resolveVariant: query parsing + defaulting
+  {
+    assert.equal(resolveVariant({ query: { variant: 'long' } }).form, 'long');
+    assert.equal(resolveVariant({ query: { variant: 'LONG' } }).form, 'long', 'case insensitive');
+    assert.equal(resolveVariant({ query: { variant: '  long  ' } }).form, 'long', 'trims whitespace');
+    assert.equal(resolveVariant({ query: { variant: 'short' } }).form, 'short');
+    assert.equal(resolveVariant({ query: { variant: 'medium' } }).form, DEFAULT_VARIANT, 'unknown defaults');
+    assert.equal(resolveVariant({ query: { variant: ['long', 'short'] } }).form, 'long', 'first element of array');
+    assert.equal(resolveVariant({ query: {} }).form, DEFAULT_VARIANT);
+    assert.equal(resolveVariant({}).form, DEFAULT_VARIANT, 'no query at all');
+    assert.equal(resolveVariant(null).form, DEFAULT_VARIANT, 'null req');
+    assert.equal(VARIANTS.short.maxTokens, 400);
+    assert.equal(VARIANTS.long.maxTokens, 900);
+    assert.ok(VARIANTS.long.maxTokens >= 2 * VARIANTS.short.maxTokens, 'long ≥ 2× short token budget');
+    // eslint-disable-next-line no-console
+    console.log('  ok  resolveVariant parses query + defaults safely');
+  }
+
+  // buildUserMessage carries the form key so the model knows which length to emit
+  {
+    const msg = buildUserMessage({ cards: [], data: [], filters: {}, priorPeriod: {}, form: 'long' });
+    const parsed = JSON.parse(msg);
+    assert.equal(parsed.form, 'long');
+    const msgDefault = buildUserMessage({ cards: [], data: [], filters: {}, priorPeriod: {} });
+    assert.equal(JSON.parse(msgDefault).form, DEFAULT_VARIANT);
+    // eslint-disable-next-line no-console
+    console.log('  ok  buildUserMessage embeds form key');
+  }
+
+  // SYSTEM_PROMPT references both variants so the cached system block carries
+  // the variant guidance — guarantees the same cached block serves both call
+  // sites without per-variant cache invalidation.
+  assert.match(SYSTEM_PROMPT, /form="short"/);
+  assert.match(SYSTEM_PROMPT, /form="long"/);
+  // eslint-disable-next-line no-console
+  console.log('  ok  SYSTEM_PROMPT documents both variants in the cached block');
+
+  // Handler with ?variant=long → long max_tokens, form key in user message,
+  // unchanged cached system blocks (cache hit-rate preserved).
+  {
+    const captured = { calls: [] };
+    const res = makeRes();
+    await handleReportsNarrative(
+      makeReq({
+        body: { cards: [{ id: 'rev', label: 'Revenue', value: 12000, delta: 0.12 }] },
+        query: { variant: 'long' }
+      }),
+      res,
+      { anthropic: makeMockAnthropic({ captured }) }
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.meta.variant, 'long');
+    assert.equal(captured.calls.length, 1);
+    const call = captured.calls[0];
+    assert.equal(call.max_tokens, 900, 'long variant doubles the token budget');
+    // The cached system blocks are byte-identical to the short variant,
+    // so the prompt cache keyed on those blocks still hits.
+    assert.equal(call.system.length, 2);
+    assert.equal(call.system[0].text, SYSTEM_PROMPT);
+    assert.equal(call.system[0].cache_control.type, 'ephemeral');
+    assert.equal(call.system[1].cache_control.type, 'ephemeral');
+    // The variant directive lives in the per-call user message instead.
+    const userPayload = JSON.parse(call.messages[0].content);
+    assert.equal(userPayload.form, 'long');
+    // eslint-disable-next-line no-console
+    console.log('  ok  ?variant=long uses 900 max_tokens + form="long" in user msg, cached system unchanged');
+  }
+
+  // Default (no query param) keeps the FN-1114 panel behaviour unchanged.
+  {
+    const captured = { calls: [] };
+    const res = makeRes();
+    await handleReportsNarrative(
+      makeReq({ body: { cards: [] } }),
+      res,
+      { anthropic: makeMockAnthropic({ captured }) }
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.meta.variant, 'short');
+    assert.equal(captured.calls[0].max_tokens, 400);
+    const userPayload = JSON.parse(captured.calls[0].messages[0].content);
+    assert.equal(userPayload.form, 'short');
+    // eslint-disable-next-line no-console
+    console.log('  ok  default variant unchanged (short, max 400)');
+  }
+
+  // Unknown variant value silently degrades to short rather than 400-ing.
+  {
+    const captured = { calls: [] };
+    const res = makeRes();
+    await handleReportsNarrative(
+      makeReq({ body: {}, query: { variant: 'gigantic' } }),
+      res,
+      { anthropic: makeMockAnthropic({ captured }) }
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.meta.variant, 'short');
+    assert.equal(captured.calls[0].max_tokens, 400);
+    // eslint-disable-next-line no-console
+    console.log('  ok  unknown variant falls back to short');
+  }
+
+  // Server-to-server call path: reporting-service forwards the user's Bearer
+  // JWT (no req.user attached). Handler verifies the token via JWT_SECRET and
+  // applies the role gate. Because this exercises the JWT verification path
+  // end-to-end, the call would 200 only when JWT_SECRET matches. We sign a
+  // token with the dev secret to assert the path works.
+  {
+    let jwt;
+    try { jwt = require('jsonwebtoken'); } catch (_e) { jwt = null; }
+    if (jwt) {
+      const secret = process.env.JWT_SECRET || 'dev_secret';
+      const token = jwt.sign({ id: 'u-server-to-server', role: 'manager' }, secret, { expiresIn: '5m' });
+      const captured = { calls: [] };
+      const res = makeRes();
+      await handleReportsNarrative(
+        {
+          params: { reportKey: 'revenue-by-driver' },
+          body: { cards: [], data: [] },
+          headers: { authorization: `Bearer ${token}` },
+          query: { variant: 'long' }
+          // NOTE: no req.user — exactly what reporting-service forwards
+        },
+        res,
+        { anthropic: makeMockAnthropic({ captured }) }
+      );
+      assert.equal(res.statusCode, 200, 'server-to-server JWT path should succeed');
+      assert.equal(res.body.meta.variant, 'long');
+      assert.equal(captured.calls.length, 1, 'Anthropic should be called once');
+      // eslint-disable-next-line no-console
+      console.log('  ok  server-to-server (Bearer JWT, no req.user) reaches handler with variant=long');
+    } else {
+      // eslint-disable-next-line no-console
+      console.log('  skip server-to-server JWT path (jsonwebtoken not installed)');
+    }
   }
 
   // eslint-disable-next-line no-console

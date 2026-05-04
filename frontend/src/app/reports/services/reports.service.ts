@@ -54,8 +54,12 @@ export class ReportsService {
   }
 
   exportReport(reportKey: ReportKey, format: 'csv' | 'pdf', filters: ReportFilters): Observable<Blob> {
+    let params = this.toParams(filters).set('format', format);
+    if (format === 'pdf') {
+      params = params.set('includeNarrative', 'true');
+    }
     return this.http.get(`${this.baseUrl}/export/${reportKey}`, {
-      params: this.toParams(filters).set('format', format),
+      params,
       responseType: 'blob'
     });
   }

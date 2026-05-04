@@ -1478,15 +1478,22 @@ function buildAiRouter(deps) {
    * @openapi
    * /api/ai/reports/{reportKey}/narrative:
    *   post:
-   *     summary: Generate a narrative for a financial report (FN-1123)
+   *     summary: Generate a narrative for a financial report (FN-1123, FN-1173)
    *     description: >
-   *       Produces a 2–3 sentence plain-prose narrative explaining the headline
-   *       movement in a financial report (revenue-by-driver, fuel-spend-by-truck,
-   *       load-margin, or any other report key). Uses Anthropic Claude Sonnet 4.6
-   *       (temperature 0.2, max 400 tokens) with **prompt caching** on two static
-   *       blocks: the role/style system prompt and the per-report schema block.
-   *       The dynamic payload (cards, data rows, filters, prior-period values) is
-   *       sent in the user message and is NOT cached.
+   *       Produces a plain-prose narrative explaining the headline movement in a
+   *       financial report (revenue-by-driver, fuel-spend-by-truck, load-margin,
+   *       or any other report key). Uses Anthropic Claude Sonnet 4.6
+   *       (temperature 0.2) with **prompt caching** on two static blocks: the
+   *       role/style system prompt and the per-report schema block. The dynamic
+   *       payload (cards, data rows, filters, prior-period values) is sent in
+   *       the user message and is NOT cached.
+   *
+   *
+   *       FN-1173: `?variant=long` returns 5–8 sentences across 1–2 paragraphs
+   *       (max 900 tokens) for embedding in branded PDF exports. The default
+   *       `?variant=short` keeps the original 2–3 sentence behaviour for
+   *       on-screen panels. Cached system blocks are byte-identical between
+   *       variants so the cache hit-rate is unaffected.
    *     tags:
    *       - AI
    *     security:
@@ -1499,6 +1506,14 @@ function buildAiRouter(deps) {
    *           type: string
    *           pattern: '^[a-z0-9-]{1,64}$'
    *         description: Report identifier (e.g. revenue-by-driver, fuel-spend-by-truck, load-margin)
+   *       - in: query
+   *         name: variant
+   *         required: false
+   *         schema:
+   *           type: string
+   *           enum: [short, long]
+   *           default: short
+   *         description: Output length variant. `short` (default) for on-screen panels (2–3 sentences, max 400 tokens). `long` for PDF embedding (5–8 sentences, max 900 tokens).
    *     requestBody:
    *       required: false
    *       content:
@@ -1536,7 +1551,7 @@ function buildAiRouter(deps) {
    *                   type: boolean
    *                 narrative:
    *                   type: string
-   *                   description: 2–3 sentence plain-prose narrative
+   *                   description: Plain-prose narrative; length depends on `variant` query param (2–3 sentences for `short`, 5–8 for `long`).
    *                 generatedAt:
    *                   type: string
    *                   format: date-time
@@ -1545,6 +1560,10 @@ function buildAiRouter(deps) {
    *                   properties:
    *                     model:
    *                       type: string
+   *                     variant:
+   *                       type: string
+   *                       enum: [short, long]
+   *                       description: The variant actually applied (defaults to `short` if missing/unknown).
    *                     cacheReadTokens:
    *                       type: integer
    *                     cacheCreationTokens:

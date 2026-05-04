@@ -3,6 +3,8 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const db = require('../internal/db').knex;
+const { renderBrandedPdf } = require('../services/pdf-template');
+const { fetchNarrative, fetchAnomalies } = require('../services/ai-narrative-client');
 
 const v2Cache = new Map();
 const V2_CACHE_TTL_MS = 60 * 1000;
@@ -3285,9 +3287,14 @@ function toCsv(rows) {
  * @openapi
  * /api/reports/v2/export/{reportKey}:
  *   get:
- *     summary: Export V2 report as CSV or PDF
+ *     summary: Export V2 report as CSV or branded PDF
  *     description: |
- *       Exports any V2 report key as a downloadable CSV (default) or PDF file.
+ *       Exports any V2 report key as a downloadable CSV (default) or **branded PDF** file
+ *       (FN-1167). The branded PDF includes: logo / wordmark, report title, filters used,
+ *       AI-generated narrative paragraph (FN-1123, fetched server-to-server from ai-service),
+ *       KPI cards, data table, and AI-detected anomaly list (FN-1134, also server-to-server).
+ *       Empty narrative or empty anomaly results omit those sections gracefully.
+ *
  *       Accepts the same filter parameters as the corresponding /api/reports/v2/{reportKey} endpoint.
  *       Requires admin, accounting, dispatcher, dispatch, or owner_operator role.
  *     tags:
@@ -3320,6 +3327,16 @@ function toCsv(rows) {
  *           enum: [csv, pdf]
  *           default: csv
  *         description: Export format
+ *       - in: query
+ *         name: narrative
+ *         schema:
+ *           type: string
+ *           enum: [auto, off]
+ *           default: auto
+ *         description: |
+ *           PDF only. `auto` (default) attempts to fetch an AI narrative + anomalies
+ *           from ai-service server-to-server; `off` skips both AI calls and renders
+ *           a branded PDF without those sections.
  *       - in: query
  *         name: startDate
  *         schema:
@@ -3389,8 +3406,6 @@ function toCsv(rows) {
  *         description: Insufficient permissions
  *       500:
  *         description: Server error
- *       501:
- *         description: PDF export unavailable (pdfkit not installed)
  */
 router.get('/v2/export/:reportKey', authMiddleware, requireRole(V2_ALLOWED_ROLES), async (req, res) => {
 	try {
@@ -3403,28 +3418,38 @@ router.get('/v2/export/:reportKey', authMiddleware, requireRole(V2_ALLOWED_ROLES
 		const rows = payload?.data || [];
 
 		if (format === 'pdf') {
-			let PDFDocument;
-			try {
-				PDFDocument = require('pdfkit');
-			} catch (err) {
-				dtLogger.error('reports_v2_pdfkit_missing', { error: err.message });
-				return res.status(501).json({ error: 'PDF export is temporarily unavailable on this environment. Please use CSV export.' });
+			const includeNarrative = (req.query.narrative || 'auto').toString().toLowerCase() !== 'off';
+
+			let narrative = null;
+			let anomalies = [];
+			if (includeNarrative) {
+				const aiPayload = { ...payload, meta: { ...(payload && payload.meta), filters } };
+				const startedAt = Date.now();
+				const [n, a] = await Promise.all([
+					fetchNarrative(req, reportKey, aiPayload),
+					fetchAnomalies(req, reportKey, aiPayload)
+				]);
+				narrative = n;
+				anomalies = a || [];
+				dtLogger.info('reports_v2_pdf_ai_fetch', {
+					reportKey,
+					narrativePresent: Boolean(narrative),
+					anomalyCount: anomalies.length,
+					ms: Date.now() - startedAt
+				});
 			}
 
 			res.setHeader('Content-Type', 'application/pdf');
 			res.setHeader('Content-Disposition', `attachment; filename="${reportKey}.pdf"`);
-			const doc = new PDFDocument({ margin: 40, size: 'A4' });
-			doc.pipe(res);
-			doc.fontSize(16).text(`FleetNeuron Report: ${reportKey}`);
-			doc.moveDown(0.5);
-			doc.fontSize(10).text(`Generated: ${new Date().toISOString()}`);
-			doc.fontSize(10).text(`Date Range: ${filters.startDate} to ${filters.endDate}`);
-			doc.moveDown();
-			const preview = rows.slice(0, 40);
-			preview.forEach((row, index) => {
-				doc.fontSize(9).text(`${index + 1}. ${JSON.stringify(row)}`);
+
+			await renderBrandedPdf({
+				reportKey,
+				payload: { ...payload, data: rows },
+				filters,
+				narrative,
+				anomalies,
+				stream: res
 			});
-			doc.end();
 			return;
 		}
 
@@ -3434,7 +3459,11 @@ router.get('/v2/export/:reportKey', authMiddleware, requireRole(V2_ALLOWED_ROLES
 		res.send(csv);
 	} catch (error) {
 		dtLogger.error('reports_v2_export_failed', { error: error.message, report: req.params.reportKey });
-		res.status(500).json({ error: error.message });
+		if (!res.headersSent) {
+			res.status(500).json({ error: error.message });
+		} else {
+			try { res.end(); } catch (_e) { /* stream already torn down */ }
+		}
 	}
 });
 
