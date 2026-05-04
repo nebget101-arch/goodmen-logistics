@@ -16,6 +16,7 @@ const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 const { handleBriefingGenerate } = require('./handlers/briefing-handler');
 const { handleAsk } = require('./handlers/ask-handler');
 const { handleScoreAlert } = require('./handlers/score-alert-handler');
+const { handleExplain } = require('./handlers/explain-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -1323,6 +1324,59 @@ function buildAiRouter(deps) {
    *         description: Missing or invalid alert payload
    */
   router.post('/score-alert', (req, res) => handleScoreAlert(req, res, deps));
+
+  /**
+   * @openapi
+   * /api/ai/explain/{token}:
+   *   get:
+   *     summary: Resolve an AI explainability token (FN-1176)
+   *     description: >
+   *       Returns the rationale (sources, rules, scores) for an AI-derived value
+   *       previously minted by ai-service (briefing claim, severity decision,
+   *       predictive trend). Tokens are returned alongside any AI output and
+   *       expire 30 days after mint.
+   *     tags:
+   *       - AI
+   *     parameters:
+   *       - in: path
+   *         name: token
+   *         required: true
+   *         schema:
+   *           type: string
+   *           pattern: '^expl_[a-f0-9]{32}$'
+   *         description: Explainability token returned alongside an AI output
+   *     responses:
+   *       200:
+   *         description: Rationale resolved
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   type: object
+   *                   description: Rationale payload (kind-specific shape)
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     token:
+   *                       type: string
+   *                     createdAt:
+   *                       type: string
+   *                       format: date-time
+   *                     expiresAt:
+   *                       type: string
+   *                       format: date-time
+   *                     processingTimeMs:
+   *                       type: number
+   *       400:
+   *         description: Malformed token
+   *       404:
+   *         description: Token not found or expired
+   */
+  router.get('/explain/:token', (req, res) => handleExplain(req, res, deps));
 
   return router;
 }

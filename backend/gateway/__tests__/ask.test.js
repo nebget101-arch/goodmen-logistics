@@ -60,11 +60,22 @@ function makeAggregatorStub() {
   };
 }
 
+// FN-1177: explain-forwarder is now a mandatory dep on buildAiRouter; ask
+// tests don't exercise /explain, so we pass a no-op stub.
+const EXPLAIN_FORWARDER_STUB = {
+  forward: async () => ({ status: 200, ok: true, body: {} })
+};
+
 function startGatewayUnderTest({ askForwarder, aggregator = makeAggregatorStub() }) {
   const app = express();
   app.use(
     '/api/ai',
-    buildAiRouter({ aggregator, askForwarder, jwtSecret: JWT_SECRET })
+    buildAiRouter({
+      aggregator,
+      askForwarder,
+      explainForwarder: EXPLAIN_FORWARDER_STUB,
+      jwtSecret: JWT_SECRET
+    })
   );
   return new Promise((resolve) => {
     const server = http.createServer(app).listen(0, () => {

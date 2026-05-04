@@ -18,6 +18,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logAiInteraction } = require('../analytics/logger');
+const explainabilityStore = require('../services/explainability-store');
 const {
   SUPPORTED_TYPES,
   MAX_REASONING_LENGTH,
@@ -59,6 +60,44 @@ function parseAiResponse(content) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/```\s*$/, '').trim();
   }
   return JSON.parse(cleaned);
+}
+
+function mintSeverityRationale({
+  tenantId,
+  alert,
+  baseScore,
+  boost,
+  finalSeverity,
+  reasoning,
+  action,
+  scoredBy,
+  model
+}) {
+  return explainabilityStore.mint({
+    kind: 'severity',
+    tenantId: tenantId || null,
+    alertId: alert.id,
+    alertType: alert.type,
+    subjectKind: alert.subjectKind || null,
+    subjectId: alert.subjectId || null,
+    rules: {
+      baseScore,
+      ruleType: alert.type,
+      facts: alert.facts || {}
+    },
+    scores: {
+      baseScore,
+      boost,
+      finalSeverity
+    },
+    sources: {
+      reasoning,
+      action,
+      scoredBy
+    },
+    model: model || null,
+    generatedAt: new Date().toISOString()
+  });
 }
 
 function buildUserMessage({ tenantId, alert, baseScore }) {
@@ -109,14 +148,28 @@ async function handleScoreAlert(req, res, deps) {
       errorCode: 'AI_UNCONFIGURED',
       processingTimeMs
     });
+    const reasoning = fallbackReasoning(alert);
+    const action = fallbackAction(alert);
+    const explainabilityToken = mintSeverityRationale({
+      tenantId,
+      alert,
+      baseScore,
+      boost: 0,
+      finalSeverity: baseScore,
+      reasoning,
+      action,
+      scoredBy: 'rules:no-anthropic',
+      model: null
+    });
     return res.json({
       severity: baseScore,
-      reasoning: fallbackReasoning(alert),
-      action: fallbackAction(alert),
+      reasoning,
+      action,
       meta: {
         baseScore,
         boost: 0,
         scoredBy: 'rules:no-anthropic',
+        explainabilityToken,
         processingTimeMs
       }
     });
@@ -149,14 +202,28 @@ async function handleScoreAlert(req, res, deps) {
         errorCode: 'AI_PARSE_FALLBACK',
         processingTimeMs
       });
+      const reasoning = fallbackReasoning(alert);
+      const action = fallbackAction(alert);
+      const explainabilityToken = mintSeverityRationale({
+        tenantId,
+        alert,
+        baseScore,
+        boost: 0,
+        finalSeverity: baseScore,
+        reasoning,
+        action,
+        scoredBy: 'rules:unparseable-ai-response',
+        model: message.model || model
+      });
       return res.json({
         severity: baseScore,
-        reasoning: fallbackReasoning(alert),
-        action: fallbackAction(alert),
+        reasoning,
+        action,
         meta: {
           baseScore,
           boost: 0,
           scoredBy: 'rules:unparseable-ai-response',
+          explainabilityToken,
           processingTimeMs
         }
       });
@@ -179,8 +246,20 @@ async function handleScoreAlert(req, res, deps) {
       processingTimeMs
     });
 
+    const finalSeverity = clampSeverity(severity);
+    const explainabilityToken = mintSeverityRationale({
+      tenantId,
+      alert,
+      baseScore,
+      boost,
+      finalSeverity,
+      reasoning,
+      action,
+      scoredBy: 'ai',
+      model: message.model || model
+    });
     return res.json({
-      severity: clampSeverity(severity),
+      severity: finalSeverity,
       reasoning,
       action,
       meta: {
@@ -188,6 +267,7 @@ async function handleScoreAlert(req, res, deps) {
         boost,
         scoredBy: 'ai',
         model: message.model || model,
+        explainabilityToken,
         processingTimeMs
       }
     });
@@ -206,14 +286,28 @@ async function handleScoreAlert(req, res, deps) {
       processingTimeMs
     });
 
+    const reasoning = fallbackReasoning(alert);
+    const action = fallbackAction(alert);
+    const explainabilityToken = mintSeverityRationale({
+      tenantId,
+      alert,
+      baseScore,
+      boost: 0,
+      finalSeverity: baseScore,
+      reasoning,
+      action,
+      scoredBy: 'rules:ai-error',
+      model
+    });
     return res.json({
       severity: baseScore,
-      reasoning: fallbackReasoning(alert),
-      action: fallbackAction(alert),
+      reasoning,
+      action,
       meta: {
         baseScore,
         boost: 0,
         scoredBy: 'rules:ai-error',
+        explainabilityToken,
         processingTimeMs
       }
     });
