@@ -10,6 +10,10 @@ const swaggerUi = require('swagger-ui-express');
 const { buildBriefingAggregator } = require('./services/briefing-aggregator');
 const { buildAskForwarder } = require('./services/ask-forwarder');
 const { buildAiRouter } = require('./routes/ai');
+const { buildSmartAlertsAggregator } = require('./services/smart-alerts-aggregator');
+const { MemoryDismissalsStore } = require('./services/dismissals-store');
+const { buildAlertsBroadcaster, makeSocketIoEmitter } = require('./services/alerts-ws');
+const { buildAlertsRouter } = require('./routes/alerts');
 
 let SocketIoServer = null;
 try {
@@ -534,6 +538,32 @@ app.use(
   })
 );
 app.use('/api/ai', buildProxy(AI_SERVICE_URL, 'ai'));
+
+// FN-1161: gateway-local /api/alerts/smart route — fans out to drivers,
+// vehicles, logistics; calls ai-service /api/ai/score-alert per signal;
+// ranks by severity. POST /:id/dismiss persists dismissals (24h, FN-1128 AC)
+// via the in-memory store; the Postgres-backed store ships with FN-1165.
+// Broadcasts updates over Socket.IO so the panel stays live without polling.
+const smartAlertsAggregator = buildSmartAlertsAggregator({
+  fetcher: (url, opts) => fetch(url, opts),
+  driversUrl: DRIVERS_COMPLIANCE_SERVICE_URL,
+  vehiclesUrl: VEHICLES_MAINTENANCE_SERVICE_URL,
+  logisticsUrl: LOGISTICS_SERVICE_URL,
+  aiUrl: AI_SERVICE_URL
+});
+const dismissalsStore = new MemoryDismissalsStore();
+const alertsBroadcaster = buildAlertsBroadcaster({
+  emit: makeSocketIoEmitter(() => ioInstance)
+});
+app.use(
+  '/api/alerts',
+  buildAlertsRouter({
+    aggregator: smartAlertsAggregator,
+    dismissalsStore,
+    broadcaster: alertsBroadcaster,
+    jwtSecret: process.env.JWT_SECRET || 'dev_secret'
+  })
+);
 
 const httpServer = http.createServer(app);
 
