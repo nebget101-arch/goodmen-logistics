@@ -1,4 +1,37 @@
 <div class="report-filters">
+  <div *ngIf="reportKey" class="nl-row" role="search">
+    <label for="reportFilterNl" class="nl-label">Ask in plain English</label>
+    <div class="nl-input-wrap" [class.is-loading]="nlLoading">
+      <input
+        id="reportFilterNl"
+        type="text"
+        class="nl-input"
+        autocomplete="off"
+        [disabled]="nlLoading"
+        [(ngModel)]="nlQuery"
+        (keydown.enter)="onNlSubmit()"
+        placeholder="e.g. revenue by driver last month, exclude team leads"
+        aria-label="Natural language report filter"
+      />
+      <span *ngIf="nlLoading" class="nl-spinner" role="status" aria-label="Parsing query"></span>
+      <button
+        type="button"
+        class="nl-submit"
+        [disabled]="nlLoading || !nlQuery.trim()"
+        (click)="onNlSubmit()"
+      >Parse</button>
+    </div>
+    <div
+      *ngIf="unmatchedTokens.length"
+      class="nl-unmatched"
+      [attr.title]="'Unmatched: ' + unmatchedTokens.join(', ')"
+      role="status"
+    >
+      <span class="nl-unmatched-label">Unmatched:</span>
+      <span class="nl-token" *ngFor="let token of unmatchedTokens">{{ token }}</span>
+    </div>
+    <div *ngIf="nlError" class="nl-error" role="alert">{{ nlError }}</div>
+  </div>
   <div class="filter-row">
     <label>Location</label>
     <select [(ngModel)]="localFilters.location_id" (change)="onApply()">

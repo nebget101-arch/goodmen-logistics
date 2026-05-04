@@ -3,6 +3,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  NlParseRequest,
+  NlParseResponse,
   ReportAnomaliesRequest,
   ReportAnomaliesResponse,
   ReportFilters,
@@ -22,6 +24,15 @@ export class ReportsService {
       `${this.aiBaseUrl}/${encodeURIComponent(reportKey)}/anomalies`,
       payload
     );
+  }
+
+  parseNlQuery(
+    reportKey: ReportKey,
+    naturalQuery: string,
+    currentFilters: ReportFilters
+  ): Observable<NlParseResponse> {
+    const payload: NlParseRequest = { reportKey, naturalQuery, currentFilters };
+    return this.http.post<NlParseResponse>(`${this.aiBaseUrl}/parse-query`, payload);
   }
 
   invalidateCache(): void {
