@@ -2762,11 +2762,16 @@
   ></app-step-attachments>
 </app-load-wizard>
 
-<!-- FN-862: new shell-based load wizard (alongside legacy until S10/FN-869). -->
+<!-- FN-862: new shell-based load wizard (alongside legacy until S10/FN-869).
+     FN-1312: `mode` and `loadId` are now bound so load-context quick-action
+     deep-links (e.g. ?action=reassign&loadId=X) can open the wizard in edit
+     mode with the load prefilled. -->
 <app-load-wizard-v2
   *ngIf="showLoadWizardV2"
-  mode="create"
+  [mode]="loadWizardV2Mode"
+  [loadId]="loadWizardV2LoadId"
   (created)="onLoadWizardV2Created($event)"
+  (updated)="onLoadWizardV2Updated($event)"
   (closed)="closeLoadWizardV2()"
 ></app-load-wizard-v2>
 
