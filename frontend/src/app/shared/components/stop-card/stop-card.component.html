@@ -49,8 +49,8 @@
       <div class="sc-field">
         <label class="sc-label">Stop Type</label>
         <select class="sc-select"
-                [value]="stop.stop_type"
-                (change)="onStopTypeChange($any($event.target).value)">
+                [ngModel]="stop.stop_type"
+                (ngModelChange)="onStopTypeChange($event)">
           <option *ngFor="let opt of stopTypeOptions" [value]="opt.value">{{ opt.label }}</option>
         </select>
       </div>
@@ -77,8 +77,8 @@
       <div class="sc-field">
         <label class="sc-label">State</label>
         <select class="sc-select"
-                [value]="normalizedState"
-                (change)="onStateChange($any($event.target).value)">
+                [ngModel]="normalizedState"
+                (ngModelChange)="onStateChange($event)">
           <option value="">--</option>
           <option *ngFor="let st of stateList" [value]="st">{{ st }}</option>
         </select>
