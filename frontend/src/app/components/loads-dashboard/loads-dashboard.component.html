@@ -602,6 +602,16 @@
           />
           <span>{{ col.label }}</span>
         </label>
+        <!-- FN-1059: Reset column widths (AC6) -->
+        <div class="loads-columns-menu__divider"></div>
+        <button
+          type="button"
+          class="loads-columns-menu__action"
+          (click)="resetColumnWidths(); $event.stopPropagation()"
+        >
+          <span class="material-symbols-outlined">restart_alt</span>
+          <span>Reset column widths</span>
+        </button>
       </div>
     </div>
 
@@ -724,22 +734,25 @@
     <ng-container *ngIf="!loading">
     <div class="loads-table-container">
     <table class="table table--header">
+      <!-- FN-1059: widths in px, sourced from columnWidths so user-resize is
+           reflected here and in table--body below. select stays at a fixed
+           36px to play well with the px-based fixed layout. -->
       <colgroup>
-        <col *ngIf="!isDriverRole" style="width: 3%"><!-- FN-768 select -->
-        <col *ngIf="isColVisible('load_number')" style="width: 6%">
-        <col *ngIf="isColVisible('pickup_date')" style="width: 7%">
-        <col *ngIf="isColVisible('driver')" style="width: 8%">
-        <col *ngIf="isColVisible('broker')" style="width: 12%">
-        <col *ngIf="isColVisible('po_number')" style="width: 7%">
-        <col *ngIf="isColVisible('pickup')" style="width: 11%">
-        <col *ngIf="isColVisible('delivery')" style="width: 11%">
-        <col *ngIf="isColVisible('rate')" style="width: 5%">
-        <col *ngIf="isColVisible('completed_date')" style="width: 8%">
-        <col *ngIf="isColVisible('status')" style="width: 6%">
-        <col *ngIf="isColVisible('billing')" style="width: 6%">
-        <col *ngIf="isColVisible('notes')" style="width: 10%">
-        <col *ngIf="isColVisible('attachments')" style="width: 8%">
-        <col *ngIf="isColVisible('actions')" style="width: 5%">
+        <col *ngIf="!isDriverRole" style="width: 36px"><!-- FN-768 select -->
+        <col *ngIf="isColVisible('load_number')" [style.width.px]="getColWidth('load_number')">
+        <col *ngIf="isColVisible('pickup_date')" [style.width.px]="getColWidth('pickup_date')">
+        <col *ngIf="isColVisible('driver')" [style.width.px]="getColWidth('driver')">
+        <col *ngIf="isColVisible('broker')" [style.width.px]="getColWidth('broker')">
+        <col *ngIf="isColVisible('po_number')" [style.width.px]="getColWidth('po_number')">
+        <col *ngIf="isColVisible('pickup')" [style.width.px]="getColWidth('pickup')">
+        <col *ngIf="isColVisible('delivery')" [style.width.px]="getColWidth('delivery')">
+        <col *ngIf="isColVisible('rate')" [style.width.px]="getColWidth('rate')">
+        <col *ngIf="isColVisible('completed_date')" [style.width.px]="getColWidth('completed_date')">
+        <col *ngIf="isColVisible('status')" [style.width.px]="getColWidth('status')">
+        <col *ngIf="isColVisible('billing')" [style.width.px]="getColWidth('billing')">
+        <col *ngIf="isColVisible('notes')" [style.width.px]="getColWidth('notes')">
+        <col *ngIf="isColVisible('attachments')" [style.width.px]="getColWidth('attachments')">
+        <col *ngIf="isColVisible('actions')" [style.width.px]="getColWidth('actions')">
       </colgroup>
       <thead>
         <tr>
@@ -752,19 +765,84 @@
               (change)="toggleSelectAll()"
             />
           </th>
+          <!-- FN-1059: load_number + actions are alwaysVisible (pinned),
+               so they intentionally do NOT carry the appResizableColumn handle. -->
           <th *ngIf="isColVisible('load_number')" (click)="toggleSort('load_number')">Load #</th>
-          <th *ngIf="isColVisible('pickup_date')" (click)="toggleSort('pickup_date')">Pickup Date</th>
-          <th *ngIf="isColVisible('driver')">Driver</th>
-          <th *ngIf="isColVisible('broker')">Broker</th>
-          <th *ngIf="isColVisible('po_number')">PO #</th>
-          <th *ngIf="isColVisible('pickup')">Pickup</th>
-          <th *ngIf="isColVisible('delivery')">Delivery</th>
-          <th *ngIf="isColVisible('rate')" (click)="toggleSort('rate')">Rate</th>
-          <th *ngIf="isColVisible('completed_date')" (click)="toggleSort('completed_date')">Completed</th>
-          <th *ngIf="isColVisible('status')">Status</th>
-          <th *ngIf="isColVisible('billing')">Billing</th>
-          <th *ngIf="isColVisible('notes')">Notes</th>
-          <th *ngIf="isColVisible('attachments')">Attachments</th>
+          <th *ngIf="isColVisible('pickup_date')"
+              [appResizableColumn]="'pickup_date'"
+              [currentWidth]="getColWidth('pickup_date')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('pickup_date', $event)"
+              (click)="toggleSort('pickup_date')">Pickup Date</th>
+          <th *ngIf="isColVisible('driver')"
+              [appResizableColumn]="'driver'"
+              [currentWidth]="getColWidth('driver')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('driver', $event)">Driver</th>
+          <th *ngIf="isColVisible('broker')"
+              [appResizableColumn]="'broker'"
+              [currentWidth]="getColWidth('broker')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('broker', $event)">Broker</th>
+          <th *ngIf="isColVisible('po_number')"
+              [appResizableColumn]="'po_number'"
+              [currentWidth]="getColWidth('po_number')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('po_number', $event)">PO #</th>
+          <th *ngIf="isColVisible('pickup')"
+              [appResizableColumn]="'pickup'"
+              [currentWidth]="getColWidth('pickup')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('pickup', $event)">Pickup</th>
+          <th *ngIf="isColVisible('delivery')"
+              [appResizableColumn]="'delivery'"
+              [currentWidth]="getColWidth('delivery')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('delivery', $event)">Delivery</th>
+          <th *ngIf="isColVisible('rate')"
+              [appResizableColumn]="'rate'"
+              [currentWidth]="getColWidth('rate')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('rate', $event)"
+              (click)="toggleSort('rate')">Rate</th>
+          <th *ngIf="isColVisible('completed_date')"
+              [appResizableColumn]="'completed_date'"
+              [currentWidth]="getColWidth('completed_date')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('completed_date', $event)"
+              (click)="toggleSort('completed_date')">Completed</th>
+          <th *ngIf="isColVisible('status')"
+              [appResizableColumn]="'status'"
+              [currentWidth]="getColWidth('status')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('status', $event)">Status</th>
+          <th *ngIf="isColVisible('billing')"
+              [appResizableColumn]="'billing'"
+              [currentWidth]="getColWidth('billing')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('billing', $event)">Billing</th>
+          <th *ngIf="isColVisible('notes')"
+              [appResizableColumn]="'notes'"
+              [currentWidth]="getColWidth('notes')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('notes', $event)">Notes</th>
+          <th *ngIf="isColVisible('attachments')"
+              [appResizableColumn]="'attachments'"
+              [currentWidth]="getColWidth('attachments')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('attachments', $event)">Attachments</th>
           <th *ngIf="isColVisible('actions')">Actions</th>
         </tr>
         <tr class="header-filters">
@@ -867,22 +945,24 @@
       *ngIf="filteredLoads.length > 0 && !loadError"
     >
       <table class="table table--body">
+        <!-- FN-1059: widths must mirror table--header above so the two
+             tables stay aligned while resizing. -->
         <colgroup>
-          <col *ngIf="!isDriverRole" style="width: 3%"><!-- FN-768 select -->
-          <col *ngIf="isColVisible('load_number')" style="width: 6%">
-          <col *ngIf="isColVisible('pickup_date')" style="width: 7%">
-          <col *ngIf="isColVisible('driver')" style="width: 8%">
-          <col *ngIf="isColVisible('broker')" style="width: 12%">
-          <col *ngIf="isColVisible('po_number')" style="width: 7%">
-          <col *ngIf="isColVisible('pickup')" style="width: 11%">
-          <col *ngIf="isColVisible('delivery')" style="width: 11%">
-          <col *ngIf="isColVisible('rate')" style="width: 5%">
-          <col *ngIf="isColVisible('completed_date')" style="width: 8%">
-          <col *ngIf="isColVisible('status')" style="width: 6%">
-          <col *ngIf="isColVisible('billing')" style="width: 6%">
-          <col *ngIf="isColVisible('notes')" style="width: 10%">
-          <col *ngIf="isColVisible('attachments')" style="width: 8%">
-          <col *ngIf="isColVisible('actions')" style="width: 5%">
+          <col *ngIf="!isDriverRole" style="width: 36px"><!-- FN-768 select -->
+          <col *ngIf="isColVisible('load_number')" [style.width.px]="getColWidth('load_number')">
+          <col *ngIf="isColVisible('pickup_date')" [style.width.px]="getColWidth('pickup_date')">
+          <col *ngIf="isColVisible('driver')" [style.width.px]="getColWidth('driver')">
+          <col *ngIf="isColVisible('broker')" [style.width.px]="getColWidth('broker')">
+          <col *ngIf="isColVisible('po_number')" [style.width.px]="getColWidth('po_number')">
+          <col *ngIf="isColVisible('pickup')" [style.width.px]="getColWidth('pickup')">
+          <col *ngIf="isColVisible('delivery')" [style.width.px]="getColWidth('delivery')">
+          <col *ngIf="isColVisible('rate')" [style.width.px]="getColWidth('rate')">
+          <col *ngIf="isColVisible('completed_date')" [style.width.px]="getColWidth('completed_date')">
+          <col *ngIf="isColVisible('status')" [style.width.px]="getColWidth('status')">
+          <col *ngIf="isColVisible('billing')" [style.width.px]="getColWidth('billing')">
+          <col *ngIf="isColVisible('notes')" [style.width.px]="getColWidth('notes')">
+          <col *ngIf="isColVisible('attachments')" [style.width.px]="getColWidth('attachments')">
+          <col *ngIf="isColVisible('actions')" [style.width.px]="getColWidth('actions')">
         </colgroup>
         <tbody>
         <tr *cdkVirtualFor="let load of filteredLoads; trackBy: trackByLoadId" [ngClass]="rowClass(load)" [class.row-selected]="isSelected(load)" (click)="onRowClick(load, $event)">

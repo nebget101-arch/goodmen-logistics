@@ -89,7 +89,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   // ─── FN-821: scroll-to-top button ──────────────────────────────────────────
   showScrollTop = false;
 
-  /** Column width map mirroring the <col> widths in the template. */
+  /** Column width map mirroring the <col> widths in the template.
+   *  Used by the loading skeleton (FN-1043) — the live table reads from
+   *  `columnWidths` (px) so user-resizable widths (FN-1059) take effect. */
   private readonly columnWidthMap: Record<string, string> = {
     load_number: '6%',
     pickup_date: '7%',
@@ -106,6 +108,35 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     attachments: '8%',
     actions: '5%',
   };
+
+  // ─── FN-1059: user-resizable column widths (px) ─────────────────────────────
+  /** Px clamp shared with `app-resizable-column` and the reset action. */
+  readonly COL_WIDTH_MIN_PX = 60;
+  readonly COL_WIDTH_MAX_PX = 600;
+  /** Default px width per column key — derived from the historical %s. */
+  private readonly columnWidthDefaultsPx: Record<string, number> = {
+    load_number: 110,
+    pickup_date: 120,
+    driver: 140,
+    broker: 200,
+    po_number: 120,
+    pickup: 180,
+    delivery: 180,
+    rate: 90,
+    completed_date: 140,
+    status: 110,
+    billing: 110,
+    notes: 180,
+    attachments: 140,
+    actions: 90,
+  };
+  /** Live px widths bound to both colgroups + read by the directive's
+   *  `currentWidth`. Defaults populated on init; overridden by user prefs. */
+  columnWidths: Record<string, number> = { ...this.columnWidthDefaultsPx };
+  /** Subject that fires whenever a column is resized — debounced for the
+   *  `patchLoadsDashboard({ columnWidths })` write so quick drags don't
+   *  hammer the prefs endpoint (AC4). */
+  private columnWidthsPersist$ = new Subject<void>();
   activeOperatingEntityName = '';
 
   showNewLoadMenu = false;
@@ -996,6 +1027,16 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.startEtaTicker();
     // Announce presence on the loads page. Server broadcasts to tenant room.
     this.websocket.send('presence:join', { page: 'loads' });
+
+    // FN-1059: debounce per-column resize → patchLoadsDashboard so a quick
+    // drag fires one PUT instead of one per pixel.
+    this.columnWidthsPersist$
+      .pipe(debounceTime(400), takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.userPreferences
+          .patchLoadsDashboard({ columnWidths: { ...this.columnWidths } })
+          .subscribe();
+      });
   }
 
   /**
@@ -4581,7 +4622,58 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       if (prefs.density === 'compact' || prefs.density === 'comfortable' || prefs.density === 'spacious') {
         this.densityMode = prefs.density;
       }
+      // FN-1059: restore per-column widths over the px defaults.
+      this.columnWidths = { ...this.columnWidthDefaultsPx };
+      const stored = prefs.columnWidths;
+      if (stored && typeof stored === 'object') {
+        for (const key of Object.keys(stored)) {
+          const v = Number(stored[key]);
+          if (Number.isFinite(v)) {
+            this.columnWidths[key] = Math.max(
+              this.COL_WIDTH_MIN_PX,
+              Math.min(this.COL_WIDTH_MAX_PX, Math.round(v)),
+            );
+          }
+        }
+      }
     });
+  }
+
+  // ─── FN-1059: column width helpers ─────────────────────────────────────────
+
+  /** Width in px for `<col>` and the directive `currentWidth` input. */
+  getColWidth(key: string): number {
+    return this.columnWidths[key] ?? this.columnWidthDefaultsPx[key] ?? 100;
+  }
+
+  /** True when a column may be resized — `load_number` and `actions` are
+   *  pinned (always visible) so we leave them at their default width. */
+  isColResizable(key: string): boolean {
+    const def = this.columnDefs.find((c) => c.key === key);
+    return !!def && !def.alwaysVisible;
+  }
+
+  /** Live update from the `appResizableColumn` directive. Mutates by
+   *  reassigning the map so OnPush callers (none today) would still see it. */
+  onColumnWidthChange(key: string, width: number): void {
+    if (!Number.isFinite(width)) return;
+    const next = Math.max(
+      this.COL_WIDTH_MIN_PX,
+      Math.min(this.COL_WIDTH_MAX_PX, Math.round(width)),
+    );
+    if (this.columnWidths[key] === next) return;
+    this.columnWidths = { ...this.columnWidths, [key]: next };
+    this.columnWidthsPersist$.next();
+  }
+
+  /** "Reset column widths" — wipes the persisted map and reverts the live
+   *  widths to the px defaults. (AC6) */
+  resetColumnWidths(): void {
+    this.columnWidths = { ...this.columnWidthDefaultsPx };
+    this.showColumnPicker = false;
+    this.userPreferences
+      .patchLoadsDashboard({ columnWidths: {} })
+      .subscribe();
   }
 
   // ─── FN-808: Load Detail Side Drawer handlers ─────────────────────────────

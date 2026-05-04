@@ -36,6 +36,7 @@ import { IntelligenceInsightsComponent } from './intelligence-panel/intelligence
 import { SmartFiltersComponent } from './smart-filters/smart-filters.component';
 import { LoadsLoadingSkeletonComponent } from './loading-skeleton/loading-skeleton.component';
 import { LoadsEmptyStateComponent } from './empty-state/empty-state.component';
+import { ResizableColumnDirective } from './resizable-column.directive';
 
 const routes: Routes = [
   {
@@ -77,7 +78,8 @@ const routes: Routes = [
     IntelligenceInsightsComponent,
     SmartFiltersComponent,
     LoadsLoadingSkeletonComponent,
-    LoadsEmptyStateComponent
+    LoadsEmptyStateComponent,
+    ResizableColumnDirective
   ],
   imports: [
     CommonModule,
