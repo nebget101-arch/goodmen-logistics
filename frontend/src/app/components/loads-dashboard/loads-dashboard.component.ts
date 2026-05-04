@@ -3046,10 +3046,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     if (zip.length < 5) return;
     this.loadsService.lookupZip(zip).subscribe({
       next: (res) => {
-        this.editStopForm.patchValue({
-          city: res?.data?.city || '',
-          state: res?.data?.state || ''
-        });
+        const d = res?.data;
+        if (!d?.city && !d?.state) return;
+        // FN-1089: mirror the FN-1087 wizard fix — setValue on individual
+        // controls + updateValueAndValidity. patchValue from inside subscribe
+        // was leaving the State input visually unsynced even when the
+        // FormControl held the correct value, and the empty-string fallback
+        // was blanking existing user input on partial responses.
+        const cityCtrl = this.editStopForm.get('city');
+        const stateCtrl = this.editStopForm.get('state');
+        cityCtrl?.setValue(d.city || cityCtrl.value || '');
+        stateCtrl?.setValue(d.state || stateCtrl.value || '');
+        this.editStopForm.updateValueAndValidity();
       }
     });
   }

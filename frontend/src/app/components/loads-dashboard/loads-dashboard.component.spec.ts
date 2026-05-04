@@ -23,13 +23,15 @@ function makePdf(name = 'rate-conf.pdf'): File {
   });
 }
 
-function makeComponent(overrides: { aiExtract?: any } = {}): LoadsDashboardComponent {
+function makeComponent(overrides: { aiExtract?: any; lookupZip?: any } = {}): LoadsDashboardComponent {
   const loadsService: any = {
     aiExtractFromPdf: jasmine
       .createSpy('aiExtractFromPdf')
       .and.returnValue(overrides.aiExtract || of({ success: true, data: null })),
     getLoad: () => of({ success: true, data: null }),
-    lookupZip: () => of({ success: true, data: {} }),
+    lookupZip: jasmine
+      .createSpy('lookupZip')
+      .and.returnValue(overrides.lookupZip || of({ success: true, data: {} })),
     bulkUploadRateConfirmations: () => of({ results: [] })
   };
   const userPreferences: any = {
@@ -230,4 +232,33 @@ describe('LoadsDashboardComponent — Auto-Create → wizard routing (FN-1078)',
       expect(component.showBulkExtractionGrid).toBeFalse();
     });
   });
+});
+
+describe('LoadsDashboardComponent.lookupZipForEditStop (FN-1089)', () => {
+  it('populates both city and state when both are returned', () => {
+    const component = makeComponent({
+      lookupZip: of({ success: true, data: { zip: '90210', city: 'Beverly Hills', state: 'CA' } })
+    });
+    component.editStopForm.patchValue({ city: '', state: '', zip: '90210' });
+
+    component.lookupZipForEditStop();
+
+    expect(component.editStopForm.get('city')!.value).toBe('Beverly Hills');
+    expect(component.editStopForm.get('state')!.value).toBe('CA');
+  });
+
+  it('preserves existing state when the response is missing state', () => {
+    const component = makeComponent({
+      lookupZip: of({ success: true, data: { zip: '10001', city: 'New York', state: '' } })
+    });
+    component.editStopForm.patchValue({ city: '', state: 'NY', zip: '10001' });
+
+    component.lookupZipForEditStop();
+
+    // city updates from the response.
+    expect(component.editStopForm.get('city')!.value).toBe('New York');
+    // state was 'NY' before lookup; blank response must not clobber it.
+    expect(component.editStopForm.get('state')!.value).toBe('NY');
+  });
+
 });
