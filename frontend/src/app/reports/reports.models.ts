@@ -124,6 +124,18 @@ export interface ReportChatResponse {
   usage?: ReportChatUsage;
 }
 
+export interface NlParseRequest {
+  reportKey: ReportKey;
+  naturalQuery: string;
+  currentFilters: ReportFilters;
+}
+
+export interface NlParseResponse {
+  filters: ReportFilters;
+  unmatchedTokens: string[];
+  confidence: number;
+}
+
 // Legacy compatibility interfaces retained for old reports components.
 export interface FinancialSummary {
   totalInvoiced?: number;
