@@ -1,12 +1,13 @@
 'use strict';
 
 /**
- * FN-1123: Tests for reports-narrative-handler.
+ * FN-1123 + FN-1315: Tests for reports-narrative-handler.
  * Runs standalone with `node`. No jest/mocha required.
  * The Anthropic client is mocked via deps.anthropic so no real API calls are made.
  */
 
 const assert = require('node:assert/strict');
+const jwt = require('jsonwebtoken');
 const {
   handleReportsNarrative,
   buildReportSchemaBlock,
@@ -14,6 +15,12 @@ const {
   REPORT_KEY_RE,
   ALLOWED_ROLES
 } = require('../reports-narrative-handler');
+
+const TEST_JWT_SECRET = 'dev_secret'; // matches the handler's fallback
+
+function signJwt(payload, options = {}) {
+  return jwt.sign(payload, TEST_JWT_SECRET, options);
+}
 
 function makeRes() {
   return {
@@ -310,6 +317,124 @@ async function main() {
   }
   // eslint-disable-next-line no-console
   console.log('  ok  all allowed roles pass RBAC');
+
+  // -------- FN-1315: local-verify path resolves a valid Bearer JWT (no req.user)
+  {
+    const captured = { calls: [] };
+    const token = signJwt({ id: 'u-admin', role: 'admin' });
+    const res = makeRes();
+    await handleReportsNarrative(
+      {
+        params: { reportKey: 'revenue-by-driver' },
+        body: { cards: [{ id: 'rev', label: 'Revenue', value: 100, delta: 0.1, unit: '$' }] },
+        headers: { authorization: `Bearer ${token}` }
+        // NOTE: no req.user — the gateway is plain http-proxy and does not attach it.
+      },
+      res,
+      { anthropic: makeMockAnthropic({ captured }) }
+    );
+    assert.equal(res.statusCode, 200, 'local-verify must succeed for a valid admin JWT');
+    assert.equal(res.body.success, true);
+    assert.equal(typeof res.body.narrative, 'string');
+    // Anthropic must have been called — proves the handler proceeded past RBAC.
+    assert.equal(captured.calls.length, 1);
+    // eslint-disable-next-line no-console
+    console.log('  ok  FN-1315: valid Bearer JWT (role=admin) resolves locally -> 200');
+  }
+
+  // -------- FN-1315: every allowed role works through the local-verify path
+  for (const role of ALLOWED_ROLES) {
+    const token = signJwt({ id: `u-${role}`, role });
+    const res = makeRes();
+    await handleReportsNarrative(
+      {
+        params: { reportKey: 'revenue-by-driver' },
+        body: {},
+        headers: { authorization: `Bearer ${token}` }
+      },
+      res,
+      { anthropic: makeMockAnthropic() }
+    );
+    assert.equal(res.statusCode, 200, `local-verify role=${role} should pass`);
+  }
+  // eslint-disable-next-line no-console
+  console.log('  ok  FN-1315: all allowed roles pass local-verify');
+
+  // -------- FN-1315: disallowed role from local-verify still returns 403
+  {
+    const token = signJwt({ id: 'u-driver', role: 'driver' });
+    const res = makeRes();
+    await handleReportsNarrative(
+      {
+        params: { reportKey: 'revenue-by-driver' },
+        body: {},
+        headers: { authorization: `Bearer ${token}` }
+      },
+      res,
+      { anthropic: makeMockAnthropic() }
+    );
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.body.code, 'AI_FORBIDDEN');
+    // eslint-disable-next-line no-console
+    console.log('  ok  FN-1315: disallowed role via local-verify -> 403');
+  }
+
+  // -------- FN-1315: expired JWT returns 403
+  {
+    const token = signJwt({ id: 'u-admin', role: 'admin' }, { expiresIn: '-1h' });
+    const res = makeRes();
+    await handleReportsNarrative(
+      {
+        params: { reportKey: 'revenue-by-driver' },
+        body: {},
+        headers: { authorization: `Bearer ${token}` }
+      },
+      res,
+      { anthropic: makeMockAnthropic() }
+    );
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.body.code, 'AI_FORBIDDEN');
+    // eslint-disable-next-line no-console
+    console.log('  ok  FN-1315: expired JWT -> 403');
+  }
+
+  // -------- FN-1315: JWT signed with wrong secret returns 403
+  {
+    const token = jwt.sign({ id: 'u-admin', role: 'admin' }, 'wrong_secret');
+    const res = makeRes();
+    await handleReportsNarrative(
+      {
+        params: { reportKey: 'revenue-by-driver' },
+        body: {},
+        headers: { authorization: `Bearer ${token}` }
+      },
+      res,
+      { anthropic: makeMockAnthropic() }
+    );
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.body.code, 'AI_FORBIDDEN');
+    // eslint-disable-next-line no-console
+    console.log('  ok  FN-1315: bad signature -> 403');
+  }
+
+  // -------- FN-1315: JWT payload without role field returns 403 insufficient role
+  {
+    const token = signJwt({ id: 'u-no-role' }); // no role claim
+    const res = makeRes();
+    await handleReportsNarrative(
+      {
+        params: { reportKey: 'revenue-by-driver' },
+        body: {},
+        headers: { authorization: `Bearer ${token}` }
+      },
+      res,
+      { anthropic: makeMockAnthropic() }
+    );
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.body.code, 'AI_FORBIDDEN');
+    // eslint-disable-next-line no-console
+    console.log('  ok  FN-1315: JWT without role -> 403');
+  }
 
   // eslint-disable-next-line no-console
   console.log('all tests passed');
