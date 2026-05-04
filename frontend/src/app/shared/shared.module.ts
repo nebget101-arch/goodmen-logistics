@@ -17,6 +17,7 @@ import { HoverPopoverComponent } from './components/hover-popover/hover-popover.
 import { AiSparkleComponent } from './components/ai-sparkle/ai-sparkle.component';
 import { ConfidenceBadgeComponent } from './components/confidence-badge/confidence-badge.component';
 import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives/has-permission.directive';
+import { AiExplainableDirective } from '../directives/ai-explainable.directive';
 
 @NgModule({
   declarations: [
@@ -41,7 +42,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives
     MatInputModule,
     MatSelectModule,
     DragDropModule,
-    ConfidenceBadgeComponent
+    ConfidenceBadgeComponent,
+    AiExplainableDirective
   ],
   exports: [
     AiSelectComponent,
@@ -54,7 +56,8 @@ import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives
     AiSparkleComponent,
     ConfidenceBadgeComponent,
     HasPermissionDirective,
-    HasAnyPermissionDirective
+    HasAnyPermissionDirective,
+    AiExplainableDirective
   ]
 })
 export class SharedModule {}
