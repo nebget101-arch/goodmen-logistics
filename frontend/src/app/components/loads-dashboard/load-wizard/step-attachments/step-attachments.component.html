@@ -24,6 +24,53 @@
     </span>
   </div>
 
+  <!-- ── FN-1071: Saved (server-side) attachments ─────────────────────────── -->
+  <div class="sa-saved-section" *ngIf="saved && saved.length > 0">
+    <div class="sa-saved-header">
+      <h4 class="sa-saved-title">Saved attachments</h4>
+      <span class="sa-saved-count">{{ saved.length }}</span>
+    </div>
+    <div class="sa-saved-list">
+      <div
+        class="sa-saved-card"
+        *ngFor="let att of saved; trackBy: trackBySavedId"
+      >
+        <span class="material-symbols-outlined sa-saved-icon">
+          {{ getSavedFileIcon(att) }}
+        </span>
+        <div class="sa-saved-meta">
+          <a
+            *ngIf="att.file_url; else noLink"
+            class="sa-saved-name sa-saved-name--link"
+            [href]="att.file_url"
+            target="_blank"
+            rel="noopener noreferrer"
+            [title]="att.file_name"
+          >
+            {{ att.file_name }}
+          </a>
+          <ng-template #noLink>
+            <span class="sa-saved-name" [title]="att.file_name">{{ att.file_name }}</span>
+          </ng-template>
+          <div class="sa-saved-sub">
+            <span class="sa-saved-type">{{ getTypeLabel(att.type) }}</span>
+            <span class="sa-saved-dot" aria-hidden="true">·</span>
+            <span class="sa-saved-date">{{ formatSavedDate(att.created_at) }}</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="sa-saved-delete-btn"
+          (click)="onDeleteSavedClick(att)"
+          [attr.aria-label]="'Delete ' + att.file_name"
+          title="Delete attachment"
+        >
+          <span class="material-symbols-outlined">delete</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Drop zone ────────────────────────────────────────────────────────── -->
   <div
     class="sa-dropzone"
@@ -130,7 +177,7 @@
   </div>
 
   <!-- ── Empty state ──────────────────────────────────────────────────────── -->
-  <div class="sa-empty" *ngIf="attachments.length === 0 && !aiExtractedPdf">
+  <div class="sa-empty" *ngIf="attachments.length === 0 && !aiExtractedPdf && (!saved || saved.length === 0)">
     <span class="material-symbols-outlined sa-empty-icon">folder_open</span>
     <p class="sa-empty-text">No files attached yet. You can add them now or after saving the load.</p>
   </div>

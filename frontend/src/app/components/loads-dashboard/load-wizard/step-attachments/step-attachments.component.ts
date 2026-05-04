@@ -7,7 +7,7 @@ import {
   ChangeDetectorRef,
   OnInit
 } from '@angular/core';
-import { LoadAttachmentType } from '../../../../models/load-dashboard.model';
+import { LoadAttachment, LoadAttachmentType } from '../../../../models/load-dashboard.model';
 
 /** Shape of a single pending attachment managed by this step. */
 export interface WizardAttachment {
@@ -56,10 +56,19 @@ export class StepAttachmentsComponent implements OnInit {
   /** Optional AI-extracted PDF to auto-attach on init. */
   @Input() aiExtractedPdf: File | null = null;
 
+  /**
+   * FN-1071 — server-side persisted attachments (rendered above the dropzone).
+   * Parents own the list and the `DELETE` call; this component just emits the id.
+   */
+  @Input() saved: LoadAttachment[] = [];
+
   // ── Outputs ─────────────────────────────────────────────────────────────────
 
   /** Emits the updated attachments array on every change. */
   @Output() attachmentsChange = new EventEmitter<WizardAttachment[]>();
+
+  /** FN-1071 — emits the saved attachment id when the user clicks delete. */
+  @Output() deleteSaved = new EventEmitter<string>();
 
   /** Emits when Save & Close is clicked. */
   @Output() save = new EventEmitter<void>();
@@ -183,6 +192,35 @@ export class StepAttachmentsComponent implements OnInit {
   getTypeLabel(type: LoadAttachmentType): string {
     const found = this.typeOptions.find(o => o.value === type);
     return found ? found.label : type;
+  }
+
+  // ── FN-1071: saved attachments helpers ──────────────────────────────────────
+
+  trackBySavedId(_index: number, item: LoadAttachment): string {
+    return item.id;
+  }
+
+  /** Material icon name based on the saved attachment's mime_type. */
+  getSavedFileIcon(att: LoadAttachment): string {
+    const mime = (att.mime_type || '').toLowerCase();
+    if (mime.startsWith('image/')) return 'image';
+    if (mime === 'application/pdf') return 'picture_as_pdf';
+    if (mime.includes('spreadsheet') || mime.includes('excel') || mime.includes('csv')) return 'table_chart';
+    if (mime.includes('word') || mime.includes('document')) return 'description';
+    return 'insert_drive_file';
+  }
+
+  /** "Apr 14, 2026" style date for saved attachment row. */
+  formatSavedDate(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  onDeleteSavedClick(att: LoadAttachment): void {
+    if (!att?.id) return;
+    this.deleteSaved.emit(att.id);
   }
 
   // ── Private ─────────────────────────────────────────────────────────────────
