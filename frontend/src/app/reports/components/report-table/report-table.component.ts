@@ -29,6 +29,17 @@ export class ReportTableComponent implements OnChanges {
   totalPages = 1;
   private sortedRows: Record<string, unknown>[] = [];
 
+  /**
+   * FN-1191 — stable per-instance prefix so each <th>/headers pair is unique
+   * when multiple report-tables coexist on the same page (caption + each col).
+   */
+  private readonly idPrefix = `rpt-tbl-${Math.random().toString(36).slice(2, 9)}`;
+  readonly captionId = `${this.idPrefix}-caption`;
+
+  columnHeaderId(key: string): string {
+    return `${this.idPrefix}-col-${key}`;
+  }
+
   ngOnChanges(): void {
     this.applySort();
     this.updatePaged();

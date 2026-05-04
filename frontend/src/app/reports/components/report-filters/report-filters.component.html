@@ -12,6 +12,7 @@
         (keydown.enter)="onNlSubmit()"
         placeholder="e.g. revenue by driver last month, exclude team leads"
         aria-label="Natural language report filter"
+        aria-describedby="reportFilterNlHint"
       />
       <span *ngIf="nlLoading" class="nl-spinner" role="status" aria-label="Parsing query"></span>
       <button
@@ -21,6 +22,7 @@
         (click)="onNlSubmit()"
       >Parse</button>
     </div>
+    <small id="reportFilterNlHint" class="filter-hint">Type a question; we will extract date and entity filters automatically.</small>
     <div
       *ngIf="unmatchedTokens.length"
       class="nl-unmatched"
@@ -33,11 +35,17 @@
     <div *ngIf="nlError" class="nl-error" role="alert">{{ nlError }}</div>
   </div>
   <div class="filter-row">
-    <label>Location</label>
-    <select [(ngModel)]="localFilters.location_id" (change)="onApply()">
+    <label for="reportFilterLocation">Location</label>
+    <select
+      id="reportFilterLocation"
+      [(ngModel)]="localFilters.location_id"
+      (change)="onApply()"
+      aria-describedby="reportFilterLocationHint"
+    >
       <option value="">All</option>
       <option *ngFor="let loc of locations" [value]="loc.id">{{ loc.name }}</option>
     </select>
+    <small id="reportFilterLocationHint" class="filter-hint">Limits the report to a single yard or branch. Choose “All” for fleet-wide totals.</small>
   </div>
   <div class="filter-row">
     <label for="reportFilterDateFrom">From</label>
@@ -47,8 +55,10 @@
       [(ngModel)]="localFilters.date_from"
       name="reportFilterDateFrom"
       ariaLabel="Report filter from date"
+      ariaDescribedBy="reportFilterDateFromHint"
       placeholder="From"
     ></app-ai-date-picker>
+    <small id="reportFilterDateFromHint" class="filter-hint">Inclusive start date. Leave blank for the earliest record.</small>
   </div>
   <div class="filter-row">
     <label for="reportFilterDateTo">To</label>
@@ -58,8 +68,10 @@
       [(ngModel)]="localFilters.date_to"
       name="reportFilterDateTo"
       ariaLabel="Report filter to date"
+      ariaDescribedBy="reportFilterDateToHint"
       placeholder="To"
     ></app-ai-date-picker>
+    <small id="reportFilterDateToHint" class="filter-hint">Inclusive end date. Defaults to today when blank.</small>
   </div>
   <button type="button" class="btn btn-primary" (click)="onApply()">Apply</button>
   <button type="button" class="btn btn-secondary" (click)="onClear()">Clear</button>

@@ -31,6 +31,8 @@ export class AiDatePickerComponent implements ControlValueAccessor {
   @Input() max: Date | null = null;
   /** Accessible name when no visible label. */
   @Input() ariaLabel = '';
+  /** Optional id of an external element that describes this input (FN-1191). */
+  @Input() ariaDescribedBy = '';
   /** Compact layout for tables / filter toolbars. */
   @Input() inline = false;
 
