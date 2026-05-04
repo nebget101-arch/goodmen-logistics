@@ -2,29 +2,23 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  EventEmitter,
   Input,
   OnChanges,
   OnDestroy,
   OnInit,
-  Output,
   SimpleChanges,
 } from '@angular/core';
-import { Subject, Subscription, interval, timer } from 'rxjs';
+import { Subject, Subscription, timer } from 'rxjs';
 import { switchMap, takeUntil } from 'rxjs/operators';
 import { LoadsService, AiInsight } from '../../../services/loads.service';
 import { IntelligencePeriod } from './intelligence-panel.component';
 
 /**
- * IntelligenceInsightsComponent (FN-795)
+ * IntelligenceInsightsComponent (FN-795 / FN-1297)
  *
  * Rule-based / AI insight list that sits below the 4 metric cards in the
  * Intelligence Panel. Refreshes every 60 seconds and any time the Panel's
- * period changes.
- *
- * While FN-793 (backend `/api/loads/ai-insights`) is still being built, the
- * service returns `[]` on 404 so this component degrades to "no insights
- * right now" — no broken UI, no error spam.
+ * period changes. Backend contract: FN-793 `/api/loads/ai-insights`.
  */
 @Component({
   selector: 'app-intelligence-insights',
@@ -38,8 +32,6 @@ export class IntelligenceInsightsComponent implements OnInit, OnChanges, OnDestr
 
   /** Polling cadence — 60s per FN-784 AC. Exposed for tests. */
   @Input() refreshMs = 60_000;
-
-  @Output() action = new EventEmitter<{ event: string; insight: AiInsight }>();
 
   insights: AiInsight[] = [];
   loading = false;
@@ -74,21 +66,15 @@ export class IntelligenceInsightsComponent implements OnInit, OnChanges, OnDestr
   trackById(_i: number, insight: AiInsight): string { return insight.id; }
 
   iconFor(insight: AiInsight): string {
-    if (insight.icon) { return insight.icon; }
     switch (insight.type) {
-      case 'overdue':      return 'schedule';
-      case 'missing_docs': return 'description';
-      case 'high_risk':    return 'warning';
-      case 'reminder':     return 'notifications';
-      case 'billing':      return 'receipt_long';
-      case 'driver':       return 'local_shipping';
-      default:             return 'auto_awesome';
-    }
-  }
-
-  onAction(insight: AiInsight): void {
-    if (insight.action) {
-      this.action.emit({ event: insight.action.event, insight });
+      case 'drafts_ready':      return 'rate_review';
+      case 'overdue':           return 'schedule';
+      case 'rate_anomaly':      return 'trending_down';
+      case 'missing_documents': return 'description';
+      case 'driver_idle':       return 'local_shipping';
+      case 'high_margin':       return 'trending_up';
+      case 'low_margin':        return 'trending_down';
+      default:                  return 'auto_awesome';
     }
   }
 
