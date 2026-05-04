@@ -106,6 +106,29 @@ describe('LoadWizardStopsComponent (FN-877)', () => {
     expect(row.get('state')!.value).toBe('NY');
   });
 
+  it('onZipBlur (FN-1087) writes both city and state via setValue on each control', () => {
+    // Regression: under OnPush, patchValue inside a subscribe could leave the
+    // State <input> visually unsynced. The fix uses setValue on each control
+    // and calls updateValueAndValidity. Verify both controls are updated.
+    const row = component.stops.at(0) as FormGroup;
+    row.get('zip')!.setValue('10001');
+    component.onZipBlur(row);
+    expect(row.get('city')!.value).toBe('New York');
+    expect(row.get('state')!.value).toBe('NY');
+  });
+
+  it('onZipBlur (FN-1087) keeps existing state when backend returns empty state', () => {
+    loadsService.lookupZip.and.returnValue(
+      of({ success: true, data: { zip: '10001', city: 'New York', state: '' } }),
+    );
+    const row = component.stops.at(0) as FormGroup;
+    row.get('state')!.setValue('CA');
+    row.get('zip')!.setValue('10001');
+    component.onZipBlur(row);
+    expect(row.get('city')!.value).toBe('New York');
+    expect(row.get('state')!.value).toBe('CA');
+  });
+
   it('onZipBlur is a no-op in view mode', () => {
     component.mode = 'view';
     const row = component.stops.at(0) as FormGroup;
