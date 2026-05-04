@@ -83,6 +83,14 @@
             {{ action.label }} →
           </a>
         </ng-container>
+
+        <app-quick-actions
+          *ngIf="alert.quickActions.length > 0"
+          [actions]="alert.quickActions"
+          [context]="alert.context"
+          [ariaLabel]="'Quick actions for ' + alert.title"
+          (action)="onQuickAction($event)"
+        ></app-quick-actions>
       </div>
 
       <button

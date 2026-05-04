@@ -1,0 +1,46 @@
+<div
+  *ngIf="visibleActions.length > 0"
+  class="quick-actions"
+  role="group"
+  [attr.aria-label]="ariaLabel || 'Quick actions'"
+>
+  <ng-container *ngFor="let item of visibleActions; trackBy: trackById">
+    <a
+      *ngIf="item.routerLink as link; else hrefOrButton"
+      class="quick-actions__btn"
+      [class.quick-actions__btn--primary]="item.variant === 'primary'"
+      [routerLink]="link"
+      [queryParams]="resolveQueryParams(item)"
+      (click)="onClick(item, $event)"
+    >
+      <span *ngIf="item.icon" class="quick-actions__icon" aria-hidden="true">{{ item.icon }}</span>
+      <span class="quick-actions__label">{{ item.label }}</span>
+    </a>
+
+    <ng-template #hrefOrButton>
+      <a
+        *ngIf="item.href as href; else asButton"
+        class="quick-actions__btn"
+        [class.quick-actions__btn--primary]="item.variant === 'primary'"
+        [href]="href"
+        rel="noopener"
+        (click)="onClick(item, $event)"
+      >
+        <span *ngIf="item.icon" class="quick-actions__icon" aria-hidden="true">{{ item.icon }}</span>
+        <span class="quick-actions__label">{{ item.label }}</span>
+      </a>
+
+      <ng-template #asButton>
+        <button
+          type="button"
+          class="quick-actions__btn"
+          [class.quick-actions__btn--primary]="item.variant === 'primary'"
+          (click)="onClick(item, $event)"
+        >
+          <span *ngIf="item.icon" class="quick-actions__icon" aria-hidden="true">{{ item.icon }}</span>
+          <span class="quick-actions__label">{{ item.label }}</span>
+        </button>
+      </ng-template>
+    </ng-template>
+  </ng-container>
+</div>
