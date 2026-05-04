@@ -20,14 +20,18 @@
 
 const ROLE_PERMISSIONS = Object.freeze({
   super_admin: null, // wildcard — every permission
-  admin: ['reports.view', 'reports.export'],
-  company_admin: ['reports.view', 'reports.export'],
+  admin: ['reports.view', 'reports.export', 'reports.shop'],
+  company_admin: ['reports.view', 'reports.export', 'reports.shop'],
   executive_read_only: ['reports.view'],
   dispatch_manager: ['reports.view', 'reports.export'],
   driver_supervisor: ['reports.view'],
   carrier_accountant: ['reports.view', 'reports.export'],
   inventory_auditor: ['reports.view'],
-  company_accountant: ['reports.view', 'reports.export']
+  company_accountant: ['reports.view', 'reports.export'],
+  // FN-1137: reports.shop is the escalated permission for the shop reporting
+  // surface (revenue/margin chat). Mirrors `06_shop_clerk_seed.js`.
+  shop_manager: ['reports.shop'],
+  parts_manager: ['reports.shop']
 });
 
 function decodeJwtPayload(authHeader) {

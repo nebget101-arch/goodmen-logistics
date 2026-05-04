@@ -18,6 +18,7 @@ const { handleAsk } = require('./handlers/ask-handler');
 const { handleScoreAlert } = require('./handlers/score-alert-handler');
 const { handleExplain } = require('./handlers/explain-handler');
 const { handleReportsAnomalies } = require('./handlers/reports-anomalies-handler');
+const { handleReportsChat } = require('./handlers/reports-chat-handler');
 const { loadAuthContext } = require('./services/auth-context');
 
 function buildAiRouter(deps) {
@@ -1469,6 +1470,118 @@ function buildAiRouter(deps) {
     '/reports/:reportKey/anomalies',
     loadAuthContext,
     (req, res) => handleReportsAnomalies(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/reports/chat:
+   *   post:
+   *     summary: AI report-context chat (FN-1137)
+   *     description: >
+   *       Multi-turn chat about a single report. The dataset block is cached
+   *       (Anthropic prompt caching) so follow-up questions in the same
+   *       session reuse the prefix and only pay for the new turn. History is
+   *       capped server-side to the last N messages (env-configurable). Data
+   *       is capped to a row threshold; when truncation triggers, the
+   *       response carries `usage._truncated: true`. Requires `reports.shop`
+   *       (escalated from VIEW); 403 otherwise.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - reportKey
+   *               - message
+   *             properties:
+   *               reportKey:
+   *                 type: string
+   *                 pattern: '^[a-z][a-z0-9_-]{0,63}$'
+   *                 description: Stable identifier for the report being viewed.
+   *               message:
+   *                 type: string
+   *                 description: User's natural-language question.
+   *               history:
+   *                 type: array
+   *                 description: Prior conversation turns (oldest first).
+   *                 items:
+   *                   type: object
+   *                   properties:
+   *                     role:
+   *                       type: string
+   *                       enum: [user, assistant]
+   *                     content:
+   *                       type: string
+   *               filters:
+   *                 type: object
+   *                 description: Filters applied when the report was rendered.
+   *               data:
+   *                 type: array
+   *                 description: Report rows (capped server-side).
+   *                 items:
+   *                   type: object
+   *               summary:
+   *                 type: object
+   *                 description: Aggregate metrics for the rendered period.
+   *     responses:
+   *       200:
+   *         description: Assistant reply with usage metadata
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 reply:
+   *                   type: string
+   *                 generatedAt:
+   *                   type: string
+   *                   format: date-time
+   *                 usage:
+   *                   type: object
+   *                   properties:
+   *                     cache_read_input_tokens:
+   *                       type: integer
+   *                     cache_creation_input_tokens:
+   *                       type: integer
+   *                     input_tokens:
+   *                       type: integer
+   *                     output_tokens:
+   *                       type: integer
+   *                     _truncated:
+   *                       type: boolean
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     reportKey:
+   *                       type: string
+   *                     model:
+   *                       type: string
+   *                     processingTimeMs:
+   *                       type: number
+   *                     historyMessages:
+   *                       type: integer
+   *                     rowsSent:
+   *                       type: integer
+   *                     originalRowCount:
+   *                       type: integer
+   *       400:
+   *         description: Bad request (invalid reportKey, missing message)
+   *       403:
+   *         description: Caller lacks reports.shop
+   *       502:
+   *         description: AI upstream error
+   *       503:
+   *         description: AI not configured
+   */
+  router.post(
+    '/reports/chat',
+    loadAuthContext,
+    (req, res) => handleReportsChat(req, res, deps)
   );
 
   return router;
