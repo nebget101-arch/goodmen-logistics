@@ -49,6 +49,7 @@
             <tr *ngFor="let row of rows; let i = index"
                 [class.beg-row--active]="processing && currentIndex === i"
                 [class.beg-row--success]="row.status === 'SUCCESS'"
+                [class.beg-row--partial]="row.status === 'PARTIAL_SUCCESS'"
                 [class.beg-row--failed]="row.status === 'FAILED'">
               <td class="beg-cell-num">{{ i + 1 }}</td>
               <td class="beg-cell-file" [title]="row.file.name">
@@ -68,12 +69,21 @@
                 <span *ngIf="row.status === 'CREATING'" class="beg-badge beg-badge--extracting">
                   <span class="material-symbols-outlined beg-spin">sync</span> Creating
                 </span>
+                <!-- Attaching (FN-1085) -->
+                <span *ngIf="row.status === 'ATTACHING'" class="beg-badge beg-badge--extracting">
+                  <span class="material-symbols-outlined beg-spin">attach_file</span> Attaching PDF
+                </span>
                 <!-- Success -->
                 <span *ngIf="row.status === 'SUCCESS' && row.autoApproved" class="beg-badge beg-badge--success">
                   <span class="material-symbols-outlined">check_circle</span> Auto-approved
                 </span>
                 <span *ngIf="row.status === 'SUCCESS' && !row.autoApproved" class="beg-badge beg-badge--draft">
                   <span class="material-symbols-outlined">edit_note</span> Draft
+                </span>
+                <!-- Partial success: load created but PDF upload failed (FN-1085) -->
+                <span *ngIf="row.status === 'PARTIAL_SUCCESS'" class="beg-badge beg-badge--partial"
+                      [title]="row.attachmentError">
+                  <span class="material-symbols-outlined">warning</span> Created — no PDF
                 </span>
                 <!-- Failed -->
                 <span *ngIf="row.status === 'FAILED'" class="beg-badge beg-badge--failed">
@@ -89,9 +99,9 @@
       <div class="beg-summary" *ngIf="completed">
         <div class="beg-summary-icon-row">
           <span class="material-symbols-outlined beg-summary-check"
-                *ngIf="failedCount === 0">task_alt</span>
+                *ngIf="failedCount === 0 && partialSuccessCount === 0">task_alt</span>
           <span class="material-symbols-outlined beg-summary-warn"
-                *ngIf="failedCount > 0">info</span>
+                *ngIf="failedCount > 0 || partialSuccessCount > 0">info</span>
         </div>
 
         <h4 class="beg-summary-title">Processing Complete</h4>
@@ -104,6 +114,10 @@
           <div class="beg-stat" *ngIf="needsReviewCount > 0">
             <span class="beg-stat-number beg-stat--amber">{{ needsReviewCount }}</span>
             <span class="beg-stat-label">need review</span>
+          </div>
+          <div class="beg-stat" *ngIf="partialSuccessCount > 0">
+            <span class="beg-stat-number beg-stat--amber">{{ partialSuccessCount }}</span>
+            <span class="beg-stat-label">PDF not attached</span>
           </div>
           <div class="beg-stat" *ngIf="failedCount > 0">
             <span class="beg-stat-number beg-stat--red">{{ failedCount }}</span>
@@ -124,6 +138,7 @@
           <tbody>
             <tr *ngFor="let row of rows; let i = index"
                 [class.beg-row--success]="row.status === 'SUCCESS'"
+                [class.beg-row--partial]="row.status === 'PARTIAL_SUCCESS'"
                 [class.beg-row--failed]="row.status === 'FAILED'">
               <td class="beg-cell-num">{{ i + 1 }}</td>
               <td class="beg-cell-file" [title]="row.file.name">
@@ -139,13 +154,20 @@
                   <span class="material-symbols-outlined">edit_note</span>
                   Draft #{{ row.load?.load_number || '--' }}
                 </span>
+                <!-- Partial success: load created but PDF didn't upload (FN-1085) -->
+                <span *ngIf="row.status === 'PARTIAL_SUCCESS'" class="beg-badge beg-badge--partial"
+                      [title]="row.attachmentError">
+                  <span class="material-symbols-outlined">warning</span>
+                  Load #{{ row.load?.load_number || '--' }} (PDF not attached)
+                </span>
                 <span *ngIf="row.status === 'FAILED'" class="beg-badge beg-badge--failed"
                       [title]="row.errorMessage">
                   <span class="material-symbols-outlined">cancel</span>
                   {{ row.errorMessage || 'Failed' }}
                 </span>
                 <!-- Retrying states -->
-                <span *ngIf="row.status === 'EXTRACTING' || row.status === 'CREATING'" class="beg-badge beg-badge--extracting">
+                <span *ngIf="row.status === 'EXTRACTING' || row.status === 'CREATING' || row.status === 'ATTACHING'"
+                      class="beg-badge beg-badge--extracting">
                   <span class="material-symbols-outlined beg-spin">sync</span> Retrying
                 </span>
                 <span *ngIf="row.status === 'QUEUED'" class="beg-badge beg-badge--queued">

@@ -245,6 +245,15 @@
   }
 }
 
+/* FN-1085: load created but RATE_CONFIRMATION upload failed.
+   Distinct amber treatment so the user can tell at a glance the load is
+   live but the source PDF still needs to be attached manually. */
+.beg-row--partial {
+  .beg-file-icon {
+    color: #fbbf24;
+  }
+}
+
 /* ── Status Badges ─────────────────────────────────────────────────────── */
 
 .beg-badge {
@@ -290,6 +299,13 @@
   color: #f87171;
   background: rgba(248, 113, 113, 0.1);
   border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+/* FN-1085: partial success — load created, PDF upload failed. */
+.beg-badge--partial {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
 }
 
 /* Spinner animation for extracting/creating badges */
