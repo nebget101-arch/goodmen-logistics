@@ -19,6 +19,12 @@
     </div>
   </header>
 
+  <app-report-narrative
+    [narrative]="narrative"
+    [loading]="narrativeLoading"
+    [failed]="narrativeFailed"
+  ></app-report-narrative>
+
   <div class="cards" *ngIf="cards.length">
     <article class="kpi-card" *ngFor="let card of cards">
       <span class="kpi-label">{{ card.label }}</span>

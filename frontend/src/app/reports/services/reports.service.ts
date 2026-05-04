@@ -7,6 +7,8 @@ import {
   ReportAnomaliesResponse,
   ReportFilters,
   ReportKey,
+  ReportNarrative,
+  ReportNarrativeRequest,
   ReportResponse
 } from '../reports.models';
 
@@ -39,6 +41,10 @@ export class ReportsService {
       params: this.toParams(filters).set('format', format),
       responseType: 'blob'
     });
+  }
+
+  getNarrative(reportKey: ReportKey, payload: ReportNarrativeRequest): Observable<ReportNarrative> {
+    return this.http.post<ReportNarrative>(`${this.aiBaseUrl}/${reportKey}/narrative`, payload || {});
   }
 
   // Legacy compatibility methods for old reports component.
