@@ -11,7 +11,7 @@ import {
   SimpleChanges,
   ViewChild,
 } from '@angular/core';
-import { LoadDetail, LoadStatus, LoadStop } from '../../../models/load-dashboard.model';
+import { LoadAttachment, LoadDetail, LoadStatus, LoadStop } from '../../../models/load-dashboard.model';
 import { LoadsService } from '../../../services/loads.service';
 import { UserPreferencesService } from '../../../services/user-preferences.service';
 import { StepBasicsData } from '../load-wizard/step-basics/step-basics.component';
@@ -94,6 +94,8 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
   truckId: string | null = null;
   trailerId: string | null = null;
   attachments: WizardAttachment[] = [];
+  /** FN-1071: server-side persisted attachments rendered in the Attachments tab. */
+  savedAttachments: LoadAttachment[] = [];
 
   /**
    * FN-1054 — Server-computed trip metrics from `getLoadDetail()`. Forwarded
@@ -190,6 +192,7 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
       this.truckId = null;
       this.trailerId = null;
       this.attachments = [];
+      this.savedAttachments = [];
       this.totalMiles = null;
       this.emptyMiles = null;
       this.loadedMiles = null;
@@ -213,6 +216,7 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
     this.truckId = d.truck_id || null;
     this.trailerId = d.trailer_id || null;
     this.attachments = [];
+    this.savedAttachments = (d.attachments || []).slice();
     this.totalMiles = this.toFiniteNumber(d.total_miles);
     this.emptyMiles = this.toFiniteNumber(d.empty_miles);
     this.loadedMiles = this.toFiniteNumber(d.loaded_miles);
@@ -261,6 +265,35 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
   onAttachmentsChange(atts: WizardAttachment[]): void {
     this.attachments = atts;
     this.dirty = true;
+  }
+
+  /**
+   * FN-1071: delete a saved (server-side) attachment.
+   * Optimistically removes the row, restores it on failure.
+   * The drawer owns the load id so the child stays loadId-agnostic.
+   */
+  onDeleteSavedAttachment(attachmentId: string): void {
+    if (!this.loadId || !attachmentId) { return; }
+    const previous = this.savedAttachments;
+    this.savedAttachments = previous.filter(a => a.id !== attachmentId);
+    if (this.loadDetail) {
+      this.loadDetail = {
+        ...this.loadDetail,
+        attachments: this.savedAttachments,
+      };
+    }
+    this.loadsService.deleteAttachment(this.loadId, attachmentId).subscribe({
+      error: () => {
+        this.savedAttachments = previous;
+        if (this.loadDetail) {
+          this.loadDetail = {
+            ...this.loadDetail,
+            attachments: previous,
+          };
+        }
+        this.errorMessage = 'Failed to delete attachment.';
+      },
+    });
   }
 
   // ─── Tab selection ────────────────────────────────────────────────────────

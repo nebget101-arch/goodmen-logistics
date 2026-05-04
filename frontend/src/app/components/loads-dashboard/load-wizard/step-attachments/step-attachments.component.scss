@@ -76,6 +76,139 @@
   color: #38bdf8;
 }
 
+/* ── FN-1071: Saved attachments (server-side) ──────────────────────────────── */
+
+.sa-saved-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 10px;
+}
+
+.sa-saved-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sa-saved-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.sa-saved-count {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 1px 7px;
+  border-radius: 9px;
+}
+
+.sa-saved-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sa-saved-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(51, 65, 85, 0.4);
+  border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
+
+  &:hover {
+    border-color: rgba(56, 189, 248, 0.35);
+    background: rgba(15, 23, 42, 0.85);
+  }
+}
+
+.sa-saved-icon {
+  font-size: 1.3rem;
+  color: #38bdf8;
+  flex-shrink: 0;
+}
+
+.sa-saved-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sa-saved-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &--link {
+    color: #38bdf8;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.sa-saved-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.sa-saved-type {
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.sa-saved-dot {
+  color: #475569;
+}
+
+.sa-saved-date {
+  color: #64748b;
+}
+
+.sa-saved-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 6px;
+  padding: 4px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+
+  .material-symbols-outlined {
+    font-size: 1.05rem;
+  }
+
+  &:hover {
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.6);
+    background: rgba(239, 68, 68, 0.08);
+  }
+}
+
 /* ── Drop zone ─────────────────────────────────────────────────────────────── */
 
 .sa-dropzone {

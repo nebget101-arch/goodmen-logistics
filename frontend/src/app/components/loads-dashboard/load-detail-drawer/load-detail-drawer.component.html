@@ -148,7 +148,9 @@
     <app-step-attachments
       *ngIf="activeTab === 'attachments' && !loading"
       [attachments]="attachments"
+      [saved]="savedAttachments"
       (attachmentsChange)="onAttachmentsChange($event)"
+      (deleteSaved)="onDeleteSavedAttachment($event)"
     ></app-step-attachments>
   </div>
 
