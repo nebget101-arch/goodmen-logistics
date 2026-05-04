@@ -55,7 +55,7 @@ function buildInsightsRouter(deps) {
     } catch (err) {
       const status = err.statusCode || 502;
       // eslint-disable-next-line no-console
-      console.error('[gateway] trends aggregation failed:', err.message);
+      console.error('[reporting] trends aggregation failed:', err.message);
       return res.status(status).json({
         error: 'Trends aggregation failed',
         message: err.message
