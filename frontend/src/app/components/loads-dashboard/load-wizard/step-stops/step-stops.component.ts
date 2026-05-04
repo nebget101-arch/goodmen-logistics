@@ -7,7 +7,9 @@ import {
   ChangeDetectorRef
 } from '@angular/core';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
+import { finalize } from 'rxjs/operators';
 import { LoadStop, LoadStopType } from '../../../../models/load-dashboard.model';
+import { LoadsService } from '../../../../services/loads.service';
 
 /** Trip metrics computed from the stop list. */
 export interface TripMetrics {
@@ -81,7 +83,13 @@ export class StepStopsComponent {
   metrics: TripMetrics = { totalMiles: null, emptyMiles: null, loadedMiles: null, ratePerMile: null };
   validationMessage = '';
 
-  constructor(private cdr: ChangeDetectorRef) {}
+  /** FN-1075 — per-row in-flight set for ZIP→city/state lookups. */
+  zipLoading = new Set<number>();
+
+  constructor(
+    private cdr: ChangeDetectorRef,
+    private loadsService: LoadsService
+  ) {}
 
   // ── Validation ──────────────────────────────────────────────────────────────
 
@@ -175,6 +183,61 @@ export class StepStopsComponent {
   onToggle(index: number): void {
     this.expandedIndex = this.expandedIndex === index ? null : index;
     this.cdr.markForCheck();
+  }
+
+  /**
+   * FN-1075 — Handle ZIP blur from a child stop card.
+   *
+   * Mirrors `load-wizard/steps/stops/stops.component.ts:onZipBlur` (lines 193-223)
+   * without sharing code: validates ZIP shape, calls `loadsService.lookupZip`,
+   * patches only city/state fields that are currently empty (preserves user input),
+   * and swallows lookup errors silently.
+   */
+  onStopZipBlur(index: number, zip: string): void {
+    const trimmed = (zip || '').trim();
+    // Pattern source validates 5 digits or 5+4 (e.g. "12345" or "12345-6789")
+    if (!/^\d{5}(-\d{4})?$/.test(trimmed)) return;
+
+    const target = this._stops[index];
+    if (!target) return;
+
+    const cityFilled = (target.city ?? '').toString().trim().length > 0;
+    const stateFilled = (target.state ?? '').toString().trim().length > 0;
+    if (cityFilled && stateFilled) return;
+
+    this.zipLoading.add(index);
+    this.cdr.markForCheck();
+
+    this.loadsService
+      .lookupZip(trimmed)
+      .pipe(
+        finalize(() => {
+          this.zipLoading.delete(index);
+          this.cdr.markForCheck();
+        })
+      )
+      .subscribe({
+        next: (res) => {
+          const data = res?.data;
+          if (!data) return;
+          const current = this._stops[index];
+          if (!current) return;
+          const patched: LoadStop = { ...current };
+          if (!((current.city ?? '').toString().trim()) && data.city) {
+            patched.city = data.city;
+          }
+          if (!((current.state ?? '').toString().trim()) && data.state) {
+            patched.state = data.state;
+          }
+          if (patched.city !== current.city || patched.state !== current.state) {
+            this._stops = this._stops.map((s, i) => i === index ? patched : s);
+            this.emitStops();
+          }
+        },
+        error: () => {
+          // Silent failure per AC: leave fields untouched, no toast.
+        }
+      });
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
