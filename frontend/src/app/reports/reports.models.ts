@@ -83,6 +83,35 @@ export interface ReportAnomaliesRequest {
   priorPeriod?: Record<string, unknown>;
 }
 
+export interface ReportChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+}
+
+export interface ReportChatRequest {
+  reportKey: string;
+  filters: ReportFilters;
+  data: Array<Record<string, unknown>>;
+  history: ReportChatMessage[];
+  message: string;
+  summary?: Record<string, unknown>;
+}
+
+export interface ReportChatUsage {
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  _truncated?: boolean;
+}
+
+export interface ReportChatResponse {
+  reply: string;
+  generatedAt?: string;
+  usage?: ReportChatUsage;
+}
+
 // Legacy compatibility interfaces retained for old reports components.
 export interface FinancialSummary {
   totalInvoiced?: number;

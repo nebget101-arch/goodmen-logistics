@@ -185,6 +185,7 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   rows: Record<string, unknown>[] = [];
   reportSummary: Record<string, unknown> = {};
   anomalies: ReportAnomaly[] = [];
+  isChatOpen = false;
 
   constructor(
     private route: ActivatedRoute,
@@ -214,7 +215,11 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         takeUntil(this.destroy$),
         switchMap((data) => {
           const reportKey = data['reportKey'] as ReportKey;
-          this.config = REPORT_CONFIG[reportKey] || REPORT_CONFIG.overview;
+          const nextConfig = REPORT_CONFIG[reportKey] || REPORT_CONFIG.overview;
+          if (this.config && this.config.key !== nextConfig.key) {
+            this.isChatOpen = false;
+          }
+          this.config = nextConfig;
           return this.route.queryParams;
         })
       )
@@ -287,6 +292,18 @@ export class ReportViewComponent implements OnInit, OnDestroy {
 
   trackByIndex(index: number): number {
     return index;
+  }
+
+  openChat(): void {
+    this.isChatOpen = true;
+  }
+
+  closeChat(): void {
+    this.isChatOpen = false;
+  }
+
+  getChatFilters(): ReportFilters {
+    return this.getCurrentFilters();
   }
 
   private fetchReport(filters: ReportFilters): void {
