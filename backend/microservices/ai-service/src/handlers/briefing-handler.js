@@ -14,6 +14,7 @@ const path = require('node:path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logAiInteraction } = require('../analytics/logger');
 const briefingCache = require('../cache/briefing-cache');
+const explainabilityStore = require('../services/explainability-store');
 
 const ROUTE = '/briefing/generate';
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -223,6 +224,24 @@ async function handleBriefingGenerate(req, res, deps) {
 
   const generatedAt = new Date().toISOString();
   const processingTimeMs = Date.now() - startedAt;
+
+  // FN-1176: mint a per-section explainability token so the drill-down panel
+  // can resolve sources/rules/scores for each briefing claim. Mutates the
+  // validated sections in place so cached responses keep the same tokens.
+  for (const section of REQUIRED_SECTIONS) {
+    validated[section].explainabilityToken = explainabilityStore.mint({
+      kind: 'briefing-section',
+      section,
+      tenantId,
+      date,
+      headline: validated[section].headline,
+      detail: validated[section].detail,
+      metric: validated[section].metric,
+      sources: { metricsKeys: Object.keys(metrics || {}) },
+      model: aiModel,
+      generatedAt
+    });
+  }
 
   briefingCache.set(tenantId, date, {
     data: validated,
