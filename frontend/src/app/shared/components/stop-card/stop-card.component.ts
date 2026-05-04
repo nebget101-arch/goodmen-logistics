@@ -75,6 +75,21 @@ export class StopCardComponent {
     'WI','WY','DC'
   ];
 
+  private static readonly STATE_NAME_TO_CODE: Readonly<Record<string, string>> = {
+    ALABAMA: 'AL', ALASKA: 'AK', ARIZONA: 'AZ', ARKANSAS: 'AR', CALIFORNIA: 'CA',
+    COLORADO: 'CO', CONNECTICUT: 'CT', DELAWARE: 'DE', FLORIDA: 'FL', GEORGIA: 'GA',
+    HAWAII: 'HI', IDAHO: 'ID', ILLINOIS: 'IL', INDIANA: 'IN', IOWA: 'IA',
+    KANSAS: 'KS', KENTUCKY: 'KY', LOUISIANA: 'LA', MAINE: 'ME', MARYLAND: 'MD',
+    MASSACHUSETTS: 'MA', MICHIGAN: 'MI', MINNESOTA: 'MN', MISSISSIPPI: 'MS',
+    MISSOURI: 'MO', MONTANA: 'MT', NEBRASKA: 'NE', NEVADA: 'NV',
+    'NEW HAMPSHIRE': 'NH', 'NEW JERSEY': 'NJ', 'NEW MEXICO': 'NM', 'NEW YORK': 'NY',
+    'NORTH CAROLINA': 'NC', 'NORTH DAKOTA': 'ND', OHIO: 'OH', OKLAHOMA: 'OK',
+    OREGON: 'OR', PENNSYLVANIA: 'PA', 'RHODE ISLAND': 'RI', 'SOUTH CAROLINA': 'SC',
+    'SOUTH DAKOTA': 'SD', TENNESSEE: 'TN', TEXAS: 'TX', UTAH: 'UT', VERMONT: 'VT',
+    VIRGINIA: 'VA', WASHINGTON: 'WA', 'WEST VIRGINIA': 'WV', WISCONSIN: 'WI',
+    WYOMING: 'WY', 'DISTRICT OF COLUMBIA': 'DC'
+  };
+
   /** Confirm-delete flag. */
   showDeleteConfirm = false;
 
@@ -89,8 +104,32 @@ export class StopCardComponent {
   get cityStateLabel(): string {
     const parts: string[] = [];
     if (this.stop.city) parts.push(this.stop.city);
-    if (this.stop.state) parts.push(this.stop.state);
+    const stateCode = this.normalizeStateCode(this.stop.state);
+    if (stateCode) parts.push(stateCode);
+    else if (this.stop.state) parts.push(this.stop.state);
     return parts.length > 0 ? parts.join(', ') : 'No location';
+  }
+
+  /** Normalized 2-letter code for the dropdown binding; empty string when unrecognized. */
+  get normalizedState(): string {
+    return this.normalizeStateCode(this.stop.state);
+  }
+
+  /**
+   * Normalize a free-form state input to a 2-letter uppercase code.
+   * Accepts existing codes ("CA", "ca", "Ca."), full names ("California"), and
+   * "District of Columbia". Returns '' when the input doesn't match a known state.
+   */
+  normalizeStateCode(input: string | null | undefined): string {
+    if (input == null) return '';
+    const cleaned = String(input)
+      .trim()
+      .replace(/[.,]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+    if (!cleaned) return '';
+    if (cleaned.length === 2 && this.stateList.includes(cleaned)) return cleaned;
+    return StopCardComponent.STATE_NAME_TO_CODE[cleaned] ?? '';
   }
 
   get dateLabel(): string {
@@ -107,6 +146,12 @@ export class StopCardComponent {
 
   onStopTypeChange(value: string): void {
     const updated: LoadStop = { ...this.stop, stop_type: value as LoadStopType };
+    this.stopChange.emit(updated);
+  }
+
+  onStateChange(value: string): void {
+    const normalized = this.normalizeStateCode(value);
+    const updated: LoadStop = { ...this.stop, state: normalized || null };
     this.stopChange.emit(updated);
   }
 
