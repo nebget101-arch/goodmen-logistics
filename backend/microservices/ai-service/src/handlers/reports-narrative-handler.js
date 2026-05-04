@@ -38,11 +38,28 @@ const REPORT_KEY_RE = /^[a-z0-9-]{1,64}$/i;
 const MAX_BODY_BYTES = 256 * 1024;
 const ALLOWED_ROLES = ['admin', 'manager', 'owner', 'dispatcher'];
 
+// FN-1173: variant control. The on-screen panel (FN-1114, FN-1146) uses the
+// short variant (2–3 sentences). The branded-PDF export (FN-1118) opts in to
+// the long variant for a more substantive print narrative. Variant is read
+// from `?variant=` so the request body stays identical and prompt-cacheable
+// across both call sites.
+const VARIANTS = Object.freeze({
+  short: { form: 'short', maxTokens: 400 },
+  long:  { form: 'long',  maxTokens: 900 }
+});
+const DEFAULT_VARIANT = 'short';
+
 const SYSTEM_PROMPT = "You are FleetNeuron's reports analyst. Given a financial " +
   "report's KPI cards, raw data rows, active filters, and prior-period values, " +
-  "write a 2–3 sentence narrative explaining the headline movement: what " +
-  "changed, by how much (with %), and the most plausible driver. Be specific " +
-  "and quantitative. No greetings, no caveats, no markdown — plain prose only.";
+  "write a narrative explaining the headline movement: what changed, by how " +
+  "much (with %), and the most plausible driver. Be specific and quantitative. " +
+  "No greetings, no caveats, no markdown — plain prose only.\n\n" +
+  "The user message includes a `form` key controlling output length:\n" +
+  "- form=\"short\": 2–3 sentences, single paragraph (default; for on-screen panels).\n" +
+  "- form=\"long\": 5–8 sentences across 1–2 paragraphs (for printed/PDF reports). " +
+  "Cover the same headline movement and driver, but add comparisons against " +
+  "the prior period for the secondary cards and call out 1–2 concrete row-level " +
+  "examples from `data` that exemplify the trend. Stay quantitative.";
 
 const REPORT_SCHEMAS = Object.freeze({
   'revenue-by-driver':
@@ -133,19 +150,36 @@ function hasAllowedRole(user) {
   return ALLOWED_ROLES.includes(role);
 }
 
-function buildUserMessage({ cards, data, filters, priorPeriod }) {
+function buildUserMessage({ cards, data, filters, priorPeriod, form }) {
   // Truncate the data array if the JSON would otherwise be huge. The handler-
   // level 256KB cap (above) is the hard limit; here we just keep the prompt
   // body at a reasonable size so the model can focus on the cards/priorPeriod.
   const MAX_DATA_ROWS = 200;
   const safeData = Array.isArray(data) ? data.slice(0, MAX_DATA_ROWS) : [];
   return JSON.stringify({
+    form: form || DEFAULT_VARIANT,
     cards: cards == null ? [] : cards,
     data: safeData,
     dataTruncated: Array.isArray(data) && data.length > MAX_DATA_ROWS,
     filters: filters == null ? {} : filters,
     priorPeriod: priorPeriod == null ? {} : priorPeriod
   });
+}
+
+/**
+ * FN-1173: Resolve the requested variant from `?variant=` (string or array).
+ * Defaults to 'short' for any unrecognised or missing value so existing
+ * callers (FN-1114 panel) keep their current behaviour.
+ */
+function resolveVariant(req) {
+  const raw = req && req.query && req.query.variant;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== 'string') return VARIANTS[DEFAULT_VARIANT];
+  const normalised = value.trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(VARIANTS, normalised)) {
+    return VARIANTS[normalised];
+  }
+  return VARIANTS[DEFAULT_VARIANT];
 }
 
 async function handleReportsNarrative(req, res, deps) {
@@ -236,14 +270,18 @@ async function handleReportsNarrative(req, res, deps) {
   }
 
   // 4. Anthropic call with prompt caching on the two static blocks.
+  // The variant only affects max_tokens and the per-call user message; the
+  // cached system blocks stay byte-identical so the cache hit-rate is the
+  // same regardless of variant.
   const client = (deps && deps.anthropic) || getAnthropicClient();
   const model = process.env.ANTHROPIC_NARRATIVE_MODEL || 'claude-sonnet-4-6';
   const userId = (auth.user && (auth.user.id || auth.user.userId || auth.user.sub)) || null;
+  const variant = resolveVariant(req);
 
   try {
     const message = await client.messages.create({
       model,
-      max_tokens: 400,
+      max_tokens: variant.maxTokens,
       temperature: 0.2,
       system: [
         {
@@ -260,7 +298,7 @@ async function handleReportsNarrative(req, res, deps) {
       messages: [
         {
           role: 'user',
-          content: buildUserMessage({ cards, data, filters, priorPeriod })
+          content: buildUserMessage({ cards, data, filters, priorPeriod, form: variant.form })
         }
       ]
     });
@@ -284,6 +322,7 @@ async function handleReportsNarrative(req, res, deps) {
       generatedAt: new Date().toISOString(),
       meta: {
         model: message.model || model,
+        variant: variant.form,
         cacheReadTokens: (message.usage && message.usage.cache_read_input_tokens) || 0,
         cacheCreationTokens: (message.usage && message.usage.cache_creation_input_tokens) || 0,
         processingTimeMs
@@ -314,8 +353,12 @@ async function handleReportsNarrative(req, res, deps) {
 module.exports = {
   handleReportsNarrative,
   buildReportSchemaBlock,
+  buildUserMessage,
+  resolveVariant,
   SYSTEM_PROMPT,
   REPORT_KEY_RE,
   ALLOWED_ROLES,
-  MAX_BODY_BYTES
+  MAX_BODY_BYTES,
+  VARIANTS,
+  DEFAULT_VARIANT
 };
