@@ -72,6 +72,11 @@
   margin-bottom: 24px;
 }
 
+.dashboard-insights {
+  display: block;
+  margin-bottom: 24px;
+}
+
 .dashboard-loading {
   display: flex;
   flex-direction: column;
