@@ -127,8 +127,11 @@
 
     <app-step-stops
       *ngIf="activeTab === 'stops' && !loading"
-      [stops]="stops"
+      [totalMiles]="totalMiles"
+      [emptyMiles]="emptyMiles"
+      [loadedMiles]="loadedMiles"
       [rate]="basics.rate"
+      [stops]="stops"
       (stopsChange)="onStopsChange($event)"
     ></app-step-stops>
 
