@@ -13,6 +13,7 @@ const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handle
 const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
 const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
+const { handleBriefingGenerate } = require('./handlers/briefing-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -1071,6 +1072,98 @@ function buildAiRouter(deps) {
    *         description: Missing or invalid query
    */
   router.post('/loads/nlq', (req, res) => handleLoadsNlq(req, res, deps));
+
+  /**
+   * @openapi
+   * /api/ai/briefing/generate:
+   *   post:
+   *     summary: Generate Daily AI Briefing (FN-1139)
+   *     description: >
+   *       Produces a five-section operational briefing (throughput, exceptions, driver risk,
+   *       vehicle risk, recommended action) from upstream-aggregated metrics. Uses Anthropic
+   *       Claude Sonnet 4.6 (temperature 0.2). Caches result per `(tenantId, date)` for 24h;
+   *       backend (FN-1141) sets `forceRefresh=true` when the user clicks "Refresh".
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - tenantId
+   *               - date
+   *             properties:
+   *               tenantId:
+   *                 type: string
+   *                 description: Tenant UUID
+   *               date:
+   *                 type: string
+   *                 format: date
+   *                 description: Calendar day (YYYY-MM-DD) for the briefing
+   *               metrics:
+   *                 type: object
+   *                 description: Upstream-aggregated fleet metrics for the day
+   *               forceRefresh:
+   *                 type: boolean
+   *                 description: Bypass cache and regenerate
+   *     responses:
+   *       200:
+   *         description: Five-section briefing
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 cached:
+   *                   type: boolean
+   *                 generatedAt:
+   *                   type: string
+   *                   format: date-time
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     throughput:
+   *                       $ref: '#/components/schemas/BriefingSection'
+   *                     exceptions:
+   *                       $ref: '#/components/schemas/BriefingSection'
+   *                     driverRisk:
+   *                       $ref: '#/components/schemas/BriefingSection'
+   *                     vehicleRisk:
+   *                       $ref: '#/components/schemas/BriefingSection'
+   *                     recommendedAction:
+   *                       $ref: '#/components/schemas/BriefingSection'
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     model:
+   *                       type: string
+   *                     processingTimeMs:
+   *                       type: number
+   *       400:
+   *         description: Missing or invalid tenantId/date/metrics
+   *       502:
+   *         description: AI upstream unavailable, parse error, or schema mismatch
+   * components:
+   *   schemas:
+   *     BriefingSection:
+   *       type: object
+   *       properties:
+   *         headline:
+   *           type: string
+   *         detail:
+   *           type: string
+   *         metric:
+   *           type: string
+   */
+  router.post('/briefing/generate', (req, res) =>
+    handleBriefingGenerate(req, res, deps)
+  );
 
   return router;
 }

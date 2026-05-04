@@ -80,6 +80,7 @@ import { LocationsAdminModule } from './components/locations-admin/locations-adm
 import { InventoryItemEditDialogComponent } from './components/inventory/inventory-item-edit-dialog/inventory-item-edit-dialog.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
 import { AiExtractionFlowComponent } from './components/loads-dashboard/ai-extraction-flow/ai-extraction-flow.component';
+import { DailyBriefingComponent } from './components/control-center/daily-briefing/daily-briefing.component';
 
 @NgModule({
   declarations: [
@@ -149,7 +150,8 @@ import { AiExtractionFlowComponent } from './components/loads-dashboard/ai-extra
     MatDialogModule,
     DragDropModule,
     SharedModule,
-    LocationsAdminModule
+    LocationsAdminModule,
+    DailyBriefingComponent
   ],
   providers: [
     { provide: ErrorHandler, useClass: GlobalErrorHandler },

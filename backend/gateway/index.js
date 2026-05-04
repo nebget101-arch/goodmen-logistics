@@ -7,6 +7,8 @@ const http = require('http');
 const jwt = require('jsonwebtoken');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const swaggerUi = require('swagger-ui-express');
+const { buildBriefingAggregator } = require('./services/briefing-aggregator');
+const { buildAiRouter } = require('./routes/ai');
 
 let SocketIoServer = null;
 try {
@@ -503,6 +505,25 @@ app.use('/api/cycle-counts', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/receiving', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/barcodes', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 app.use('/api/shop-clients', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
+// FN-1141: gateway-local /api/ai/briefing route — aggregates upstream fleet
+// state from logistics, drivers-compliance, and vehicles-maintenance, then
+// forwards to ai-service /api/ai/briefing/generate. Mounted before the catch-all
+// proxy so the briefing endpoint is handled here while other /api/ai/* requests
+// continue to be proxied to ai-service.
+const briefingAggregator = buildBriefingAggregator({
+  fetcher: (url, opts) => fetch(url, opts),
+  logisticsUrl: LOGISTICS_SERVICE_URL,
+  driversUrl: DRIVERS_COMPLIANCE_SERVICE_URL,
+  vehiclesUrl: VEHICLES_MAINTENANCE_SERVICE_URL,
+  aiUrl: AI_SERVICE_URL
+});
+app.use(
+  '/api/ai',
+  buildAiRouter({
+    aggregator: briefingAggregator,
+    jwtSecret: process.env.JWT_SECRET || 'dev_secret'
+  })
+);
 app.use('/api/ai', buildProxy(AI_SERVICE_URL, 'ai'));
 
 const httpServer = http.createServer(app);
