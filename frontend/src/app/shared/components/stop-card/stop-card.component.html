@@ -98,7 +98,7 @@
       <div class="sc-field">
         <label class="sc-label">Date</label>
         <input class="sc-input" type="date"
-               [value]="stop.stop_date || ''"
+               [value]="toYmd(stop.stop_date)"
                (input)="onFieldChange('stop_date', $any($event.target).value)"/>
       </div>
 
