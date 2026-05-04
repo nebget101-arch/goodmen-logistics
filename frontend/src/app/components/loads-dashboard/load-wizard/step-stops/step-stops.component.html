@@ -36,10 +36,12 @@
         [index]="i"
         [expanded]="expandedIndex === i"
         [disableDelete]="isDeleteDisabled(stop)"
+        [loadingZip]="zipLoading.has(i)"
         (stopChange)="onStopChange($event, i)"
         (duplicate)="onDuplicate(i)"
         (deleteStop)="onDelete(i)"
-        (toggle)="onToggle(i)">
+        (toggle)="onToggle(i)"
+        (zipBlur)="onStopZipBlur(i, $event)">
       </app-stop-card>
     </div>
   </div>

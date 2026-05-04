@@ -47,6 +47,12 @@ export class StopCardComponent {
   /** When true the delete button is hidden (minimum stop constraint). */
   @Input() disableDelete = false;
 
+  /**
+   * FN-1075 — When true, parent is performing a ZIP→city/state lookup for this row.
+   * Drives the inline "looking up…" indicator next to the ZIP input.
+   */
+  @Input() loadingZip = false;
+
   // ── Outputs ─────────────────────────────────────────────────────────────────
 
   /** Emits the updated stop whenever any field changes. */
@@ -60,6 +66,9 @@ export class StopCardComponent {
 
   /** Requests the parent to toggle expand/collapse on this card. */
   @Output() toggle = new EventEmitter<void>();
+
+  /** FN-1075 — Emits the trimmed ZIP value when the ZIP input blurs. */
+  @Output() zipBlur = new EventEmitter<string>();
 
   // ── Static options ──────────────────────────────────────────────────────────
 
@@ -172,6 +181,15 @@ export class StopCardComponent {
     const normalized = this.normalizeStateCode(value);
     const updated: LoadStop = { ...this.stop, state: normalized || null };
     this.stopChange.emit(updated);
+  }
+
+  /**
+   * FN-1075 — Emit the trimmed ZIP up to the parent so it can call
+   * `LoadsService.lookupZip` and patch empty city/state. Mirrors
+   * `load-wizard/steps/stops/stops.component.ts:onZipBlur` without importing it.
+   */
+  onZipBlur(): void {
+    this.zipBlur.emit((this.stop.zip || '').trim());
   }
 
   // ── Actions ─────────────────────────────────────────────────────────────────

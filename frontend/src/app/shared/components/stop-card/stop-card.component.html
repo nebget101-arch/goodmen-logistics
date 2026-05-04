@@ -84,14 +84,18 @@
         </select>
       </div>
 
-      <!-- ZIP -->
+      <!-- ZIP — FN-1075: blur triggers parent ZIP→city/state lookup -->
       <div class="sc-field">
-        <label class="sc-label">ZIP</label>
+        <label class="sc-label">
+          ZIP
+          <span *ngIf="loadingZip" class="sc-zip-status" data-testid="zip-loading">looking up…</span>
+        </label>
         <input class="sc-input" type="text"
                placeholder="ZIP code"
                maxlength="10"
                [value]="stop.zip || ''"
-               (input)="onFieldChange('zip', $any($event.target).value)"/>
+               (input)="onFieldChange('zip', $any($event.target).value)"
+               (blur)="onZipBlur()"/>
       </div>
 
       <!-- Date -->
