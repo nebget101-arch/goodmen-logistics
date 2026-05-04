@@ -12,25 +12,12 @@
       [attr.data-severity]="insight.severity"
     >
       <span class="material-symbols-outlined intel-insights__icon">{{ iconFor(insight) }}</span>
-      <div class="intel-insights__body">
-        <a *ngIf="insight.href; else plainTitle"
-           [routerLink]="insight.href"
-           class="intel-insights__title-link">
-          {{ insight.title }}
-        </a>
-        <ng-template #plainTitle>
-          <div class="intel-insights__item-title">{{ insight.title }}</div>
-        </ng-template>
-        <div class="intel-insights__subtitle" *ngIf="insight.subtitle">{{ insight.subtitle }}</div>
-      </div>
-      <button
-        *ngIf="insight.action"
-        type="button"
-        class="intel-insights__action"
-        (click)="onAction(insight)"
+      <a
+        [routerLink]="insight.href"
+        class="intel-insights__title-link"
       >
-        {{ insight.action.label }}
-      </button>
+        {{ insight.title }}
+      </a>
     </li>
   </ul>
 
