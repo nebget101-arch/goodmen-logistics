@@ -17,6 +17,8 @@ const { handleBriefingGenerate } = require('./handlers/briefing-handler');
 const { handleAsk } = require('./handlers/ask-handler');
 const { handleScoreAlert } = require('./handlers/score-alert-handler');
 const { handleExplain } = require('./handlers/explain-handler');
+const { handleReportsAnomalies } = require('./handlers/reports-anomalies-handler');
+const { loadAuthContext } = require('./services/auth-context');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -1377,6 +1379,97 @@ function buildAiRouter(deps) {
    *         description: Token not found or expired
    */
   router.get('/explain/:token', (req, res) => handleExplain(req, res, deps));
+
+  /**
+   * @openapi
+   * /api/ai/reports/{reportKey}/anomalies:
+   *   post:
+   *     summary: AI structured anomaly detection for a report (FN-1134)
+   *     description: >
+   *       Returns severity-tagged structured outliers for a report dataset using
+   *       Anthropic Claude with prompt caching (system prompt + per-report
+   *       schema). Malformed model output collapses to an empty array (logged,
+   *       not 500). Requires the caller to hold `reports.view`.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: reportKey
+   *         required: true
+   *         schema:
+   *           type: string
+   *           pattern: '^[a-z][a-z0-9_-]{0,63}$'
+   *         description: Stable identifier for the report being analysed.
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               data:
+   *                 oneOf:
+   *                   - type: array
+   *                   - type: object
+   *                 description: Report rows or aggregate object.
+   *               filters:
+   *                 type: object
+   *                 description: Filters applied when the report was rendered.
+   *               priorPeriod:
+   *                 type: object
+   *                 description: Aggregate metrics for the comparison period.
+   *     responses:
+   *       200:
+   *         description: Structured anomalies (possibly empty)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 anomalies:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       metric:
+   *                         type: string
+   *                       value:
+   *                         type: number
+   *                       deltaPct:
+   *                         type: number
+   *                         nullable: true
+   *                       severity:
+   *                         type: string
+   *                         enum: [info, warning, critical]
+   *                       context:
+   *                         type: string
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     reportKey:
+   *                       type: string
+   *                     scoredBy:
+   *                       type: string
+   *                     model:
+   *                       type: string
+   *                     cacheReadTokens:
+   *                       type: integer
+   *                     cacheWriteTokens:
+   *                       type: integer
+   *                     processingTimeMs:
+   *                       type: number
+   *       400:
+   *         description: Bad request (invalid reportKey or body)
+   *       403:
+   *         description: Caller lacks reports.view
+   */
+  router.post(
+    '/reports/:reportKey/anomalies',
+    loadAuthContext,
+    (req, res) => handleReportsAnomalies(req, res, deps)
+  );
 
   return router;
 }
