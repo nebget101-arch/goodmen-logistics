@@ -9,6 +9,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const swaggerUi = require('swagger-ui-express');
 const { buildBriefingAggregator } = require('./services/briefing-aggregator');
 const { buildAskForwarder } = require('./services/ask-forwarder');
+const { buildExplainForwarder } = require('./services/explain-forwarder');
 const { buildAiRouter } = require('./routes/ai');
 const { buildSmartAlertsAggregator } = require('./services/smart-alerts-aggregator');
 const { MemoryDismissalsStore } = require('./services/dismissals-store');
@@ -530,11 +531,16 @@ const askForwarder = buildAskForwarder({
   fetcher: (url, opts) => fetch(url, opts),
   aiUrl: AI_SERVICE_URL
 });
+const explainForwarder = buildExplainForwarder({
+  fetcher: (url, opts) => fetch(url, opts),
+  aiUrl: AI_SERVICE_URL
+});
 app.use(
   '/api/ai',
   buildAiRouter({
     aggregator: briefingAggregator,
     askForwarder,
+    explainForwarder,
     jwtSecret: process.env.JWT_SECRET || 'dev_secret'
   })
 );

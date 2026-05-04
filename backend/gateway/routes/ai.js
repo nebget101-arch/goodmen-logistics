@@ -4,6 +4,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 
 const ASK_PROMPT_MAX = 1000;
+const EXPLAIN_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 
 function authenticate(req, jwtSecret) {
   const authHeader = req.headers.authorization || '';
@@ -24,9 +25,10 @@ function authenticate(req, jwtSecret) {
 }
 
 function buildAiRouter(deps) {
-  const { aggregator, askForwarder, jwtSecret } = deps;
+  const { aggregator, askForwarder, explainForwarder, jwtSecret } = deps;
   if (!aggregator) throw new Error('ai router: aggregator is required');
   if (!askForwarder) throw new Error('ai router: askForwarder is required');
+  if (!explainForwarder) throw new Error('ai router: explainForwarder is required');
   if (!jwtSecret) throw new Error('ai router: jwtSecret is required');
 
   const router = express.Router();
@@ -92,6 +94,40 @@ function buildAiRouter(deps) {
       console.error('[gateway] ask forwarding failed:', err.message);
       return res.status(502).json({
         error: 'Ask FleetNeuron forwarding failed',
+        message: err.message
+      });
+    }
+  });
+
+  // FN-1177: forwards GET /api/ai/explain/:token to ai-service after
+  // verifying the caller's JWT and pinning the upstream call to the JWT's
+  // tenant. ai-service returns 404 when the token is expired or scoped to a
+  // different tenant; the gateway passes that through unchanged so leaks
+  // can't be probed via timing or status codes.
+  router.get('/explain/:token', async (req, res) => {
+    const auth = authenticate(req, jwtSecret);
+    if (auth.error) {
+      return res.status(auth.error.status).json({ error: auth.error.message });
+    }
+
+    const token = req.params.token || '';
+    if (!EXPLAIN_TOKEN_PATTERN.test(token)) {
+      return res.status(404).json({ error: 'Explanation not found' });
+    }
+
+    try {
+      const upstream = await explainForwarder.forward({
+        tenantId: auth.tenantId,
+        authHeader: auth.authHeader,
+        token
+      });
+      const status = upstream.status >= 200 && upstream.status < 600 ? upstream.status : 502;
+      return res.status(status).json(upstream.body || { error: 'AI service returned no body' });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[gateway] explain forwarding failed:', err.message);
+      return res.status(502).json({
+        error: 'Explain forwarding failed',
         message: err.message
       });
     }
