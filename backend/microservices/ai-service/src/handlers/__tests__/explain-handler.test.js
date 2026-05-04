@@ -147,6 +147,50 @@ async function main() {
     assert.equal(typeof res.body.meta.processingTimeMs, 'number');
   });
 
+  await runCase('tenant-mismatch returns 404 (not 200) — defense-in-depth for FN-1177 gateway', async () => {
+    const token = explainabilityStore.mint({
+      kind: 'severity',
+      tenantId: 'tenant-A',
+      alertId: 'a:1'
+    });
+
+    const res = makeRes();
+    await handleExplain(
+      { params: { token }, query: { tenantId: 'tenant-B' } },
+      res
+    );
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.body.code, 'AI_TOKEN_NOT_FOUND');
+  });
+
+  await runCase('matching tenantId resolves successfully', async () => {
+    const token = explainabilityStore.mint({
+      kind: 'severity',
+      tenantId: 'tenant-A',
+      alertId: 'a:1'
+    });
+
+    const res = makeRes();
+    await handleExplain(
+      { params: { token }, query: { tenantId: 'tenant-A' } },
+      res
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+  });
+
+  await runCase('tenantId query is optional — direct ai-service callers (no gateway) still work', async () => {
+    const token = explainabilityStore.mint({
+      kind: 'severity',
+      tenantId: 'tenant-A',
+      alertId: 'a:1'
+    });
+
+    const res = makeRes();
+    await handleExplain({ params: { token } }, res);
+    assert.equal(res.statusCode, 200);
+  });
+
   // ---- end-to-end: briefing-handler mints, explain-handler resolves ----
 
   await runCase('briefing-handler mints one token per section, all resolvable', async () => {

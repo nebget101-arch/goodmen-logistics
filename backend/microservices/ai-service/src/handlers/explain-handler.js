@@ -43,6 +43,33 @@ async function handleExplain(req, res) {
     });
   }
 
+  // Tenant scoping (FN-1177): the gateway forwards the JWT's tenant_id as
+  // ?tenantId=…; if the rationale was minted for a different tenant, return
+  // an indistinguishable 404 so token shape can't leak across tenants.
+  const expectedTenantId =
+    req.query && typeof req.query.tenantId === 'string'
+      ? req.query.tenantId.trim()
+      : '';
+  const ownerTenantId = entry.rationale && entry.rationale.tenantId
+    ? String(entry.rationale.tenantId)
+    : '';
+  if (expectedTenantId && ownerTenantId && expectedTenantId !== ownerTenantId) {
+    logAiInteraction({
+      userId: req.user && req.user.id ? req.user.id : null,
+      route: ROUTE,
+      message: `explain tenant-mismatch token=${token} expected=${expectedTenantId} owner=${ownerTenantId}`,
+      conversationId: null,
+      success: false,
+      errorCode: 'AI_TOKEN_NOT_FOUND',
+      processingTimeMs
+    });
+    return res.status(404).json({
+      success: false,
+      error: 'token not found or expired',
+      code: 'AI_TOKEN_NOT_FOUND'
+    });
+  }
+
   logAiInteraction({
     userId: req.user && req.user.id ? req.user.id : null,
     route: ROUTE,
