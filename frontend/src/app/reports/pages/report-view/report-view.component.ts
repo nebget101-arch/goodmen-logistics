@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, switchMap, takeUntil } from 'rxjs';
-import { ReportCard, ReportColumn, ReportFilters, ReportKey, ReportPageConfig } from '../../reports.models';
+import { ReportAnomaly, ReportCard, ReportColumn, ReportFilters, ReportKey, ReportPageConfig } from '../../reports.models';
 import { ReportsService } from '../../services/reports.service';
 import { OperatingEntityContextService } from '../../../services/operating-entity-context.service';
 
@@ -184,6 +184,7 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   cards: ReportCard[] = [];
   rows: Record<string, unknown>[] = [];
   reportSummary: Record<string, unknown> = {};
+  anomalies: ReportAnomaly[] = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -291,21 +292,42 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   private fetchReport(filters: ReportFilters): void {
     this.isLoading = true;
     this.error = '';
+    this.anomalies = [];
     this.reportsService.getReport(this.config.endpoint, filters).pipe(takeUntil(this.destroy$)).subscribe({
       next: (resp) => {
         this.cards = resp.cards || [];
         this.rows = resp.data || [];
         this.reportSummary = (resp.summary || {}) as Record<string, unknown>;
         this.isLoading = false;
+        this.fetchAnomalies(filters);
       },
       error: (err) => {
         this.error = err?.error?.error || 'Unable to load report data.';
         this.rows = [];
         this.cards = [];
         this.reportSummary = {};
+        this.anomalies = [];
         this.isLoading = false;
       }
     });
+  }
+
+  private fetchAnomalies(filters: ReportFilters): void {
+    if (!this.rows.length) {
+      this.anomalies = [];
+      return;
+    }
+    this.reportsService
+      .getAnomalies(this.config.key, { data: this.rows, filters })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          this.anomalies = Array.isArray(resp?.anomalies) ? resp.anomalies : [];
+        },
+        error: () => {
+          this.anomalies = [];
+        }
+      });
   }
 
   private getCurrentFilters(): ReportFilters {

@@ -35,6 +35,8 @@
     No revenue or expense data found for the selected filters. Check your date range and company selection.
   </div>
 
+  <app-report-anomalies *ngIf="!isLoading" [anomalies]="anomalies"></app-report-anomalies>
+
   <div class="entity-subtotals" *ngIf="!isLoading && operatingEntitySubtotals().length">
     <h3>Operating Entity Subtotals</h3>
     <div class="entity-subtotals-grid">

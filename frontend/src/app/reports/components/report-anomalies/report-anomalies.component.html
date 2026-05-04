@@ -1,0 +1,28 @@
+<div
+  *ngIf="visibleAnomalies.length"
+  class="anomaly-row"
+  role="status"
+  aria-live="polite"
+  aria-label="Report anomalies"
+>
+  <button
+    *ngFor="let anomaly of visibleAnomalies; trackBy: trackByKey"
+    type="button"
+    class="anomaly-chip"
+    [class.anomaly-chip--info]="anomaly.severity === 'info'"
+    [class.anomaly-chip--warning]="anomaly.severity === 'warning'"
+    [class.anomaly-chip--critical]="anomaly.severity === 'critical'"
+    [attr.aria-label]="ariaLabelFor(anomaly)"
+    (click)="dismiss(anomaly)"
+  >
+    <span class="material-symbols-outlined anomaly-chip-icon" aria-hidden="true">
+      {{ iconFor(anomaly.severity) }}
+    </span>
+    <span class="anomaly-chip-metric">{{ anomaly.metric }}</span>
+    <span class="anomaly-chip-delta" *ngIf="formatDelta(anomaly.deltaPct) as delta">
+      {{ delta }}
+    </span>
+    <span class="anomaly-chip-context" *ngIf="anomaly.context">{{ anomaly.context }}</span>
+    <span class="material-symbols-outlined anomaly-chip-dismiss" aria-hidden="true">close</span>
+  </button>
+</div>

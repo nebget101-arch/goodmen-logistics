@@ -63,6 +63,26 @@ export interface ReportPageConfig {
   columns: ReportColumn[];
 }
 
+export type ReportAnomalySeverity = 'info' | 'warning' | 'critical';
+
+export interface ReportAnomaly {
+  metric: string;
+  value: number;
+  deltaPct: number;
+  severity: ReportAnomalySeverity;
+  context?: string;
+}
+
+export interface ReportAnomaliesResponse {
+  anomalies: ReportAnomaly[];
+}
+
+export interface ReportAnomaliesRequest {
+  data: Record<string, unknown>[];
+  filters: ReportFilters;
+  priorPeriod?: Record<string, unknown>;
+}
+
 // Legacy compatibility interfaces retained for old reports components.
 export interface FinancialSummary {
   totalInvoiced?: number;
