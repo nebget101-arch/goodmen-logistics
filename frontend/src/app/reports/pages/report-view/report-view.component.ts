@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, switchMap, takeUntil } from 'rxjs';
-import { ReportCard, ReportColumn, ReportFilters, ReportKey, ReportPageConfig } from '../../reports.models';
+import { ReportCard, ReportColumn, ReportFilters, ReportKey, ReportNarrative, ReportPageConfig } from '../../reports.models';
 import { ReportsService } from '../../services/reports.service';
 import { OperatingEntityContextService } from '../../../services/operating-entity-context.service';
 
@@ -185,6 +185,10 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   rows: Record<string, unknown>[] = [];
   reportSummary: Record<string, unknown> = {};
 
+  narrative: ReportNarrative | null = null;
+  narrativeLoading = false;
+  narrativeFailed = false;
+
   constructor(
     private route: ActivatedRoute,
     private reportsService: ReportsService,
@@ -297,6 +301,7 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         this.rows = resp.data || [];
         this.reportSummary = (resp.summary || {}) as Record<string, unknown>;
         this.isLoading = false;
+        this.fetchNarrative(filters);
       },
       error: (err) => {
         this.error = err?.error?.error || 'Unable to load report data.';
@@ -304,8 +309,37 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         this.cards = [];
         this.reportSummary = {};
         this.isLoading = false;
+        this.narrative = null;
+        this.narrativeLoading = false;
+        this.narrativeFailed = true;
       }
     });
+  }
+
+  private fetchNarrative(filters: ReportFilters): void {
+    this.narrative = null;
+    this.narrativeFailed = false;
+    this.narrativeLoading = true;
+    const payload = {
+      cards: this.cards,
+      data: this.rows,
+      filters,
+      priorPeriod: (this.reportSummary?.['priorPeriod'] as Record<string, unknown>) || undefined
+    };
+    this.reportsService
+      .getNarrative(this.config.key, payload)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          this.narrative = resp;
+          this.narrativeLoading = false;
+        },
+        error: () => {
+          this.narrative = null;
+          this.narrativeLoading = false;
+          this.narrativeFailed = true;
+        }
+      });
   }
 
   private getCurrentFilters(): ReportFilters {

@@ -63,6 +63,18 @@ export interface ReportPageConfig {
   columns: ReportColumn[];
 }
 
+export interface ReportNarrativeRequest {
+  cards?: ReportCard[];
+  data?: Record<string, unknown>[];
+  filters?: ReportFilters;
+  priorPeriod?: Record<string, unknown>;
+}
+
+export interface ReportNarrative {
+  narrative: string;
+  generatedAt: string;
+}
+
 // Legacy compatibility interfaces retained for old reports components.
 export interface FinancialSummary {
   totalInvoiced?: number;
