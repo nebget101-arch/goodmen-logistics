@@ -23,12 +23,22 @@ function makePdf(name = 'rate-conf.pdf'): File {
   });
 }
 
-function makeComponent(overrides: { aiExtract?: any; lookupZip?: any } = {}): LoadsDashboardComponent {
+function makeComponent(
+  overrides: {
+    aiExtract?: any;
+    lookupZip?: any;
+    getLoad?: any;
+    hasPermission?: (permission: string) => boolean;
+    routerNavigate?: jasmine.Spy;
+  } = {}
+): LoadsDashboardComponent {
   const loadsService: any = {
     aiExtractFromPdf: jasmine
       .createSpy('aiExtractFromPdf')
       .and.returnValue(overrides.aiExtract || of({ success: true, data: null })),
-    getLoad: () => of({ success: true, data: null }),
+    getLoad: overrides.getLoad
+      ? jasmine.createSpy('getLoad').and.callFake(overrides.getLoad)
+      : jasmine.createSpy('getLoad').and.returnValue(of({ success: true, data: null })),
     lookupZip: jasmine
       .createSpy('lookupZip')
       .and.returnValue(overrides.lookupZip || of({ success: true, data: {} })),
@@ -57,7 +67,10 @@ function makeComponent(overrides: { aiExtract?: any; lookupZip?: any } = {}): Lo
     queryParamMap: of(new Map()),
     snapshot: { queryParamMap: { get: () => null } }
   };
-  const router: any = { navigate: () => Promise.resolve(), events: of(null) };
+  const router: any = {
+    navigate: overrides.routerNavigate || jasmine.createSpy('navigate').and.returnValue(Promise.resolve()),
+    events: of(null)
+  };
   const sanitizer: any = { bypassSecurityTrustResourceUrl: (s: string) => s };
   const operatingEntityContext: any = {
     activeOperatingEntityId$: of(null),
@@ -68,6 +81,11 @@ function makeComponent(overrides: { aiExtract?: any; lookupZip?: any } = {}): Lo
     create: () => of({ success: true })
   };
   const keyboardShortcuts: any = { registerAll: () => () => {} };
+  const accessControl: any = {
+    hasPermission: overrides.hasPermission
+      ? jasmine.createSpy('hasPermission').and.callFake(overrides.hasPermission)
+      : jasmine.createSpy('hasPermission').and.returnValue(true)
+  };
 
   return new LoadsDashboardComponent(
     loadsService,
@@ -80,7 +98,8 @@ function makeComponent(overrides: { aiExtract?: any; lookupZip?: any } = {}): Lo
     keyboardShortcuts,
     userPreferences,
     scrollStrategies,
-    websocket
+    websocket,
+    accessControl
   );
 }
 
@@ -231,6 +250,107 @@ describe('LoadsDashboardComponent — Auto-Create → wizard routing (FN-1078)',
       expect(component.showAutoModal).toBeTrue();
       expect(component.showBulkExtractionGrid).toBeFalse();
     });
+  });
+});
+
+describe('LoadsDashboardComponent.applyRouteQueryParams (FN-1312)', () => {
+  it('routes ?action=reassign&loadId=X to V2 wizard in edit mode', () => {
+    const component = makeComponent();
+
+    component.applyRouteQueryParams({ action: 'reassign', loadId: '158061' });
+
+    expect(component.showLoadWizardV2).toBeTrue();
+    expect(component.loadWizardV2Mode).toBe('edit');
+    expect(component.loadWizardV2LoadId).toBe('158061');
+    expect(component.showDetailsModal).toBeFalse();
+  });
+
+  it('falls through to detail drawer when user lacks LOADS_EDIT permission', () => {
+    const getLoadSpy = jasmine
+      .createSpy('getLoad')
+      .and.returnValue(of({ success: true, data: { id: '158061' } }));
+    const component = makeComponent({
+      hasPermission: () => false,
+      getLoad: getLoadSpy
+    });
+
+    component.applyRouteQueryParams({ action: 'reassign', loadId: '158061' });
+
+    expect(component.showLoadWizardV2).toBeFalse();
+    expect(component.showDetailsModal).toBeTrue();
+    expect(getLoadSpy).toHaveBeenCalledWith('158061');
+  });
+
+  it('opens the legacy detail drawer for ?loadId=X without action (regression check)', () => {
+    const getLoadSpy = jasmine
+      .createSpy('getLoad')
+      .and.returnValue(of({ success: true, data: { id: '158061' } }));
+    const component = makeComponent({ getLoad: getLoadSpy });
+
+    component.applyRouteQueryParams({ loadId: '158061' });
+
+    expect(component.showLoadWizardV2).toBeFalse();
+    expect(component.showDetailsModal).toBeTrue();
+    expect(getLoadSpy).toHaveBeenCalledWith('158061');
+  });
+
+  it('does nothing when neither action nor loadId is present', () => {
+    const component = makeComponent();
+
+    component.applyRouteQueryParams({});
+
+    expect(component.showLoadWizardV2).toBeFalse();
+    expect(component.showDetailsModal).toBeFalse();
+  });
+
+  it('still applies status / billingStatus filter params on top of routing', () => {
+    const component = makeComponent();
+
+    component.applyRouteQueryParams({ status: 'IN_TRANSIT', billingStatus: 'INVOICED' });
+
+    expect(component.filters.status).toBe('IN_TRANSIT');
+    expect(component.filters.billingStatus).toBe('INVOICED');
+  });
+
+  it('clears action+loadId query params when the wizard closes from edit mode', () => {
+    const navigateSpy = jasmine.createSpy('navigate').and.returnValue(Promise.resolve());
+    const component = makeComponent({ routerNavigate: navigateSpy });
+
+    component.applyRouteQueryParams({ action: 'reassign', loadId: '158061' });
+    expect(component.showLoadWizardV2).toBeTrue();
+
+    component.closeLoadWizardV2();
+
+    expect(component.showLoadWizardV2).toBeFalse();
+    expect(component.loadWizardV2Mode).toBe('create');
+    expect(component.loadWizardV2LoadId).toBeNull();
+    expect(navigateSpy).toHaveBeenCalled();
+    const navArgs = navigateSpy.calls.mostRecent().args;
+    expect(navArgs[1].queryParams).toEqual({ action: null, loadId: null });
+    expect(navArgs[1].queryParamsHandling).toBe('merge');
+  });
+
+  it('does NOT clear query params when closing from create mode (no regression on + New Load)', () => {
+    const navigateSpy = jasmine.createSpy('navigate').and.returnValue(Promise.resolve());
+    const component = makeComponent({ routerNavigate: navigateSpy });
+
+    component.openLoadWizardV2();
+    component.closeLoadWizardV2();
+
+    expect(navigateSpy).not.toHaveBeenCalled();
+  });
+
+  it('clears query params after a successful update from edit mode', () => {
+    const navigateSpy = jasmine.createSpy('navigate').and.returnValue(Promise.resolve());
+    const component = makeComponent({ routerNavigate: navigateSpy });
+    spyOn(component, 'loadLoads');
+
+    component.applyRouteQueryParams({ action: 'reassign', loadId: '158061' });
+    component.onLoadWizardV2Updated({ id: '158061', load_number: 'L-158061' } as any);
+
+    expect(component.showLoadWizardV2).toBeFalse();
+    expect(component.successMessage).toContain('updated');
+    expect(navigateSpy).toHaveBeenCalled();
   });
 });
 
