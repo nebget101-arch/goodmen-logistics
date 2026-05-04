@@ -186,6 +186,7 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   reportSummary: Record<string, unknown> = {};
   anomalies: ReportAnomaly[] = [];
   isChatOpen = false;
+  isExporting: { csv: boolean; pdf: boolean } = { csv: false, pdf: false };
 
   narrative: ReportNarrative | null = null;
   narrativeLoading = false;
@@ -245,22 +246,39 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   }
 
   exportAs(format: 'csv' | 'pdf'): void {
+    if (this.isExporting[format]) return;
+    const filters = this.getCurrentFilters();
+    this.isExporting[format] = true;
+    this.error = '';
     this.reportsService
-      .exportReport(this.config.key, format, this.getCurrentFilters())
+      .exportReport(this.config.key, format, filters)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (blob) => {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${this.config.key}.${format}`;
+          a.download = this.buildExportFilename(format, filters);
           a.click();
           URL.revokeObjectURL(url);
+          this.isExporting[format] = false;
         },
         error: () => {
-          this.error = 'Export failed. Please try again.';
+          this.error = `${format.toUpperCase()} export failed. Please try again.`;
+          this.isExporting[format] = false;
         }
       });
+  }
+
+  private buildExportFilename(format: 'csv' | 'pdf', filters: ReportFilters): string {
+    const start = filters.startDate;
+    const end = filters.endDate;
+    let range: string;
+    if (start && end) range = `${start}_${end}`;
+    else if (start) range = `from-${start}`;
+    else if (end) range = `to-${end}`;
+    else range = 'all';
+    return `${this.config.key}-${range}.${format}`;
   }
 
   asColumns(): ReportColumn[] {
