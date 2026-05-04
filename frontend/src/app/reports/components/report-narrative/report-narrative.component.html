@@ -1,0 +1,24 @@
+<section
+  *ngIf="visible"
+  class="narrative"
+  role="region"
+  aria-label="AI report narrative"
+  [attr.aria-busy]="loading ? 'true' : 'false'"
+>
+  <header class="narrative__header">
+    <span class="narrative__pill">
+      <span class="material-symbols-outlined narrative__pill-icon" aria-hidden="true">auto_awesome</span>
+      AI summary
+    </span>
+    <span *ngIf="!loading && generatedAtLabel" class="narrative__timestamp">{{ generatedAtLabel }}</span>
+  </header>
+
+  <p *ngIf="!loading && narrative?.narrative as text" class="narrative__text">{{ text }}</p>
+
+  <div *ngIf="loading" class="narrative__skeleton" aria-hidden="true">
+    <span class="narrative__skeleton-line"></span>
+    <span class="narrative__skeleton-line narrative__skeleton-line--short"></span>
+  </div>
+
+  <span *ngIf="loading" class="sr-only">Generating AI summary…</span>
+</section>

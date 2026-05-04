@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, switchMap, takeUntil } from 'rxjs';
-import { ReportAnomaly, ReportCard, ReportColumn, ReportFilters, ReportKey, ReportPageConfig } from '../../reports.models';
+import { ReportAnomaly, ReportCard, ReportColumn, ReportFilters, ReportKey, ReportNarrative, ReportPageConfig } from '../../reports.models';
 import { ReportsService } from '../../services/reports.service';
 import { OperatingEntityContextService } from '../../../services/operating-entity-context.service';
 
@@ -186,6 +186,10 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   reportSummary: Record<string, unknown> = {};
   anomalies: ReportAnomaly[] = [];
 
+  narrative: ReportNarrative | null = null;
+  narrativeLoading = false;
+  narrativeFailed = false;
+
   constructor(
     private route: ActivatedRoute,
     private reportsService: ReportsService,
@@ -300,6 +304,7 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         this.reportSummary = (resp.summary || {}) as Record<string, unknown>;
         this.isLoading = false;
         this.fetchAnomalies(filters);
+        this.fetchNarrative(filters);
       },
       error: (err) => {
         this.error = err?.error?.error || 'Unable to load report data.';
@@ -308,6 +313,9 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         this.reportSummary = {};
         this.anomalies = [];
         this.isLoading = false;
+        this.narrative = null;
+        this.narrativeLoading = false;
+        this.narrativeFailed = true;
       }
     });
   }
@@ -326,6 +334,32 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.anomalies = [];
+        }
+      });
+  }
+
+  private fetchNarrative(filters: ReportFilters): void {
+    this.narrative = null;
+    this.narrativeFailed = false;
+    this.narrativeLoading = true;
+    const payload = {
+      cards: this.cards,
+      data: this.rows,
+      filters,
+      priorPeriod: (this.reportSummary?.['priorPeriod'] as Record<string, unknown>) || undefined
+    };
+    this.reportsService
+      .getNarrative(this.config.key, payload)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          this.narrative = resp;
+          this.narrativeLoading = false;
+        },
+        error: () => {
+          this.narrative = null;
+          this.narrativeLoading = false;
+          this.narrativeFailed = true;
         }
       });
   }
