@@ -15,6 +15,7 @@ const { handleSettlementInsights } = require('./handlers/settlement-insights-han
 const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 const { handleBriefingGenerate } = require('./handlers/briefing-handler');
 const { handleAsk } = require('./handlers/ask-handler');
+const { handleScoreAlert } = require('./handlers/score-alert-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -1243,6 +1244,85 @@ function buildAiRouter(deps) {
    *         description: AI upstream unavailable, parse error, or schema mismatch
    */
   router.post('/ask', (req, res) => handleAsk(req, res, deps));
+
+  /**
+   * @openapi
+   * /api/ai/score-alert:
+   *   post:
+   *     summary: Score Smart Alert severity (FN-1159)
+   *     description: >
+   *       Combines a deterministic rule-based baseline (alert type + facts) with a
+   *       Claude-derived contextual boost to produce a 0-100 severity, a one-sentence
+   *       reasoning token, and a recommended dispatcher action. Falls back to the
+   *       rule-based baseline + canned reasoning/action when Claude is unavailable
+   *       or returns malformed output, so the gateway aggregator (FN-1161) always
+   *       gets a finite severity.
+   *     tags:
+   *       - AI
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - alert
+   *             properties:
+   *               tenantId:
+   *                 type: string
+   *                 description: Optional tenant context, passed through to logging.
+   *               alert:
+   *                 type: object
+   *                 required:
+   *                   - id
+   *                   - type
+   *                 properties:
+   *                   id:
+   *                     type: string
+   *                   type:
+   *                     type: string
+   *                     enum: [hos_imminent, fatigue, inspection_overdue, late_load_risk]
+   *                   subjectId:
+   *                     type: string
+   *                   subjectKind:
+   *                     type: string
+   *                     enum: [driver, vehicle, load]
+   *                   facts:
+   *                     type: object
+   *                     description: Type-specific signal facts (minutesRemaining, daysOverdue, etaDelta, fatigueScore, etc.).
+   *     responses:
+   *       200:
+   *         description: Severity-scored alert with reasoning and recommended action
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 severity:
+   *                   type: integer
+   *                   minimum: 0
+   *                   maximum: 100
+   *                 reasoning:
+   *                   type: string
+   *                 action:
+   *                   type: string
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     baseScore:
+   *                       type: integer
+   *                     boost:
+   *                       type: integer
+   *                     scoredBy:
+   *                       type: string
+   *                     model:
+   *                       type: string
+   *                     processingTimeMs:
+   *                       type: number
+   *       400:
+   *         description: Missing or invalid alert payload
+   */
+  router.post('/score-alert', (req, res) => handleScoreAlert(req, res, deps));
 
   return router;
 }
