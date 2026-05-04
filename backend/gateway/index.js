@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const swaggerUi = require('swagger-ui-express');
 const { buildBriefingAggregator } = require('./services/briefing-aggregator');
+const { buildAskForwarder } = require('./services/ask-forwarder');
 const { buildAiRouter } = require('./routes/ai');
 
 let SocketIoServer = null;
@@ -510,6 +511,9 @@ app.use('/api/shop-clients', buildProxy(INVENTORY_SERVICE_URL, 'inventory'));
 // forwards to ai-service /api/ai/briefing/generate. Mounted before the catch-all
 // proxy so the briefing endpoint is handled here while other /api/ai/* requests
 // continue to be proxied to ai-service.
+//
+// FN-1148: gateway-local POST /api/ai/ask route — verifies JWT, validates the
+// { prompt, briefingContext } envelope, and forwards to ai-service.
 const briefingAggregator = buildBriefingAggregator({
   fetcher: (url, opts) => fetch(url, opts),
   logisticsUrl: LOGISTICS_SERVICE_URL,
@@ -517,10 +521,15 @@ const briefingAggregator = buildBriefingAggregator({
   vehiclesUrl: VEHICLES_MAINTENANCE_SERVICE_URL,
   aiUrl: AI_SERVICE_URL
 });
+const askForwarder = buildAskForwarder({
+  fetcher: (url, opts) => fetch(url, opts),
+  aiUrl: AI_SERVICE_URL
+});
 app.use(
   '/api/ai',
   buildAiRouter({
     aggregator: briefingAggregator,
+    askForwarder,
     jwtSecret: process.env.JWT_SECRET || 'dev_secret'
   })
 );

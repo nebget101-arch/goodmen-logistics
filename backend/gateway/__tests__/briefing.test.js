@@ -56,11 +56,17 @@ function buildAggregatorForTest(fetcher) {
   });
 }
 
+// FN-1148: ask-forwarder is now a mandatory dep on buildAiRouter; briefing
+// tests don't exercise /ask, so we pass a no-op stub.
+const ASK_FORWARDER_STUB = {
+  forward: async () => ({ status: 200, ok: true, body: {} })
+};
+
 function startGatewayUnderTest(aggregator) {
   const app = express();
   app.use(
     '/api/ai',
-    buildAiRouter({ aggregator, jwtSecret: JWT_SECRET })
+    buildAiRouter({ aggregator, askForwarder: ASK_FORWARDER_STUB, jwtSecret: JWT_SECRET })
   );
   return new Promise((resolve) => {
     const server = http.createServer(app).listen(0, () => {
