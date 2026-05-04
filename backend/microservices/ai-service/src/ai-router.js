@@ -20,6 +20,7 @@ const { handleExplain } = require('./handlers/explain-handler');
 const { handleReportsAnomalies } = require('./handlers/reports-anomalies-handler');
 const { handleReportsNarrative } = require('./handlers/reports-narrative-handler');
 const { handleReportsChat } = require('./handlers/reports-chat-handler');
+const { handleReportsParseQuery } = require('./handlers/reports-parse-query-handler');
 const { loadAuthContext } = require('./services/auth-context');
 
 function buildAiRouter(deps) {
@@ -1673,6 +1674,94 @@ function buildAiRouter(deps) {
     '/reports/chat',
     loadAuthContext,
     (req, res) => handleReportsChat(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/reports/parse-query:
+   *   post:
+   *     summary: AI natural-language filter parser for the Reports Center (FN-1117)
+   *     description: >
+   *       Converts a natural-language query (e.g. "revenue by driver last month, exclude team leads")
+   *       into a validated filter object for the given `reportKey`. Uses Anthropic Claude Haiku 4.5
+   *       with prompt caching on the system prompt + per-report filter schema (the second call for
+   *       the same `reportKey` reports `meta.cacheReadTokens > 0`). Filter keys not in the report's
+   *       allowed schema, or values that fail validation, are dropped and their source tokens
+   *       surfaced in `unmatchedTokens`. Requires the caller to hold `reports.view`.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - reportKey
+   *               - naturalQuery
+   *             properties:
+   *               reportKey:
+   *                 type: string
+   *                 pattern: '^[a-z][a-z0-9_-]{0,63}$'
+   *                 description: Stable identifier for the report (must be one of the registered v2 reports).
+   *               naturalQuery:
+   *                 type: string
+   *                 maxLength: 500
+   *                 description: Free-text query to parse into structured filters.
+   *               currentFilters:
+   *                 type: object
+   *                 description: Filters currently applied in the UI (used as context to bias parsing).
+   *     responses:
+   *       200:
+   *         description: Parsed filters and any unmatched source tokens
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 fallback:
+   *                   type: boolean
+   *                 filters:
+   *                   type: object
+   *                   description: Validated filter key/value pairs (all keys are members of the report's allowed schema).
+   *                 unmatchedTokens:
+   *                   type: array
+   *                   items:
+   *                     type: string
+   *                   description: Source tokens the parser could not map to an allowed filter.
+   *                 confidence:
+   *                   type: number
+   *                   minimum: 0
+   *                   maximum: 1
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     reportKey:
+   *                       type: string
+   *                     model:
+   *                       type: string
+   *                     cacheReadTokens:
+   *                       type: integer
+   *                     cacheWriteTokens:
+   *                       type: integer
+   *                     processingTimeMs:
+   *                       type: number
+   *                     reason:
+   *                       type: string
+   *                       description: Present only on fallback responses.
+   *       400:
+   *         description: Bad request (missing/invalid reportKey or naturalQuery, or unknown reportKey)
+   *       403:
+   *         description: Caller lacks reports.view
+   */
+  router.post(
+    '/reports/parse-query',
+    loadAuthContext,
+    (req, res) => handleReportsParseQuery(req, res, deps)
   );
 
   return router;
