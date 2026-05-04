@@ -81,6 +81,7 @@ import { InventoryItemEditDialogComponent } from './components/inventory/invento
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
 import { AiExtractionFlowComponent } from './components/loads-dashboard/ai-extraction-flow/ai-extraction-flow.component';
 import { DailyBriefingComponent } from './components/control-center/daily-briefing/daily-briefing.component';
+import { AskBarComponent } from './components/control-center/ask-bar/ask-bar.component';
 
 @NgModule({
   declarations: [
@@ -151,7 +152,8 @@ import { DailyBriefingComponent } from './components/control-center/daily-briefi
     DragDropModule,
     SharedModule,
     LocationsAdminModule,
-    DailyBriefingComponent
+    DailyBriefingComponent,
+    AskBarComponent
   ],
   providers: [
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
