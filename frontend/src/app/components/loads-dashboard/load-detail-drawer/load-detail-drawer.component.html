@@ -153,6 +153,8 @@
   </div>
 
   <!-- ── Footer ───────────────────────────────────────────────────────────── -->
+  <!-- FN-1063: in `view` mode the primary action is "Edit" (flips to edit
+       mode); in `edit` mode the primary action is "Save". -->
   <footer class="load-drawer__footer">
     <button
       type="button"
@@ -160,9 +162,20 @@
       (click)="requestClose()"
       [disabled]="saving"
     >
-      Cancel
+      {{ mode === 'edit' ? 'Cancel' : 'Close' }}
     </button>
     <button
+      *ngIf="mode === 'view'"
+      type="button"
+      class="btn btn-primary"
+      (click)="enterEditMode()"
+      [disabled]="loading || !loadDetail"
+    >
+      <span class="material-symbols-outlined">edit</span>
+      Edit
+    </button>
+    <button
+      *ngIf="mode === 'edit'"
       type="button"
       class="btn btn-primary"
       (click)="onSaveClick()"

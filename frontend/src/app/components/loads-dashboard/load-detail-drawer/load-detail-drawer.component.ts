@@ -61,6 +61,17 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
    */
   @Input() focusLowConfidence = false;
 
+  /**
+   * FN-1063 — opening mode. `view` renders the drawer without the Save
+   * button (an "Edit" affordance lets users opt into editing). `edit` shows
+   * the Save button immediately. The form fields remain visually
+   * interactive in both modes — view mode just gates persistence.
+   */
+  @Input() initialMode: 'view' | 'edit' = 'view';
+
+  /** Internal mode (mirrors initialMode on first init / loadId change). */
+  mode: 'view' | 'edit' = 'view';
+
   @Output() close = new EventEmitter<void>();
   @Output() prev = new EventEmitter<void>();
   @Output() next = new EventEmitter<void>();
@@ -120,10 +131,15 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.mode = this.initialMode;
     if (this.loadId) { this.fetchLoad(this.loadId); }
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    // FN-1063: parent may switch the entry mode without remounting.
+    if (changes['initialMode']) {
+      this.mode = (changes['initialMode'].currentValue as 'view' | 'edit') || 'view';
+    }
     // New load ID → re-fetch and reset dirty state. Keep the drawer open
     // (no close/reopen animation) so cross-row navigation stays smooth.
     if (changes['loadId'] && !changes['loadId'].firstChange) {
@@ -131,8 +147,16 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
       this.dirty = false;
       this.showUnsavedWarning = false;
       this.activeTab = 'basics';
+      // FN-1063: each row navigation resets to the requested initial mode
+      // so prev/next from a "view" entry stay in view mode (and vice versa).
+      this.mode = this.initialMode;
       if (id) { this.fetchLoad(id); } else { this.loadDetail = null; }
     }
+  }
+
+  /** FN-1063: flip from view to edit when the user clicks the Edit affordance. */
+  enterEditMode(): void {
+    this.mode = 'edit';
   }
 
   ngOnDestroy(): void {

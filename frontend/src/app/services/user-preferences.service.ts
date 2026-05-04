@@ -31,6 +31,8 @@ export interface LoadsDashboardPrefs {
   /** FN-1059: per-column widths in px keyed by `columnDefs[].key`. Empty
    *  object means "use defaults"; hidden columns retain their stored width. */
   columnWidths?: Record<string, number>;
+  /** FN-1063: rows-per-page selection (one of 25 / 50 / 100 / 200). */
+  pageSize?: number;
 }
 
 /**

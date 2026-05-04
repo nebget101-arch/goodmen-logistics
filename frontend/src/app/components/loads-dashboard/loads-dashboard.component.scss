@@ -940,6 +940,141 @@
     }
   }
 
+  /* ── FN-1063: Clone Existing Load picker ── */
+  .clone-picker-modal {
+    max-width: 640px;
+    width: min(640px, calc(100vw - 32px));
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+  }
+
+  .clone-picker-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid rgba(94, 234, 212, 0.15);
+
+    h3 {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 18px;
+      color: var(--text-dark);
+    }
+  }
+
+  .clone-picker-modal__close {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    color: var(--text-light);
+    border-radius: 999px;
+    padding: 4px 6px;
+    cursor: pointer;
+
+    &:hover {
+      color: var(--text-dark);
+      border-color: rgba(94, 234, 212, 0.6);
+    }
+  }
+
+  .clone-picker-modal__body {
+    padding: 16px 22px 20px;
+    overflow-y: auto;
+  }
+
+  .clone-picker-modal__hint {
+    font-size: 13px;
+    color: var(--text-light);
+    margin: 0 0 14px;
+  }
+
+  .clone-picker-modal__search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 8px;
+    padding: 8px 12px;
+
+    .material-symbols-outlined { color: var(--text-light); font-size: 18px; }
+
+    .clone-picker-modal__search-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-dark);
+      font-size: 14px;
+
+      &::placeholder { color: var(--text-light); }
+    }
+
+    &:focus-within { border-color: rgba(94, 234, 212, 0.6); }
+  }
+
+  .clone-picker-modal__error {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.12);
+    color: #fecaca;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  .clone-picker-modal__loading,
+  .clone-picker-modal__empty {
+    margin-top: 14px;
+    padding: 14px;
+    text-align: center;
+    color: var(--text-light);
+    font-size: 13px;
+  }
+
+  .clone-picker-modal__results {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .clone-picker-modal__result {
+    display: grid;
+    grid-template-columns: 130px 1fr 1fr 80px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    transition: background 100ms ease-out;
+    color: var(--text-dark);
+    font-size: 13px;
+
+    &:last-child { border-bottom: 0; }
+
+    &:hover,
+    &:focus-visible {
+      background: rgba(45, 212, 191, 0.1);
+      outline: none;
+    }
+
+    &.is-disabled {
+      pointer-events: none;
+      opacity: 0.5;
+    }
+
+    .clone-picker-modal__result-num { font-weight: 600; }
+    .clone-picker-modal__result-broker,
+    .clone-picker-modal__result-route { color: var(--text-light); }
+    .clone-picker-modal__result-status { text-align: right; color: var(--text-light); font-size: 11px; }
+  }
+
   /* ── Bulk Upload AI-themed modal ── */
   .bulk-ai-modal {
     max-width: 600px;
@@ -1367,6 +1502,32 @@
     .pagination-page {
       font-size: 12px;
       color: var(--text-light);
+    }
+
+    // FN-1063: rows-per-page selector — sits next to the paginator buttons.
+    .page-size-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-light);
+
+      .page-size-control__label {
+        color: var(--text-light);
+      }
+
+      .page-size-control__select {
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.7);
+        background: rgba(15, 23, 42, 0.98);
+        color: var(--text-dark);
+        font-size: 12px;
+        cursor: pointer;
+
+        &:hover { border-color: rgba(34, 197, 94, 0.7); }
+        &:focus { outline: 2px solid rgba(45, 212, 191, 0.6); outline-offset: 1px; }
+      }
     }
 
     .pagination-btn {
@@ -3601,16 +3762,19 @@
     min-width: 0;
   }
 
+  // FN-1063: row-toolbar buttons are always discoverable at reduced opacity
+  // and brighten to full on row hover / focus / drawer-active state. The
+  // earlier hover-only reveal (FN-805) made actions invisible to keyboard
+  // users and undiscoverable until users guessed there were row controls.
   .row-toolbar {
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
     gap: 4px;
     min-height: 28px;
-    opacity: 0;
-    transform: translateY(1px);
-    transition: opacity 100ms ease-out, transform 100ms ease-out;
-    pointer-events: none;
+    opacity: 0.55;
+    transition: opacity 100ms ease-out;
+    pointer-events: auto;
   }
 
   .table--body tr:hover .row-toolbar,
@@ -3619,8 +3783,6 @@
   .row-toolbar:hover,
   .row-toolbar:focus-within {
     opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
   }
 
   .row-toolbar__btn {
