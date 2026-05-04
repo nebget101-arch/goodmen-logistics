@@ -94,6 +94,13 @@ export class LoadWizardComponent implements OnInit, OnDestroy {
    * for callers that already have the detail (e.g. dashboard row drawer).
    */
   @Input() loadDetail: LoadDetail | null = null;
+  /**
+   * FN-1300: pre-loaded source PDF for `mode='ai-extract'`. When non-null on
+   * init, the wizard auto-feeds it through `onPdfSelected` so extraction kicks
+   * off immediately and the user lands on the animated progress UI without an
+   * extra click. Used by the dashboard hero single-PDF drop path.
+   */
+  @Input() initialPdfFile: File | null = null;
 
   @Output() created = new EventEmitter<LoadDetail>();
   @Output() updated = new EventEmitter<LoadDetail>();
@@ -190,6 +197,13 @@ export class LoadWizardComponent implements OnInit, OnDestroy {
       } else {
         this.fetchLoadForPrefill(this.loadId);
       }
+    }
+
+    // FN-1300: when the dashboard hero hands us a single PDF for ai-extract,
+    // auto-feed it so the animated progress UI starts on first render — no
+    // need for the user to click the dropzone.
+    if (this.mode === 'ai-extract' && this.initialPdfFile) {
+      this.onPdfSelected(this.initialPdfFile);
     }
   }
 

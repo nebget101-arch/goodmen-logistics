@@ -36,6 +36,7 @@ import { OperatingEntityContextService } from '../../services/operating-entity-c
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 import { StepBasicsData } from './load-wizard/step-basics/step-basics.component';
 import { WizardAttachment } from './load-wizard/step-attachments/step-attachments.component';
+import { LoadWizardMode } from '../load-wizard/load-wizard.component';
 import {
   IntelligenceMetrics,
   IntelligencePeriod,
@@ -47,7 +48,6 @@ import {
 } from './load-detail-drawer/load-detail-drawer.component';
 import { EmptyStateMode } from './empty-state/empty-state.component';
 import { SkeletonColumn } from './loading-skeleton/loading-skeleton.component';
-import { selectPdfs } from '../../utils/pdf-upload.util';
 
 type DensityMode = 'compact' | 'comfortable' | 'spacious';
 
@@ -141,7 +141,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   showNewLoadMenu = false;
   showManualModal = false;
-  showAutoModal = false;
 
   // ─── Load Wizard (FN-732) ───────────────────────────────────────────────
   /** Whether the 4-step load creation wizard is open. */
@@ -151,6 +150,17 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
    * Runs alongside the legacy modal until FN-869 (S10) retires it.
    */
   showLoadWizardV2 = false;
+  /**
+   * FN-1300 — drives `<app-load-wizard-v2>`'s `mode` input. `'create'` for the
+   * standard "New Load" entry, `'ai-extract'` when the hero hands a single PDF
+   * to the wizard so it auto-runs extraction on open.
+   */
+  wizardMode: LoadWizardMode = 'create';
+  /**
+   * FN-1300 — pre-loaded PDF for the V2 wizard's `[initialPdfFile]` input.
+   * Set by the hero single-PDF drop path; cleared on close/create.
+   */
+  singlePdfForWizard: File | null = null;
   /** Index of the currently active wizard step (0-based, 0–3). */
   wizardActiveStep = 0;
   /** Validity state of each wizard step — used by the progress bar jump guard. */
@@ -239,13 +249,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     'OTHER',
     'CONFIRMATION'
   ];
-
-  // Auto-create from PDF state
-  autoPdfFile: File | null = null;
-  autoExtracting = false;
-  autoError = '';
-  autoExtraction: LoadAiEndpointExtraction | null = null;
-  autoIsDragOver = false;
 
   // Bulk upload rate confirmations
   bulkPdfFiles: File[] = [];
@@ -1802,15 +1805,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showNewLoadMenu = false;
   }
 
-  openAutoCreate(): void {
-    this.autoPdfFile = null;
-    this.autoExtracting = false;
-    this.autoError = '';
-    this.autoExtraction = null;
-    this.showAutoModal = true;
-    this.showNewLoadMenu = false;
-  }
-
   // ─── Load Wizard methods (FN-732) ─────────────────────────────────────────
 
   /** Open the 4-step load creation wizard (replaces the inline new-load form). */
@@ -2131,6 +2125,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   /** Open the FN-862 wizard in create mode (alongside the legacy modal). */
   openLoadWizardV2(): void {
+    this.wizardMode = 'create';
+    this.singlePdfForWizard = null;
     this.showLoadWizardV2 = true;
     this.showNewLoadMenu = false;
   }
@@ -2138,11 +2134,15 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   /** Close the FN-862 wizard (emitted from `closed`). */
   closeLoadWizardV2(): void {
     this.showLoadWizardV2 = false;
+    this.singlePdfForWizard = null;
+    this.wizardMode = 'create';
   }
 
   /** Handle `created` output from the FN-862 wizard — reload grid, show toast. */
   onLoadWizardV2Created(load: LoadDetail): void {
     this.showLoadWizardV2 = false;
+    this.singlePdfForWizard = null;
+    this.wizardMode = 'create';
     this.successMessage = `Load ${load?.load_number || load?.id || ''} created.`;
     this.loadLoads();
     setTimeout(() => (this.successMessage = ''), 4000);
@@ -2256,13 +2256,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   // ─── Hero CTA handlers (FN-743) ────────────────────────────────────────
 
-  /** Single PDF selected from hero upload zone — pre-fills the auto-create modal. */
+  /**
+   * FN-1300: single PDF dropped/selected in the hero — route directly into the
+   * V2 wizard in `ai-extract` mode with the file pre-loaded so extraction kicks
+   * off automatically (animated progress UI, then prefilled Steps 1-2). The
+   * V2 wizard's `submitCreate()` already attaches the source PDF as
+   * `RATE_CONFIRMATION` on save.
+   */
   onHeroSinglePdf(file: File): void {
-    this.autoPdfFile = file;
-    this.autoExtracting = false;
-    this.autoError = '';
-    this.autoExtraction = null;
-    this.showAutoModal = true;
+    this.singlePdfForWizard = file;
+    this.wizardMode = 'ai-extract';
+    this.showLoadWizardV2 = true;
+    this.showNewLoadMenu = false;
   }
 
   /** Multiple PDFs selected from hero upload zone — pre-fills the bulk upload modal. */
@@ -3272,17 +3277,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     // To be implemented later
   }
 
-  closeAutoModal(): void {
-    this.showAutoModal = false;
-    this.autoIsDragOver = false;
-  }
-
-  clearAutoPdf(): void {
-    this.autoPdfFile = null;
-    this.autoError = '';
-    this.autoExtraction = null;
-  }
-
   openDetails(load: LoadListItem): void {
     this.loadsService.getLoad(load.id).subscribe({
       next: (res) => {
@@ -3633,45 +3627,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   }
 
   /** Apply extracted AI values into the manual load form for review (same scenarios as bulk: multi-stop, PO, etc.). */
-  private applyExtractionToForm(extraction: LoadAiEndpointExtraction): void {
-    this.editingLoadId = null;
-    this.editingLoadDetail = null;
-    this.resetManualForm();
-
-    const pickup = extraction.pickup || ({} as any);
-    const delivery = extraction.delivery || ({} as any);
-
-    this.manualLoadForm.patchValue({
-      brokerName: extraction.brokerName || '',
-      poNumber: extraction.poNumber || (extraction.loadId || extraction.orderId || extraction.proNumber || '').toString() || '',
-      rate: extraction.rate != null ? extraction.rate : '',
-      pickupDate: pickup.date || '',
-      pickupCity: pickup.city || '',
-      pickupState: pickup.state || '',
-      pickupZip: pickup.zip || '',
-      deliveryDate: delivery.date || '',
-      deliveryCity: delivery.city || '',
-      deliveryState: delivery.state || '',
-      deliveryZip: delivery.zip || ''
-    });
-
-    // Apply multi-stop when present (same as bulk upload)
-    const rawStops = extraction.stops && Array.isArray(extraction.stops) ? extraction.stops : [];
-    if (rawStops.length > 0) {
-      this.sortedStops = rawStops
-        .map((s, i) => ({
-          stop_type: (s.type || (i === 0 ? 'PICKUP' : 'DELIVERY')) as 'PICKUP' | 'DELIVERY',
-          sequence: s.sequence ?? i + 1,
-          stop_date: s.date || null,
-          city: s.city || null,
-          state: s.state || null,
-          zip: s.zip || null,
-          address1: s.address1 || null
-        }))
-        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-    }
-  }
-
   markPickupCityEdited(): void {
     this.pickupCityEdited = true;
   }
@@ -4344,7 +4299,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   @HostListener('document:drop', ['$event'])
   onPageDrop(event: DragEvent): void {
     // Skip if a modal is already open or we're inside a specific dropzone
-    if (this.showBulkUploadModal || this.showAutoModal || this.showBulkExtractionGrid || this.showManualModal || this.showLoadWizard || this.showLoadWizardV2) {
+    if (this.showBulkUploadModal || this.showBulkExtractionGrid || this.showManualModal || this.showLoadWizard || this.showLoadWizardV2) {
       return;
     }
     const files = event.dataTransfer?.files;
@@ -4356,72 +4311,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Auto-create from PDF handlers
-
-  onAutoFileSelected(files: FileList | null): void {
-    this._handleAutoModalFiles(files);
-  }
-
-  onAutoFileDragOver(event: DragEvent): void {
-    if (this.autoExtracting) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.autoIsDragOver = true;
-  }
-
-  onAutoFileDragLeave(event: DragEvent): void {
-    event.stopPropagation();
-    this.autoIsDragOver = false;
-  }
-
-  onAutoFileDropped(event: DragEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    this.autoIsDragOver = false;
-    if (this.autoExtracting) return;
-    this._handleAutoModalFiles(event.dataTransfer?.files ?? null);
-  }
-
   // FN-1057: Hero CTA emits this when 11+ PDFs were selected and capped to 10.
   onPdfsCapped(): void {
     this._notifyPdfsCapped();
-  }
-
-  private _handleAutoModalFiles(files: FileList | null): void {
-    this.autoError = '';
-    if (!files || files.length === 0) return;
-    const hasNonPdf = Array.from(files).some((f) => f.type !== 'application/pdf');
-    const { pdfs, capped } = selectPdfs(files);
-    if (pdfs.length === 0) {
-      this.autoError = hasNonPdf
-        ? 'Please select PDF files only.'
-        : 'Please select a PDF file.';
-      return;
-    }
-    if (capped) this._notifyPdfsCapped();
-    // FN-1078: when a PDF is already queued and the user picks more, route to
-    // the bulk-extraction grid instead of silently overwriting the first one.
-    if (this.autoPdfFile && pdfs.length >= 1) {
-      const queued = this.autoPdfFile;
-      const merged: File[] = [queued, ...pdfs.filter((p) => p !== queued)].slice(0, 10);
-      if (merged.length >= 2) {
-        this.showAutoModal = false;
-        this.autoPdfFile = null;
-        this.autoExtraction = null;
-        this.openBulkExtractionGrid(merged);
-        return;
-      }
-    }
-    if (pdfs.length === 1) {
-      this.autoPdfFile = pdfs[0];
-      return;
-    }
-    // 2–10 PDFs → close Auto-Create modal and route to the bulk flow,
-    // matching the hero CTA's bulkPdfsSelected behavior.
-    this.showAutoModal = false;
-    this.autoPdfFile = null;
-    this.autoExtraction = null;
-    this.onHeroBulkPdfs(pdfs);
   }
 
   private _notifyPdfsCapped(): void {
@@ -4431,82 +4323,6 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         this.errorMessage = '';
       }
     }, 4000);
-  }
-
-  runAutoExtraction(): void {
-    this.autoError = '';
-    if (!this.autoPdfFile) {
-      this.autoError = 'Please select a PDF file first.';
-      return;
-    }
-    const pdfFile = this.autoPdfFile;
-    this.autoExtracting = true;
-    this.loadsService.aiExtractFromPdf(pdfFile).subscribe({
-      next: (res) => {
-        this.autoExtracting = false;
-        const data = res?.data;
-
-        // FN-1078: every successful response routes through the 4-step wizard.
-        // Surface "no data" / vision-only as transient banners instead of the
-        // legacy manual modal so the user lands in a single creation surface.
-        if (!data) {
-          this.errorMessage = 'Extraction returned no data — continuing with manual entry. Your PDF is queued.';
-          setTimeout(() => {
-            if (this.errorMessage.startsWith('Extraction returned no data')) this.errorMessage = '';
-          }, 6000);
-          this._continueAutoToWizard(pdfFile, null);
-          return;
-        }
-        this.autoExtraction = data;
-
-        if (data.provider === 'none' && data.warning) {
-          this.errorMessage = data.warning;
-          setTimeout(() => {
-            if (this.errorMessage === data.warning) this.errorMessage = '';
-          }, 6000);
-          this._continueAutoToWizard(pdfFile, null);
-          return;
-        }
-
-        // Normal case: hand the extraction off to the wizard with prefill.
-        this._continueAutoToWizard(pdfFile, data);
-      },
-      error: (err) => {
-        console.error('AI extract failed', err);
-        this.autoExtracting = false;
-        // FN-1078: keep the user in the Auto-Create modal so they can retry,
-        // close, or use the new "Continue manually" button. The button routes
-        // to the same 4-step wizard with the PDF queued and no prefill.
-        this.autoError =
-          'Failed to extract from PDF. Click "Continue manually" to enter the load by hand — the PDF will be attached.';
-      }
-    });
-  }
-
-  /**
-   * FN-1078: bridge from the Auto-Create modal into the 4-step wizard.
-   * Closes the modal, queues the PDF on the wizard's attachment slot, and
-   * (when extraction is present) prefills wizard step state with confidence
-   * markers for FN-818 per-field highlighting.
-   */
-  private _continueAutoToWizard(pdfFile: File, extraction: LoadAiEndpointExtraction | null): void {
-    this.showAutoModal = false;
-    this.openLoadWizardWithExtraction({ extraction, pdfFile });
-    // Reset modal state so a fresh re-open starts clean.
-    this.autoPdfFile = null;
-    this.autoError = '';
-    this.autoExtraction = null;
-    this.autoIsDragOver = false;
-  }
-
-  /**
-   * FN-1078: error-state escape hatch — open the wizard with just the PDF
-   * queued (no prefill) when extraction failed but the user still wants to
-   * record the load.
-   */
-  continueAutoManually(): void {
-    if (!this.autoPdfFile) return;
-    this._continueAutoToWizard(this.autoPdfFile, null);
   }
 
   // ─── FN-794: Intelligence panel metrics + handlers ──────────────────────
