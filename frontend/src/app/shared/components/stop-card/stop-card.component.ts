@@ -133,8 +133,27 @@ export class StopCardComponent {
   }
 
   get dateLabel(): string {
-    if (!this.stop.stop_date) return '--';
-    return this.stop.stop_date;
+    const ymd = this.toYmd(this.stop.stop_date);
+    return ymd || '--';
+  }
+
+  /**
+   * FN-1052 — Normalize a stop_date value to a `YYYY-MM-DD` calendar string.
+   *
+   * The pg driver returns DATE columns as JS Date, which `JSON.stringify`
+   * serializes to a UTC ISO timestamp ("2026-04-15T00:00:00.000Z"). Slicing
+   * the first 10 chars preserves the calendar date the user entered without
+   * any timezone offset math.
+   */
+  toYmd(value: Date | string | null | undefined): string {
+    if (value === null || value === undefined || value === '') return '';
+    if (typeof value === 'string') {
+      return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : '';
+    }
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      return value.toISOString().slice(0, 10);
+    }
+    return '';
   }
 
   // ── Field change handlers ───────────────────────────────────────────────────

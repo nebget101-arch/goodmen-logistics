@@ -137,3 +137,70 @@ describe('StopCardComponent state binding (FN-1049)', () => {
     expect(emitted!.state).toBeNull();
   });
 });
+
+describe('StopCardComponent date formatting (FN-1052)', () => {
+  let fixture: ComponentFixture<StopCardComponent>;
+  let component: StopCardComponent;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommonModule, DragDropModule],
+      declarations: [StopCardComponent]
+    }).compileComponents();
+    fixture = TestBed.createComponent(StopCardComponent);
+    component = fixture.componentInstance;
+  });
+
+  describe('toYmd', () => {
+    it('returns "" for null/undefined/empty', () => {
+      expect(component.toYmd(null)).toBe('');
+      expect(component.toYmd(undefined)).toBe('');
+      expect(component.toYmd('')).toBe('');
+    });
+
+    it('slices the first 10 chars of an ISO timestamp string', () => {
+      expect(component.toYmd('2026-04-15T00:00:00.000Z')).toBe('2026-04-15');
+    });
+
+    it('returns YYYY-MM-DD strings unchanged', () => {
+      expect(component.toYmd('2026-04-15')).toBe('2026-04-15');
+    });
+
+    it('returns "" for non-date-like strings', () => {
+      expect(component.toYmd('not-a-date')).toBe('');
+    });
+
+    it('handles a UTC-midnight Date the same way as its ISO string', () => {
+      const d = new Date('2026-04-15T00:00:00.000Z');
+      expect(component.toYmd(d)).toBe('2026-04-15');
+    });
+
+    it('returns "" for an invalid Date', () => {
+      expect(component.toYmd(new Date('invalid'))).toBe('');
+    });
+  });
+
+  describe('dateLabel', () => {
+    it('returns "--" when stop_date is missing', () => {
+      component.stop = { stop_type: 'PICKUP' } as LoadStop;
+      expect(component.dateLabel).toBe('--');
+    });
+
+    it('returns YMD slice for an ISO timestamp', () => {
+      component.stop = {
+        stop_type: 'PICKUP',
+        stop_date: '2026-04-15T00:00:00.000Z'
+      } as LoadStop;
+      expect(component.dateLabel).toBe('2026-04-15');
+    });
+
+    it('returns the same calendar date regardless of host timezone', () => {
+      // Round-trip the string the user sees — no UTC↔local conversion.
+      component.stop = {
+        stop_type: 'PICKUP',
+        stop_date: '2026-04-15'
+      } as LoadStop;
+      expect(component.dateLabel).toBe('2026-04-15');
+    });
+  });
+});
