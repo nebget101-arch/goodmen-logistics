@@ -18,6 +18,10 @@ import {
   detailFor,
   severityBucket,
 } from '../../../services/smart-alerts.service';
+import {
+  QuickActionDef,
+  QuickActionsComponent,
+} from '../quick-actions/quick-actions.component';
 
 const SEVERITY_LABEL: Record<SmartAlertSeverityBucket, string> = {
   critical: 'Critical',
@@ -25,6 +29,85 @@ const SEVERITY_LABEL: Record<SmartAlertSeverityBucket, string> = {
   medium: 'Medium',
   low: 'Low',
 };
+
+/**
+ * Map a smart alert to its row-level context (loadId / driverId / vehicleId)
+ * — the QuickActions component merges this into each action's queryParams
+ * so deep-link routes are pre-filled (FN-1129 AC).
+ */
+function contextFor(alert: SmartAlert): Record<string, string | number | boolean> {
+  if (!alert.subjectId) return {};
+  switch (alert.subjectKind) {
+    case 'driver':
+      return { driverId: alert.subjectId };
+    case 'vehicle':
+      return { vehicleId: alert.subjectId };
+    case 'load':
+      return { loadId: alert.subjectId };
+    default:
+      return {};
+  }
+}
+
+/**
+ * Build the per-alert quick action set. Up to 3 contextual actions; the
+ * QuickActions component additionally hides any the user lacks permission
+ * for. Action id is what downstream consumers receive on (action) emit.
+ */
+function quickActionsFor(alert: SmartAlert): QuickActionDef[] {
+  switch (alert.type) {
+    case 'late_load_risk':
+      return [
+        {
+          id: 'reassign-load',
+          label: 'Reassign load',
+          icon: '↻',
+          routerLink: ['/loads'],
+          queryParams: { action: 'reassign' },
+          requiredPermission: 'loads.edit',
+          variant: 'primary',
+        },
+        {
+          id: 'notify-driver',
+          label: 'Notify driver',
+          icon: '✉',
+          requiredPermission: ['drivers.edit', 'drivers.manage'],
+        },
+      ];
+    case 'hos_imminent':
+    case 'fatigue':
+      return [
+        {
+          id: 'notify-driver',
+          label: 'Notify driver',
+          icon: '✉',
+          requiredPermission: ['drivers.edit', 'drivers.manage'],
+          variant: 'primary',
+        },
+        {
+          id: 'reassign-load',
+          label: 'Reassign load',
+          icon: '↻',
+          routerLink: ['/loads'],
+          queryParams: { action: 'reassign' },
+          requiredPermission: 'loads.edit',
+        },
+      ];
+    case 'inspection_overdue':
+      return [
+        {
+          id: 'schedule-maintenance',
+          label: 'Schedule maintenance',
+          icon: '⚙',
+          routerLink: ['/work-orders', 'new'],
+          requiredPermission: 'work_orders.create',
+          variant: 'primary',
+        },
+      ];
+    default:
+      return [];
+  }
+}
 
 interface SmartAlertView {
   id: string;
@@ -34,13 +117,15 @@ interface SmartAlertView {
   bucket: SmartAlertSeverityBucket;
   bucketLabel: string;
   action: SmartAlertActionLink | null;
+  quickActions: QuickActionDef[];
+  context: Record<string, string | number | boolean>;
   raw: SmartAlert;
 }
 
 @Component({
   selector: 'app-smart-alerts',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, QuickActionsComponent],
   templateUrl: './smart-alerts.component.html',
   styleUrls: ['./smart-alerts.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -112,6 +197,13 @@ export class SmartAlertsComponent implements OnInit, OnDestroy {
     return alert.id;
   }
 
+  // Bound to <app-quick-actions> (action). Router navigation already happens
+  // via routerLink; this hook exists for non-routing actions and future
+  // telemetry without changing the component's public surface.
+  onQuickAction(_event: { action: QuickActionDef; queryParams: Record<string, string | number | boolean> }): void {
+    // no-op for now
+  }
+
   private toView(alert: SmartAlert): SmartAlertView {
     const bucket = severityBucket(alert.severity);
     return {
@@ -122,6 +214,8 @@ export class SmartAlertsComponent implements OnInit, OnDestroy {
       bucket,
       bucketLabel: SEVERITY_LABEL[bucket],
       action: defaultActionFor(alert),
+      quickActions: quickActionsFor(alert),
+      context: contextFor(alert),
       raw: alert,
     };
   }

@@ -15,6 +15,10 @@ import {
   TrendSeriesId,
   TrendsResponse,
 } from '../../../services/insights.service';
+import {
+  QuickActionDef,
+  QuickActionsComponent,
+} from '../quick-actions/quick-actions.component';
 
 type TrendDirection = 'up' | 'down' | 'flat';
 
@@ -42,7 +46,7 @@ interface SparklinePath {
 @Component({
   selector: 'app-predictive-insights',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, QuickActionsComponent],
   templateUrl: './predictive-insights.component.html',
   styleUrls: ['./predictive-insights.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -110,6 +114,67 @@ export class PredictiveInsightsComponent implements OnInit, OnDestroy {
 
   trackByCard(_index: number, card: CardView): string {
     return card.id;
+  }
+
+  // Per-trend quick actions surfaced inside each insight cell. The QuickActions
+  // component handles permission gating and the 3-action cap.
+  quickActionsFor(id: TrendSeriesId): QuickActionDef[] {
+    switch (id) {
+      case 'maintenance':
+        return [
+          {
+            id: 'schedule-maintenance',
+            label: 'Schedule maintenance',
+            icon: '⚙',
+            routerLink: ['/work-orders', 'new'],
+            requiredPermission: 'work_orders.create',
+            variant: 'primary',
+          },
+          {
+            id: 'view-vehicles',
+            label: 'Open vehicles',
+            icon: '➜',
+            routerLink: ['/vehicles'],
+            requiredPermission: 'vehicles.view',
+          },
+        ];
+      case 'loadVolume':
+      case 'onTimePct':
+        return [
+          {
+            id: 'open-loads',
+            label: 'Open loads',
+            icon: '➜',
+            routerLink: ['/loads'],
+            requiredPermission: 'loads.view',
+            variant: 'primary',
+          },
+          {
+            id: 'create-load',
+            label: 'Create load',
+            icon: '+',
+            routerLink: ['/loads', 'new'],
+            requiredPermission: 'loads.create',
+          },
+        ];
+      case 'fuelCost':
+        return [
+          {
+            id: 'open-fuel',
+            label: 'Open fuel',
+            icon: '⛽',
+            routerLink: ['/fuel'],
+            requiredPermission: 'fuel.view',
+            variant: 'primary',
+          },
+        ];
+      default:
+        return [];
+    }
+  }
+
+  onQuickAction(_event: { action: QuickActionDef; queryParams: Record<string, string | number | boolean> }): void {
+    // no-op for now
   }
 
   getSeries(id: TrendSeriesId): TrendSeries | null {

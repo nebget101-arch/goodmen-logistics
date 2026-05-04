@@ -104,6 +104,12 @@
             </ng-container>
 
             <p class="insights-card__cell-desc">{{ card.description }}</p>
+
+            <app-quick-actions
+              [actions]="quickActionsFor(card.id)"
+              [ariaLabel]="'Quick actions for ' + card.label"
+              (action)="onQuickAction($event)"
+            ></app-quick-actions>
           </ng-container>
 
           <ng-template #emptyState>
