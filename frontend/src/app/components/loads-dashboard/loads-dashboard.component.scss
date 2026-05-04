@@ -2543,6 +2543,14 @@
       border-color: rgba(56, 189, 248, 0.6);
       cursor: default;
     }
+
+    &.ai-dropzone--drag-over:not(.ai-dropzone--extracting) {
+      border-color: rgba(103, 232, 249, 0.95);
+      box-shadow: 0 0 30px rgba(56, 189, 248, 0.25);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.25), transparent 60%),
+        rgba(15, 23, 42, 0.85);
+    }
   }
 
   .ai-dropzone-content {

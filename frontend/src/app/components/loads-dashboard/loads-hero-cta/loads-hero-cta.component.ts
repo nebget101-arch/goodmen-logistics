@@ -3,6 +3,7 @@
 // Emits typed events so the parent (loads-dashboard) handles modal logic.
 
 import { Component, EventEmitter, Output } from '@angular/core';
+import { selectPdfs } from '../../../utils/pdf-upload.util';
 
 @Component({
   selector: 'app-loads-hero-cta',
@@ -14,6 +15,8 @@ export class LoadsHeroCtaComponent {
   @Output() singlePdfSelected = new EventEmitter<File>();
   /** Fires when 2–10 PDFs are dropped or selected — triggers bulk AI flow. */
   @Output() bulkPdfsSelected = new EventEmitter<File[]>();
+  /** Fires when 11+ PDFs were selected and we capped to the first 10. */
+  @Output() pdfsCapped = new EventEmitter<void>();
   /** Fires when the user clicks "Create Manually". */
   @Output() manualCreateClick = new EventEmitter<void>();
   /** Fires when the user clicks "Clone Existing Load". */
@@ -77,10 +80,9 @@ export class LoadsHeroCtaComponent {
 
   private _handleFiles(files: FileList | null): void {
     if (!files || files.length === 0) return;
-    const pdfs = Array.from(files)
-      .filter((f) => f.type === 'application/pdf')
-      .slice(0, 10);
+    const { pdfs, capped } = selectPdfs(files);
     if (pdfs.length === 0) return;
+    if (capped) this.pdfsCapped.emit();
     if (pdfs.length === 1) {
       this.singlePdfSelected.emit(pdfs[0]);
     } else {
