@@ -14,6 +14,7 @@ const { handlePspReportVision } = require('./handlers/psp-report-vision-handler'
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
 const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 const { handleBriefingGenerate } = require('./handlers/briefing-handler');
+const { handleAsk } = require('./handlers/ask-handler');
 
 function buildAiRouter(deps) {
   const router = express.Router();
@@ -1164,6 +1165,84 @@ function buildAiRouter(deps) {
   router.post('/briefing/generate', (req, res) =>
     handleBriefingGenerate(req, res, deps)
   );
+
+  /**
+   * @openapi
+   * /api/ai/ask:
+   *   post:
+   *     summary: Ask FleetNeuron natural-language Q&A (FN-1148)
+   *     description: >
+   *       Classifies the user's prompt into one of {loads, drivers, vehicles,
+   *       generic} and routes it to a domain-specific Claude prompt. The
+   *       briefing context (FN-1124) provides today's fleet snapshot for
+   *       grounding. Returns a structured `{kind:"text", headline, detail}`
+   *       answer envelope so the Control Center bar (FN-1146) can render it
+   *       inline.
+   *     tags:
+   *       - AI
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - prompt
+   *             properties:
+   *               prompt:
+   *                 type: string
+   *                 description: User's natural-language question (max 1000 chars)
+   *               briefingContext:
+   *                 type: object
+   *                 description: Today's briefing context (FN-1124 schema) used to ground the answer
+   *               tenantId:
+   *                 type: string
+   *                 description: Tenant identifier (forwarded from gateway JWT)
+   *     responses:
+   *       200:
+   *         description: Classified intent and structured answer
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 intent:
+   *                   type: string
+   *                   enum: [loads, drivers, vehicles, generic]
+   *                 answer:
+   *                   type: object
+   *                   properties:
+   *                     kind:
+   *                       type: string
+   *                       enum: [text]
+   *                     headline:
+   *                       type: string
+   *                     detail:
+   *                       type: string
+   *                 classification:
+   *                   type: object
+   *                   properties:
+   *                     confidence:
+   *                       type: number
+   *                     reasoning:
+   *                       type: string
+   *                     source:
+   *                       type: string
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     model:
+   *                       type: string
+   *                     processingTimeMs:
+   *                       type: number
+   *       400:
+   *         description: Missing or invalid prompt
+   *       502:
+   *         description: AI upstream unavailable, parse error, or schema mismatch
+   */
+  router.post('/ask', (req, res) => handleAsk(req, res, deps));
 
   return router;
 }
