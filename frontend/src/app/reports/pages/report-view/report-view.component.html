@@ -8,6 +8,16 @@
       <p>{{ config.subtitle }}</p>
     </div>
     <div class="report-actions">
+      <button
+        type="button"
+        class="btn btn-export"
+        (click)="openChat()"
+        [attr.aria-expanded]="isChatOpen"
+        aria-controls="report-chat-drawer"
+        aria-label="Ask AI about this report">
+        <span class="material-symbols-outlined">forum</span>
+        Ask AI
+      </button>
       <button type="button" class="btn btn-export" (click)="exportAs('csv')">
         <span class="material-symbols-outlined">table_view</span>
         Export CSV
@@ -69,3 +79,14 @@
     <div class="empty" *ngIf="rows.length === 0">No records found for selected filters.</div>
   </div>
 </section>
+
+<app-report-chat-drawer
+  id="report-chat-drawer"
+  [open]="isChatOpen"
+  [reportKey]="config?.key || ''"
+  [reportTitle]="config?.title || ''"
+  [filters]="getChatFilters()"
+  [data]="rows"
+  [summary]="reportSummary"
+  (closed)="closeChat()">
+</app-report-chat-drawer>
