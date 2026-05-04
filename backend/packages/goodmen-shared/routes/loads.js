@@ -2866,6 +2866,118 @@ router.get('/exceptions/count', requireRole(['admin', 'dispatch']), async (req, 
   }
 });
 
+// ─── FN-1309: Smart Alerts upstream — late-load risk ────────────────────────
+// `smart-alerts-aggregator.js` (gateway) calls this with `?limit=20` on every
+// dashboard load. Must register BEFORE `/:id` for the same reason as the
+// FN-1303 briefing routes: a stray static path like `/late-risk` would
+// otherwise crash on the UUID cast in `/:id`.
+
+function parseAlertsTopLimit(raw) {
+  if (raw === undefined || raw === null || raw === '') return 20;
+  const trimmed = String(raw).trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(1, Math.min(100, n));
+}
+
+/**
+ * @openapi
+ * /api/loads/late-risk:
+ *   get:
+ *     summary: Loads at risk of late delivery (FN-1309)
+ *     description: >
+ *       Returns loads whose latest delivery stop appointment is past and the
+ *       load has not yet reached a terminal status. `etaDelta` is the positive
+ *       number of minutes the delivery is currently behind appointment time.
+ *       Schema has no ETA column, so the closest signal is "delivery
+ *       appointment is past and the load is still open" — same overdue
+ *       definition the FN-1303 `/exceptions/count` uses. Tenant +
+ *       operating-entity scoped.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Number of loads to return (default 20, max 100)
+ *     responses:
+ *       200:
+ *         description: Late-risk load list
+ *       400:
+ *         description: Invalid limit
+ *       500:
+ *         description: Server error
+ */
+router.get('/late-risk', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const limit = parseAlertsTopLimit(req.query.limit);
+  if (limit === null) {
+    return res.status(400).json({ success: false, error: 'Invalid limit; expected positive integer' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const sql = `
+    WITH last_delivery AS (
+      SELECT DISTINCT ON (ls.load_id)
+        ls.load_id, ls.stop_date, ls.city, ls.state
+      FROM load_stops ls
+      WHERE ls.stop_type = 'DELIVERY'
+      ORDER BY ls.load_id, ls.sequence DESC
+    )
+    SELECT
+      l.id AS load_id,
+      l.load_number,
+      d.stop_date AS delivery_stop_date,
+      d.city AS delivery_city,
+      d.state AS delivery_state,
+      GREATEST(
+        0,
+        (EXTRACT(EPOCH FROM (NOW() - d.stop_date)) / 60.0)::int
+      ) AS eta_delta_minutes
+    FROM loads l
+    JOIN last_delivery d ON d.load_id = l.id
+    WHERE (l.tenant_id = $1 OR $1::uuid IS NULL)
+      AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+      AND UPPER(l.status::text) <> ALL($3::text[])
+      AND d.stop_date IS NOT NULL
+      AND d.stop_date < NOW()
+    ORDER BY d.stop_date ASC
+    LIMIT $4
+  `;
+
+  try {
+    const result = await query(sql, [tenantId, operatingEntityId, EXCLUDED_FROM_OVERDUE, limit]);
+    const data = result.rows.map((row) => {
+      const destination = [row.delivery_city, row.delivery_state]
+        .filter((part) => part != null && String(part).trim() !== '')
+        .join(', ') || null;
+      return {
+        loadId: row.load_id,
+        loadNumber: row.load_number || null,
+        etaDelta: Number(row.eta_delta_minutes) || 0,
+        destination
+      };
+    });
+    return res.json(data);
+  } catch (error) {
+    const code = error?.code ? String(error.code) : '';
+    const message = error?.message ? String(error.message) : '';
+    if (code === '42P01' || message.includes('does not exist')) {
+      dtLogger.warn?.('loads_late_risk_table_missing', { message });
+      return res.json([]);
+    }
+    dtLogger.error('loads_late_risk_failed', error);
+    res.status(500).json({ success: false, error: 'Failed to compute late-load risk' });
+  }
+});
+
 /**
  * @openapi
  * /api/loads/{id}:
