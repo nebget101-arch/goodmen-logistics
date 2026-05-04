@@ -2,13 +2,27 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ReportFilters, ReportKey, ReportResponse } from '../reports.models';
+import {
+  ReportAnomaliesRequest,
+  ReportAnomaliesResponse,
+  ReportFilters,
+  ReportKey,
+  ReportResponse
+} from '../reports.models';
 
 @Injectable({ providedIn: 'root' })
 export class ReportsService {
   private readonly baseUrl = `${environment.apiUrl}/reports/v2`;
+  private readonly aiBaseUrl = `${environment.apiUrl}/ai/reports`;
 
   constructor(private http: HttpClient) {}
+
+  getAnomalies(reportKey: ReportKey, payload: ReportAnomaliesRequest): Observable<ReportAnomaliesResponse> {
+    return this.http.post<ReportAnomaliesResponse>(
+      `${this.aiBaseUrl}/${encodeURIComponent(reportKey)}/anomalies`,
+      payload
+    );
+  }
 
   invalidateCache(): void {
     // server-side cache is key-based; frontend keeps this hook for future client caching

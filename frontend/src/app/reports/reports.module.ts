@@ -9,6 +9,7 @@ import { ReportChartComponent } from './components/report-chart/report-chart.com
 import { ReportTableComponent } from './components/report-table/report-table.component';
 import { ReportFiltersComponent } from './components/report-filters/report-filters.component';
 import { KpiCardsComponent } from './components/kpi-cards/kpi-cards.component';
+import { ReportAnomaliesComponent } from './components/report-anomalies/report-anomalies.component';
 import { ReportsPageComponent } from './pages/reports-page/reports-page.component';
 
 @NgModule({
@@ -19,6 +20,7 @@ import { ReportsPageComponent } from './pages/reports-page/reports-page.componen
     ReportTableComponent,
     ReportFiltersComponent,
     KpiCardsComponent,
+    ReportAnomaliesComponent,
     ReportsPageComponent
   ],
   imports: [CommonModule, FormsModule, SharedModule, ReportsRoutingModule]
