@@ -2,6 +2,7 @@
 
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import { StopCardComponent } from './stop-card.component';
 import { LoadStop } from '../../../models/load-dashboard.model';
@@ -11,7 +12,7 @@ describe('StopCardComponent.normalizeStateCode (FN-1049)', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [CommonModule, DragDropModule],
+      imports: [CommonModule, FormsModule, DragDropModule],
       declarations: [StopCardComponent]
     }).compileComponents();
     component = TestBed.createComponent(StopCardComponent).componentInstance;
@@ -63,7 +64,7 @@ describe('StopCardComponent state binding (FN-1049)', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [CommonModule, DragDropModule],
+      imports: [CommonModule, FormsModule, DragDropModule],
       declarations: [StopCardComponent]
     }).compileComponents();
     fixture = TestBed.createComponent(StopCardComponent);
@@ -101,8 +102,10 @@ describe('StopCardComponent state binding (FN-1049)', () => {
     expect(component.cityStateLabel).toBe('Atlantis, Atlantis');
   });
 
-  it('renders the State <select> bound to the normalized code', () => {
+  it('renders the State <select> bound to the normalized code', async () => {
     expanded({ stop_type: 'PICKUP', state: 'California' });
+    await fixture.whenStable();
+    fixture.detectChanges();
     const select = fixture.nativeElement.querySelector('.sc-select') as HTMLSelectElement;
     // First .sc-select is stop type; we want the State one — use a more specific query
     const stateSelect = fixture.nativeElement.querySelectorAll('select.sc-select')[1] as HTMLSelectElement;
@@ -144,7 +147,7 @@ describe('StopCardComponent date formatting (FN-1052)', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [CommonModule, DragDropModule],
+      imports: [CommonModule, FormsModule, DragDropModule],
       declarations: [StopCardComponent]
     }).compileComponents();
     fixture = TestBed.createComponent(StopCardComponent);
@@ -202,5 +205,97 @@ describe('StopCardComponent date formatting (FN-1052)', () => {
       } as LoadStop;
       expect(component.dateLabel).toBe('2026-04-15');
     });
+  });
+});
+
+describe('StopCardComponent select bindings (FN-1295)', () => {
+  let fixture: ComponentFixture<StopCardComponent>;
+  let component: StopCardComponent;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommonModule, FormsModule, DragDropModule],
+      declarations: [StopCardComponent]
+    }).compileComponents();
+    fixture = TestBed.createComponent(StopCardComponent);
+    component = fixture.componentInstance;
+    component.expanded = true;
+  });
+
+  function selectFor(label: 'Stop Type' | 'State'): HTMLSelectElement {
+    const fields = fixture.nativeElement.querySelectorAll('.sc-field') as NodeListOf<HTMLElement>;
+    for (const field of Array.from(fields)) {
+      const lbl = field.querySelector('.sc-label');
+      if (lbl && (lbl.textContent || '').trim().startsWith(label)) {
+        const sel = field.querySelector('select') as HTMLSelectElement | null;
+        if (sel) return sel;
+      }
+    }
+    throw new Error(`select for label "${label}" not found`);
+  }
+
+  it('State select renders persisted "GA" with selectedIndex pointing to GA (not the placeholder at 0)', async () => {
+    component.stop = { stop_type: 'DELIVERY', state: 'GA', city: 'Gainesville' };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const stateSelect = selectFor('State');
+    expect(stateSelect.value).toBe('GA');
+    expect(stateSelect.selectedIndex).toBeGreaterThan(0);
+    const opt = stateSelect.options[stateSelect.selectedIndex];
+    expect(opt.value).toBe('GA');
+    expect((opt.textContent || '').trim()).toBe('GA');
+  });
+
+  it('Stop Type select renders "Delivery" for DELIVERY stops (regression for same root-cause fix)', async () => {
+    component.stop = { stop_type: 'DELIVERY' };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const typeSelect = selectFor('Stop Type');
+    expect(typeSelect.value).toBe('DELIVERY');
+    const opt = typeSelect.options[typeSelect.selectedIndex];
+    expect(opt.value).toBe('DELIVERY');
+    expect((opt.textContent || '').trim()).toBe('Delivery');
+  });
+
+  it('emits stopChange with the new state when the State select is changed by the user', async () => {
+    component.stop = { stop_type: 'PICKUP', state: 'GA' };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    let emitted: LoadStop | undefined;
+    component.stopChange.subscribe((s: LoadStop) => (emitted = s));
+
+    const stateSelect = selectFor('State');
+    stateSelect.value = 'TX';
+    stateSelect.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(emitted).toBeTruthy();
+    expect(emitted!.state).toBe('TX');
+  });
+
+  it('emits stopChange with the new stop_type when the Stop Type select is changed by the user', async () => {
+    component.stop = { stop_type: 'PICKUP' };
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    let emitted: LoadStop | undefined;
+    component.stopChange.subscribe((s: LoadStop) => (emitted = s));
+
+    const typeSelect = selectFor('Stop Type');
+    typeSelect.value = 'DELIVERY';
+    typeSelect.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(emitted).toBeTruthy();
+    expect(emitted!.stop_type).toBe('DELIVERY');
   });
 });
