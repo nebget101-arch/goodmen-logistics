@@ -7,12 +7,16 @@
  * grid column) so the two panes share the viewport without overlapping.
  */
 
-$drawer-border: #e2e8f0;
-$drawer-bg: #ffffff;
-$drawer-header-bg: #f8fafc;
-$drawer-text: #1e293b;
-$drawer-muted: #64748b;
-$teal: #14b8a6;
+/* FN-1040 — re-tokenized to match the AI dark theme (.card / .topbar in styles.css). */
+$drawer-border: var(--border-color);
+$drawer-bg: rgba(15, 23, 42, 0.96);
+$drawer-header-bg: rgba(2, 6, 23, 0.92);
+$drawer-text: #e5e7eb;
+$drawer-text-strong: #e5f9ff;
+$drawer-muted: #94a3b8;
+$accent: #67e8f9;
+$accent-soft: rgba(56, 189, 248, 0.18);
+$accent-border: rgba(56, 189, 248, 0.35);
 
 :host {
   /*
@@ -38,7 +42,10 @@ $teal: #14b8a6;
   height: 100%;
   background: $drawer-bg;
   border-left: 1px solid $drawer-border;
-  box-shadow: -8px 0 24px rgba(15, 23, 42, 0.08);
+  box-shadow:
+    -18px 0 44px rgba(2, 6, 23, 0.85),
+    0 0 0 1px rgba(15, 23, 42, 1);
+  color: $drawer-text;
   animation: drawer-slide-in 280ms cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
@@ -66,7 +73,7 @@ $teal: #14b8a6;
 
   &:hover,
   &:active {
-    background: rgba(20, 184, 166, 0.2);
+    background: $accent-soft;
   }
 }
 
@@ -109,8 +116,9 @@ $teal: #14b8a6;
   transition: background 120ms ease, border-color 120ms ease;
 
   &:hover:not(:disabled) {
-    background: rgba(20, 184, 166, 0.08);
-    border-color: rgba(20, 184, 166, 0.3);
+    background: $accent-soft;
+    border-color: $accent-border;
+    color: $drawer-text-strong;
   }
 
   &:disabled {
@@ -133,7 +141,7 @@ $teal: #14b8a6;
 .load-drawer__load-number {
   font-size: 16px;
   font-weight: 600;
-  color: $drawer-text;
+  color: $drawer-text-strong;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -154,7 +162,7 @@ $teal: #14b8a6;
   padding: 8px 12px 0;
   border-bottom: 1px solid $drawer-border;
   flex-shrink: 0;
-  background: #ffffff;
+  background: $drawer-bg;
 }
 
 .load-drawer__tab {
@@ -179,12 +187,12 @@ $teal: #14b8a6;
   }
 
   &:hover {
-    color: $drawer-text;
+    color: $drawer-text-strong;
   }
 
   &.is-active {
-    color: $teal;
-    border-bottom-color: $teal;
+    color: $accent;
+    border-bottom-color: $accent;
   }
 }
 
@@ -192,12 +200,12 @@ $teal: #14b8a6;
   padding: 8px 16px;
   font-size: 13px;
   color: $drawer-muted;
-  background: #f8fafc;
+  background: $drawer-header-bg;
   border-bottom: 1px solid $drawer-border;
 
   &--error {
-    color: #b91c1c;
-    background: #fef2f2;
+    color: #fca5a5;
+    background: rgba(127, 29, 29, 0.35);
   }
 }
 
@@ -245,7 +253,7 @@ $teal: #14b8a6;
 .load-drawer__unsaved-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(2, 6, 23, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -253,19 +261,22 @@ $teal: #14b8a6;
 }
 
 .load-drawer__unsaved-dialog {
-  background: #ffffff;
-  border-radius: 8px;
+  background: $drawer-bg;
+  border: 1px solid $drawer-border;
+  border-radius: 12px;
   padding: 20px 24px;
   max-width: 380px;
   width: calc(100% - 32px);
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(15, 23, 42, 1);
   text-align: center;
 
   h3 {
     margin: 8px 0 4px;
     font-size: 16px;
     font-weight: 600;
-    color: $drawer-text;
+    color: $drawer-text-strong;
   }
 
   p {
