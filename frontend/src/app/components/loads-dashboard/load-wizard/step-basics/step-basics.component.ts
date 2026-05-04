@@ -57,6 +57,14 @@ export class StepBasicsComponent implements OnInit, OnChanges {
   /** FN-818 — when true, low-confidence fields (<80) get a subtle highlight. */
   @Input() focusLowConfidence = false;
 
+  /**
+   * FN-1042: distinguishes brand-new wizard creates from drawer-edit reuse.
+   * In `'edit'` the dispatcher is whoever the load is assigned to (set by the
+   * drawer from `dispatcher_name`); the localStorage current-user fallback
+   * must NOT overwrite it. Default `'create'` preserves the new-load wizard.
+   */
+  @Input() mode: 'create' | 'edit' = 'create';
+
   @Output() valid = new EventEmitter<boolean>();
   @Output() dataChange = new EventEmitter<StepBasicsData>();
 
@@ -92,7 +100,7 @@ export class StepBasicsComponent implements OnInit, OnChanges {
     if (!this.data.loadNumber) {
       this.data.loadNumber = this.generateLoadNumber();
     }
-    if (!this.data.dispatcher) {
+    if (this.mode === 'create' && !this.data.dispatcher) {
       const user = JSON.parse(localStorage.getItem('fn_user') || '{}');
       this.data.dispatcher = user?.username || user?.first_name || '';
     }

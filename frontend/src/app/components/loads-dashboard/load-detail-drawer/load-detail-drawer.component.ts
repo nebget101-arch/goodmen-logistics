@@ -166,7 +166,7 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
       brokerName: d.broker_name || '',
       poNumber: d.po_number || '',
       rate: d.rate != null ? Number(d.rate) : null,
-      dispatcher: (d as any).dispatcher_name || '',
+      dispatcher: d.dispatcher_name || '',
       notes: d.notes || '',
     };
     this.stops = (d.stops || [])

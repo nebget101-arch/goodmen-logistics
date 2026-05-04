@@ -44,6 +44,8 @@ export interface LoadListItem {
   delivery_state: string | null;
   delivery_zip?: string | null;
   driver_name: string | null;
+  /** FN-1042: dispatcher display name (joined from users in backend list query). */
+  dispatcher_name?: string | null;
   broker_name: string | null;
   po_number?: string | null;
   attachment_count: number;
