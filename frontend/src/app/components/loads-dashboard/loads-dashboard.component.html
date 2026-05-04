@@ -2408,11 +2408,35 @@
             <p class="ai-dropzone-hint">or click to browse files</p>
             <input type="file" accept="application/pdf" multiple (change)="onAutoFileSelected($any($event.target).files); $any($event.target).value = ''" class="ai-dropzone-input">
           </div>
-          <div class="ai-dropzone-content" *ngIf="autoPdfFile && !autoExtracting">
+          <div class="ai-dropzone-content ai-dropzone-content--has-file" *ngIf="autoPdfFile && !autoExtracting">
+            <button type="button" class="ai-clear-file-btn"
+                    (click)="clearAutoPdf()"
+                    aria-label="Remove selected file">
+              <span class="material-symbols-outlined">close</span>
+            </button>
             <span class="material-symbols-outlined ai-file-icon">description</span>
             <p class="ai-dropzone-filename">{{ autoPdfFile.name }}</p>
             <p class="ai-dropzone-hint">Ready for AI extraction</p>
-            <input type="file" accept="application/pdf" multiple (change)="onAutoFileSelected($any($event.target).files); $any($event.target).value = ''" class="ai-dropzone-input">
+            <div class="ai-file-actions">
+              <label for="autoReplaceInput" class="ai-file-action-link">
+                <span class="material-symbols-outlined">swap_horiz</span>
+                Replace file
+              </label>
+              <input id="autoReplaceInput" type="file" accept="application/pdf"
+                     (change)="onAutoFileSelected($any($event.target).files); $any($event.target).value = ''"
+                     class="ai-hidden-file-input">
+              <span class="ai-file-action-divider" aria-hidden="true">·</span>
+              <label for="autoAddMoreInput" class="ai-file-action-link">
+                <span class="material-symbols-outlined">add</span>
+                Add more PDFs
+              </label>
+              <input id="autoAddMoreInput" type="file" accept="application/pdf" multiple
+                     (change)="onAutoFileSelected($any($event.target).files); $any($event.target).value = ''"
+                     class="ai-hidden-file-input">
+            </div>
+            <p class="ai-dropzone-hint ai-dropzone-hint--bulk">
+              Adding more PDFs (up to 10) switches to bulk extraction
+            </p>
           </div>
           <div class="ai-dropzone-content ai-extracting-state" *ngIf="autoExtracting">
             <span class="material-symbols-outlined ai-brain-pulse">neurology</span>
