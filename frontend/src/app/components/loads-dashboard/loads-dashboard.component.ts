@@ -33,6 +33,8 @@ import {
 } from '../../services/websocket.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { AccessControlService } from '../../services/access-control.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 import { StepBasicsData } from './load-wizard/step-basics/step-basics.component';
 import { WizardAttachment } from './load-wizard/step-attachments/step-attachments.component';
@@ -151,6 +153,12 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
    * Runs alongside the legacy modal until FN-869 (S10) retires it.
    */
   showLoadWizardV2 = false;
+  /** FN-1312: V2 wizard mode for the current open instance — `'create'` for the
+   * "+ New Load" button, `'edit'` when reached via a load-context quick-action
+   * deep-link such as `?action=reassign&loadId=X`. */
+  loadWizardV2Mode: 'create' | 'edit' = 'create';
+  /** FN-1312: Load id passed to V2 wizard in edit mode (null for create). */
+  loadWizardV2LoadId: string | null = null;
   /** Index of the currently active wizard step (0-based, 0–3). */
   wizardActiveStep = 0;
   /** Validity state of each wizard step — used by the progress bar jump guard. */
@@ -903,7 +911,8 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     private keyboardShortcuts: KeyboardShortcutsService,
     private userPreferences: UserPreferencesService,
     private scrollStrategies: ScrollStrategyOptions,
-    private websocket: WebsocketService
+    private websocket: WebsocketService,
+    private accessControl: AccessControlService
   ) {
     // Close the inline menu when any ancestor scrolls — the virtual-scroll
     // viewport may recycle the trigger row while the menu is open.
@@ -996,19 +1005,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.bindOperatingEntityContext();
-    this.route.queryParams.subscribe((params) => {
-      if (params['status']) this.filters.status = params['status'];
-      if (params['billingStatus']) this.filters.billingStatus = params['billingStatus'];
-      const loadId = params['loadId'];
-      if (loadId) {
-        this.loadsService.getLoad(loadId).subscribe({
-          next: (res) => {
-            this.selectedLoad = res?.data || null;
-            this.showDetailsModal = true;
-          }
-        });
-      }
-    });
+    this.route.queryParams.subscribe((params) => this.applyRouteQueryParams(params));
     this.statusFilterOptions = this.statusOptions.map(s => ({ value: s, label: this.getStatusLabel(s) }));
     this.billingFilterOptions = this.billingOptions.map(b => ({ value: b, label: this.getBillingLabel(b) }));
     this.initColumnVisibility();
@@ -2131,21 +2128,97 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   /** Open the FN-862 wizard in create mode (alongside the legacy modal). */
   openLoadWizardV2(): void {
+    this.loadWizardV2Mode = 'create';
+    this.loadWizardV2LoadId = null;
     this.showLoadWizardV2 = true;
     this.showNewLoadMenu = false;
   }
 
   /** Close the FN-862 wizard (emitted from `closed`). */
   closeLoadWizardV2(): void {
+    const wasEdit = this.loadWizardV2Mode === 'edit';
     this.showLoadWizardV2 = false;
+    this.loadWizardV2Mode = 'create';
+    this.loadWizardV2LoadId = null;
+    // FN-1312: Clear deep-link query params so a refresh doesn't reopen.
+    if (wasEdit) this.clearLoadActionQueryParams();
   }
 
   /** Handle `created` output from the FN-862 wizard — reload grid, show toast. */
   onLoadWizardV2Created(load: LoadDetail): void {
     this.showLoadWizardV2 = false;
+    this.loadWizardV2Mode = 'create';
+    this.loadWizardV2LoadId = null;
     this.successMessage = `Load ${load?.load_number || load?.id || ''} created.`;
     this.loadLoads();
     setTimeout(() => (this.successMessage = ''), 4000);
+  }
+
+  /** FN-1312: Handle `updated` output from the FN-862 wizard in edit mode. */
+  onLoadWizardV2Updated(load: LoadDetail): void {
+    this.showLoadWizardV2 = false;
+    this.loadWizardV2Mode = 'create';
+    this.loadWizardV2LoadId = null;
+    this.successMessage = `Load ${load?.load_number || load?.id || ''} updated.`;
+    this.loadLoads();
+    this.clearLoadActionQueryParams();
+    setTimeout(() => (this.successMessage = ''), 4000);
+  }
+
+  /**
+   * FN-1312: Apply `?action=...&loadId=...` deep-link routing for the loads
+   * page. `action=reassign` (a load-context quick-action from Smart Alert /
+   * Predictive Insight cards) opens the V2 wizard in edit mode for the
+   * referenced load. A bare `loadId` (no action) keeps the legacy detail
+   * drawer behavior.
+   *
+   * Extracted from `ngOnInit` so unit tests can drive the routing branches
+   * without spinning up the full lifecycle.
+   */
+  applyRouteQueryParams(params: Record<string, string | undefined>): void {
+    if (params['status']) this.filters.status = params['status']!;
+    if (params['billingStatus']) this.filters.billingStatus = params['billingStatus']!;
+
+    const loadId = params['loadId'];
+    const action = params['action'];
+
+    if (!loadId) return;
+
+    if (action === 'reassign') {
+      // Load-context quick-action deep-link: open V2 wizard in edit mode.
+      // Permission gate: users without LOADS_EDIT fall through to the
+      // read-only detail drawer (matches the wizard's own canEdit gate).
+      if (this.accessControl.hasPermission(PERMISSIONS.LOADS_EDIT)) {
+        this.loadWizardV2Mode = 'edit';
+        this.loadWizardV2LoadId = loadId;
+        this.showLoadWizardV2 = true;
+        this.showDetailsModal = false;
+        return;
+      }
+    }
+
+    // Default loadId-only deep-link → existing detail-drawer behavior.
+    this.loadsService.getLoad(loadId).subscribe({
+      next: (res) => {
+        this.selectedLoad = res?.data || null;
+        this.showDetailsModal = true;
+      }
+    });
+  }
+
+  /**
+   * FN-1312: Strip `action` and `loadId` from the URL (preserving any other
+   * query params) so a page refresh doesn't reopen the wizard. Uses
+   * `queryParamsHandling: 'merge'` with `null` values, which is the Angular
+   * idiom for removing specific keys.
+   */
+  private clearLoadActionQueryParams(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { action: null, loadId: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   /** Called when the wizard emits (save). Creates the load and closes the wizard. */
