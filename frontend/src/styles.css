@@ -13,6 +13,33 @@
   --border-color: rgba(31, 41, 55, 0.9);
   /* Native <select> chevron when appearance:none (matches slate-400 icons) */
   --fn-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none'%3E%3Cpath stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+
+  /*
+   * FN-1191 — FleetNeuron AI dark-theme palette tokens.
+   * Added so reports/ + future modules can route every color through a token
+   * (zero hardcoded hex in module SCSS/CSS). Slate scale + accent ramp picked
+   * to match the AI look already used by .card / .topbar / load-detail-drawer.
+   */
+  --ai-text-strong: #f1f5f9;
+  --ai-text-body: #e2e8f0;
+  --ai-text-soft: #cbd5e1;
+  --ai-text-muted: #94a3b8;
+  --ai-text-subtle: #64748b;
+  --ai-text-faint: #475569;
+  --ai-text-on-accent: #ffffff;
+  --ai-surface-deep: #0a1628;
+  --ai-surface-raised: #1e293b;
+  --ai-surface-elevated: #334155;
+  --ai-accent-info: #3b82f6;
+  --ai-accent-info-strong: #2563eb;
+  --ai-accent-info-stronger: #1d4ed8;
+  --ai-accent-cyan: #67e8f9;
+  --ai-accent-indigo: #a5b4fc;
+  --ai-accent-success: #4ade80;
+  --ai-accent-danger: #f87171;
+  --ai-accent-danger-soft: #fca5a5;
+  --ai-accent-warning: #fb923c;
+  --ai-accent-warning-soft: #fed7aa;
 }
 
 * {

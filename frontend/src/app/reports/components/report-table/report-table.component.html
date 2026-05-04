@@ -1,24 +1,41 @@
 <div class="report-table">
   <div class="table-header" *ngIf="title">
-    <h4>{{ title }}</h4>
-    <button class="btn btn-secondary" type="button" (click)="exportCsv()">Export CSV</button>
+    <h4 [id]="captionId">{{ title }}</h4>
+    <button class="btn btn-secondary" type="button" (click)="exportCsv()" [attr.aria-label]="'Export ' + (title || 'report') + ' to CSV'">Export CSV</button>
   </div>
 
   <div class="table-responsive">
-    <table class="table table-striped">
+    <table
+      class="table table-striped"
+      [attr.aria-labelledby]="title ? captionId : null"
+      [attr.aria-label]="title ? null : 'Report data'"
+    >
+      <caption *ngIf="title" class="sr-only">{{ title }}</caption>
       <thead>
         <tr>
-          <th *ngFor="let col of columns" style="cursor:pointer;">
-            <button type="button" class="btn btn-link" style="text-decoration:none; color:inherit; padding:0;" (click)="sortBy(col.key)">
+          <th
+            *ngFor="let col of columns"
+            scope="col"
+            [id]="columnHeaderId(col.key)"
+            [attr.aria-sort]="sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'"
+            style="cursor:pointer;"
+          >
+            <button
+              type="button"
+              class="btn btn-link"
+              style="text-decoration:none; color:inherit; padding:0;"
+              (click)="sortBy(col.key)"
+              [attr.aria-label]="'Sort by ' + col.label"
+            >
               {{ col.label }}
-              <span *ngIf="sortKey === col.key">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+              <span aria-hidden="true" *ngIf="sortKey === col.key">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
             </button>
           </th>
         </tr>
       </thead>
       <tbody>
         <tr *ngFor="let row of pagedRows">
-          <td *ngFor="let col of columns">
+          <td *ngFor="let col of columns" [headers]="columnHeaderId(col.key)">
             {{ col.format ? col.format(row[col.key]) : row[col.key] }}
           </td>
         </tr>
@@ -31,9 +48,9 @@
     </table>
   </div>
 
-  <div class="pagination" *ngIf="totalPages > 1">
-    <button class="btn btn-outline-secondary" type="button" (click)="prevPage()">Prev</button>
-    <span>Page {{ page }} / {{ totalPages }}</span>
-    <button class="btn btn-outline-secondary" type="button" (click)="nextPage()">Next</button>
+  <div class="pagination" *ngIf="totalPages > 1" role="navigation" aria-label="Table pagination">
+    <button class="btn btn-outline-secondary" type="button" (click)="prevPage()" [disabled]="page === 1" aria-label="Previous page">Prev</button>
+    <span aria-live="polite">Page {{ page }} / {{ totalPages }}</span>
+    <button class="btn btn-outline-secondary" type="button" (click)="nextPage()" [disabled]="page === totalPages" aria-label="Next page">Next</button>
   </div>
 </div>
