@@ -23,6 +23,11 @@ function emitLoadEvent(tenantId, event, payload) {
     });
 }
 
+// FN-1303: shape-check ids before they reach `WHERE id = $1::uuid` so a typo
+// or a stray static path (e.g. `/api/loads/throughput`) returns 404 instead of
+// crashing the query with `invalid input syntax for type uuid`.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const LOAD_STATUSES = ['DRAFT', 'NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
 const BILLING_STATUSES = ['PENDING', 'CANCELLED', 'CANCELED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
 const STOP_TYPES = ['PICKUP', 'DELIVERY'];
@@ -2612,6 +2617,255 @@ router.get('/smart-filter-counts', async (req, res) => {
   }
 });
 
+// ─── FN-1303: Daily AI Briefing upstream endpoints ──────────────────────────
+// `briefing-aggregator.js` (gateway) fans out to /throughput and
+// /exceptions/count on every dashboard load. Both must register BEFORE /:id.
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function todayUtcIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function parseBriefingDate(raw) {
+  if (raw === undefined || raw === null || raw === '') return todayUtcIso();
+  const value = String(raw).trim();
+  if (!ISO_DATE_RE.test(value)) return null;
+  return value;
+}
+
+/**
+ * @openapi
+ * /api/loads/throughput:
+ *   get:
+ *     summary: Daily load throughput totals (FN-1303)
+ *     description: >
+ *       Counts and total revenue for loads anchored to the requested UTC date,
+ *       used by the Daily AI Briefing aggregator. Effective date follows the
+ *       same COALESCE(completed_date, first PICKUP stop_date, created_at) rule
+ *       as `/api/loads/ai-insights`. Tenant + operating-entity scoped.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: YYYY-MM-DD (UTC); defaults to today
+ *     responses:
+ *       200:
+ *         description: Throughput payload
+ *       400:
+ *         description: Invalid date
+ *       500:
+ *         description: Server error
+ */
+router.get('/throughput', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const date = parseBriefingDate(req.query.date);
+  if (date === null) {
+    return res.status(400).json({ success: false, error: 'Invalid date; expected YYYY-MM-DD' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const scopeSql = `
+    (l.tenant_id = $1 OR $1::uuid IS NULL)
+    AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+  `;
+  const effectiveDateSql = `
+    COALESCE(
+      l.completed_date,
+      (SELECT stop_date FROM load_stops s WHERE s.load_id = l.id AND s.stop_type = 'PICKUP' ORDER BY s.sequence ASC LIMIT 1)::date,
+      l.created_at::date
+    )
+  `;
+
+  // Anchor counts to the requested date. exception_count mirrors the
+  // ai-insights `needs_attention` composite (overdue + missing_docs +
+  // drafts_ready) restricted to loads anchored to this date — there is no
+  // load_exceptions table, so this is the closest "open exceptions for the
+  // day" signal the schema can support today.
+  const sql = `
+    SELECT
+      COUNT(*) FILTER (WHERE ${effectiveDateSql} = $3::date)::int AS load_count,
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND UPPER(l.status::text) = ANY($4::text[])
+      )::int AS delivered_count,
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND (
+            (UPPER(l.status::text) <> ALL($5::text[])
+             AND EXISTS (
+               SELECT 1
+               FROM load_stops ls
+               WHERE ls.load_id = l.id
+                 AND ls.stop_type = 'DELIVERY'
+                 AND ls.stop_date::date < NOW()::date
+             ))
+            OR (UPPER(l.status::text) = 'DELIVERED'
+                AND NOT EXISTS (
+                  SELECT 1 FROM load_attachments la
+                  WHERE la.load_id = l.id AND la.type = 'PROOF_OF_DELIVERY'
+                ))
+            OR (UPPER(l.status::text) IN ('PICKED_UP', 'IN_TRANSIT', 'EN_ROUTE')
+                AND NOT EXISTS (
+                  SELECT 1 FROM load_attachments la
+                  WHERE la.load_id = l.id AND la.type = 'BOL'
+                ))
+            OR (UPPER(l.status::text) = 'DRAFT'
+                AND l.needs_review = true
+                AND l.created_at < NOW() - INTERVAL '2 hours')
+          )
+      )::int AS exception_count,
+      COALESCE(SUM(
+        CASE WHEN ${effectiveDateSql} = $3::date
+              AND UPPER(l.status::text) = ANY($4::text[])
+             THEN l.rate ELSE 0 END
+      ), 0)::numeric AS total_revenue
+    FROM loads l
+    WHERE ${scopeSql}
+  `;
+
+  try {
+    const result = await query(sql, [
+      tenantId,
+      operatingEntityId,
+      date,
+      DELIVERED_STATUSES,
+      EXCLUDED_FROM_OVERDUE
+    ]);
+    const row = result.rows[0] || {};
+    return res.json({
+      success: true,
+      data: {
+        date,
+        loadCount: Number(row.load_count) || 0,
+        deliveredCount: Number(row.delivered_count) || 0,
+        exceptionCount: Number(row.exception_count) || 0,
+        totalRevenue: Number(row.total_revenue) || 0
+      }
+    });
+  } catch (error) {
+    dtLogger.error('loads_throughput_failed', error, { date });
+    res.status(500).json({ success: false, error: 'Failed to compute throughput' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/exceptions/count:
+ *   get:
+ *     summary: Open exceptions count for a UTC date (FN-1303)
+ *     description: >
+ *       Composite exception count anchored to the requested date. Because
+ *       there is no `load_exceptions` table, the count is derived from
+ *       overdue loads, loads missing POD/BOL, and stale unreviewed AI drafts.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: YYYY-MM-DD (UTC); defaults to today
+ *     responses:
+ *       200:
+ *         description: Exception count + breakdown
+ *       400:
+ *         description: Invalid date
+ *       500:
+ *         description: Server error
+ */
+router.get('/exceptions/count', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const date = parseBriefingDate(req.query.date);
+  if (date === null) {
+    return res.status(400).json({ success: false, error: 'Invalid date; expected YYYY-MM-DD' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const scopeSql = `
+    (l.tenant_id = $1 OR $1::uuid IS NULL)
+    AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+  `;
+  const effectiveDateSql = `
+    COALESCE(
+      l.completed_date,
+      (SELECT stop_date FROM load_stops s WHERE s.load_id = l.id AND s.stop_type = 'PICKUP' ORDER BY s.sequence ASC LIMIT 1)::date,
+      l.created_at::date
+    )
+  `;
+
+  const sql = `
+    SELECT
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND UPPER(l.status::text) <> ALL($4::text[])
+          AND EXISTS (
+            SELECT 1 FROM load_stops ls
+            WHERE ls.load_id = l.id
+              AND ls.stop_type = 'DELIVERY'
+              AND ls.stop_date::date < NOW()::date
+          )
+      )::int AS overdue,
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND (
+            (UPPER(l.status::text) = 'DELIVERED'
+             AND NOT EXISTS (
+               SELECT 1 FROM load_attachments la
+               WHERE la.load_id = l.id AND la.type = 'PROOF_OF_DELIVERY'
+             ))
+            OR (UPPER(l.status::text) IN ('PICKED_UP', 'IN_TRANSIT', 'EN_ROUTE')
+                AND NOT EXISTS (
+                  SELECT 1 FROM load_attachments la
+                  WHERE la.load_id = l.id AND la.type = 'BOL'
+                ))
+          )
+      )::int AS missing_docs,
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND UPPER(l.status::text) = 'DRAFT'
+          AND l.needs_review = true
+          AND l.created_at < NOW() - INTERVAL '2 hours'
+      )::int AS drafts_ready
+    FROM loads l
+    WHERE ${scopeSql}
+  `;
+
+  try {
+    const result = await query(sql, [
+      tenantId,
+      operatingEntityId,
+      date,
+      EXCLUDED_FROM_OVERDUE
+    ]);
+    const row = result.rows[0] || {};
+    const breakdown = {
+      overdue: Number(row.overdue) || 0,
+      missing_docs: Number(row.missing_docs) || 0,
+      drafts_ready: Number(row.drafts_ready) || 0
+    };
+    const count = breakdown.overdue + breakdown.missing_docs + breakdown.drafts_ready;
+    return res.json({
+      success: true,
+      data: { date, count, breakdown }
+    });
+  } catch (error) {
+    dtLogger.error('loads_exceptions_count_failed', error, { date });
+    res.status(500).json({ success: false, error: 'Failed to compute exception count' });
+  }
+});
+
 /**
  * @openapi
  * /api/loads/{id}:
@@ -2652,6 +2906,11 @@ router.get('/smart-filter-counts', async (req, res) => {
  */
 // GET /api/loads/:id
 router.get('/:id', async (req, res) => {
+  // FN-1303: reject non-UUID ids without hitting the DB so missing static
+  // routes (e.g. `/throughput`) surface as 404, not 500 + loads_get_failed.
+  if (!UUID_RE.test(req.params.id)) {
+    return res.status(404).json({ success: false, error: 'Load not found' });
+  }
   try {
     const data = await getLoadDetail(query, req.params.id, req.context || null);
     if (!data) return res.status(404).json({ success: false, error: 'Load not found' });
