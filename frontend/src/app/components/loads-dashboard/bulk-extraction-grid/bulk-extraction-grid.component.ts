@@ -13,9 +13,20 @@ import { LoadAiEndpointExtraction, LoadDetail } from '../../../models/load-dashb
 
 /**
  * Per-file extraction status used by the grid rows.
- * Tracks each PDF through extract -> (auto-approve | draft) -> done/failed.
+ * Tracks each PDF through extract -> (auto-approve | draft) -> done/partial/failed.
+ *
+ * PARTIAL_SUCCESS (FN-1085): load was created but the source PDF failed to
+ * upload as a RATE_CONFIRMATION attachment. The load link is still surfaced so
+ * the user can open it and attach the PDF manually.
  */
-export type FileExtractionStatus = 'QUEUED' | 'EXTRACTING' | 'CREATING' | 'SUCCESS' | 'FAILED';
+export type FileExtractionStatus =
+  | 'QUEUED'
+  | 'EXTRACTING'
+  | 'CREATING'
+  | 'ATTACHING'
+  | 'SUCCESS'
+  | 'PARTIAL_SUCCESS'
+  | 'FAILED';
 
 export interface FileExtractionRow {
   file: File;
@@ -28,6 +39,8 @@ export interface FileExtractionRow {
   extraction: LoadAiEndpointExtraction | null;
   /** Human-readable error message on failure. */
   errorMessage: string;
+  /** Attachment-upload error (set when load created but PDF upload failed). */
+  attachmentError: string;
 }
 
 /**
@@ -77,7 +90,8 @@ export class BulkExtractionGridComponent implements OnInit, OnDestroy {
       autoApproved: false,
       load: null,
       extraction: null,
-      errorMessage: ''
+      errorMessage: '',
+      attachmentError: ''
     }));
     this.startProcessing();
   }
@@ -100,6 +114,15 @@ export class BulkExtractionGridComponent implements OnInit, OnDestroy {
     return this.rows.filter((r) => r.status === 'FAILED').length;
   }
 
+  /**
+   * FN-1085: rows where the load was created but the source PDF failed to
+   * upload as a RATE_CONFIRMATION attachment. Surfaced separately from full
+   * SUCCESS so the user knows to attach manually.
+   */
+  get partialSuccessCount(): number {
+    return this.rows.filter((r) => r.status === 'PARTIAL_SUCCESS').length;
+  }
+
   get successCount(): number {
     return this.rows.filter((r) => r.status === 'SUCCESS').length;
   }
@@ -109,7 +132,9 @@ export class BulkExtractionGridComponent implements OnInit, OnDestroy {
   }
 
   get processedCount(): number {
-    return this.rows.filter((r) => r.status === 'SUCCESS' || r.status === 'FAILED').length;
+    return this.rows.filter(
+      (r) => r.status === 'SUCCESS' || r.status === 'PARTIAL_SUCCESS' || r.status === 'FAILED'
+    ).length;
   }
 
   get progressPercent(): number {
@@ -169,11 +194,47 @@ export class BulkExtractionGridComponent implements OnInit, OnDestroy {
 
           this.loadsService.createLoad(payload).subscribe({
             next: (createRes) => {
-              row.status = 'SUCCESS';
+              const createdLoad = createRes?.data || null;
               row.autoApproved = shouldAutoApprove;
-              row.load = createRes?.data || null;
+              row.load = createdLoad;
+
+              // FN-1085: upload the source PDF as a RATE_CONFIRMATION
+              // attachment. Mirrors LoadWizardComponent.submitCreate's
+              // ai-extract path so bulk-created loads also have the rate
+              // confirmation attached for downstream review.
+              if (!createdLoad?.id) {
+                row.status = 'FAILED';
+                row.errorMessage = 'Load created but no ID returned.';
+                this.cdr.markForCheck();
+                resolve();
+                return;
+              }
+
+              row.status = 'ATTACHING';
               this.cdr.markForCheck();
-              resolve();
+
+              this.loadsService
+                .uploadAttachment(createdLoad.id, row.file, 'RATE_CONFIRMATION')
+                .subscribe({
+                  next: () => {
+                    row.status = 'SUCCESS';
+                    this.cdr.markForCheck();
+                    resolve();
+                  },
+                  error: (uploadErr) => {
+                    // Load created — surface as PARTIAL_SUCCESS so the row
+                    // stays visible with its load link, but distinct from
+                    // green SUCCESS so the user knows to attach the PDF
+                    // manually.
+                    row.status = 'PARTIAL_SUCCESS';
+                    row.attachmentError =
+                      uploadErr?.error?.message ||
+                      uploadErr?.message ||
+                      'Load created but PDF upload failed — attach manually.';
+                    this.cdr.markForCheck();
+                    resolve();
+                  }
+                });
             },
             error: (err) => {
               row.status = 'FAILED';
@@ -277,10 +338,14 @@ export class BulkExtractionGridComponent implements OnInit, OnDestroy {
 
   async retryFile(index: number): Promise<void> {
     const row = this.rows[index];
+    // Only FAILED rows are retried. PARTIAL_SUCCESS rows already created a
+    // load — retrying would create a duplicate load. The user must attach the
+    // PDF manually from the load detail drawer instead.
     if (!row || row.status !== 'FAILED') return;
 
     row.status = 'QUEUED';
     row.errorMessage = '';
+    row.attachmentError = '';
     row.extraction = null;
     row.load = null;
     row.autoApproved = false;
@@ -289,7 +354,9 @@ export class BulkExtractionGridComponent implements OnInit, OnDestroy {
     await this.processFile(row);
 
     // Recheck completion state
-    const allDone = this.rows.every((r) => r.status === 'SUCCESS' || r.status === 'FAILED');
+    const allDone = this.rows.every(
+      (r) => r.status === 'SUCCESS' || r.status === 'PARTIAL_SUCCESS' || r.status === 'FAILED'
+    );
     if (allDone && !this.processing) {
       this.completed = true;
     }
