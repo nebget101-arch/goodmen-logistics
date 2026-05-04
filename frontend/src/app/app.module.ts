@@ -82,6 +82,7 @@ import { AutoReplenishmentComponent } from './components/auto-replenishment/auto
 import { AiExtractionFlowComponent } from './components/loads-dashboard/ai-extraction-flow/ai-extraction-flow.component';
 import { DailyBriefingComponent } from './components/control-center/daily-briefing/daily-briefing.component';
 import { AskBarComponent } from './components/control-center/ask-bar/ask-bar.component';
+import { SmartAlertsComponent } from './components/control-center/smart-alerts/smart-alerts.component';
 
 @NgModule({
   declarations: [
@@ -153,7 +154,8 @@ import { AskBarComponent } from './components/control-center/ask-bar/ask-bar.com
     SharedModule,
     LocationsAdminModule,
     DailyBriefingComponent,
-    AskBarComponent
+    AskBarComponent,
+    SmartAlertsComponent
   ],
   providers: [
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
