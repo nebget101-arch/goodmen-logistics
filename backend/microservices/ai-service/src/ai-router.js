@@ -26,6 +26,10 @@ const {
   handlePartsPhotoIntake,
   photoUpload,
 } = require('./handlers/parts-photo-intake-handler');
+const {
+  handlePartsInvoiceIntake,
+  invoiceUpload,
+} = require('./handlers/parts-invoice-intake-handler');
 const { loadAuthContext } = require('./services/auth-context');
 
 function buildAiRouter(deps) {
@@ -1962,6 +1966,78 @@ function buildAiRouter(deps) {
     '/parts/identify-from-photo',
     photoUpload.single('image'),
     (req, res) => handlePartsPhotoIntake(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/parts/extract-from-invoice:
+   *   post:
+   *     summary: AI parts-invoice OCR intake (FN-1103)
+   *     description: >
+   *       Accepts a vendor parts invoice as either `multipart/form-data`
+   *       (field `image`) OR JSON `{base64, mimeType}`. Accepts images
+   *       (image/jpeg, image/png, image/webp) or PDF (application/pdf).
+   *       Max 20MB. Uploads the file to R2 under
+   *       `parts/invoices/<uuid>.<ext>`, then runs the FN-1102 invoice
+   *       vision handler. Response carries the AI extraction (so the FE
+   *       can show a checkbox table for review/edit/bulk-create) and the
+   *       `r2Key` for the source artefact. Auth is enforced upstream by
+   *       the gateway, consistent with other `/api/ai/*` endpoints.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         multipart/form-data:
+   *           schema:
+   *             type: object
+   *             required: [image]
+   *             properties:
+   *               image:
+   *                 type: string
+   *                 format: binary
+   *                 description: Invoice file (jpeg/png/webp or PDF, max 20MB)
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [base64]
+   *             properties:
+   *               base64:
+   *                 type: string
+   *               mimeType:
+   *                 type: string
+   *                 default: image/jpeg
+   *     responses:
+   *       200:
+   *         description: Invoice uploaded and lines extracted
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 aiResult:
+   *                   type: object
+   *                   description: Same envelope as `parts-invoice-vision-handler` (vendor, invoiceNumber, lineItems[], confidence, warnings)
+   *                 r2Key:
+   *                   type: string
+   *                   description: Storage key under `parts/invoices/`
+   *       400:
+   *         description: Missing/invalid file, unsupported mimeType, or invalid base64
+   *       413:
+   *         description: File exceeds 20MB
+   *       422:
+   *         description: Invoice unreadable (AI_INVOICE_UNREADABLE) — `r2Key` is still returned
+   *       502:
+   *         description: R2 upload failed or AI upstream/parse failure
+   */
+  router.post(
+    '/parts/extract-from-invoice',
+    invoiceUpload.single('image'),
+    (req, res) => handlePartsInvoiceIntake(req, res, deps)
   );
 
   return router;

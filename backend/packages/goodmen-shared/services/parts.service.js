@@ -318,6 +318,117 @@ async function deletePart(id) {
 }
 
 /**
+ * FN-1103: Bulk-create parts from a JSON list (Quick Add Invoice flow).
+ *
+ * - Dedup within the request: if the same SKU appears more than once,
+ *   the first occurrence wins, later ones go into `skipped` with
+ *   `reason: 'duplicate_in_request'`.
+ * - Dedup against existing rows: any SKU that already exists in the DB
+ *   goes into `skipped` with `reason: 'sku_exists'`. A single
+ *   `WHERE sku IN (...)` query checks all SKUs at once.
+ * - FK auto-create for vendor + manufacturer via
+ *   `resolveManufacturerVendor` (FN-1091/1093).
+ * - All inserts wrap in one transaction. If any insert fails the
+ *   transaction rolls back and the error is rethrown for the caller
+ *   to translate to HTTP 500.
+ *
+ * Returns `{ created: [partRow, ...], skipped: [{ sku, reason }, ...] }`.
+ */
+async function bulkCreateParts(items) {
+	if (!Array.isArray(items) || items.length === 0) {
+		throw new Error('items must be a non-empty array');
+	}
+
+	// Validate basics + dedup within request.
+	const skipped = [];
+	const seenInRequest = new Set();
+	const candidates = []; // items to actually insert
+	for (const raw of items) {
+		if (!raw || typeof raw !== 'object') continue;
+		const sku = typeof raw.sku === 'string' ? raw.sku.trim().toUpperCase() : '';
+		const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+
+		if (!sku || !name) {
+			skipped.push({
+				sku: sku || '',
+				reason: 'missing_sku_or_name',
+			});
+			continue;
+		}
+
+		if (seenInRequest.has(sku)) {
+			skipped.push({ sku, reason: 'duplicate_in_request' });
+			continue;
+		}
+		seenInRequest.add(sku);
+		candidates.push({ ...raw, sku, name });
+	}
+
+	if (candidates.length === 0) {
+		return { created: [], skipped };
+	}
+
+	// Single roundtrip to find existing SKUs.
+	const candidateSkus = candidates.map((c) => c.sku);
+	const existingRows = await db('parts')
+		.whereIn(db.raw('UPPER(sku)'), candidateSkus)
+		.select('sku');
+	const existingSet = new Set(existingRows.map((r) => String(r.sku).toUpperCase()));
+
+	const toInsert = [];
+	for (const c of candidates) {
+		if (existingSet.has(c.sku)) {
+			skipped.push({ sku: c.sku, reason: 'sku_exists' });
+		} else {
+			toInsert.push(c);
+		}
+	}
+
+	if (toInsert.length === 0) {
+		return { created: [], skipped };
+	}
+
+	// Resolve FK vendor/manufacturer outside the trx (each call may
+	// `findOrCreate` against the master tables). Then insert all parts in
+	// one transaction so a failure midway rolls everything back.
+	const prepared = [];
+	for (const c of toInsert) {
+		const mvPatch = await resolveManufacturerVendor(c);
+		const imagePatch = resolveImageR2Patch(c);
+		prepared.push({
+			sku: c.sku,
+			name: c.name,
+			category: c.category,
+			description: c.description,
+			unit_cost: c.unit_cost || 0,
+			unit_price: c.unit_price || 0,
+			quantity_on_hand: c.quantity_on_hand || 0,
+			reorder_level: c.reorder_level || 5,
+			supplier_id: c.supplier_id,
+			status: 'ACTIVE',
+			...mvPatch,
+			...imagePatch,
+		});
+	}
+
+	const created = await db.transaction(async (trx) => {
+		const inserted = [];
+		for (const row of prepared) {
+			const [partRow] = await trx('parts').insert(row).returning('*');
+			inserted.push(partRow);
+		}
+		return inserted;
+	});
+
+	dtLogger.info('parts_bulk_created', {
+		created: created.length,
+		skipped: skipped.length,
+	});
+
+	return { created, skipped };
+}
+
+/**
  * Get part categories (distinct)
  */
 async function getCategories() {
@@ -370,6 +481,7 @@ module.exports = {
 	createPart,
 	updatePart,
 	deletePart,
+	bulkCreateParts,
 	getCategories,
 	getManufacturers,
 	resolveManufacturerVendor,

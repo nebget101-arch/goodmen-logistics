@@ -343,6 +343,111 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'parts_manager
 
 /**
  * @openapi
+ * /api/parts/bulk:
+ *   post:
+ *     summary: Bulk-create parts from JSON (FN-1103)
+ *     description: >-
+ *       Creates many parts in a single transaction. Used by the Quick Add
+ *       Invoice OCR flow (FN-1101) after the user reviews/edits AI-extracted
+ *       line items. Dedupes by SKU within the request and against existing
+ *       DB rows. Auto-creates vendor and manufacturer master rows when
+ *       only free-text values are supplied (FN-1091/1093). All inserts
+ *       run in one transaction — any failure rolls back the whole batch
+ *       and returns 500.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [items]
+ *             properties:
+ *               items:
+ *                 type: array
+ *                 description: Parts to create (each requires sku and name)
+ *                 items:
+ *                   type: object
+ *                   required: [sku, name]
+ *                   properties:
+ *                     sku:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     category:
+ *                       type: string
+ *                     manufacturer:
+ *                       type: string
+ *                     description:
+ *                       type: string
+ *                     unit_cost:
+ *                       type: number
+ *                     unit_price:
+ *                       type: number
+ *                     reorder_level:
+ *                       type: integer
+ *                     preferred_vendor_name:
+ *                       type: string
+ *     responses:
+ *       201:
+ *         description: Bulk-create result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 created:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 skipped:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       sku:
+ *                         type: string
+ *                       reason:
+ *                         type: string
+ *                         enum: [duplicate_in_request, sku_exists, missing_sku_or_name]
+ *       400:
+ *         description: items must be a non-empty array
+ *       500:
+ *         description: Insert failed; full batch rolled back
+ */
+router.post('/bulk', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
+	try {
+		const items = req.body && Array.isArray(req.body.items) ? req.body.items : null;
+		if (!items || items.length === 0) {
+			return res.status(400).json({ error: 'items must be a non-empty array' });
+		}
+
+		const result = await partsService.bulkCreateParts(items);
+
+		dtLogger.info('parts_bulk_create_completed', {
+			userId: req.user?.id,
+			created: result.created.length,
+			skipped: result.skipped.length,
+		});
+
+		return res.status(201).json({
+			success: true,
+			created: result.created,
+			skipped: result.skipped,
+		});
+	} catch (error) {
+		dtLogger.error('parts_bulk_create_failed', { error: error.message });
+		return res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * @openapi
  * /api/parts:
  *   get:
  *     summary: List all parts
