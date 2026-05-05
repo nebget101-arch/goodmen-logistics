@@ -1,0 +1,63 @@
+/* FN-1326 — severity chip; pulls hue tokens from styles.css :root. */
+
+.severity-badge-host {
+  display: inline-flex;
+}
+
+.severity-badge {
+  --badge-fg: var(--sev-medium-fg);
+  --badge-bg: var(--sev-medium-bg);
+  --badge-border: var(--sev-medium-border);
+  --badge-pip: var(--sev-medium-pip);
+
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+  border: 1px solid var(--badge-border);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+
+  &--critical {
+    --badge-fg: var(--sev-critical-fg);
+    --badge-bg: var(--sev-critical-bg);
+    --badge-border: var(--sev-critical-border);
+    --badge-pip: var(--sev-critical-pip);
+  }
+
+  &--high {
+    --badge-fg: var(--sev-high-fg);
+    --badge-bg: var(--sev-high-bg);
+    --badge-border: var(--sev-high-border);
+    --badge-pip: var(--sev-high-pip);
+  }
+
+  &--medium {
+    --badge-fg: var(--sev-medium-fg);
+    --badge-bg: var(--sev-medium-bg);
+    --badge-border: var(--sev-medium-border);
+    --badge-pip: var(--sev-medium-pip);
+  }
+
+  &--low {
+    --badge-fg: var(--sev-low-fg);
+    --badge-bg: var(--sev-low-bg);
+    --badge-border: var(--sev-low-border);
+    --badge-pip: var(--sev-low-pip);
+  }
+}
+
+.severity-badge__pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--badge-pip);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--badge-pip) 35%, transparent);
+}
