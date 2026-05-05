@@ -593,6 +593,103 @@ router.get('/manufacturers', authMiddleware, async (req, res) => {
 
 /**
  * @openapi
+ * /api/parts/duplicate-check:
+ *   get:
+ *     summary: Find possible duplicate parts via fuzzy match (FN-1110)
+ *     description: >-
+ *       Returns up to `limit` parts whose name, sku, or manufacturer is
+ *       similar to the provided query terms. Uses pg_trgm `similarity()` with
+ *       a weighted blend (name 0.5 + sku 0.3 + manufacturer 0.2) and a
+ *       per-component threshold of 0.85, so a strong match on any single
+ *       supplied field is enough to surface a row. At least one of `name`,
+ *       `sku`, or `manufacturer` must be provided.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: name
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sku
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: manufacturer
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *           minimum: 1
+ *           maximum: 25
+ *     responses:
+ *       200:
+ *         description: List of duplicate candidates sorted by blended similarity desc
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       name:
+ *                         type: string
+ *                       sku:
+ *                         type: string
+ *                       manufacturer:
+ *                         type: string
+ *                         nullable: true
+ *                       similarity:
+ *                         type: number
+ *       400:
+ *         description: At least one of name/sku/manufacturer must be provided
+ *       500:
+ *         description: Server error
+ */
+router.get('/duplicate-check', authMiddleware, async (req, res) => {
+	try {
+		const name = String(req.query.name || '').trim();
+		const sku = String(req.query.sku || '').trim();
+		const manufacturer = String(req.query.manufacturer || '').trim();
+
+		if (!name && !sku && !manufacturer) {
+			return res.status(400).json({
+				error: 'At least one of name, sku, or manufacturer must be provided'
+			});
+		}
+
+		const candidates = await partsService.findDuplicateCandidates({
+			name,
+			sku,
+			manufacturer,
+			limit: req.query.limit
+		});
+
+		return res.json({
+			success: true,
+			data: candidates
+		});
+	} catch (error) {
+		dtLogger.error('parts_duplicate_check_failed', { error: error.message });
+		return res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * @openapi
  * /api/parts/{partId}/barcodes:
  *   post:
  *     summary: Assign a barcode to a part
