@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  EventEmitter,
   OnDestroy,
   OnInit,
+  Output,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject, takeUntil } from 'rxjs';
@@ -21,6 +23,18 @@ interface SectionView {
   icon: 'flow' | 'alert' | 'driver' | 'vehicle' | 'spark';
 }
 
+/**
+ * FN-1337: emitted when the briefing finishes loading so the parent can
+ * collapse / restore the card. `hasBaseline=false` means the AI service has
+ * not yet collected enough data to produce a useful briefing; in that case
+ * `firstBaselineEta` (when present) is the ISO date the first baseline is
+ * expected.
+ */
+export interface BriefingVisibility {
+  hasBaseline: boolean;
+  firstBaselineEta: string | null;
+}
+
 @Component({
   selector: 'app-daily-briefing',
   standalone: true,
@@ -30,10 +44,14 @@ interface SectionView {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DailyBriefingComponent implements OnInit, OnDestroy {
+  @Output() visibilityChange = new EventEmitter<BriefingVisibility>();
+
   response: DailyBriefingResponse | null = null;
   loading = true;
   refreshing = false;
   errorMessage: string | null = null;
+  hasBaseline = true;
+  firstBaselineEta: string | null = null;
 
   readonly sections: SectionView[] = [
     { id: 'throughput', label: 'Load throughput', icon: 'flow' },
@@ -89,6 +107,7 @@ export class DailyBriefingComponent implements OnInit, OnDestroy {
           this.response = data;
           this.loading = false;
           this.refreshing = false;
+          this.applyBaseline(data);
           this.cdr.markForCheck();
         },
         error: () => {
@@ -99,5 +118,18 @@ export class DailyBriefingComponent implements OnInit, OnDestroy {
           this.cdr.markForCheck();
         },
       });
+  }
+
+  /**
+   * Defaults to `hasBaseline=true` when the server omits the field — preserves
+   * the pre-FN-1337 contract where every response is render-worthy.
+   */
+  private applyBaseline(data: DailyBriefingResponse): void {
+    this.hasBaseline = data.hasBaseline !== false;
+    this.firstBaselineEta = data.firstBaselineEta ?? null;
+    this.visibilityChange.emit({
+      hasBaseline: this.hasBaseline,
+      firstBaselineEta: this.firstBaselineEta,
+    });
   }
 }

@@ -154,6 +154,33 @@ describe('DailyBriefingComponent', () => {
     pending.complete();
   });
 
+  it('emits visibilityChange with hasBaseline=true when the response omits the field (back-compat)', () => {
+    const events: Array<{ hasBaseline: boolean; firstBaselineEta: string | null }> = [];
+    component.visibilityChange.subscribe((e) => events.push(e));
+    fixture.detectChanges();
+
+    expect(events.length).toBe(1);
+    expect(events[0]).toEqual({ hasBaseline: true, firstBaselineEta: null });
+  });
+
+  it('hides briefing sections and shows "First baseline ready by {date}" when hasBaseline=false', () => {
+    const noBaseline: DailyBriefingResponse = {
+      ...mockResponse,
+      hasBaseline: false,
+      firstBaselineEta: '2026-05-12',
+    };
+    briefingService.getBriefing.and.returnValue(of(noBaseline));
+    const events: Array<{ hasBaseline: boolean; firstBaselineEta: string | null }> = [];
+    component.visibilityChange.subscribe((e) => events.push(e));
+    fixture.detectChanges();
+
+    expect(events).toEqual([{ hasBaseline: false, firstBaselineEta: '2026-05-12' }]);
+    expect(fixture.nativeElement.querySelector('.briefing-card__sections')).toBeFalsy();
+    const baseline = fixture.nativeElement.querySelector('[data-testid="briefing-first-baseline-eta"]');
+    expect(baseline).toBeTruthy();
+    expect(baseline.textContent).toContain('First baseline ready by 2026-05-12');
+  });
+
   it('exposes accessible labels: region heading and refresh button', () => {
     fixture.detectChanges();
 

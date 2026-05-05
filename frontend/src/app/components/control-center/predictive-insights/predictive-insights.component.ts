@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  EventEmitter,
   OnDestroy,
   OnInit,
+  Output,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject, takeUntil } from 'rxjs';
@@ -19,6 +21,16 @@ import {
   QuickActionDef,
   QuickActionsComponent,
 } from '../quick-actions/quick-actions.component';
+
+/**
+ * FN-1337: emitted after the trends fetch resolves so the parent can collapse
+ * the card when no series has any meaningful data. `firstBaselineEta` is the
+ * ISO date the AI service expects baseline coverage by, when known.
+ */
+export interface InsightsVisibility {
+  hasBaseline: boolean;
+  firstBaselineEta: string | null;
+}
 
 type TrendDirection = 'up' | 'down' | 'flat';
 
@@ -52,10 +64,14 @@ interface SparklinePath {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PredictiveInsightsComponent implements OnInit, OnDestroy {
+  @Output() visibilityChange = new EventEmitter<InsightsVisibility>();
+
   response: TrendsResponse | null = null;
   loading = true;
   refreshing = false;
   errorMessage: string | null = null;
+  hasBaseline = true;
+  firstBaselineEta: string | null = null;
 
   readonly cards: CardView[] = [
     {
@@ -308,6 +324,7 @@ export class PredictiveInsightsComponent implements OnInit, OnDestroy {
           this.response = data;
           this.loading = false;
           this.refreshing = false;
+          this.applyBaseline(data);
           this.cdr.markForCheck();
         },
         error: () => {
@@ -318,5 +335,24 @@ export class PredictiveInsightsComponent implements OnInit, OnDestroy {
           this.cdr.markForCheck();
         },
       });
+  }
+
+  /**
+   * Server-supplied `hasBaseline` wins. When omitted, derive from the response:
+   * a series counts as having a baseline if any actual or predicted point is
+   * non-null. A card with zero meaningful data across all four series is
+   * surfaced to the parent as `hasBaseline=false`.
+   */
+  private applyBaseline(data: TrendsResponse): void {
+    if (typeof data.hasBaseline === 'boolean') {
+      this.hasBaseline = data.hasBaseline;
+    } else {
+      this.hasBaseline = (Object.values(data.series) as TrendSeries[]).some((s) => this.hasData(s));
+    }
+    this.firstBaselineEta = data.firstBaselineEta ?? null;
+    this.visibilityChange.emit({
+      hasBaseline: this.hasBaseline,
+      firstBaselineEta: this.firstBaselineEta,
+    });
   }
 }

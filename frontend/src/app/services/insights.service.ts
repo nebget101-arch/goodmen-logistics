@@ -30,6 +30,8 @@ export interface TrendsResponse {
   series: TrendsPayload;
   upstreamErrors: TrendsUpstreamError[];
   cached: boolean;
+  hasBaseline?: boolean;
+  firstBaselineEta?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })

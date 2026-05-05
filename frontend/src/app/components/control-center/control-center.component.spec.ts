@@ -32,11 +32,11 @@ class StubWindowSelectorComponent {}
 
 const layoutEndpoint = `${environment.apiUrl}/users/me/dashboard-layout`;
 
-function envelope(role: string, cards: WidgetId[], isDefault: boolean) {
+function envelope(role: string, cards: WidgetId[], isDefault: boolean, hidden: WidgetId[] = []) {
   return {
     success: true,
     data: {
-      layout: { cards },
+      layout: { cards, hidden },
       is_default: isDefault,
       role,
       updated_at: isDefault ? null : '2026-05-04T12:00:00.000Z',
@@ -150,7 +150,7 @@ describe('ControlCenterComponent', () => {
 
     const put = httpMock.expectOne(layoutEndpoint);
     expect(put.request.method).toBe('PUT');
-    expect(put.request.body).toEqual({ cards: component.widgets });
+    expect(put.request.body).toEqual({ cards: component.widgets, hidden: [] });
     put.flush(envelope('dispatcher', [...component.widgets], false));
     tick();
     expect(component.saving).toBeFalse();
@@ -225,6 +225,103 @@ describe('ControlCenterComponent', () => {
     tick();
 
     expect(component.errorMessage).toContain('Could not save');
+    httpMock.verify();
+  }));
+
+  it('hydrates persisted hidden cards and excludes them from visibleWidgets', fakeAsync(() => {
+    const { fixture, component, httpMock } = setup();
+    fixture.detectChanges();
+    tick();
+    httpMock
+      .expectOne(layoutEndpoint)
+      .flush(
+        envelope(
+          'dispatcher',
+          [...ROLE_DEFAULT_LAYOUTS.dispatcher],
+          false,
+          ['daily-briefing'] as WidgetId[],
+        ),
+      );
+    tick();
+
+    expect(component.hidden).toEqual(['daily-briefing'] as WidgetId[]);
+    expect(component.visibleWidgets).not.toContain('daily-briefing' as WidgetId);
+    expect(component.visibleWidgets.length).toBe(component.widgets.length - 1);
+    httpMock.verify();
+  }));
+
+  it('persists newly hidden card when a child reports hasBaseline=false', fakeAsync(() => {
+    const { fixture, component, httpMock } = setup();
+    fixture.detectChanges();
+    tick();
+    httpMock
+      .expectOne(layoutEndpoint)
+      .flush(envelope('dispatcher', [...ROLE_DEFAULT_LAYOUTS.dispatcher], true));
+    tick();
+
+    component.onBriefingVisibility({ hasBaseline: false, firstBaselineEta: '2026-05-12' });
+    expect(component.hidden).toEqual(['daily-briefing'] as WidgetId[]);
+
+    const put = httpMock.expectOne(layoutEndpoint);
+    expect(put.request.method).toBe('PUT');
+    expect(put.request.body).toEqual({
+      cards: component.widgets,
+      hidden: ['daily-briefing'],
+    });
+    put.flush(
+      envelope('dispatcher', [...component.widgets], false, ['daily-briefing'] as WidgetId[]),
+    );
+    tick();
+    httpMock.verify();
+  }));
+
+  it('un-hides a card when the child later reports hasBaseline=true', fakeAsync(() => {
+    const { fixture, component, httpMock } = setup();
+    fixture.detectChanges();
+    tick();
+    httpMock
+      .expectOne(layoutEndpoint)
+      .flush(
+        envelope(
+          'dispatcher',
+          [...ROLE_DEFAULT_LAYOUTS.dispatcher],
+          false,
+          ['predictive-insights'] as WidgetId[],
+        ),
+      );
+    tick();
+
+    component.onInsightsVisibility({ hasBaseline: true, firstBaselineEta: null });
+    expect(component.hidden).toEqual([]);
+
+    const put = httpMock.expectOne(layoutEndpoint);
+    expect(put.request.body).toEqual({ cards: component.widgets, hidden: [] });
+    put.flush(envelope('dispatcher', [...component.widgets], false));
+    tick();
+    httpMock.verify();
+  }));
+
+  it('toggleShowHidden surfaces dismissed cards without persisting', fakeAsync(() => {
+    const { fixture, component, httpMock } = setup();
+    fixture.detectChanges();
+    tick();
+    httpMock
+      .expectOne(layoutEndpoint)
+      .flush(
+        envelope(
+          'dispatcher',
+          [...ROLE_DEFAULT_LAYOUTS.dispatcher],
+          false,
+          ['daily-briefing'] as WidgetId[],
+        ),
+      );
+    tick();
+
+    expect(component.visibleWidgets).not.toContain('daily-briefing' as WidgetId);
+    component.toggleShowHidden();
+    expect(component.showHidden).toBeTrue();
+    expect(component.visibleWidgets).toContain('daily-briefing' as WidgetId);
+    httpMock.expectNone(layoutEndpoint);
     httpMock.verify();
   }));
 
