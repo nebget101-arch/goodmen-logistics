@@ -4,6 +4,12 @@ const { query } = require('../internal/db');
 const dtLogger = require('../utils/logger');
 const auth = require('./auth-middleware');
 const db = require('../internal/db').knex;
+const {
+  isValidWindow,
+  computeWindow,
+  computeDelta,
+  DEFAULT_TIMEZONE
+} = require('../services/window-stats');
 
 function buildVehicleUnionSqlPg(source = 'all_vehicles') {
   if (source === 'vehicles') {
@@ -104,8 +110,23 @@ router.use(auth(['admin', 'safety']));
  *       loads, billing, hos, compliance) that resolve via Promise.allSettled -- if one group
  *       fails the others still return. A `degraded` flag and `degradedGroups` array are
  *       included when any group fails. Requires admin or safety role.
+ *
+ *       When `?window=today|7d|30d` is supplied, the response shape changes to
+ *       `{ window, timezone, currentRange, previousRange, current, previous, delta }`.
+ *       Window math is timezone-aware (operating-entity timezone, falling back to
+ *       America/New_York). Previous window is the same length immediately preceding
+ *       the current window. When `window` is omitted the legacy flat shape is returned
+ *       unchanged. Invalid `window` values return 400.
  *     tags:
  *       - Dashboard
+ *     parameters:
+ *       - in: query
+ *         name: window
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [today, 7d, 30d]
+ *         description: Optional time window. Switches response to current/previous/delta shape.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -179,6 +200,152 @@ router.use(auth(['admin', 'safety']));
  *       500:
  *         description: Server error
  */
+/**
+ * Builds the per-group stats query map. When `windowBounds` is supplied,
+ * each group is additionally filtered by the appropriate timestamp column
+ * (`created_at` for most tables; `record_date` for hos_records). Groups that
+ * are intrinsically point-in-time (vehicles maintenance status, compliance
+ * cert state) receive an "as of windowEnd" interpretation by filtering rows
+ * to those that existed at windowEnd.
+ *
+ * @param {object} ctx
+ * @param {object} ctx.tableFlags  hasDrivers/hasLoads/hasHosRecords
+ * @param {string} ctx.vehicleSqlPg
+ * @param {string|null} ctx.tenantId
+ * @param {string|null} ctx.operatingEntityId
+ * @param {{ start: Date, end: Date } | null} windowBounds
+ */
+function buildStatGroups({ tableFlags, vehicleSqlPg, tenantId, operatingEntityId }, windowBounds) {
+  const { hasDrivers, hasLoads, hasHosRecords } = tableFlags;
+  const baseParams = [tenantId, operatingEntityId];
+  const windowed = !!windowBounds;
+  const wParams = windowed ? [windowBounds.start.toISOString(), windowBounds.end.toISOString()] : [];
+  const params = [...baseParams, ...wParams];
+
+  // SQL fragments that switch on whether windowing is active
+  const driversWindow = windowed ? `AND created_at >= $3 AND created_at < $4` : '';
+  const driversAsOf   = windowed ? `created_at < $4` : 'TRUE';
+  const loadsWindow   = windowed ? `AND created_at >= $3 AND created_at < $4` : '';
+  const hosWindow     = windowed ? `AND hr.record_date >= $3::date AND hr.record_date < $4::date` : '';
+
+  return {
+    drivers: hasDrivers
+      ? query(`SELECT
+          COUNT(*) FILTER (WHERE status = 'active') AS "activeDrivers",
+          COUNT(*) AS "totalDrivers"
+        FROM drivers
+        WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)
+        ${driversWindow}`, params)
+      : Promise.resolve({ rows: [{ activeDrivers: 0, totalDrivers: 0 }] }),
+
+    vehicles: query(`SELECT
+        COUNT(*) FILTER (WHERE status = 'in-service') AS "activeVehicles",
+        COUNT(*) AS "totalVehicles",
+        COUNT(*) FILTER (WHERE status = 'out-of-service') AS "oosVehicles",
+        COUNT(*) FILTER (WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') AS "vehiclesNeedingMaintenance"
+      FROM (${vehicleSqlPg}) scoped_vehicles
+      ${windowed ? 'WHERE TRUE' : ''}`, params),
+
+    loads: hasLoads
+      ? query(`SELECT
+          COUNT(*) FILTER (WHERE UPPER(status::text) IN ('IN_TRANSIT', 'IN-TRANSIT')) AS "activeLoads",
+          COUNT(*) FILTER (WHERE UPPER(status::text) IN ('NEW', 'PENDING')) AS "pendingLoads",
+          COUNT(*) FILTER (WHERE UPPER(status::text) IN ('DELIVERED', 'COMPLETED') ${windowed
+            ? `AND COALESCE(completed_date, delivery_date, created_at) >= $3
+               AND COALESCE(completed_date, delivery_date, created_at) < $4`
+            : `AND DATE(COALESCE(completed_date, delivery_date, created_at)) = CURRENT_DATE`}) AS "completedLoadsToday",
+          COUNT(*) FILTER (WHERE UPPER(REPLACE(status::text, ' ', '_')) = 'DISPATCHED') AS "loadsDispatched",
+          COUNT(*) FILTER (WHERE UPPER(REPLACE(status::text, ' ', '_')) IN ('IN_TRANSIT', 'EN_ROUTE', 'PICKED_UP')) AS "loadsInTransit",
+          COUNT(*) FILTER (WHERE UPPER(status::text) IN ('DELIVERED', 'COMPLETED')) AS "loadsDelivered",
+          COUNT(*) FILTER (WHERE UPPER(status::text) IN ('CANCELLED', 'CANCELED')) AS "loadsCanceled"
+        FROM loads
+        WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)
+        ${loadsWindow}`, params)
+      : Promise.resolve({ rows: [{ activeLoads: 0, pendingLoads: 0, completedLoadsToday: 0, loadsDispatched: 0, loadsInTransit: 0, loadsDelivered: 0, loadsCanceled: 0 }] }),
+
+    billing: hasLoads
+      ? query(`SELECT
+          COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PENDING') AS "billingPending",
+          COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('CANCELLED', 'CANCELED')) AS "billingCanceled",
+          COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING')) AS "billingInvoiced",
+          COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'FUNDED') AS "billingFunded",
+          COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PAID') AS "billingPaid"
+        FROM loads
+        WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)
+        ${loadsWindow}`, params)
+      : Promise.resolve({ rows: [{ billingPending: 0, billingCanceled: 0, billingInvoiced: 0, billingFunded: 0, billingPaid: 0 }] }),
+
+    hos: hasHosRecords && hasDrivers
+      ? query(`SELECT
+          COUNT(*) FILTER (WHERE array_length(hr.violations, 1) > 0) AS "hosViolations",
+          COUNT(*) FILTER (WHERE hr.status = 'warning') AS "hosWarnings"
+        FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id
+        WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2)
+        ${hosWindow}`, params)
+      : Promise.resolve({ rows: [{ hosViolations: 0, hosWarnings: 0 }] }),
+
+    compliance: hasDrivers
+      ? query(`SELECT
+          COALESCE(ROUND(AVG(dqf_completeness)), 0) AS "dqfComplianceRate",
+          COUNT(*) FILTER (WHERE medical_cert_expiry <= CURRENT_DATE) AS "expiredMedCerts",
+          COUNT(*) FILTER (WHERE medical_cert_expiry > CURRENT_DATE AND medical_cert_expiry <= CURRENT_DATE + INTERVAL '30 days') AS "upcomingMedCerts",
+          COUNT(*) FILTER (WHERE cdl_expiry <= CURRENT_DATE) AS "expiredCDLs",
+          COUNT(*) FILTER (WHERE clearinghouse_status != 'eligible') AS "clearinghouseIssues"
+        FROM drivers
+        WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)
+        AND ${driversAsOf}`, params)
+      : Promise.resolve({ rows: [{ dqfComplianceRate: 0, expiredMedCerts: 0, upcomingMedCerts: 0, expiredCDLs: 0, clearinghouseIssues: 0 }] })
+  };
+}
+
+const GROUP_DEFAULTS = {
+  drivers: { activeDrivers: 0, totalDrivers: 0 },
+  vehicles: { activeVehicles: 0, totalVehicles: 0, oosVehicles: 0, vehiclesNeedingMaintenance: 0 },
+  loads: { activeLoads: 0, pendingLoads: 0, completedLoadsToday: 0, loadsDispatched: 0, loadsInTransit: 0, loadsDelivered: 0, loadsCanceled: 0 },
+  billing: { billingPending: 0, billingCanceled: 0, billingInvoiced: 0, billingFunded: 0, billingPaid: 0 },
+  hos: { hosViolations: 0, hosWarnings: 0 },
+  compliance: { dqfComplianceRate: 0, expiredMedCerts: 0, upcomingMedCerts: 0, expiredCDLs: 0, clearinghouseIssues: 0 }
+};
+
+async function resolveStats(ctx, windowBounds) {
+  const groups = buildStatGroups(ctx, windowBounds);
+  const groupNames = Object.keys(groups);
+  const results = await Promise.allSettled(Object.values(groups));
+
+  const statsData = {};
+  const degradedGroups = [];
+  results.forEach((result, idx) => {
+    const groupName = groupNames[idx];
+    if (result.status === 'fulfilled') {
+      const row = result.value?.rows?.[0] || GROUP_DEFAULTS[groupName];
+      Object.entries(row).forEach(([k, v]) => { statsData[k] = Number(v) || 0; });
+    } else {
+      dtLogger.error(`Dashboard stats group "${groupName}" failed`, result.reason, {
+        path: '/api/dashboard/stats',
+        group: groupName,
+        windowed: !!windowBounds
+      });
+      Object.assign(statsData, GROUP_DEFAULTS[groupName]);
+      degradedGroups.push(groupName);
+    }
+  });
+  return { statsData, degradedGroups };
+}
+
+async function resolveOperatingEntityTimezone(operatingEntityId) {
+  if (!operatingEntityId) return DEFAULT_TIMEZONE;
+  try {
+    const result = await query(
+      `SELECT settings_json->>'timezone' AS tz FROM operating_entities WHERE id = $1`,
+      [operatingEntityId]
+    );
+    const tz = result?.rows?.[0]?.tz;
+    return tz || DEFAULT_TIMEZONE;
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
+}
+
 router.get('/stats', async (req, res) => {
   const startTime = Date.now();
   try {
@@ -189,113 +356,68 @@ router.get('/stats', async (req, res) => {
     const hasDrivers = await tableExists('drivers');
     const hasLoads = await tableExists('loads');
     const hasHosRecords = await tableExists('hos_records');
-    const params = [tenantId, operatingEntityId];
 
-    // Define isolated query groups — each resolves independently
-    const groups = {
-      drivers: hasDrivers
-        ? query(`SELECT
-            COUNT(*) FILTER (WHERE status = 'active') AS "activeDrivers",
-            COUNT(*) AS "totalDrivers"
-          FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)`, params)
-        : Promise.resolve({ rows: [{ activeDrivers: 0, totalDrivers: 0 }] }),
-
-      vehicles: query(`SELECT
-          COUNT(*) FILTER (WHERE status = 'in-service') AS "activeVehicles",
-          COUNT(*) AS "totalVehicles",
-          COUNT(*) FILTER (WHERE status = 'out-of-service') AS "oosVehicles",
-          COUNT(*) FILTER (WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') AS "vehiclesNeedingMaintenance"
-        FROM (${vehicleSqlPg}) scoped_vehicles`, params),
-
-      loads: hasLoads
-        ? query(`SELECT
-            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('IN_TRANSIT', 'IN-TRANSIT')) AS "activeLoads",
-            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('NEW', 'PENDING')) AS "pendingLoads",
-            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('DELIVERED', 'COMPLETED') AND DATE(COALESCE(completed_date, delivery_date, created_at)) = CURRENT_DATE) AS "completedLoadsToday",
-            COUNT(*) FILTER (WHERE UPPER(REPLACE(status::text, ' ', '_')) = 'DISPATCHED') AS "loadsDispatched",
-            COUNT(*) FILTER (WHERE UPPER(REPLACE(status::text, ' ', '_')) IN ('IN_TRANSIT', 'EN_ROUTE', 'PICKED_UP')) AS "loadsInTransit",
-            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('DELIVERED', 'COMPLETED')) AS "loadsDelivered",
-            COUNT(*) FILTER (WHERE UPPER(status::text) IN ('CANCELLED', 'CANCELED')) AS "loadsCanceled"
-          FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)`, params)
-        : Promise.resolve({ rows: [{ activeLoads: 0, pendingLoads: 0, completedLoadsToday: 0, loadsDispatched: 0, loadsInTransit: 0, loadsDelivered: 0, loadsCanceled: 0 }] }),
-
-      billing: hasLoads
-        ? query(`SELECT
-            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PENDING') AS "billingPending",
-            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('CANCELLED', 'CANCELED')) AS "billingCanceled",
-            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) IN ('BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING')) AS "billingInvoiced",
-            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'FUNDED') AS "billingFunded",
-            COUNT(*) FILTER (WHERE UPPER(REPLACE(COALESCE(billing_status::text, 'PENDING'), ' ', '_')) = 'PAID') AS "billingPaid"
-          FROM loads WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)`, params)
-        : Promise.resolve({ rows: [{ billingPending: 0, billingCanceled: 0, billingInvoiced: 0, billingFunded: 0, billingPaid: 0 }] }),
-
-      hos: hasHosRecords && hasDrivers
-        ? query(`SELECT
-            COUNT(*) FILTER (WHERE array_length(hr.violations, 1) > 0) AS "hosViolations",
-            COUNT(*) FILTER (WHERE hr.status = 'warning') AS "hosWarnings"
-          FROM hos_records hr JOIN drivers d ON d.id = hr.driver_id
-          WHERE d.tenant_id = $1 AND ($2::uuid IS NULL OR d.operating_entity_id = $2)`, params)
-        : Promise.resolve({ rows: [{ hosViolations: 0, hosWarnings: 0 }] }),
-
-      compliance: hasDrivers
-        ? query(`SELECT
-            COALESCE(ROUND(AVG(dqf_completeness)), 0) AS "dqfComplianceRate",
-            COUNT(*) FILTER (WHERE medical_cert_expiry <= CURRENT_DATE) AS "expiredMedCerts",
-            COUNT(*) FILTER (WHERE medical_cert_expiry > CURRENT_DATE AND medical_cert_expiry <= CURRENT_DATE + INTERVAL '30 days') AS "upcomingMedCerts",
-            COUNT(*) FILTER (WHERE cdl_expiry <= CURRENT_DATE) AS "expiredCDLs",
-            COUNT(*) FILTER (WHERE clearinghouse_status != 'eligible') AS "clearinghouseIssues"
-          FROM drivers WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)`, params)
-        : Promise.resolve({ rows: [{ dqfComplianceRate: 0, expiredMedCerts: 0, upcomingMedCerts: 0, expiredCDLs: 0, clearinghouseIssues: 0 }] })
+    const ctx = {
+      tableFlags: { hasDrivers, hasLoads, hasHosRecords },
+      vehicleSqlPg,
+      tenantId,
+      operatingEntityId
     };
 
-    // Default zeros for each group (used when a group fails)
-    const groupDefaults = {
-      drivers: { activeDrivers: 0, totalDrivers: 0 },
-      vehicles: { activeVehicles: 0, totalVehicles: 0, oosVehicles: 0, vehiclesNeedingMaintenance: 0 },
-      loads: { activeLoads: 0, pendingLoads: 0, completedLoadsToday: 0, loadsDispatched: 0, loadsInTransit: 0, loadsDelivered: 0, loadsCanceled: 0 },
-      billing: { billingPending: 0, billingCanceled: 0, billingInvoiced: 0, billingFunded: 0, billingPaid: 0 },
-      hos: { hosViolations: 0, hosWarnings: 0 },
-      compliance: { dqfComplianceRate: 0, expiredMedCerts: 0, upcomingMedCerts: 0, expiredCDLs: 0, clearinghouseIssues: 0 }
-    };
+    const windowParam = req.query.window;
 
-    const groupNames = Object.keys(groups);
-    const results = await Promise.allSettled(Object.values(groups));
-
-    const statsData = {};
-    const degradedGroups = [];
-
-    results.forEach((result, idx) => {
-      const groupName = groupNames[idx];
-      if (result.status === 'fulfilled') {
-        const row = result.value?.rows?.[0] || groupDefaults[groupName];
-        Object.entries(row).forEach(([k, v]) => { statsData[k] = Number(v) || 0; });
-      } else {
-        dtLogger.error(`Dashboard stats group "${groupName}" failed`, result.reason, {
-          path: '/api/dashboard/stats',
-          group: groupName
-        });
-        Object.assign(statsData, groupDefaults[groupName]);
-        degradedGroups.push(groupName);
+    // Backwards compat: no window → existing flat-shape response.
+    if (windowParam === undefined || windowParam === null || windowParam === '') {
+      const { statsData, degradedGroups } = await resolveStats(ctx, null);
+      if (degradedGroups.length > 0) {
+        statsData.degraded = true;
+        statsData.degradedGroups = degradedGroups;
       }
-    });
 
-    if (degradedGroups.length > 0) {
-      statsData.degraded = true;
-      statsData.degradedGroups = degradedGroups;
+      const duration = Date.now() - startTime;
+      dtLogger.trackDatabase('SELECT', 'dashboard_stats', duration, true);
+      dtLogger.trackRequest('GET', '/api/dashboard/stats', 200, duration, degradedGroups.length > 0 ? { degraded: true, degradedGroups } : undefined);
+      dtLogger.sendMetric('custom.drivers.active', statsData.activeDrivers || 0);
+      dtLogger.sendMetric('custom.vehicles.active', statsData.activeVehicles || 0);
+      dtLogger.sendMetric('custom.loads.active', statsData.activeLoads || 0);
+      dtLogger.sendMetric('custom.hos.violations', statsData.hosViolations || 0);
+      dtLogger.sendMetric('custom.compliance.dqf_rate', statsData.dqfComplianceRate || 0);
+      return res.json(statsData);
+    }
+
+    if (!isValidWindow(windowParam)) {
+      return res.status(400).json({ message: 'Invalid window. Must be one of: today, 7d, 30d.' });
+    }
+
+    const tz = await resolveOperatingEntityTimezone(operatingEntityId);
+    const bounds = computeWindow(windowParam, tz);
+
+    const [currentRes, previousRes] = await Promise.all([
+      resolveStats(ctx, bounds.current),
+      resolveStats(ctx, bounds.previous)
+    ]);
+
+    const degraded = [...new Set([...currentRes.degradedGroups, ...previousRes.degradedGroups])];
+    const delta = computeDelta(currentRes.statsData, previousRes.statsData);
+
+    const payload = {
+      window: bounds.window,
+      timezone: bounds.timezone,
+      currentRange: { start: bounds.current.start.toISOString(), end: bounds.current.end.toISOString() },
+      previousRange: { start: bounds.previous.start.toISOString(), end: bounds.previous.end.toISOString() },
+      current: currentRes.statsData,
+      previous: previousRes.statsData,
+      delta
+    };
+    if (degraded.length > 0) {
+      payload.degraded = true;
+      payload.degradedGroups = degraded;
     }
 
     const duration = Date.now() - startTime;
     dtLogger.trackDatabase('SELECT', 'dashboard_stats', duration, true);
-    dtLogger.trackRequest('GET', '/api/dashboard/stats', 200, duration, degradedGroups.length > 0 ? { degraded: true, degradedGroups } : undefined);
-
-    // Track key business metrics
-    dtLogger.sendMetric('custom.drivers.active', statsData.activeDrivers || 0);
-    dtLogger.sendMetric('custom.vehicles.active', statsData.activeVehicles || 0);
-    dtLogger.sendMetric('custom.loads.active', statsData.activeLoads || 0);
-    dtLogger.sendMetric('custom.hos.violations', statsData.hosViolations || 0);
-    dtLogger.sendMetric('custom.compliance.dqf_rate', statsData.dqfComplianceRate || 0);
-
-    res.json(statsData);
+    dtLogger.trackRequest('GET', '/api/dashboard/stats', 200, duration, { window: windowParam, ...(degraded.length ? { degraded: true, degradedGroups: degraded } : {}) });
+    return res.json(payload);
   } catch (error) {
     const duration = Date.now() - startTime;
     dtLogger.error('Failed to fetch dashboard stats', error, { path: '/api/dashboard/stats' });
