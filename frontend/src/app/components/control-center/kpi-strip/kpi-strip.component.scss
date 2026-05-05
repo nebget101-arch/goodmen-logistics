@@ -4,7 +4,12 @@
  * Each card shows the current value scoped to the active dashboard window,
  * a sub line (target / context), and a delta vs. the previous window when
  * the backend emits one.
+ *
+ * FN-1345 — uses shared breakpoint tokens. KPI strip wraps to 3-up under
+ * 1280px and to 2-up under 768px so KPI cards stay readable on tablet/mobile.
  */
+
+@use '../../../../styles/breakpoints' as bp;
 
 :host {
   display: block;
@@ -23,13 +28,13 @@
   gap: 12px;
 }
 
-@media (max-width: 1280px) {
+@include bp.respond-down(bp.$bp-wide) {
   .kpi-strip__list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 720px) {
+@include bp.respond-down(bp.$bp-tablet) {
   .kpi-strip__list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -45,13 +50,13 @@
   gap: 12px;
 }
 
-@media (max-width: 1280px) {
+@include bp.respond-down(bp.$bp-wide) {
   .kpi-strip__loading {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 720px) {
+@include bp.respond-down(bp.$bp-tablet) {
   .kpi-strip__loading {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

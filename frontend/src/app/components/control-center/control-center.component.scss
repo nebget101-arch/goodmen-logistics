@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 :host {
   display: block;
 }
@@ -8,6 +10,23 @@
   gap: 18px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
   color: #e5e7eb;
+  min-width: 0;
+}
+
+// FN-1345 — Below 1280px any sibling right rail (if added by a future story)
+// must collapse inline below the main column. Stacking the .control-center__layout
+// children removes the two-column track and keeps the rail's content reachable.
+.control-center__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 18px;
+  align-items: start;
+}
+
+@include bp.respond-down(bp.$bp-wide) {
+  .control-center__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .control-center__header {
@@ -179,4 +198,28 @@
   font-weight: 600;
   color: #f8fafc;
   letter-spacing: 0.01em;
+}
+
+// FN-1345 — mobile rhythm. Tighten gaps + quick-actions padding so cards
+// breathe consistently on tablet/mobile and Quick Actions stay reachable
+// without horizontal scroll. Drag-reorder unaffected (CDK transforms work
+// inside any container width).
+@include bp.respond-down(bp.$bp-tablet) {
+  .control-center {
+    gap: 14px;
+  }
+
+  .control-center__grid {
+    gap: 14px;
+  }
+
+  .control-center__quick-actions {
+    padding: 18px;
+  }
+}
+
+@include bp.respond-down(bp.$bp-mobile) {
+  .control-center__quick-actions {
+    padding: 14px;
+  }
 }

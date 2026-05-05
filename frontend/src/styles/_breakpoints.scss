@@ -1,0 +1,20 @@
+// FN-1345 — shared responsive breakpoint tokens for the Control Center redesign.
+// Keep these in sync with the QA validation matrix (FN-1346): 1920 / 1280 / 1024 / 768 / 375.
+
+$bp-mobile:    375px;  // small phones
+$bp-tablet:    768px;  // KPI strip wraps to 2-up below this
+$bp-desktop:   1024px;  // dense desktop / small laptop
+$bp-wide:      1280px;  // right-rail / two-column threshold for Control Center
+$bp-ultrawide: 1920px;  // reference width for design comps
+
+@mixin respond-down($max) {
+  @media (max-width: $max) {
+    @content;
+  }
+}
+
+@mixin respond-up($min) {
+  @media (min-width: ($min + 1)) {
+    @content;
+  }
+}
