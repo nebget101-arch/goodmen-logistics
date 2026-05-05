@@ -1,0 +1,154 @@
+.master-typeahead {
+  position: relative;
+  width: 100%;
+}
+
+.typeahead-input-wrap {
+  position: relative;
+}
+
+.typeahead-input {
+  /* Inherits .form-control from the host page. We only add right-padding
+     so the spinner doesn't overlap the caret when loading. */
+  padding-right: 32px;
+}
+
+.typeahead-spinner {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border-radius: 50%;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-top-color: rgba(59, 130, 246, 0.95);
+  animation: master-typeahead-spin 0.7s linear infinite;
+}
+
+@keyframes master-typeahead-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.typeahead-dropdown {
+  position: absolute;
+  z-index: 1000;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.9), 0 0 0 1px rgba(15, 23, 42, 1);
+}
+
+.typeahead-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.typeahead-row {
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.typeahead-row:hover,
+.typeahead-row.active {
+  background: rgba(59, 130, 246, 0.18);
+  color: #f1f5f9;
+}
+
+.typeahead-row-name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.typeahead-empty {
+  margin: 0;
+  padding: 12px;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.85);
+  text-align: center;
+}
+
+.typeahead-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  font-size: 13px;
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.typeahead-error-text {
+  line-height: 1.4;
+}
+
+.typeahead-retry {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.18);
+  color: #fee2e2;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.typeahead-retry:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.typeahead-create-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(34, 197, 94, 0.08);
+  color: #bbf7d0;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.typeahead-create-row:hover,
+.typeahead-create-row.active {
+  background: rgba(34, 197, 94, 0.18);
+}
+
+.typeahead-create-row[disabled] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.typeahead-create-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.35);
+  color: #f0fdf4;
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.typeahead-create-name {
+  font-weight: 600;
+  color: #f0fdf4;
+}

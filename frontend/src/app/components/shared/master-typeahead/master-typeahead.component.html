@@ -1,0 +1,68 @@
+<div class="master-typeahead">
+  <div class="typeahead-input-wrap">
+    <input
+      #inputEl
+      type="text"
+      class="form-control typeahead-input"
+      [id]="inputId || null"
+      [value]="inputText"
+      [disabled]="disabled"
+      [placeholder]="placeholder || ('Search ' + entityLabel + '…')"
+      [attr.aria-autocomplete]="'list'"
+      [attr.aria-expanded]="showDropdown"
+      [attr.aria-busy]="loading || creating ? 'true' : null"
+      autocomplete="off"
+      (input)="onInput($event)"
+      (focus)="onFocus()"
+      (keydown)="onKeydown($event)"
+    />
+    <span *ngIf="loading" class="typeahead-spinner" aria-hidden="true"></span>
+  </div>
+
+  <div *ngIf="showDropdown" class="typeahead-dropdown" role="listbox">
+    <ng-container *ngIf="error; else listOrEmpty">
+      <div class="typeahead-error" role="alert">
+        <span class="typeahead-error-text">{{ error }}</span>
+        <button type="button" class="typeahead-retry" (click)="retry()">Retry</button>
+      </div>
+    </ng-container>
+
+    <ng-template #listOrEmpty>
+      <ul *ngIf="results.length" class="typeahead-list">
+        <li
+          *ngFor="let row of results; let i = index; trackBy: trackById"
+          role="option"
+          class="typeahead-row"
+          [class.active]="i === activeIndex"
+          [attr.aria-selected]="i === activeIndex"
+          (mousedown)="$event.preventDefault(); selectResult(row)"
+        >
+          <span class="typeahead-row-name">{{ row.name }}</span>
+        </li>
+      </ul>
+
+      <p
+        *ngIf="!loading && !results.length && hasSearched && !canCreate()"
+        class="typeahead-empty"
+      >
+        No {{ entityLabel }}s match "{{ inputText }}"
+      </p>
+
+      <button
+        *ngIf="canCreate()"
+        type="button"
+        class="typeahead-create-row"
+        [class.active]="activeIndex === results.length"
+        (mousedown)="$event.preventDefault(); createNew()"
+        [disabled]="creating"
+      >
+        <span class="typeahead-create-icon" aria-hidden="true">+</span>
+        <span class="typeahead-create-label">
+          <ng-container *ngIf="!creating">Create new {{ entityLabel }}: </ng-container>
+          <ng-container *ngIf="creating">Creating {{ entityLabel }}: </ng-container>
+          <span class="typeahead-create-name">"{{ inputText.trim() }}"</span>
+        </span>
+      </button>
+    </ng-template>
+  </div>
+</div>
