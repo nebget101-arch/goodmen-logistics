@@ -4,7 +4,14 @@
  * dashboard. Severity tokens come from the FN-1326 design tokens; this file
  * only owns layout, the bulk-action bar, the empty/loading/error states, and
  * the per-target list inside an expanded group.
+ *
+ * FN-1345 — mobile rhythm: tighter padding/gap below 768px so the queue
+ * stacks cleanly with the rest of the Control Center cards and doesn't
+ * trigger horizontal scroll. Existing flex-wrap on header/filters/bulk-bar
+ * already handles the narrower width.
  */
+
+@use '../../../../styles/breakpoints' as bp;
 
 .action-queue {
   display: flex;
@@ -329,4 +336,34 @@
 @keyframes action-queue-shimmer {
   0%   { background-position: 100% 0; }
   100% { background-position: -100% 0; }
+}
+
+@include bp.respond-down(bp.$bp-tablet) {
+  .action-queue {
+    padding: 14px 14px 16px;
+    gap: 12px;
+
+    &__list {
+      gap: 8px;
+    }
+
+    &__details {
+      padding: 10px 12px 12px;
+    }
+  }
+}
+
+@include bp.respond-down(bp.$bp-mobile) {
+  .action-queue {
+    padding: 12px 12px 14px;
+
+    &__filters {
+      gap: 8px;
+    }
+
+    &__filter {
+      min-width: 0;
+      flex: 1 1 calc(50% - 4px);
+    }
+  }
 }

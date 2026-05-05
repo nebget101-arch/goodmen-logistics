@@ -155,12 +155,41 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
+  min-width: 0;
 }
 
 .dashboard-column {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
+}
+
+/* FN-1345 — Below 1280px the Control Center collapses to a single column;
+   tighten the shell gap so action-queue + KPI strip stay rhythmically aligned. */
+@media (max-width: 1280px) {
+  .dashboard-grid {
+    gap: 16px;
+  }
+}
+
+/* FN-1345 — Below 768px stack with a tighter rhythm and reduce shell padding
+   so cards reach the edges on tablet/mobile without horizontal scroll. */
+@media (max-width: 768px) {
+  .dashboard-shell {
+    padding: 18px 14px;
+  }
+  .dashboard-ask-bar,
+  .dashboard-briefing,
+  .dashboard-insights {
+    margin-bottom: 16px;
+  }
+  .dashboard-grid {
+    gap: 14px;
+  }
+  .dashboard-column {
+    gap: 12px;
+  }
 }
 
 .panel {
