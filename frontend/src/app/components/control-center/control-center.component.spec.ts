@@ -14,8 +14,8 @@ import { environment } from '../../../environments/environment';
 
 @Component({ selector: 'app-daily-briefing', standalone: true, template: '' })
 class StubDailyBriefingComponent {}
-@Component({ selector: 'app-smart-alerts', standalone: true, template: '' })
-class StubSmartAlertsComponent {}
+@Component({ selector: 'app-action-queue', standalone: true, template: '' })
+class StubActionQueueComponent {}
 @Component({ selector: 'app-predictive-insights', standalone: true, template: '' })
 class StubPredictiveInsightsComponent {}
 @Component({
@@ -56,7 +56,7 @@ function setup(): {
         CommonModule,
         DragDropModule,
         StubDailyBriefingComponent,
-        StubSmartAlertsComponent,
+        StubActionQueueComponent,
         StubPredictiveInsightsComponent,
         StubQuickActionsComponent,
       ],
@@ -110,21 +110,21 @@ describe('ControlCenterComponent', () => {
     httpMock.verify();
   }));
 
-  it('uses saved layout and sanitizes unknown widget ids', fakeAsync(() => {
+  it('uses saved layout, sanitizes unknown ids, and migrates legacy smart-alerts → action-queue', fakeAsync(() => {
     const { fixture, component, httpMock } = setup();
     fixture.detectChanges();
     tick();
     httpMock.expectOne(layoutEndpoint).flush(
       envelope(
         'dispatcher',
-        ['quick-actions', 'unknown' as WidgetId, 'smart-alerts', 'daily-briefing'],
+        ['quick-actions', 'unknown' as WidgetId, 'smart-alerts' as unknown as WidgetId, 'daily-briefing'],
         false,
       ),
     );
     tick();
     expect(component.widgets).toEqual([
       'quick-actions',
-      'smart-alerts',
+      'action-queue',
       'daily-briefing',
     ] as WidgetId[]);
     httpMock.verify();
@@ -171,12 +171,12 @@ describe('ControlCenterComponent', () => {
     tick();
     httpMock
       .expectOne(layoutEndpoint)
-      .flush(envelope('safety', ['quick-actions', 'smart-alerts'] as WidgetId[], false));
+      .flush(envelope('safety', ['quick-actions', 'action-queue'] as WidgetId[], false));
     tick();
 
     expect(component.widgets).toEqual([
       'quick-actions',
-      'smart-alerts',
+      'action-queue',
     ] as WidgetId[]);
 
     component.resetToDefault();

@@ -2,7 +2,7 @@ import type { QuickActionDef } from './quick-actions/quick-actions.component';
 
 export type WidgetId =
   | 'daily-briefing'
-  | 'smart-alerts'
+  | 'action-queue'
   | 'predictive-insights'
   | 'quick-actions';
 
@@ -10,10 +10,19 @@ export type RoleKey = 'dispatcher' | 'safety' | 'maintenance' | 'owner';
 
 export const ALL_WIDGET_IDS: readonly WidgetId[] = [
   'daily-briefing',
-  'smart-alerts',
+  'action-queue',
   'predictive-insights',
   'quick-actions',
 ];
+
+/**
+ * Legacy widget ids that map to a current widget. Persisted layouts written
+ * before FN-1322 (Action Queue) used `smart-alerts`; rewrite on read so users
+ * keep their card order across the rename.
+ */
+const LEGACY_WIDGET_ID_MAP: Readonly<Record<string, WidgetId>> = {
+  'smart-alerts': 'action-queue',
+};
 
 export const FALLBACK_ROLE: RoleKey = 'dispatcher';
 
@@ -22,10 +31,10 @@ export const FALLBACK_ROLE: RoleKey = 'dispatcher';
  * Order is the rendered top-to-bottom card order.
  */
 export const ROLE_DEFAULT_LAYOUTS: Readonly<Record<RoleKey, readonly WidgetId[]>> = {
-  dispatcher: ['daily-briefing', 'smart-alerts', 'predictive-insights', 'quick-actions'],
-  safety: ['daily-briefing', 'smart-alerts', 'predictive-insights', 'quick-actions'],
-  maintenance: ['daily-briefing', 'smart-alerts', 'predictive-insights', 'quick-actions'],
-  owner: ['daily-briefing', 'predictive-insights', 'smart-alerts'],
+  dispatcher: ['daily-briefing', 'action-queue', 'predictive-insights', 'quick-actions'],
+  safety: ['daily-briefing', 'action-queue', 'predictive-insights', 'quick-actions'],
+  maintenance: ['daily-briefing', 'action-queue', 'predictive-insights', 'quick-actions'],
+  owner: ['daily-briefing', 'predictive-insights', 'action-queue'],
 };
 
 /**
@@ -98,10 +107,13 @@ export function sanitizeLayout(widgets: unknown): WidgetId[] {
   const out: WidgetId[] = [];
   for (const id of widgets) {
     if (typeof id !== 'string') continue;
-    if (!ALL_WIDGET_IDS.includes(id as WidgetId)) continue;
-    if (seen.has(id as WidgetId)) continue;
-    seen.add(id as WidgetId);
-    out.push(id as WidgetId);
+    const mapped: WidgetId | undefined =
+      (LEGACY_WIDGET_ID_MAP[id] as WidgetId | undefined) ??
+      (ALL_WIDGET_IDS.includes(id as WidgetId) ? (id as WidgetId) : undefined);
+    if (!mapped) continue;
+    if (seen.has(mapped)) continue;
+    seen.add(mapped);
+    out.push(mapped);
   }
   return out;
 }

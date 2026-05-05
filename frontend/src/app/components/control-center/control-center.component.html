@@ -48,7 +48,7 @@
       </button>
       <ng-container [ngSwitch]="id">
         <app-daily-briefing *ngSwitchCase="'daily-briefing'"></app-daily-briefing>
-        <app-smart-alerts *ngSwitchCase="'smart-alerts'"></app-smart-alerts>
+        <app-action-queue *ngSwitchCase="'action-queue'"></app-action-queue>
         <app-predictive-insights *ngSwitchCase="'predictive-insights'"></app-predictive-insights>
         <div *ngSwitchCase="'quick-actions'" class="control-center__quick-actions">
           <h3 class="control-center__quick-actions-title">Quick actions</h3>
