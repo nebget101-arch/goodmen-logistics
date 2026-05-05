@@ -6,7 +6,12 @@ import { takeUntil } from 'rxjs/operators';
 import { ManufacturersService, MasterEntity } from '../../services/manufacturers.service';
 import { VendorsService } from '../../services/vendors.service';
 import { MasterTypeaheadValue } from '../shared/master-typeahead/master-typeahead.component';
-import { AiPartsService, PartConfidence } from '../../services/ai-parts.service';
+import {
+  AiPartsService,
+  BulkCreateResponse,
+  InvoiceAiResult,
+  PartConfidence,
+} from '../../services/ai-parts.service';
 
 @Component({
   selector: 'app-parts-catalog',
@@ -85,6 +90,21 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
   @ViewChild('snapPhotoInput') snapPhotoInput!: ElementRef<HTMLInputElement>;
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── FN-1104: Quick Add → Scan Invoice ───────────────────────────────────────
+  /** Whether the Scan Invoice review modal is open. */
+  invoiceModalOpen = false;
+  /** AI extraction shown in the review modal (null until upload returns). */
+  invoiceAiResult: InvoiceAiResult | null = null;
+  /** R2 key for the uploaded invoice — held for audit-trail wiring. */
+  invoiceR2Key = '';
+  /** Set of catalog SKUs (uppercase) so the modal can flag known SKUs. */
+  invoiceExistingSkus: Set<string> = new Set<string>();
+  /** Cancel signal for the in-flight invoice extraction request. */
+  private invoiceCancel$ = new Subject<void>();
+  private invoiceSub: Subscription | null = null;
+  @ViewChild('scanInvoiceInput') scanInvoiceInput!: ElementRef<HTMLInputElement>;
+  // ─────────────────────────────────────────────────────────────────────────────
+
   /**
    * Bound once at construction so the OnPush typeahead receives stable Input
    * references (FN-317 RCA: fresh per-CD references trap OnPush in re-renders).
@@ -138,6 +158,7 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.cancelAiPhoto();
+    this.cancelAiInvoice();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -172,6 +193,7 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
       next: (response: any) => {
         this.parts = response.data || [];
         this.applyFilters();
+        this.refreshInvoiceExistingSkus();
         this.loading = false;
       },
       error: (error: any) => {
@@ -179,6 +201,15 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
         this.loading = false;
       }
     });
+  }
+
+  /** Build the lookup the Scan Invoice modal uses to flag known SKUs. */
+  private refreshInvoiceExistingSkus(): void {
+    const next = new Set<string>();
+    for (const p of this.parts) {
+      if (p?.sku) next.add(String(p.sku).trim().toUpperCase());
+    }
+    this.invoiceExistingSkus = next;
   }
 
   loadCategories(): void {
@@ -744,5 +775,94 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
       description:  ai.confidence?.description,
       dimensions:   ai.confidence?.dimensions,
     };
+  }
+
+  // ── FN-1104: Quick Add → Scan Invoice ───────────────────────────────────────
+
+  /** Trigger the hidden invoice file input (image or PDF). */
+  startScanInvoice(): void {
+    this.closeQuickAdd();
+    if (!this.scanInvoiceInput?.nativeElement) return;
+    // Reset so the same file can be reselected back-to-back.
+    this.scanInvoiceInput.nativeElement.value = '';
+    this.scanInvoiceInput.nativeElement.click();
+  }
+
+  /**
+   * File-input handler. Uploads to /api/ai/parts/extract-from-invoice and
+   * opens the review modal with the extracted lines. On failure, surface
+   * a toast — the user can retry or fall back to manual add.
+   */
+  onScanInvoiceSelected(event: Event): void {
+    const target = event.target as HTMLInputElement | null;
+    const file = target?.files?.[0];
+    if (!file) return;
+
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.aiBusy = true;
+    this.invoiceCancel$ = new Subject<void>();
+
+    this.invoiceSub?.unsubscribe();
+    this.invoiceSub = this.aiPartsService
+      .extractFromInvoice(file)
+      .pipe(takeUntil(this.invoiceCancel$))
+      .subscribe({
+        next: (res) => {
+          this.aiBusy = false;
+          this.invoiceAiResult = res.data;
+          this.invoiceR2Key = res.r2Key || '';
+          this.refreshInvoiceExistingSkus();
+          this.invoiceModalOpen = true;
+        },
+        error: (err: Error) => {
+          this.aiBusy = false;
+          this.errorMessage = err?.message
+            || 'AI invoice extraction failed. Please add parts manually.';
+        },
+      });
+  }
+
+  cancelAiInvoice(): void {
+    if (this.aiBusy) {
+      this.invoiceCancel$.next();
+      this.invoiceCancel$.complete();
+      this.aiBusy = false;
+    }
+    this.invoiceSub?.unsubscribe();
+    this.invoiceSub = null;
+  }
+
+  /** Modal closed without confirming (Cancel or X). */
+  onInvoiceModalClosed(): void {
+    this.invoiceModalOpen = false;
+    this.invoiceAiResult = null;
+    this.invoiceR2Key = '';
+  }
+
+  /**
+   * Modal confirmed bulk-create. Show a "Created N parts" toast and
+   * refresh the catalog so the new SKUs appear immediately.
+   */
+  onInvoiceModalConfirmed(result: BulkCreateResponse): void {
+    const createdCount = result?.created?.length || 0;
+    const skippedCount = result?.skipped?.length || 0;
+
+    if (createdCount > 0) {
+      const noun = createdCount === 1 ? 'part' : 'parts';
+      this.successMessage = skippedCount > 0
+        ? `Created ${createdCount} ${noun} (${skippedCount} skipped). View catalog below.`
+        : `Created ${createdCount} ${noun}. View catalog below.`;
+      setTimeout(() => (this.successMessage = ''), 5000);
+      this.loadParts();
+    } else if (skippedCount > 0) {
+      // Nothing created — leave the modal open so the user can fix per-row
+      // errors (the modal renders them inline). No toast.
+      return;
+    }
+
+    this.invoiceModalOpen = false;
+    this.invoiceAiResult = null;
+    this.invoiceR2Key = '';
   }
 }
