@@ -28,11 +28,81 @@
         />
       </label>
 
-      <button type="button" class="btn-primary btn-with-icon" (click)="openForm()">
+      <!-- FN-1099: Quick Add → Snap Photo (split menu) -->
+      <div class="quick-add-wrap">
+        <button
+          type="button"
+          class="btn-primary btn-with-icon quick-add-toggle"
+          (click)="toggleQuickAdd()"
+          [attr.aria-expanded]="quickAddOpen"
+          aria-haspopup="menu"
+          [disabled]="aiBusy"
+        >
+          <span class="btn-icon icon-plus"></span>
+          <span>Quick Add</span>
+          <span class="quick-add-caret">▾</span>
+        </button>
+        <div *ngIf="quickAddOpen" class="quick-add-menu" role="menu">
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            (click)="startSnapPhoto()"
+          >
+            <span class="quick-add-icon">📷</span>
+            <span class="quick-add-label">Snap Photo</span>
+            <span class="quick-add-hint">Auto-fill from a part photo</span>
+          </button>
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            disabled
+            title="Coming soon — bulk SKU pasting from a list"
+          >
+            <span class="quick-add-icon">📋</span>
+            <span class="quick-add-label">Paste SKUs</span>
+            <span class="quick-add-hint">Coming soon</span>
+          </button>
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            disabled
+            title="Coming soon — clone an existing part as a template"
+          >
+            <span class="quick-add-icon">📑</span>
+            <span class="quick-add-label">Clone Existing</span>
+            <span class="quick-add-hint">Coming soon</span>
+          </button>
+        </div>
+      </div>
+
+      <button type="button" class="btn-outline btn-with-icon" (click)="openForm()">
         <span class="btn-icon icon-plus"></span>
         <span>New Part</span>
       </button>
+
+      <!-- Hidden file input — capture=environment opens rear camera on mobile;
+           desktop browsers fall back to a regular file picker. -->
+      <input
+        #snapPhotoInput
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        capture="environment"
+        (change)="onSnapPhotoSelected($event)"
+        class="input-file-hidden"
+      />
       </ng-container>
+    </div>
+  </div>
+
+  <!-- FN-1099: AI photo-intake loading overlay -->
+  <div *ngIf="aiBusy" class="ai-photo-overlay" role="status" aria-live="polite">
+    <div class="ai-photo-overlay-card">
+      <div class="ai-photo-spinner"></div>
+      <p class="ai-photo-msg">Identifying part from photo…</p>
+      <button type="button" class="btn-outline" (click)="cancelAiPhoto()">Cancel</button>
     </div>
   </div>
 
@@ -355,7 +425,10 @@
         <form [formGroup]="partForm">
           <div class="form-grid">
             <div class="form-group">
-              <label for="sku">SKU *</label>
+              <label for="sku">
+                SKU *
+                <app-confidence-badge [confidence]="aiConfidence.partNumber ?? null"></app-confidence-badge>
+              </label>
               <input
                 id="sku"
                 type="text"
@@ -371,12 +444,18 @@
             </div>
 
             <div class="form-group">
-              <label for="category">Category *</label>
+              <label for="category">
+                Category *
+                <app-confidence-badge [confidence]="aiConfidence.category ?? null"></app-confidence-badge>
+              </label>
               <input id="category" type="text" class="form-control" formControlName="category" />
             </div>
 
             <div class="form-group">
-              <label for="manufacturer">Manufacturer *</label>
+              <label for="manufacturer">
+                Manufacturer *
+                <app-confidence-badge [confidence]="aiConfidence.manufacturer ?? null"></app-confidence-badge>
+              </label>
               <app-master-typeahead
                 inputId="manufacturer"
                 entityLabel="manufacturer"
@@ -455,13 +534,24 @@
           </div>
 
           <div class="form-group full-width">
-            <label for="description">Description</label>
+            <label for="description">
+              Description
+              <app-confidence-badge [confidence]="aiConfidence.description ?? null"></app-confidence-badge>
+            </label>
             <textarea
               id="description"
               rows="3"
               class="form-control"
               formControlName="description"
             ></textarea>
+          </div>
+
+          <!-- FN-1099: Surface AI warnings (e.g., partial label, glare) -->
+          <div *ngIf="aiWarnings.length" class="form-group full-width ai-warnings">
+            <strong>AI noticed:</strong>
+            <ul>
+              <li *ngFor="let w of aiWarnings">{{ w }}</li>
+            </ul>
           </div>
 
           <div class="form-group full-width">

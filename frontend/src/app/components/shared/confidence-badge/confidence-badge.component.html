@@ -1,0 +1,9 @@
+<span
+  *ngIf="bucket"
+  class="confidence-badge"
+  [ngClass]="cssClass"
+  [attr.title]="'AI confidence ' + pct"
+  [attr.aria-label]="'AI confidence ' + label + ' (' + pct + ')'"
+>
+  AI · {{ label }}
+</span>

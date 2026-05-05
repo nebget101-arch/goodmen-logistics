@@ -1,17 +1,19 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { ApiService } from '../../services/api.service';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Observable } from 'rxjs';
+import { Observable, Subject, Subscription } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { ManufacturersService, MasterEntity } from '../../services/manufacturers.service';
 import { VendorsService } from '../../services/vendors.service';
 import { MasterTypeaheadValue } from '../shared/master-typeahead/master-typeahead.component';
+import { AiPartsService, PartConfidence } from '../../services/ai-parts.service';
 
 @Component({
   selector: 'app-parts-catalog',
   templateUrl: './parts-catalog.component.html',
   styleUrls: ['./parts-catalog.component.css']
 })
-export class PartsCatalogComponent implements OnInit {
+export class PartsCatalogComponent implements OnInit, OnDestroy {
   parts: any[] = [];
   filteredParts: any[] = [];
   categories: string[] = [];
@@ -60,6 +62,29 @@ export class PartsCatalogComponent implements OnInit {
   manufacturerValue: MasterTypeaheadValue | null = null;
   vendorValue: MasterTypeaheadValue | null = null;
 
+  // ── FN-1099: Quick Add → Snap Photo ─────────────────────────────────────────
+  /** Whether the Quick Add dropdown menu is open. */
+  quickAddOpen = false;
+  /** AI photo intake in flight — drives the spinner overlay + Cancel button. */
+  aiBusy = false;
+  /**
+   * Per-field confidence scores for the currently-prefilled modal. Cleared
+   * when the user edits the field (badge disappears once typing starts).
+   */
+  aiConfidence: Partial<Record<'manufacturer' | 'partNumber' | 'category' | 'description' | 'dimensions', number>> = {};
+  /** R2 key returned by /api/ai/parts/identify-from-photo — sent on Save. */
+  aiR2Key: string | null = null;
+  /** Warnings the model surfaced (low-confidence indicators, partial reads). */
+  aiWarnings: string[] = [];
+  /** Cancel signal for the in-flight AI request. */
+  private aiCancel$ = new Subject<void>();
+  /** Subscription so the photo flow doesn't leak observers across modals. */
+  private aiPhotoSub: Subscription | null = null;
+  /** Lifecycle teardown for editsToFieldClearBadge listeners. */
+  private destroy$ = new Subject<void>();
+  @ViewChild('snapPhotoInput') snapPhotoInput!: ElementRef<HTMLInputElement>;
+  // ─────────────────────────────────────────────────────────────────────────────
+
   /**
    * Bound once at construction so the OnPush typeahead receives stable Input
    * references (FN-317 RCA: fresh per-CD references trap OnPush in re-renders).
@@ -77,7 +102,8 @@ export class PartsCatalogComponent implements OnInit {
     private apiService: ApiService,
     private fb: FormBuilder,
     private manufacturersService: ManufacturersService,
-    private vendorsService: VendorsService
+    private vendorsService: VendorsService,
+    private aiPartsService: AiPartsService,
   ) {
     this.partForm = this.fb.group({
       sku: ['', [Validators.required]],
@@ -107,6 +133,37 @@ export class PartsCatalogComponent implements OnInit {
     this.loadParts();
     this.loadCategories();
     this.loadManufacturers();
+    this.wireBadgeClearOnEdit();
+  }
+
+  ngOnDestroy(): void {
+    this.cancelAiPhoto();
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  /**
+   * When the user types into a prefilled field, drop its AI confidence so
+   * the badge clears. Manufacturer is special — its value comes from the
+   * typeahead (onManufacturerPick), so we clear that one there.
+   */
+  private wireBadgeClearOnEdit(): void {
+    const fields: Array<{ control: string; ai: keyof PartConfidence }> = [
+      // SKU is the FE binding for the AI's partNumber suggestion (the model
+      // returns the printed part-number text; the form has no separate field).
+      { control: 'sku',         ai: 'partNumber' },
+      { control: 'category',    ai: 'category' },
+      { control: 'description', ai: 'description' },
+    ];
+    for (const { control, ai } of fields) {
+      this.partForm.get(control)?.valueChanges
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(() => {
+          if (this.aiConfidence[ai] !== undefined) {
+            this.aiConfidence = { ...this.aiConfidence, [ai]: undefined };
+          }
+        });
+    }
   }
 
   loadParts(filters?: any): void {
@@ -225,6 +282,11 @@ export class PartsCatalogComponent implements OnInit {
       manufacturer_id: value.id,
     });
     this.partForm.get('manufacturer')?.markAsDirty();
+    // The user has confirmed a master record (or chosen "create new") —
+    // the AI suggestion is no longer authoritative, drop the badge.
+    if (this.aiConfidence.manufacturer !== undefined) {
+      this.aiConfidence = { ...this.aiConfidence, manufacturer: undefined };
+    }
   }
 
   onVendorPick(value: MasterTypeaheadValue): void {
@@ -246,6 +308,9 @@ export class PartsCatalogComponent implements OnInit {
     this.partForm.reset();
     this.manufacturerValue = null;
     this.vendorValue = null;
+    this.aiConfidence = {};
+    this.aiR2Key = null;
+    this.aiWarnings = [];
   }
 
   savePart(): void {
@@ -255,7 +320,11 @@ export class PartsCatalogComponent implements OnInit {
     }
 
     this.loading = true;
-    const formData = this.partForm.value;
+    const formData: any = this.partForm.value;
+    if (this.aiR2Key) {
+      // FN-1098 BE accepts image_r2_key on create/update and persists into parts.image_url.
+      formData.image_r2_key = this.aiR2Key;
+    }
 
     if (this.editingPartId) {
       // Update
@@ -564,5 +633,116 @@ export class PartsCatalogComponent implements OnInit {
         this.aiAnalysisLoading = false;
       }
     });
+  }
+
+  // ── FN-1099: Quick Add → Snap Photo ─────────────────────────────────────────
+
+  toggleQuickAdd(): void {
+    this.quickAddOpen = !this.quickAddOpen;
+  }
+
+  closeQuickAdd(): void {
+    this.quickAddOpen = false;
+  }
+
+  /** Trigger the hidden file input (uses capture=environment on mobile). */
+  startSnapPhoto(): void {
+    this.closeQuickAdd();
+    if (!this.snapPhotoInput?.nativeElement) return;
+    // Reset value so the same file can be re-selected back-to-back.
+    this.snapPhotoInput.nativeElement.value = '';
+    this.snapPhotoInput.nativeElement.click();
+  }
+
+  /**
+   * File-input change handler. Uploads to /api/ai/parts/identify-from-photo,
+   * then opens the Add Part modal — prefilled on success, empty + toast
+   * on failure (so the user can fill manually).
+   */
+  onSnapPhotoSelected(event: Event): void {
+    const target = event.target as HTMLInputElement | null;
+    const file = target?.files?.[0];
+    if (!file) return;
+
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.aiBusy = true;
+    this.aiCancel$ = new Subject<void>();
+
+    this.aiPhotoSub?.unsubscribe();
+    this.aiPhotoSub = this.aiPartsService
+      .identifyFromPhoto(file)
+      .pipe(takeUntil(this.aiCancel$))
+      .subscribe({
+        next: (res) => {
+          this.aiBusy = false;
+          if (res.aiResult.isUnreadable) {
+            // Treat unreadable as a soft failure: still open empty so the
+            // user can fill manually, but surface the model's reason.
+            this.errorMessage = res.aiResult.warnings?.[0]
+              || 'We could not read the part in that photo. Try a closer, well-lit shot.';
+            this.openForm();
+            return;
+          }
+          this.openFormPrefilled(res.aiResult, res.r2Key);
+        },
+        error: (err: Error) => {
+          this.aiBusy = false;
+          this.errorMessage = err?.message || 'AI photo intake failed. Please fill the form manually.';
+          // Failure path: open empty form so the user can still add the part.
+          this.openForm();
+        },
+      });
+  }
+
+  cancelAiPhoto(): void {
+    if (this.aiBusy) {
+      this.aiCancel$.next();
+      this.aiCancel$.complete();
+      this.aiBusy = false;
+    }
+    this.aiPhotoSub?.unsubscribe();
+    this.aiPhotoSub = null;
+  }
+
+  /**
+   * Open the Add-Part modal pre-filled from the AI extraction. Manufacturer
+   * is set as a typeahead "value" with id=null so the user must intentionally
+   * pick an existing master record OR explicitly create a new one (FN-1091
+   * binding). Creating a new master row never happens implicitly.
+   */
+  private openFormPrefilled(ai: import('../../services/ai-parts.service').PartAiResult, r2Key: string): void {
+    this.openForm();
+    this.aiR2Key = r2Key;
+    this.aiWarnings = ai.warnings || [];
+
+    const partNumber = ai.partNumber || '';
+    const category = ai.category || '';
+    const description = ai.descriptionGuess || '';
+
+    this.partForm.patchValue({
+      // SKU is the form's mapping for the AI partNumber suggestion (no
+      // separate partNumber control). User can override.
+      sku: partNumber,
+      category: category,
+      description: description,
+    }, { emitEvent: false });
+
+    if (ai.manufacturer) {
+      // Show the AI suggestion in the typeahead, but with id=null so the user
+      // must confirm by picking an existing record or explicitly creating one.
+      this.manufacturerValue = { id: null, name: ai.manufacturer };
+      this.partForm.patchValue({ manufacturer: ai.manufacturer, manufacturer_id: null }, { emitEvent: false });
+    }
+
+    // Snapshot the AI confidence so badges render. valueChanges listeners
+    // will clear them as the user edits.
+    this.aiConfidence = {
+      manufacturer: ai.confidence?.manufacturer,
+      partNumber:   ai.confidence?.partNumber,
+      category:     ai.confidence?.category,
+      description:  ai.confidence?.description,
+      dimensions:   ai.confidence?.dimensions,
+    };
   }
 }

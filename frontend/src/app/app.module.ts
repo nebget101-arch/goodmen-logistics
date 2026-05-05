@@ -42,6 +42,7 @@ import { UsersAdminComponent } from './components/users-admin/users-admin.compon
 import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
 import { MasterTypeaheadComponent } from './components/shared/master-typeahead/master-typeahead.component';
+import { ConfidenceBadgeComponent } from './components/shared/confidence-badge/confidence-badge.component';
 import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
@@ -108,6 +109,7 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     SmartAutocompleteComponent,
     PartsCatalogComponent,
     MasterTypeaheadComponent,
+    ConfidenceBadgeComponent,
     WarehouseReceivingComponent,
     InventoryTransfersComponent,
     DirectSalesComponent,
