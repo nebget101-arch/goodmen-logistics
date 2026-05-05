@@ -1,0 +1,67 @@
+<article
+  class="grouped-alert-row"
+  [class.grouped-alert-row--critical]="severity === 'critical'"
+  [class.grouped-alert-row--high]="severity === 'high'"
+  [class.grouped-alert-row--medium]="severity === 'medium'"
+  [class.grouped-alert-row--low]="severity === 'low'"
+  [class.grouped-alert-row--expanded]="expanded"
+>
+  <header class="grouped-alert-row__header">
+    <span class="grouped-alert-row__pip" aria-hidden="true"></span>
+
+    <div class="grouped-alert-row__meta">
+      <div class="grouped-alert-row__row-1">
+        <app-severity-badge [severity]="severity" [showPip]="false"></app-severity-badge>
+        <span *ngIf="category" class="grouped-alert-row__category">{{ category }}</span>
+      </div>
+      <p class="grouped-alert-row__message">{{ message }}</p>
+    </div>
+
+    <div class="grouped-alert-row__actions">
+      <span
+        *ngIf="count > 1"
+        class="grouped-alert-row__count"
+        [attr.aria-label]="count + ' alerts grouped'"
+      >
+        {{ countLabel }}
+      </span>
+
+      <button
+        *ngIf="isExpandable"
+        type="button"
+        class="grouped-alert-row__expand"
+        [attr.aria-expanded]="expanded"
+        [attr.aria-label]="expanded ? 'Collapse group' : 'Expand group'"
+        (click)="toggleExpanded()"
+      >
+        <span class="grouped-alert-row__chevron" aria-hidden="true">
+          {{ expanded ? '▾' : '▸' }}
+        </span>
+      </button>
+
+      <button
+        *ngIf="primaryAction"
+        type="button"
+        class="grouped-alert-row__cta"
+        [attr.aria-label]="primaryAction.ariaLabel || primaryAction.label"
+        (click)="onPrimaryAction($event)"
+      >
+        {{ primaryAction.label }}
+      </button>
+
+      <button
+        *ngIf="dismissible"
+        type="button"
+        class="grouped-alert-row__dismiss"
+        aria-label="Dismiss alert group"
+        (click)="onDismiss($event)"
+      >
+        ×
+      </button>
+    </div>
+  </header>
+
+  <section *ngIf="expanded" class="grouped-alert-row__body" role="region">
+    <ng-content></ng-content>
+  </section>
+</article>

@@ -1,0 +1,201 @@
+/* FN-1326 — grouped alert row. Pulls severity tokens from styles.css :root. */
+
+.grouped-alert-row-host {
+  display: block;
+}
+
+.grouped-alert-row {
+  --row-fg: var(--sev-medium-fg);
+  --row-bg: var(--sev-medium-bg);
+  --row-border: var(--sev-medium-border);
+  --row-pip: var(--sev-medium-pip);
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--row-bg);
+  border: 1px solid var(--row-border);
+  border-left-width: 3px;
+  border-radius: 10px;
+  color: var(--ai-text-body);
+  font-size: 13px;
+  line-height: 1.5;
+
+  &--critical {
+    --row-fg: var(--sev-critical-fg);
+    --row-bg: var(--sev-critical-bg);
+    --row-border: var(--sev-critical-border);
+    --row-pip: var(--sev-critical-pip);
+  }
+
+  &--high {
+    --row-fg: var(--sev-high-fg);
+    --row-bg: var(--sev-high-bg);
+    --row-border: var(--sev-high-border);
+    --row-pip: var(--sev-high-pip);
+  }
+
+  &--medium {
+    --row-fg: var(--sev-medium-fg);
+    --row-bg: var(--sev-medium-bg);
+    --row-border: var(--sev-medium-border);
+    --row-pip: var(--sev-medium-pip);
+  }
+
+  &--low {
+    --row-fg: var(--sev-low-fg);
+    --row-bg: var(--sev-low-bg);
+    --row-border: var(--sev-low-border);
+    --row-pip: var(--sev-low-pip);
+  }
+}
+
+.grouped-alert-row__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.grouped-alert-row__pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--row-pip);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--row-pip) 25%, transparent);
+}
+
+.grouped-alert-row__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.grouped-alert-row__row-1 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grouped-alert-row__category {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ai-text-muted);
+}
+
+.grouped-alert-row__message {
+  margin: 0;
+  color: var(--ai-text-strong);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.grouped-alert-row__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.grouped-alert-row__count {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--ai-text-faint);
+  color: var(--ai-text-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.grouped-alert-row__expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--ai-text-faint);
+  background: transparent;
+  color: var(--ai-text-soft);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+
+  &:hover {
+    background: rgba(15, 23, 42, 0.6);
+    color: var(--ai-text-strong);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--row-fg);
+    outline-offset: 2px;
+  }
+}
+
+.grouped-alert-row__chevron {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.grouped-alert-row__cta {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--row-border);
+  background: var(--row-bg);
+  color: var(--row-fg);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+
+  &:hover {
+    background: color-mix(in srgb, var(--row-bg) 160%, transparent);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--row-fg);
+    outline-offset: 2px;
+  }
+}
+
+.grouped-alert-row__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ai-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+
+  &:hover {
+    background: rgba(248, 113, 113, 0.10);
+    color: var(--sev-critical-fg);
+    border-color: var(--sev-critical-border);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--sev-critical-fg);
+    outline-offset: 2px;
+  }
+}
+
+.grouped-alert-row__body {
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--row-border) 60%, transparent);
+  color: var(--ai-text-soft);
+  font-size: 12px;
+}

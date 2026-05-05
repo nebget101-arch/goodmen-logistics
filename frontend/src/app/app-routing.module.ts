@@ -40,6 +40,7 @@ import { BillingComponent } from './billing/billing.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 import { LocationsListComponent } from './components/locations-admin/locations-list/locations-list.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
+import { environment } from '../environments/environment';
 
 const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
@@ -247,6 +248,17 @@ const routes: Routes = [
     canActivate: [AuthGuard, PermissionGuard],
     data: { anyPermission: [PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.USERS_EDIT] }
   },
+  // FN-1326 — dev-only severity-system preview. Excluded from production builds
+  // so the route does not ship to customers; lazy-loaded so it adds zero bundle
+  // weight unless explicitly visited in dev.
+  ...(environment.production
+    ? []
+    : [{
+        path: 'dev/severity-preview',
+        loadComponent: () =>
+          import('./dev/severity-preview/severity-preview.component')
+            .then(m => m.SeverityPreviewComponent)
+      }]),
   { path: 'login', component: LoginComponent },
   { path: 'forgot-password', component: ForgotPasswordComponent },
   { path: 'reset-password', component: ResetPasswordComponent },
