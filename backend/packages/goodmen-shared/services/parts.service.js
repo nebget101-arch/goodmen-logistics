@@ -429,6 +429,75 @@ async function bulkCreateParts(items) {
 }
 
 /**
+ * FN-1110: Find possible duplicate parts via pg_trgm fuzzy match.
+ *
+ * Computes a weighted blended similarity (name 0.5 + sku 0.3 + manufacturer 0.2)
+ * across whichever of the three fields the caller provided. Empty fields
+ * contribute ~0; weights are NOT renormalized, so a single-field query caps
+ * at the field's own weight. Threshold of 0.85 is applied to the BEST
+ * individual component score so a strong name match alone is enough to surface
+ * a row, while the returned `similarity` is the blended score used for ranking.
+ *
+ * Returns rows sorted by blended similarity desc.
+ */
+async function findDuplicateCandidates({ name = '', sku = '', manufacturer = '', limit = 5 } = {}) {
+	const nameTerm = String(name || '').trim();
+	const skuTerm = String(sku || '').trim();
+	const mfgTerm = String(manufacturer || '').trim();
+
+	if (!nameTerm && !skuTerm && !mfgTerm) {
+		return [];
+	}
+
+	const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 5, 1), 25);
+	const threshold = 0.85;
+
+	const sql = `
+		WITH scored AS (
+			SELECT
+				p.id,
+				p.name,
+				p.sku,
+				p.manufacturer,
+				similarity(COALESCE(p.name, ''), ?) AS name_sim,
+				similarity(COALESCE(p.sku, ''), ?) AS sku_sim,
+				similarity(COALESCE(p.manufacturer, ''), ?) AS mfg_sim
+			FROM parts p
+		)
+		SELECT
+			id,
+			name,
+			sku,
+			manufacturer,
+			(0.5 * name_sim) + (0.3 * sku_sim) + (0.2 * mfg_sim) AS similarity
+		FROM scored
+		WHERE GREATEST(name_sim, sku_sim, mfg_sim) >= ?
+		ORDER BY similarity DESC, sku ASC
+		LIMIT ?
+	`;
+
+	try {
+		const result = await db.raw(sql, [nameTerm, skuTerm, mfgTerm, threshold, safeLimit]);
+		const rows = result.rows || result;
+		return rows.map(r => ({
+			id: r.id,
+			name: r.name,
+			sku: r.sku,
+			manufacturer: r.manufacturer,
+			similarity: Number(parseFloat(r.similarity).toFixed(4))
+		}));
+	} catch (error) {
+		dtLogger.error('parts_duplicate_check_failed', {
+			error: error.message,
+			hasName: !!nameTerm,
+			hasSku: !!skuTerm,
+			hasManufacturer: !!mfgTerm
+		});
+		throw error;
+	}
+}
+
+/**
  * Get part categories (distinct)
  */
 async function getCategories() {
@@ -482,6 +551,7 @@ module.exports = {
 	updatePart,
 	deletePart,
 	bulkCreateParts,
+	findDuplicateCandidates,
 	getCategories,
 	getManufacturers,
 	resolveManufacturerVendor,
