@@ -688,6 +688,12 @@ router.get('/:id([0-9a-fA-F-]{36})', authMiddleware, async (req, res) => {
  *               status:
  *                 type: string
  *                 enum: [ACTIVE, INACTIVE]
+ *               image_r2_key:
+ *                 type: string
+ *                 description: >-
+ *                   FN-1098. R2 storage key returned by
+ *                   `/api/ai/parts/identify-from-photo` (e.g. `parts/photos/<uuid>.jpg`).
+ *                   Persists to `parts.image_url`.
  *     responses:
  *       201:
  *         description: Part created
@@ -765,6 +771,12 @@ router.post('/', authMiddleware, requireRole(['admin', 'parts_manager']), async 
  *                 type: integer
  *               status:
  *                 type: string
+ *               image_r2_key:
+ *                 type: string
+ *                 description: >-
+ *                   FN-1098. R2 storage key returned by
+ *                   `/api/ai/parts/identify-from-photo`. Persists to `parts.image_url`.
+ *                   Pass `null` or an empty string to clear the image.
  *     responses:
  *       200:
  *         description: Part updated

@@ -167,25 +167,48 @@ function validateExtractionResult(raw) {
   };
 }
 
-async function handlePartsVision(req, res, deps) {
+/**
+ * Pure extraction helper — runs Claude vision on a base64 image and returns
+ * a tagged result. Shared by `handlePartsVision` (the JSON route) and
+ * `handlePartsPhotoIntake` (FN-1098 multipart route).
+ *
+ * Returns one of:
+ *   { kind: 'bad_request', status: 400, body }
+ *   { kind: 'success',     status: 200, body, model, processingTimeMs }
+ *   { kind: 'unreadable',  status: 422, body, processingTimeMs }
+ *   { kind: 'parse_error', status: 502, body, processingTimeMs }
+ *   { kind: 'upstream_error', status: 502, body, processingTimeMs }
+ *
+ * `route` is used only for analytics logging so callers (e.g. FN-1098) can
+ * tag their own route name.
+ */
+async function extractPartFromImage({ imageBase64, mediaType, deps, route }) {
   const startedAt = Date.now();
-  const { imageBase64, mimeType, mediaType } = req.body || {};
+  const logRoute = route || ROUTE;
 
   if (!imageBase64 || typeof imageBase64 !== 'string') {
-    return res.status(400).json({
-      success: false,
-      error: 'imageBase64 is required',
-      code: 'AI_BAD_REQUEST',
-    });
+    return {
+      kind: 'bad_request',
+      status: 400,
+      body: {
+        success: false,
+        error: 'imageBase64 is required',
+        code: 'AI_BAD_REQUEST',
+      },
+    };
   }
 
-  const resolvedMediaType = mimeType || mediaType || 'image/jpeg';
+  const resolvedMediaType = mediaType || 'image/jpeg';
   if (!SUPPORTED_MEDIA_TYPES.includes(resolvedMediaType)) {
-    return res.status(400).json({
-      success: false,
-      error: `Unsupported media type: ${resolvedMediaType}. Supported: ${SUPPORTED_MEDIA_TYPES.join(', ')}`,
-      code: 'AI_BAD_REQUEST',
-    });
+    return {
+      kind: 'bad_request',
+      status: 400,
+      body: {
+        success: false,
+        error: `Unsupported media type: ${resolvedMediaType}. Supported: ${SUPPORTED_MEDIA_TYPES.join(', ')}`,
+        code: 'AI_BAD_REQUEST',
+      },
+    };
   }
 
   const client = (deps && deps.anthropic) || getAnthropicClient();
@@ -220,18 +243,23 @@ async function handlePartsVision(req, res, deps) {
     } catch (_parseErr) {
       logAiInteraction({
         userId: null,
-        route: ROUTE,
+        route: logRoute,
         message: 'Parts vision parse failure',
         conversationId: null,
         success: false,
         errorCode: 'AI_PARSE_ERROR',
         processingTimeMs,
       });
-      return res.status(502).json({
-        success: false,
-        error: 'AI returned unparseable response',
-        code: 'AI_PARSE_ERROR',
-      });
+      return {
+        kind: 'parse_error',
+        status: 502,
+        body: {
+          success: false,
+          error: 'AI returned unparseable response',
+          code: 'AI_PARSE_ERROR',
+        },
+        processingTimeMs,
+      };
     }
 
     let result;
@@ -240,41 +268,51 @@ async function handlePartsVision(req, res, deps) {
     } catch (_validErr) {
       logAiInteraction({
         userId: null,
-        route: ROUTE,
+        route: logRoute,
         message: 'Parts vision invalid response shape',
         conversationId: null,
         success: false,
         errorCode: 'AI_PARSE_ERROR',
         processingTimeMs,
       });
-      return res.status(502).json({
-        success: false,
-        error: 'AI returned unparseable response',
-        code: 'AI_PARSE_ERROR',
-      });
+      return {
+        kind: 'parse_error',
+        status: 502,
+        body: {
+          success: false,
+          error: 'AI returned unparseable response',
+          code: 'AI_PARSE_ERROR',
+        },
+        processingTimeMs,
+      };
     }
 
     if (result.isUnreadable) {
       logAiInteraction({
         userId: null,
-        route: ROUTE,
+        route: logRoute,
         message: 'Parts vision image unreadable',
         conversationId: null,
         success: true,
         errorCode: 'AI_IMAGE_UNREADABLE',
         processingTimeMs,
       });
-      return res.status(422).json({
-        success: false,
-        error: 'Image is unreadable — no part identifiable',
-        code: 'AI_IMAGE_UNREADABLE',
-        warnings: result.warnings,
-      });
+      return {
+        kind: 'unreadable',
+        status: 422,
+        body: {
+          success: false,
+          error: 'Image is unreadable — no part identifiable',
+          code: 'AI_IMAGE_UNREADABLE',
+          warnings: result.warnings,
+        },
+        processingTimeMs,
+      };
     }
 
     logAiInteraction({
       userId: null,
-      route: ROUTE,
+      route: logRoute,
       message: `Parts vision ok (mfg=${result.manufacturer || 'null'}, pn=${result.partNumber || 'null'})`,
       conversationId: null,
       success: true,
@@ -282,11 +320,19 @@ async function handlePartsVision(req, res, deps) {
       processingTimeMs,
     });
 
-    return res.json({
-      success: true,
+    const usedModel = message.model || model;
+    return {
+      kind: 'success',
+      status: 200,
+      body: {
+        success: true,
+        data: result,
+        meta: { model: usedModel, processingTimeMs },
+      },
       data: result,
-      meta: { model: message.model || model, processingTimeMs },
-    });
+      model: usedModel,
+      processingTimeMs,
+    };
   } catch (err) {
     const processingTimeMs = Date.now() - startedAt;
     // eslint-disable-next-line no-console
@@ -294,7 +340,7 @@ async function handlePartsVision(req, res, deps) {
 
     logAiInteraction({
       userId: null,
-      route: ROUTE,
+      route: logRoute,
       message: `Parts vision upstream failure: ${err.message || 'Unknown error'}`,
       conversationId: null,
       success: false,
@@ -302,17 +348,34 @@ async function handlePartsVision(req, res, deps) {
       processingTimeMs,
     });
 
-    return res.status(502).json({
-      success: false,
-      error: 'AI parts vision extraction failed',
-      code: 'AI_VISION_ERROR',
-      details: err.message || 'Unknown error',
-    });
+    return {
+      kind: 'upstream_error',
+      status: 502,
+      body: {
+        success: false,
+        error: 'AI parts vision extraction failed',
+        code: 'AI_VISION_ERROR',
+        details: err.message || 'Unknown error',
+      },
+      processingTimeMs,
+    };
   }
+}
+
+async function handlePartsVision(req, res, deps) {
+  const { imageBase64, mimeType, mediaType } = req.body || {};
+  const result = await extractPartFromImage({
+    imageBase64,
+    mediaType: mimeType || mediaType,
+    deps,
+    route: ROUTE,
+  });
+  return res.status(result.status).json(result.body);
 }
 
 module.exports = {
   handlePartsVision,
+  extractPartFromImage,
   buildPartsVisionPrompt,
   parseAiResponse,
   validateExtractionResult,
