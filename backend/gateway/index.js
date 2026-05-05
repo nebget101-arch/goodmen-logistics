@@ -504,6 +504,8 @@ app.use(
   buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
 );
 app.use('/api/parts', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
+app.use('/api/manufacturers', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
+app.use('/api/vendors', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
 // Proxy /api/health, /api/health/db, /api/health/db/diagnostic to logistics (path can be /db when mounted)
 app.use(
   '/api/health',
