@@ -911,3 +911,129 @@
   font-weight: 600;
 }
 .sb-link:hover { color: #7dd3fc; text-decoration: underline; }
+
+/* ── FN-1099: Quick Add → Snap Photo ────────────────────────────────────── */
+
+.quick-add-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.quick-add-toggle {
+  /* inherits .btn-primary; just gives the caret a little breathing room */
+  padding-right: 12px;
+}
+.quick-add-caret {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.quick-add-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.55);
+  padding: 6px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quick-add-item {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  text-align: left;
+  color: #e2e8f0;
+  cursor: pointer;
+  font: inherit;
+}
+.quick-add-item:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.12);
+}
+.quick-add-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.quick-add-icon {
+  grid-row: 1 / span 2;
+  font-size: 18px;
+  text-align: center;
+}
+.quick-add-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+.quick-add-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Loading overlay shown while the AI photo intake is in flight */
+.ai-photo-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.ai-photo-overlay-card {
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  padding: 24px 28px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 24px 50px rgba(2, 6, 23, 0.55);
+}
+.ai-photo-spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid rgba(148, 163, 184, 0.25);
+  border-top-color: #38bdf8;
+  animation: ai-photo-spin 0.9s linear infinite;
+}
+@keyframes ai-photo-spin {
+  to { transform: rotate(360deg); }
+}
+.ai-photo-msg {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+/* Surface AI warnings inside the modal body */
+.ai-warnings {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #fde68a;
+  font-size: 12px;
+}
+.ai-warnings ul { margin: 4px 0 0; padding-left: 18px; }
+.ai-warnings li { margin: 2px 0; }
+
+/* Inline confidence badge slightly nudges down so it sits with the label baseline */
+label app-confidence-badge {
+  margin-left: 8px;
+  vertical-align: middle;
+}

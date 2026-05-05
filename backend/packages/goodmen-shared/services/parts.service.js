@@ -4,6 +4,33 @@ const manufacturersService = require('./manufacturers.service');
 const vendorsService = require('./vendors.service');
 
 /**
+ * FN-1098: Resolve the image-storage patch for a part insert/update.
+ *
+ * The Quick Add Photo flow (FN-1098) uploads the photo to R2 first and
+ * returns an `r2Key` (e.g. `parts/photos/<uuid>.jpg`). When the user saves
+ * the prefilled form, the FE re-sends that key as `image_r2_key`. We persist
+ * it directly into `parts.image_url` — the column stores the R2 object key
+ * (the storage helper's URL convention); pre-signed download URLs are
+ * generated on read, never stored, because they expire.
+ *
+ * Caller may also pass `image_url` directly (e.g. legacy bulk-upload flow);
+ * `image_r2_key` takes precedence when both are present.
+ */
+function resolveImageR2Patch(input = {}) {
+	const patch = {};
+	if (input.image_r2_key !== undefined) {
+		if (input.image_r2_key === null || input.image_r2_key === '') {
+			patch.image_url = null;
+		} else if (typeof input.image_r2_key === 'string') {
+			patch.image_url = input.image_r2_key;
+		}
+	} else if (input.image_url !== undefined) {
+		patch.image_url = input.image_url || null;
+	}
+	return patch;
+}
+
+/**
  * Resolve manufacturer + vendor inputs into a normalized patch:
  *   { manufacturer_id, manufacturer, vendor_id, preferred_vendor_name }
  *
@@ -190,6 +217,7 @@ async function createPart(partData) {
 		}
 
 		const mvPatch = await resolveManufacturerVendor(partData);
+		const imagePatch = resolveImageR2Patch(partData);
 
 		const part = await db('parts').insert({
 			sku: partData.sku.toUpperCase(),
@@ -203,6 +231,7 @@ async function createPart(partData) {
 			supplier_id: partData.supplier_id,
 			status: 'ACTIVE',
 			...mvPatch,
+			...imagePatch,
 		}).returning('*');
 
 		dtLogger.info('part_created', { id: part[0].id, sku: part[0].sku });
@@ -246,6 +275,8 @@ async function updatePart(id, partData) {
 
 		const mvPatch = await resolveManufacturerVendor(partData);
 		Object.assign(updateData, mvPatch);
+		const imagePatch = resolveImageR2Patch(partData);
+		Object.assign(updateData, imagePatch);
 		// Preserve status or ensure it's ACTIVE (automatic for new parts with quantity > 0)
 		if (partData.status !== undefined) {
 			updateData.status = partData.status;
@@ -342,4 +373,5 @@ module.exports = {
 	getCategories,
 	getManufacturers,
 	resolveManufacturerVendor,
+	resolveImageR2Patch,
 };
