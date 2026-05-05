@@ -22,6 +22,10 @@ const { handleReportsNarrative } = require('./handlers/reports-narrative-handler
 const { handleReportsChat } = require('./handlers/reports-chat-handler');
 const { handleReportsParseQuery } = require('./handlers/reports-parse-query-handler');
 const { handlePartsVision } = require('./handlers/parts-vision-handler');
+const {
+  handlePartsPhotoIntake,
+  photoUpload,
+} = require('./handlers/parts-photo-intake-handler');
 const { loadAuthContext } = require('./services/auth-context');
 
 function buildAiRouter(deps) {
@@ -1879,6 +1883,85 @@ function buildAiRouter(deps) {
    */
   router.post('/parts/identify-vision', (req, res) =>
     handlePartsVision(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/parts/identify-from-photo:
+   *   post:
+   *     summary: AI part-identification photo intake (FN-1098)
+   *     description: >
+   *       Accepts a part photo as either `multipart/form-data` (field `image`)
+   *       OR JSON `{imageBase64, mimeType}`. Max 10MB. Uploads the image to R2
+   *       under `parts/photos/<uuid>.<ext>`, then runs the FN-1097 vision
+   *       handler. Response carries the AI extraction (so the FE can prefill
+   *       the Quick Add modal) and the `r2Key` (so a subsequent
+   *       create/update of `parts` can persist `image_r2_key` →
+   *       `parts.image_url`). Returns `aiResult.code = AI_IMAGE_UNREADABLE`
+   *       (HTTP 422) when no part is visible. Auth is enforced upstream by
+   *       the gateway, consistent with other `/api/ai/*` endpoints.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         multipart/form-data:
+   *           schema:
+   *             type: object
+   *             required: [image]
+   *             properties:
+   *               image:
+   *                 type: string
+   *                 format: binary
+   *                 description: Part photo (jpeg/png/webp/gif, max 10MB)
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [imageBase64]
+   *             properties:
+   *               imageBase64:
+   *                 type: string
+   *               mimeType:
+   *                 type: string
+   *                 default: image/jpeg
+   *     responses:
+   *       200:
+   *         description: Image uploaded and part identified
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 aiResult:
+   *                   type: object
+   *                   description: Same envelope as `/api/ai/parts/identify-vision`
+   *                 r2Key:
+   *                   type: string
+   *                   description: Storage key under `parts/photos/`
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     processingTimeMs:
+   *                       type: number
+   *                     model:
+   *                       type: string
+   *       400:
+   *         description: Missing/invalid image, unsupported mimeType, or invalid base64
+   *       413:
+   *         description: Image exceeds 10MB
+   *       422:
+   *         description: Image is unreadable / no part visible (AI_IMAGE_UNREADABLE) — `r2Key` is still returned
+   *       502:
+   *         description: R2 upload failed or AI upstream/parse failure
+   */
+  router.post(
+    '/parts/identify-from-photo',
+    photoUpload.single('image'),
+    (req, res) => handlePartsPhotoIntake(req, res, deps)
   );
 
   return router;
