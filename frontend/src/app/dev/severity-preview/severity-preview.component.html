@@ -1,0 +1,57 @@
+<section class="severity-preview">
+  <header class="severity-preview__header">
+    <h1>Severity system preview</h1>
+    <p class="severity-preview__sub">
+      FN-1326 — design tokens + reusable grouped-alert row.
+      Dev-only route at <code>/dev/severity-preview</code>.
+    </p>
+  </header>
+
+  <section class="severity-preview__group">
+    <h2>Severity badges</h2>
+    <div class="severity-preview__badges">
+      <app-severity-badge
+        *ngFor="let sev of severities"
+        [severity]="sev"
+      ></app-severity-badge>
+    </div>
+  </section>
+
+  <section class="severity-preview__group">
+    <h2>Grouped rows (severity-ranked)</h2>
+    <div class="severity-preview__rows">
+      <app-grouped-alert-row
+        *ngFor="let row of groupedRows; let i = index"
+        [severity]="row.severity"
+        [category]="row.category"
+        [message]="row.message"
+        [count]="row.count"
+        [countUnit]="row.countUnit ?? null"
+        [primaryAction]="{ label: row.cta }"
+        [expanded]="!!expanded['g-' + i]"
+        (expandedChange)="toggle('g-' + i, $event)"
+        (primaryActionClick)="onAction(row.cta)"
+        (dismiss)="onDismiss(row.message)"
+      >
+        <ul class="severity-preview__targets">
+          <li *ngFor="let t of row.expandedSample">{{ t }}</li>
+        </ul>
+      </app-grouped-alert-row>
+    </div>
+  </section>
+
+  <section class="severity-preview__group">
+    <h2>Ungrouped (count = 1)</h2>
+    <div class="severity-preview__rows">
+      <app-grouped-alert-row
+        [severity]="ungroupedRow.severity"
+        [category]="ungroupedRow.category"
+        [message]="ungroupedRow.message"
+        [count]="ungroupedRow.count"
+        [primaryAction]="{ label: ungroupedRow.cta }"
+        (primaryActionClick)="onAction(ungroupedRow.cta)"
+        (dismiss)="onDismiss(ungroupedRow.message)"
+      ></app-grouped-alert-row>
+    </div>
+  </section>
+</section>

@@ -16,6 +16,8 @@ import { CommandPaletteComponent } from './components/command-palette/command-pa
 import { HoverPopoverComponent } from './components/hover-popover/hover-popover.component';
 import { AiSparkleComponent } from './components/ai-sparkle/ai-sparkle.component';
 import { ConfidenceBadgeComponent } from './components/confidence-badge/confidence-badge.component';
+import { SeverityBadgeComponent } from './components/severity-badge/severity-badge.component';
+import { GroupedAlertRowComponent } from './components/grouped-alert-row/grouped-alert-row.component';
 import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives/has-permission.directive';
 import { AiExplainableDirective } from '../directives/ai-explainable.directive';
 
@@ -43,6 +45,8 @@ import { AiExplainableDirective } from '../directives/ai-explainable.directive';
     MatSelectModule,
     DragDropModule,
     ConfidenceBadgeComponent,
+    SeverityBadgeComponent,
+    GroupedAlertRowComponent,
     AiExplainableDirective
   ],
   exports: [
@@ -55,6 +59,8 @@ import { AiExplainableDirective } from '../directives/ai-explainable.directive';
     HoverPopoverComponent,
     AiSparkleComponent,
     ConfidenceBadgeComponent,
+    SeverityBadgeComponent,
+    GroupedAlertRowComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective,
     AiExplainableDirective
