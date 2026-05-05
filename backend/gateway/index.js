@@ -15,6 +15,9 @@ const { buildSmartAlertsAggregator } = require('./services/smart-alerts-aggregat
 const { MemoryDismissalsStore } = require('./services/dismissals-store');
 const { buildAlertsBroadcaster, makeSocketIoEmitter } = require('./services/alerts-ws');
 const { buildAlertsRouter } = require('./routes/alerts');
+const { buildAlertGrouper } = require('./services/alert-grouper');
+const { buildComplianceAlertsClient } = require('./services/compliance-alerts-client');
+const { buildActionQueueRouter } = require('./routes/action-queue');
 
 let SocketIoServer = null;
 try {
@@ -366,6 +369,41 @@ function buildProxy(target, label) {
   });
 }
 
+// FN-1161 / FN-1330: shared smart-alerts + dismissals + WS broadcaster.
+// Constructed BEFORE the proxy block so the action-queue router (which must
+// intercept /api/dashboard/action-queue ahead of the /api/dashboard proxy)
+// can reuse the same singletons as /api/alerts/smart.
+const smartAlertsAggregator = buildSmartAlertsAggregator({
+  fetcher: (url, opts) => fetch(url, opts),
+  driversUrl: DRIVERS_COMPLIANCE_SERVICE_URL,
+  vehiclesUrl: VEHICLES_MAINTENANCE_SERVICE_URL,
+  logisticsUrl: LOGISTICS_SERVICE_URL,
+  aiUrl: AI_SERVICE_URL
+});
+const dismissalsStore = new MemoryDismissalsStore();
+const alertsBroadcaster = buildAlertsBroadcaster({
+  emit: makeSocketIoEmitter(() => ioInstance)
+});
+
+// FN-1330: Action Queue endpoint — merges Smart Alerts + Compliance Alerts
+// into one severity-ranked, grouped feed. Mounted before /api/dashboard
+// proxy so /api/dashboard/action-queue resolves locally.
+const actionQueueGrouper = buildAlertGrouper();
+const complianceAlertsClient = buildComplianceAlertsClient({
+  fetcher: (url, opts) => fetch(url, opts),
+  reportingUrl: REPORTING_SERVICE_URL
+});
+app.use(
+  '/api/dashboard/action-queue',
+  buildActionQueueRouter({
+    smartAlertsAggregator,
+    complianceAlertsClient,
+    alertGrouper: actionQueueGrouper,
+    dismissalsStore,
+    jwtSecret: process.env.JWT_SECRET || 'dev_secret'
+  })
+);
+
 // Microservice routes (override before monolith fallback)
 app.use('/api/dashboard', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/reports', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
@@ -548,22 +586,6 @@ app.use(
 );
 app.use('/api/ai', buildProxy(AI_SERVICE_URL, 'ai'));
 
-// FN-1161: gateway-local /api/alerts/smart route — fans out to drivers,
-// vehicles, logistics; calls ai-service /api/ai/score-alert per signal;
-// ranks by severity. POST /:id/dismiss persists dismissals (24h, FN-1128 AC)
-// via the in-memory store; the Postgres-backed store ships with FN-1165.
-// Broadcasts updates over Socket.IO so the panel stays live without polling.
-const smartAlertsAggregator = buildSmartAlertsAggregator({
-  fetcher: (url, opts) => fetch(url, opts),
-  driversUrl: DRIVERS_COMPLIANCE_SERVICE_URL,
-  vehiclesUrl: VEHICLES_MAINTENANCE_SERVICE_URL,
-  logisticsUrl: LOGISTICS_SERVICE_URL,
-  aiUrl: AI_SERVICE_URL
-});
-const dismissalsStore = new MemoryDismissalsStore();
-const alertsBroadcaster = buildAlertsBroadcaster({
-  emit: makeSocketIoEmitter(() => ioInstance)
-});
 app.use(
   '/api/alerts',
   buildAlertsRouter({
