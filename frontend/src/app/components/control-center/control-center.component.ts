@@ -20,6 +20,8 @@ import {
   QuickActionDef,
   QuickActionsComponent,
 } from './quick-actions/quick-actions.component';
+import { KpiStripComponent } from './kpi-strip/kpi-strip.component';
+import { WindowSelectorComponent } from './window-selector/window-selector.component';
 import {
   defaultLayoutForRole,
   normalizeRole,
@@ -42,6 +44,8 @@ import {
     ActionQueueComponent,
     PredictiveInsightsComponent,
     QuickActionsComponent,
+    KpiStripComponent,
+    WindowSelectorComponent,
   ],
   templateUrl: './control-center.component.html',
   styleUrls: ['./control-center.component.scss'],

@@ -1,0 +1,20 @@
+<div
+  class="window-selector"
+  role="radiogroup"
+  aria-label="Dashboard time window"
+  data-testid="dashboard-window-selector"
+>
+  <button
+    *ngFor="let opt of options; trackBy: trackByValue"
+    type="button"
+    role="radio"
+    class="window-selector__btn"
+    [class.window-selector__btn--active]="opt.value === active"
+    [attr.aria-checked]="opt.value === active"
+    [attr.aria-label]="opt.ariaLabel"
+    [attr.data-window]="opt.value"
+    (click)="select(opt.value)"
+  >
+    {{ opt.label }}
+  </button>
+</div>

@@ -25,6 +25,10 @@ class StubPredictiveInsightsComponent {}
   inputs: ['actions', 'ariaLabel', 'context', 'max'],
 })
 class StubQuickActionsComponent {}
+@Component({ selector: 'app-kpi-strip', standalone: true, template: '' })
+class StubKpiStripComponent {}
+@Component({ selector: 'app-window-selector', standalone: true, template: '' })
+class StubWindowSelectorComponent {}
 
 const layoutEndpoint = `${environment.apiUrl}/users/me/dashboard-layout`;
 
@@ -59,6 +63,8 @@ function setup(): {
         StubActionQueueComponent,
         StubPredictiveInsightsComponent,
         StubQuickActionsComponent,
+        StubKpiStripComponent,
+        StubWindowSelectorComponent,
       ],
     },
   });

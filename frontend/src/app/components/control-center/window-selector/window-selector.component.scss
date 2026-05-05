@@ -1,0 +1,53 @@
+/*
+ * FN-1332 — global Today/7d/30d window selector.
+ * Renders a compact pill-segmented control next to the page header. Selected
+ * value persists via the dashboard-window service (URL-backed).
+ */
+
+:host {
+  display: inline-flex;
+}
+
+.window-selector {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.28));
+  background: rgba(15, 23, 42, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+}
+
+.window-selector__btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ai-text-soft, rgba(226, 232, 240, 0.78));
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+  min-width: 56px;
+  text-align: center;
+}
+
+.window-selector__btn:hover:not(.window-selector__btn--active) {
+  background: rgba(59, 130, 246, 0.10);
+  color: var(--ai-text-body, #e2e8f0);
+}
+
+.window-selector__btn--active {
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.22), rgba(59, 130, 246, 0.22));
+  color: var(--ai-text-strong, #f8fafc);
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.45) inset;
+}
+
+.window-selector__btn:focus-visible {
+  outline: 2px solid var(--ai-accent-info, #60a5fa);
+  outline-offset: 2px;
+}
