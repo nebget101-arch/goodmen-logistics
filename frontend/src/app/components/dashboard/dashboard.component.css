@@ -332,58 +332,6 @@
   }
 }
 
-.panel-actions {
-  margin-top: 4px;
-}
-
-.actions-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.action-chip {
-  position: relative;
-  border-radius: 999px;
-  border: 1px solid rgba(55, 65, 81, 0.9);
-  background: radial-gradient(circle at 0 0, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.98));
-  color: #e5e7eb;
-  padding: 6px 14px;
-  min-width: 180px;
-  text-align: left;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 0.8rem;
-  box-shadow:
-    0 10px 24px rgba(15, 23, 42, 0.9),
-    0 0 0 1px rgba(15, 23, 42, 1);
-  transition: transform 130ms ease, box-shadow 130ms ease, border-color 130ms ease, background 130ms ease;
-}
-
-.action-chip:hover {
-  transform: translateY(-1px);
-  border-color: rgba(59, 130, 246, 0.9);
-  box-shadow:
-    0 14px 32px rgba(37, 99, 235, 0.45),
-    0 0 0 1px rgba(15, 23, 42, 1);
-}
-
-.action-chip-emphasis {
-  border-color: rgba(34, 197, 94, 0.9);
-  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.2), rgba(15, 23, 42, 0.98));
-}
-
-.chip-title {
-  font-weight: 600;
-}
-
-.chip-sub {
-  font-size: 0.72rem;
-  color: #9ca3af;
-}
-
 .metric-card-link {
   display: block;
   text-decoration: none;

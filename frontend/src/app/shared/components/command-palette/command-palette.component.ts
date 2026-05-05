@@ -18,6 +18,7 @@ import { CommandPaletteService } from '../../services/command-palette.service';
 import { KeyboardShortcutsService } from '../../services/keyboard-shortcuts.service';
 import { AccessControlService } from '../../../services/access-control.service';
 import { NAV_TOP_LINKS, NAV_SECTIONS, NavLink } from '../../../config/nav.config';
+import { COMMAND_ACTIONS, COMMAND_ACTION_PATHS, CommandAction } from './command-actions';
 
 interface PaletteItem {
   group: 'recent' | 'loads' | 'search' | 'actions' | 'filters' | 'nav';
@@ -214,19 +215,24 @@ export class CommandPaletteComponent implements OnInit, OnDestroy, AfterViewChec
   // ─── Internals ──────────────────────────────────────────────────────────────
 
   private buildStaticItems(): void {
+    // FN-1335 — primary action set is sourced from COMMAND_ACTIONS so the
+    // palette stays in sync with the bottom dashboard "Quick Actions" surface
+    // we removed; permission/feature filtering is applied per entry.
+    const priorityActions: PaletteItem[] = COMMAND_ACTIONS
+      .filter(a => this.canSeeCommandAction(a))
+      .map(a => ({
+        group: 'actions' as const,
+        groupLabel: 'Quick Actions',
+        icon: a.icon,
+        label: a.label,
+        hint: a.hint,
+        activate: () => this.navigate([a.path], a.queryParams),
+      }));
+
     this.allActions = [
+      ...priorityActions,
       {
-        group: 'actions', groupLabel: 'Actions', icon: 'add_circle',
-        label: 'New load', hint: 'Open the loads list to start a new load',
-        activate: () => this.navigate(['/loads']),
-      },
-      {
-        group: 'actions', groupLabel: 'Actions', icon: 'refresh',
-        label: 'Open dashboard', hint: 'Jump to the main dashboard',
-        activate: () => this.navigate(['/dashboard']),
-      },
-      {
-        group: 'actions', groupLabel: 'Actions', icon: 'keyboard',
+        group: 'actions', groupLabel: 'Quick Actions', icon: 'keyboard',
         label: 'Show keyboard shortcuts', hint: 'Opens the shortcuts help overlay',
         activate: () => { this.close(); this.shortcuts.openHelp(); },
       },
@@ -260,6 +266,8 @@ export class CommandPaletteComponent implements OnInit, OnDestroy, AfterViewChec
       ...NAV_SECTIONS.flatMap(s => s.children),
     ];
     this.allNavLinks = navLinks
+      // Dedupe — anything already surfaced in Quick Actions shouldn't repeat under Navigation.
+      .filter(link => !COMMAND_ACTION_PATHS.has(link.path))
       .filter(link => this.canSeeNavLink(link))
       .map(link => ({
         group: 'nav' as const,
@@ -269,6 +277,17 @@ export class CommandPaletteComponent implements OnInit, OnDestroy, AfterViewChec
         hint: link.path,
         activate: () => this.navigate([link.path]),
       }));
+  }
+
+  private canSeeCommandAction(a: CommandAction): boolean {
+    try {
+      if (a.featureFlag && !this.access.hasFeatureAccess(a.featureFlag)) { return false; }
+      if (a.tab && !this.access.canSee(a.tab)) { return false; }
+      return this.access.canAccessUrl(a.path);
+    } catch {
+      // Access service may not be loaded yet; show by default — guards on the route still apply.
+      return true;
+    }
   }
 
   private canSeeNavLink(link: NavLink): boolean {
