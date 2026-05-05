@@ -37,63 +37,6 @@
 
   <section *ngIf="!loading" class="dashboard-grid">
     <div class="dashboard-column">
-      <div class="panel panel-metrics">
-        <div class="panel-header">
-          <h2>Fleet health overview</h2>
-          <span class="panel-tag">AI summarized</span>
-        </div>
-
-        <div class="metrics-grid">
-          <a class="metric-card metric-card-link" routerLink="/drivers">
-            <div class="metric-label">Active Drivers</div>
-            <div class="metric-value">{{ stats.activeDrivers }}/{{ stats.totalDrivers }}</div>
-            <div class="metric-sub">Total drivers in fleet</div>
-          </a>
-
-          <a class="metric-card metric-card-link" [ngClass]="stats.oosVehicles > 0 ? 'metric-critical' : 'metric-good'" routerLink="/vehicles" [queryParams]="{filter: 'oos'}">
-            <div class="metric-label">Vehicle Status</div>
-            <div class="metric-value">{{ stats.activeVehicles }}/{{ stats.totalVehicles }}</div>
-            <div class="metric-sub">{{ stats.oosVehicles }} out of service</div>
-          </a>
-
-          <a class="metric-card metric-card-link" routerLink="/loads">
-            <div class="metric-label">Active Loads</div>
-            <div class="metric-value">{{ stats.activeLoads }}</div>
-            <div class="metric-sub">{{ stats.pendingLoads }} pending assignment</div>
-          </a>
-
-          <a class="metric-card metric-card-link" [ngClass]="stats.hosViolations > 0 ? 'metric-warn' : 'metric-good'" routerLink="/hos">
-            <div class="metric-label">HOS Compliance</div>
-            <div class="metric-value">{{ stats.hosViolations }}</div>
-            <div class="metric-sub">Violations / warnings today</div>
-          </a>
-
-          <a class="metric-card metric-card-link" [ngClass]="stats.dqfComplianceRate < 90 ? 'metric-warn' : 'metric-good'" routerLink="/drivers/dqf">
-            <div class="metric-label">DQF Compliance</div>
-            <div class="metric-value">{{ stats.dqfComplianceRate }}%</div>
-            <div class="metric-sub">Average record completeness</div>
-          </a>
-
-          <a class="metric-card metric-card-link" [ngClass]="stats.expiredMedCerts > 0 ? 'metric-critical' : (stats.upcomingMedCerts > 0 ? 'metric-warn' : 'metric-good')" routerLink="/drivers/dqf" [queryParams]="{filter: 'med-certs'}">
-            <div class="metric-label">Medical Certificates</div>
-            <div class="metric-value">{{ stats.expiredMedCerts }}</div>
-            <div class="metric-sub">{{ stats.upcomingMedCerts }} expiring soon</div>
-          </a>
-
-          <a class="metric-card metric-card-link" [ngClass]="stats.vehiclesNeedingMaintenance > 0 ? 'metric-warn' : 'metric-good'" routerLink="/vehicles" [queryParams]="{filter: 'maintenance-due'}">
-            <div class="metric-label">Maintenance Due</div>
-            <div class="metric-value">{{ stats.vehiclesNeedingMaintenance }}</div>
-            <div class="metric-sub">Vehicles needing service</div>
-          </a>
-
-          <a class="metric-card metric-card-link" [ngClass]="stats.clearinghouseIssues > 0 ? 'metric-critical' : 'metric-good'" routerLink="/drivers/dqf" [queryParams]="{filter: 'clearinghouse'}">
-            <div class="metric-label">Clearinghouse</div>
-            <div class="metric-value">{{ stats.clearinghouseIssues }}</div>
-            <div class="metric-sub">Queries pending / issues</div>
-          </a>
-        </div>
-      </div>
-
       <div class="panel panel-loads">
         <div class="panel-header">
           <h2>Loads progress</h2>
