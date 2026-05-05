@@ -1,0 +1,204 @@
+/*
+ * FN-1332 — top-of-page KPI strip.
+ * Renders up to 6 click-through KPI cards in a single row (responsive grid).
+ * Each card shows the current value scoped to the active dashboard window,
+ * a sub line (target / context), and a delta vs. the previous window when
+ * the backend emits one.
+ */
+
+:host {
+  display: block;
+}
+
+.kpi-strip {
+  width: 100%;
+}
+
+.kpi-strip__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1280px) {
+  .kpi-strip__list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .kpi-strip__list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.kpi-strip__item {
+  display: flex;
+}
+
+.kpi-strip__loading {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1280px) {
+  .kpi-strip__loading {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .kpi-strip__loading {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.kpi-strip__skeleton {
+  height: 96px;
+  border-radius: 14px;
+  background: linear-gradient(
+    90deg,
+    rgba(30, 41, 59, 0.55) 0%,
+    rgba(51, 65, 85, 0.55) 50%,
+    rgba(30, 41, 59, 0.55) 100%
+  );
+  background-size: 200% 100%;
+  animation: kpi-strip-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes kpi-strip-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.kpi-strip__error {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  background: rgba(127, 29, 29, 0.18);
+  color: var(--ai-accent-danger-soft, #fecaca);
+  font-size: 0.85rem;
+}
+
+.kpi-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.22));
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.78) 0%, rgba(2, 6, 23, 0.92) 100%);
+  color: var(--ai-text-body, #e2e8f0);
+  text-decoration: none;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  box-shadow: 0 8px 24px -16px rgba(2, 6, 23, 0.6);
+  min-height: 96px;
+  position: relative;
+  isolation: isolate;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 1px solid transparent;
+  z-index: -1;
+}
+
+.kpi-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(45, 212, 191, 0.45);
+  box-shadow: 0 12px 32px -18px rgba(8, 47, 73, 0.7);
+}
+
+.kpi-card:focus-visible {
+  outline: 2px solid var(--ai-accent-info, #60a5fa);
+  outline-offset: 2px;
+}
+
+.kpi-strip__item--warn .kpi-card {
+  border-color: rgba(251, 146, 60, 0.45);
+}
+
+.kpi-strip__item--critical .kpi-card {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: linear-gradient(180deg, rgba(127, 29, 29, 0.25) 0%, rgba(2, 6, 23, 0.92) 100%);
+}
+
+.kpi-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kpi-card__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ai-text-muted, rgba(148, 163, 184, 0.85));
+  font-weight: 600;
+}
+
+.kpi-card__value {
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: var(--ai-text-strong, #f8fafc);
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+}
+
+.kpi-strip__item--warn .kpi-card__value {
+  color: #fed7aa;
+}
+
+.kpi-strip__item--critical .kpi-card__value {
+  color: #fecaca;
+}
+
+.kpi-card__sub {
+  font-size: 0.78rem;
+  color: var(--ai-text-soft, rgba(226, 232, 240, 0.65));
+}
+
+.kpi-card__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.kpi-card__delta-arrow {
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.kpi-card__delta--good {
+  background: rgba(74, 222, 128, 0.14);
+  color: var(--ai-accent-success, #86efac);
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+.kpi-card__delta--bad {
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--ai-accent-danger-soft, #fecaca);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.kpi-card__delta--neutral {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--ai-text-muted, #cbd5e1);
+  border-color: rgba(148, 163, 184, 0.35);
+}

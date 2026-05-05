@@ -1,0 +1,55 @@
+<section
+  class="kpi-strip"
+  aria-label="Key performance indicators"
+  data-testid="kpi-strip"
+  [attr.data-window]="activeWindow"
+>
+  <div *ngIf="loading" class="kpi-strip__loading" aria-live="polite">
+    <div class="kpi-strip__skeleton" *ngFor="let _ of [].constructor(6)"></div>
+  </div>
+
+  <div *ngIf="!loading && error" class="kpi-strip__error" role="alert">
+    {{ error }}
+  </div>
+
+  <ul *ngIf="!loading && !error" class="kpi-strip__list" role="list">
+    <li
+      *ngFor="let card of cards; trackBy: trackById"
+      class="kpi-strip__item"
+      [class.kpi-strip__item--good]="card.severity === 'good'"
+      [class.kpi-strip__item--warn]="card.severity === 'warn'"
+      [class.kpi-strip__item--critical]="card.severity === 'critical'"
+    >
+      <a
+        class="kpi-card"
+        [routerLink]="card.routerLink"
+        [queryParams]="card.queryParams || null"
+        [attr.data-kpi-id]="card.id"
+        [attr.aria-label]="card.label + ' — ' + card.value"
+      >
+        <div class="kpi-card__top">
+          <span class="kpi-card__label">{{ card.label }}</span>
+          <span
+            *ngIf="card.delta.direction !== 'none'"
+            class="kpi-card__delta"
+            [class.kpi-card__delta--good]="card.delta.tone === 'good'"
+            [class.kpi-card__delta--bad]="card.delta.tone === 'bad'"
+            [class.kpi-card__delta--neutral]="card.delta.tone === 'neutral'"
+            [attr.aria-label]="'Change vs prior window: ' + card.delta.text"
+          >
+            <span class="kpi-card__delta-arrow" aria-hidden="true">
+              <ng-container [ngSwitch]="card.delta.direction">
+                <ng-container *ngSwitchCase="'up'">▲</ng-container>
+                <ng-container *ngSwitchCase="'down'">▼</ng-container>
+                <ng-container *ngSwitchDefault>·</ng-container>
+              </ng-container>
+            </span>
+            {{ card.delta.text }}
+          </span>
+        </div>
+        <div class="kpi-card__value">{{ card.value }}</div>
+        <div class="kpi-card__sub">{{ card.sub }}</div>
+      </a>
+    </li>
+  </ul>
+</section>

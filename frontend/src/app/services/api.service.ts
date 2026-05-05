@@ -321,8 +321,15 @@ export class ApiService {
   }
 
   // Dashboard
-  getDashboardStats(): Observable<any> {
-    return this.http.get(`${this.baseUrl}/dashboard/stats`);
+  /**
+   * FN-1332 — pass `window` so the backend can return window-scoped stats with
+   * deltas (FN-1333). When `window` is omitted the endpoint preserves its
+   * legacy behavior, so callers that haven't migrated still work.
+   */
+  getDashboardStats(opts: { window?: 'today' | '7d' | '30d' } = {}): Observable<any> {
+    const params: Record<string, string> = {};
+    if (opts.window) params['window'] = opts.window;
+    return this.http.get(`${this.baseUrl}/dashboard/stats`, { params });
   }
 
   /**

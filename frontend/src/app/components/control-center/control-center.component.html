@@ -6,16 +6,21 @@
         {{ role | titlecase }} default · drag cards to reorder
       </p>
     </div>
-    <button
-      type="button"
-      class="control-center__reset"
-      (click)="resetToDefault()"
-      [disabled]="loading || saving"
-      data-testid="control-center-reset"
-    >
-      Reset to default
-    </button>
+    <div class="control-center__header-actions">
+      <app-window-selector></app-window-selector>
+      <button
+        type="button"
+        class="control-center__reset"
+        (click)="resetToDefault()"
+        [disabled]="loading || saving"
+        data-testid="control-center-reset"
+      >
+        Reset to default
+      </button>
+    </div>
   </header>
+
+  <app-kpi-strip class="control-center__kpis"></app-kpi-strip>
 
   <div *ngIf="errorMessage" class="control-center__error" role="alert">
     {{ errorMessage }}
