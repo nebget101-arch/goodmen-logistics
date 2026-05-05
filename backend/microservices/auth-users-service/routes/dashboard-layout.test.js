@@ -15,6 +15,7 @@ const http = require('http');
 
 const createDashboardLayoutRouter = require('./dashboard-layout');
 const {
+  createLayoutStore,
   getRoleDefault,
   normalizeRoleKey,
   ROLE_DEFAULTS
@@ -256,6 +257,137 @@ describe('dashboard-layout route (FN-1172)', () => {
           body: { cards: [] }
         });
         assert.strictEqual(res.status, 403);
+      } finally {
+        server.close();
+      }
+    });
+  });
+
+  describe('preset-table integration (FN-1342)', () => {
+    function makeUserLayoutsKnex({ row = null } = {}) {
+      return function knex(table) {
+        assert.strictEqual(table, 'user_dashboard_layouts');
+        return {
+          where() {
+            return this;
+          },
+          async first() {
+            return row;
+          }
+        };
+      };
+    }
+
+    function makePresetStore(byRole) {
+      return {
+        async getDefaultForRole(roleKey) {
+          const hit = byRole[roleKey];
+          if (!hit) return null;
+          return {
+            preset_key: hit.preset_key,
+            role_key: roleKey,
+            display_name: hit.display_name,
+            layout: hit.layout
+          };
+        }
+      };
+    }
+
+    it('GET returns the preset-table layout end-to-end through the real store', async () => {
+      const layout = { cards: ['preset-table-owner'] };
+      const realStore = createLayoutStore({
+        knex: makeUserLayoutsKnex(),
+        presetStore: makePresetStore({
+          owner: { preset_key: 'owner-default', display_name: 'Owner', layout }
+        })
+      });
+      const app = buildApp({
+        store: realStore,
+        identity: { userId: 'u-owner', role: 'owner', tenantId: 'tenant-1' }
+      });
+      const server = await startServer(app);
+      try {
+        const res = await request(server, {
+          method: 'GET',
+          path: '/api/users/me/dashboard-layout'
+        });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.data.is_default, true);
+        assert.deepStrictEqual(res.body.data.layout, layout);
+        assert.strictEqual(res.body.data.role, 'owner');
+      } finally {
+        server.close();
+      }
+    });
+
+    it('GET falls back to ROLE_DEFAULTS when the presets table returns nothing', async () => {
+      const realStore = createLayoutStore({
+        knex: makeUserLayoutsKnex(),
+        presetStore: makePresetStore({}) // empty table
+      });
+      const app = buildApp({
+        store: realStore,
+        identity: { userId: 'u-disp', role: 'dispatcher', tenantId: 'tenant-1' }
+      });
+      const server = await startServer(app);
+      try {
+        const res = await request(server, {
+          method: 'GET',
+          path: '/api/users/me/dashboard-layout'
+        });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.data.is_default, true);
+        assert.deepStrictEqual(res.body.data.layout, ROLE_DEFAULTS.dispatcher);
+      } finally {
+        server.close();
+      }
+    });
+
+    it('DELETE→GET returns the role-correct preset (covers reset-to-default)', async () => {
+      const safetyLayout = { cards: ['preset-table-safety'] };
+      let userRow = {
+        layout_json: JSON.stringify({ cards: ['old-custom'] }),
+        updated_at: '2026-05-05T09:00:00Z'
+      };
+      const knex = function (table) {
+        assert.strictEqual(table, 'user_dashboard_layouts');
+        return {
+          where() {
+            return this;
+          },
+          async first() {
+            return userRow;
+          },
+          async del() {
+            userRow = null;
+            return 1;
+          }
+        };
+      };
+      const realStore = createLayoutStore({
+        knex,
+        presetStore: makePresetStore({
+          safety: {
+            preset_key: 'compliance-default',
+            display_name: 'Compliance',
+            layout: safetyLayout
+          }
+        })
+      });
+      const app = buildApp({
+        store: realStore,
+        identity: { userId: 'u-safety', role: 'safety_manager', tenantId: 'tenant-1' }
+      });
+      const server = await startServer(app);
+      try {
+        const res = await request(server, {
+          method: 'DELETE',
+          path: '/api/users/me/dashboard-layout'
+        });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.data.is_default, true);
+        assert.strictEqual(res.body.data.role, 'safety');
+        assert.deepStrictEqual(res.body.data.layout, safetyLayout);
       } finally {
         server.close();
       }
