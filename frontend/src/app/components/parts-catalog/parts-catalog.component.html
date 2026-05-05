@@ -377,12 +377,28 @@
 
             <div class="form-group">
               <label for="manufacturer">Manufacturer *</label>
-              <input
-                id="manufacturer"
-                type="text"
-                class="form-control"
-                formControlName="manufacturer"
-              />
+              <app-master-typeahead
+                inputId="manufacturer"
+                entityLabel="manufacturer"
+                placeholder="Search or create a manufacturer…"
+                [value]="manufacturerValue"
+                [searchFn]="searchManufacturers"
+                [createFn]="createManufacturer"
+                (valueChange)="onManufacturerPick($event)"
+              ></app-master-typeahead>
+            </div>
+
+            <div class="form-group">
+              <label for="preferred_vendor_name">Preferred Vendor</label>
+              <app-master-typeahead
+                inputId="preferred_vendor_name"
+                entityLabel="vendor"
+                placeholder="Search or create a vendor…"
+                [value]="vendorValue"
+                [searchFn]="searchVendors"
+                [createFn]="createVendor"
+                (valueChange)="onVendorPick($event)"
+              ></app-master-typeahead>
             </div>
 
             <div class="form-group">

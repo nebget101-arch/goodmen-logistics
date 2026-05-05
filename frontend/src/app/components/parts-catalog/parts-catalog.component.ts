@@ -1,6 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../services/api.service';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Observable } from 'rxjs';
+import { ManufacturersService, MasterEntity } from '../../services/manufacturers.service';
+import { VendorsService } from '../../services/vendors.service';
+import { MasterTypeaheadValue } from '../shared/master-typeahead/master-typeahead.component';
 
 @Component({
   selector: 'app-parts-catalog',
@@ -52,12 +56,39 @@ export class PartsCatalogComponent implements OnInit {
   /** Search within AI analysis parts */
   aiSearchText = '';
 
-  constructor(private apiService: ApiService, private fb: FormBuilder) {
+  /** Master-typeahead values bound to the modal (kept in sync with form FK + text fields). */
+  manufacturerValue: MasterTypeaheadValue | null = null;
+  vendorValue: MasterTypeaheadValue | null = null;
+
+  /**
+   * Bound once at construction so the OnPush typeahead receives stable Input
+   * references (FN-317 RCA: fresh per-CD references trap OnPush in re-renders).
+   */
+  readonly searchManufacturers = (q: string): Observable<MasterEntity[]> =>
+    this.manufacturersService.search(q);
+  readonly createManufacturer = (name: string): Observable<MasterEntity> =>
+    this.manufacturersService.create(name);
+  readonly searchVendors = (q: string): Observable<MasterEntity[]> =>
+    this.vendorsService.search(q);
+  readonly createVendor = (name: string): Observable<MasterEntity> =>
+    this.vendorsService.create(name);
+
+  constructor(
+    private apiService: ApiService,
+    private fb: FormBuilder,
+    private manufacturersService: ManufacturersService,
+    private vendorsService: VendorsService
+  ) {
     this.partForm = this.fb.group({
       sku: ['', [Validators.required]],
       name: ['', Validators.required],
       category: ['', Validators.required],
+      // Free-text manufacturer is preserved on the wire — the BE keeps it in
+      // sync with manufacturer_id (FN-1093). The typeahead drives both fields.
       manufacturer: ['', Validators.required],
+      manufacturer_id: [null as number | null],
+      preferred_vendor_name: [''],
+      vendor_id: [null as number | null],
       uom: ['each'],
       unit_cost: [0, Validators.required],
       unit_price: [0],
@@ -167,13 +198,42 @@ export class PartsCatalogComponent implements OnInit {
     if (part) {
       this.editingPartId = part.id;
       this.partForm.patchValue(part);
+      // Hydrate the typeaheads. If the part has a FK we trust it; if it only
+      // has the legacy free-text we still display it and let the BE upgrade
+      // it to a FK on save (FN-1093 resolveManufacturerVendor).
+      this.manufacturerValue = part.manufacturer || part.manufacturer_id != null
+        ? { id: part.manufacturer_id ?? null, name: part.manufacturer ?? '' }
+        : null;
+      this.vendorValue = part.preferred_vendor_name || part.vendor_id != null
+        ? { id: part.vendor_id ?? null, name: part.preferred_vendor_name ?? '' }
+        : null;
     } else {
       this.editingPartId = null;
-      this.partForm.reset();
+      this.partForm.reset({ uom: 'each', unit_cost: 0, unit_price: 0, quantity_on_hand: 0, reorder_level: 5 });
+      this.manufacturerValue = null;
+      this.vendorValue = null;
     }
     this.showForm = true;
     this.successMessage = '';
     this.errorMessage = '';
+  }
+
+  onManufacturerPick(value: MasterTypeaheadValue): void {
+    this.manufacturerValue = value;
+    this.partForm.patchValue({
+      manufacturer: value.name,
+      manufacturer_id: value.id,
+    });
+    this.partForm.get('manufacturer')?.markAsDirty();
+  }
+
+  onVendorPick(value: MasterTypeaheadValue): void {
+    this.vendorValue = value;
+    this.partForm.patchValue({
+      preferred_vendor_name: value.name,
+      vendor_id: value.id,
+    });
+    this.partForm.get('preferred_vendor_name')?.markAsDirty();
   }
 
   openFormModal(part?: any): void {
@@ -184,6 +244,8 @@ export class PartsCatalogComponent implements OnInit {
     this.showForm = false;
     this.editingPartId = null;
     this.partForm.reset();
+    this.manufacturerValue = null;
+    this.vendorValue = null;
   }
 
   savePart(): void {
