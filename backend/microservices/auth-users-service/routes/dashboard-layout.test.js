@@ -199,7 +199,7 @@ describe('dashboard-layout route (FN-1172)', () => {
 
     it('persists a layout and subsequent GET returns is_default=false', async () => {
       const layout = {
-        cards: ['quick-actions', 'daily-briefing', 'smart-alerts', 'predictive-insights']
+        cards: ['quick-actions', 'daily-briefing', 'action-queue', 'predictive-insights']
       };
       const putRes = await request(server, {
         method: 'PUT',

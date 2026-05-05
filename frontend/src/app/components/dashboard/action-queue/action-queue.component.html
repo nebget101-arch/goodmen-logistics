@@ -1,0 +1,130 @@
+<section class="action-queue" aria-label="Action queue">
+  <header class="action-queue__header">
+    <div class="action-queue__title">
+      <h2>Action queue</h2>
+      <span class="action-queue__tag">Severity ranked</span>
+      <span *ngIf="!loading" class="action-queue__count">{{ total }} {{ total === 1 ? 'item' : 'items' }}</span>
+    </div>
+
+    <div class="action-queue__filters">
+      <label class="action-queue__filter">
+        <span class="action-queue__filter-label">Window</span>
+        <select
+          [ngModel]="windowFilter"
+          (ngModelChange)="onWindowChange($event)"
+          aria-label="Time window filter"
+        >
+          <option value="today">Today</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+        </select>
+      </label>
+      <label class="action-queue__filter">
+        <span class="action-queue__filter-label">Severity</span>
+        <select
+          [ngModel]="severityFilter"
+          (ngModelChange)="onSeverityChange($event)"
+          aria-label="Severity filter"
+        >
+          <option value="all">All severities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+      <button
+        type="button"
+        class="action-queue__refresh"
+        (click)="refresh()"
+        [disabled]="loading"
+        aria-label="Refresh action queue"
+      >
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <div *ngIf="upstreamWarning" class="action-queue__banner action-queue__banner--warn" role="status">
+    Some upstream signals are degraded — partial results shown.
+  </div>
+
+  <div *ngIf="error" class="action-queue__banner action-queue__banner--error" role="alert">
+    {{ error }}
+  </div>
+
+  <div *ngIf="loading" class="action-queue__loading" aria-busy="true">
+    <div class="action-queue__skeleton" *ngFor="let i of [1, 2, 3]"></div>
+  </div>
+
+  <ng-container *ngIf="!loading && rows.length === 0 && !error">
+    <div class="action-queue__empty">
+      <div class="action-queue__empty-icon" aria-hidden="true">✓</div>
+      <p class="action-queue__empty-title">All clear — nothing needs your attention.</p>
+      <p class="action-queue__empty-sub">Severity-ranked alerts and tasks will appear here as they arise.</p>
+    </div>
+  </ng-container>
+
+  <ul *ngIf="!loading && rows.length > 0" class="action-queue__list" role="list">
+    <li *ngFor="let row of rows; trackBy: trackByGroupId" class="action-queue__item">
+      <app-grouped-alert-row
+        [severity]="row.group.severity"
+        [category]="row.group.category | titlecase"
+        [message]="row.group.message"
+        [count]="row.group.count"
+        [countUnit]="row.group.count > 1 ? 'affected' : null"
+        [primaryAction]="buildPrimaryAction(row.group)"
+        [expanded]="row.expanded"
+        (expandedChange)="onExpandedChange(row, $event)"
+        (primaryActionClick)="onPrimaryAction(row)"
+        (dismiss)="dismissGroup(row)"
+      >
+        <div class="action-queue__details">
+          <div class="action-queue__bulk-bar">
+            <label class="action-queue__select-all">
+              <input
+                type="checkbox"
+                [checked]="isAllSelected(row)"
+                (change)="toggleSelectAll(row, $any($event.target).checked)"
+                [attr.aria-label]="'Select all ' + row.group.targets.length + ' affected items'"
+              />
+              <span>Select all ({{ row.group.targets.length }})</span>
+            </label>
+            <button
+              type="button"
+              class="action-queue__bulk-btn"
+              (click)="dismissSelected(row)"
+              [disabled]="row.busy || row.selectedTargetIds.size === 0"
+            >
+              Dismiss selected
+              <span *ngIf="row.selectedTargetIds.size > 0">({{ row.selectedTargetIds.size }})</span>
+            </button>
+          </div>
+
+          <ul class="action-queue__targets" role="list">
+            <li *ngFor="let target of row.group.targets" class="action-queue__target">
+              <label class="action-queue__target-label">
+                <input
+                  type="checkbox"
+                  [checked]="isTargetSelected(row, target.id)"
+                  (change)="toggleTarget(row, target.id, $any($event.target).checked)"
+                  [attr.aria-label]="'Select ' + target.label"
+                />
+                <span class="action-queue__target-name">{{ target.label }}</span>
+              </label>
+              <button
+                *ngIf="target.route"
+                type="button"
+                class="action-queue__target-open"
+                (click)="openTarget(target)"
+                [attr.aria-label]="'Open ' + target.label"
+              >
+                Open ›
+              </button>
+            </li>
+          </ul>
+        </div>
+      </app-grouped-alert-row>
+    </li>
+  </ul>
+</section>

@@ -325,8 +325,34 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/dashboard/stats`);
   }
 
-  getAlerts(): Observable<any> {
-    return this.http.get(`${this.baseUrl}/dashboard/alerts`);
+  /**
+   * FN-1329 — fetch the unified Action Queue (severity-ranked, grouped alerts).
+   * Backed by `GET /api/dashboard/action-queue` on the gateway (FN-1330).
+   */
+  getActionQueue(opts: {
+    window?: 'today' | '7d' | '30d';
+    severity?: 'all' | 'critical' | 'high' | 'medium' | 'low';
+  } = {}): Observable<any> {
+    const params: Record<string, string> = {};
+    if (opts.window) params['window'] = opts.window;
+    if (opts.severity) params['severity'] = opts.severity;
+    return this.http.get(`${this.baseUrl}/dashboard/action-queue`, { params });
+  }
+
+  /**
+   * FN-1329 — dismiss a grouped alert. Pass `groupId` alone to dismiss the
+   * whole group; pass `targetIds` to dismiss only the selected items inside
+   * an expanded group. Persists via the existing dismissals store.
+   */
+  dismissActionQueueGroup(payload: {
+    groupId: string;
+    targetIds?: string[];
+  }): Observable<any> {
+    const body: Record<string, unknown> = { group_id: payload.groupId };
+    if (payload.targetIds && payload.targetIds.length) {
+      body['target_ids'] = payload.targetIds;
+    }
+    return this.http.post(`${this.baseUrl}/dashboard/action-queue/dismiss`, body);
   }
 
   // Drivers

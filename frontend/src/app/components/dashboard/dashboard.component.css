@@ -153,7 +153,7 @@
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -161,11 +161,6 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.dashboard-column-narrow {
-  max-width: 460px;
-  margin-left: auto;
 }
 
 .panel {
@@ -204,11 +199,6 @@
   color: #a5f3fc;
   border: 1px solid rgba(59, 130, 246, 0.7);
   background: rgba(15, 23, 42, 0.95);
-}
-
-.panel-tag-warn {
-  color: #fed7aa;
-  border-color: rgba(251, 146, 60, 0.8);
 }
 
 .metrics-grid {
@@ -394,161 +384,6 @@
   color: #9ca3af;
 }
 
-.panel-alerts {
-  min-height: 200px;
-}
-
-.alerts-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 36px 16px;
-  gap: 6px;
-  color: #9ca3af;
-}
-
-.alerts-ok-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.7);
-  color: #bbf7d0;
-  font-size: 0.8rem;
-}
-
-.alerts-empty span {
-  font-size: 0.76rem;
-  color: #6b7280;
-}
-
-.alert-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 9px 8px;
-  border-radius: 12px;
-  background: radial-gradient(circle at 0 0, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.98));
-  border: 1px solid rgba(31, 41, 55, 0.95);
-  margin-bottom: 8px;
-}
-
-.alert-pip {
-  margin-top: 5px;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #22c55e;
-  box-shadow: 0 0 12px rgba(34, 197, 94, 0.9);
-}
-
-.alert-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.alert-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.alert-category {
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #e5e7eb;
-}
-
-.alert-date {
-  font-size: 0.7rem;
-  color: #6b7280;
-}
-
-.alert-message {
-  margin-top: 2px;
-  font-size: 0.8rem;
-  color: #d1d5db;
-}
-
-.alert-critical .alert-pip,
-.alert-error .alert-pip,
-.alert-danger .alert-pip {
-  background: #ef4444;
-  box-shadow: 0 0 14px rgba(248, 113, 113, 0.95);
-}
-
-.alert-warning .alert-pip {
-  background: #f97316;
-  box-shadow: 0 0 14px rgba(251, 146, 60, 0.95);
-}
-
-.alert-info .alert-pip {
-  background: #3b82f6;
-  box-shadow: 0 0 14px rgba(59, 130, 246, 0.9);
-}
-
-.alerts-filters {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.filter-select {
-  flex: 1;
-  min-width: 100px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(55, 65, 81, 0.9);
-  background: rgba(15, 23, 42, 0.96);
-  color: #e5e7eb;
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  min-height: 34px;
-  line-height: 1.25;
-  box-sizing: border-box;
-}
-
-select.filter-select:not([multiple]) {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  cursor: pointer;
-  color-scheme: dark;
-  padding: 6px 28px 6px 10px;
-  background:
-    var(--fn-select-chevron) no-repeat right 8px center / 12px,
-    rgba(15, 23, 42, 0.96);
-}
-
-select.filter-select:not([multiple]):focus {
-  outline: none;
-  border-color: rgba(59, 130, 246, 0.7);
-  background:
-    var(--fn-select-chevron) no-repeat right 8px center / 12px,
-    rgba(15, 23, 42, 0.96);
-}
-
-.alert-clickable {
-  cursor: pointer;
-  text-decoration: none;
-  color: inherit;
-  transition: border-color 140ms ease, background 140ms ease;
-}
-
-.alert-clickable:hover {
-  border-color: rgba(59, 130, 246, 0.7);
-  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.12), rgba(15, 23, 42, 0.98));
-}
-
 .metric-card-link {
   display: block;
   text-decoration: none;
@@ -567,24 +402,10 @@ select.filter-select:not([multiple]):focus {
   }
 }
 
-@media (max-width: 960px) {
-  .dashboard-grid {
-    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.1fr);
-  }
-}
-
 @media (max-width: 800px) {
   .dashboard-header {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .dashboard-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .dashboard-column-narrow {
-    max-width: 100%;
   }
 }
 

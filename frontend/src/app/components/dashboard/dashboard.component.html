@@ -36,7 +36,6 @@
   </div>
 
   <section *ngIf="!loading" class="dashboard-grid">
-    <!-- Metrics Column -->
     <div class="dashboard-column">
       <div class="panel panel-metrics">
         <div class="panel-header">
@@ -187,58 +186,5 @@
         </div>
       </div>
     </div>
-
-    <!-- Alerts Column -->
-    <aside class="dashboard-column dashboard-column-narrow">
-      <div class="panel panel-alerts">
-        <div class="panel-header panel-header-with-filters">
-          <h2>Compliance alerts</h2>
-          <span class="panel-tag panel-tag-warn">Real-time</span>
-        </div>
-        <div class="alerts-filters">
-          <select [(ngModel)]="alertFilterType" class="filter-select">
-            <option value="all">All severity</option>
-            <option value="critical">Critical</option>
-            <option value="warning">Warning</option>
-          </select>
-          <select [(ngModel)]="alertFilterCategory" class="filter-select">
-            <option value="all">All categories</option>
-            <option value="driver">Driver</option>
-            <option value="vehicle">Vehicle</option>
-            <option value="maintenance">Maintenance</option>
-            <option value="compliance">Compliance</option>
-          </select>
-        </div>
-
-        <div *ngIf="filteredAlerts.length === 0" class="alerts-empty">
-          <div class="alerts-ok-icon">✓</div>
-          <p>No compliance alerts match your filters.</p>
-          <span>{{ alerts.length === 0 ? 'FleetNeuron is not detecting any anomalies right now.' : 'Try changing the filter options above.' }}</span>
-        </div>
-
-        <ng-container *ngFor="let alert of filteredAlerts">
-          <a *ngIf="getAlertLink(alert)" [routerLink]="getAlertLink(alert)" [queryParams]="getAlertQueryParams(alert)" [class]="'alert-row alert-clickable ' + getAlertClass(alert.type)">
-            <div class="alert-pip"></div>
-            <div class="alert-content">
-              <div class="alert-top">
-                <span class="alert-category">{{ alert.category | uppercase }}</span>
-                <span *ngIf="alert.date" class="alert-date">{{ alert.date }}</span>
-              </div>
-              <div class="alert-message">{{ alert.message }}</div>
-            </div>
-          </a>
-          <div *ngIf="!getAlertLink(alert)" [class]="'alert-row ' + getAlertClass(alert.type)">
-            <div class="alert-pip"></div>
-            <div class="alert-content">
-              <div class="alert-top">
-                <span class="alert-category">{{ alert.category | uppercase }}</span>
-                <span *ngIf="alert.date" class="alert-date">{{ alert.date }}</span>
-              </div>
-              <div class="alert-message">{{ alert.message }}</div>
-            </div>
-          </div>
-        </ng-container>
-      </div>
-    </aside>
   </section>
 </div>
