@@ -14,7 +14,7 @@ import {
 import { Subject, takeUntil } from 'rxjs';
 
 import { DailyBriefingComponent } from './daily-briefing/daily-briefing.component';
-import { SmartAlertsComponent } from './smart-alerts/smart-alerts.component';
+import { ActionQueueComponent } from '../dashboard/action-queue/action-queue.component';
 import { PredictiveInsightsComponent } from './predictive-insights/predictive-insights.component';
 import {
   QuickActionDef,
@@ -39,7 +39,7 @@ import {
     CommonModule,
     DragDropModule,
     DailyBriefingComponent,
-    SmartAlertsComponent,
+    ActionQueueComponent,
     PredictiveInsightsComponent,
     QuickActionsComponent,
   ],

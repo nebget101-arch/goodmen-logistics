@@ -84,7 +84,6 @@ import { AiExtractionFlowComponent } from './components/loads-dashboard/ai-extra
 import { DailyBriefingComponent } from './components/control-center/daily-briefing/daily-briefing.component';
 import { AskBarComponent } from './components/control-center/ask-bar/ask-bar.component';
 import { PredictiveInsightsComponent } from './components/control-center/predictive-insights/predictive-insights.component';
-import { SmartAlertsComponent } from './components/control-center/smart-alerts/smart-alerts.component';
 import { ExplainPanelComponent } from './components/control-center/explain-panel/explain-panel.component';
 import { ControlCenterComponent } from './components/control-center/control-center.component';
 
@@ -161,7 +160,6 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     DailyBriefingComponent,
     AskBarComponent,
     PredictiveInsightsComponent,
-    SmartAlertsComponent,
     ExplainPanelComponent,
     ControlCenterComponent
   ],

@@ -14,16 +14,16 @@
 
 const ROLE_DEFAULTS = Object.freeze({
   dispatcher: {
-    cards: ['daily-briefing', 'smart-alerts', 'predictive-insights', 'quick-actions']
+    cards: ['daily-briefing', 'action-queue', 'predictive-insights', 'quick-actions']
   },
   safety: {
-    cards: ['daily-briefing', 'smart-alerts', 'predictive-insights', 'quick-actions']
+    cards: ['daily-briefing', 'action-queue', 'predictive-insights', 'quick-actions']
   },
   maintenance: {
-    cards: ['daily-briefing', 'smart-alerts', 'predictive-insights', 'quick-actions']
+    cards: ['daily-briefing', 'action-queue', 'predictive-insights', 'quick-actions']
   },
   owner: {
-    cards: ['daily-briefing', 'predictive-insights', 'smart-alerts', 'quick-actions']
+    cards: ['daily-briefing', 'predictive-insights', 'action-queue', 'quick-actions']
   }
 });
 
