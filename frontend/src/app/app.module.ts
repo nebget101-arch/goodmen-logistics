@@ -44,6 +44,7 @@ import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.
 import { QuickAddInvoiceModalComponent } from './components/parts-catalog/quick-add-invoice-modal/quick-add-invoice-modal.component';
 import { MasterTypeaheadComponent } from './components/shared/master-typeahead/master-typeahead.component';
 import { ConfidenceBadgeComponent } from './components/shared/confidence-badge/confidence-badge.component';
+import { BarcodeScannerDialogComponent } from './components/shared/barcode-scanner-dialog/barcode-scanner-dialog.component';
 import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
@@ -112,6 +113,7 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     QuickAddInvoiceModalComponent,
     MasterTypeaheadComponent,
     ConfidenceBadgeComponent,
+    BarcodeScannerDialogComponent,
     WarehouseReceivingComponent,
     InventoryTransfersComponent,
     DirectSalesComponent,

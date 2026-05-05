@@ -90,6 +90,17 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
   @ViewChild('snapPhotoInput') snapPhotoInput!: ElementRef<HTMLInputElement>;
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── FN-1107: Quick Add → Scan Barcode ───────────────────────────────────────
+  /** Whether the Scan Barcode dialog is open. */
+  scannerOpen = false;
+  /** Lookup error pushed back into the dialog so it stays open on transient/server errors. */
+  scannerError: string | null = null;
+  /** True while a barcode lookup is in flight. Drives the dialog's busy state. */
+  scannerBusy = false;
+  /** True when the Add modal was opened from a no-match scan — locks the barcode field. */
+  barcodePrefilled = false;
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // ── FN-1104: Quick Add → Scan Invoice ───────────────────────────────────────
   /** Whether the Scan Invoice review modal is open. */
   invoiceModalOpen = false;
@@ -342,6 +353,7 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
     this.aiConfidence = {};
     this.aiR2Key = null;
     this.aiWarnings = [];
+    this.barcodePrefilled = false;
   }
 
   savePart(): void {
@@ -864,5 +876,71 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
     this.invoiceModalOpen = false;
     this.invoiceAiResult = null;
     this.invoiceR2Key = '';
+  }
+
+  // ── FN-1107: Quick Add → Scan Barcode ───────────────────────────────────────
+
+  /** Open the shared scanner dialog from the Quick Add menu. */
+  startScanBarcode(): void {
+    this.closeQuickAdd();
+    this.scannerError = null;
+    this.scannerBusy = false;
+    this.scannerOpen = true;
+  }
+
+  /** Close the scanner dialog and reset its transient state. */
+  closeScanner(): void {
+    this.scannerOpen = false;
+    this.scannerError = null;
+    this.scannerBusy = false;
+  }
+
+  /**
+   * Dialog emitted a barcode value. Look it up; on match open Edit, on 404
+   * open Add prefilled (read-only barcode), on other error keep the dialog
+   * open with an inline error so the user can retry.
+   */
+  onBarcodeScanned(code: string): void {
+    const value = (code || '').trim();
+    if (!value) {
+      this.scannerError = 'Empty barcode value.';
+      return;
+    }
+    this.scannerError = null;
+    this.scannerBusy = true;
+    this.apiService.lookupBarcode(value).subscribe({
+      next: (res: any) => {
+        this.scannerBusy = false;
+        const lookup = res?.data?.part;
+        if (!lookup?.id) {
+          // Endpoint returned 200 but no part — treat as unmatched.
+          this.openAddWithBarcodePrefilled(value);
+          return;
+        }
+        // Resolve the full part record from the local catalog cache so the
+        // Edit modal sees manufacturer/vendor/uom/qty fields the lookup
+        // endpoint doesn't return (FN-1107 acceptance note).
+        const full = this.parts.find((p: any) => p.id === lookup.id) || lookup;
+        this.scannerOpen = false;
+        this.openForm(full);
+      },
+      error: (err: any) => {
+        this.scannerBusy = false;
+        if (err?.status === 404) {
+          this.openAddWithBarcodePrefilled(value);
+          return;
+        }
+        // Transient/server error — surface inside the dialog so the user can retry.
+        this.scannerError = err?.error?.error || err?.message || 'Lookup failed. Try again.';
+      },
+    });
+  }
+
+  /** Open the Add Part modal with the scanned barcode prefilled and locked. */
+  private openAddWithBarcodePrefilled(code: string): void {
+    this.scannerOpen = false;
+    this.openForm();
+    this.partForm.patchValue({ barcode: code }, { emitEvent: false });
+    this.barcodePrefilled = true;
   }
 }
