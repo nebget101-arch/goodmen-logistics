@@ -53,6 +53,17 @@
             <span class="quick-add-label">Snap Photo</span>
             <span class="quick-add-hint">Auto-fill from a part photo</span>
           </button>
+          <!-- FN-1104: Scan Invoice → AI OCR multi-line bulk-create. -->
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            (click)="startScanInvoice()"
+          >
+            <span class="quick-add-icon">🧾</span>
+            <span class="quick-add-label">Scan Invoice</span>
+            <span class="quick-add-hint">Bulk-create from a vendor invoice</span>
+          </button>
           <button
             type="button"
             class="quick-add-item"
@@ -93,18 +104,38 @@
         (change)="onSnapPhotoSelected($event)"
         class="input-file-hidden"
       />
+      <!-- FN-1104: invoice picker — image OR PDF (no capture so the OS file
+           dialog opens by default; mobile can still pick from the camera). -->
+      <input
+        #scanInvoiceInput
+        type="file"
+        accept="image/jpeg,image/png,application/pdf"
+        (change)="onScanInvoiceSelected($event)"
+        class="input-file-hidden"
+      />
       </ng-container>
     </div>
   </div>
 
-  <!-- FN-1099: AI photo-intake loading overlay -->
+  <!-- FN-1099 / FN-1104: shared AI loading overlay (drives Snap Photo and
+       Scan Invoice — both flip aiBusy). -->
   <div *ngIf="aiBusy" class="ai-photo-overlay" role="status" aria-live="polite">
     <div class="ai-photo-overlay-card">
       <div class="ai-photo-spinner"></div>
-      <p class="ai-photo-msg">Identifying part from photo…</p>
-      <button type="button" class="btn-outline" (click)="cancelAiPhoto()">Cancel</button>
+      <p class="ai-photo-msg">Reading invoice / part photo…</p>
+      <button type="button" class="btn-outline" (click)="cancelAiPhoto(); cancelAiInvoice();">Cancel</button>
     </div>
   </div>
+
+  <!-- FN-1104: Scan Invoice review modal -->
+  <app-quick-add-invoice-modal
+    *ngIf="invoiceModalOpen && invoiceAiResult"
+    [aiResult]="invoiceAiResult"
+    [r2Key]="invoiceR2Key"
+    [existingSkus]="invoiceExistingSkus"
+    (confirmed)="onInvoiceModalConfirmed($event)"
+    (closed)="onInvoiceModalClosed()"
+  ></app-quick-add-invoice-modal>
 
   <!-- Messages -->
   <div *ngIf="successMessage" class="alert alert-success">
