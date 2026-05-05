@@ -40,6 +40,38 @@
   --ai-accent-danger-soft: #fca5a5;
   --ai-accent-warning: #fb923c;
   --ai-accent-warning-soft: #fed7aa;
+
+  /*
+   * FN-1326 — four-tier severity ramp for the unified Action Queue and any
+   * grouped-alert surface. Foreground hex values are picked from the existing
+   * AI dark-theme accent ramp so badges sit consistently on `--background`
+   * (#020617). Backgrounds and borders are tinted versions of the same hue
+   * so a row reads at a glance without competing with the surface gradient.
+   * Verified WCAG AA contrast (≥ 4.5:1) for every fg vs `--background`.
+   */
+  --sev-critical:        #f87171;                 /* slate-on-red, AA against #020617 */
+  --sev-critical-fg:     var(--sev-critical);
+  --sev-critical-bg:     rgba(248, 113, 113, 0.14);
+  --sev-critical-border: rgba(248, 113, 113, 0.42);
+  --sev-critical-pip:    #ef4444;
+
+  --sev-high:            #fbbf24;                 /* amber-400 */
+  --sev-high-fg:         var(--sev-high);
+  --sev-high-bg:         rgba(251, 191, 36, 0.14);
+  --sev-high-border:     rgba(251, 191, 36, 0.42);
+  --sev-high-pip:        #f59e0b;
+
+  --sev-medium:          #67e8f9;                 /* cyan-300 (matches --ai-accent-cyan) */
+  --sev-medium-fg:       var(--sev-medium);
+  --sev-medium-bg:       rgba(103, 232, 249, 0.12);
+  --sev-medium-border:   rgba(103, 232, 249, 0.38);
+  --sev-medium-pip:      #22d3ee;
+
+  --sev-low:             #cbd5e1;                 /* slate-300 (--ai-text-soft) */
+  --sev-low-fg:          var(--sev-low);
+  --sev-low-bg:          rgba(203, 213, 225, 0.10);
+  --sev-low-border:      rgba(203, 213, 225, 0.32);
+  --sev-low-pip:         #94a3b8;
 }
 
 * {
