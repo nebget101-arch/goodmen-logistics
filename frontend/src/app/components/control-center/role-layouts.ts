@@ -117,3 +117,12 @@ export function sanitizeLayout(widgets: unknown): WidgetId[] {
   }
   return out;
 }
+
+/**
+ * Hidden cards (FN-1337): per-user dismissed widgets persisted alongside the
+ * card order. Reuses the same id-mapping rules as the cards array so a legacy
+ * `smart-alerts` flag survives the rename to `action-queue`.
+ */
+export function sanitizeHidden(hidden: unknown): WidgetId[] {
+  return sanitizeLayout(hidden);
+}

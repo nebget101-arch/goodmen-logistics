@@ -28,6 +28,8 @@ export interface DailyBriefingResponse {
   briefing: BriefingPayload;
   upstreamErrors?: BriefingUpstreamError[];
   cached: boolean;
+  hasBaseline?: boolean;
+  firstBaselineEta?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })

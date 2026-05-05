@@ -9,6 +9,17 @@
     <div class="control-center__header-actions">
       <app-window-selector></app-window-selector>
       <button
+        *ngIf="hiddenCount > 0"
+        type="button"
+        class="control-center__show-hidden"
+        (click)="toggleShowHidden()"
+        [disabled]="loading || saving"
+        data-testid="control-center-show-hidden"
+        [attr.aria-pressed]="showHidden ? 'true' : 'false'"
+      >
+        {{ showHidden ? 'Hide ' + hiddenCount + ' card' + (hiddenCount === 1 ? '' : 's') : 'Show hidden cards (' + hiddenCount + ')' }}
+      </button>
+      <button
         type="button"
         class="control-center__reset"
         (click)="resetToDefault()"
@@ -38,9 +49,10 @@
     data-testid="control-center-grid"
   >
     <li
-      *ngFor="let id of widgets; trackBy: trackById"
+      *ngFor="let id of visibleWidgets; trackBy: trackById"
       cdkDrag
       class="control-center__card"
+      [class.control-center__card--hidden-restored]="showHidden && hidden.includes(id)"
       [attr.data-widget-id]="id"
     >
       <button
@@ -52,9 +64,15 @@
         <span aria-hidden="true">⋮⋮</span>
       </button>
       <ng-container [ngSwitch]="id">
-        <app-daily-briefing *ngSwitchCase="'daily-briefing'"></app-daily-briefing>
+        <app-daily-briefing
+          *ngSwitchCase="'daily-briefing'"
+          (visibilityChange)="onBriefingVisibility($event)"
+        ></app-daily-briefing>
         <app-action-queue *ngSwitchCase="'action-queue'"></app-action-queue>
-        <app-predictive-insights *ngSwitchCase="'predictive-insights'"></app-predictive-insights>
+        <app-predictive-insights
+          *ngSwitchCase="'predictive-insights'"
+          (visibilityChange)="onInsightsVisibility($event)"
+        ></app-predictive-insights>
         <div *ngSwitchCase="'quick-actions'" class="control-center__quick-actions">
           <h3 class="control-center__quick-actions-title">Quick actions</h3>
           <app-quick-actions

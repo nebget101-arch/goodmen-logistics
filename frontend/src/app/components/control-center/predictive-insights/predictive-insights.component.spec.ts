@@ -243,6 +243,43 @@ describe('PredictiveInsightsComponent', () => {
     pending.complete();
   });
 
+  it('emits visibilityChange with hasBaseline=true when at least one series has data', () => {
+    const events: Array<{ hasBaseline: boolean; firstBaselineEta: string | null }> = [];
+    component.visibilityChange.subscribe((e) => events.push(e));
+    fixture.detectChanges();
+
+    expect(events).toEqual([{ hasBaseline: true, firstBaselineEta: null }]);
+  });
+
+  it('emits hasBaseline=false when every series is fully empty', () => {
+    const empty: TrendsResponse = {
+      ...sparseResponse,
+      series: {
+        loadVolume: { actual: actualPoints([null, null, null]), predicted: predictedPoints([null, null, null]) },
+        maintenance: { actual: actualPoints([null, null, null]), predicted: predictedPoints([null, null, null]) },
+        onTimePct: { actual: actualPoints([null, null, null]), predicted: predictedPoints([null, null, null]) },
+        fuelCost: { actual: actualPoints([null, null, null]), predicted: predictedPoints([null, null, null]) },
+      },
+    };
+    insightsService.getTrends.and.returnValue(of(empty));
+    const events: Array<{ hasBaseline: boolean; firstBaselineEta: string | null }> = [];
+    component.visibilityChange.subscribe((e) => events.push(e));
+    fixture.detectChanges();
+
+    expect(events).toEqual([{ hasBaseline: false, firstBaselineEta: null }]);
+  });
+
+  it('renders "First baseline ready by {date}" in empty cells when firstBaselineEta is set', () => {
+    insightsService.getTrends.and.returnValue(
+      of({ ...sparseResponse, firstBaselineEta: '2026-05-15' } as TrendsResponse),
+    );
+    fixture.detectChanges();
+
+    const eta = fixture.nativeElement.querySelector('[data-testid="insights-first-baseline-eta"]');
+    expect(eta).toBeTruthy();
+    expect(eta.textContent).toContain('First baseline ready by 2026-05-15');
+  });
+
   it('exposes accessible labels: region heading and refresh button', () => {
     fixture.detectChanges();
 

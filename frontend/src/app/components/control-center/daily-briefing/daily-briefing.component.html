@@ -44,8 +44,17 @@
     </div>
   </div>
 
+  <div
+    *ngIf="!loading && !errorMessage && response && !hasBaseline && firstBaselineEta"
+    class="briefing-card__baseline"
+    role="status"
+    data-testid="briefing-first-baseline-eta"
+  >
+    First baseline ready by {{ firstBaselineEta }}
+  </div>
+
   <ul
-    *ngIf="!loading && !errorMessage && response"
+    *ngIf="!loading && !errorMessage && response && hasBaseline"
     class="briefing-card__sections"
     role="list"
   >
