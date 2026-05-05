@@ -113,9 +113,19 @@
           </ng-container>
 
           <ng-template #emptyState>
-            <p class="insights-card__cell-empty" role="status">
-              Not enough data yet — collecting baseline.
+            <p
+              *ngIf="firstBaselineEta; else collectingBaseline"
+              class="insights-card__cell-empty"
+              role="status"
+              data-testid="insights-first-baseline-eta"
+            >
+              First baseline ready by {{ firstBaselineEta }}
             </p>
+            <ng-template #collectingBaseline>
+              <p class="insights-card__cell-empty" role="status">
+                Not enough data yet — collecting baseline.
+              </p>
+            </ng-template>
           </ng-template>
         </ng-container>
       </ng-container>

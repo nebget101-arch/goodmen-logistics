@@ -38,7 +38,15 @@
   color: rgba(226, 232, 240, 0.7);
 }
 
-.control-center__reset {
+.control-center__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.control-center__reset,
+.control-center__show-hidden {
   appearance: none;
   border: 1px solid rgba(45, 212, 191, 0.4);
   background: rgba(15, 23, 42, 0.6);
@@ -50,15 +58,33 @@
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.control-center__reset:hover:not(:disabled) {
+.control-center__show-hidden {
+  border-color: rgba(148, 163, 184, 0.4);
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.control-center__show-hidden[aria-pressed='true'] {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.7);
+  color: #f1f5f9;
+}
+
+.control-center__reset:hover:not(:disabled),
+.control-center__show-hidden:hover:not(:disabled) {
   background: rgba(45, 212, 191, 0.12);
   border-color: rgba(45, 212, 191, 0.7);
   color: #99f6e4;
 }
 
-.control-center__reset:disabled {
+.control-center__reset:disabled,
+.control-center__show-hidden:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.control-center__card--hidden-restored {
+  outline: 1px dashed rgba(148, 163, 184, 0.45);
+  outline-offset: 4px;
 }
 
 .control-center__error {
