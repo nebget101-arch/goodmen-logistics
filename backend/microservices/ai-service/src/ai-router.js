@@ -21,6 +21,7 @@ const { handleReportsAnomalies } = require('./handlers/reports-anomalies-handler
 const { handleReportsNarrative } = require('./handlers/reports-narrative-handler');
 const { handleReportsChat } = require('./handlers/reports-chat-handler');
 const { handleReportsParseQuery } = require('./handlers/reports-parse-query-handler');
+const { handlePartsVision } = require('./handlers/parts-vision-handler');
 const { loadAuthContext } = require('./services/auth-context');
 
 function buildAiRouter(deps) {
@@ -1781,6 +1782,103 @@ function buildAiRouter(deps) {
     '/reports/parse-query',
     loadAuthContext,
     (req, res) => handleReportsParseQuery(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/parts/identify-vision:
+   *   post:
+   *     summary: AI part-identification from photo (FN-1097)
+   *     description: >
+   *       Identifies a vehicle/equipment part from a photograph using Anthropic Claude
+   *       vision (claude-sonnet-4-20250514). Returns structured fields (manufacturer,
+   *       part number, category, description, dimensions) with per-field confidence
+   *       (0–1). Returns HTTP 422 with code `AI_IMAGE_UNREADABLE` when no part is
+   *       visible. Used as the inner handler for `/api/ai/parts/identify-from-photo`
+   *       (FN-1098), which adds multipart upload + R2 storage on top.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - imageBase64
+   *             properties:
+   *               imageBase64:
+   *                 type: string
+   *                 description: Base64-encoded part photo
+   *               mimeType:
+   *                 type: string
+   *                 default: image/jpeg
+   *                 description: Image MIME type (image/jpeg, image/png, image/webp, image/gif)
+   *     responses:
+   *       200:
+   *         description: Extracted part fields with per-field confidence
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     manufacturer:
+   *                       type: string
+   *                       nullable: true
+   *                     partNumber:
+   *                       type: string
+   *                       nullable: true
+   *                     category:
+   *                       type: string
+   *                       nullable: true
+   *                     descriptionGuess:
+   *                       type: string
+   *                       nullable: true
+   *                     dimensionsGuess:
+   *                       type: string
+   *                       nullable: true
+   *                     confidence:
+   *                       type: object
+   *                       properties:
+   *                         manufacturer:
+   *                           type: number
+   *                         partNumber:
+   *                           type: number
+   *                         category:
+   *                           type: number
+   *                         description:
+   *                           type: number
+   *                         dimensions:
+   *                           type: number
+   *                     isUnreadable:
+   *                       type: boolean
+   *                     warnings:
+   *                       type: array
+   *                       items:
+   *                         type: string
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     model:
+   *                       type: string
+   *                     processingTimeMs:
+   *                       type: number
+   *       400:
+   *         description: Missing imageBase64 or unsupported mimeType
+   *       422:
+   *         description: Image is unreadable / no part visible (AI_IMAGE_UNREADABLE)
+   *       502:
+   *         description: AI parse error or upstream failure
+   */
+  router.post('/parts/identify-vision', (req, res) =>
+    handlePartsVision(req, res, deps)
   );
 
   return router;
