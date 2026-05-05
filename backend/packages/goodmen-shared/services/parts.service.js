@@ -1,5 +1,66 @@
 const db = require('../internal/db').knex;
 const dtLogger = require('../utils/logger');
+const manufacturersService = require('./manufacturers.service');
+const vendorsService = require('./vendors.service');
+
+/**
+ * Resolve manufacturer + vendor inputs into a normalized patch:
+ *   { manufacturer_id, manufacturer, vendor_id, preferred_vendor_name }
+ *
+ * Rules (per FN-1093):
+ *   - If `manufacturer_id` provided: load master row, force `manufacturer` to
+ *     master.name (FK is authoritative).
+ *   - Else if non-empty `manufacturer` text provided: find-or-create master,
+ *     set both FK and text (canonicalized to master.name).
+ *
+ * Same logic for vendor_id / preferred_vendor_name.
+ *
+ * Only includes keys the caller actually supplied so updatePart's
+ * partial-update semantics are preserved.
+ */
+async function resolveManufacturerVendor(input = {}) {
+	const patch = {};
+
+	if (input.manufacturer_id !== undefined && input.manufacturer_id !== null) {
+		const master = await manufacturersService.getById(input.manufacturer_id);
+		patch.manufacturer_id = master.id;
+		patch.manufacturer = master.name;
+	} else if (input.manufacturer_id === null) {
+		patch.manufacturer_id = null;
+		if (input.manufacturer !== undefined) {
+			patch.manufacturer = input.manufacturer || null;
+		}
+	} else if (typeof input.manufacturer === 'string' && input.manufacturer.trim()) {
+		const master = await manufacturersService.findOrCreate(input.manufacturer);
+		if (master) {
+			patch.manufacturer_id = master.id;
+			patch.manufacturer = master.name;
+		}
+	} else if (input.manufacturer !== undefined) {
+		patch.manufacturer = input.manufacturer || null;
+	}
+
+	if (input.vendor_id !== undefined && input.vendor_id !== null) {
+		const master = await vendorsService.getById(input.vendor_id);
+		patch.vendor_id = master.id;
+		patch.preferred_vendor_name = master.name;
+	} else if (input.vendor_id === null) {
+		patch.vendor_id = null;
+		if (input.preferred_vendor_name !== undefined) {
+			patch.preferred_vendor_name = input.preferred_vendor_name || null;
+		}
+	} else if (typeof input.preferred_vendor_name === 'string' && input.preferred_vendor_name.trim()) {
+		const master = await vendorsService.findOrCreate(input.preferred_vendor_name);
+		if (master) {
+			patch.vendor_id = master.id;
+			patch.preferred_vendor_name = master.name;
+		}
+	} else if (input.preferred_vendor_name !== undefined) {
+		patch.preferred_vendor_name = input.preferred_vendor_name || null;
+	}
+
+	return patch;
+}
 
 /**
  * Get active-parts filter for schema compatibility.
@@ -128,6 +189,8 @@ async function createPart(partData) {
 			throw new Error(`Part with SKU ${partData.sku} already exists`);
 		}
 
+		const mvPatch = await resolveManufacturerVendor(partData);
+
 		const part = await db('parts').insert({
 			sku: partData.sku.toUpperCase(),
 			name: partData.name,
@@ -138,7 +201,8 @@ async function createPart(partData) {
 			quantity_on_hand: partData.quantity_on_hand || 0,
 			reorder_level: partData.reorder_level || 5,
 			supplier_id: partData.supplier_id,
-			status: 'ACTIVE'
+			status: 'ACTIVE',
+			...mvPatch,
 		}).returning('*');
 
 		dtLogger.info('part_created', { id: part[0].id, sku: part[0].sku });
@@ -179,6 +243,9 @@ async function updatePart(id, partData) {
 		if (partData.quantity_on_hand !== undefined) updateData.quantity_on_hand = partData.quantity_on_hand;
 		if (partData.reorder_level !== undefined) updateData.reorder_level = partData.reorder_level;
 		if (partData.supplier_id !== undefined) updateData.supplier_id = partData.supplier_id;
+
+		const mvPatch = await resolveManufacturerVendor(partData);
+		Object.assign(updateData, mvPatch);
 		// Preserve status or ensure it's ACTIVE (automatic for new parts with quantity > 0)
 		if (partData.status !== undefined) {
 			updateData.status = partData.status;
@@ -273,5 +340,6 @@ module.exports = {
 	updatePart,
 	deletePart,
 	getCategories,
-	getManufacturers
+	getManufacturers,
+	resolveManufacturerVendor,
 };
