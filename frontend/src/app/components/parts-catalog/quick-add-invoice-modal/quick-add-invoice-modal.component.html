@@ -1,0 +1,250 @@
+<div
+  class="invoice-modal-backdrop"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="invoice-modal-title"
+>
+  <div class="invoice-modal">
+    <header class="invoice-modal-header">
+      <h2 id="invoice-modal-title">Review Invoice Lines</h2>
+      <button
+        type="button"
+        class="invoice-modal-close"
+        (click)="cancel()"
+        [disabled]="saving"
+        aria-label="Close"
+      >
+        ×
+      </button>
+    </header>
+
+    <section class="invoice-modal-meta">
+      <div class="invoice-meta-field">
+        <label for="invoice-vendor">Vendor</label>
+        <div class="invoice-meta-row">
+          <app-master-typeahead
+            class="invoice-meta-typeahead"
+            inputId="invoice-vendor"
+            entityLabel="vendor"
+            placeholder="Search or create vendor…"
+            [value]="vendorValue"
+            [searchFn]="searchVendors"
+            [createFn]="createVendor"
+            (valueChange)="onVendorPick($event)"
+          ></app-master-typeahead>
+          <app-confidence-badge
+            *ngIf="vendorConfidence !== null"
+            [confidence]="vendorConfidence"
+          ></app-confidence-badge>
+        </div>
+      </div>
+
+      <div class="invoice-meta-field">
+        <label for="invoice-number">Invoice #</label>
+        <div class="invoice-meta-row">
+          <input
+            id="invoice-number"
+            type="text"
+            class="invoice-meta-input"
+            [value]="invoiceNumber"
+            (input)="onInvoiceNumberInput($event)"
+          />
+          <app-confidence-badge
+            *ngIf="invoiceNumberConfidence !== null"
+            [confidence]="invoiceNumberConfidence"
+          ></app-confidence-badge>
+        </div>
+      </div>
+    </section>
+
+    <div *ngIf="warnings.length > 0" class="invoice-warnings" role="status">
+      <div class="invoice-warnings-title">AI noted some uncertainties:</div>
+      <ul>
+        <li *ngFor="let w of warnings">{{ w }}</li>
+      </ul>
+    </div>
+
+    <section class="invoice-lines">
+      <div class="invoice-lines-toolbar">
+        <span class="invoice-lines-count">
+          {{ selectedCount }} of {{ rows.length }} selected
+        </span>
+        <span class="invoice-lines-toolbar-actions">
+          <button
+            type="button"
+            class="link-btn"
+            (click)="selectAll()"
+            [disabled]="saving"
+          >Select all</button>
+          <button
+            type="button"
+            class="link-btn"
+            (click)="deselectAll()"
+            [disabled]="saving"
+          >Deselect all</button>
+        </span>
+      </div>
+
+      <table class="invoice-lines-table" *ngIf="rows.length > 0; else emptyLines">
+        <thead>
+          <tr>
+            <th class="col-check"><span class="sr-only">Include</span></th>
+            <th class="col-sku">SKU</th>
+            <th class="col-desc">Description</th>
+            <th class="col-qty">Qty</th>
+            <th class="col-cost">Unit cost</th>
+            <th class="col-mfr">Manufacturer</th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let row of rows; let i = index; trackBy: trackByIndex">
+            <tr
+              class="invoice-line-row"
+              [class.invoice-line-row--skip]="row.alreadyExists"
+              [class.invoice-line-row--unchecked]="!row.selected"
+            >
+              <td class="col-check">
+                <input
+                  type="checkbox"
+                  [checked]="row.selected"
+                  (change)="toggleRow(row)"
+                  [disabled]="saving"
+                  [attr.aria-label]="'Include line ' + (i + 1)"
+                />
+              </td>
+              <td class="col-sku">
+                <div class="cell-stack">
+                  <input
+                    type="text"
+                    class="cell-input"
+                    [value]="row.sku"
+                    (input)="onRowFieldInput(row, 'sku', $event)"
+                    [disabled]="saving"
+                  />
+                  <span *ngIf="row.alreadyExists" class="cell-badge cell-badge--skip">
+                    Already in catalog
+                  </span>
+                  <app-confidence-badge
+                    *ngIf="row.confidence.sku != null"
+                    [confidence]="row.confidence.sku"
+                  ></app-confidence-badge>
+                </div>
+              </td>
+              <td class="col-desc">
+                <div class="cell-stack">
+                  <input
+                    type="text"
+                    class="cell-input"
+                    [value]="row.description"
+                    (input)="onRowFieldInput(row, 'description', $event)"
+                    [disabled]="saving"
+                  />
+                  <app-confidence-badge
+                    *ngIf="row.confidence.description != null"
+                    [confidence]="row.confidence.description"
+                  ></app-confidence-badge>
+                </div>
+              </td>
+              <td class="col-qty">
+                <div class="cell-stack">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    class="cell-input cell-input--num"
+                    [value]="row.qty"
+                    (input)="onRowNumberInput(row, 'qty', $event)"
+                    [disabled]="saving"
+                  />
+                  <app-confidence-badge
+                    *ngIf="row.confidence.qty != null"
+                    [confidence]="row.confidence.qty"
+                  ></app-confidence-badge>
+                </div>
+              </td>
+              <td class="col-cost">
+                <div class="cell-stack">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="cell-input cell-input--num"
+                    [value]="row.unitCost"
+                    (input)="onRowNumberInput(row, 'unitCost', $event)"
+                    [disabled]="saving"
+                  />
+                  <app-confidence-badge
+                    *ngIf="row.confidence.unitCost != null"
+                    [confidence]="row.confidence.unitCost"
+                  ></app-confidence-badge>
+                </div>
+              </td>
+              <td class="col-mfr">
+                <div class="cell-stack">
+                  <app-master-typeahead
+                    entityLabel="manufacturer"
+                    placeholder="Manufacturer…"
+                    [value]="row.manufacturerValue"
+                    [searchFn]="searchManufacturers"
+                    [createFn]="createManufacturer"
+                    [disabled]="saving"
+                    (valueChange)="onRowManufacturerPick(row, $event)"
+                  ></app-master-typeahead>
+                  <app-confidence-badge
+                    *ngIf="row.confidence.manufacturer != null"
+                    [confidence]="row.confidence.manufacturer"
+                  ></app-confidence-badge>
+                </div>
+              </td>
+            </tr>
+            <tr
+              *ngIf="rowErrors[(row.sku || '').toUpperCase()]"
+              class="invoice-line-error-row"
+            >
+              <td></td>
+              <td colspan="5" class="invoice-line-error">
+                {{ rowErrors[(row.sku || '').toUpperCase()] }}
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+      <ng-template #emptyLines>
+        <p class="invoice-lines-empty">
+          The AI did not return any line items. Close this dialog and try a clearer photo or upload the original PDF.
+        </p>
+      </ng-template>
+    </section>
+
+    <div *ngIf="errorMessage" class="invoice-modal-error" role="alert">
+      {{ errorMessage }}
+    </div>
+
+    <div *ngIf="resultSummary && resultSummary.success" class="invoice-modal-success" role="status">
+      Created {{ resultSummary.created.length }}
+      <ng-container *ngIf="resultSummary.created.length === 1">part</ng-container>
+      <ng-container *ngIf="resultSummary.created.length !== 1">parts</ng-container>
+      <span *ngIf="resultSummary.skipped.length > 0">
+        · {{ resultSummary.skipped.length }} skipped
+      </span>
+    </div>
+
+    <footer class="invoice-modal-footer">
+      <button
+        type="button"
+        class="btn-outline"
+        (click)="cancel()"
+        [disabled]="saving"
+      >Cancel</button>
+      <button
+        type="button"
+        class="btn-primary"
+        (click)="confirm()"
+        [disabled]="!canConfirm"
+      >
+        <span *ngIf="!saving">Confirm and Create</span>
+        <span *ngIf="saving">Creating…</span>
+      </button>
+    </footer>
+  </div>
+</div>
