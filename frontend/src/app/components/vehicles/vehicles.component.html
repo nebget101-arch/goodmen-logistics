@@ -348,7 +348,29 @@
     </div>
     
     <div class="modal-body" *ngIf="selectedVehicleDetails">
-      <div class="details-grid">
+      <!-- Detail tabs (FN-1390) -->
+      <nav class="detail-tabs" role="tablist" aria-label="Vehicle detail sections">
+        <button
+          type="button"
+          role="tab"
+          class="detail-tab"
+          [class.is-active]="activeDetailTab === 'overview'"
+          [attr.aria-selected]="activeDetailTab === 'overview'"
+          (click)="selectDetailTab('overview')">
+          Overview
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="detail-tab"
+          [class.is-active]="activeDetailTab === 'maintenance'"
+          [attr.aria-selected]="activeDetailTab === 'maintenance'"
+          (click)="selectDetailTab('maintenance')">
+          Maintenance History
+        </button>
+      </nav>
+
+      <div class="details-grid" *ngIf="activeDetailTab === 'overview'">
         <!-- Basic Information -->
         <div class="detail-section">
           <h3 class="section-title">Basic Information</h3>
@@ -463,6 +485,96 @@
           </ng-container>
         </div>
       </div>
+
+      <!-- Maintenance History tab (FN-1390) -->
+      <section class="maintenance-history-tab" *ngIf="activeDetailTab === 'maintenance'" role="tabpanel" aria-label="Maintenance history">
+        <div class="maintenance-header-strip">
+          <div class="maintenance-kpi">
+            <span class="maintenance-kpi-label">Lifetime spend</span>
+            <span class="maintenance-kpi-value">{{ maintenanceMeta.lifetime_spend | currency:'USD':'symbol':'1.0-0' }}</span>
+          </div>
+          <div class="maintenance-kpi">
+            <span class="maintenance-kpi-label">Last WO</span>
+            <span class="maintenance-kpi-value">{{ lastWorkOrderDate ? (lastWorkOrderDate | date:'mediumDate') : '—' }}</span>
+          </div>
+          <div class="maintenance-kpi">
+            <span class="maintenance-kpi-label">WO count</span>
+            <span class="maintenance-kpi-value">{{ maintenanceMeta.total || 0 }}</span>
+          </div>
+        </div>
+
+        <div *ngIf="maintenanceHistoryLoading" class="maintenance-state maintenance-state--loading">
+          Loading maintenance history…
+        </div>
+
+        <div *ngIf="!maintenanceHistoryLoading && maintenanceHistoryError" class="maintenance-state maintenance-state--error">
+          {{ maintenanceHistoryError }}
+          <button type="button" class="btn btn-link" (click)="retryMaintenanceHistory()">Retry</button>
+        </div>
+
+        <div *ngIf="!maintenanceHistoryLoading && !maintenanceHistoryError && maintenanceRows.length === 0" class="maintenance-state maintenance-state--empty">
+          No maintenance history yet.
+        </div>
+
+        <div *ngIf="!maintenanceHistoryLoading && !maintenanceHistoryError && maintenanceRows.length > 0" class="maintenance-table-wrapper">
+          <table class="maintenance-table">
+            <thead>
+              <tr>
+                <th scope="col">WO #</th>
+                <th scope="col">Date</th>
+                <th scope="col">Type</th>
+                <th scope="col">Title</th>
+                <th scope="col">Shop Location</th>
+                <th scope="col" class="num">Total</th>
+                <th scope="col" *ngIf="canViewInvoices()">Invoice</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                *ngFor="let row of maintenanceRows; trackBy: trackByMaintenanceRow"
+                class="maintenance-row"
+                tabindex="0"
+                (click)="openWorkOrder(row)"
+                (keydown.enter)="openWorkOrder(row)"
+                (keydown.space)="openWorkOrder(row); $event.preventDefault()">
+                <td>{{ row.work_order_number || '—' }}</td>
+                <td>{{ (row.completion_date || row.request_date) ? ((row.completion_date || row.request_date) | date:'shortDate') : '—' }}</td>
+                <td>{{ row.type || '—' }}</td>
+                <td class="maintenance-title-cell">{{ row.title || '—' }}</td>
+                <td>{{ row.shop_location_name || '—' }}</td>
+                <td class="num">{{ row.grand_total != null ? (row.grand_total | currency:'USD':'symbol':'1.2-2') : '—' }}</td>
+                <td *ngIf="canViewInvoices()">
+                  <button
+                    *ngIf="row.invoice; else noInvoice"
+                    type="button"
+                    class="invoice-pill"
+                    (click)="openInvoicePdf(row.invoice, $event)"
+                    [attr.aria-label]="'Download invoice ' + (row.invoice?.number || '')">
+                    {{ row.invoice?.number || 'PDF' }}
+                  </button>
+                  <ng-template #noInvoice><span class="invoice-pill-empty">—</span></ng-template>
+                </td>
+                <td>
+                  <span [class]="'badge ' + getMaintenanceStatusBadge(row.status)">
+                    {{ getMaintenanceStatusLabel(row.status) }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="maintenance-pagination" *ngIf="maintenanceTotalPages > 1">
+            <button type="button" class="btn btn-secondary btn-sm"
+              [disabled]="maintenancePage <= 1"
+              (click)="onMaintenancePageChange(maintenancePage - 1)">Prev</button>
+            <span class="maintenance-page-indicator">Page {{ maintenancePage }} of {{ maintenanceTotalPages }}</span>
+            <button type="button" class="btn btn-secondary btn-sm"
+              [disabled]="maintenancePage >= maintenanceTotalPages"
+              (click)="onMaintenancePageChange(maintenancePage + 1)">Next</button>
+          </div>
+        </div>
+      </section>
 
       <div class="modal-actions">
         <button class="btn btn-secondary" (click)="closeVehicleDetails()" type="button">Close</button>
