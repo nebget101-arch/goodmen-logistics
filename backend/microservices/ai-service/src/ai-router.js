@@ -14,6 +14,7 @@ const { handlePspReportVision } = require('./handlers/psp-report-vision-handler'
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
 const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 const { handleLoadDriverMatch } = require('./handlers/load-driver-match-handler');
+const { handleVehicleRepairHistorySummary } = require('./handlers/vehicle-repair-history-handler');
 const { handleBriefingGenerate } = require('./handlers/briefing-handler');
 const { handleAsk } = require('./handlers/ask-handler');
 const { handleScoreAlert } = require('./handlers/score-alert-handler');
@@ -2149,6 +2150,109 @@ function buildAiRouter(deps) {
    */
   router.post('/loads/recommend-driver', (req, res) =>
     handleLoadDriverMatch(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/vehicles/repair-history-summary:
+   *   post:
+   *     summary: AI VIN repair history summary (FN-1445 / FN-1433)
+   *     description: >
+   *       Returns a 1-2 sentence summary, recurring complaint patterns linked to
+   *       the underlying work-order IDs, and a comeback-risk grade
+   *       (low/medium/high) for a vehicle's recent repair history. Uses Anthropic
+   *       Claude with **prompt caching** on the static system prompt. Short-circuits
+   *       (no LLM call) when `history.length < 2`. Caps `history` to 50 rows. Result
+   *       is cached in-process for ~1h keyed by VIN + work-order IDs.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [vin, history]
+   *             properties:
+   *               vin:
+   *                 type: string
+   *               history:
+   *                 type: array
+   *                 description: Recent work-order rows for this VIN (newest first, max 50)
+   *                 items:
+   *                   type: object
+   *                   required: [id]
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     date:
+   *                       type: string
+   *                       format: date
+   *                     complaint:
+   *                       type: string
+   *                     diagnosis:
+   *                       type: string
+   *                     repair:
+   *                       type: string
+   *                     mileage:
+   *                       type: number
+   *     responses:
+   *       200:
+   *         description: Summary, recurring patterns, and comeback risk
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 cached:
+   *                   type: boolean
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     summary:
+   *                       type: string
+   *                     recurringIssues:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           pattern:
+   *                             type: string
+   *                           occurrences:
+   *                             type: integer
+   *                           workOrderIds:
+   *                             type: array
+   *                             items:
+   *                               type: string
+   *                     comebackRisk:
+   *                       type: string
+   *                       enum: [low, medium, high]
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     model:
+   *                       type: string
+   *                     rowsAnalyzed:
+   *                       type: integer
+   *                     shortCircuited:
+   *                       type: boolean
+   *                     cacheCreationInputTokens:
+   *                       type: integer
+   *                     cacheReadInputTokens:
+   *                       type: integer
+   *                     processingTimeMs:
+   *                       type: number
+   *       400:
+   *         description: Missing or invalid vin/history
+   *       502:
+   *         description: AI upstream unavailable
+   */
+  router.post('/vehicles/repair-history-summary', (req, res) =>
+    handleVehicleRepairHistorySummary(req, res, deps)
   );
 
   return router;
