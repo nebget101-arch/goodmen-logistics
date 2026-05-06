@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { OnboardingModalService } from './services/onboarding-modal.service';
 import { ApiService } from './services/api.service';
 import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.service';
+import { AiChatLauncherService, AiChatLauncherState } from './services/ai-chat-launcher.service';
 import { AccessControlService } from './services/access-control.service';
 import { OperatingEntityContextService } from './services/operating-entity-context.service';
 import { ReferenceDataService } from './services/reference-data.service';
@@ -31,6 +32,8 @@ export class AppComponent implements OnInit {
   sidebarOpen = false;
   userMenuOpen = false;
   aiChatOpen = false;
+  /** FN-1356: 'default' = full pill, 'minimized' = icon-only orb. Persisted in localStorage. */
+  aiLauncherState: AiChatLauncherState = 'default';
   aiConversationId: string | null = null;
   aiMessages: AiChatMessage[] = [];
   aiSuggestions: AiSuggestion[] = [];
@@ -49,6 +52,7 @@ export class AppComponent implements OnInit {
     public onboardingModal: OnboardingModalService,
     private apiService: ApiService,
     private aiChatService: AiChatService,
+    private aiChatLauncher: AiChatLauncherService,
     public access: AccessControlService,
     public operatingEntityContext: OperatingEntityContextService,
     private referenceDataService: ReferenceDataService,
@@ -118,6 +122,20 @@ export class AppComponent implements OnInit {
       return;
     }
     this.aiChatOpen = !this.aiChatOpen;
+  }
+
+  /** FN-1356: Collapse the pill into the circular orb (× control on the pill). */
+  minimizeAiLauncher(event?: MouseEvent | KeyboardEvent): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.aiChatLauncher.setState('minimized');
+  }
+
+  /** FN-1356: Expand the orb back into the pill (click on the orb). Does not open chat. */
+  expandAiLauncher(): void {
+    this.aiChatLauncher.setState('default');
   }
 
   sendAiMessage(): void {
@@ -260,6 +278,7 @@ export class AppComponent implements OnInit {
     }
     this.operatingEntityContext.bootstrapFromSessionIfNeeded(this.isLoggedIn());
     this.operatingEntityContext.context$().subscribe(() => this.rebuildOperatingEntityOptions());
+    this.aiChatLauncher.state$.subscribe((state) => (this.aiLauncherState = state));
   }
 
   toggleSidebar(): void {

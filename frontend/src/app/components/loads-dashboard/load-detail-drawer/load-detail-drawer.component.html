@@ -157,7 +157,8 @@
   <!-- ── Footer ───────────────────────────────────────────────────────────── -->
   <!-- FN-1063: in `view` mode the primary action is "Edit" (flips to edit
        mode); in `edit` mode the primary action is "Save". -->
-  <footer class="load-drawer__footer">
+  <!-- FN-1356: appFabSafeArea reserves bottom space so the global Ask Neuron FAB clears the drawer footer while the drawer is open. -->
+  <footer class="load-drawer__footer" appFabSafeArea="64">
     <button
       type="button"
       class="btn btn-ghost"

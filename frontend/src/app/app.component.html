@@ -178,16 +178,43 @@
     <app-trial-banner *ngIf="shouldRenderProtectedShell()"></app-trial-banner>
     <router-outlet></router-outlet>
 
-    <button
-      class="ai-chat-launcher"
-      type="button"
-        *ngIf="shouldRenderProtectedShell()"
-      (click)="toggleAiChat()"
-      aria-label="Open Ask Neuron assistant"
-    >
-      <span class="material-symbols-outlined">psychology_alt</span>
-      <span class="ai-chat-launcher-label">Ask Neuron</span>
-    </button>
+    <ng-container *ngIf="shouldRenderProtectedShell()">
+      <!-- FN-1356: Default pill — click opens chat; × collapses to the orb. -->
+      <div
+        class="ai-chat-launcher ai-chat-launcher--pill"
+        *ngIf="aiLauncherState === 'default'"
+      >
+        <button
+          class="ai-chat-launcher__main"
+          type="button"
+          (click)="toggleAiChat()"
+          [attr.aria-expanded]="aiChatOpen"
+          aria-label="Open Ask Neuron assistant"
+        >
+          <span class="material-symbols-outlined">psychology_alt</span>
+          <span class="ai-chat-launcher-label">Ask Neuron</span>
+        </button>
+        <button
+          class="ai-chat-launcher__minimize"
+          type="button"
+          (click)="minimizeAiLauncher($event)"
+          aria-label="Minimize Ask Neuron launcher"
+          title="Minimize"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+      <!-- FN-1356: Minimized orb — click expands back to the pill (does not open chat). -->
+      <button
+        class="ai-chat-launcher ai-chat-launcher--orb"
+        type="button"
+        *ngIf="aiLauncherState === 'minimized'"
+        (click)="expandAiLauncher()"
+        aria-label="Expand Ask Neuron launcher"
+      >
+        <span class="material-symbols-outlined">psychology_alt</span>
+      </button>
+    </ng-container>
 
     <section class="ai-chat-panel" *ngIf="aiChatOpen && shouldRenderProtectedShell()">
       <header class="ai-chat-header">
