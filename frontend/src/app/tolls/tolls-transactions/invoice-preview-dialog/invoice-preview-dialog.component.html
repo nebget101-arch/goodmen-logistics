@@ -43,7 +43,10 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let row of rows; let i = index" [class.flagged]="row.plate_unmatched || row.possible_duplicate">
+        <tr *ngFor="let row of rows; let i = index"
+            [class.flagged]="row.plate_unmatched || row.possible_duplicate || row.low_confidence"
+            [class.low-confidence]="row.low_confidence"
+            [attr.data-low-confidence]="row.low_confidence ? 'true' : null">
           <td>
             <input type="date" [(ngModel)]="row.transaction_date" class="cell-input" />
           </td>
@@ -72,6 +75,9 @@
             </span>
             <span class="badge badge-dup" *ngIf="row.possible_duplicate" title="Possible duplicate transaction">
               Duplicate?
+            </span>
+            <span class="badge badge-verify" *ngIf="row.low_confidence" title="AI extraction confidence is low — please verify this row">
+              Verify
             </span>
           </td>
           <td>

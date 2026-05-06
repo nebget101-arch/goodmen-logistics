@@ -203,6 +203,16 @@ tbody td {
   border: 1px solid rgba(168, 85, 247, 0.3);
 }
 
+.badge-verify {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+tbody tr.low-confidence {
+  background: rgba(56, 189, 248, 0.06);
+}
+
 /* Remove row button */
 .remove-btn {
   background: none;
