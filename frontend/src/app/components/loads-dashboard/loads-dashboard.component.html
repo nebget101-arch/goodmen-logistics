@@ -834,6 +834,7 @@
               [maxWidth]="COL_WIDTH_MAX_PX"
               (widthChange)="onColumnWidthChange('delivery', $event)">Delivery</th>
           <th *ngIf="isColVisible('rate')"
+              class="th-rate"
               [appResizableColumn]="'rate'"
               [currentWidth]="getColWidth('rate')"
               [minWidth]="COL_WIDTH_MIN_PX"
@@ -1037,7 +1038,7 @@
               Email
             </span>
           </td>
-          <td *ngIf="isColVisible('pickup_date')" [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
+          <td *ngIf="isColVisible('pickup_date')" class="cell-num" [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
           <!-- FN-806: Driver hover preview — position (from LoadDetail) + HOS
                placeholder; lazy-fetched on hover via prefetchLoadPreview(load). -->
           <td *ngIf="isColVisible('driver')" class="preview-cell">
@@ -1077,8 +1078,8 @@
           <td *ngIf="isColVisible('po_number')" [title]="load.po_number || '--'">{{ load.po_number || '--' }}</td>
           <td *ngIf="isColVisible('pickup')" [title]="(load.pickup_city || '--') + ', ' + (load.pickup_state || '')">{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
           <td *ngIf="isColVisible('delivery')" [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
-          <td *ngIf="isColVisible('rate')" [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
-          <td *ngIf="isColVisible('completed_date')" [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
+          <td *ngIf="isColVisible('rate')" class="cell-num cell-rate" [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
+          <td *ngIf="isColVisible('completed_date')" class="cell-num" [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
           <!-- FN-767/FN-805/FN-854: Inline status change — click pill to open
                a CDK Overlay dropdown (portaled to body so the cdk-virtual-scroll
                viewport's overflow:auto doesn't clip it). Menu shows only valid
