@@ -1,68 +1,75 @@
 'use strict';
 
-const Queue = require('bull');
-const Redis = require('ioredis');
+/**
+ * FN-1424 — FMCSA import control plane.
+ *
+ * A small Bull-backed queue that:
+ *   1. Persists each import attempt to fmcsa.import_runs (the ledger).
+ *   2. Looks up the registered importer for the requested file and runs it.
+ *   3. Re-runs all five files on a biweekly cron.
+ *
+ * Importers (FN-1413/FN-1414) register themselves at startup via
+ * `registerImporter(file, fn)`. Until they do, manual triggers fail
+ * the run with status='error'; dry-run triggers succeed with 0 rows.
+ */
 
-const { runCensusImport, runAuthorityImport } = require('./fmcsa-importer');
+const Queue = require('bull');
+const { getFmcsaKnex } = require('./fmcsa-knex');
 
 const LOG_PREFIX = '[fmcsa-import-queue]';
+const SUPPORTED_FILES = Object.freeze(['census', 'authority', 'inspections', 'crashes', 'sms']);
+const BIWEEKLY_MS = 14 * 24 * 60 * 60 * 1000;
+
+function isCronEnabled() {
+  if (process.env.NODE_ENV === 'development') {
+    return process.env.FMCSA_IMPORT_CRON_ENABLED === 'true';
+  }
+  return true;
+}
 
 /**
- * FMCSA bulk-file import queue (FN-1413).
+ * Create the import queue. Returns a small API surface that the route
+ * layer and the integrations-service bootstrap consume.
  *
- * Separate from `fmcsa-scrape-queue.js` because the workloads have different
- * shapes: scrape jobs are short, throttled HTTP requests against SAFER, while
- * import jobs are long-running streaming downloads of multi-hundred-MB CSVs
- * that batch-upsert into `fmcsa.*`. Sharing a queue would couple their retry
- * and concurrency policies in ways neither workload wants — for instance,
- * Bull's per-queue limiter on the scrape queue would needlessly throttle
- * imports, and a stuck import would block scrape jobs.
- *
- * Job names produced here:
- *   - 'import-fmcsa-census'
- *   - 'import-fmcsa-authority'
- *
- * Cron scheduling lives in FN-1415; this module only registers processors
- * and exposes manual-trigger helpers.
+ * @param {object}   options
+ * @param {string}   options.redisUrl         Redis connection URL (rediss:// for TLS)
+ * @param {import('knex').Knex} [options.fmcsaKnex] Override for tests; defaults to getFmcsaKnex()
  */
-function createImportQueue(knex, redisUrl) {
-  if (!knex) throw new Error(`${LOG_PREFIX} knex instance is required`);
+function createImportQueue({ redisUrl, fmcsaKnex } = {}) {
   if (!redisUrl) throw new Error(`${LOG_PREFIX} redisUrl is required`);
 
-  const useTls = redisUrl.startsWith('rediss://');
-  const redisOpts = {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    retryStrategy(times) {
-      if (times > 10) return null;
-      return Math.min(times * 3000, 30000);
-    },
-    ...(useTls ? { tls: { rejectUnauthorized: false } } : {}),
-  };
+  const knex = fmcsaKnex || getFmcsaKnex();
+  const importers = new Map();
 
-  const queue = new Queue('fmcsa-import', {
-    prefix: 'fmcsa-import',
+  // ── Queue setup ─────────────────────────────────────────────────────
+  const useTls = redisUrl.startsWith('rediss://');
+  const Redis = require('ioredis');
+  const queue = new Queue('fmcsa-imports', {
+    prefix: 'fmcsa-imports',
     createClient() {
-      return new Redis(redisUrl, { ...redisOpts });
+      return new Redis(redisUrl, {
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+        retryStrategy(times) {
+          if (times > 10) return null;
+          return Math.min(times * 3000, 30000);
+        },
+        ...(useTls ? { tls: { rejectUnauthorized: false } } : {}),
+      });
     },
     defaultJobOptions: {
-      attempts: 2,
-      backoff: { type: 'exponential', delay: 60_000 },
+      attempts: 1, // imports are large — let the ledger record the failure rather than auto-retry
       removeOnComplete: { age: 7 * 24 * 3600 },
       removeOnFail: { age: 30 * 24 * 3600 },
-      // Bulk imports run for many minutes; the per-job timeout is
-      // intentionally generous (90 min) and well above any reasonable
-      // legitimate run time so a hang surfaces as a failure.
-      timeout: 90 * 60 * 1000,
     },
   });
 
   let redisConnected = false;
   queue.on('error', (err) => {
     if (!redisConnected) {
-      console.warn(`${LOG_PREFIX} Queue error (Redis may be unavailable):`, err.message);
+      console.warn(`${LOG_PREFIX} queue error (Redis may be unavailable):`, err.message);
     } else {
-      console.error(`${LOG_PREFIX} Queue error:`, err.message);
+      console.error(`${LOG_PREFIX} queue error:`, err.message);
     }
   });
   queue.client.on('ready', () => {
@@ -70,59 +77,186 @@ function createImportQueue(knex, redisUrl) {
     console.log(`${LOG_PREFIX} Redis connected`);
   });
   queue.on('failed', (job, err) => {
-    console.error(`${LOG_PREFIX} Job ${job.id} (${job.name}) failed:`, err.message);
+    console.error(`${LOG_PREFIX} job ${job.id} failed:`, err.message);
   });
 
-  // Concurrency 1 per processor: bulk imports are I/O-heavy and write a lot of
-  // hot rows; we don't want two simultaneously fighting for the same rows.
-  queue.process('import-fmcsa-census', 1, async (job) => {
-    const { source, triggeredBy = 'manual', triggeredByUserId = null, batchSize } = job.data || {};
-    console.log(`${LOG_PREFIX} import-fmcsa-census starting (job ${job.id})`);
-    const result = await runCensusImport({
-      knex,
-      source,
-      triggeredBy,
-      triggeredByUserId,
-      batchSize,
-    });
-    console.log(
-      `${LOG_PREFIX} import-fmcsa-census done: runId=${result.runId} ` +
-        `inserted=${result.counts.inserted} updated=${result.counts.updated} ` +
-        `skipped=${result.counts.skipped} took=${result.durationMs}ms`,
-    );
-    return result;
+  // ── Importer registry ───────────────────────────────────────────────
+
+  /**
+   * Register an importer for a given file. The function receives
+   * `(knex, { dryRun })` and must resolve with `{ rowsInserted, rowsUpdated, rowsSkipped }`.
+   * FN-1413 (census/authority) and FN-1414 (inspections/crashes/sms) populate this.
+   */
+  function registerImporter(file, fn) {
+    if (!SUPPORTED_FILES.includes(file)) {
+      throw new Error(`${LOG_PREFIX} unsupported file: ${file}`);
+    }
+    if (typeof fn !== 'function') {
+      throw new Error(`${LOG_PREFIX} importer for ${file} must be a function`);
+    }
+    importers.set(file, fn);
+  }
+
+  // ── Job processor ───────────────────────────────────────────────────
+
+  queue.process('run-import', async (job) => {
+    const { runId, file, dryRun } = job.data;
+    if (!runId) throw new Error('run-import job is missing runId');
+
+    await knex('fmcsa.import_runs')
+      .where({ id: runId })
+      .update({ status: 'running', updated_at: knex.fn.now() });
+
+    const importer = importers.get(file);
+    if (!importer) {
+      // Stories FN-1413 / FN-1414 will register importers. Until they do:
+      //   - dry runs succeed with 0 rows (the AC permits this).
+      //   - real runs fail loudly so the operator notices.
+      if (dryRun) {
+        await knex('fmcsa.import_runs')
+          .where({ id: runId })
+          .update({
+            status: 'success',
+            finished_at: knex.fn.now(),
+            rows_inserted: 0,
+            rows_updated: 0,
+            rows_skipped: 0,
+            updated_at: knex.fn.now(),
+          });
+        return { runId, file, status: 'success', dryRun: true, rowsInserted: 0 };
+      }
+      const message = `No importer registered for file '${file}'`;
+      await knex('fmcsa.import_runs')
+        .where({ id: runId })
+        .update({
+          status: 'error',
+          finished_at: knex.fn.now(),
+          error_message: message,
+          updated_at: knex.fn.now(),
+        });
+      throw new Error(message);
+    }
+
+    try {
+      const result = (await importer(knex, { dryRun })) || {};
+      const rowsInserted = Number.isFinite(result.rowsInserted) ? result.rowsInserted : 0;
+      const rowsUpdated = Number.isFinite(result.rowsUpdated) ? result.rowsUpdated : 0;
+      const rowsSkipped = Number.isFinite(result.rowsSkipped) ? result.rowsSkipped : 0;
+      await knex('fmcsa.import_runs')
+        .where({ id: runId })
+        .update({
+          status: 'success',
+          finished_at: knex.fn.now(),
+          rows_inserted: dryRun ? 0 : rowsInserted,
+          rows_updated: dryRun ? 0 : rowsUpdated,
+          rows_skipped: dryRun ? 0 : rowsSkipped,
+          updated_at: knex.fn.now(),
+        });
+      return { runId, file, status: 'success' };
+    } catch (err) {
+      await knex('fmcsa.import_runs')
+        .where({ id: runId })
+        .update({
+          status: 'error',
+          finished_at: knex.fn.now(),
+          error_message: err.message?.slice(0, 1000) || String(err),
+          updated_at: knex.fn.now(),
+        });
+      throw err;
+    }
   });
 
-  queue.process('import-fmcsa-authority', 1, async (job) => {
-    const { source, triggeredBy = 'manual', triggeredByUserId = null, batchSize } = job.data || {};
-    console.log(`${LOG_PREFIX} import-fmcsa-authority starting (job ${job.id})`);
-    const result = await runAuthorityImport({
-      knex,
-      source,
-      triggeredBy,
-      triggeredByUserId,
-      batchSize,
-    });
-    console.log(
-      `${LOG_PREFIX} import-fmcsa-authority done: runId=${result.runId} ` +
-        `inserted=${result.counts.inserted} updated=${result.counts.updated} ` +
-        `skipped=${result.counts.skipped} took=${result.durationMs}ms`,
+  // ── Public API ──────────────────────────────────────────────────────
+
+  /**
+   * Create a ledger row in 'queued' state and enqueue a Bull job.
+   * Returns the inserted row.
+   */
+  async function enqueueImportRun({ file, dryRun = false, triggeredBy, triggeredByUserId = null }) {
+    if (!SUPPORTED_FILES.includes(file)) {
+      throw new Error(`unsupported file: ${file}`);
+    }
+    if (triggeredBy !== 'manual' && triggeredBy !== 'cron') {
+      throw new Error(`triggeredBy must be 'manual' or 'cron'`);
+    }
+    const [row] = await knex('fmcsa.import_runs')
+      .insert({
+        file,
+        triggered_by: triggeredBy,
+        triggered_by_user_id: triggeredBy === 'manual' ? triggeredByUserId : null,
+        status: 'queued',
+      })
+      .returning(['id', 'file', 'triggered_by', 'triggered_by_user_id', 'started_at', 'finished_at', 'status']);
+
+    await queue.add('run-import', { runId: row.id, file, dryRun: !!dryRun });
+    return row;
+  }
+
+  /**
+   * Return the most recent runs (default 50, max 200), ordered by started_at DESC.
+   */
+  async function listRecentRuns(limit = 50) {
+    const safeLimit = Math.max(1, Math.min(200, Number.parseInt(limit, 10) || 50));
+    return knex('fmcsa.import_runs')
+      .orderBy('started_at', 'desc')
+      .limit(safeLimit);
+  }
+
+  /**
+   * Register the biweekly cron. No-op when disabled by NODE_ENV gating.
+   * Honors FMCSA_IMPORT_CRON if set (a cron expression), otherwise uses
+   * Bull's repeat-every-N-ms for true 14-day cadence.
+   */
+  async function initScheduler() {
+    if (!isCronEnabled()) {
+      console.log(`${LOG_PREFIX} cron disabled (NODE_ENV=${process.env.NODE_ENV}, FMCSA_IMPORT_CRON_ENABLED=${process.env.FMCSA_IMPORT_CRON_ENABLED})`);
+      return;
+    }
+    const repeat = process.env.FMCSA_IMPORT_CRON
+      ? { cron: process.env.FMCSA_IMPORT_CRON }
+      : { every: BIWEEKLY_MS };
+
+    await queue.add(
+      'cron-trigger',
+      {},
+      { repeat, jobId: 'fmcsa-import-cron' }
     );
-    return result;
+    console.log(`${LOG_PREFIX} cron registered (${JSON.stringify(repeat)})`);
+  }
+
+  // Cron-trigger processor: enqueues one run-import job per supported file.
+  queue.process('cron-trigger', async () => {
+    console.log(`${LOG_PREFIX} cron-trigger fired — enqueuing all ${SUPPORTED_FILES.length} importers`);
+    const results = [];
+    for (const file of SUPPORTED_FILES) {
+      const row = await enqueueImportRun({ file, dryRun: false, triggeredBy: 'cron' });
+      results.push({ runId: row.id, file });
+    }
+    return { runs: results };
   });
+
+  async function shutdown() {
+    try {
+      await queue.close();
+    } catch (err) {
+      console.error(`${LOG_PREFIX} error closing queue:`, err.message);
+    }
+  }
 
   return {
     queue,
-    enqueueCensus(opts = {}) {
-      return queue.add('import-fmcsa-census', opts);
-    },
-    enqueueAuthority(opts = {}) {
-      return queue.add('import-fmcsa-authority', opts);
-    },
-    async close() {
-      await queue.close();
-    },
+    enqueueImportRun,
+    listRecentRuns,
+    initScheduler,
+    registerImporter,
+    shutdown,
   };
 }
 
-module.exports = { createImportQueue };
+module.exports = {
+  createImportQueue,
+  SUPPORTED_FILES,
+  BIWEEKLY_MS,
+  // Exposed for unit tests:
+  _isCronEnabled: isCronEnabled,
+};
