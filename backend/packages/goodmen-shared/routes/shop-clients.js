@@ -1,10 +1,10 @@
 const express = require('express');
-const axios = require('axios');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
 const { loadUserRbac, requirePermission } = require('../middleware/rbac-middleware');
 const dtLogger = require('../utils/logger');
 const customersService = require('../services/customers.service');
+const fmcsaRef = require('../services/fmcsa-reference');
 
 const rbac = [authMiddleware, loadUserRbac];
 
@@ -56,21 +56,36 @@ const rbac = [authMiddleware, loadUserRbac];
  */
 router.get('/fmcsainfo/:dot', ...rbac, requirePermission('shop_clients.read'), async (req, res) => {
   try {
-    const url = `https://mobile.fmcsa.dot.gov/qc/services/carriers/${req.params.dot}?webKey=94c7ff4bde4f4531bec510f7d3c4100d99f02350`;
-    const response = await axios.get(url);
-    const carrier = response.data?.content?.carrier;
+    const dot = (req.params.dot || '').toString().trim();
+    if (!/^\d{1,9}$/.test(dot)) {
+      return res.status(400).json({ error: 'Invalid DOT number' });
+    }
+    const [carrier, contacts, scores] = await Promise.all([
+      fmcsaRef.getCarrier(dot),
+      fmcsaRef.getCarrierContacts(dot),
+      fmcsaRef.getBasicScores(dot),
+    ]);
     if (!carrier) return res.status(404).json({ error: 'Company not found' });
     res.json({
-      name: carrier.legalName || carrier.dbaName || '',
-      dot_number: carrier.dotNumber || '',
-      address: carrier.phyStreet || '',
-      city: carrier.phyCity || '',
-      state: carrier.phyState || '',
-      zip: carrier.phyZipcode || '',
-      phone: '',
-      email: ''
+      name: carrier.legal_name || carrier.dba_name || '',
+      dot_number: String(carrier.dot),
+      mc_number: carrier.mc_number || '',
+      address: carrier.address_line1 || '',
+      city: carrier.city || '',
+      state: carrier.state || '',
+      zip: carrier.zip_code || '',
+      phone: contacts?.phone || '',
+      fax: contacts?.fax || '',
+      email: contacts?.email || '',
+      basic_scores: (scores || []).map((s) => ({
+        basic: s.basic,
+        measure_value: s.measure_value,
+        percentile: s.percentile,
+        computed_at: s.computed_at,
+      })),
     });
   } catch (err) {
+    dtLogger.error('shop_clients_fmcsainfo_error', err);
     res.status(500).json({ error: 'Failed to fetch FMCSA info' });
   }
 });
