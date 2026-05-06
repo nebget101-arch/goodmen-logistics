@@ -1,0 +1,20 @@
+<div class="part-label" *ngIf="part">
+  <div class="part-label-name">{{ part.name || '—' }}</div>
+  <div class="part-label-meta">
+    <div class="part-label-sku">SKU: <strong>{{ part.sku || '—' }}</strong></div>
+    <div class="part-label-value" *ngIf="barcodeValue">{{ barcodeValue }}</div>
+  </div>
+
+  <div class="part-label-codes" *ngIf="barcodeValue; else noCode">
+    <div class="part-label-barcode">
+      <svg #barcodeSvg></svg>
+    </div>
+    <div class="part-label-qr" [innerHTML]="qrSvgMarkup"></div>
+  </div>
+
+  <ng-template #noCode>
+    <div class="part-label-empty">No barcode value to print.</div>
+  </ng-template>
+
+  <div *ngIf="renderError" class="part-label-error">{{ renderError }}</div>
+</div>

@@ -380,6 +380,16 @@
                     <span class="btn-icon icon-edit"></span>
                     <span>Edit</span>
                   </button>
+                  <!-- FN-1399: Reprint a label for an existing part. -->
+                  <button
+                    type="button"
+                    class="btn-small btn-outline"
+                    (click)="printLabelForPart(part)"
+                    *ngIf="part.barcode"
+                    title="Print a barcode label for this part"
+                  >
+                    Print label
+                  </button>
                   <button
                     type="button"
                     class="btn-small btn-danger btn-with-icon"
@@ -579,13 +589,29 @@
 
             <div class="form-group">
               <label for="barcode">Barcode</label>
+              <!-- FN-1399: Backend auto-generates the barcode on create. The
+                   field is read-only by default; users opt in to a vendor-
+                   supplied barcode via the toggle. On Edit mode and on
+                   barcode-prefilled scans (FN-1107) the toggle is hidden. -->
               <input
                 id="barcode"
                 type="text"
                 class="form-control"
                 formControlName="barcode"
-                [readOnly]="barcodePrefilled"
+                [readOnly]="!editingPartId && !barcodePrefilled && !vendorBarcodeOverride"
+                [placeholder]="!editingPartId && !barcodePrefilled && !vendorBarcodeOverride ? 'auto-generated' : ''"
               />
+              <label
+                *ngIf="!editingPartId && !barcodePrefilled"
+                class="barcode-override-toggle"
+              >
+                <input
+                  type="checkbox"
+                  [(ngModel)]="vendorBarcodeOverride"
+                  [ngModelOptions]="{ standalone: true }"
+                />
+                I have a vendor barcode
+              </label>
             </div>
 
             <div class="form-group">
@@ -654,5 +680,42 @@
       </div>
     </div>
   </div>
+
+  <!-- FN-1399: Post-create success modal with Print Label CTA -->
+  <div class="modal-backdrop print-confirm-backdrop" *ngIf="printablePart">
+    <div class="modal print-confirm-modal">
+      <div class="modal-header">
+        <h5>Part created</h5>
+        <button type="button" class="btn-close" (click)="dismissPrintConfirm()"></button>
+      </div>
+      <div class="modal-body">
+        <p class="print-confirm-msg">
+          <strong>{{ printablePart.name }}</strong>
+          <span class="print-confirm-sku">SKU: {{ printablePart.sku }}</span>
+        </p>
+        <p class="print-confirm-msg">
+          A scannable barcode has been generated:
+          <code class="print-confirm-code">{{ printablePart.barcode }}</code>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-outline" (click)="dismissPrintConfirm()">Done</button>
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="printLabelForPart(printablePart)"
+        >
+          Print label
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FN-1399: Hidden print container. Only renders when partForLabel is set
+     so JsBarcode can mount cleanly. The label-print-area class is the only
+     element kept visible by @media print rules in the component CSS. -->
+<div *ngIf="partForLabel" class="label-print-area">
+  <app-part-label-print [part]="partForLabel"></app-part-label-print>
 </div>
 
