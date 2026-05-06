@@ -1,0 +1,243 @@
+/*
+ * FN-1343 — Control Center preset switcher.
+ * Trigger button matches the existing `.control-center__reset` pill style;
+ * the panel is a dark dropdown rendered absolutely below the trigger.
+ */
+
+:host {
+  display: inline-block;
+  position: relative;
+}
+
+.preset-switcher {
+  position: relative;
+  display: inline-block;
+}
+
+.preset-switcher__trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(45, 212, 191, 0.4);
+  background: rgba(15, 23, 42, 0.6);
+  color: #5eead4;
+  padding: 8px 14px;
+  font-size: 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.preset-switcher__trigger:hover:not(:disabled) {
+  background: rgba(45, 212, 191, 0.12);
+  border-color: rgba(45, 212, 191, 0.7);
+  color: #99f6e4;
+}
+
+.preset-switcher__trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.preset-switcher--open .preset-switcher__trigger {
+  background: rgba(45, 212, 191, 0.18);
+  border-color: rgba(45, 212, 191, 0.85);
+  color: #ccfbf1;
+}
+
+.preset-switcher__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  min-width: 320px;
+  max-width: 380px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(45, 212, 191, 0.32);
+  background: rgba(2, 6, 23, 0.97);
+  box-shadow: 0 24px 48px -16px rgba(8, 47, 73, 0.85);
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preset-switcher__panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preset-switcher__panel-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f8fafc;
+  letter-spacing: 0.01em;
+}
+
+.preset-switcher__panel-sub {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.preset-switcher__status {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.preset-switcher__error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+  font-size: 12px;
+}
+
+.preset-switcher__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preset-switcher__option {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.7);
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.preset-switcher__option:hover {
+  border-color: rgba(45, 212, 191, 0.6);
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.preset-switcher__option:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.preset-switcher__item--selected .preset-switcher__option {
+  border-color: rgba(45, 212, 191, 0.85);
+  background: rgba(15, 23, 42, 0.95);
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.5);
+}
+
+.preset-switcher__option-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f8fafc;
+  letter-spacing: 0.02em;
+}
+
+.preset-switcher__active-flag {
+  font-size: 11px;
+  font-weight: 500;
+  color: #5eead4;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.preset-switcher__thumb {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preset-switcher__thumb-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.65);
+  border: 1px solid rgba(31, 41, 55, 0.85);
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.preset-switcher__thumb-pos {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(45, 212, 191, 0.18);
+  color: #5eead4;
+}
+
+.preset-switcher__thumb-label {
+  flex: 1;
+}
+
+.preset-switcher__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.preset-switcher__cancel,
+.preset-switcher__confirm {
+  appearance: none;
+  border-radius: 8px;
+  font-size: 13px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.preset-switcher__cancel {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: transparent;
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.preset-switcher__cancel:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.65);
+  color: #f1f5f9;
+}
+
+.preset-switcher__confirm {
+  border: 1px solid rgba(45, 212, 191, 0.7);
+  background: rgba(45, 212, 191, 0.18);
+  color: #ccfbf1;
+  font-weight: 600;
+}
+
+.preset-switcher__confirm:hover:not(:disabled) {
+  background: rgba(45, 212, 191, 0.32);
+  border-color: rgba(45, 212, 191, 0.95);
+}
+
+.preset-switcher__cancel:disabled,
+.preset-switcher__confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

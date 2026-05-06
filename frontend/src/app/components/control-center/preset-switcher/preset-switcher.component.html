@@ -1,0 +1,112 @@
+<div class="preset-switcher" [class.preset-switcher--open]="open">
+  <button
+    type="button"
+    class="preset-switcher__trigger"
+    [disabled]="disabled"
+    [attr.aria-expanded]="open"
+    aria-haspopup="dialog"
+    (click)="toggle()"
+    data-testid="preset-switcher-trigger"
+  >
+    <span aria-hidden="true">⚙</span>
+    Switch preset
+  </button>
+
+  <div
+    *ngIf="open"
+    class="preset-switcher__panel"
+    role="dialog"
+    aria-label="Choose a layout preset"
+    data-testid="preset-switcher-panel"
+  >
+    <header class="preset-switcher__panel-header">
+      <h3 class="preset-switcher__panel-title">Choose a layout preset</h3>
+      <p class="preset-switcher__panel-sub">
+        Replaces your current card order. You can still drag cards afterwards.
+      </p>
+    </header>
+
+    <p
+      *ngIf="loadingPresets"
+      class="preset-switcher__status"
+      aria-live="polite"
+    >
+      Loading presets…
+    </p>
+
+    <p
+      *ngIf="loadError"
+      class="preset-switcher__error"
+      role="alert"
+    >
+      {{ loadError }}
+    </p>
+
+    <ul
+      *ngIf="!loadingPresets && !loadError"
+      class="preset-switcher__list"
+      role="radiogroup"
+      aria-label="Available presets"
+    >
+      <li
+        *ngFor="let preset of presets; trackBy: trackByPresetKey"
+        class="preset-switcher__item"
+        [class.preset-switcher__item--selected]="selectedKey === preset.presetKey"
+        [class.preset-switcher__item--active]="activePresetKey === preset.presetKey"
+      >
+        <button
+          type="button"
+          class="preset-switcher__option"
+          role="radio"
+          [attr.aria-checked]="selectedKey === preset.presetKey"
+          [attr.data-preset-key]="preset.presetKey"
+          (click)="select(preset.presetKey)"
+        >
+          <span class="preset-switcher__option-name">
+            {{ preset.displayName }}
+            <span
+              *ngIf="activePresetKey === preset.presetKey"
+              class="preset-switcher__active-flag"
+              aria-label="Currently active"
+            >
+              · Active
+            </span>
+          </span>
+
+          <ol
+            class="preset-switcher__thumb"
+            aria-label="Layout preview"
+          >
+            <li
+              *ngFor="let widget of preset.widgets; let i = index; trackBy: trackByWidget"
+              class="preset-switcher__thumb-item"
+            >
+              <span class="preset-switcher__thumb-pos">{{ i + 1 }}</span>
+              <span class="preset-switcher__thumb-label">{{ widgetLabel(widget) }}</span>
+            </li>
+          </ol>
+        </button>
+      </li>
+    </ul>
+
+    <footer class="preset-switcher__footer">
+      <button
+        type="button"
+        class="preset-switcher__cancel"
+        (click)="close()"
+        [disabled]="applying"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="preset-switcher__confirm"
+        (click)="apply()"
+        [disabled]="!selectedKey || applying || !!loadError"
+        data-testid="preset-switcher-apply"
+      >
+        {{ applying ? 'Applying…' : 'Apply preset' }}
+      </button>
+    </footer>
+  </div>
+</div>

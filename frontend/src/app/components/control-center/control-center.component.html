@@ -8,6 +8,12 @@
     </div>
     <div class="control-center__header-actions">
       <app-window-selector></app-window-selector>
+      <app-preset-switcher
+        [disabled]="loading || saving"
+        [activePresetKey]="activePresetKey"
+        (presetApplied)="onPresetApplied($event)"
+        (presetApplyFailed)="onPresetApplyFailed($event)"
+      ></app-preset-switcher>
       <button
         *ngIf="hiddenCount > 0"
         type="button"

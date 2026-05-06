@@ -10,7 +10,15 @@
  * The default-layout shape is intentionally a simple ordered list of
  * card identifiers; per-role content variants (e.g. Smart Alerts filter
  * by HOS vs maintenance) are applied on the frontend (FN-1171).
+ *
+ * FN-1342 (parent FN-1327): the role default is now sourced from the
+ * `dashboard_layout_presets` table via `preset-store.js`. The hard-coded
+ * ROLE_DEFAULTS map below is retained as a rollback-safe last-resort
+ * fallback used when the table is empty, the row is malformed, or the
+ * query fails.
  */
+
+const { createPresetStore } = require('./preset-store');
 
 const ROLE_DEFAULTS = Object.freeze({
   dispatcher: {
@@ -67,8 +75,30 @@ function parseLayoutJson(value) {
   return value;
 }
 
-function createLayoutStore({ knex }) {
+async function resolveRoleDefaultLayout({ presetStore, role }) {
+  const roleKey = normalizeRoleKey(role);
+  if (presetStore && typeof presetStore.getDefaultForRole === 'function') {
+    try {
+      const preset = await presetStore.getDefaultForRole(roleKey);
+      if (preset && preset.layout) {
+        return JSON.parse(JSON.stringify(preset.layout));
+      }
+    } catch (err) {
+      // Defense-in-depth: presets table missing/unavailable falls through
+      // to the hard-coded ROLE_DEFAULTS map. This preserves the FN-1172
+      // behavior contract during DB outages or pre-migration deploys.
+      console.warn(
+        '[layout-store] preset lookup failed, falling back to ROLE_DEFAULTS',
+        err && err.message ? err.message : err
+      );
+    }
+  }
+  return getRoleDefault(role);
+}
+
+function createLayoutStore({ knex, presetStore } = {}) {
   if (!knex) throw new Error('layout-store requires a knex instance');
+  const presets = presetStore || createPresetStore({ knex });
 
   async function getLayout({ userId, role }) {
     const row = await knex('user_dashboard_layouts')
@@ -77,7 +107,7 @@ function createLayoutStore({ knex }) {
 
     if (!row) {
       return {
-        layout: getRoleDefault(role),
+        layout: await resolveRoleDefaultLayout({ presetStore: presets, role }),
         is_default: true,
         role: normalizeRoleKey(role),
         updated_at: null
@@ -87,7 +117,7 @@ function createLayoutStore({ knex }) {
     const parsed = parseLayoutJson(row.layout_json);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return {
-        layout: getRoleDefault(role),
+        layout: await resolveRoleDefaultLayout({ presetStore: presets, role }),
         is_default: true,
         role: normalizeRoleKey(role),
         updated_at: row.updated_at || null
@@ -139,6 +169,7 @@ module.exports = {
   createLayoutStore,
   getRoleDefault,
   normalizeRoleKey,
+  resolveRoleDefaultLayout,
   ROLE_DEFAULTS,
   DEFAULT_ROLE_KEY
 };
