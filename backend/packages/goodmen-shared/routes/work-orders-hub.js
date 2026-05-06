@@ -6,6 +6,7 @@ const db = require('../internal/db').knex;
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const workOrdersService = require('../services/work-orders.service');
+const { enrichTriageParts } = require('../services/triage-enrichment.service');
 const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 
 const router = express.Router();
@@ -712,6 +713,138 @@ router.post('/', authMiddleware, requireRole(['admin', 'service_advisor', 'shop_
   } catch (error) {
     dtLogger.error('work_orders_create_failed', error);
     res.status(400).json({ error: error.message });
+  }
+});
+
+const TRIAGE_ENRICHED_ROLES = [
+  'admin',
+  'service_advisor',
+  'shop_manager',
+  'shop_clerk',
+  'service_writer',
+  'mechanic',
+  'technician',
+];
+
+const TRIAGE_AI_TIMEOUT_MS = 20_000;
+
+/**
+ * @openapi
+ * /api/work-orders/triage-enriched:
+ *   post:
+ *     summary: AI triage with live parts availability
+ *     description: >-
+ *       Calls the AI work-order triage handler and enriches each suggested part
+ *       with on-hand qty, bin location, reorder point, and stock status from
+ *       the tenant's parts catalog and inventory. Suggested SKUs that are not
+ *       found in the tenant's parts catalog are returned with
+ *       inventoryStatus="not_found" rather than dropped.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - description
+ *             properties:
+ *               description:
+ *                 type: string
+ *               vehicleId:
+ *                 type: string
+ *               customerId:
+ *                 type: string
+ *               locationId:
+ *                 type: string
+ *                 description: When set, restricts inventory lookup to this single location.
+ *     responses:
+ *       200:
+ *         description: AI triage response enriched with availability
+ *       400:
+ *         description: Validation error or AI 4xx
+ *       502:
+ *         description: AI service error
+ *       504:
+ *         description: AI service timeout
+ */
+router.post('/triage-enriched', authMiddleware, requireRole(TRIAGE_ENRICHED_ROLES), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const tenantId = req.context?.tenantId;
+    if (!tenantId) {
+      return res.status(403).json({ error: 'Tenant context required' });
+    }
+
+    const { description, vehicleId, customerId, locationId } = req.body || {};
+    if (!description || typeof description !== 'string') {
+      return res.status(400).json({ error: 'description is required' });
+    }
+
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TRIAGE_AI_TIMEOUT_MS);
+
+    let aiResponse;
+    try {
+      aiResponse = await fetch(`${aiServiceUrl}/api/ai/work-order/triage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}),
+        },
+        body: JSON.stringify({ description, vehicleId, customerId, locationId }),
+        signal: controller.signal,
+      });
+    } catch (fetchErr) {
+      if (fetchErr.name === 'AbortError') {
+        dtLogger.error('triage_enriched_ai_timeout', { aiServiceUrl });
+        return res.status(504).json({ error: 'AI triage timeout' });
+      }
+      dtLogger.error('triage_enriched_ai_unreachable', { aiServiceUrl, error: fetchErr.message });
+      return res.status(502).json({ error: 'AI triage unreachable' });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!aiResponse.ok) {
+      const errorBody = await aiResponse.json().catch(() => ({}));
+      dtLogger.error('triage_enriched_ai_error', { status: aiResponse.status, body: errorBody });
+      const proxiedStatus = aiResponse.status === 400 ? 400 : 502;
+      return res.status(proxiedStatus).json({
+        error: errorBody.error || 'AI triage failed',
+        code: errorBody.code,
+      });
+    }
+
+    const aiBody = await aiResponse.json();
+    const enrichedParts = await enrichTriageParts({
+      knex: db,
+      tenantId,
+      locationId: locationId || null,
+      parts: Array.isArray(aiBody?.parts) ? aiBody.parts : [],
+    });
+
+    const duration = Date.now() - startTime;
+    dtLogger.trackEvent?.('triage.enriched', {
+      tenantId,
+      locationId: locationId || null,
+      durationMs: duration,
+      partCount: enrichedParts.length,
+    });
+
+    return res.json({
+      tasks: Array.isArray(aiBody?.tasks) ? aiBody.tasks : [],
+      parts: enrichedParts,
+      priority: typeof aiBody?.priority === 'string' ? aiBody.priority : 'MEDIUM',
+      notes: typeof aiBody?.notes === 'string' ? aiBody.notes : '',
+    });
+  } catch (error) {
+    dtLogger.error('triage_enriched_failed', error);
+    return res.status(500).json({ error: 'Triage enrichment failed' });
   }
 });
 
