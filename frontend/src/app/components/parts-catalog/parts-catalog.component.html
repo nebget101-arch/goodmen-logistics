@@ -64,6 +64,17 @@
             <span class="quick-add-label">Scan Invoice</span>
             <span class="quick-add-hint">Bulk-create from a vendor invoice</span>
           </button>
+          <!-- FN-1107: Scan Barcode → lookup → open Edit (match) or Add prefilled (no match). -->
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            (click)="startScanBarcode()"
+          >
+            <span class="quick-add-icon">🏷️</span>
+            <span class="quick-add-label">Scan Barcode</span>
+            <span class="quick-add-hint">Open by barcode or add prefilled</span>
+          </button>
           <button
             type="button"
             class="quick-add-item"
@@ -136,6 +147,15 @@
     (confirmed)="onInvoiceModalConfirmed($event)"
     (closed)="onInvoiceModalClosed()"
   ></app-quick-add-invoice-modal>
+
+  <!-- FN-1107: Scan Barcode dialog -->
+  <app-barcode-scanner-dialog
+    *ngIf="scannerOpen"
+    [externalError]="scannerError"
+    [busy]="scannerBusy"
+    (scanned)="onBarcodeScanned($event)"
+    (closed)="closeScanner()"
+  ></app-barcode-scanner-dialog>
 
   <!-- Messages -->
   <div *ngIf="successMessage" class="alert alert-success">
@@ -540,7 +560,13 @@
 
             <div class="form-group">
               <label for="barcode">Barcode</label>
-              <input id="barcode" type="text" class="form-control" formControlName="barcode" />
+              <input
+                id="barcode"
+                type="text"
+                class="form-control"
+                formControlName="barcode"
+                [readOnly]="barcodePrefilled"
+              />
             </div>
 
             <div class="form-group">

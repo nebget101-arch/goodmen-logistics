@@ -52,6 +52,7 @@ class ApiServiceStub {
   bulkUploadParts(): Observable<any> { return of({}); }
   getInventoryByPart(): Observable<any> { return of([]); }
   getPartsAnalysis(): Observable<any> { return of({}); }
+  lookupBarcode = jasmine.createSpy('lookupBarcode');
 }
 
 class ManufacturersServiceStub {
@@ -285,6 +286,211 @@ describe('PartsCatalogComponent — FN-1099 Snap Photo flow', () => {
       expect(component.aiR2Key).toBeNull();
       expect(component.aiWarnings).toEqual([]);
       expect(component.aiConfidence).toEqual({});
+    });
+  });
+});
+
+/**
+ * FN-1107 unit specs — Quick Add → Scan Barcode flow.
+ *
+ * The acceptance criteria require three paths:
+ *   - matched: lookup succeeds → close scanner → open Edit modal with full part record
+ *   - unmatched: lookup returns 404 → close scanner → open Add modal with barcode prefilled (read-only)
+ *   - malformed: server returns 5xx (or any non-404 error) → keep scanner open + surface error
+ *
+ * The barcode-scanner-dialog component itself handles the "no code detected
+ * in image" path internally (toast + retry, no `scanned` event). That flow
+ * is exercised by the dialog's own decode handler — here we focus on the
+ * parts-catalog routing logic that runs after a value is captured.
+ */
+describe('PartsCatalogComponent — FN-1107 Scan Barcode flow', () => {
+  let fixture: ComponentFixture<PartsCatalogComponent>;
+  let component: PartsCatalogComponent;
+  let api: ApiServiceStub;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterTestingModule],
+      declarations: [
+        PartsCatalogComponent,
+        ConfidenceBadgeComponent,
+        StubMasterTypeaheadComponent,
+      ],
+      providers: [
+        { provide: ApiService, useClass: ApiServiceStub },
+        { provide: ManufacturersService, useClass: ManufacturersServiceStub },
+        { provide: VendorsService, useClass: VendorsServiceStub },
+        { provide: AiPartsService, useClass: AiPartsServiceStub },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(PartsCatalogComponent);
+    component = fixture.componentInstance;
+    api = TestBed.inject(ApiService) as unknown as ApiServiceStub;
+    fixture.detectChanges();
+  });
+
+  it('startScanBarcode opens the dialog and closes the Quick Add menu', () => {
+    component.quickAddOpen = true;
+    component.startScanBarcode();
+    expect(component.scannerOpen).toBe(true);
+    expect(component.quickAddOpen).toBe(false);
+    expect(component.scannerError).toBeNull();
+    expect(component.scannerBusy).toBe(false);
+  });
+
+  describe('matched: lookup hits → close scanner → open Edit modal', () => {
+    it('resolves the full part from the local catalog cache and opens Edit', () => {
+      // Seed the in-memory catalog cache the way ngOnInit loadParts() would.
+      const fullPart = {
+        id: 'part-uuid-42',
+        sku: 'SKU-42',
+        name: 'Brake Pad — Bendix BP1234',
+        category: 'Brakes',
+        manufacturer: 'Bendix',
+        manufacturer_id: 7,
+        preferred_vendor_name: 'NAPA',
+        vendor_id: 11,
+        uom: 'each',
+        unit_cost: 42.5,
+        unit_price: 79.99,
+        barcode: 'BPDE1234',
+        quantity_on_hand: 12,
+        reorder_level: 3,
+      };
+      component.parts = [fullPart];
+
+      // Lookup endpoint only returns the partial record — Edit must hydrate
+      // the missing fields (manufacturer/vendor/uom/qty) from the cache.
+      api.lookupBarcode.and.returnValue(of({
+        success: true,
+        data: {
+          barcode: { id: 'b1', barcode_value: 'BPDE1234', part_id: 'part-uuid-42' },
+          part: {
+            id: 'part-uuid-42',
+            sku: 'SKU-42',
+            name: 'Brake Pad — Bendix BP1234',
+            category: 'Brakes',
+            unit_price: 79.99,
+            unit_cost: 42.5,
+          },
+          inventory_by_location: [],
+        },
+      }));
+
+      component.startScanBarcode();
+      component.onBarcodeScanned('BPDE1234');
+
+      expect(api.lookupBarcode).toHaveBeenCalledWith('BPDE1234');
+      expect(component.scannerOpen).toBe(false);
+      expect(component.showForm).toBe(true);
+      expect(component.editingPartId).toBe('part-uuid-42');
+      // Full record (cache) values are present, not just the lookup partial.
+      expect(component.partForm.value.manufacturer).toBe('Bendix');
+      expect(component.partForm.value.uom).toBe('each');
+      expect(component.partForm.value.quantity_on_hand).toBe(12);
+      expect(component.barcodePrefilled).toBe(false);
+    });
+
+    it('falls back to the lookup partial if the part is not in the catalog cache', () => {
+      component.parts = [];
+      api.lookupBarcode.and.returnValue(of({
+        success: true,
+        data: {
+          part: { id: 'orphan-1', sku: 'NEW-1', name: 'New Part', category: 'X', unit_price: 1, unit_cost: 1 },
+        },
+      }));
+
+      component.startScanBarcode();
+      component.onBarcodeScanned('ORPHAN');
+
+      expect(component.scannerOpen).toBe(false);
+      expect(component.showForm).toBe(true);
+      expect(component.editingPartId).toBe('orphan-1');
+      expect(component.partForm.value.sku).toBe('NEW-1');
+    });
+  });
+
+  describe('unmatched: 404 → close scanner → Add modal with barcode prefilled (read-only)', () => {
+    it('opens the Add modal, prefills barcode, and locks it', () => {
+      api.lookupBarcode.and.returnValue(throwError(() => ({ status: 404, error: { error: 'Barcode not found' } })));
+
+      component.startScanBarcode();
+      component.onBarcodeScanned('NEW-CODE-9');
+
+      expect(component.scannerOpen).toBe(false);
+      expect(component.showForm).toBe(true);
+      expect(component.editingPartId).toBeNull();
+      expect(component.partForm.value.barcode).toBe('NEW-CODE-9');
+      expect(component.barcodePrefilled).toBe(true);
+    });
+
+    it('treats 200 with no part record as unmatched (defensive)', () => {
+      api.lookupBarcode.and.returnValue(of({ success: true, data: { part: null } }));
+
+      component.startScanBarcode();
+      component.onBarcodeScanned('NO-PART');
+
+      expect(component.scannerOpen).toBe(false);
+      expect(component.showForm).toBe(true);
+      expect(component.partForm.value.barcode).toBe('NO-PART');
+      expect(component.barcodePrefilled).toBe(true);
+    });
+
+    it('closeForm clears barcodePrefilled so a subsequent New Part is editable', () => {
+      api.lookupBarcode.and.returnValue(throwError(() => ({ status: 404 })));
+      component.startScanBarcode();
+      component.onBarcodeScanned('NEW-CODE-9');
+      expect(component.barcodePrefilled).toBe(true);
+
+      component.closeForm();
+
+      expect(component.barcodePrefilled).toBe(false);
+    });
+  });
+
+  describe('malformed / lookup error: scanner stays open with inline error', () => {
+    it('surfaces a 5xx server error and keeps the dialog open', () => {
+      api.lookupBarcode.and.returnValue(throwError(() => ({
+        status: 500,
+        error: { error: 'database unavailable' },
+      })));
+
+      component.startScanBarcode();
+      component.onBarcodeScanned('SOMECODE');
+
+      expect(component.scannerOpen).toBe(true);
+      expect(component.showForm).toBe(false);
+      expect(component.scannerBusy).toBe(false);
+      expect(component.scannerError).toContain('database unavailable');
+    });
+
+    it('rejects an empty/whitespace value without calling the API', () => {
+      component.startScanBarcode();
+      component.onBarcodeScanned('   ');
+
+      expect(api.lookupBarcode).not.toHaveBeenCalled();
+      expect(component.scannerOpen).toBe(true);
+      expect(component.scannerError).toMatch(/empty/i);
+    });
+
+    it('clears the inline error and busy flag when the user retries successfully', () => {
+      // First call fails with a server error.
+      api.lookupBarcode.and.returnValue(throwError(() => ({ status: 500, error: { error: 'temporary glitch' } })));
+      component.startScanBarcode();
+      component.onBarcodeScanned('CODE-A');
+      expect(component.scannerError).toBeTruthy();
+      expect(component.scannerOpen).toBe(true);
+
+      // Retry succeeds → scanner closes, error cleared.
+      api.lookupBarcode.and.returnValue(of({ success: true, data: { part: { id: 'p1', sku: 'S1' } } }));
+      component.parts = [{ id: 'p1', sku: 'S1', name: 'X', category: 'C', manufacturer: 'M', uom: 'each' }];
+      component.onBarcodeScanned('CODE-A');
+
+      expect(component.scannerOpen).toBe(false);
+      expect(component.scannerError).toBeNull();
+      expect(component.scannerBusy).toBe(false);
+      expect(component.showForm).toBe(true);
     });
   });
 });
