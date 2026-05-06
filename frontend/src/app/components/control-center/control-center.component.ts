@@ -217,7 +217,7 @@ export class ControlCenterComponent implements OnInit, OnDestroy {
   private persistLayout(): void {
     this.saving = true;
     this.errorMessage = null;
-    this.activePresetKey = matchPresetKey(widgets);
+    this.activePresetKey = matchPresetKey(this.widgets);
     this.cdr.markForCheck();
 
     this.layoutService
