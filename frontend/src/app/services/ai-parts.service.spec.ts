@@ -25,12 +25,15 @@ describe('AiPartsService', () => {
     return new File([new Uint8Array([1, 2, 3, 4])], name, { type });
   }
 
-  it('POSTs multipart to /api/ai/parts/identify-from-photo and unwraps the response', (done) => {
+  it('POSTs multipart to /api/ai/parts/identify-from-photo and unwraps aiResult.data', (done) => {
     const file = makeFile();
 
     service.identifyFromPhoto(file).subscribe((res) => {
       expect(res.success).toBe(true);
       expect(res.aiResult.manufacturer).toBe('Bosch');
+      expect(res.aiResult.partNumber).toBe('F002H20064');
+      expect(res.aiResult.category).toBe('Filtration');
+      expect(res.aiResult.descriptionGuess).toBe('Oil filter cartridge');
       expect(res.aiResult.confidence.manufacturer).toBe(0.9);
       expect(res.r2Key).toBe('parts/photos/abc.jpg');
       done();
@@ -45,26 +48,57 @@ describe('AiPartsService', () => {
     // but in tests it's the absence we care about.
     expect(req.request.headers.get('Content-Type')).toBeNull();
 
+    // FN-1365: BE wraps the vision-handler payload — the actual fields live
+    // under `aiResult.data`, not directly on `aiResult`. The service must
+    // unwrap so the component sees a flat shape.
+    req.flush({
+      success: true,
+      aiResult: {
+        success: true,
+        data: {
+          manufacturer: 'Bosch',
+          partNumber: 'F002H20064',
+          category: 'Filtration',
+          descriptionGuess: 'Oil filter cartridge',
+          dimensionsGuess: '4in x 4in',
+          confidence: {
+            manufacturer: 0.9,
+            partNumber: 0.92,
+            category: 0.88,
+            description: 0.7,
+            dimensions: 0.4,
+          },
+          isUnreadable: false,
+          warnings: [],
+        },
+        meta: { processingTimeMs: 2100, model: 'claude-sonnet-4' },
+      },
+      r2Key: 'parts/photos/abc.jpg',
+      meta: { processingTimeMs: 2100, model: 'claude-sonnet-4' },
+    });
+  });
+
+  it('FN-1365: also accepts a flat aiResult (no data wrapper) for backwards safety', (done) => {
+    service.identifyFromPhoto(makeFile()).subscribe((res) => {
+      expect(res.aiResult.manufacturer).toBe('Bosch');
+      expect(res.aiResult.partNumber).toBe('F002H20064');
+      done();
+    });
+
+    const req = http.expectOne(`${environment.apiUrl}/ai/parts/identify-from-photo`);
     req.flush({
       success: true,
       aiResult: {
         manufacturer: 'Bosch',
         partNumber: 'F002H20064',
         category: 'Filtration',
-        descriptionGuess: 'Oil filter cartridge',
-        dimensionsGuess: '4in x 4in',
-        confidence: {
-          manufacturer: 0.9,
-          partNumber: 0.92,
-          category: 0.88,
-          description: 0.7,
-          dimensions: 0.4,
-        },
+        descriptionGuess: '',
+        dimensionsGuess: '',
+        confidence: {},
         isUnreadable: false,
         warnings: [],
       },
       r2Key: 'parts/photos/abc.jpg',
-      meta: { processingTimeMs: 2100, model: 'claude-sonnet-4' },
     });
   });
 
@@ -77,7 +111,7 @@ describe('AiPartsService', () => {
     });
 
     const req = http.expectOne(`${environment.apiUrl}/ai/parts/identify-from-photo`);
-    req.flush({ success: true, aiResult: {}, r2Key: 'parts/photos/x.jpg' });
+    req.flush({ success: true, aiResult: { success: true, data: {} }, r2Key: 'parts/photos/x.jpg' });
   });
 
   it('maps AI_IMAGE_UNREADABLE → friendly error', (done) => {

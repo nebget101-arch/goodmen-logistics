@@ -910,7 +910,11 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
             this.openForm();
             return;
           }
-          this.openFormPrefilled(res.aiResult, res.r2Key);
+          // FN-1365: parity with FN-1107 barcode flow — if the AI surfaced a
+          // SKU that already exists in the catalog, open Edit on that record
+          // instead of Create-prefilled. Any error along this lookup path
+          // falls back to the existing Create-prefilled behavior.
+          this.routePhotoResult(res.aiResult, res.r2Key);
         },
         error: (err: Error) => {
           this.aiBusy = false;
@@ -919,6 +923,56 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
           this.openForm();
         },
       });
+  }
+
+  /**
+   * FN-1365: photo-intake routing. If the AI returned a partNumber that
+   * matches an existing catalog SKU (case-insensitive), open the Edit modal
+   * for that record. Otherwise open Create pre-filled. Lookup errors fall
+   * through to Create pre-filled — never block the user from adding a part.
+   */
+  private routePhotoResult(
+    ai: import('../../services/ai-parts.service').PartAiResult,
+    r2Key: string,
+  ): void {
+    const skuUpper = (ai.partNumber || '').trim().toUpperCase();
+    if (!skuUpper) {
+      this.openFormPrefilled(ai, r2Key);
+      return;
+    }
+
+    this.apiService.duplicateCheckParts({ sku: skuUpper, limit: 5 }).subscribe({
+      next: (res: any) => {
+        const candidates: Array<{ id: string; sku: string }> = Array.isArray(res?.data)
+          ? res.data
+          : [];
+        const exact = candidates.find(
+          (c) => (c?.sku || '').trim().toUpperCase() === skuUpper,
+        );
+        if (exact?.id) {
+          // Resolve the full part record so the Edit modal has all fields
+          // (manufacturer/vendor/uom/qty). Mirrors FN-1111's
+          // onEditExistingDuplicate fallback pattern.
+          this.apiService.getPartById(exact.id).subscribe({
+            next: (full: any) => {
+              const part = full?.data ?? full ?? exact;
+              this.openForm(part);
+            },
+            error: () => {
+              // Fall back to local cache, then to the candidate stub.
+              const cached = this.parts.find((p: any) => p.id === exact.id);
+              this.openForm(cached || exact);
+            },
+          });
+          return;
+        }
+        this.openFormPrefilled(ai, r2Key);
+      },
+      error: () => {
+        // Lookup transient/server error → still let the user add the part.
+        this.openFormPrefilled(ai, r2Key);
+      },
+    });
   }
 
   cancelAiPhoto(): void {
