@@ -355,6 +355,16 @@ export class LoadsService {
     );
   }
 
+  // FN-1439: AI-ranked driver candidates for an unassigned load.
+  // Backend route (FN-1438) aggregates load + candidate-driver state and
+  // proxies to the AI service (FN-1437); top 5 with positive HOS only.
+  recommendDriver(loadId: string): Observable<RecommendDriverResponse> {
+    return this.http.post<RecommendDriverResponse>(
+      `${this.baseUrl}/loads/${loadId}/recommend-driver`,
+      {}
+    );
+  }
+
   /**
    * FN-795: Fetch the AI insights list for the Intelligence Panel.
    * Maps the backend response (FN-793) — which uses `insights` / `message` /
@@ -419,4 +429,25 @@ export interface AiInsight {
   severity: AiInsightSeverity;
   title: string;
   href: string;
+}
+
+/**
+ * FN-1439 — Response shape for `POST /api/loads/:id/recommend-driver`.
+ * Mirrors the AI-service contract (see FN-1431 story doc).
+ */
+export interface RecommendDriverCandidate {
+  driverId: string;
+  name?: string;
+  score: number;
+  rationale: string;
+  hosRemaining: number;
+  distanceMiles: number;
+  equipmentMatch: boolean;
+  lastLoadWithCustomer?: string | null;
+}
+
+export interface RecommendDriverResponse {
+  success: boolean;
+  candidates: RecommendDriverCandidate[];
+  reasoning?: string;
 }
