@@ -3,6 +3,7 @@ import { RouterModule, Routes } from '@angular/router';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { DriversComponent } from './components/drivers/drivers.component';
 import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
+import { DriverEditComponent } from './components/driver-edit/driver-edit.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
 import { HosComponent } from './components/hos/hos.component';
 import { LoadsComponent } from './components/loads/loads.component';
@@ -73,6 +74,7 @@ const routes: Routes = [
   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/dashboard' } },
   { path: 'drivers', component: DispatchDriversComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/drivers' } },
   { path: 'drivers/dqf', component: DriversComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/drivers/dqf' } },
+  { path: 'drivers/:id/edit', component: DriverEditComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/drivers' } },
   {
     path: 'vehicles',
     component: VehiclesComponent,
