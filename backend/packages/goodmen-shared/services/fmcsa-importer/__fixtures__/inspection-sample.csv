@@ -1,0 +1,10 @@
+REPORT_NUMBER,DOT_NUMBER,INSP_DATE,REPORT_STATE,INSP_LEVEL,UNIT_TYPE_DESC,VIOL_UNIT,VIOL_CODE,VIOL_DESCR,OOS_INDICATOR,VIOLATION_SEQUENCE,SEVERITY_WEIGHT
+INSP-1001,123456,2026-01-05,CA,2,Vehicle,1,393.75A,Tire tread depth less than 2/32 inch,Y,1,8
+INSP-1001,123456,2026-01-05,CA,2,Driver,2,392.2,Failure to obey traffic control device,N,2,3
+INSP-1002,123456,2026-01-12,CA,1,Vehicle,1,393.45A,Brake hose chafed,N,1,4
+INSP-1002,123456,2026-01-12,CA,1,Hazmat,1,177.817C,Hazmat shipping papers not accessible,Y,2,7
+INSP-1003,789012,2026-02-03,TX,3,Driver,1,395.8,Driver record of duty status not current,Y,1,5
+INSP-1004,789012,2026-02-15,TX,2,Vehicle,1,393.95A,Emergency equipment missing,N,1,2
+INSP-1004,789012,2026-02-15,TX,2,Vehicle,2,396.3A1,Inspection/repair/maintenance,N,2,1
+INSP-1004,789012,2026-02-15,TX,2,Driver,1,391.41A,Operating CMV without medical certificate,Y,3,10
+INSP-1005,345678,2026-03-09,FL,1,Hazmat,1,172.704A,Hazmat training records not provided,Y,1,9
