@@ -14,6 +14,7 @@ import {
   PartPhotoIntakeResponse,
 } from '../../services/ai-parts.service';
 import { ConfidenceBadgeComponent } from '../shared/confidence-badge/confidence-badge.component';
+import { DuplicateWarningComponent } from './duplicate-warning/duplicate-warning.component';
 
 /**
  * FN-1099 unit specs — Quick Add → Snap Photo flow.
@@ -42,9 +43,11 @@ class StubMasterTypeaheadComponent {
 }
 
 class ApiServiceStub {
-  getParts(): Observable<any> { return of({ data: [] }); }
+  partsList: any[] = [];
+  getParts(): Observable<any> { return of({ data: this.partsList }); }
   getPartCategories(): Observable<any> { return of({ data: [] }); }
   getPartManufacturers(): Observable<any> { return of({ data: [] }); }
+  getPartById = jasmine.createSpy('getPartById').and.returnValue(of({ data: { id: 'p-1', sku: 'OIL-001', name: 'Oil Filter' } }));
   createPart = jasmine.createSpy('createPart').and.returnValue(of({ message: 'ok' }));
   updatePart = jasmine.createSpy('updatePart').and.returnValue(of({ message: 'ok' }));
   deactivatePart(): Observable<any> { return of({}); }
@@ -53,6 +56,7 @@ class ApiServiceStub {
   getInventoryByPart(): Observable<any> { return of([]); }
   getPartsAnalysis(): Observable<any> { return of({}); }
   lookupBarcode = jasmine.createSpy('lookupBarcode');
+  duplicateCheckParts = jasmine.createSpy('duplicateCheckParts').and.returnValue(of({ data: [] }));
 }
 
 class ManufacturersServiceStub {
@@ -111,6 +115,7 @@ describe('PartsCatalogComponent — FN-1099 Snap Photo flow', () => {
       declarations: [
         PartsCatalogComponent,
         ConfidenceBadgeComponent,
+        DuplicateWarningComponent,
         StubMasterTypeaheadComponent,
       ],
       providers: [
@@ -491,6 +496,201 @@ describe('PartsCatalogComponent — FN-1107 Scan Barcode flow', () => {
       expect(component.scannerError).toBeNull();
       expect(component.scannerBusy).toBe(false);
       expect(component.showForm).toBe(true);
+    });
+  });
+});
+
+describe('PartsCatalogComponent — FN-1111 duplicate detection + auto-SKU', () => {
+  let fixture: ComponentFixture<PartsCatalogComponent>;
+  let component: PartsCatalogComponent;
+  let api: ApiServiceStub;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterTestingModule],
+      declarations: [
+        PartsCatalogComponent,
+        ConfidenceBadgeComponent,
+        DuplicateWarningComponent,
+        StubMasterTypeaheadComponent,
+      ],
+      providers: [
+        { provide: ApiService, useClass: ApiServiceStub },
+        { provide: ManufacturersService, useClass: ManufacturersServiceStub },
+        { provide: VendorsService, useClass: VendorsServiceStub },
+        { provide: AiPartsService, useClass: AiPartsServiceStub },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(PartsCatalogComponent);
+    component = fixture.componentInstance;
+    api = TestBed.inject(ApiService) as unknown as ApiServiceStub;
+    fixture.detectChanges();
+    component.openForm();
+  });
+
+  describe('debounced duplicate-check', () => {
+    it('coalesces rapid keystrokes into a single API call after 350ms', fakeAsync(() => {
+      api.duplicateCheckParts.calls.reset();
+      api.duplicateCheckParts.and.returnValue(of({
+        data: [{ id: 'p-1', name: 'Oil Filter', sku: 'OIL-1', manufacturer: 'Fleetguard', similarity: 0.92 }],
+      }));
+
+      component.partForm.patchValue({ name: 'O' });
+      component.partForm.patchValue({ name: 'Oi' });
+      component.partForm.patchValue({ name: 'Oil' });
+      tick(100);
+      expect(api.duplicateCheckParts).not.toHaveBeenCalled();
+
+      tick(300);
+      expect(api.duplicateCheckParts).toHaveBeenCalledTimes(1);
+      const arg = api.duplicateCheckParts.calls.mostRecent().args[0];
+      expect(arg.name).toBe('Oil');
+      expect(arg.limit).toBe(5);
+    }));
+
+    it('renders the warning when candidates come back', fakeAsync(() => {
+      api.duplicateCheckParts.and.returnValue(of({
+        data: [{ id: 'p-1', name: 'Oil Filter', sku: 'OIL-1', manufacturer: 'Fleetguard', similarity: 0.92 }],
+      }));
+      component.partForm.patchValue({ name: 'Oil' });
+      tick(400);
+      fixture.detectChanges();
+
+      expect(component.duplicateCandidates.length).toBe(1);
+      expect(component.showDuplicateWarning).toBe(true);
+      expect(fixture.nativeElement.querySelector('app-duplicate-warning')).not.toBeNull();
+    }));
+
+    it('does NOT call the API when all three fields are empty (BE 400 guard)', fakeAsync(() => {
+      api.duplicateCheckParts.calls.reset();
+      component.partForm.patchValue({ name: 'x' });
+      tick(400);
+      api.duplicateCheckParts.calls.reset();
+      component.partForm.patchValue({ name: '' });
+      tick(400);
+      expect(api.duplicateCheckParts).not.toHaveBeenCalled();
+      expect(component.duplicateCandidates).toEqual([]);
+    }));
+
+    it('hides the warning when the next call returns empty (e.g. user changed name)', fakeAsync(() => {
+      api.duplicateCheckParts.and.returnValue(of({
+        data: [{ id: 'p-1', name: 'Oil Filter', sku: 'OIL-1', manufacturer: 'Fleetguard', similarity: 0.92 }],
+      }));
+      component.partForm.patchValue({ name: 'Oil' });
+      tick(400);
+      expect(component.duplicateCandidates.length).toBe(1);
+
+      api.duplicateCheckParts.and.returnValue(of({ data: [] }));
+      component.partForm.patchValue({ name: 'FleetGuard FF5052' });
+      tick(400);
+      expect(component.duplicateCandidates).toEqual([]);
+      expect(component.showDuplicateWarning).toBe(false);
+    }));
+
+    it('no-false-positive: typing "FleetGuard FF5052" with no similar parts shows nothing', fakeAsync(() => {
+      api.duplicateCheckParts.and.returnValue(of({ data: [] }));
+      component.partForm.patchValue({ name: 'FleetGuard FF5052' });
+      tick(400);
+      expect(component.duplicateCandidates).toEqual([]);
+      expect(component.showDuplicateWarning).toBe(false);
+    }));
+
+    it('does NOT call the API in Edit mode', fakeAsync(() => {
+      component.closeForm();
+      component.openForm({ id: 'existing-1', sku: 'OIL-001', name: 'Oil Filter', category: 'Engine', manufacturer: 'Fleetguard' });
+      api.duplicateCheckParts.calls.reset();
+
+      component.partForm.patchValue({ name: 'Oil Filter v2' });
+      tick(400);
+      expect(api.duplicateCheckParts).not.toHaveBeenCalled();
+    }));
+  });
+
+  describe('dismissal', () => {
+    it('dismiss clears candidates and suppresses the warning for the rest of the session', fakeAsync(() => {
+      api.duplicateCheckParts.and.returnValue(of({
+        data: [{ id: 'p-1', name: 'Oil Filter', sku: 'OIL-1', manufacturer: 'Fleetguard', similarity: 0.92 }],
+      }));
+      component.partForm.patchValue({ name: 'Oil' });
+      tick(400);
+      expect(component.showDuplicateWarning).toBe(true);
+
+      component.onDismissDuplicateWarning();
+      expect(component.duplicateWarningDismissed).toBe(true);
+      expect(component.showDuplicateWarning).toBe(false);
+
+      api.duplicateCheckParts.calls.reset();
+      component.partForm.patchValue({ name: 'Oil Filter Premium' });
+      tick(400);
+      expect(api.duplicateCheckParts).not.toHaveBeenCalled();
+      expect(component.showDuplicateWarning).toBe(false);
+    }));
+
+    it('reopening the modal resets the dismissal flag', () => {
+      component.duplicateWarningDismissed = true;
+      component.duplicateCandidates = [{ id: 'p-1', name: 'X', sku: 'X-1', manufacturer: null, similarity: 0.9 }];
+
+      component.closeForm();
+      component.openForm();
+
+      expect(component.duplicateWarningDismissed).toBe(false);
+      expect(component.duplicateCandidates).toEqual([]);
+    });
+  });
+
+  describe('edit-existing link', () => {
+    it('closes the Add modal and reopens as Edit for the chosen candidate', fakeAsync(() => {
+      const cand = { id: 'p-7', name: 'Oil Filter', sku: 'OIL-7', manufacturer: 'Fleetguard', similarity: 0.93 };
+      api.getPartById.and.returnValue(of({ data: { id: 'p-7', sku: 'OIL-7', name: 'Oil Filter', category: 'Engine', manufacturer: 'Fleetguard' } }));
+
+      component.onEditExistingDuplicate(cand);
+      tick();
+
+      expect(api.getPartById).toHaveBeenCalledWith('p-7');
+      expect(component.editingPartId).toBe('p-7');
+      expect(component.showForm).toBe(true);
+      expect(component.partForm.value.sku).toBe('OIL-7');
+    }));
+  });
+
+  describe('generate-SKU', () => {
+    beforeEach(() => {
+      component.partForm.patchValue({ manufacturer: 'Fleetguard', category: 'Engine' });
+    });
+
+    it('produces <MFG>-<CAT>-<NNNN> with uppercase 3-letter abbreviations', () => {
+      api.partsList = [];
+      component.parts = [];
+      component.generateSku();
+      const sku: string = component.partForm.value.sku;
+      expect(sku).toMatch(/^FLE-ENG-\d{4}$/);
+    });
+
+    it('skips collisions against parts already in memory', () => {
+      const taken: any[] = [];
+      for (let i = 0; i < 9999; i++) {
+        taken.push({ sku: `FLE-ENG-${String(i).padStart(4, '0')}` });
+      }
+      component.parts = taken;
+      component.generateSku();
+      expect(component.partForm.value.sku).toBe('FLE-ENG-9999');
+    });
+
+    it('errors out when manufacturer or category is missing', () => {
+      component.partForm.patchValue({ manufacturer: '', category: 'Engine' });
+      component.generateSku();
+      expect(component.partForm.value.sku || '').toBe('');
+      expect(component.errorMessage).toMatch(/manufacturer and category/i);
+    });
+
+    it('keeps the field editable (no readonly applied)', () => {
+      component.parts = [];
+      component.generateSku();
+      const ctrl = component.partForm.get('sku')!;
+      expect(ctrl.disabled).toBe(false);
+      ctrl.setValue('CUSTOM-SKU-1');
+      expect(component.partForm.value.sku).toBe('CUSTOM-SKU-1');
     });
   });
 });

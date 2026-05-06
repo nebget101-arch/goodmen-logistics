@@ -736,6 +736,25 @@
   margin-top: 8px;
 }
 
+/* FN-1111: SKU input + Generate-SKU button row */
+.parts-dashboard .sku-field {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.parts-dashboard .sku-field .form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.parts-dashboard .btn-generate-sku {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 @media (max-width: 768px) {
   .parts-dashboard .header {
     flex-direction: column;
