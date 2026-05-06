@@ -196,6 +196,69 @@ test('bulkCreateParts: missing sku or name → skipped with reason missing_sku_o
 	}
 });
 
+test('FN-1364 bulkCreateParts: missing/empty category → defaults to Uncategorized; missing manufacturer stays null', async () => {
+	const { partsService, tables } = loadServicesWithMockDb();
+
+	const items = [
+		// no category at all
+		{ sku: 'NC-1', name: 'No Category Part' },
+		// empty-string category
+		{ sku: 'NC-2', name: 'Empty Category Part', category: '' },
+		// whitespace-only category
+		{ sku: 'NC-3', name: 'Whitespace Category Part', category: '   ' },
+		// explicit category should be preserved as-is (with trim)
+		{ sku: 'OK-1', name: 'Categorized Part', category: '  Brakes  ' },
+		// no manufacturer at all
+		{ sku: 'NM-1', name: 'No Manufacturer Part' },
+	];
+
+	const result = await partsService.bulkCreateParts(items);
+	assert.equal(result.created.length, 5);
+	assert.equal(result.skipped.length, 0);
+
+	const bySku = Object.fromEntries(
+		tables.parts.map((p) => [p.sku, p])
+	);
+	assert.equal(bySku['NC-1'].category, 'Uncategorized');
+	assert.equal(bySku['NC-2'].category, 'Uncategorized');
+	assert.equal(bySku['NC-3'].category, 'Uncategorized');
+	assert.equal(bySku['OK-1'].category, 'Brakes');
+
+	// Manufacturer stays null when not supplied (resolveManufacturerVendor
+	// only sets keys the caller actually passed, so manufacturer/manufacturer_id
+	// remain undefined-on-row → DB stores NULL).
+	const nm = bySku['NM-1'];
+	assert.ok(nm.manufacturer === undefined || nm.manufacturer === null,
+		`expected manufacturer null/undefined, got ${nm.manufacturer}`);
+	assert.ok(nm.manufacturer_id === undefined || nm.manufacturer_id === null,
+		`expected manufacturer_id null/undefined, got ${nm.manufacturer_id}`);
+});
+
+test('FN-1364 createPart: missing category → Uncategorized; explicit category preserved', async () => {
+	const { partsService, tables } = loadServicesWithMockDb();
+
+	await partsService.createPart({ sku: 'CP-1', name: 'Solo No Category' });
+	await partsService.createPart({ sku: 'CP-2', name: 'Solo Empty Cat', category: '' });
+	await partsService.createPart({ sku: 'CP-3', name: 'Solo Real Cat', category: 'Engine' });
+
+	const bySku = Object.fromEntries(tables.parts.map((p) => [p.sku, p]));
+	assert.equal(bySku['CP-1'].category, 'Uncategorized');
+	assert.equal(bySku['CP-2'].category, 'Uncategorized');
+	assert.equal(bySku['CP-3'].category, 'Engine');
+});
+
+test('FN-1364 createPart: missing sku or name still throws (validation unchanged)', async () => {
+	const { partsService } = loadServicesWithMockDb();
+	await assert.rejects(
+		() => partsService.createPart({ name: 'No SKU Here' }),
+		/SKU and name are required/
+	);
+	await assert.rejects(
+		() => partsService.createPart({ sku: 'X-1' }),
+		/SKU and name are required/
+	);
+});
+
 test('bulkCreateParts: a single existing-SKU lookup query is used, not N queries', async () => {
 	// Indirectly verified — the mock's `whereIn(db.raw('UPPER(sku)'), [...])` path
 	// is the only path the service can use. If the service looped with .where()
