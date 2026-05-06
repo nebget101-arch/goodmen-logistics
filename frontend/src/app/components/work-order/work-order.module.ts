@@ -18,6 +18,7 @@ import { WoFinancialsTabComponent } from './tabs/financials-tab/financials-tab.c
 import { WoNotesTabComponent } from './tabs/notes-tab/notes-tab.component';
 import { WoWorkflowButtonsComponent } from './workflow-buttons/workflow-buttons.component';
 import { WoStatusTimelineComponent } from './workflow-buttons/status-timeline.component';
+import { WoRepairHistoryWidgetComponent } from './repair-history-widget/repair-history-widget.component';
 
 const routes: Routes = [
   {
@@ -57,7 +58,8 @@ const routes: Routes = [
     WoFinancialsTabComponent,
     WoNotesTabComponent,
     WoWorkflowButtonsComponent,
-    WoStatusTimelineComponent
+    WoStatusTimelineComponent,
+    WoRepairHistoryWidgetComponent
   ],
   imports: [
     CommonModule,
