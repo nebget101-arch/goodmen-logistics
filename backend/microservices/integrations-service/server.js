@@ -78,9 +78,16 @@ async function initImportQueue() {
   }
   try {
     const { createImportQueue } = require('@goodmen/shared/services/fmcsa-import-queue');
+    const { getRegisteredImporters } = require('@goodmen/shared/services/fmcsa-importer/register-importers');
     importQueueInstance = createImportQueue({ redisUrl: REDIS_URL });
+    // FN-1452: bind the five FMCSA file importers to the queue's registry.
+    // Without this, every `run-import` job hits the no-importer branch and
+    // writes status='error' to fmcsa.import_runs.
+    for (const [file, fn] of getRegisteredImporters()) {
+      importQueueInstance.registerImporter(file, fn);
+    }
     await importQueueInstance.initScheduler();
-    console.log('[integrations] FMCSA import queue initialized');
+    console.log('[integrations] FMCSA import queue initialized (5 importers registered)');
   } catch (err) {
     console.error('[integrations] Failed to initialize import queue:', err.message);
   }

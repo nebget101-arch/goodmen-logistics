@@ -247,6 +247,11 @@ function createImportQueue(knex, redisUrl) {
   };
 }
 
+// FN-1452 — adapters that bridge the per-driver signatures to the queue's
+// `(knex, { dryRun }) → { rowsInserted, rowsUpdated, rowsSkipped }` shape live
+// in their own file so unit tests can require them without pulling in `bull`.
+const { getRegisteredImporters } = require('./register-importers');
+
 module.exports = {
   // Direct drivers (Census + Authority — Socrata datasets)
   runCensusImport,
@@ -264,6 +269,8 @@ module.exports = {
     crashV1: require('./parsers/crash.v1'),
     smsV1: require('./parsers/sms.v1'),
   },
+  // FN-1452 — registry adapters consumed by integrations-service bootstrap.
+  getRegisteredImporters,
   // For testability of the source-resolution helper
   _internals: { openSourceStream },
   // Constants in case callers want to inspect job names
