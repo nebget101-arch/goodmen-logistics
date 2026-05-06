@@ -701,4 +701,182 @@ router.post('/overrides', async (req, res) => {
   }
 });
 
+// ─── FMCSA sync (FN-1427) ────────────────────────────────────────────────────
+
+/**
+ * Populate the global `brokers` table from `fmcsa.authorities`.
+ *
+ * Invariants (critical):
+ *   - Manual rows (`brokers.source = 'manual'`) are NEVER overwritten.
+ *   - Tenant overlay fields (notes, payment_rating, broker_notes, is_blocked,
+ *     is_preferred) live in `tenant_broker_overrides` and are never touched
+ *     by this sync — they're keyed by (tenant_id, broker_id) and the broker_id
+ *     is preserved across refreshes.
+ *
+ * Strategy:
+ *   1. INSERT new active broker authorities not yet in `brokers` (NOT EXISTS
+ *      guard on mc_number).
+ *   2. UPDATE existing rows where source='fmcsa' to refresh their data.
+ *
+ * Rows previously imported but no longer Active in FMCSA keep their last-known
+ * state (the `status` field reflects what the last successful sync saw).
+ */
+async function syncBrokersFromFmcsa() {
+  // INSERT new rows. Collapse multiple authorities for the same mc_number to a
+  // single broker (DISTINCT ON mc_number, prefer the most recently changed).
+  const inserted = await knex.raw(
+    `
+    WITH active_brokers AS (
+      SELECT DISTINCT ON (a.mc_number)
+        a.mc_number,
+        a.dot,
+        a.status,
+        c.legal_name,
+        c.dba_name,
+        c.address_line1,
+        c.city,
+        c.state,
+        c.zip_code,
+        c.country,
+        c.phone,
+        c.email
+      FROM fmcsa.authorities a
+      LEFT JOIN fmcsa.carriers c ON a.dot = c.dot
+      WHERE a.authority_type = 'Broker'
+        AND a.status = 'Active'
+        AND a.mc_number IS NOT NULL
+        AND a.mc_number <> ''
+      ORDER BY a.mc_number, a.authority_status_changed_at DESC NULLS LAST
+    )
+    INSERT INTO brokers (
+      legal_name, dba_name, mc_number, dot_number, authority_type, status,
+      phone, email, street, city, state, zip, country,
+      source, fmcsa_synced_at, created_at, updated_at
+    )
+    SELECT
+      COALESCE(NULLIF(TRIM(ab.legal_name), ''), 'MC ' || ab.mc_number),
+      ab.dba_name,
+      ab.mc_number,
+      ab.dot::text,
+      'Broker',
+      ab.status,
+      ab.phone,
+      ab.email,
+      ab.address_line1,
+      ab.city,
+      ab.state,
+      ab.zip_code,
+      COALESCE(ab.country, 'US'),
+      'fmcsa',
+      NOW(),
+      NOW(),
+      NOW()
+    FROM active_brokers ab
+    WHERE NOT EXISTS (
+      SELECT 1 FROM brokers b WHERE b.mc_number = ab.mc_number
+    )
+    RETURNING id
+    `,
+  );
+
+  // UPDATE existing FMCSA-sourced rows to refresh their data.
+  const updated = await knex.raw(
+    `
+    WITH active_brokers AS (
+      SELECT DISTINCT ON (a.mc_number)
+        a.mc_number,
+        a.dot,
+        a.status,
+        c.legal_name,
+        c.dba_name,
+        c.address_line1,
+        c.city,
+        c.state,
+        c.zip_code,
+        c.country,
+        c.phone,
+        c.email
+      FROM fmcsa.authorities a
+      LEFT JOIN fmcsa.carriers c ON a.dot = c.dot
+      WHERE a.authority_type = 'Broker'
+        AND a.status = 'Active'
+        AND a.mc_number IS NOT NULL
+        AND a.mc_number <> ''
+      ORDER BY a.mc_number, a.authority_status_changed_at DESC NULLS LAST
+    )
+    UPDATE brokers b
+    SET legal_name      = COALESCE(NULLIF(TRIM(ab.legal_name), ''), b.legal_name),
+        dba_name        = ab.dba_name,
+        dot_number      = ab.dot::text,
+        status          = ab.status,
+        phone           = ab.phone,
+        email           = ab.email,
+        street          = ab.address_line1,
+        city            = ab.city,
+        state           = ab.state,
+        zip             = ab.zip_code,
+        country         = COALESCE(ab.country, b.country, 'US'),
+        fmcsa_synced_at = NOW(),
+        updated_at      = NOW()
+    FROM active_brokers ab
+    WHERE b.mc_number = ab.mc_number
+      AND b.source    = 'fmcsa'
+    RETURNING b.id
+    `,
+  );
+
+  return {
+    inserted: inserted.rows?.length || 0,
+    updated: updated.rows?.length || 0,
+  };
+}
+
+/**
+ * @openapi
+ * /api/brokers/sync-from-fmcsa:
+ *   post:
+ *     summary: Populate brokers table from fmcsa.authorities
+ *     description: >
+ *       Admin-only. Inserts active Broker authorities from `fmcsa.authorities`
+ *       into the global `brokers` table (source='fmcsa') and refreshes
+ *       previously-synced rows. Manually-entered brokers (source='manual')
+ *       are never overwritten. Tenant overlay fields are never touched.
+ *     tags:
+ *       - Brokers
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sync completed.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 inserted:
+ *                   type: integer
+ *                 updated:
+ *                   type: integer
+ *       500:
+ *         description: Server error.
+ */
+router.post('/sync-from-fmcsa', async (req, res) => {
+  // The router-level `auth(['admin', 'dispatch'])` already gates access.
+  // Restrict the sync to admin only.
+  const role = req.user?.role || req.context?.role;
+  if (role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'admin role required' });
+  }
+  try {
+    const result = await syncBrokersFromFmcsa();
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('Error syncing brokers from FMCSA:', err);
+    res.status(500).json({ success: false, error: 'Failed to sync brokers from FMCSA' });
+  }
+});
+
 module.exports = router;
+module.exports.syncBrokersFromFmcsa = syncBrokersFromFmcsa;
