@@ -145,7 +145,8 @@ function createImportQueue(knex, redisUrl) {
     ...(useTls ? { tls: { rejectUnauthorized: false } } : {}),
   };
 
-  // Mirror fmcsa-scrape-queue.js — use createClient pattern (NOT `redis: url`).
+  // Use the createClient pattern (NOT `redis: url`) — Bull v4 needs a real
+  // ioredis-style client when redisOpts contains non-default values.
   const queue = new Queue(QUEUE_NAME, {
     prefix: QUEUE_PREFIX,
     createClient() {

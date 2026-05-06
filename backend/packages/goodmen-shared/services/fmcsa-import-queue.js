@@ -10,13 +10,9 @@ const LOG_PREFIX = '[fmcsa-import-queue]';
 /**
  * FMCSA bulk-file import queue (FN-1413).
  *
- * Separate from `fmcsa-scrape-queue.js` because the workloads have different
- * shapes: scrape jobs are short, throttled HTTP requests against SAFER, while
- * import jobs are long-running streaming downloads of multi-hundred-MB CSVs
- * that batch-upsert into `fmcsa.*`. Sharing a queue would couple their retry
- * and concurrency policies in ways neither workload wants — for instance,
- * Bull's per-queue limiter on the scrape queue would needlessly throttle
- * imports, and a stuck import would block scrape jobs.
+ * Long-running streaming downloads of multi-hundred-MB FMCSA CSVs that
+ * batch-upsert into `fmcsa.*`. Runs on its own Bull queue so its retry and
+ * concurrency policies are isolated from any other queues in the service.
  *
  * Job names produced here:
  *   - 'import-fmcsa-census'
