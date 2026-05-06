@@ -60,6 +60,7 @@ import { DatePickerComponent } from './components/shared/date-picker/date-picker
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
 import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
 import { InboundEmailSettingsComponent } from './components/admin/inbound-email-settings/inbound-email-settings.component';
+import { FmcsaImportsAdminComponent } from './components/admin/fmcsa-imports/fmcsa-imports.component';
 import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
@@ -151,7 +152,8 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     InventoryItemEditDialogComponent,
     AutoReplenishmentComponent,
     AiExtractionFlowComponent,
-    InboundEmailSettingsComponent
+    InboundEmailSettingsComponent,
+    FmcsaImportsAdminComponent
   ],
   imports: [
     BrowserModule,

@@ -41,6 +41,7 @@ export interface UserAccess {
   locations: AccessLocation[];
   tenantId?: string | null;
   tenantName?: string | null;
+  isInternal?: boolean;
   subscriptionPlanId?: string | null;
   subscriptionPlan?: AccessSubscriptionPlan | null;
 }
