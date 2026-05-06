@@ -277,6 +277,96 @@ router.get('/location-summary', authMiddleware, async (_req, res) => {
 
 /**
  * @openapi
+ * /api/inventory/by-part/{partId}:
+ *   get:
+ *     summary: List inventory rows for a part across all locations
+ *     description: Returns one inventory row per (location, bin) carrying the given part. Used by the Parts Catalog stock-breakdown expand row. Returns an empty array (200) when the part has no inventory anywhere.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: partId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part UUID
+ *     responses:
+ *       200:
+ *         description: Cross-location inventory rows for the part
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       location_id:
+ *                         type: string
+ *                         format: uuid
+ *                       location_name:
+ *                         type: string
+ *                       on_hand_qty:
+ *                         type: number
+ *                       reserved_qty:
+ *                         type: number
+ *                       available_qty:
+ *                         type: number
+ *                       bin_location:
+ *                         type: string
+ *                         nullable: true
+ *                       bin_id:
+ *                         type: string
+ *                         format: uuid
+ *                         nullable: true
+ *                       bin_code:
+ *                         type: string
+ *                         nullable: true
+ *                       bin_name:
+ *                         type: string
+ *                         nullable: true
+ *       500:
+ *         description: Server error
+ */
+router.get('/by-part/:partId', authMiddleware, async (req, res) => {
+	try {
+		const rows = await db('inventory')
+			.where('inventory.part_id', req.params.partId)
+			.join('locations', 'locations.id', 'inventory.location_id')
+			.leftJoin('location_bins', 'location_bins.id', 'inventory.bin_id')
+			.select(
+				'inventory.id',
+				'inventory.location_id',
+				'locations.name as location_name',
+				'inventory.on_hand_qty',
+				'inventory.reserved_qty',
+				db.raw('(inventory.on_hand_qty - inventory.reserved_qty) as available_qty'),
+				'inventory.bin_location',
+				'inventory.bin_id',
+				'location_bins.bin_code',
+				'location_bins.bin_name'
+			)
+			.orderBy('locations.name', 'asc');
+
+		res.json({ success: true, data: rows });
+	} catch (error) {
+		dtLogger.error('inventory_by_part_get_failed', { partId: req.params.partId, error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * @openapi
  * /api/inventory/{id}:
  *   put:
  *     summary: Update inventory settings
