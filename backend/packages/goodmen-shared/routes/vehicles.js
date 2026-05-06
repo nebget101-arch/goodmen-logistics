@@ -61,6 +61,47 @@ async function getVehiclesColumnSet() {
   return vehiclesColumnSetCache;
 }
 
+// FN-1386: ownership classification — `vehicles.ownership_type` enum
+// (added by FN-1385). Settlements still rely on `company_owned`, so we
+// keep both in sync on save.
+const OWNERSHIP_TYPES = ['company', 'oo', 'leased'];
+
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Validate ownership_type and the conditional fields it requires.
+ * Returns null if valid, or an error string describing the first problem.
+ * Only enforced when `ownership_type` is supplied (PUT may patch other fields
+ * without touching ownership).
+ */
+function validateOwnership(body) {
+  if (!body || typeof body !== 'object') return null;
+  if (body.ownership_type === undefined || body.ownership_type === null || body.ownership_type === '') {
+    return null;
+  }
+  const ownershipType = String(body.ownership_type);
+  if (!OWNERSHIP_TYPES.includes(ownershipType)) {
+    return `Invalid ownership_type '${ownershipType}'. Expected one of: ${OWNERSHIP_TYPES.join(', ')}`;
+  }
+  if (ownershipType === 'oo') {
+    if (!isNonEmptyString(body.equipment_owner_name)) {
+      return 'equipment_owner_name is required when ownership_type is "oo"';
+    }
+  }
+  if (ownershipType === 'leased') {
+    const topLevel = isNonEmptyString(body.lessor_name);
+    const trailerNested = body.trailer_details
+      && typeof body.trailer_details === 'object'
+      && isNonEmptyString(body.trailer_details.lessor_name);
+    if (!topLevel && !trailerNested) {
+      return 'lessor_name (top-level for trucks) or trailer_details.lessor_name (trailers) is required when ownership_type is "leased"';
+    }
+  }
+  return null;
+}
+
 // Protect vehicles routes. Safety / safety_manager may create/edit trucks & trailers and unit
 // documents (assign units, new equipment) — same JWT write list as fleet + admin + shop.
 const VEHICLE_SHOP_ROLES = [
@@ -372,9 +413,23 @@ router.get('/search', async (req, res) => {
  *     summary: List vehicles
  *     tags:
  *       - Vehicles
+ *     parameters:
+ *       - in: query
+ *         name: equipment_owner_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: ownership_type
+ *         schema:
+ *           type: string
+ *           enum: [company, oo, leased]
+ *         description: FN-1386 — filter by ownership classification
  *     responses:
  *       200:
  *         description: Vehicles returned
+ *       400:
+ *         description: Invalid filter value
  *   post:
  *     summary: Create vehicle
  *     tags:
@@ -387,9 +442,22 @@ router.get('/search', async (req, res) => {
  *             type: object
  *             description: Vehicle payload
  *             additionalProperties: true
+ *             properties:
+ *               ownership_type:
+ *                 type: string
+ *                 enum: [company, oo, leased]
+ *                 description: FN-1386 — required when caller wants OO/Leased classification
+ *               equipment_owner_name:
+ *                 type: string
+ *                 description: Required when ownership_type is "oo"
+ *               lessor_name:
+ *                 type: string
+ *                 description: Required when ownership_type is "leased" (truck path)
  *     responses:
  *       201:
  *         description: Vehicle created
+ *       400:
+ *         description: Validation failed (ownership_type/equipment_owner_name/lessor_name)
  */
 // GET all vehicles
 router.get('/', async (req, res) => {
@@ -472,6 +540,20 @@ router.get('/', async (req, res) => {
     if (equipmentOwnerId && vehicleColumns.has('equipment_owner_id')) {
       params.push(equipmentOwnerId);
       sql += ` AND av.equipment_owner_id = $${params.length}`;
+    }
+
+    // FN-1386: filter by ownership classification (company | oo | leased)
+    const ownershipFilter = req.query.ownership_type;
+    if (ownershipFilter !== undefined && ownershipFilter !== '') {
+      if (!OWNERSHIP_TYPES.includes(String(ownershipFilter))) {
+        return res.status(400).json({
+          message: `Invalid ownership_type '${ownershipFilter}'. Expected one of: ${OWNERSHIP_TYPES.join(', ')}`
+        });
+      }
+      if (vehicleColumns.has('ownership_type')) {
+        params.push(ownershipFilter);
+        sql += ` AND av.ownership_type = $${params.length}`;
+      }
     }
 
     sql += vehicleColumns.has('unit_number') ? ' ORDER BY av.unit_number' : ' ORDER BY 1';
@@ -794,27 +876,39 @@ router.post('/', async (req, res) => {
   try {
     const tenantId = req.context?.tenantId || null;
     const operatingEntityId = req.context?.operatingEntityId || null;
-    const { 
-      unit_number, 
-      vin, 
-      make, 
-      model, 
-      year, 
-      license_plate, 
-      state, 
-      mileage, 
+    const {
+      unit_number,
+      vin,
+      make,
+      model,
+      year,
+      license_plate,
+      state,
+      mileage,
       inspection_expiry,
       next_pm_due,
       next_pm_mileage,
-      insurance_expiry, 
+      insurance_expiry,
       registration_expiry,
       oos_reason,
       vehicle_type,
-      trailer_details
+      trailer_details,
+      ownership_type,
+      equipment_owner_name,
+      equipment_owner_id,
+      lessor_name,
+      lease_date,
+      lease_payment_amount
     } = req.body;
 
     if (!tenantId || !operatingEntityId) {
       return res.status(403).json({ message: 'Operating entity context is required to create a vehicle' });
+    }
+
+    // FN-1386: validate ownership classification before any DB write.
+    const ownershipError = validateOwnership(req.body);
+    if (ownershipError) {
+      return res.status(400).json({ message: ownershipError });
     }
 
     const finalVin = (vin && vin.trim()) ? vin.trim() : (unit_number ? unit_number.slice(-4) : '');
@@ -850,15 +944,69 @@ router.post('/', async (req, res) => {
       console.warn('[vehicles] trailer_details persist skipped:', metaErr?.message || metaErr);
     }
 
-    await query('UPDATE vehicles SET company_owned = true WHERE id = $1', [result.rows[0].id]);
+    // FN-1386: persist ownership classification + dependent fields. Keep
+    // `company_owned` derived from ownership_type so settlements (which still
+    // read company_owned) stay consistent. Default to 'company' when the
+    // caller omits ownership_type, matching the column's DB default.
+    const finalOwnershipType = OWNERSHIP_TYPES.includes(ownership_type) ? ownership_type : 'company';
+    const finalCompanyOwned = finalOwnershipType === 'company';
+    try {
+      const vehicleColumns = await getVehiclesColumnSet();
+      const setClauses = [];
+      const setParams = [];
+      let p = 1;
+
+      if (vehicleColumns.has('ownership_type')) {
+        setClauses.push(`ownership_type = $${p++}`);
+        setParams.push(finalOwnershipType);
+      }
+      if (vehicleColumns.has('company_owned')) {
+        setClauses.push(`company_owned = $${p++}`);
+        setParams.push(finalCompanyOwned);
+      }
+      if (vehicleColumns.has('equipment_owner_name') && equipment_owner_name !== undefined) {
+        setClauses.push(`equipment_owner_name = $${p++}`);
+        setParams.push(isNonEmptyString(equipment_owner_name) ? equipment_owner_name.trim() : null);
+      }
+      if (vehicleColumns.has('equipment_owner_id') && equipment_owner_id !== undefined) {
+        setClauses.push(`equipment_owner_id = $${p++}`);
+        setParams.push(equipment_owner_id || null);
+      }
+      // Only persist top-level lease fields if the column exists; trailer
+      // lease info already lives inside trailer_details JSONB above.
+      if (vehicleColumns.has('lessor_name') && lessor_name !== undefined) {
+        setClauses.push(`lessor_name = $${p++}`);
+        setParams.push(isNonEmptyString(lessor_name) ? lessor_name.trim() : null);
+      }
+      if (vehicleColumns.has('lease_date') && lease_date !== undefined) {
+        setClauses.push(`lease_date = $${p++}`);
+        setParams.push(lease_date || null);
+      }
+      if (vehicleColumns.has('lease_payment_amount') && lease_payment_amount !== undefined) {
+        setClauses.push(`lease_payment_amount = $${p++}`);
+        setParams.push(lease_payment_amount === '' || lease_payment_amount === null ? null : lease_payment_amount);
+      }
+
+      if (setClauses.length > 0) {
+        setParams.push(result.rows[0].id);
+        await query(
+          `UPDATE vehicles SET ${setClauses.join(', ')} WHERE id = $${p}`,
+          setParams
+        );
+      }
+    } catch (ownErr) {
+      console.warn('[vehicles] ownership persist skipped:', ownErr?.message || ownErr);
+    }
     const duration = Date.now() - startTime;
-    
+
     dtLogger.trackDatabase('INSERT', 'vehicles', duration, true, { vehicleId: result.rows[0].id });
     dtLogger.trackEvent('vehicle.created', { vehicleId: result.rows[0].id, unit_number, vin });
     dtLogger.trackRequest('POST', '/api/vehicles', 201, duration);
     dtLogger.info('Vehicle created successfully', { vehicleId: result.rows[0].id, unit_number });
-    
-    res.status(201).json(result.rows[0]);
+
+    // Re-read so the response reflects the persisted ownership + trailer_details.
+    const finalRead = await query('SELECT * FROM vehicles WHERE id = $1', [result.rows[0].id]);
+    res.status(201).json(finalRead.rows[0] || result.rows[0]);
   } catch (error) {
     const duration = Date.now() - startTime;
     dtLogger.error('Failed to create vehicle', error, { body: req.body });
@@ -915,21 +1063,39 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const startTime = Date.now();
   try {
+    // FN-1386: validate ownership classification before any DB write.
+    const ownershipError = validateOwnership(req.body);
+    if (ownershipError) {
+      return res.status(400).json({ message: ownershipError });
+    }
+
     const vehicleColumns = await getVehiclesColumnSet();
     // Fields that should not be updated
     const excludedFields = ['id', 'created_at', 'updated_at', 'customer_id', 'source'];
-    
+
     // String fields that must never be null in the database
     const nullSafeStringFields = new Set(['vin', 'make', 'model', 'license_plate', 'state', 'unit_number']);
+
+    // FN-1386: when ownership_type is explicitly set, derive company_owned
+    // from it so settlements stay consistent with the new enum. The caller's
+    // company_owned is overridden to avoid an inconsistent pair.
+    const updateBody = { ...req.body };
+    if (
+      updateBody.ownership_type !== undefined
+      && OWNERSHIP_TYPES.includes(String(updateBody.ownership_type))
+      && vehicleColumns.has('company_owned')
+    ) {
+      updateBody.company_owned = String(updateBody.ownership_type) === 'company';
+    }
 
     const fields = [];
     const values = [];
     let paramCount = 1;
 
-    Object.keys(req.body).forEach(key => {
-      if (req.body[key] !== undefined && !excludedFields.includes(key) && vehicleColumns.has(key)) {
+    Object.keys(updateBody).forEach(key => {
+      if (updateBody[key] !== undefined && !excludedFields.includes(key) && vehicleColumns.has(key)) {
         fields.push(`${key} = $${paramCount}`);
-        let val = req.body[key];
+        let val = updateBody[key];
         if (nullSafeStringFields.has(key) && (val === null || val === undefined)) {
           val = '';
         }
@@ -1325,5 +1491,8 @@ router.delete('/:id/documents/:documentId', async (req, res) => {
 router.VEHICLE_READ_ROLES = VEHICLE_READ_ROLES;
 router.VEHICLE_WRITE_ROLES = VEHICLE_WRITE_ROLES;
 router.isVehicleReadHttpMethod = isVehicleReadHttpMethod;
+// Expose for FN-1386 ownership-validation tests.
+router.OWNERSHIP_TYPES = OWNERSHIP_TYPES;
+router.validateOwnership = validateOwnership;
 
 module.exports = router;
