@@ -12,12 +12,15 @@
       [attr.data-severity]="insight.severity"
     >
       <span class="material-symbols-outlined intel-insights__icon">{{ iconFor(insight) }}</span>
-      <a
-        [routerLink]="insight.href"
+      <!-- FN-1353: was a routerLink; now emits (insightApply) so the parent
+           can apply a smart filter or navigate as a fallback. -->
+      <button
+        type="button"
         class="intel-insights__title-link"
+        (click)="onInsightClick(insight, $event)"
       >
         {{ insight.title }}
-      </a>
+      </button>
     </li>
   </ul>
 

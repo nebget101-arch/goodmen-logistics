@@ -72,6 +72,14 @@
   --sev-low-bg:          rgba(203, 213, 225, 0.10);
   --sev-low-border:      rgba(203, 213, 225, 0.32);
   --sev-low-pip:         #94a3b8;
+
+  /*
+   * FN-1353 — Loads list redesign.
+   * `--row-attention-accent` is the left-edge stripe shown on cards/rows
+   * that need attention (overdue, missing docs, idle driver). Aliases the
+   * existing warning ramp; no new hex literals introduced.
+   */
+  --row-attention-accent: var(--ai-accent-warning);
 }
 
 * {

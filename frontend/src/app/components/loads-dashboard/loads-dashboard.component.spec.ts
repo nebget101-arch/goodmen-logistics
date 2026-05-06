@@ -382,3 +382,123 @@ describe('LoadsDashboardComponent.lookupZipForEditStop (FN-1089)', () => {
   });
 
 });
+
+// ─── FN-1353: AI insight → smart filter wiring ────────────────────────────
+describe('LoadsDashboardComponent — FN-1353 applyAiInsight', () => {
+  function makeInsight(type: string, href = '/loads'): any {
+    return {
+      id: `insight-${type}`,
+      type,
+      severity: 'warn',
+      title: `Test ${type}`,
+      href,
+    };
+  }
+
+  function makeC(): { c: any; loadLoadsSpy: jasmine.Spy; navSpy: jasmine.Spy } {
+    const navSpy = jasmine.createSpy('navigateByUrl').and.returnValue(Promise.resolve(true));
+    const c: any = makeComponent();
+    // Stub `loadLoads` so we don't fire real HTTP.
+    const loadLoadsSpy = spyOn(c, 'loadLoads').and.callFake(() => {});
+    c.router.navigateByUrl = navSpy;
+    return { c, loadLoadsSpy, navSpy };
+  }
+
+  it('overdue → activates smart filter "overdue" and reloads', () => {
+    const { c, loadLoadsSpy } = makeC();
+    c.smartFilterKeys = [];
+    c.applyAiInsight(makeInsight('overdue'));
+    expect(c.smartFilterKeys).toContain('overdue');
+    expect(loadLoadsSpy).toHaveBeenCalled();
+    expect(c.page).toBe(1);
+  });
+
+  it('missing_documents → activates smart filter "missing_docs"', () => {
+    const { c } = makeC();
+    c.smartFilterKeys = [];
+    c.applyAiInsight(makeInsight('missing_documents'));
+    expect(c.smartFilterKeys).toContain('missing_docs');
+  });
+
+  it('driver_idle → activates smart filter "idle_drivers"', () => {
+    const { c } = makeC();
+    c.smartFilterKeys = [];
+    c.applyAiInsight(makeInsight('driver_idle'));
+    expect(c.smartFilterKeys).toContain('idle_drivers');
+  });
+
+  it('does not duplicate an already-active filter', () => {
+    const { c, loadLoadsSpy } = makeC();
+    c.smartFilterKeys = ['overdue'];
+    c.applyAiInsight(makeInsight('overdue'));
+    expect(c.smartFilterKeys.filter((k: string) => k === 'overdue').length).toBe(1);
+    // No reload triggered if no chip change.
+    expect(loadLoadsSpy).not.toHaveBeenCalled();
+  });
+
+  it('unmapped types fall back to navigateByUrl(insight.href)', () => {
+    const { c, navSpy, loadLoadsSpy } = makeC();
+    c.smartFilterKeys = [];
+    c.applyAiInsight(makeInsight('rate_anomaly', '/reports/rate-anomaly'));
+    expect(navSpy).toHaveBeenCalledWith('/reports/rate-anomaly');
+    expect(loadLoadsSpy).not.toHaveBeenCalled();
+  });
+
+  it('isRowAttention flags DRAFT loads', () => {
+    const { c } = makeC();
+    expect(c.isRowAttention({
+      id: '1', load_number: 'L1', status: 'DRAFT', billing_status: 'PENDING',
+      attachment_types: [], attachment_count: 0,
+    } as any)).toBe(true);
+  });
+
+  it('isRowAttention flags DELIVERED loads missing BOL/POD', () => {
+    const { c } = makeC();
+    expect(c.isRowAttention({
+      id: '1', load_number: 'L1', status: 'DELIVERED', billing_status: 'PENDING',
+      attachment_types: ['RATE_CONFIRMATION'], attachment_count: 1,
+    } as any)).toBe(true);
+  });
+
+  it('isRowAttention does NOT flag DELIVERED loads with BOL', () => {
+    const { c } = makeC();
+    expect(c.isRowAttention({
+      id: '1', load_number: 'L1', status: 'DELIVERED', billing_status: 'PENDING',
+      attachment_types: ['BOL'], attachment_count: 1,
+    } as any)).toBe(false);
+  });
+
+  it('kanbanKeyForLoad maps statuses to columns correctly', () => {
+    const { c } = makeC();
+    expect(c.kanbanKeyForLoad({ status: 'DISPATCHED', billing_status: 'PENDING' } as any)).toBe('dispatched');
+    expect(c.kanbanKeyForLoad({ status: 'IN_TRANSIT', billing_status: 'PENDING' } as any)).toBe('in_transit');
+    expect(c.kanbanKeyForLoad({ status: 'DELIVERED', billing_status: 'PENDING' } as any)).toBe('delivered');
+    expect(c.kanbanKeyForLoad({ status: 'DELIVERED', billing_status: 'INVOICED' } as any)).toBe('invoiced');
+    expect(c.kanbanKeyForLoad({ status: 'DELIVERED', billing_status: 'FUNDED' } as any)).toBe('funded');
+    expect(c.kanbanKeyForLoad({ status: 'DELIVERED', billing_status: 'PAID' } as any)).toBe('funded');
+  });
+
+  it('hydrateViewMode reads localStorage and falls back to "cards" on invalid', () => {
+    const { c } = makeC();
+    try {
+      window.localStorage.setItem('loads.list.view', 'kanban');
+      c.hydrateViewMode();
+      expect(c.viewMode).toBe('kanban');
+      window.localStorage.setItem('loads.list.view', 'invalid');
+      c.hydrateViewMode();
+      expect(c.viewMode).toBe('cards');
+    } finally {
+      window.localStorage.removeItem('loads.list.view');
+    }
+  });
+
+  it('setViewMode persists to localStorage', () => {
+    const { c } = makeC();
+    try {
+      c.setViewMode('table');
+      expect(window.localStorage.getItem('loads.list.view')).toBe('table');
+    } finally {
+      window.localStorage.removeItem('loads.list.view');
+    }
+  });
+});

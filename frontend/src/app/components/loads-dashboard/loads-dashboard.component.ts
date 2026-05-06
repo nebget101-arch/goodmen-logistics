@@ -21,8 +21,11 @@ import {
   BrokerOption,
   SmartFilterCounts,
   SmartFilterKey,
-  SMART_FILTER_KEYS
+  SMART_FILTER_KEYS,
+  AiInsight,
+  AiInsightType
 } from '../../services/loads.service';
+import { LoadsViewMode } from './primitives/view-toggle.component';
 import { LoadTemplatesService } from '../../services/load-templates.service';
 import { KeyboardShortcutsService } from '../../shared/services/keyboard-shortcuts.service';
 import { UserPreferencesService, LoadsSavedView } from '../../services/user-preferences.service';
@@ -78,6 +81,21 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   /** FN-821: brief fade-in pulse on `.loads-viewport` whenever filters/sort change. */
   filterPulseActive = false;
   private filterPulseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ─── FN-1353: list view mode (Table | Cards | Kanban) ─────────────────────
+  /** Persisted in `localStorage` under `loads.list.view`. Default `cards`. */
+  viewMode: LoadsViewMode = 'cards';
+  /** Storage key — exposed for tests. */
+  static readonly VIEW_MODE_STORAGE_KEY = 'loads.list.view';
+
+  /** Pipeline groups for Kanban view (visual grouping by pipeline status only). */
+  readonly kanbanColumns: ReadonlyArray<{ key: string; label: string }> = [
+    { key: 'dispatched', label: 'Dispatched' },
+    { key: 'in_transit', label: 'In Transit' },
+    { key: 'delivered',  label: 'Delivered' },
+    { key: 'invoiced',   label: 'Invoiced' },
+    { key: 'funded',     label: 'Funded' },
+  ];
 
   // ─── FN-821: density mode ──────────────────────────────────────────────────
   densityMode: DensityMode = 'comfortable';
@@ -1009,6 +1027,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.statusFilterOptions = this.statusOptions.map(s => ({ value: s, label: this.getStatusLabel(s) }));
     this.billingFilterOptions = this.billingOptions.map(b => ({ value: b, label: this.getBillingLabel(b) }));
     this.initColumnVisibility();
+    // FN-1353: hydrate persisted view mode before first render so the right
+    // view container is mounted on initial paint.
+    this.hydrateViewMode();
     this.loadDropdownData();
     this.loadLoads();
     this.applyUseTemplateFromRouterState();
@@ -1623,6 +1644,169 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.smartFilterKeys = [];
     this.page = 1;
     this.loadLoads();
+  }
+
+  // ─── FN-1353: list view mode (Table | Cards | Kanban) ────────────────────
+
+  /** Hydrate `viewMode` from localStorage. Defaults to `cards`. */
+  hydrateViewMode(): void {
+    try {
+      const raw = (typeof window !== 'undefined' && window.localStorage)
+        ? window.localStorage.getItem(LoadsDashboardComponent.VIEW_MODE_STORAGE_KEY)
+        : null;
+      if (raw === 'table' || raw === 'cards' || raw === 'kanban') {
+        this.viewMode = raw;
+      } else {
+        this.viewMode = 'cards';
+      }
+    } catch {
+      this.viewMode = 'cards';
+    }
+  }
+
+  /** Persist + apply a new view mode. */
+  setViewMode(mode: LoadsViewMode): void {
+    if (this.viewMode === mode) { return; }
+    this.viewMode = mode;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(LoadsDashboardComponent.VIEW_MODE_STORAGE_KEY, mode);
+      }
+    } catch {
+      /* storage may be disabled (private mode); ignore. */
+    }
+  }
+
+  /**
+   * FN-1353 — Per-row attention predicate for Cards/Kanban views. A row
+   * gets the warning accent stripe when:
+   *   1. It needs attention by the existing rule (`isNeedsAttention`); OR
+   *   2. It is missing required documents (`missing_docs` smart-filter
+   *      logic — no BOL/POD attached for delivered/in-transit loads); OR
+   *   3. The user has the `idle_drivers` chip toggled on (per-row idle
+   *      data isn't on the list payload yet, so we keep this conservative).
+   */
+  isRowAttention(load: LoadListItem): boolean {
+    if (this.isNeedsAttention(load)) { return true; }
+    // Mirror the smart-filter "missing_docs" idea client-side.
+    const types = Array.isArray(load.attachment_types) ? load.attachment_types : [];
+    const status = (load.status || '').toString().toUpperCase();
+    if ((status === 'DELIVERED' || status === 'IN_TRANSIT' || status === 'EN_ROUTE')
+        && !types.includes('BOL')
+        && !types.includes('PROOF_OF_DELIVERY')) {
+      return true;
+    }
+    return false;
+  }
+
+  /** FN-1353 — Group filtered loads by pipeline column key for Kanban view. */
+  loadsForKanbanColumn(columnKey: string): LoadListItem[] {
+    const rows = this.filteredLoads;
+    return rows.filter((l) => this.kanbanKeyForLoad(l) === columnKey);
+  }
+
+  /** Map a load's (status, billing_status) pair to a Kanban column key. */
+  kanbanKeyForLoad(load: LoadListItem): string {
+    const ls = (load.status || '').toString().toUpperCase();
+    const bs = (load.billing_status || '').toString().toUpperCase();
+    if (bs === 'FUNDED' || bs === 'PAID') { return 'funded'; }
+    if (bs === 'INVOICED' || bs === 'SENT_TO_FACTORING') { return 'invoiced'; }
+    if (ls === 'DELIVERED') { return 'delivered'; }
+    if (ls === 'EN_ROUTE' || ls === 'PICKED_UP' || ls === 'IN_TRANSIT') { return 'in_transit'; }
+    if (ls === 'DISPATCHED') { return 'dispatched'; }
+    return 'dispatched';
+  }
+
+  // ─── FN-1353: AI insight → smart filter wiring ───────────────────────────
+
+  /** Mapping from AiInsight.type → SmartFilterKey for the in-app apply path. */
+  private readonly aiInsightFilterMap: Partial<Record<AiInsightType, SmartFilterKey>> = {
+    overdue: 'overdue',
+    missing_documents: 'missing_docs',
+    driver_idle: 'idle_drivers',
+  };
+
+  /**
+   * FN-1353 — invoked when an AI insight row is clicked. For mapped types
+   * (overdue / missing_documents / driver_idle), set the corresponding
+   * smart-filter chip active. For unmapped types, fall back to navigating
+   * via the original `insight.href`. After applying, scroll the list region
+   * into view on the next tick so the filter render completes first.
+   */
+  applyAiInsight(insight: AiInsight): void {
+    if (!insight) { return; }
+    const filterKey = this.aiInsightFilterMap[insight.type];
+    if (filterKey && SMART_FILTER_KEYS.includes(filterKey)) {
+      if (!this.smartFilterKeys.includes(filterKey)) {
+        this.smartFilterKeys = [...this.smartFilterKeys, filterKey];
+        this.page = 1;
+        this.loadLoads();
+      }
+      setTimeout(() => {
+        const el = document.querySelector('.table-card');
+        if (el && (el as HTMLElement).scrollIntoView) {
+          (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 0);
+      return;
+    }
+    // Unmapped types — navigate to the legacy href.
+    if (insight.href) {
+      this.router.navigateByUrl(insight.href);
+    }
+  }
+
+  // ─── FN-1353: row action handlers (shared across Cards / Kanban) ─────────
+
+  /** Open the read-only detail drawer for a load (Cards/Kanban "Open" action). */
+  onCardOpen(loadId: string): void {
+    if (loadId) { this.openLoadDrawer(loadId); }
+  }
+
+  /** Open the load wizard in edit mode for a load. */
+  onCardEdit(loadId: string): void {
+    if (loadId) { this.openLoadWizardForEdit(loadId); }
+  }
+
+  /** Clone a load — wraps the existing `cloneLoad(load)` helper for an id-only callsite. */
+  onCardClone(loadId: string): void {
+    if (!loadId) { return; }
+    const load = (this.loads || []).find((l) => l.id === loadId);
+    if (load) { this.cloneLoad(load); }
+  }
+
+  /** "View on map" → navigate to the existing load-map deep-link. */
+  onCardViewOnMap(loadId: string): void {
+    if (!loadId) { return; }
+    this.router.navigateByUrl(`/load-map?loadId=${encodeURIComponent(loadId)}`);
+  }
+
+  /** "Track driver" → navigate to fleet view scoped to this load's driver if known. */
+  onCardTrackDriver(loadId: string): void {
+    if (!loadId) { return; }
+    const load = (this.loads || []).find((l) => l.id === loadId);
+    if (load) {
+      this.router.navigateByUrl(`/load-map?loadId=${encodeURIComponent(loadId)}`);
+    }
+  }
+
+  /** "Copy link" → copy `/loads?loadId=…` to clipboard. */
+  onCardCopyLink(loadId: string): void {
+    if (!loadId) { return; }
+    const url = `${window.location.origin}/loads?loadId=${encodeURIComponent(loadId)}`;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(url).then(
+          () => {
+            this.successMessage = 'Load link copied to clipboard.';
+            setTimeout(() => { this.successMessage = ''; }, 2500);
+          },
+          () => { /* permission denied — silent fallback */ },
+        );
+      }
+    } catch {
+      /* clipboard unavailable — silent. */
+    }
   }
 
   onSearch(value: string): void {

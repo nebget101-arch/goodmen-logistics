@@ -38,6 +38,8 @@
     background: rgba(20, 184, 166, 0.18);
     border-color: rgba(20, 184, 166, 0.6);
     color: #2dd4bf;
+    /* FN-1353: token-driven cyan glow to make the active chip feel "live". */
+    box-shadow: 0 0 0 2px rgba(103, 232, 249, 0.18), 0 0 12px rgba(103, 232, 249, 0.35);
 
     .material-symbols-outlined {
       color: #2dd4bf;
