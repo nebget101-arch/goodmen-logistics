@@ -65,26 +65,11 @@ app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ─── Bull Queue initialization ───────────────────────────────────────────────
+// FN-1451: SAFER scraper + Bull scrape queue retired. FMCSA reference data
+// now comes from the bulk-importer pipeline (FN-1412/1420/1422) and is read
+// via fmcsa-reference (FN-1427).
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-let scrapeQueueInstance = null;
 let importQueueInstance = null;
-
-async function initScrapeQueue() {
-  if (!process.env.REDIS_URL) {
-    console.warn('[integrations] REDIS_URL not set — FMCSA scrape queue disabled. Dashboard API still works.');
-    return;
-  }
-  try {
-    const { createScrapeQueue } = require('@goodmen/shared/services/fmcsa-scrape-queue');
-    scrapeQueueInstance = createScrapeQueue(knex, REDIS_URL);
-    fmcsaSafetyRouter.initQueue(scrapeQueueInstance);
-    scrapeQueueInstance.initScheduler();
-    console.log('[integrations] FMCSA scrape queue initialized with daily scheduler');
-  } catch (err) {
-    console.error('[integrations] Failed to initialize scrape queue:', err.message);
-    console.error('[integrations] FMCSA scraping will be unavailable. Ensure Redis is running.');
-  }
-}
 
 async function initImportQueue() {
   if (!process.env.REDIS_URL) {
@@ -136,7 +121,6 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'goodmen-integrations-service',
-    scrapeQueue: scrapeQueueInstance ? 'connected' : 'unavailable',
     timestamp: new Date().toISOString()
   });
 });
@@ -149,15 +133,11 @@ app.listen(PORT, async () => {
     console.error('⚠️  Migration error (non-fatal):', err.message);
   }
   console.log(`🔌 Integrations service running on http://localhost:${PORT}`);
-  await initScrapeQueue();
   await initImportQueue();
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  if (scrapeQueueInstance) {
-    await scrapeQueueInstance.shutdown();
-  }
   if (importQueueInstance) {
     await importQueueInstance.shutdown();
   }
