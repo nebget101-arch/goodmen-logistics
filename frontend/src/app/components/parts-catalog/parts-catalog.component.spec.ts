@@ -800,4 +800,71 @@ describe('PartsCatalogComponent — FN-1111 duplicate detection + auto-SKU', () 
       expect(component.partForm.value.sku).toBe('CUSTOM-SKU-1');
     });
   });
+
+  // FN-1399: Print Label flow on part create
+  describe('FN-1399 — Print Label flow', () => {
+    it('opens the print confirm modal when create response includes a backend-generated barcode', () => {
+      api.createPart.and.returnValue(of({
+        message: 'Part created',
+        data: { id: 'p-new', sku: 'BOS-FIL-0001', name: 'Oil Filter', barcode: 'FN-AB23CD45' },
+      }));
+      component.openForm();
+      component.partForm.patchValue({
+        sku: 'BOS-FIL-0001',
+        name: 'Oil Filter',
+        category: 'Filtration',
+        manufacturer: 'Bosch',
+        unit_cost: 10,
+      });
+      component.savePart();
+
+      expect(component.printablePart).toEqual(jasmine.objectContaining({
+        sku: 'BOS-FIL-0001',
+        barcode: 'FN-AB23CD45',
+      }));
+    });
+
+    it('does not open the print modal if the create response has no barcode', () => {
+      api.createPart.and.returnValue(of({ message: 'ok', data: { id: 'p-new', sku: 'X', name: 'Y' } }));
+      component.openForm();
+      component.partForm.patchValue({
+        sku: 'X', name: 'Y', category: 'Z', manufacturer: 'M', unit_cost: 1,
+      });
+      component.savePart();
+      expect(component.printablePart).toBeNull();
+    });
+
+    it('printLabelForPart sets partForLabel and triggers window.print', fakeAsync(() => {
+      const printSpy = spyOn(window, 'print');
+      component.printLabelForPart({ id: 'p-1', sku: 'A', name: 'B', barcode: 'FN-XYZ12345' });
+      expect(component.partForLabel).toEqual(jasmine.objectContaining({ barcode: 'FN-XYZ12345' }));
+      tick(50);
+      expect(printSpy).toHaveBeenCalled();
+      tick(500);
+      expect(component.partForLabel).toBeNull();
+    }));
+
+    it('printLabelForPart no-ops on a part with no barcode', () => {
+      const printSpy = spyOn(window, 'print');
+      component.printLabelForPart({ id: 'p-1', sku: 'A', name: 'B' });
+      expect(printSpy).not.toHaveBeenCalled();
+      expect(component.partForLabel).toBeNull();
+    });
+
+    it('dismissPrintConfirm clears the modal without printing', () => {
+      const printSpy = spyOn(window, 'print');
+      component.printablePart = { id: 'p-1', sku: 'A', name: 'B', barcode: 'FN-XYZ12345' };
+      component.dismissPrintConfirm();
+      expect(component.printablePart).toBeNull();
+      expect(printSpy).not.toHaveBeenCalled();
+    });
+
+    it('vendorBarcodeOverride defaults to false on each open and resets on close', () => {
+      component.openForm();
+      expect(component.vendorBarcodeOverride).toBe(false);
+      component.vendorBarcodeOverride = true;
+      component.closeForm();
+      expect(component.vendorBarcodeOverride).toBe(false);
+    });
+  });
 });

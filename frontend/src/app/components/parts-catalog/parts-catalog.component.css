@@ -1056,3 +1056,90 @@ label app-confidence-badge {
   margin-left: 8px;
   vertical-align: middle;
 }
+
+/* ── FN-1399: Print Label flow ─────────────────────────────────────────────── */
+
+/* Vendor-barcode opt-in toggle below the read-only barcode field. */
+.parts-dashboard .barcode-override-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-light);
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.parts-dashboard .barcode-override-toggle input[type="checkbox"] {
+  margin: 0;
+}
+
+/* Post-create confirmation modal — narrower than the main edit modal. */
+.parts-dashboard .modal.print-confirm-modal {
+  max-width: 480px;
+}
+
+.parts-dashboard .print-confirm-msg {
+  margin: 0 0 10px;
+  color: #e2e8f0;
+  font-size: 14px;
+  line-height: 1.4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: baseline;
+}
+
+.parts-dashboard .print-confirm-sku {
+  color: var(--text-light);
+  font-size: 12px;
+}
+
+.parts-dashboard .print-confirm-code {
+  font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: #bae6fd;
+}
+
+/* Off-screen by default; flipped to the only visible element under @media print. */
+.label-print-area {
+  position: fixed;
+  left: -10000px;
+  top: -10000px;
+  z-index: -1;
+  background: #fff;
+}
+
+@media print {
+  /* Hide all UI chrome — only the label container prints. Mirrors the
+     pattern used by drivers.component.ts for the DQF print view. */
+  body * {
+    visibility: hidden;
+  }
+
+  .label-print-area,
+  .label-print-area * {
+    visibility: visible;
+  }
+
+  .label-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: auto;
+    z-index: 9999;
+    background: #fff;
+  }
+
+  /* Trim browser-default page margins so the 4x2" label sits flush. */
+  @page {
+    margin: 0.25in;
+  }
+}
