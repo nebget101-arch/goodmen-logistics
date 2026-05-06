@@ -31,6 +31,20 @@ function resolveImageR2Patch(input = {}) {
 }
 
 /**
+ * FN-1364: Coerce a missing/empty/whitespace-only category to 'Uncategorized'.
+ *
+ * The DB column is nullable as of FN-1363; product policy is "if AI couldn't
+ * classify it (or the user didn't pick a category), label it Uncategorized at
+ * the service layer so list/filter UI never has to render NULL." Manual paths
+ * that intentionally omit category get the same treatment.
+ */
+function normalizeCategory(value) {
+	if (typeof value !== 'string') return 'Uncategorized';
+	const trimmed = value.trim();
+	return trimmed === '' ? 'Uncategorized' : trimmed;
+}
+
+/**
  * Resolve manufacturer + vendor inputs into a normalized patch:
  *   { manufacturer_id, manufacturer, vendor_id, preferred_vendor_name }
  *
@@ -222,7 +236,7 @@ async function createPart(partData) {
 		const part = await db('parts').insert({
 			sku: partData.sku.toUpperCase(),
 			name: partData.name,
-			category: partData.category,
+			category: normalizeCategory(partData.category),
 			description: partData.description,
 			unit_cost: partData.unit_cost || 0,
 			unit_price: partData.unit_price || 0,
@@ -398,7 +412,7 @@ async function bulkCreateParts(items) {
 		prepared.push({
 			sku: c.sku,
 			name: c.name,
-			category: c.category,
+			category: normalizeCategory(c.category),
 			description: c.description,
 			unit_cost: c.unit_cost || 0,
 			unit_price: c.unit_price || 0,

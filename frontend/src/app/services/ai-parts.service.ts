@@ -171,7 +171,7 @@ export class AiPartsService {
     form.append('image', file, file.name || 'part.jpg');
 
     return this.http
-      .post<PartPhotoIntakeResponse>(this.endpoint, form)
+      .post<any>(this.endpoint, form)
       .pipe(
         map((res) => this.normalize(res)),
         catchError((err: HttpErrorResponse) => throwError(() => this.toFriendlyError(err))),
@@ -208,22 +208,27 @@ export class AiPartsService {
     );
   }
 
-  private normalize(res: PartPhotoIntakeResponse): PartPhotoIntakeResponse {
-    // Defensive: BE handler always returns `aiResult` + `r2Key`, but null
-    // out missing nested fields so the UI doesn't blow up if the contract
-    // drifts.
-    const ai = res?.aiResult || ({} as PartAiResult);
+  private normalize(res: any): PartPhotoIntakeResponse {
+    // FN-1365: the photo intake handler wraps the vision-handler payload as
+    //   { aiResult: { success, data: {...flat fields}, meta }, r2Key, ... }
+    // so the actual fields live under `aiResult.data`, not `aiResult`. Older
+    // callers may still hand us a flat aiResult; accept either shape so the
+    // service stays tolerant if the BE contract drifts back.
+    const wrapper = res?.aiResult || {};
+    const ai = (wrapper && typeof wrapper === 'object' && wrapper.data && typeof wrapper.data === 'object')
+      ? wrapper.data
+      : wrapper;
     return {
       success: !!res?.success,
       aiResult: {
-        manufacturer: ai.manufacturer ?? null,
-        partNumber: ai.partNumber ?? null,
-        category: ai.category ?? null,
-        descriptionGuess: ai.descriptionGuess ?? null,
-        dimensionsGuess: ai.dimensionsGuess ?? null,
-        confidence: ai.confidence || {},
-        isUnreadable: !!ai.isUnreadable,
-        warnings: Array.isArray(ai.warnings) ? ai.warnings : [],
+        manufacturer: ai?.manufacturer ?? null,
+        partNumber: ai?.partNumber ?? null,
+        category: ai?.category ?? null,
+        descriptionGuess: ai?.descriptionGuess ?? null,
+        dimensionsGuess: ai?.dimensionsGuess ?? null,
+        confidence: ai?.confidence || {},
+        isUnreadable: !!ai?.isUnreadable,
+        warnings: Array.isArray(ai?.warnings) ? ai.warnings : [],
       },
       r2Key: res?.r2Key || '',
       meta: res?.meta,

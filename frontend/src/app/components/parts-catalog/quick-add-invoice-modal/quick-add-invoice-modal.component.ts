@@ -130,6 +130,10 @@ export class QuickAddInvoiceModalComponent implements OnInit, OnChanges {
     return {
       sku: line.sku || '',
       description: line.description || '',
+      // FN-1365: editable per-row category. The AI invoice handler doesn't
+      // extract category, so this starts blank — the user fills it in if
+      // they want it set on the created part. Optional on the wire.
+      category: '',
       qty: line.qty,
       unitCost: line.unitCost,
       manufacturer: line.manufacturer || '',
@@ -163,10 +167,16 @@ export class QuickAddInvoiceModalComponent implements OnInit, OnChanges {
     row.selected = !row.selected;
   }
 
-  onRowFieldInput(row: ReviewRow, field: 'sku' | 'description', event: Event): void {
+  onRowFieldInput(
+    row: ReviewRow,
+    field: 'sku' | 'description' | 'category',
+    event: Event,
+  ): void {
     const target = event.target as HTMLInputElement | null;
     row[field] = target?.value ?? '';
-    row.confidence = { ...row.confidence, [field]: undefined };
+    if (field === 'sku' || field === 'description') {
+      row.confidence = { ...row.confidence, [field]: undefined };
+    }
     if (field === 'sku') {
       // Re-evaluate the catalog-collision flag — the user may have edited
       // away from a duplicate, or vice-versa.
@@ -254,6 +264,7 @@ export class QuickAddInvoiceModalComponent implements OnInit, OnChanges {
       .map((r) => {
         const sku = (r.sku || '').trim();
         const description = (r.description || '').trim();
+        const category = (r.category || '').trim();
         // BE requires `name`; we map description → name (fallback to SKU
         // so we never send an empty name when the user keeps a description-
         // less line). The BE rejects missing-sku/name with a clean
@@ -263,6 +274,10 @@ export class QuickAddInvoiceModalComponent implements OnInit, OnChanges {
           sku,
           name,
           description,
+          // FN-1365: optional per-row category. Omit when blank so the BE
+          // tolerate-null path (FN-1364) and DB-nullable column (FN-1363)
+          // accept the row without a category.
+          category: category || undefined,
           manufacturer: (r.manufacturer || '').trim() || undefined,
           preferred_vendor_name: (this.vendor || '').trim() || undefined,
           unit_cost: r.unitCost,
@@ -292,6 +307,8 @@ export class QuickAddInvoiceModalComponent implements OnInit, OnChanges {
 interface ReviewRow {
   sku: string;
   description: string;
+  /** FN-1365: optional per-row category — sent on bulk-create when non-empty. */
+  category: string;
   qty: number;
   unitCost: number;
   manufacturer: string;

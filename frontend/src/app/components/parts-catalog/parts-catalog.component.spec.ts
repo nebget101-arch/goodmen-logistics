@@ -276,6 +276,113 @@ describe('PartsCatalogComponent — FN-1099 Snap Photo flow', () => {
     }));
   });
 
+  // FN-1365: SKU duplicate check on the photo flow (parity with FN-1107 barcode)
+  describe('FN-1365 — SKU duplicate check after photo identify', () => {
+    it('opens Edit Part modal when the AI SKU already exists in the catalog', () => {
+      aiParts.identifyFromPhoto.and.returnValue(of(makeAiResponse()));
+      // Simulate a duplicate-check hit on the AI-extracted SKU.
+      api.duplicateCheckParts.and.returnValue(of({
+        data: [
+          { id: 'p-existing', sku: 'F002H20064', name: 'Oil filter', manufacturer: 'Bosch', similarity: 1.0 },
+        ],
+      }));
+      api.getPartById.and.returnValue(of({
+        data: {
+          id: 'p-existing',
+          sku: 'F002H20064',
+          name: 'Oil filter',
+          category: 'Filtration',
+          manufacturer: 'Bosch',
+          manufacturer_id: 7,
+          unit_cost: 12.5,
+          quantity_on_hand: 4,
+          uom: 'each',
+        },
+      }));
+
+      component.onSnapPhotoSelected({ target: { files: [makeFile()] } } as unknown as Event);
+
+      expect(api.duplicateCheckParts).toHaveBeenCalled();
+      const dupArg = api.duplicateCheckParts.calls.mostRecent().args[0];
+      expect(dupArg.sku).toBe('F002H20064');
+      expect(api.getPartById).toHaveBeenCalledWith('p-existing');
+
+      // Edit mode: editingPartId set, NOT the prefilled-create flow.
+      expect(component.showForm).toBe(true);
+      expect(component.editingPartId).toBe('p-existing');
+      expect(component.partForm.value.sku).toBe('F002H20064');
+      // aiR2Key is only set on the Create-prefilled path; in Edit it stays null.
+      expect(component.aiR2Key).toBeNull();
+    });
+
+    it('does case-insensitive SKU match', () => {
+      aiParts.identifyFromPhoto.and.returnValue(of(makeAiResponse({ partNumber: 'abc-123' })));
+      api.duplicateCheckParts.and.returnValue(of({
+        data: [{ id: 'p-1', sku: 'ABC-123', name: 'X', manufacturer: 'Y', similarity: 1.0 }],
+      }));
+      api.getPartById.and.returnValue(of({ data: { id: 'p-1', sku: 'ABC-123', name: 'X' } }));
+
+      component.onSnapPhotoSelected({ target: { files: [makeFile()] } } as unknown as Event);
+
+      expect(component.editingPartId).toBe('p-1');
+    });
+
+    it('opens Create prefilled when duplicate-check returns no exact SKU match', () => {
+      aiParts.identifyFromPhoto.and.returnValue(of(makeAiResponse()));
+      api.duplicateCheckParts.and.returnValue(of({
+        // Fuzzy candidates but none matches the SKU exactly.
+        data: [{ id: 'p-other', sku: 'F002H99999', name: 'Other filter', manufacturer: 'Bosch', similarity: 0.6 }],
+      }));
+
+      component.onSnapPhotoSelected({ target: { files: [makeFile()] } } as unknown as Event);
+
+      expect(component.editingPartId).toBeNull();
+      expect(component.showForm).toBe(true);
+      expect(component.partForm.value.sku).toBe('F002H20064');
+      expect(component.aiR2Key).toBe('parts/photos/abc.jpg');
+      expect(api.getPartById).not.toHaveBeenCalled();
+    });
+
+    it('falls back to Create prefilled on duplicate-check error', () => {
+      aiParts.identifyFromPhoto.and.returnValue(of(makeAiResponse()));
+      api.duplicateCheckParts.and.returnValue(throwError(() => ({ status: 500 })));
+
+      component.onSnapPhotoSelected({ target: { files: [makeFile()] } } as unknown as Event);
+
+      expect(component.editingPartId).toBeNull();
+      expect(component.showForm).toBe(true);
+      expect(component.partForm.value.sku).toBe('F002H20064');
+      expect(component.aiR2Key).toBe('parts/photos/abc.jpg');
+    });
+
+    it('skips the SKU lookup when AI returned no partNumber', () => {
+      aiParts.identifyFromPhoto.and.returnValue(of(makeAiResponse({ partNumber: null })));
+
+      component.onSnapPhotoSelected({ target: { files: [makeFile()] } } as unknown as Event);
+
+      expect(api.duplicateCheckParts).not.toHaveBeenCalled();
+      expect(component.editingPartId).toBeNull();
+      expect(component.showForm).toBe(true);
+      expect(component.aiR2Key).toBe('parts/photos/abc.jpg');
+    });
+
+    it('falls back to local catalog cache when getPartById fails', () => {
+      aiParts.identifyFromPhoto.and.returnValue(of(makeAiResponse()));
+      api.duplicateCheckParts.and.returnValue(of({
+        data: [{ id: 'p-cached', sku: 'F002H20064', name: 'Oil filter', manufacturer: 'Bosch', similarity: 1.0 }],
+      }));
+      api.getPartById.and.returnValue(throwError(() => ({ status: 500 })));
+      component.parts = [
+        { id: 'p-cached', sku: 'F002H20064', name: 'Oil filter', category: 'Filtration', manufacturer: 'Bosch', uom: 'each', quantity_on_hand: 9 },
+      ];
+
+      component.onSnapPhotoSelected({ target: { files: [makeFile()] } } as unknown as Event);
+
+      expect(component.editingPartId).toBe('p-cached');
+      expect(component.partForm.value.quantity_on_hand).toBe(9);
+    });
+  });
+
   describe('closeForm clears AI state', () => {
     it('drops r2Key, confidence, and warnings on close', () => {
       aiParts.identifyFromPhoto.and.returnValue(of(makeAiResponse({
