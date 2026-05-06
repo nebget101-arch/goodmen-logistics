@@ -1,0 +1,126 @@
+<ng-container *ngIf="loading">
+  <div class="cs-trigger cs-skeleton" [class.cs-trigger--compact]="compact" aria-busy="true" aria-label="Loading companies">
+    <span class="cs-avatar cs-skeleton-block"></span>
+    <span class="cs-trigger-body">
+      <span class="cs-skeleton-line cs-skeleton-line--name"></span>
+      <span class="cs-skeleton-line cs-skeleton-line--chip"></span>
+    </span>
+  </div>
+</ng-container>
+
+<ng-container *ngIf="!loading">
+  <ng-container *ngIf="isReadOnly; else interactiveTpl">
+    <div class="cs-trigger cs-trigger--readonly" [class.cs-trigger--compact]="compact">
+      <ng-container *ngTemplateOutlet="triggerInner; context: { row: selectedRow }"></ng-container>
+    </div>
+  </ng-container>
+
+  <ng-template #interactiveTpl>
+    <button
+      #triggerBtn
+      type="button"
+      class="cs-trigger"
+      [class.cs-trigger--compact]="compact"
+      [class.cs-trigger--open]="open"
+      role="button"
+      aria-haspopup="listbox"
+      [attr.aria-expanded]="triggerAriaExpanded"
+      [attr.aria-label]="'Switch operating company'"
+      (click)="toggleOpen()"
+      (keydown)="onTriggerKeydown($event)"
+    >
+      <ng-container *ngTemplateOutlet="triggerInner; context: { row: selectedRow }"></ng-container>
+      <span class="cs-chevron material-symbols-outlined" aria-hidden="true">expand_more</span>
+    </button>
+
+    <div
+      #popover
+      class="cs-popover"
+      [class.cs-popover--compact]="compact"
+      [class.cs-popover--mobile-sheet]="compact && isMobileViewport"
+      *ngIf="open"
+    >
+      <div class="cs-search-row">
+        <span class="cs-search-icon material-symbols-outlined" aria-hidden="true">search</span>
+        <input
+          #searchInput
+          type="text"
+          class="cs-search-input"
+          [value]="search"
+          (input)="onSearchChange($any($event.target).value)"
+          (keydown)="onListKeydown($event)"
+          placeholder="Search companies or MC#"
+          aria-label="Search companies"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <ul
+        class="cs-listbox"
+        role="listbox"
+        aria-label="Operating companies"
+        (keydown)="onListKeydown($event)"
+        tabindex="-1"
+      >
+        <ng-container *ngFor="let row of filteredRows; trackBy: trackById; let i = index">
+          <li
+            *ngIf="row.isAllEntities && i === 0"
+            class="cs-section-divider"
+            aria-hidden="true"
+          ></li>
+          <li
+            #rowEl
+            class="cs-row"
+            [class.cs-row--active]="i === activeIndex"
+            [class.cs-row--selected]="selectedRow?.id === row.id"
+            [class.cs-row--all]="row.isAllEntities"
+            role="option"
+            [attr.aria-selected]="selectedRow?.id === row.id ? 'true' : 'false'"
+            (click)="onSelectRow(row)"
+            (mouseenter)="activeIndex = i"
+          >
+            <span
+              class="cs-avatar"
+              [style.background]="row.avatar.bg"
+              [style.color]="row.avatar.fg"
+              aria-hidden="true"
+            >{{ row.avatar.initials }}</span>
+            <span class="cs-row-body">
+              <span class="cs-row-name">{{ row.name }}</span>
+              <span class="cs-row-chip" *ngIf="row.mcNumber">MC {{ row.mcNumber }}</span>
+            </span>
+            <span
+              class="cs-row-check material-symbols-outlined"
+              *ngIf="selectedRow?.id === row.id"
+              aria-hidden="true"
+            >check</span>
+          </li>
+        </ng-container>
+
+        <li class="cs-empty" *ngIf="filteredRows.length === 0">No companies match "{{ search }}".</li>
+      </ul>
+    </div>
+  </ng-template>
+</ng-container>
+
+<ng-template #triggerInner let-row="row">
+  <ng-container *ngIf="row; else placeholderTpl">
+    <span
+      class="cs-avatar"
+      [style.background]="row.avatar.bg"
+      [style.color]="row.avatar.fg"
+      aria-hidden="true"
+    >{{ row.avatar.initials }}</span>
+    <span class="cs-trigger-body">
+      <span class="cs-trigger-name">{{ row.name }}</span>
+      <span class="cs-trigger-chip" *ngIf="row.mcNumber">MC {{ row.mcNumber }}</span>
+    </span>
+  </ng-container>
+  <ng-template #placeholderTpl>
+    <span class="cs-avatar cs-avatar--empty" aria-hidden="true">·</span>
+    <span class="cs-trigger-body">
+      <span class="cs-trigger-name cs-trigger-name--placeholder">Select company</span>
+    </span>
+  </ng-template>
+</ng-template>

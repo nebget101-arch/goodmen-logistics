@@ -9,6 +9,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import { AiSelectComponent } from './ai-select/ai-select.component';
 import { AiDatePickerComponent } from './ai-date-picker/ai-date-picker.component';
+import { CompanySwitcherComponent } from './company-switcher/company-switcher.component';
 import { BinPickerComponent } from './components/bin-picker/bin-picker.component';
 import { StopCardComponent } from './components/stop-card/stop-card.component';
 import { KeyboardShortcutsHelpComponent } from './components/keyboard-shortcuts-help/keyboard-shortcuts-help.component';
@@ -26,6 +27,7 @@ import { FabSafeAreaDirective } from '../directives/fab-safe-area.directive';
   declarations: [
     AiSelectComponent,
     AiDatePickerComponent,
+    CompanySwitcherComponent,
     BinPickerComponent,
     StopCardComponent,
     KeyboardShortcutsHelpComponent,
@@ -54,6 +56,7 @@ import { FabSafeAreaDirective } from '../directives/fab-safe-area.directive';
   exports: [
     AiSelectComponent,
     AiDatePickerComponent,
+    CompanySwitcherComponent,
     BinPickerComponent,
     StopCardComponent,
     KeyboardShortcutsHelpComponent,
