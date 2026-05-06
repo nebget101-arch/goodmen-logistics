@@ -444,6 +444,43 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
     return (this.loadDetail?.status as LoadStatus) ?? null;
   }
 
+  // ─── FN-1439: Suggest-driver modal ────────────────────────────────────────
+
+  /** True when the suggest-driver modal is open over the drawer. */
+  showRecommendDriverModal = false;
+
+  /**
+   * Open the AI suggest-driver modal. Available on the Driver tab when no
+   * driver is currently assigned. The modal fetches its own candidates from
+   * `POST /api/loads/:id/recommend-driver`.
+   */
+  openRecommendDriverModal(): void {
+    if (!this.loadId) return;
+    this.showRecommendDriverModal = true;
+  }
+
+  closeRecommendDriverModal(): void {
+    this.showRecommendDriverModal = false;
+  }
+
+  /**
+   * The modal calls the existing assignment endpoint itself (with the AI
+   * rationale fields) and emits the refreshed LoadDetail. We refresh local
+   * state and bubble up to the parent so the loads list reflects the assignment.
+   */
+  onRecommendDriverAssigned(refreshed: LoadDetail): void {
+    this.loadDetail = refreshed;
+    this.populateFromDetail(refreshed);
+    this.showRecommendDriverModal = false;
+    this.savedLoad.emit(refreshed);
+  }
+
+  /** "Assign manually" link in the empty state — close modal, switch to Driver tab. */
+  onRecommendDriverManualFallback(): void {
+    this.showRecommendDriverModal = false;
+    this.activeTab = 'driver';
+  }
+
   // ─── FN-818: AI extraction header helpers ─────────────────────────────────
 
   /** True when the current load was created by an AI extractor or inbound email. */

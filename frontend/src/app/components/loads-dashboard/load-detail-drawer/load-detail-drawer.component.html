@@ -135,15 +135,37 @@
       (stopsChange)="onStopsChange($event)"
     ></app-step-stops>
 
-    <app-wizard-step-driver
-      *ngIf="activeTab === 'driver' && !loading"
-      [driverId]="driverId"
-      [truckId]="truckId"
-      [trailerId]="trailerId"
-      (driverIdChange)="onDriverChange($event)"
-      (truckIdChange)="onTruckChange($event)"
-      (trailerIdChange)="onTrailerChange($event)"
-    ></app-wizard-step-driver>
+    <ng-container *ngIf="activeTab === 'driver' && !loading">
+      <!-- FN-1439: AI-suggested driver CTA. Only useful when no driver is
+           currently assigned; manual dropdown below remains the fallback. -->
+      <div class="load-drawer__suggest-driver" *ngIf="!driverId">
+        <div class="load-drawer__suggest-driver-copy">
+          <span class="material-symbols-outlined">auto_awesome</span>
+          <div>
+            <strong>Need a driver fast?</strong>
+            <p>Let AI rank the best fits by HOS, distance, equipment, and history.</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="openRecommendDriverModal()"
+          data-testid="suggest-driver-cta"
+        >
+          <span class="material-symbols-outlined">auto_awesome</span>
+          Suggest driver
+        </button>
+      </div>
+
+      <app-wizard-step-driver
+        [driverId]="driverId"
+        [truckId]="truckId"
+        [trailerId]="trailerId"
+        (driverIdChange)="onDriverChange($event)"
+        (truckIdChange)="onTruckChange($event)"
+        (trailerIdChange)="onTrailerChange($event)"
+      ></app-wizard-step-driver>
+    </ng-container>
 
     <app-step-attachments
       *ngIf="activeTab === 'attachments' && !loading"
@@ -189,6 +211,16 @@
       {{ saving ? 'Saving…' : 'Save' }}
     </button>
   </footer>
+
+  <!-- ── FN-1439: Suggest-driver modal ────────────────────────────────────── -->
+  <app-recommend-driver-modal
+    [open]="showRecommendDriverModal"
+    [loadId]="loadId"
+    [loadDetail]="loadDetail"
+    (close)="closeRecommendDriverModal()"
+    (assigned)="onRecommendDriverAssigned($event)"
+    (manualAssign)="onRecommendDriverManualFallback()"
+  ></app-recommend-driver-modal>
 
   <!-- ── Unsaved-changes dialog ───────────────────────────────────────────── -->
   <div

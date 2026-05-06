@@ -4361,4 +4361,274 @@ router.post('/:id/return-load', requireRole(['admin', 'dispatch']), async (req, 
   }
 });
 
+// FN-1438: AI load-to-driver assignment ----------------------------------
+// Fetches the load + the eligible candidate-driver pool (active, in tenant,
+// positive HOS remaining), caps to the 25 closest by haversine, and proxies
+// to the AI service for ranking. Returns 200 with `{ candidates: [], reasoning }`
+// on AI failure so the dispatcher UI can fall back to manual assignment
+// rather than blocking.
+const RECOMMEND_DRIVER_CAP = 25;
+const RECOMMEND_DRIVER_AI_TIMEOUT_MS = 15000;
+const HOS_DRIVE_CAP_HOURS_FOR_RECO = 11;
+const HOS_DUTY_CAP_HOURS_FOR_RECO = 14;
+
+function haversineMiles(lat1, lng1, lat2, lng2) {
+  if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return null;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const earthRadiusMi = 3958.7613;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMi * c;
+}
+
+router.post('/:id/recommend-driver', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const startTime = Date.now();
+  const loadId = req.params.id;
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  if (!loadId || !UUID_RE.test(loadId)) {
+    return res.status(400).json({ success: false, error: 'Invalid load id' });
+  }
+  if (!tenantId) {
+    return res.status(403).json({ success: false, error: 'Forbidden: tenant context required' });
+  }
+
+  try {
+    // Fetch load + first pickup stop + origin lat/lng (resolved via zip_codes).
+    const loadResult = await query(
+      `
+        WITH first_pickup AS (
+          SELECT s.load_id, s.stop_date, s.zip
+          FROM load_stops s
+          WHERE s.load_id = $1 AND s.stop_type = 'PICKUP'
+          ORDER BY s.sequence ASC NULLS LAST, s.created_at ASC NULLS LAST
+          LIMIT 1
+        )
+        SELECT
+          l.id,
+          l.broker_id,
+          l.pickup_date,
+          l.driver_id,
+          l.ai_metadata,
+          fp.zip AS pickup_zip,
+          fp.stop_date AS pickup_stop_date,
+          zc.latitude AS origin_lat,
+          zc.longitude AS origin_lng
+        FROM loads l
+        LEFT JOIN first_pickup fp ON fp.load_id = l.id
+        LEFT JOIN zip_codes zc ON zc.zip = fp.zip
+        WHERE l.id = $1::uuid
+          AND l.tenant_id = $2
+          AND ($3::uuid IS NULL OR l.operating_entity_id = $3)
+      `,
+      [loadId, tenantId, operatingEntityId]
+    );
+
+    if (loadResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Load not found' });
+    }
+    const loadRow = loadResult.rows[0];
+    const originLat = loadRow.origin_lat != null ? Number(loadRow.origin_lat) : null;
+    const originLng = loadRow.origin_lng != null ? Number(loadRow.origin_lng) : null;
+    const pickupAtRaw = loadRow.pickup_stop_date || loadRow.pickup_date || null;
+    const pickupAt = pickupAtRaw ? new Date(pickupAtRaw).toISOString() : null;
+    const aiMeta = loadRow.ai_metadata && typeof loadRow.ai_metadata === 'object'
+      ? loadRow.ai_metadata
+      : {};
+    const loadEquipmentClass = aiMeta.equipmentClass || aiMeta.equipment_class || null;
+    const customerId = loadRow.broker_id || null;
+
+    // Pull the candidate-driver pool. Tenant + OE scoped, status=active, plus
+    // each driver's latest HOS, last delivery zip (for current location), the
+    // truck class for equipment matching, and the most recent load they ran
+    // for this broker (treated as "customer" for prior-history rationale).
+    const candParams = [tenantId, operatingEntityId, customerId];
+    const candResult = await query(
+      `
+        WITH latest_hos AS (
+          SELECT DISTINCT ON (driver_id)
+            driver_id, record_date, on_duty_hours, driving_hours
+          FROM hos_records
+          ORDER BY driver_id, record_date DESC
+        ),
+        last_delivery AS (
+          SELECT DISTINCT ON (l.driver_id)
+            l.driver_id, s.zip
+          FROM loads l
+          JOIN load_stops s ON s.load_id = l.id
+          WHERE s.stop_type = 'DELIVERY'
+            AND l.driver_id IS NOT NULL
+            AND l.tenant_id = $1
+          ORDER BY l.driver_id,
+                   COALESCE(s.stop_date, l.completed_date, l.created_at::date) DESC
+        ),
+        last_with_broker AS (
+          SELECT l.driver_id,
+                 MAX(COALESCE(l.completed_date, l.created_at::date)) AS last_with_broker_date
+          FROM loads l
+          WHERE l.driver_id IS NOT NULL
+            AND l.tenant_id = $1
+            AND $3::uuid IS NOT NULL
+            AND l.broker_id = $3::uuid
+          GROUP BY l.driver_id
+        )
+        SELECT
+          d.id AS driver_id,
+          TRIM(CONCAT_WS(' ', d.first_name, d.last_name)) AS name,
+          zc.latitude AS lat,
+          zc.longitude AS lng,
+          h.driving_hours,
+          h.on_duty_hours,
+          v.vehicle_type AS equipment_class,
+          lwb.last_with_broker_date
+        FROM drivers d
+        LEFT JOIN latest_hos h ON h.driver_id = d.id
+        LEFT JOIN last_delivery ld ON ld.driver_id = d.id
+        LEFT JOIN zip_codes zc ON zc.zip = ld.zip
+        LEFT JOIN vehicles v ON v.id = d.truck_id
+        LEFT JOIN last_with_broker lwb ON lwb.driver_id = d.id
+        WHERE d.tenant_id = $1
+          AND ($2::uuid IS NULL OR d.operating_entity_id = $2)
+          AND LOWER(COALESCE(d.status, 'active')) = 'active'
+      `,
+      candParams
+    );
+
+    // Drop drivers with non-positive HOS *before* asking the AI to rank them.
+    // If we have no HOS record at all we keep the driver but report null and
+    // let the AI handler decide — better than silently filtering.
+    const eligible = [];
+    for (const row of candResult.rows) {
+      const drivingHours = row.driving_hours != null ? Number(row.driving_hours) : null;
+      const onDutyHours = row.on_duty_hours != null ? Number(row.on_duty_hours) : null;
+      let hosRemainingHours = null;
+      if (drivingHours != null && onDutyHours != null) {
+        hosRemainingHours = Math.max(
+          0,
+          Math.min(
+            HOS_DRIVE_CAP_HOURS_FOR_RECO - drivingHours,
+            HOS_DUTY_CAP_HOURS_FOR_RECO - onDutyHours
+          )
+        );
+        if (hosRemainingHours <= 0) continue;
+      }
+      const lat = row.lat != null ? Number(row.lat) : null;
+      const lng = row.lng != null ? Number(row.lng) : null;
+      const distanceMiles = haversineMiles(originLat, originLng, lat, lng);
+      eligible.push({
+        driverId: row.driver_id,
+        name: row.name || null,
+        lat,
+        lng,
+        hosRemainingHours,
+        equipmentClass: row.equipment_class || null,
+        lastLoadWithCustomer: row.last_with_broker_date
+          ? new Date(row.last_with_broker_date).toISOString().slice(0, 10)
+          : null,
+        _distanceMiles: distanceMiles
+      });
+    }
+
+    // Cap pool size before paying the LLM cost. Drivers with no resolved
+    // location sort last so they only fill in when we have headroom.
+    eligible.sort((a, b) => {
+      const aDist = a._distanceMiles == null ? Infinity : a._distanceMiles;
+      const bDist = b._distanceMiles == null ? Infinity : b._distanceMiles;
+      return aDist - bDist;
+    });
+    const candidatePool = eligible.slice(0, RECOMMEND_DRIVER_CAP).map((c) => {
+      // strip the internal sort key before sending to the AI service
+      const { _distanceMiles, ...rest } = c;
+      return rest;
+    });
+
+    if (candidatePool.length === 0) {
+      const duration = Date.now() - startTime;
+      dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 200, duration, {
+        candidates: 0,
+        reason: 'no_eligible_drivers'
+      });
+      return res.json({
+        success: true,
+        candidates: [],
+        reasoning: 'No drivers in this tenant currently have positive HOS remaining.'
+      });
+    }
+
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+    const signal =
+      typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(RECOMMEND_DRIVER_AI_TIMEOUT_MS)
+        : undefined;
+
+    const aiCallStart = Date.now();
+    let aiPayload;
+    try {
+      const aiRes = await fetch(`${aiServiceUrl}/api/ai/loads/recommend-driver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loadId,
+          load: {
+            originLat,
+            originLng,
+            pickupAt,
+            equipmentClass: loadEquipmentClass,
+            customerId
+          },
+          candidateDrivers: candidatePool
+        }),
+        signal
+      });
+      const aiDuration = Date.now() - aiCallStart;
+      if (!aiRes.ok) {
+        const snippet = await aiRes.text().catch(() => '');
+        dtLogger.error('loads_recommend_driver_ai_http', {
+          status: aiRes.status,
+          snippet: snippet.slice(0, 200),
+          aiDurationMs: aiDuration
+        });
+        return res.json({
+          success: true,
+          candidates: [],
+          reasoning: 'AI service unavailable'
+        });
+      }
+      aiPayload = await aiRes.json();
+    } catch (fetchErr) {
+      const aiDuration = Date.now() - aiCallStart;
+      dtLogger.error('loads_recommend_driver_ai_fetch_failed', {
+        err: fetchErr?.message || String(fetchErr),
+        aiDurationMs: aiDuration
+      });
+      return res.json({
+        success: true,
+        candidates: [],
+        reasoning: 'AI service unavailable'
+      });
+    }
+
+    const candidates = Array.isArray(aiPayload?.candidates) ? aiPayload.candidates : [];
+    const reasoning = typeof aiPayload?.reasoning === 'string' ? aiPayload.reasoning : '';
+
+    const duration = Date.now() - startTime;
+    dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 200, duration, {
+      candidates: candidates.length,
+      poolSize: candidatePool.length
+    });
+
+    return res.json({ success: true, candidates, reasoning });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    dtLogger.error('loads_recommend_driver_failed', error, { loadId });
+    dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 500, duration);
+    return res.status(500).json({ success: false, error: 'Failed to recommend driver' });
+  }
+});
+
 module.exports = router;

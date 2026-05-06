@@ -29,6 +29,7 @@ import { StepStopsComponent } from './load-wizard/step-stops/step-stops.componen
 import { WizardStepDriverComponent } from './load-wizard/step-driver/step-driver.component';
 import { StepAttachmentsComponent } from './load-wizard/step-attachments/step-attachments.component';
 import { LoadDetailDrawerComponent } from './load-detail-drawer/load-detail-drawer.component';
+import { RecommendDriverModalComponent } from './recommend-driver-modal/recommend-driver-modal.component';
 import { LoadsHeroCtaComponent } from './loads-hero-cta/loads-hero-cta.component';
 import { LoadTemplatesComponent } from './load-templates/load-templates.component';
 import { IntelligencePanelComponent } from './intelligence-panel/intelligence-panel.component';
@@ -79,6 +80,7 @@ const routes: Routes = [
     WizardStepDriverComponent,
     StepAttachmentsComponent,
     LoadDetailDrawerComponent,
+    RecommendDriverModalComponent,
     LoadsHeroCtaComponent,
     LoadTemplatesComponent,
     IntelligencePanelComponent,
