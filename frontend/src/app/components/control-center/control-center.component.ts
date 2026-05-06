@@ -22,6 +22,7 @@ import {
 } from './quick-actions/quick-actions.component';
 import {
   defaultLayoutForRole,
+  LAYOUT_PRESETS,
   normalizeRole,
   quickActionsForRole,
   RoleKey,
@@ -31,6 +32,7 @@ import {
   DashboardLayout,
   DashboardLayoutService,
 } from '../../services/dashboard-layout.service';
+import { PresetSwitcherComponent } from './preset-switcher/preset-switcher.component';
 
 @Component({
   selector: 'app-control-center',
@@ -42,6 +44,7 @@ import {
     ActionQueueComponent,
     PredictiveInsightsComponent,
     QuickActionsComponent,
+    PresetSwitcherComponent,
   ],
   templateUrl: './control-center.component.html',
   styleUrls: ['./control-center.component.scss'],
@@ -54,6 +57,7 @@ export class ControlCenterComponent implements OnInit, OnDestroy {
   loading = true;
   saving = false;
   errorMessage: string | null = null;
+  activePresetKey: string | null = null;
 
   private readonly destroy$ = new Subject<void>();
 
@@ -109,12 +113,22 @@ export class ControlCenterComponent implements OnInit, OnDestroy {
 
   trackById = (_: number, id: WidgetId): WidgetId => id;
 
+  onPresetApplied(result: DashboardLayout): void {
+    this.applyLayout(result);
+  }
+
+  onPresetApplyFailed(message: string): void {
+    this.errorMessage = message;
+    this.cdr.markForCheck();
+  }
+
   private applyLayout(result: DashboardLayout): void {
     this.role = normalizeRole(result.role);
     this.quickActions = quickActionsForRole(this.role);
     this.widgets = result.widgets.length
       ? result.widgets
       : defaultLayoutForRole(this.role);
+    this.activePresetKey = matchPresetKey(this.widgets);
     this.loading = false;
     this.errorMessage = null;
     this.cdr.markForCheck();
@@ -123,6 +137,7 @@ export class ControlCenterComponent implements OnInit, OnDestroy {
   private fallbackToClientDefault(): void {
     this.quickActions = quickActionsForRole(this.role);
     this.widgets = defaultLayoutForRole(this.role);
+    this.activePresetKey = matchPresetKey(this.widgets);
     this.loading = false;
     this.errorMessage = 'Could not load saved layout. Showing role default.';
     this.cdr.markForCheck();
@@ -131,6 +146,7 @@ export class ControlCenterComponent implements OnInit, OnDestroy {
   private persistLayout(widgets: WidgetId[]): void {
     this.saving = true;
     this.errorMessage = null;
+    this.activePresetKey = matchPresetKey(widgets);
     this.cdr.markForCheck();
 
     this.layoutService
@@ -148,4 +164,14 @@ export class ControlCenterComponent implements OnInit, OnDestroy {
         },
       });
   }
+}
+
+function matchPresetKey(widgets: readonly WidgetId[]): string | null {
+  if (!widgets.length) return null;
+  const match = LAYOUT_PRESETS.find(
+    (p) =>
+      p.widgets.length === widgets.length &&
+      p.widgets.every((w, i) => w === widgets[i]),
+  );
+  return match ? match.presetKey : null;
 }

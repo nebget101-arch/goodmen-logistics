@@ -38,6 +38,13 @@
   color: rgba(226, 232, 240, 0.7);
 }
 
+.control-center__settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .control-center__reset {
   appearance: none;
   border: 1px solid rgba(45, 212, 191, 0.4);
