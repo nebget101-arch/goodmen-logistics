@@ -41,24 +41,14 @@
       </ul>
     </nav>
     <div class="sidebar-actions">
-      <div
-        class="company-switcher"
-        *ngIf="isLoggedIn() && operatingEntityContext.snapshot.isLoaded && operatingEntityContext.snapshot.accessibleOperatingEntities.length > 0"
-      >
-        <label for="globalCompanySwitcher" class="company-switcher-label">Company</label>
-        <app-ai-select
-          inputId="globalCompanySwitcher"
-          class="company-switcher-select"
-          [options]="operatingEntityOptions"
-          [ngModel]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
-          (ngModelChange)="onOperatingEntityChange($event)"
-        ></app-ai-select>
-      </div>
-
-      <div class="company-switcher company-switcher-loading" *ngIf="isLoggedIn() && !operatingEntityContext.snapshot.isLoaded">
-        <span class="company-switcher-label">Company</span>
-        <span class="company-switcher-value">Loading…</span>
-      </div>
+      <app-company-switcher
+        *ngIf="isLoggedIn()"
+        [entities]="companySwitcherEntities"
+        [selectedEntityId]="operatingEntityContext.snapshot.selectedOperatingEntityId"
+        [showAllEntities]="companySwitcherShowAll"
+        [loading]="!operatingEntityContext.snapshot.isLoaded"
+        (entitySelected)="onOperatingEntityChange($event)"
+      ></app-company-switcher>
 
       <div class="user-menu-wrap" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
         <button type="button" class="user-menu-btn" (click)="toggleUserMenu()" aria-label="User menu" [attr.aria-expanded]="userMenuOpen">
@@ -113,18 +103,15 @@
         <span class="brand-tagline">AI fleet intelligence</span>
       </div>
 
-      <div
+      <app-company-switcher
         class="mobile-company-switcher"
-        *ngIf="operatingEntityContext.snapshot.isLoaded && operatingEntityContext.snapshot.accessibleOperatingEntities.length > 0"
-      >
-        <app-ai-select
-          class="company-switcher-select"
-          [options]="operatingEntityOptionsMobile"
-          [ngModel]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
-          (ngModelChange)="onOperatingEntityChange($event)"
-          ariaLabel="Select company"
-        ></app-ai-select>
-      </div>
+        [entities]="companySwitcherEntities"
+        [selectedEntityId]="operatingEntityContext.snapshot.selectedOperatingEntityId"
+        [showAllEntities]="companySwitcherShowAll"
+        [loading]="!operatingEntityContext.snapshot.isLoaded"
+        [compact]="true"
+        (entitySelected)="onOperatingEntityChange($event)"
+      ></app-company-switcher>
 
       <div class="user-menu-wrap mobile-user-menu" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
         <button type="button" class="user-menu-btn user-menu-btn-mobile" (click)="toggleUserMenu()" aria-label="User menu" [attr.aria-expanded]="userMenuOpen">
