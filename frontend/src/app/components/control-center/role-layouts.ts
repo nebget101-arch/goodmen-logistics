@@ -38,6 +38,47 @@ export const ROLE_DEFAULT_LAYOUTS: Readonly<Record<RoleKey, readonly WidgetId[]>
 };
 
 /**
+ * FN-1343 — named layout presets surfaced by the Control Center settings menu.
+ * Mirrors the rows seeded by the FN-1341 migration into `dashboard_layout_presets`.
+ * `roleKey` is the canonical RBAC role each preset maps onto; `Compliance`
+ * attaches to `safety` per the parent story (FN-1327) Schema Contract notes.
+ */
+export interface DashboardLayoutPreset {
+  presetKey: 'owner-default' | 'dispatcher-default' | 'compliance-default';
+  displayName: string;
+  roleKey: RoleKey;
+  widgets: WidgetId[];
+}
+
+export const LAYOUT_PRESETS: readonly DashboardLayoutPreset[] = [
+  {
+    presetKey: 'owner-default',
+    displayName: 'Owner',
+    roleKey: 'owner',
+    widgets: [...ROLE_DEFAULT_LAYOUTS.owner],
+  },
+  {
+    presetKey: 'dispatcher-default',
+    displayName: 'Dispatcher',
+    roleKey: 'dispatcher',
+    widgets: [...ROLE_DEFAULT_LAYOUTS.dispatcher],
+  },
+  {
+    presetKey: 'compliance-default',
+    displayName: 'Compliance',
+    roleKey: 'safety',
+    widgets: [...ROLE_DEFAULT_LAYOUTS.safety],
+  },
+];
+
+export function findPreset(
+  presetKey: string | null | undefined
+): DashboardLayoutPreset | undefined {
+  if (!presetKey) return undefined;
+  return LAYOUT_PRESETS.find((p) => p.presetKey === presetKey);
+}
+
+/**
  * Per-role contextual quick actions surfaced by the top-level Quick Actions card.
  * Cards inside Smart Alerts / Predictive Insights remain row-scoped (FN-1169) and
  * are unrelated to this list.
