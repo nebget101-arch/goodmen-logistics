@@ -5,12 +5,11 @@ import { ApiService } from './services/api.service';
 import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.service';
 import { AiChatLauncherService, AiChatLauncherState } from './services/ai-chat-launcher.service';
 import { AccessControlService } from './services/access-control.service';
-import { OperatingEntityContextService } from './services/operating-entity-context.service';
+import { OperatingEntityContextService, OperatingEntityOption } from './services/operating-entity-context.service';
 import { ReferenceDataService } from './services/reference-data.service';
 import { WebsocketService } from './services/websocket.service';
 import { NAV_TOP_LINKS, NAV_SECTIONS, NavSection, NavLink } from './config/nav.config';
 import { PERMISSIONS } from './models/access-control.model';
-import { AiSelectOption } from './shared/ai-select/ai-select.component';
 
 @Component({
   selector: 'app-root',
@@ -63,25 +62,14 @@ export class AppComponent implements OnInit {
     return !!localStorage.getItem('token');
   }
 
-  operatingEntityOptions: AiSelectOption[] = [];
-  operatingEntityOptionsMobile: AiSelectOption[] = [];
+  companySwitcherEntities: OperatingEntityOption[] = [];
+  companySwitcherShowAll = false;
 
   rebuildOperatingEntityOptions(): void {
-    const entities = this.operatingEntityContext.snapshot.accessibleOperatingEntities;
-    const prefix: AiSelectOption[] = this.showAllEntitiesOption()
-      ? [{ value: 'all', label: 'All Entities' }]
-      : [];
-    this.operatingEntityOptions = [
-      ...prefix,
-      ...entities.map(e => ({
-        value: e.id,
-        label: e.name + (e.mcNumber ? ' \u00b7 MC ' + e.mcNumber : '')
-      }))
+    this.companySwitcherEntities = [
+      ...this.operatingEntityContext.snapshot.accessibleOperatingEntities
     ];
-    this.operatingEntityOptionsMobile = [
-      ...prefix,
-      ...entities.map(e => ({ value: e.id, label: e.name }))
-    ];
+    this.companySwitcherShowAll = this.showAllEntitiesOption();
   }
 
   showAllEntitiesOption(): boolean {
