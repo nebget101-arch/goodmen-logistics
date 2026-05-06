@@ -1477,7 +1477,7 @@ export class ApiService {
    * Each item includes: location_id, location_name, on_hand_qty, bin_id?, bin_code?, bin_name?
    */
   getInventoryByPart(partId: string): Observable<any> {
-    return this.http.get(`${this.baseUrl}/inventory?partId=${encodeURIComponent(partId)}`);
+    return this.http.get(`${this.baseUrl}/inventory/by-part/${encodeURIComponent(partId)}`);
   }
 
   // Receiving
