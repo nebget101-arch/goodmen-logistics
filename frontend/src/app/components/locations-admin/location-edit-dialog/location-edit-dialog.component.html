@@ -251,31 +251,27 @@
       </ng-container>
       <!-- ────────── END DETAILS TAB ───────────────────────────────────── -->
 
-      <!-- ────────── BINS TAB (placeholder — FN-699) ───────────────────── -->
+      <!-- ────────── BINS TAB ──────────────────────────────────────────── -->
       <ng-container *ngIf="activeTab === 'bins'">
-        <div class="led-placeholder">
-          <span class="material-symbols-outlined led-placeholder-icon">shelves</span>
-          <p>Bins management will be available here.</p>
-          <p class="led-placeholder-sub">Coming in a future update.</p>
-        </div>
+        <app-bins-tab
+          [locationId]="location?.id || ''"
+          [locationType]="locationType"
+        ></app-bins-tab>
       </ng-container>
 
-      <!-- ────────── USERS TAB (placeholder — FN-700) ──────────────────── -->
+      <!-- ────────── USERS TAB ─────────────────────────────────────────── -->
       <ng-container *ngIf="activeTab === 'users'">
-        <div class="led-placeholder">
-          <span class="material-symbols-outlined led-placeholder-icon">group</span>
-          <p>User assignments will be available here.</p>
-          <p class="led-placeholder-sub">Coming in a future update.</p>
-        </div>
+        <app-users-tab
+          [locationId]="location?.id || ''"
+        ></app-users-tab>
       </ng-container>
 
-      <!-- ────────── SUPPLY RULES TAB (placeholder — FN-701) ───────────── -->
+      <!-- ────────── SUPPLY RULES TAB ──────────────────────────────────── -->
       <ng-container *ngIf="activeTab === 'supply_rules'">
-        <div class="led-placeholder">
-          <span class="material-symbols-outlined led-placeholder-icon">local_shipping</span>
-          <p>Supply rules will be available here.</p>
-          <p class="led-placeholder-sub">Coming in a future update.</p>
-        </div>
+        <app-supply-rules-tab
+          [locationId]="location?.id || null"
+          [locationType]="locationType"
+        ></app-supply-rules-tab>
       </ng-container>
 
     </div><!-- /led-body -->
