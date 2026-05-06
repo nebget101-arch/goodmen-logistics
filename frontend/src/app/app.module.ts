@@ -44,6 +44,7 @@ import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
 import { QuickAddInvoiceModalComponent } from './components/parts-catalog/quick-add-invoice-modal/quick-add-invoice-modal.component';
 import { DuplicateWarningComponent } from './components/parts-catalog/duplicate-warning/duplicate-warning.component';
+import { PartLabelPrintComponent } from './components/part-label-print/part-label-print.component';
 import { MasterTypeaheadComponent } from './components/shared/master-typeahead/master-typeahead.component';
 import { ConfidenceBadgeComponent } from './components/shared/confidence-badge/confidence-badge.component';
 import { BarcodeScannerDialogComponent } from './components/shared/barcode-scanner-dialog/barcode-scanner-dialog.component';
@@ -115,6 +116,7 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     PartsCatalogComponent,
     QuickAddInvoiceModalComponent,
     DuplicateWarningComponent,
+    PartLabelPrintComponent,
     MasterTypeaheadComponent,
     ConfidenceBadgeComponent,
     BarcodeScannerDialogComponent,

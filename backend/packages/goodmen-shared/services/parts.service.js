@@ -2,6 +2,7 @@ const db = require('../internal/db').knex;
 const dtLogger = require('../utils/logger');
 const manufacturersService = require('./manufacturers.service');
 const vendorsService = require('./vendors.service');
+const { resolveBarcodeForCreate } = require('./barcode-generator');
 
 /**
  * FN-1098: Resolve the image-storage patch for a part insert/update.
@@ -101,6 +102,21 @@ async function resolveManufacturerVendor(input = {}) {
 	}
 
 	return patch;
+}
+
+/**
+ * FN-1400: Returns true if a candidate barcode value is already taken by either
+ * `parts.barcode` (primary storage for the auto-generated label value) or
+ * `part_barcodes.barcode_value` (secondary mappings used by scanner flows).
+ * Cross-checking both tables is defensive — a generated value must be globally
+ * unique across anything a scanner might match against.
+ */
+async function isBarcodeTaken(value) {
+	const [partsHit, barcodesHit] = await Promise.all([
+		db('parts').where('barcode', value).first(),
+		db('part_barcodes').where('barcode_value', value).first(),
+	]);
+	return Boolean(partsHit || barcodesHit);
 }
 
 /**
@@ -232,6 +248,7 @@ async function createPart(partData) {
 
 		const mvPatch = await resolveManufacturerVendor(partData);
 		const imagePatch = resolveImageR2Patch(partData);
+		const barcode = await resolveBarcodeForCreate(partData.barcode, isBarcodeTaken);
 
 		const part = await db('parts').insert({
 			sku: partData.sku.toUpperCase(),
@@ -244,6 +261,7 @@ async function createPart(partData) {
 			reorder_level: partData.reorder_level || 5,
 			supplier_id: partData.supplier_id,
 			status: 'ACTIVE',
+			barcode,
 			...mvPatch,
 			...imagePatch,
 		}).returning('*');
