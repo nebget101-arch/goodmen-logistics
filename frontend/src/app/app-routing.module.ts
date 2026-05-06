@@ -31,11 +31,13 @@ import { CommunicationPreferencesComponent } from './components/communication-pr
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
 import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
 import { InboundEmailSettingsComponent } from './components/admin/inbound-email-settings/inbound-email-settings.component';
+import { FmcsaImportsAdminComponent } from './components/admin/fmcsa-imports/fmcsa-imports.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 import { EmployerResponseComponent } from './public/components/employer-response/employer-response.component';
 import { PERMISSIONS } from './models/access-control.model';
 import { InternalTrialAdminGuard } from './guards/internal-trial-admin.guard';
+import { InternalTenantGuard } from './guards/internal-tenant.guard';
 import { BillingAdminGuard } from './guards/billing-admin.guard';
 import { BillingComponent } from './billing/billing.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
@@ -249,6 +251,11 @@ const routes: Routes = [
     component: InboundEmailSettingsComponent,
     canActivate: [AuthGuard, PermissionGuard],
     data: { anyPermission: [PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.USERS_EDIT] }
+  },
+  {
+    path: 'admin/fmcsa-imports',
+    component: FmcsaImportsAdminComponent,
+    canActivate: [AuthGuard, InternalTenantGuard]
   },
   // FN-1326 — dev-only severity-system preview. Excluded from production builds
   // so the route does not ship to customers; lazy-loaded so it adds zero bundle

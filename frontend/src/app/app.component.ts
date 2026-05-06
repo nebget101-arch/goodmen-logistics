@@ -234,6 +234,10 @@ export class AppComponent implements OnInit {
     return this.access.canAccessTrialRequestsAdmin();
   }
 
+  canSeeFmcsaImportsAdmin(): boolean {
+    return this.access.canAccessFmcsaImportsAdmin();
+  }
+
   canAccessBilling(): boolean {
     return this.access.canAccessBilling();
   }

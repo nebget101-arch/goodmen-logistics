@@ -102,6 +102,11 @@ export class AccessControlService {
       locations,
       tenantId: raw.tenantId ?? null,
       tenantName: raw.tenantName ?? null,
+      isInternal: typeof raw.isInternal === 'boolean'
+        ? raw.isInternal
+        : typeof raw.is_internal === 'boolean'
+          ? raw.is_internal
+          : undefined,
       subscriptionPlanId: raw.subscriptionPlanId ?? null,
       subscriptionPlan: raw.subscriptionPlan ?? null,
     };
@@ -474,6 +479,22 @@ export class AccessControlService {
 
   isInternalTrialAdminTenant(): boolean {
     return String(this.getTenantName() || '').trim().toLowerCase() === INTERNAL_TRIAL_ADMIN_TENANT_NAME;
+  }
+
+  /**
+   * FN-1425: True when the active tenant is the FleetNeuron-internal tenant.
+   * Prefers the backend-provided `isInternal` flag (FN-1417 / FN-1424); falls back to
+   * the legacy tenant-name check while older sessions are still in flight.
+   */
+  isInternalTenant(): boolean {
+    if (typeof this.access?.isInternal === 'boolean') return this.access.isInternal;
+    return this.isInternalTrialAdminTenant();
+  }
+
+  /** FN-1425: Admin role required to operate the FMCSA import control plane. */
+  canAccessFmcsaImportsAdmin(): boolean {
+    if (!this.isInternalTenant()) return false;
+    return this.hasAnyRole([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.COMPANY_ADMIN]);
   }
 
   canAccessTrialRequestsAdmin(): boolean {

@@ -24,6 +24,8 @@ setDatabase({ knex });
 // ─── Auth middleware (needed for FMCSA safety routes) ────────────────────────
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
+const requireInternalTenant = require('@goodmen/shared/middleware/require-internal-tenant');
+const { loadUserRbac, requirePermission } = require('@goodmen/shared/middleware/rbac-middleware');
 
 const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
 const swaggerOptions = buildSwaggerOptions({
@@ -40,6 +42,7 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 const scanBridgeRouter = require('@goodmen/shared/routes/scan-bridge');
 const fmcsaRouter = require('@goodmen/shared/routes/fmcsa');
 const fmcsaSafetyRouter = require('@goodmen/shared/routes/fmcsa-safety');
+const { createImportsRouter } = require('@goodmen/shared/routes/fmcsa-imports');
 const inboundEmailWebhookRouter = require('./routes/inbound-email-webhook');
 const inboundEmailRouter = require('@goodmen/shared/routes/inbound-email');
 
@@ -64,6 +67,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // ─── Bull Queue initialization ───────────────────────────────────────────────
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 let scrapeQueueInstance = null;
+let importQueueInstance = null;
 
 async function initScrapeQueue() {
   if (!process.env.REDIS_URL) {
@@ -81,6 +85,41 @@ async function initScrapeQueue() {
     console.error('[integrations] FMCSA scraping will be unavailable. Ensure Redis is running.');
   }
 }
+
+async function initImportQueue() {
+  if (!process.env.REDIS_URL) {
+    console.warn('[integrations] REDIS_URL not set — FMCSA import queue disabled.');
+    return;
+  }
+  try {
+    const { createImportQueue } = require('@goodmen/shared/services/fmcsa-import-queue');
+    importQueueInstance = createImportQueue({ redisUrl: REDIS_URL });
+    await importQueueInstance.initScheduler();
+    console.log('[integrations] FMCSA import queue initialized');
+  } catch (err) {
+    console.error('[integrations] Failed to initialize import queue:', err.message);
+  }
+}
+
+// FMCSA import control plane (FleetNeuron-internal admin only).
+// The router is built lazily once the queue is constructed during startup.
+app.use(
+  '/api/fmcsa/imports',
+  authMiddleware,
+  tenantContextMiddleware,
+  requireInternalTenant,
+  loadUserRbac,
+  requirePermission('fmcsa.imports.manage'),
+  (req, res, next) => {
+    if (!importQueueInstance) {
+      return res.status(503).json({ success: false, error: 'FMCSA import queue unavailable (Redis not connected)' });
+    }
+    if (!app.locals._fmcsaImportsRouter) {
+      app.locals._fmcsaImportsRouter = createImportsRouter({ importQueue: importQueueInstance });
+    }
+    return app.locals._fmcsaImportsRouter(req, res, next);
+  }
+);
 
 /**
  * @openapi
@@ -111,12 +150,16 @@ app.listen(PORT, async () => {
   }
   console.log(`🔌 Integrations service running on http://localhost:${PORT}`);
   await initScrapeQueue();
+  await initImportQueue();
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   if (scrapeQueueInstance) {
     await scrapeQueueInstance.shutdown();
+  }
+  if (importQueueInstance) {
+    await importQueueInstance.shutdown();
   }
   await knex.destroy();
   process.exit(0);
