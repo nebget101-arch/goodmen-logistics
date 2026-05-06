@@ -206,4 +206,42 @@ describe('QuickAddInvoiceModalComponent (FN-1104)', () => {
     component.closed.subscribe(() => done());
     component.cancel();
   });
+
+  // FN-1365: editable per-row Category column
+  describe('FN-1365 — editable Category column', () => {
+    it('renders a Category column header and per-row category input', () => {
+      const headers = fixture.nativeElement.querySelectorAll('.invoice-lines-table thead th');
+      const headerText = Array.from(headers).map((h: any) => h.textContent.trim()).join('|');
+      expect(headerText).toContain('Category');
+
+      const catInputs = fixture.nativeElement.querySelectorAll('.col-cat .cell-input');
+      expect(catInputs.length).toBe(2);
+    });
+
+    it('persists category edits into the row state and bulk-create payload', () => {
+      const catInputs = fixture.nativeElement.querySelectorAll('.col-cat .cell-input');
+      const firstCat = catInputs[0] as HTMLInputElement;
+      firstCat.value = 'Filtration';
+      firstCat.dispatchEvent(new Event('input'));
+      expect(component.rows[0].category).toBe('Filtration');
+
+      aiPartsService.bulkCreate.and.returnValue(
+        of<BulkCreateResponse>({
+          success: true,
+          created: [{ id: 'p1', sku: 'FRAM-PH7317', name: 'Oil filter' }],
+          skipped: [],
+        }),
+      );
+
+      // Only the first row has a category — the second stays blank.
+      component.rows[1].selected = true;
+      component.confirm();
+
+      const items = aiPartsService.bulkCreate.calls.mostRecent().args[0];
+      expect(items.length).toBe(2);
+      expect(items[0].category).toBe('Filtration');
+      // Blank category is omitted from the payload (BE/DB tolerate null).
+      expect(items[1].category).toBeUndefined();
+    });
+  });
 });

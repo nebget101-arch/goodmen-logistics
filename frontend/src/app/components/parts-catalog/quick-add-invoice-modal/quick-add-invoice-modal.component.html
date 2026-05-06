@@ -91,6 +91,7 @@
             <th class="col-check"><span class="sr-only">Include</span></th>
             <th class="col-sku">SKU</th>
             <th class="col-desc">Description</th>
+            <th class="col-cat">Category</th>
             <th class="col-qty">Qty</th>
             <th class="col-cost">Unit cost</th>
             <th class="col-mfr">Manufacturer</th>
@@ -143,6 +144,19 @@
                     *ngIf="row.confidence.description != null"
                     [confidence]="row.confidence.description"
                   ></app-confidence-badge>
+                </div>
+              </td>
+              <td class="col-cat">
+                <div class="cell-stack">
+                  <input
+                    type="text"
+                    class="cell-input"
+                    placeholder="Category (optional)"
+                    [value]="row.category"
+                    (input)="onRowFieldInput(row, 'category', $event)"
+                    [disabled]="saving"
+                    [attr.aria-label]="'Category for line ' + (i + 1)"
+                  />
                 </div>
               </td>
               <td class="col-qty">
@@ -202,7 +216,7 @@
               class="invoice-line-error-row"
             >
               <td></td>
-              <td colspan="5" class="invoice-line-error">
+              <td colspan="6" class="invoice-line-error">
                 {{ rowErrors[(row.sku || '').toUpperCase()] }}
               </td>
             </tr>
