@@ -1,4 +1,5 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { LoadsService } from '../../services/loads.service';
@@ -7,6 +8,7 @@ import { LoadListItem } from '../../models/load-dashboard.model';
 import { ReferenceDataService, StatusCode } from '../../services/reference-data.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { SafetyRiskService, DriverRiskBadge } from '../../safety/safety-risk.service';
+import { environment } from '../../../environments/environment';
 
 interface DriverRow {
   id: string | null;
@@ -32,6 +34,32 @@ interface CustomFilter {
   driverIds: string[];
 }
 
+interface NlqLoadResult {
+  id: string;
+  load_number?: string;
+  loadNumber?: string;
+  broker_name?: string;
+  brokerName?: string;
+  driver_name?: string;
+  driverName?: string;
+  status?: string;
+  billing_status?: string;
+  billingStatus?: string;
+  pickup_city?: string;
+  pickup_state?: string;
+  delivery_city?: string;
+  delivery_state?: string;
+  pickup_date?: string;
+  delivery_date?: string;
+  rate?: number;
+}
+
+interface NlqResponse {
+  filters?: Record<string, unknown>;
+  loads?: NlqLoadResult[];
+  fallback?: boolean;
+}
+
 @Component({
   selector: 'app-dispatch-board',
   templateUrl: './dispatch-board.component.html',
@@ -45,6 +73,19 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
   loading = true;
   searchText = '';
   dateSearch: string = '';
+
+  // FN-1435 — NLQ search bar state
+  @ViewChild('nlqInput') nlqInput?: ElementRef<HTMLInputElement>;
+  nlqQuery = '';
+  nlqSubmittedQuery = '';
+  nlqLoading = false;
+  nlqResults: NlqLoadResult[] = [];
+  nlqHasSearched = false;
+  nlqFallback = false;
+
+  toast = '';
+  toastType: 'success' | 'error' = 'success';
+  private toastTimer: any = null;
 
   sortField: SortField = 'driver';
   sortDir: SortDir = 'asc';
@@ -120,7 +161,8 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private referenceDataService: ReferenceDataService,
     private operatingEntityContext: OperatingEntityContextService,
-    private safetyRisk: SafetyRiskService
+    private safetyRisk: SafetyRiskService,
+    private http: HttpClient
   ) {}
 
   get days(): DayColumn[] {
@@ -406,6 +448,7 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.toastTimer) { clearTimeout(this.toastTimer); }
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -821,11 +864,116 @@ export class DispatchBoardComponent implements OnInit, OnDestroy {
     return d?.id ?? null;
   }
 
-  goToLoad(load: LoadListItem): void {
+  goToLoad(load: { id: string }): void {
     this.router.navigate(['/loads'], { queryParams: { loadId: load.id } });
   }
 
   newLoad(): void {
     this.router.navigate(['/loads'], { queryParams: { create: '1' } });
+  }
+
+  // FN-1435 — NLQ search bar handlers ──────────────────────────────────────────
+
+  /** Submit the natural-language query to /api/loads/search/nlq (POST { query }), same endpoint command palette uses. */
+  runNlqSearch(): void {
+    const q = (this.nlqQuery || '').trim();
+    if (!q || this.nlqLoading) { return; }
+
+    this.nlqLoading = true;
+    this.nlqHasSearched = true;
+    this.nlqSubmittedQuery = q;
+    this.cdr.markForCheck();
+
+    const url = `${environment.apiUrl}/loads/search/nlq`;
+    this.http.post<NlqResponse>(url, { query: q }).subscribe({
+      next: (res) => {
+        this.nlqLoading = false;
+        this.nlqResults = Array.isArray(res?.loads) ? (res!.loads as NlqLoadResult[]) : [];
+        this.nlqFallback = !!res?.fallback;
+        this.cdr.markForCheck();
+      },
+      error: (_err: HttpErrorResponse) => {
+        this.nlqLoading = false;
+        this.nlqResults = [];
+        this.nlqFallback = false;
+        this.showToast('Search failed. Please try again.', 'error');
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  /** Clear the search bar and dismiss results. */
+  clearNlqSearch(): void {
+    this.nlqQuery = '';
+    this.nlqSubmittedQuery = '';
+    this.nlqResults = [];
+    this.nlqHasSearched = false;
+    this.nlqFallback = false;
+    this.nlqLoading = false;
+    this.cdr.markForCheck();
+  }
+
+  /** Enter submits, Esc clears (when focus is in the input). */
+  onNlqInputKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.runNlqSearch();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.clearNlqSearch();
+      this.nlqInput?.nativeElement?.blur();
+    }
+  }
+
+  /** Global `/` shortcut → focus the NLQ search input. Skips when user is already typing in another field. */
+  @HostListener('document:keydown', ['$event'])
+  onGlobalKeydown(event: KeyboardEvent): void {
+    if (event.key !== '/') { return; }
+    if (event.metaKey || event.ctrlKey || event.altKey) { return; }
+    const target = event.target as HTMLElement | null;
+    const tag = (target?.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) { return; }
+    if (this.nlqInput?.nativeElement) {
+      event.preventDefault();
+      this.nlqInput.nativeElement.focus();
+      this.nlqInput.nativeElement.select();
+    }
+  }
+
+  formatNlqLoadLabel(load: NlqLoadResult): string {
+    const number = load.load_number || load.loadNumber || load.id;
+    return `#${number}`;
+  }
+
+  formatNlqLoadRoute(load: NlqLoadResult): string {
+    const pickup = [load.pickup_city, load.pickup_state].filter(Boolean).join(', ');
+    const delivery = [load.delivery_city, load.delivery_state].filter(Boolean).join(', ');
+    if (pickup && delivery) return `${pickup} → ${delivery}`;
+    return pickup || delivery || '';
+  }
+
+  formatNlqLoadMeta(load: NlqLoadResult): string {
+    const parts: string[] = [];
+    const broker = load.broker_name || load.brokerName;
+    if (broker) parts.push(broker);
+    const driver = load.driver_name || load.driverName;
+    if (driver) parts.push(driver);
+    if (typeof load.rate === 'number') parts.push(`$${load.rate.toLocaleString()}`);
+    return parts.join(' · ');
+  }
+
+  trackByLoadId(_index: number, load: NlqLoadResult): string {
+    return load.id;
+  }
+
+  private showToast(message: string, type: 'success' | 'error' = 'success'): void {
+    this.toast = message;
+    this.toastType = type;
+    if (this.toastTimer) { clearTimeout(this.toastTimer); }
+    this.toastTimer = setTimeout(() => {
+      this.toast = '';
+      this.cdr.markForCheck();
+    }, 4000);
   }
 }
