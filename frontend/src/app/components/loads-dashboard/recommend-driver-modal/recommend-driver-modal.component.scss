@@ -1,0 +1,305 @@
+/*
+ * FN-1439 — Suggest-driver modal styling.
+ * Mirrors the AI dark theme tokens from the load detail drawer (FN-1040).
+ */
+$bg: rgba(15, 23, 42, 0.96);
+$bg-elev: rgba(2, 6, 23, 0.92);
+$border: var(--border-color, rgba(56, 189, 248, 0.18));
+$text: #e5e7eb;
+$text-strong: #e5f9ff;
+$muted: #94a3b8;
+$accent: #67e8f9;
+$accent-soft: rgba(56, 189, 248, 0.18);
+$accent-border: rgba(56, 189, 248, 0.35);
+$danger: #f87171;
+$success: #4ade80;
+
+.recommend-driver-backdrop {
+  /* The shared `.modal-backdrop` class already centers + dims; just stack
+     above the drawer (which sits at z-index 40). */
+  z-index: 60;
+}
+
+.recommend-driver-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: $bg;
+  color: $text;
+  border: 1px solid $accent-border;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.85);
+  overflow: hidden;
+}
+
+.recommend-driver-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 16px;
+  background: $bg-elev;
+  border-bottom: 1px solid $border;
+}
+
+.recommend-driver-modal__title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: $text-strong;
+  }
+}
+
+.recommend-driver-modal__sparkle {
+  font-size: 28px;
+  color: $accent;
+  background: $accent-soft;
+  border: 1px solid $accent-border;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.recommend-driver-modal__subtitle {
+  margin: 4px 0 0;
+  color: $muted;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.recommend-driver-modal__close {
+  background: transparent;
+  border: 1px solid transparent;
+  color: $muted;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+
+  &:hover:not(:disabled) {
+    background: $accent-soft;
+    color: $accent;
+    border-color: $accent-border;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.recommend-driver-modal__body {
+  padding: 16px 24px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+/* ── Loading skeleton ─────────────────────────────────────────────────── */
+.recommend-driver-modal__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.recommend-driver-modal__skeleton-row {
+  border: 1px solid $border;
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.10) 0%,
+    rgba(148, 163, 184, 0.22) 50%,
+    rgba(148, 163, 184, 0.10) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1400ms ease-in-out infinite;
+}
+
+.skeleton-line--name { width: 40%; height: 14px; }
+.skeleton-line--meta { width: 60%; }
+.skeleton-line--rationale { width: 90%; height: 10px; }
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Empty / failure state ────────────────────────────────────────────── */
+.recommend-driver-modal__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 36px 16px;
+
+  h4 {
+    margin: 4px 0 0;
+    color: $text-strong;
+    font-size: 16px;
+  }
+
+  p {
+    margin: 0 0 8px;
+    color: $muted;
+    font-size: 13px;
+    max-width: 380px;
+  }
+}
+
+.recommend-driver-modal__empty-icon {
+  font-size: 40px;
+  color: $muted;
+  opacity: 0.7;
+}
+
+/* ── Candidate list ───────────────────────────────────────────────────── */
+.recommend-driver-modal__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recommend-driver-modal__row {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid $border;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 120ms, background 120ms;
+
+  &:hover {
+    border-color: $accent-border;
+    background: rgba(56, 189, 248, 0.04);
+  }
+
+  &.is-assigning {
+    opacity: 0.85;
+  }
+}
+
+.recommend-driver-modal__row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recommend-driver-modal__row-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.recommend-driver-modal__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: $text-strong;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recommend-driver-modal__score-badge {
+  flex-shrink: 0;
+  background: $accent-soft;
+  color: $accent;
+  border: 1px solid $accent-border;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.recommend-driver-modal__row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  font-size: 12px;
+  color: $muted;
+}
+
+.recommend-driver-modal__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  .material-symbols-outlined {
+    font-size: 16px;
+  }
+
+  &.is-match .material-symbols-outlined { color: $success; }
+  &.is-mismatch .material-symbols-outlined { color: $danger; }
+}
+
+.recommend-driver-modal__rationale {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: $text;
+}
+
+.recommend-driver-modal__assign-btn {
+  flex-shrink: 0;
+  align-self: center;
+  min-width: 96px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  .spin {
+    animation: spin 800ms linear infinite;
+    font-size: 16px;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.recommend-driver-modal__error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(248, 113, 113, 0.10);
+  border: 1px solid rgba(248, 113, 113, 0.40);
+  color: $danger;
+  font-size: 13px;
+}
+
+.recommend-driver-modal__footer {
+  padding: 12px 24px 16px;
+  border-top: 1px solid $border;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background: $bg-elev;
+}

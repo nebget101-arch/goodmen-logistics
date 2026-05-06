@@ -1,0 +1,156 @@
+<!--
+  FN-1439 — Suggest-driver modal. Top AI-ranked candidates for an
+  unassigned load, with rationale + per-row Assign action.
+-->
+<div
+  class="modal-backdrop recommend-driver-backdrop"
+  *ngIf="open"
+  (click)="onClose()"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="recommend-driver-title"
+>
+  <div class="modal recommend-driver-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header recommend-driver-modal__header">
+      <div class="recommend-driver-modal__title-group">
+        <span class="material-symbols-outlined recommend-driver-modal__sparkle">auto_awesome</span>
+        <div>
+          <h3 id="recommend-driver-title">Suggested drivers</h3>
+          <p class="recommend-driver-modal__subtitle">
+            AI-ranked candidates with positive HOS, ordered by best fit.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="recommend-driver-modal__close"
+        (click)="onClose()"
+        [disabled]="!!assigningDriverId"
+        aria-label="Close"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <div class="modal-body recommend-driver-modal__body">
+      <!-- Loading skeleton (cold path can be 2–4s). -->
+      <div
+        class="recommend-driver-modal__skeleton"
+        *ngIf="loading"
+        aria-busy="true"
+        aria-live="polite"
+      >
+        <div class="recommend-driver-modal__skeleton-row" *ngFor="let _ of [1,2,3]">
+          <div class="skeleton-line skeleton-line--name"></div>
+          <div class="skeleton-line skeleton-line--meta"></div>
+          <div class="skeleton-line skeleton-line--rationale"></div>
+        </div>
+      </div>
+
+      <!-- Empty state (also used for AI failure per AC). -->
+      <div
+        class="recommend-driver-modal__empty"
+        *ngIf="!loading && candidates.length === 0"
+      >
+        <span class="material-symbols-outlined recommend-driver-modal__empty-icon">
+          search_off
+        </span>
+        <h4>No suggestions available</h4>
+        <p>
+          The AI couldn't rank candidates for this load. You can still pick a
+          driver manually.
+        </p>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="onManualAssign()"
+          data-testid="recommend-driver-manual-link"
+        >
+          Assign manually
+        </button>
+      </div>
+
+      <!-- Candidate rows. -->
+      <ul
+        class="recommend-driver-modal__list"
+        *ngIf="!loading && candidates.length > 0"
+      >
+        <li
+          *ngFor="let c of candidates; trackBy: trackByDriverId"
+          class="recommend-driver-modal__row"
+          [class.is-assigning]="assigningDriverId === c.driverId"
+        >
+          <div class="recommend-driver-modal__row-main">
+            <div class="recommend-driver-modal__row-name">
+              <span class="recommend-driver-modal__name">
+                {{ c.name || 'Driver ' + c.driverId }}
+              </span>
+              <span
+                class="recommend-driver-modal__score-badge"
+                [attr.title]="'Match score: ' + scoreLabel(c.score)"
+              >
+                {{ scoreLabel(c.score) }}
+              </span>
+            </div>
+            <div class="recommend-driver-modal__row-meta">
+              <span class="recommend-driver-modal__meta-item" title="Distance from origin">
+                <span class="material-symbols-outlined">near_me</span>
+                {{ distanceLabel(c.distanceMiles) }}
+              </span>
+              <span class="recommend-driver-modal__meta-item" title="HOS remaining">
+                <span class="material-symbols-outlined">schedule</span>
+                {{ hosLabel(c.hosRemaining) }}
+              </span>
+              <span
+                class="recommend-driver-modal__meta-item"
+                [class.is-match]="c.equipmentMatch"
+                [class.is-mismatch]="!c.equipmentMatch"
+                [title]="c.equipmentMatch ? 'Equipment matches' : 'Equipment mismatch'"
+              >
+                <span class="material-symbols-outlined">
+                  {{ c.equipmentMatch ? 'check_circle' : 'cancel' }}
+                </span>
+                Equipment
+              </span>
+            </div>
+            <p class="recommend-driver-modal__rationale">{{ c.rationale }}</p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-primary recommend-driver-modal__assign-btn"
+            (click)="onAssign(c)"
+            [disabled]="!!assigningDriverId"
+            [attr.data-testid]="'recommend-driver-assign-' + c.driverId"
+          >
+            <span
+              *ngIf="assigningDriverId === c.driverId"
+              class="material-symbols-outlined spin"
+            >
+              progress_activity
+            </span>
+            {{ assigningDriverId === c.driverId ? 'Assigning…' : 'Assign' }}
+          </button>
+        </li>
+      </ul>
+
+      <div
+        class="recommend-driver-modal__error"
+        *ngIf="errorMessage"
+        role="alert"
+      >
+        {{ errorMessage }}
+      </div>
+    </div>
+
+    <div class="modal-footer recommend-driver-modal__footer">
+      <button
+        type="button"
+        class="btn btn-ghost"
+        (click)="onClose()"
+        [disabled]="!!assigningDriverId"
+      >
+        Close
+      </button>
+    </div>
+  </div>
+</div>
