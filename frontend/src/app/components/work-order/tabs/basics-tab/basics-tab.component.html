@@ -71,6 +71,26 @@
           <label for="qcCustomerPhone">Phone</label>
           <input id="qcCustomerPhone" type="text" class="form-control" [(ngModel)]="newCustomer.phone" name="qcCustomerPhone" placeholder="e.g. (555) 123-4567">
         </div>
+        <div class="inline-field">
+          <label for="qcCustomerEmail">Email</label>
+          <input id="qcCustomerEmail" type="email" class="form-control" [(ngModel)]="newCustomer.email" name="qcCustomerEmail" placeholder="e.g. dispatch@example.com">
+        </div>
+        <div class="inline-field">
+          <label for="qcCustomerAddress">Address</label>
+          <input id="qcCustomerAddress" type="text" class="form-control" [(ngModel)]="newCustomer.address" name="qcCustomerAddress" placeholder="Street address">
+        </div>
+        <div class="inline-field">
+          <label for="qcCustomerCity">City</label>
+          <input id="qcCustomerCity" type="text" class="form-control" [(ngModel)]="newCustomer.city" name="qcCustomerCity" placeholder="City">
+        </div>
+        <div class="inline-field">
+          <label for="qcCustomerState">State</label>
+          <input id="qcCustomerState" type="text" class="form-control" [(ngModel)]="newCustomer.state" name="qcCustomerState" placeholder="State" maxlength="2">
+        </div>
+        <div class="inline-field">
+          <label for="qcCustomerZip">ZIP</label>
+          <input id="qcCustomerZip" type="text" class="form-control" [(ngModel)]="newCustomer.zip" name="qcCustomerZip" placeholder="ZIP">
+        </div>
       </div>
       <div *ngIf="newCustomerError" class="alert alert-danger mt-2">{{newCustomerError}}</div>
       <div class="inline-create-actions">
@@ -148,16 +168,20 @@
   </div>
   <div class="row">
     <div class="col">
-      <app-ai-date-picker inputId="workOrderRequestDate" label="Request Date" [(ngModel)]="workOrder.requestDate" name="requestDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      <label for="workOrderRequestDate">Request Date</label>
+      <app-ai-date-picker inputId="workOrderRequestDate" ariaLabel="Request Date" [(ngModel)]="workOrder.requestDate" name="requestDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
     </div>
     <div class="col">
-      <app-ai-date-picker inputId="workOrderScheduledDate" label="Scheduled Date" [(ngModel)]="workOrder.scheduledDate" name="scheduledDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      <label for="workOrderScheduledDate">Scheduled Date</label>
+      <app-ai-date-picker inputId="workOrderScheduledDate" ariaLabel="Scheduled Date" [(ngModel)]="workOrder.scheduledDate" name="scheduledDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
     </div>
     <div class="col">
-      <app-ai-date-picker inputId="workOrderStartDate" label="Start Date" [(ngModel)]="workOrder.startDate" name="startDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      <label for="workOrderStartDate">Start Date</label>
+      <app-ai-date-picker inputId="workOrderStartDate" ariaLabel="Start Date" [(ngModel)]="workOrder.startDate" name="startDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
     </div>
     <div class="col">
-      <app-ai-date-picker inputId="workOrderCompletionDate" label="Completion Date" [(ngModel)]="workOrder.completionDate" name="completionDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+      <label for="workOrderCompletionDate">Completion Date</label>
+      <app-ai-date-picker inputId="workOrderCompletionDate" ariaLabel="Completion Date" [(ngModel)]="workOrder.completionDate" name="completionDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
     </div>
   </div>
 </div>

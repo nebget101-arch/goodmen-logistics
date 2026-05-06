@@ -97,7 +97,13 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
 
   private loadVehicles(): void {
     this.apiService.getVehicles().subscribe({
-      next: (data) => { this.vehicles = data; },
+      next: (data: any) => {
+        const rows = data?.rows || data?.data || data || [];
+        this.vehicles = (Array.isArray(rows) ? rows : []).map((v: any) => ({
+          ...v,
+          customer_id: v.customer_id ?? v.customerId ?? null
+        }));
+      },
       error: () => { this.vehicles = []; }
     });
   }
@@ -123,7 +129,10 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
 
   private loadLocations(): void {
     this.apiService.getLocations().subscribe({
-      next: (data) => { this.locations = data; },
+      next: (data: any) => {
+        const rows = data?.data || data?.rows || data || [];
+        this.locations = Array.isArray(rows) ? rows : [];
+      },
       error: () => { this.locations = []; }
     });
   }
