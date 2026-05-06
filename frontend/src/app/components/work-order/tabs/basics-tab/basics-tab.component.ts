@@ -1,4 +1,6 @@
-import { Component, Input, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy, ChangeDetectorRef, OnDestroy, OnInit } from '@angular/core';
+import { Subject, of } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, takeUntil, catchError } from 'rxjs/operators';
 import { ApiService } from '../../../../services/api.service';
 import { CreditService } from '../../../../services/credit.service';
 import { PermissionHelperService } from '../../../../services/permission-helper.service';
@@ -10,7 +12,7 @@ import { PERMISSIONS } from '../../../../models/access-control.model';
   styleUrls: ['./basics-tab.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class WoBasicsTabComponent {
+export class WoBasicsTabComponent implements OnInit, OnDestroy {
   @Input() workOrder: any = {};
   @Input() customers: any[] = [];
   @Input() vehicles: any[] = [];
@@ -35,9 +37,14 @@ export class WoBasicsTabComponent {
 
   /* Inline quick-create customer (replaces modal) */
   showInlineCustomerCreate = false;
-  newCustomer: any = { company_name: '', dot_number: '', contact_name: '', phone: '' };
+  newCustomer: any = this.emptyNewCustomer();
   newCustomerError = '';
   fmcsaLookupLoading = false;
+
+  /* Server-side customer typeahead (FN-1370) */
+  private customerSearch$ = new Subject<string>();
+  private destroy$ = new Subject<void>();
+  customerSearchLoading = false;
 
   /* Vehicle search state */
   vehicleSearch = '';
@@ -57,6 +64,43 @@ export class WoBasicsTabComponent {
     private permissions: PermissionHelperService,
     private cdr: ChangeDetectorRef
   ) {}
+
+  ngOnInit(): void {
+    this.customerSearch$
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        switchMap(query => {
+          const q = (query || '').trim();
+          if (!q) {
+            this.customerSearchLoading = false;
+            return of<any>([]);
+          }
+          this.customerSearchLoading = true;
+          this.cdr.markForCheck();
+          return this.apiService.getCustomers({ query: q, pageSize: 50 }).pipe(
+            catchError(() => of<any>([]))
+          );
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe((data: any) => {
+        const rows = data?.rows || data?.data || data || [];
+        this.filteredCustomers = (Array.isArray(rows) ? rows : []).map((c: any) => ({
+          ...c,
+          company_name: c.company_name || c.companyName || c.name || '',
+          displayName: c.company_name || c.companyName || c.name || ''
+        }));
+        this.customerSearchLoading = false;
+        this.showCustomerDropdown = true;
+        this.cdr.markForCheck();
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
 
   /* ─── Customer search ─── */
 
@@ -98,16 +142,12 @@ export class WoBasicsTabComponent {
     if (!this.customerSearch) {
       this.filteredCustomers = [];
       this.showCustomerDropdown = false;
+      this.customerSearchLoading = false;
       return;
     }
-    const search = this.customerSearch.toLowerCase();
-    this.filteredCustomers = this.customers.filter((c: any) => {
-      const name = (c.displayName || c.company_name || c.name || '').toLowerCase();
-      const dot = (c.dot_number || '').toLowerCase();
-      return name.includes(search) || dot.includes(search);
-    });
     /* Always show dropdown when typing so the "+ Create new" option is visible */
     this.showCustomerDropdown = true;
+    this.customerSearch$.next(this.customerSearch);
   }
 
   selectCustomer(customer: any): void {
@@ -149,10 +189,16 @@ export class WoBasicsTabComponent {
       next: (company: any) => {
         if (company) {
           this.newCustomer = {
-            company_name: company.legal_name || company.name || '',
-            dot_number: dot,
+            ...this.emptyNewCustomer(),
+            company_name: company.name || company.legal_name || '',
+            dot_number: company.dot_number || dot,
             contact_name: '',
-            phone: company.phone || ''
+            phone: company.phone || '',
+            email: company.email || '',
+            address: company.address || '',
+            city: company.city || '',
+            state: company.state || '',
+            zip: company.zip || ''
           };
           this.showInlineCustomerCreate = true;
           this.cdr.markForCheck();
@@ -187,7 +233,7 @@ export class WoBasicsTabComponent {
         this.customerSearch = customer.company_name || customer.name || '';
         this.applyCustomerVehicleFilter();
         this.checkCustomerCredit(customer.id);
-        this.newCustomer = { company_name: '', dot_number: '', contact_name: '', phone: '' };
+        this.newCustomer = this.emptyNewCustomer();
         this.cdr.markForCheck();
       },
       error: () => {
@@ -311,10 +357,8 @@ export class WoBasicsTabComponent {
     }
     this.newCustomerError = '';
     this.newCustomer = {
-      company_name: this.customerSearch || '',
-      dot_number: '',
-      contact_name: '',
-      phone: ''
+      ...this.emptyNewCustomer(),
+      company_name: this.customerSearch || ''
     };
     this.showInlineCustomerCreate = true;
     this.showCustomerDropdown = false;
@@ -348,8 +392,13 @@ export class WoBasicsTabComponent {
       next: (company: any) => {
         this.fmcsaLookupLoading = false;
         if (company) {
-          this.newCustomer.company_name = company.legal_name || company.name || this.newCustomer.company_name;
+          this.newCustomer.company_name = company.name || company.legal_name || this.newCustomer.company_name;
           this.newCustomer.phone = company.phone || this.newCustomer.phone;
+          this.newCustomer.email = company.email || this.newCustomer.email;
+          this.newCustomer.address = company.address || this.newCustomer.address;
+          this.newCustomer.city = company.city || this.newCustomer.city;
+          this.newCustomer.state = company.state || this.newCustomer.state;
+          this.newCustomer.zip = company.zip || this.newCustomer.zip;
         } else {
           this.newCustomerError = 'No FMCSA record found for this DOT.';
         }
@@ -458,7 +507,25 @@ export class WoBasicsTabComponent {
 
   private getVehicleSearchPool(): any[] {
     if (!this.workOrder.customerId) return this.vehicles;
-    return this.vehicles.filter((v: any) => String(v.customer_id) === String(this.workOrder.customerId));
+    const wantedId = String(this.workOrder.customerId);
+    return this.vehicles.filter((v: any) => {
+      const vid = v.customer_id ?? v.customerId ?? null;
+      return vid != null && String(vid) === wantedId;
+    });
+  }
+
+  private emptyNewCustomer(): any {
+    return {
+      company_name: '',
+      dot_number: '',
+      contact_name: '',
+      phone: '',
+      email: '',
+      address: '',
+      city: '',
+      state: '',
+      zip: ''
+    };
   }
 
   private applyCustomerVehicleFilter(): void {
