@@ -61,26 +61,10 @@ app.use(
 app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// ─── Bull Queue initialization ───────────────────────────────────────────────
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-let scrapeQueueInstance = null;
-
-async function initScrapeQueue() {
-  if (!process.env.REDIS_URL) {
-    console.warn('[integrations] REDIS_URL not set — FMCSA scrape queue disabled. Dashboard API still works.');
-    return;
-  }
-  try {
-    const { createScrapeQueue } = require('@goodmen/shared/services/fmcsa-scrape-queue');
-    scrapeQueueInstance = createScrapeQueue(knex, REDIS_URL);
-    fmcsaSafetyRouter.initQueue(scrapeQueueInstance);
-    scrapeQueueInstance.initScheduler();
-    console.log('[integrations] FMCSA scrape queue initialized with daily scheduler');
-  } catch (err) {
-    console.error('[integrations] Failed to initialize scrape queue:', err.message);
-    console.error('[integrations] FMCSA scraping will be unavailable. Ensure Redis is running.');
-  }
-}
+// FN-1451: SAFER scraper + Bull scrape queue retired. The integrations
+// service no longer initializes a scrape queue on boot. FMCSA reference data
+// now comes from the bulk-importer pipeline (FN-1412/1420/1422) and is read
+// via fmcsa-reference (FN-1427).
 
 /**
  * @openapi
@@ -97,7 +81,6 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'goodmen-integrations-service',
-    scrapeQueue: scrapeQueueInstance ? 'connected' : 'unavailable',
     timestamp: new Date().toISOString()
   });
 });
@@ -110,14 +93,10 @@ app.listen(PORT, async () => {
     console.error('⚠️  Migration error (non-fatal):', err.message);
   }
   console.log(`🔌 Integrations service running on http://localhost:${PORT}`);
-  await initScrapeQueue();
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  if (scrapeQueueInstance) {
-    await scrapeQueueInstance.shutdown();
-  }
   await knex.destroy();
   process.exit(0);
 });
