@@ -4,7 +4,7 @@
  * FMCSA Safety Module – Express router.
  * Mounted at /api/fmcsa/safety in the integrations service.
  *
- * Internal routes (FleetNeuron safety team):
+ * Internal routes (FleetNeuron safety team — read-only after FN-1451):
  *   GET    /api/fmcsa/safety/dashboard
  *   GET    /api/fmcsa/safety/carriers
  *   POST   /api/fmcsa/safety/carriers
@@ -13,29 +13,30 @@
  *   GET    /api/fmcsa/safety/carriers/:id/basic-details
  *   GET    /api/fmcsa/safety/carriers/:id/basic-details/:basicName
  *   GET    /api/fmcsa/safety/carriers/:id/basic-details/:basicName/history
- *   POST   /api/fmcsa/safety/scrape
- *   POST   /api/fmcsa/safety/scrape/basic-details
- *   POST   /api/fmcsa/safety/scrape/:carrierId
- *   POST   /api/fmcsa/safety/scrape/:carrierId/basic-details
  *   GET    /api/fmcsa/safety/jobs
  *
  * Client-facing routes (tenant-scoped):
- *   GET    /api/fmcsa/safety/my-scores
- *   GET    /api/fmcsa/safety/my-scores/:dotNumber/history
+ *   GET    /api/fmcsa/safety/my-scores                      (FN-1427 → fmcsa-reference)
+ *   GET    /api/fmcsa/safety/my-scores/:dotNumber/history   (FN-1427 → fmcsa-reference)
  *   GET    /api/fmcsa/safety/my-scores/:dotNumber/basic-details
  *
- * FN-1427 migration status (pass 1 of two):
- *   - Tenant-facing read paths (/my-scores, /my-scores/:dot/history) now read
- *     from fmcsa.* via fmcsa-reference.js.
- *   - Legacy reads kept (pass 2 will retire them, drop their tables, and
- *     remove the scrape POST endpoints once the QA parity check passes):
- *       /dashboard                              → fmcsa_monitored_carriers + fmcsa_safety_snapshots
- *       /carriers (CRUD)                        → fmcsa_monitored_carriers
- *       /carriers/:id/history                   → fmcsa_safety_snapshots
- *       /carriers/:id/basic-details*            → fmcsa_basic_details* family
- *       /carriers/:id/inspection-details*       → fmcsa_inspection_details
- *       /jobs, /scrape*                         → fmcsa_scrape_jobs + scraper
- *       /my-scores/:dot/basic-details           → fmcsa_basic_details* family
+ * FN-474 inspection ingest / list / match (kept):
+ *   POST   /api/fmcsa/safety/inspections/ingest
+ *   GET    /api/fmcsa/safety/inspections
+ *   GET    /api/fmcsa/safety/inspections/:id
+ *   PATCH  /api/fmcsa/safety/inspections/:id/match
+ *   POST   /api/fmcsa/safety/inspections/rematch
+ *
+ * Migration history:
+ *   FN-1427 — tenant-facing reads switched to fmcsa.* via fmcsa-reference.js.
+ *   FN-1451 — SAFER scraper retired: POST /scrape* endpoints + initQueue +
+ *             fmcsa-safer-scraper.js + fmcsa-scrape-queue.js + utils/fmcsa.js
+ *             removed. Read endpoints + their backing legacy tables
+ *             (fmcsa_monitored_carriers, fmcsa_safety_snapshots,
+ *             fmcsa_basic_details*, fmcsa_scrape_jobs) deliberately kept
+ *             intact: a frontend cleanup ticket will retire the legacy
+ *             admin UI (fmcsa-dashboard / fmcsa-carriers / fmcsa-carrier-detail)
+ *             before those reads + tables get dropped.
  */
 
 const express = require('express');
@@ -49,22 +50,10 @@ router.use(loadUserRbac);
 router.use(requireAnyPermission([
   'fmcsa_safety.view',
   'fmcsa_safety.manage',
-  'fmcsa_safety.scrape',
 ]));
 
 const canView = requirePermission('fmcsa_safety.view');
 const canManage = requirePermission('fmcsa_safety.manage');
-const canScrape = requirePermission('fmcsa_safety.scrape');
-
-// ─── Queue reference (set by initQueue) ──────────────────────────────────────
-let scrapeQueue = null;
-
-/**
- * Called by integrations-service on startup to inject the Bull queue instance.
- */
-function initQueue(queue) {
-  scrapeQueue = queue;
-}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -484,89 +473,6 @@ router.get('/carriers/:id/history', canView, async (req, res) => {
   } catch (err) {
     console.error('[fmcsa-safety] carrier history error', err);
     sendError(res, 500, 'Failed to load carrier history');
-  }
-});
-
-// ─── Internal: Trigger Scrape ────────────────────────────────────────────────
-
-router.post('/scrape', canScrape, async (req, res) => {
-  try {
-    if (!(await isDefaultTenant(req))) {
-      return sendError(res, 403, 'Only platform admin can trigger full scrape');
-    }
-    if (!scrapeQueue) {
-      return sendError(res, 503, 'Scrape queue not initialized');
-    }
-    const job = await scrapeQueue.enqueueFullScrape(userId(req));
-    res.status(202).json({ message: 'Scrape started', job });
-  } catch (err) {
-    console.error('[fmcsa-safety] trigger scrape error', err);
-    sendError(res, 500, 'Failed to trigger scrape');
-  }
-});
-
-// NOTE: /scrape/basic-details must be defined BEFORE /scrape/:carrierId
-// to prevent Express from matching "basic-details" as a carrierId param.
-router.post('/scrape/basic-details', canScrape, async (req, res) => {
-  try {
-    if (!(await isDefaultTenant(req))) {
-      return sendError(res, 403, 'Only platform admin can trigger full BASIC detail scrape');
-    }
-    if (!scrapeQueue) {
-      return sendError(res, 503, 'Scrape queue not initialized');
-    }
-
-    const job = await scrapeQueue.enqueueFullBasicDetailScrape(userId(req));
-    res.status(202).json({ message: 'Full BASIC detail scrape started', job });
-  } catch (err) {
-    console.error('[fmcsa-safety] trigger full basic detail scrape error', err);
-    sendError(res, 500, 'Failed to trigger full BASIC detail scrape');
-  }
-});
-
-router.post('/scrape/:carrierId', canScrape, async (req, res) => {
-  try {
-    if (!scrapeQueue) {
-      return sendError(res, 503, 'Scrape queue not initialized');
-    }
-
-    // Verify carrier exists
-    const carrier = await knex('fmcsa_monitored_carriers')
-      .where({ id: req.params.carrierId })
-      .first();
-    if (!carrier) {
-      return sendError(res, 404, 'Carrier not found');
-    }
-
-    const job = await scrapeQueue.enqueueSingleScrape(req.params.carrierId, userId(req));
-    res.status(202).json({ message: 'Single carrier scrape started', job });
-  } catch (err) {
-    console.error('[fmcsa-safety] trigger single scrape error', err);
-    sendError(res, 500, 'Failed to trigger scrape');
-  }
-});
-
-router.post('/scrape/:carrierId/basic-details', canScrape, async (req, res) => {
-  try {
-    if (!scrapeQueue) {
-      return sendError(res, 503, 'Scrape queue not initialized');
-    }
-
-    const carrier = await knex('fmcsa_monitored_carriers')
-      .where({ id: req.params.carrierId })
-      .first();
-    if (!carrier) {
-      return sendError(res, 404, 'Carrier not found');
-    }
-
-    const job = await scrapeQueue.enqueueBasicDetailScrape(
-      req.params.carrierId,
-      userId(req)
-    );
-    res.status(202).json({ message: 'BASIC detail scrape started', job });
-  } catch (err) {
-    console.error('[fmcsa-safety] trigger basic detail scrape error', err);
-    sendError(res, 500, 'Failed to trigger BASIC detail scrape');
   }
 });
 
@@ -1177,6 +1083,4 @@ router.post('/inspections/rematch', requireRole(['admin', 'safety']), async (req
   }
 });
 
-// Export router and initQueue
-router.initQueue = initQueue;
 module.exports = router;
