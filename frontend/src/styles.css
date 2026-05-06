@@ -89,6 +89,25 @@
    * existing warning ramp; no new hex literals introduced.
    */
   --row-attention-accent: var(--ai-accent-warning);
+
+  /*
+   * FN-1403 — Loads Table view redesign.
+   * Semantic surfaces / accents used by the dense data grid. All values
+   * derived from the existing AI palette (no new hex introduced beyond the
+   * tinted alpha overlays needed for legible zebra striping + subtle row
+   * states on the dark background).
+   */
+  --ai-surface-zebra:        rgba(30, 41, 59, 0.35);  /* --ai-surface-raised @ 35% */
+  --ai-row-hover-bg:         rgba(103, 232, 249, 0.06);  /* --ai-accent-cyan @ 6% */
+  --ai-row-hover-stripe:     rgba(103, 232, 249, 0.55);  /* --ai-accent-cyan @ 55% */
+  --ai-row-selected-bg:      rgba(59, 130, 246, 0.12);  /* --ai-accent-info @ 12% */
+  --ai-row-delivered-bg:     rgba(74, 222, 128, 0.06);  /* --ai-accent-success @ 6% */
+  --ai-row-cancelled-bg:     rgba(248, 113, 113, 0.05);  /* --ai-accent-danger @ 5% */
+  --ai-in-transit-pulse:     #22c55e;  /* legacy live-tracking green; preserved */
+  --ai-in-transit-pulse-soft: rgba(34, 197, 94, 0.55);
+  --ai-in-transit-eta-fg:    #065f46;  /* dark green text on light chip */
+  --ai-in-transit-eta-bg:    rgba(34, 197, 94, 0.14);
+  --ai-in-transit-eta-border: rgba(34, 197, 94, 0.35);
 }
 
 * {

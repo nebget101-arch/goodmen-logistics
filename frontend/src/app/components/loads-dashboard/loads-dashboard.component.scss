@@ -491,7 +491,12 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--text-light);
-      padding: 10px;
+      // FN-1403: vertical padding stays fixed; horizontal padding is driven
+      // by --loads-cell-px so the density toggle scales padding both ways.
+      padding-top: 10px;
+      padding-bottom: 10px;
+      padding-left: var(--loads-cell-px, 10px);
+      padding-right: var(--loads-cell-px, 10px);
       cursor: pointer;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -523,7 +528,12 @@
     }
 
     td {
-      padding: 12px 10px;
+      // FN-1403: vertical padding handled by density modes; horizontal
+      // padding scales with --loads-cell-px so dense rows feel tight.
+      padding-top: 12px;
+      padding-bottom: 12px;
+      padding-left: var(--loads-cell-px, 10px);
+      padding-right: var(--loads-cell-px, 10px);
       border-top: 1px solid var(--border-color);
       vertical-align: top;
       font-size: 13px;
@@ -541,6 +551,21 @@
     flex-direction: column;
     min-height: 0;
     width: 100%;
+    // FN-1403: required so the inner header table can use position:sticky;
+    // sticky resolves against the nearest scrolling ancestor / table-card.
+    position: relative;
+  }
+
+  // FN-1403: pin the header table to the top of the loads-table-container so
+  // it stays visible when the page scrolls. The body table lives inside the
+  // cdk-virtual-scroll-viewport (own scrollbar), so this only affects page
+  // scroll. Background must be opaque so virtualized rows don't bleed through.
+  .table--header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--ai-surface-deep);
+    box-shadow: 0 1px 0 0 var(--border-color);
   }
 
   .loads-viewport {
@@ -552,6 +577,18 @@
 
   .table--body tbody tr:first-child td {
     border-top: none;
+  }
+
+  // FN-1403: zebra striping + subtle vertical column separators using AI dark
+  // theme tokens. Applied only to the body table so the header keeps its
+  // stronger surface fill. Selection / hover states sit above this in
+  // specificity (later in the file) so they win the cascade.
+  .table--body tbody tr:nth-child(even) > td {
+    background: var(--ai-surface-zebra);
+  }
+  .table--body tbody tr > td + td,
+  .table--header thead tr > th + th {
+    border-left: 1px solid var(--border-color);
   }
 
   .empty-state {
@@ -665,12 +702,13 @@
     }
   }
 
+  // FN-1403: row state tints now use AI dark-theme tokens.
   .row-delivered {
-    background: rgba(46, 125, 50, 0.05);
+    background: var(--ai-row-delivered-bg);
   }
 
   .row-cancelled {
-    background: rgba(198, 40, 40, 0.04);
+    background: var(--ai-row-cancelled-bg);
   }
 
   /* FN-808: Drawer row states.
@@ -4148,7 +4186,8 @@
   }
 
   tr.row-selected > td {
-    background: rgba(59, 130, 246, 0.12);
+    // FN-1403: token-driven selected-row tint; overrides zebra striping.
+    background: var(--ai-row-selected-bg);
   }
 
   // ─── FN-813: realtime (WebSocket) styling ────────────────────────────────
@@ -4170,14 +4209,16 @@
   }
 
   // In-transit pulsing dot + ETA countdown pill in the Status cell.
+  // FN-1403: routed through AI theme tokens; dot pulse keeps the legacy
+  // bright green so the live-tracking signal still reads at a glance.
   .in-transit-dot {
     display: inline-block;
     width: 8px;
     height: 8px;
     border-radius: 50%;
     margin-left: 6px;
-    background: #22c55e;
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+    background: var(--ai-in-transit-pulse);
+    box-shadow: 0 0 0 0 var(--ai-in-transit-pulse-soft);
     animation: loadsRealtimeInTransitPulse 1.6s ease-out infinite;
     will-change: transform, box-shadow;
     vertical-align: middle;
@@ -4190,9 +4231,10 @@
     font-size: 11px;
     line-height: 14px;
     font-weight: 600;
-    color: #065f46;
-    background: rgba(34, 197, 94, 0.14);
-    border: 1px solid rgba(34, 197, 94, 0.35);
+    font-variant-numeric: tabular-nums;
+    color: var(--ai-in-transit-eta-fg);
+    background: var(--ai-in-transit-eta-bg);
+    border: 1px solid var(--ai-in-transit-eta-border);
   }
 
   // Connection dot in the header (green/gray) + reconnecting banner.
@@ -4410,35 +4452,56 @@ app-loads-empty-state {
 // look compact/comfortable/spacious rather than just sharing the measurement.
 .loads-dashboard {
   --loads-row-height: 52px;
+  // FN-1403: horizontal cell padding now scales with density alongside the
+  // existing row-height var. Default matches the historical 10px value so
+  // surfaces outside the .loads-dashboard scope (none today, but a safe
+  // fallback) stay visually unchanged.
+  --loads-cell-px: 10px;
 
   .table--body tbody tr > td {
     height: var(--loads-row-height);
     transition: background 140ms $fn-ease;
   }
 
-  &--compact .table--body tbody tr > td {
-    padding-top: 6px;
-    padding-bottom: 6px;
-    font-size: 12.5px;
-    line-height: 1.35;
+  &--compact {
+    --loads-cell-px: 8px;
+
+    .table--body tbody tr > td {
+      padding-top: 6px;
+      padding-bottom: 6px;
+      font-size: 12.5px;
+      line-height: 1.35;
+    }
   }
 
-  &--comfortable .table--body tbody tr > td {
-    padding-top: 12px;
-    padding-bottom: 12px;
+  &--comfortable {
+    --loads-cell-px: 12px;
+
+    .table--body tbody tr > td {
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
   }
 
-  &--spacious .table--body tbody tr > td {
-    padding-top: 20px;
-    padding-bottom: 20px;
-    font-size: 13.5px;
-    line-height: 1.55;
+  &--spacious {
+    --loads-cell-px: 16px;
+
+    .table--body tbody tr > td {
+      padding-top: 20px;
+      padding-bottom: 20px;
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
   }
 }
 
 // ── Row micro-animations ────────────────────────────────────────────────────
 // Row hover — subtle lift + teal border glow via a left-edge accent so we
 // don't redraw the whole row's box-shadow every frame (cheaper on long lists).
+// FN-1403: hover/focus tints now route through AI theme tokens. Hover wins
+// over zebra striping (later in cascade); :focus-within mirrors the hover
+// styling so keyboard users get the same affordance without a separate
+// outline ring competing with the existing in-row focus rings.
 .table--body tbody tr {
   position: relative;
   transition:
@@ -4446,10 +4509,19 @@ app-loads-empty-state {
     box-shadow 180ms $fn-ease,
     transform 180ms $fn-ease;
 
-  &:hover {
-    background: rgba(45, 212, 191, 0.06);
-    box-shadow: inset 3px 0 0 rgba(45, 212, 191, 0.55);
+  &:hover,
+  &:focus-within {
+    background: var(--ai-row-hover-bg);
+    box-shadow: inset 3px 0 0 var(--ai-row-hover-stripe);
     transform: translateZ(0);
+  }
+
+  // Hover/focus tint must beat zebra striping (which lives on the td) but
+  // selected-row tint should still win when both apply, so we exclude .row-
+  // selected from the hover override.
+  &:hover:not(.row-selected) > td,
+  &:focus-within:not(.row-selected) > td {
+    background: var(--ai-row-hover-bg);
   }
 }
 
@@ -4917,3 +4989,27 @@ app-status-pill.status-pill--pulse {
     grid-template-columns: 1fr;
   }
 }
+
+/* ─── FN-1403: Table view tabular numerals + right-aligned Rate ──────────────
+ * Numeric cells (Rate, Pickup Date, Completed Date, ETA chip) get
+ * font-variant-numeric: tabular-nums so column digits line up vertically and
+ * the Rate column header + body right-align cleanly.
+ *
+ * Scoped inside .loads-dashboard so Cards and Kanban templates that use other
+ * class names are unaffected.
+ */
+.loads-dashboard {
+  .table--header thead tr:first-child th.th-rate {
+    text-align: right;
+    padding-right: var(--loads-cell-px, 10px);
+  }
+
+  .table--body tbody tr > td.cell-num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .table--body tbody tr > td.cell-rate {
+    text-align: right;
+  }
+}
+
