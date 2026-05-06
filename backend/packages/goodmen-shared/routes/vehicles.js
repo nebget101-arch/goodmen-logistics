@@ -8,6 +8,10 @@ const { query } = require('../internal/db');
 const { getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
 const { loadUserRbac, requirePermission } = require('../middleware/rbac-middleware');
 const { getVehicleMaintenanceHistory } = require('../services/vehicles-maintenance-history.service');
+const {
+  clampWindowDays,
+  getRepairHistorySummary
+} = require('../services/vehicle-repair-history.service');
 
 async function resolveVehicleSource() {
   try {
@@ -1557,6 +1561,78 @@ router.get(
       dtLogger.error('vehicle_maintenance_history_failed', error, { vehicleId: req.params.id });
       console.error('Error fetching vehicle maintenance history:', error);
       res.status(500).json({ message: 'Failed to fetch maintenance history' });
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/vehicles/{id}/repair-history-summary:
+ *   get:
+ *     summary: AI summary of a vehicle's repair history with comeback risk
+ *     description: >-
+ *       FN-1433: Pulls work-order history for the vehicle within the windowDays
+ *       window (default 365, clamped to [30, 1825]), caps at 50 rows by created_at
+ *       desc, and forwards to the ai-service handler at
+ *       POST /api/ai/vehicles/repair-history-summary. The route response is
+ *       short-cached in process for 5 minutes per (tenant, vehicle, windowDays).
+ *       The ai-service short-circuits when fewer than 2 work orders are sent —
+ *       this route passes that response through unchanged. Requires
+ *       `work_orders.view`.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: windowDays
+ *         schema: { type: integer, minimum: 30, maximum: 1825, default: 365 }
+ *     responses:
+ *       200:
+ *         description: AI summary, recurring patterns, and comeback risk grade
+ *       403:
+ *         description: Tenant context missing or insufficient permission
+ *       404:
+ *         description: Vehicle not found in this tenant
+ *       502:
+ *         description: AI service unavailable
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  '/:id/repair-history-summary',
+  loadUserRbac,
+  requirePermission('work_orders.view'),
+  async (req, res) => {
+    try {
+      const tenantId = req.context?.tenantId || null;
+      if (!tenantId) {
+        return res.status(403).json({ message: 'Tenant context required' });
+      }
+
+      const windowDays = clampWindowDays(req.query.windowDays);
+      const result = await getRepairHistorySummary(req.params.id, {
+        tenantId,
+        windowDays,
+        req
+      });
+
+      if (result === null) {
+        return res.status(404).json({ message: 'Vehicle not found' });
+      }
+      if (!result.ok) {
+        return res.status(502).json({ message: 'AI summary service unavailable' });
+      }
+
+      res.json({ ...result.body, windowDays, cached: result.fromCache === true });
+    } catch (error) {
+      dtLogger.error('vehicle_repair_history_summary_failed', error, { vehicleId: req.params.id });
+      console.error('Error fetching vehicle repair history summary:', error);
+      res.status(500).json({ message: 'Failed to fetch repair history summary' });
     }
   }
 );
