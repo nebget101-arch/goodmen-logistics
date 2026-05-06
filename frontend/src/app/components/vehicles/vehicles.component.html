@@ -79,6 +79,20 @@
         </button>
       </div>
 
+      <!-- Ownership Filter Chip-set -->
+      <div class="ownership-filters" role="group" aria-label="Filter by ownership">
+        <button
+          *ngFor="let opt of ownershipOptions"
+          type="button"
+          class="ownership-chip"
+          [class.ownership-chip--active]="selectedOwnership === opt.value"
+          [attr.aria-pressed]="selectedOwnership === opt.value"
+          (click)="onOwnershipChange(opt.value)"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+
       <!-- Results Summary -->
       <div class="results-summary" role="status" aria-live="polite">
         <span class="results-text">
@@ -150,6 +164,7 @@
               Unit # <span class="sort-icon" aria-hidden="true">{{ getSortIcon('unit_number') }}</span>
             </th>
             <th scope="col">Vehicle Details</th>
+            <th scope="col">Ownership</th>
             <th scope="col">VIN</th>
             <th scope="col">Mileage</th>
             <th scope="col" class="sortable" (click)="onSortChange('inspection_expiry')" role="button" tabindex="0"
@@ -174,22 +189,50 @@
             </td>
             <td data-label="Vehicle Details">
               <div class="vehicle-details">
-                <span class="vehicle-info">{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}</span>
-                <small class="vehicle-plate">{{ vehicle.license_plate }}</small>
+                <ng-container *ngIf="vehicleType === 'trailer'; else truckDetails">
+                  <span class="vehicle-info">
+                    <ng-container *ngIf="getTrailerType(vehicle); else trailerFallback">
+                      {{ getTrailerType(vehicle) }}
+                    </ng-container>
+                    <ng-template #trailerFallback>
+                      {{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}
+                    </ng-template>
+                  </span>
+                  <small class="vehicle-plate">{{ getPlateState(vehicle) }}</small>
+                  <small class="vehicle-driver" *ngIf="getTrailerDriver(vehicle) as drv">
+                    Driver: {{ drv }}
+                  </small>
+                </ng-container>
+                <ng-template #truckDetails>
+                  <span class="vehicle-info">{{ vehicle.year }} {{ vehicle.make }} {{ vehicle.model }}</span>
+                  <small class="vehicle-plate">{{ getPlateState(vehicle) }}</small>
+                </ng-template>
               </div>
             </td>
+            <td data-label="Ownership">
+              <span [class]="'badge ' + getOwnershipChipClass(vehicle)"
+                    [attr.aria-label]="'Ownership: ' + getOwnershipLabel(vehicle)">
+                {{ getOwnershipLabel(vehicle) }}
+              </span>
+              <small *ngIf="vehicle.equipment_owner_name" class="owner-name">
+                {{ vehicle.equipment_owner_name }}
+              </small>
+            </td>
             <td data-label="VIN">
-              <small class="vin-text">{{ vehicle.vin }}</small>
+              <small class="vin-text">{{ vehicle.vin || '—' }}</small>
             </td>
             <td data-label="Mileage">
-              {{ vehicle.mileage ? (vehicle.mileage | number:'1.0-0') : 'N/A' }} mi
+              <ng-container *ngIf="vehicle.mileage; else mileageDash">
+                {{ vehicle.mileage | number:'1.0-0' }} mi
+              </ng-container>
+              <ng-template #mileageDash>—</ng-template>
             </td>
             <td data-label="Inspection Expires">
-              {{ vehicle.inspection_expiry | date: 'yyyy-MM-dd' }}
+              {{ vehicle.inspection_expiry ? (vehicle.inspection_expiry | date: 'yyyy-MM-dd') : '—' }}
             </td>
             <td data-label="Next PM Due">
               <div class="pm-info">
-                <span>{{ vehicle.next_pm_due ? (vehicle.next_pm_due | date: 'yyyy-MM-dd') : 'N/A' }}</span>
+                <span>{{ vehicle.next_pm_due ? (vehicle.next_pm_due | date: 'yyyy-MM-dd') : '—' }}</span>
                 <small *ngIf="vehicle.next_pm_mileage">&#64; {{ vehicle.next_pm_mileage | number:'1.0-0' }} mi</small>
               </div>
             </td>
