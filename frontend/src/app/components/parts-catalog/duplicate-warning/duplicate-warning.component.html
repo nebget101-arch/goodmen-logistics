@@ -1,0 +1,32 @@
+<div *ngIf="candidates && candidates.length" class="dup-warning" role="alert" aria-live="polite">
+  <div class="dup-warning__header">
+    <span class="dup-warning__icon" aria-hidden="true">!</span>
+    <strong class="dup-warning__title">Possible duplicates:</strong>
+    <button
+      type="button"
+      class="dup-warning__dismiss"
+      (click)="onDismiss()"
+    >
+      Ignore — this is a new part
+    </button>
+  </div>
+
+  <ul class="dup-warning__list">
+    <li *ngFor="let c of candidates" class="dup-warning__row">
+      <div class="dup-warning__row-main">
+        <span class="dup-warning__row-name">{{ c.name }}</span>
+        <span class="dup-warning__row-meta">
+          {{ c.sku }}<span *ngIf="c.manufacturer"> · {{ c.manufacturer }}</span>
+        </span>
+      </div>
+      <span class="dup-warning__similarity">{{ similarityPercent(c.similarity) }}%</span>
+      <button
+        type="button"
+        class="dup-warning__edit-link"
+        (click)="onEditExisting(c)"
+      >
+        Edit existing
+      </button>
+    </li>
+  </ul>
+</div>
