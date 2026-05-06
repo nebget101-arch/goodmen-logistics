@@ -31,15 +31,56 @@
     </div>
     <div *ngIf="aiTriageResult.parts?.length">
       <strong>Suggested parts:</strong>
-      <ul class="mb-1">
-        <li *ngFor="let p of aiTriageResult.parts">
-          {{ p.query }} <span *ngIf="p.qty">x {{ p.qty }}</span>
+      <ul class="triage-parts-list mb-1">
+        <li *ngFor="let p of aiTriageResult.parts; trackBy: trackPart" class="triage-part-row" [attr.data-state]="p.inventoryStatus">
+          <div class="triage-part-main">
+            <span class="triage-part-name">{{ p.partName || p.query }}</span>
+            <span class="triage-part-meta" *ngIf="p.suggestedSku"> &nbsp;·&nbsp; SKU {{ p.suggestedSku }}</span>
+            <span class="triage-part-qty" *ngIf="p.qty"> &nbsp;·&nbsp; qty {{ p.qty }}</span>
+          </div>
+
+          <ng-container [ngSwitch]="p.inventoryStatus">
+            <span *ngSwitchCase="'in_stock'" class="avail-badge avail-in-stock">
+              <span class="avail-dot" aria-hidden="true">✓</span>
+              {{ p.binLocation || 'In stock' }}
+              <span *ngIf="p.onHand !== null"> (qty {{ p.onHand }})</span>
+            </span>
+
+            <span *ngSwitchCase="'low_stock'" class="avail-badge avail-low-stock" role="status">
+              <span class="avail-dot" aria-hidden="true">!</span>
+              Low stock
+              <span *ngIf="p.onHand !== null && p.reorderPoint !== null"> ({{ p.onHand }} of {{ p.reorderPoint }})</span>
+            </span>
+
+            <span *ngSwitchCase="'out_of_stock'" class="avail-badge avail-out-of-stock" role="status">
+              <span class="avail-dot" aria-hidden="true">✕</span>
+              Out of stock
+            </span>
+
+            <a *ngSwitchCase="'not_found'" class="avail-not-found"
+               [routerLink]="['/parts-catalog']"
+               [queryParams]="{ search: p.suggestedSku || p.partName }">
+              Catalog not found — search manually
+            </a>
+          </ng-container>
+
+          <button *ngIf="canReorder(p)"
+                  type="button"
+                  class="btn-create-reorder"
+                  (click)="createReorder(p)">
+            {{ p.reorderState === 'pending' ? 'Creating...' : 'Create reorder' }}
+          </button>
+          <span *ngIf="p.reorderState === 'success'" class="reorder-confirmed">Reorder queued</span>
         </li>
       </ul>
     </div>
     <button type="button" class="btn btn-primary btn-sm mt-1" (click)="applyAiTriage()">
       Apply suggestions to form
     </button>
+  </div>
+
+  <div *ngIf="toast" class="triage-toast" [class.toast-error]="toastType === 'error'" role="status" aria-live="polite">
+    {{ toast }}
   </div>
 
   <div class="row">

@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node src/handlers/__tests__/loads-nlq-handler.test.js && node src/handlers/__tests__/briefing-handler.test.js && node src/handlers/__tests__/ask-handler.test.js && node src/handlers/__tests__/score-alert-handler.test.js && node src/handlers/__tests__/reports-narrative-handler.test.js && node src/handlers/__tests__/reports-parse-query-handler.test.js && node src/handlers/__tests__/parts-vision-handler.spec.js && node src/handlers/__tests__/parts-photo-intake-handler.spec.js && node src/handlers/__tests__/parts-invoice-vision-handler.spec.js && node src/handlers/__tests__/parts-invoice-intake-handler.spec.js && node src/handlers/__tests__/load-driver-match-handler.test.js"
+    "test": "node src/handlers/__tests__/loads-nlq-handler.test.js && node src/handlers/__tests__/briefing-handler.test.js && node src/handlers/__tests__/ask-handler.test.js && node src/handlers/__tests__/score-alert-handler.test.js && node src/handlers/__tests__/reports-narrative-handler.test.js && node src/handlers/__tests__/reports-parse-query-handler.test.js && node src/handlers/__tests__/parts-vision-handler.spec.js && node src/handlers/__tests__/parts-photo-intake-handler.spec.js && node src/handlers/__tests__/parts-invoice-vision-handler.spec.js && node src/handlers/__tests__/parts-invoice-intake-handler.spec.js && node src/handlers/__tests__/load-driver-match-handler.test.js && node src/handlers/__tests__/work-order-triage-handler.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
