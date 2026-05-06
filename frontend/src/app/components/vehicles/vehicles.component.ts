@@ -4,6 +4,7 @@ import { ApiService } from '../../services/api.service';
 import { debounceTime, forkJoin, Subject, Subscription } from 'rxjs';
 import { PermissionHelperService } from '../../services/permission-helper.service';
 import { PERMISSIONS } from '../../models/access-control.model';
+import { environment } from '../../../environments/environment';
 
 interface Vehicle {
   id: string;
@@ -32,6 +33,37 @@ type SortField = 'unit_number' | 'inspection_expiry';
 type SortOrder = 'asc' | 'desc';
 type Ownership = 'company' | 'oo' | 'leased';
 type OwnershipFilter = 'all' | Ownership;
+type DetailTab = 'overview' | 'maintenance';
+
+interface MaintenanceInvoice {
+  id: string;
+  number: string | null;
+  status: string | null;
+  amount_due: number | null;
+  pdf_url: string;
+}
+
+interface MaintenanceRow {
+  work_order_id: string;
+  work_order_number: string | null;
+  type: string | null;
+  status: string | null;
+  title: string | null;
+  request_date: string | null;
+  completion_date: string | null;
+  shop_location_name: string | null;
+  labor_total: number | null;
+  parts_total: number | null;
+  grand_total: number | null;
+  invoice?: MaintenanceInvoice | null;
+}
+
+interface MaintenanceMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  lifetime_spend: number;
+}
 
 @Component({
   selector: 'app-vehicles',
@@ -74,6 +106,16 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   selectedVehicleDetails: Vehicle | null = null;
   showVehicleDetails = false;
   sortOrder: SortOrder = 'asc';
+
+  // Detail-drawer tabs (FN-1390 — Maintenance History)
+  activeDetailTab: DetailTab = 'overview';
+  maintenanceHistoryLoading = false;
+  maintenanceHistoryError = '';
+  maintenanceHistoryLoaded = false;
+  maintenanceRows: MaintenanceRow[] = [];
+  maintenanceMeta: MaintenanceMeta = { page: 1, pageSize: 25, total: 0, lifetime_spend: 0 };
+  maintenancePage = 1;
+  readonly maintenancePageSize = 25;
 
   equipmentSafetyLoading = false;
   equipmentSafetyError = '';
@@ -559,12 +601,16 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   openVehicleDetails(vehicle: Vehicle): void {
     this.selectedVehicleDetails = vehicle;
     this.showVehicleDetails = true;
+    this.activeDetailTab = 'overview';
+    this.resetMaintenanceHistoryState();
     this.loadEquipmentSafetySummary(vehicle.id);
   }
 
   closeVehicleDetails(): void {
     this.showVehicleDetails = false;
     this.selectedVehicleDetails = null;
+    this.activeDetailTab = 'overview';
+    this.resetMaintenanceHistoryState();
     this.equipmentSafetyError = '';
     this.equipmentSafetySummary = {
       totalIncidents: 0,
@@ -575,6 +621,110 @@ export class VehiclesComponent implements OnInit, OnDestroy {
       lastIncidentDate: null,
       recentIncidents: []
     };
+  }
+
+  selectDetailTab(tab: DetailTab): void {
+    if (this.activeDetailTab === tab) return;
+    this.activeDetailTab = tab;
+    if (tab === 'maintenance' && !this.maintenanceHistoryLoaded && this.selectedVehicleDetails) {
+      this.loadMaintenanceHistory(this.selectedVehicleDetails.id, 1);
+    }
+  }
+
+  loadMaintenanceHistory(vehicleId: string, page: number): void {
+    if (!vehicleId) return;
+    this.maintenanceHistoryLoading = true;
+    this.maintenanceHistoryError = '';
+    this.maintenancePage = page;
+
+    this.apiService.getVehicleMaintenanceHistory(vehicleId, page, this.maintenancePageSize).subscribe({
+      next: (resp: any) => {
+        this.maintenanceRows = Array.isArray(resp?.data) ? resp.data : [];
+        const meta = resp?.meta || {};
+        this.maintenanceMeta = {
+          page: Number(meta.page) || page,
+          pageSize: Number(meta.pageSize) || this.maintenancePageSize,
+          total: Number(meta.total) || 0,
+          lifetime_spend: Number(meta.lifetime_spend) || 0
+        };
+        this.maintenanceHistoryLoaded = true;
+        this.maintenanceHistoryLoading = false;
+      },
+      error: () => {
+        this.maintenanceHistoryError = 'Unable to load maintenance history.';
+        this.maintenanceHistoryLoading = false;
+      }
+    });
+  }
+
+  retryMaintenanceHistory(): void {
+    if (!this.selectedVehicleDetails) return;
+    this.loadMaintenanceHistory(this.selectedVehicleDetails.id, this.maintenancePage || 1);
+  }
+
+  onMaintenancePageChange(page: number): void {
+    if (!this.selectedVehicleDetails) return;
+    if (page < 1 || page > this.maintenanceTotalPages) return;
+    this.loadMaintenanceHistory(this.selectedVehicleDetails.id, page);
+  }
+
+  get maintenanceTotalPages(): number {
+    const size = this.maintenanceMeta?.pageSize || this.maintenancePageSize;
+    return Math.max(1, Math.ceil((this.maintenanceMeta?.total || 0) / size));
+  }
+
+  get lastWorkOrderDate(): string | null {
+    // Rows come back ordered by work_orders.created_at DESC, so the first row of page 1 is the latest.
+    if (this.maintenancePage !== 1 || !this.maintenanceRows.length) return null;
+    const first = this.maintenanceRows[0];
+    return first?.completion_date || first?.request_date || null;
+  }
+
+  canViewInvoices(): boolean {
+    return this.permissions.hasPermission(PERMISSIONS.INVOICES_VIEW);
+  }
+
+  /** Scope: row click → open /work-order/:id in a new tab. */
+  openWorkOrder(row: MaintenanceRow): void {
+    if (!row?.work_order_id) return;
+    window.open(`/work-order/${row.work_order_id}`, '_blank', 'noopener');
+  }
+
+  /**
+   * Scope: invoice pill click → download PDF.
+   * Open the gateway URL in a new tab — the API streams the PDF.
+   */
+  openInvoicePdf(invoice: MaintenanceInvoice | null | undefined, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!invoice?.id) return;
+    window.open(`${environment.apiUrl}/invoices/${invoice.id}/pdf`, '_blank', 'noopener');
+  }
+
+  getMaintenanceStatusBadge(status: string | null | undefined): string {
+    const normalized = (status || '').toString().trim().toUpperCase();
+    if (normalized === 'COMPLETED' || normalized === 'CLOSED' || normalized === 'INVOICED') return 'badge-success';
+    if (normalized === 'CANCELED' || normalized === 'CANCELLED') return 'badge-muted';
+    if (normalized === 'IN_PROGRESS' || normalized === 'OPEN') return 'badge-info';
+    return 'badge-warning';
+  }
+
+  getMaintenanceStatusLabel(status: string | null | undefined): string {
+    const normalized = (status || '').toString().trim();
+    if (!normalized) return '—';
+    return normalized.replace(/_/g, ' ');
+  }
+
+  trackByMaintenanceRow(_index: number, row: MaintenanceRow): string {
+    return row?.work_order_id || String(_index);
+  }
+
+  private resetMaintenanceHistoryState(): void {
+    this.maintenanceHistoryLoading = false;
+    this.maintenanceHistoryError = '';
+    this.maintenanceHistoryLoaded = false;
+    this.maintenanceRows = [];
+    this.maintenanceMeta = { page: 1, pageSize: this.maintenancePageSize, total: 0, lifetime_spend: 0 };
+    this.maintenancePage = 1;
   }
 
   loadEquipmentSafetySummary(vehicleId: string): void {
