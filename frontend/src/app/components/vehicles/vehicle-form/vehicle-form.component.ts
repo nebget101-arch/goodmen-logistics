@@ -1,6 +1,8 @@
 import { Component, EventEmitter, Input, OnInit, OnChanges, OnDestroy, SimpleChanges, Output } from '@angular/core';
 import { ApiService } from '../../../services/api.service';
 
+export type OwnershipType = 'company' | 'oo' | 'leased';
+
 interface VehicleFormData {
   id?: string;
   unit_number: string;
@@ -20,7 +22,17 @@ interface VehicleFormData {
   oos_reason?: string;
   vehicle_type?: 'truck' | 'trailer';
   trailer_details?: TrailerDetails;
+  // FN-1387: ownership classification + conditional fields. `company_owned` is
+  // derived server-side from `ownership_type` (FN-1386), so the form only
+  // sends the enum and lets backend keep the legacy boolean in sync.
+  ownership_type: OwnershipType;
   equipment_owner_name?: string;
+  equipment_owner_id?: string;
+  equipment_owner_percentage?: number | null;
+  operating_entity_id?: string;
+  lessor_name?: string;
+  lease_date?: string;
+  lease_payment_amount?: number | null;
 }
 
 interface TrailerDetails {
@@ -85,7 +97,15 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     insurance_expiry: '',
     registration_expiry: '',
     oos_reason: '',
-    vehicle_type: 'truck'
+    vehicle_type: 'truck',
+    ownership_type: 'company',
+    equipment_owner_name: '',
+    equipment_owner_id: '',
+    equipment_owner_percentage: null,
+    operating_entity_id: '',
+    lessor_name: '',
+    lease_date: '',
+    lease_payment_amount: null
   };
 
   trailerForm: TrailerDetails = this.getDefaultTrailerDetails();
@@ -95,6 +115,21 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
   vinDecoding = false;
   vinDecodeMessage = '';
   private vinDecodeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // FN-1387: equipment-owner typeahead (sourced from settlements payee search,
+  // which already returns equipment-owner payees) + operating entity dropdown.
+  equipmentOwnerSearch = '';
+  equipmentOwnerResults: Array<{ id: string; name: string }> = [];
+  equipmentOwnerDropdownOpen = false;
+  equipmentOwnerLoading = false;
+  private equipmentOwnerSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  operatingEntities: any[] = [];
+  operatingEntitySelectOptionsCached: { value: string; label: string }[] = [];
+
+  // FN-1387: trailer details accordion (collapsed by default; auto-open on
+  // edit when trailer-specific fields are non-empty so legacy data stays
+  // discoverable).
+  trailerDetailsExpanded = false;
 
   documents: Document[] = [];
   
@@ -139,6 +174,10 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
 
   get makeSelectOptions(): { value: string; label: string }[] {
     return this.makeSelectOptionsCached;
+  }
+
+  get operatingEntitySelectOptions(): { value: string; label: string }[] {
+    return this.operatingEntitySelectOptionsCached;
   }
 
   statusSelectOptions = [
@@ -239,6 +278,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       this.makeSelectOptionsCached = this.makes.map(m => ({ value: m, label: m }));
       this.updateFilteredTrailerTypeOptions();
       this.loadDrivers();
+      this.loadOperatingEntities();
       this.loadFormData();
     } catch (err) {
       console.error('[VEHICLE-FORM] ERROR in ngOnInit:', err);
@@ -249,6 +289,10 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     if (this.vinDecodeTimer) {
       clearTimeout(this.vinDecodeTimer);
       this.vinDecodeTimer = null;
+    }
+    if (this.equipmentOwnerSearchTimer) {
+      clearTimeout(this.equipmentOwnerSearchTimer);
+      this.equipmentOwnerSearchTimer = null;
     }
   }
 
@@ -285,6 +329,12 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       this.formData.registration_expiry = this.formData.registration_expiry || '';
       this.formData.oos_reason = this.formData.oos_reason || '';
       this.formData.equipment_owner_name = this.formData.equipment_owner_name || '';
+      this.formData.equipment_owner_id = this.formData.equipment_owner_id || '';
+      this.formData.equipment_owner_percentage = this.formData.equipment_owner_percentage ?? null;
+      this.formData.operating_entity_id = this.formData.operating_entity_id || '';
+      this.formData.lessor_name = this.formData.lessor_name || '';
+      this.formData.lease_date = this.formData.lease_date || '';
+      this.formData.lease_payment_amount = this.formData.lease_payment_amount ?? null;
       if (!this.formData.vehicle_type) {
         this.formData.vehicle_type = this.vehicleType;
       }
@@ -297,6 +347,28 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
         ...parsedTrailerDetails
       };
       this.syncTrailerTypeSearchFromCurrent();
+
+      // FN-1387: derive ownership_type from server payload, falling back to
+      // legacy signals (`company_owned` + `trailer_details.ownership`) so that
+      // pre-FN-1385 rows still render as the right segmented option.
+      this.formData.ownership_type = this.deriveOwnershipType(this.vehicle, this.trailerForm);
+
+      // For trailers stored as leased before FN-1387, lessor + lease date
+      // lived inside trailer_details. Mirror them onto the top-level fields
+      // so the shared Ownership section can display them.
+      if (this.formData.ownership_type === 'leased' && this.isTrailerMode) {
+        this.formData.lessor_name = this.formData.lessor_name || this.trailerForm.lessor_name || '';
+        this.formData.lease_date = this.formData.lease_date || this.trailerForm.lease_date || '';
+      }
+
+      // Seed the typeahead search input with the saved owner name so users
+      // see what was previously selected.
+      this.equipmentOwnerSearch = this.formData.equipment_owner_name || '';
+      this.equipmentOwnerResults = [];
+      this.equipmentOwnerDropdownOpen = false;
+
+      // Auto-expand trailer details when there's existing data worth showing.
+      this.trailerDetailsExpanded = this.isTrailerMode && this.hasTrailerDetailContent(this.trailerForm);
     } else {
       this.isEditMode = false;
       this.unitNumberManuallyEdited = false;
@@ -317,11 +389,48 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
         registration_expiry: '',
         oos_reason: '',
         vehicle_type: this.vehicleType,
-        equipment_owner_name: ''
+        ownership_type: 'company',
+        equipment_owner_name: '',
+        equipment_owner_id: '',
+        equipment_owner_percentage: null,
+        operating_entity_id: '',
+        lessor_name: '',
+        lease_date: '',
+        lease_payment_amount: null
       };
       this.trailerForm = this.getDefaultTrailerDetails();
       this.trailerTypeSearch = '';
+      this.equipmentOwnerSearch = '';
+      this.equipmentOwnerResults = [];
+      this.equipmentOwnerDropdownOpen = false;
+      this.trailerDetailsExpanded = false;
     }
+  }
+
+  private deriveOwnershipType(vehicle: any, trailer: TrailerDetails): OwnershipType {
+    const raw = vehicle?.ownership_type;
+    if (raw === 'company' || raw === 'oo' || raw === 'leased') {
+      return raw;
+    }
+    if (vehicle?.vehicle_type === 'trailer' && trailer?.ownership === 'leased') {
+      return 'leased';
+    }
+    if (vehicle?.company_owned === false) {
+      return 'oo';
+    }
+    return 'company';
+  }
+
+  private hasTrailerDetailContent(trailer: TrailerDetails): boolean {
+    return Boolean(
+      trailer?.trailer_type_code ||
+        trailer?.assigned_driver_id ||
+        trailer?.fid_number ||
+        trailer?.address ||
+        trailer?.city ||
+        trailer?.notes ||
+        trailer?.history
+    );
   }
 
   onVinChange(): void {
@@ -377,6 +486,112 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
         this.driverSelectOptionsCached = [];
       }
     });
+  }
+
+  loadOperatingEntities(): void {
+    this.apiService.listOperatingEntities().subscribe({
+      next: (data: any) => {
+        const list = Array.isArray(data) ? data : (Array.isArray(data?.entities) ? data.entities : []);
+        this.operatingEntities = list;
+        this.operatingEntitySelectOptionsCached = list.map((e: any) => ({
+          value: String(e.id),
+          label: e.name || e.legal_name || e.dba_name || `Entity ${e.id}`
+        }));
+      },
+      error: () => {
+        this.operatingEntities = [];
+        this.operatingEntitySelectOptionsCached = [];
+      }
+    });
+  }
+
+  setOwnershipType(value: OwnershipType): void {
+    if (this.formData.ownership_type === value) {
+      return;
+    }
+    this.formData.ownership_type = value;
+    delete this.errors.ownership_type;
+
+    // Clear conditional-field errors as they're no longer relevant.
+    delete this.errors.equipment_owner_name;
+    delete this.errors.lessor_name;
+
+    // Clear values from the now-hidden branches so we don't leak stale data
+    // into the save payload.
+    if (value !== 'oo') {
+      this.formData.equipment_owner_name = '';
+      this.formData.equipment_owner_id = '';
+      this.formData.equipment_owner_percentage = null;
+      this.formData.operating_entity_id = '';
+      this.equipmentOwnerSearch = '';
+      this.equipmentOwnerResults = [];
+      this.equipmentOwnerDropdownOpen = false;
+    }
+    if (value !== 'leased') {
+      this.formData.lessor_name = '';
+      this.formData.lease_date = '';
+      this.formData.lease_payment_amount = null;
+    }
+  }
+
+  onEquipmentOwnerSearchInput(): void {
+    const term = (this.equipmentOwnerSearch || '').trim();
+    // The text the user types becomes the persisted name unless they pick
+    // an existing payee — backend FN-1386 only requires `equipment_owner_name`,
+    // so free-text typing is a valid path.
+    this.formData.equipment_owner_name = this.equipmentOwnerSearch;
+    this.formData.equipment_owner_id = '';
+    delete this.errors.equipment_owner_name;
+    this.equipmentOwnerDropdownOpen = true;
+
+    if (this.equipmentOwnerSearchTimer) {
+      clearTimeout(this.equipmentOwnerSearchTimer);
+      this.equipmentOwnerSearchTimer = null;
+    }
+
+    if (term.length < 2) {
+      this.equipmentOwnerResults = [];
+      this.equipmentOwnerLoading = false;
+      return;
+    }
+
+    this.equipmentOwnerLoading = true;
+    this.equipmentOwnerSearchTimer = setTimeout(() => {
+      this.apiService.searchPayees(term, 'all', 20).subscribe({
+        next: (data: any) => {
+          const list = Array.isArray(data) ? data : (Array.isArray(data?.payees) ? data.payees : []);
+          this.equipmentOwnerResults = list
+            .filter((p: any) => !p?.type || p.type === 'equipment_owner' || p.type === 'company' || p.type === 'individual')
+            .slice(0, 20)
+            .map((p: any) => ({ id: String(p.id || ''), name: p.name || p.display_name || 'Unknown' }))
+            .filter((p: { id: string; name: string }) => p.name && p.name !== 'Unknown');
+          this.equipmentOwnerLoading = false;
+        },
+        error: () => {
+          this.equipmentOwnerResults = [];
+          this.equipmentOwnerLoading = false;
+        }
+      });
+    }, 250);
+  }
+
+  selectEquipmentOwner(option: { id: string; name: string }): void {
+    this.formData.equipment_owner_name = option.name;
+    this.formData.equipment_owner_id = option.id;
+    this.equipmentOwnerSearch = option.name;
+    this.equipmentOwnerDropdownOpen = false;
+    delete this.errors.equipment_owner_name;
+  }
+
+  onEquipmentOwnerBlur(): void {
+    // Defer so click on a dropdown item still registers before close.
+    setTimeout(() => {
+      this.equipmentOwnerDropdownOpen = false;
+    }, 150);
+  }
+
+  toggleTrailerDetails(): void {
+    this.trailerDetailsExpanded = !this.trailerDetailsExpanded;
   }
 
   onTrailerTypeSearchFocus(): void {
@@ -565,6 +780,20 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       }
     }
 
+    // FN-1387: ownership-conditional validation. Mirrors backend FN-1386
+    // server-side checks so users see the error before round-tripping.
+    if (this.formData.ownership_type === 'oo') {
+      const ownerName = (this.formData.equipment_owner_name || '').trim();
+      if (!ownerName) {
+        this.errors.equipment_owner_name = 'Equipment Owner is required for OO';
+      }
+    } else if (this.formData.ownership_type === 'leased') {
+      const lessor = (this.formData.lessor_name || '').trim();
+      if (!lessor) {
+        this.errors.lessor_name = 'Lessor Name is required for Leased';
+      }
+    }
+
     return Object.keys(this.errors).length === 0;
   }
 
@@ -574,6 +803,8 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     }
 
     this.saving = true;
+
+    const ownershipType: OwnershipType = this.formData.ownership_type || 'company';
 
     const vehicleData: any = {
       unit_number: this.formData.unit_number || '',
@@ -592,15 +823,40 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       registration_expiry: this.formData.registration_expiry || null,
       oos_reason: this.formData.oos_reason || '',
       vehicle_type: this.formData.vehicle_type || this.vehicleType,
-      equipment_owner_name: this.formData.equipment_owner_name || null
+      // FN-1387: ownership classification — backend FN-1386 derives
+      // `company_owned` from this enum so settlements stays in sync.
+      ownership_type: ownershipType,
+      equipment_owner_name: ownershipType === 'oo' ? (this.formData.equipment_owner_name || null) : null,
+      equipment_owner_id: ownershipType === 'oo' && this.formData.equipment_owner_id
+        ? this.formData.equipment_owner_id
+        : null,
+      equipment_owner_percentage: ownershipType === 'oo'
+        ? (this.formData.equipment_owner_percentage ?? null)
+        : null,
+      operating_entity_id: ownershipType === 'oo' && this.formData.operating_entity_id
+        ? this.formData.operating_entity_id
+        : null,
+      lessor_name: ownershipType === 'leased' ? (this.formData.lessor_name || null) : null,
+      lease_date: ownershipType === 'leased' ? (this.formData.lease_date || null) : null,
+      lease_payment_amount: ownershipType === 'leased'
+        ? (this.formData.lease_payment_amount ?? null)
+        : null
     };
 
     if (this.isTrailerMode) {
-      vehicleData.trailer_details = {
+      // Mirror top-level lease fields into trailer_details so legacy readers
+      // (and the backend's trailer-nested validator path) keep working.
+      const mergedTrailer: TrailerDetails = {
         ...this.trailerForm,
+        ownership: ownershipType === 'leased' ? 'leased' : 'owned',
         notes: this.trailerForm.notes || '',
         history: this.trailerForm.history || ''
       };
+      if (ownershipType === 'leased') {
+        mergedTrailer.lessor_name = this.formData.lessor_name || mergedTrailer.lessor_name || '';
+        mergedTrailer.lease_date = this.formData.lease_date || mergedTrailer.lease_date || '';
+      }
+      vehicleData.trailer_details = mergedTrailer;
     }
     
     if (this.isEditMode && this.formData.id) {
