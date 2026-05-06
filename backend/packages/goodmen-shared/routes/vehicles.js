@@ -6,6 +6,8 @@ const axios = require('axios');
 const dtLogger = require('../utils/logger');
 const { query } = require('../internal/db');
 const { getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
+const { loadUserRbac, requirePermission } = require('../middleware/rbac-middleware');
+const { getVehicleMaintenanceHistory } = require('../services/vehicles-maintenance-history.service');
 
 async function resolveVehicleSource() {
   try {
@@ -1486,6 +1488,78 @@ router.delete('/:id/documents/:documentId', async (req, res) => {
     res.status(500).json({ message: 'Failed to delete vehicle document' });
   }
 });
+
+/**
+ * @openapi
+ * /api/vehicles/{id}/maintenance-history:
+ *   get:
+ *     summary: List a vehicle's shop work orders + invoices
+ *     description: >-
+ *       Returns the paginated maintenance history (work orders LEFT JOIN invoices)
+ *       for a fleet or customer-owned vehicle, joined by VIN through the
+ *       customer_vehicles mirror table. Includes a meta.lifetime_spend aggregate
+ *       across all non-canceled work orders. Requires `work_orders.view`; the
+ *       per-row `invoice` field is omitted when the caller lacks `invoices.view`.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+ *     responses:
+ *       200:
+ *         description: Paginated work order + invoice rows
+ *       403:
+ *         description: Tenant context missing or insufficient permission
+ *       404:
+ *         description: Vehicle not found in this tenant
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  '/:id/maintenance-history',
+  loadUserRbac,
+  requirePermission('work_orders.view'),
+  async (req, res) => {
+    try {
+      const tenantId = req.context?.tenantId || null;
+      if (!tenantId) {
+        return res.status(403).json({ message: 'Tenant context required' });
+      }
+
+      const rbac = req.user?.rbac;
+      const permCodes = rbac?.permissionCodes || [];
+      const isSuperAdmin = (rbac?.roles || []).some((r) => r.code === 'super_admin');
+      const includeInvoices = isSuperAdmin || permCodes.includes('invoices.view');
+
+      const result = await getVehicleMaintenanceHistory(req.params.id, {
+        tenantId,
+        page: req.query.page,
+        pageSize: req.query.pageSize,
+        includeInvoices
+      });
+
+      if (!result) {
+        return res.status(404).json({ message: 'Vehicle not found' });
+      }
+
+      res.json(result);
+    } catch (error) {
+      dtLogger.error('vehicle_maintenance_history_failed', error, { vehicleId: req.params.id });
+      console.error('Error fetching vehicle maintenance history:', error);
+      res.status(500).json({ message: 'Failed to fetch maintenance history' });
+    }
+  }
+);
 
 // Expose for unit tests (FN-133 regression)
 router.VEHICLE_READ_ROLES = VEHICLE_READ_ROLES;
