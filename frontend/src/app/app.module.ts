@@ -42,6 +42,7 @@ import { UsersAdminComponent } from './components/users-admin/users-admin.compon
 import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
 import { QuickAddInvoiceModalComponent } from './components/parts-catalog/quick-add-invoice-modal/quick-add-invoice-modal.component';
+import { DuplicateWarningComponent } from './components/parts-catalog/duplicate-warning/duplicate-warning.component';
 import { MasterTypeaheadComponent } from './components/shared/master-typeahead/master-typeahead.component';
 import { ConfidenceBadgeComponent } from './components/shared/confidence-badge/confidence-badge.component';
 import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
@@ -110,6 +111,7 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     SmartAutocompleteComponent,
     PartsCatalogComponent,
     QuickAddInvoiceModalComponent,
+    DuplicateWarningComponent,
     MasterTypeaheadComponent,
     ConfidenceBadgeComponent,
     WarehouseReceivingComponent,

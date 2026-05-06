@@ -453,6 +453,14 @@
         <button type="button" class="btn-close" (click)="closeForm()"></button>
       </div>
       <div class="modal-body">
+        <!-- FN-1111: Live duplicate detection while typing in the Add Part form -->
+        <app-duplicate-warning
+          *ngIf="showDuplicateWarning"
+          [candidates]="duplicateCandidates"
+          (editExisting)="onEditExistingDuplicate($event)"
+          (dismissed)="onDismissDuplicateWarning()"
+        ></app-duplicate-warning>
+
         <form [formGroup]="partForm">
           <div class="form-grid">
             <div class="form-group">
@@ -460,13 +468,24 @@
                 SKU *
                 <app-confidence-badge [confidence]="aiConfidence.partNumber ?? null"></app-confidence-badge>
               </label>
-              <input
-                id="sku"
-                type="text"
-                class="form-control"
-                formControlName="sku"
-                [readOnly]="editingPartId !== null"
-              />
+              <div class="sku-field">
+                <input
+                  id="sku"
+                  type="text"
+                  class="form-control"
+                  formControlName="sku"
+                  [readOnly]="editingPartId !== null"
+                />
+                <button
+                  *ngIf="!editingPartId"
+                  type="button"
+                  class="btn-outline btn-generate-sku"
+                  (click)="generateSku()"
+                  [disabled]="generateSkuBusy"
+                >
+                  Generate SKU
+                </button>
+              </div>
             </div>
 
             <div class="form-group">

@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { ApiService } from '../../services/api.service';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Observable, Subject, Subscription } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { combineLatest, Observable, of, Subject, Subscription } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, map, switchMap, takeUntil } from 'rxjs/operators';
 import { ManufacturersService, MasterEntity } from '../../services/manufacturers.service';
 import { VendorsService } from '../../services/vendors.service';
 import { MasterTypeaheadValue } from '../shared/master-typeahead/master-typeahead.component';
@@ -12,6 +12,7 @@ import {
   InvoiceAiResult,
   PartConfidence,
 } from '../../services/ai-parts.service';
+import { DuplicateCandidate } from './duplicate-warning/duplicate-warning.component';
 
 @Component({
   selector: 'app-parts-catalog',
@@ -90,6 +91,23 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
   @ViewChild('snapPhotoInput') snapPhotoInput!: ElementRef<HTMLInputElement>;
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── FN-1111: Live duplicate detection + auto-SKU ────────────────────────────
+  /** Candidates from the most recent /api/parts/duplicate-check call. */
+  duplicateCandidates: DuplicateCandidate[] = [];
+  /**
+   * Once the user clicks "Ignore — this is a new part" we suppress the
+   * warning for the rest of the modal session. Reset whenever the modal
+   * opens (closeForm clears it).
+   */
+  duplicateWarningDismissed = false;
+  /** Debounce window for typing → duplicate-check requests. */
+  static readonly DUPLICATE_CHECK_DEBOUNCE_MS = 350;
+  /** Subscription for the debounced duplicate-check pipeline. */
+  private duplicateCheckSub: Subscription | null = null;
+  /** Whether the SKU field was explicitly populated by Generate-SKU. */
+  generateSkuBusy = false;
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // ── FN-1104: Quick Add → Scan Invoice ───────────────────────────────────────
   /** Whether the Scan Invoice review modal is open. */
   invoiceModalOpen = false;
@@ -154,11 +172,14 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
     this.loadCategories();
     this.loadManufacturers();
     this.wireBadgeClearOnEdit();
+    this.wireDuplicateCheck();
   }
 
   ngOnDestroy(): void {
     this.cancelAiPhoto();
     this.cancelAiInvoice();
+    this.duplicateCheckSub?.unsubscribe();
+    this.duplicateCheckSub = null;
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -168,6 +189,59 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
    * the badge clears. Manufacturer is special — its value comes from the
    * typeahead (onManufacturerPick), so we clear that one there.
    */
+  /**
+   * FN-1111: Watch name/sku/manufacturer in the Add form and call
+   * /api/parts/duplicate-check after a 350ms quiet window. The pipeline:
+   *   - debounceTime(350) — collapse rapid keystrokes
+   *   - distinctUntilChanged on the trio — skip no-op CD ticks
+   *   - filter — only fire when (a) Add mode (no editingPartId), (b) the
+   *     warning has not been dismissed for this session, and (c) at least
+   *     one of name/sku/manufacturer is non-empty (BE 400s otherwise)
+   *   - switchMap to the API, swallow errors so a transient failure does
+   *     not poison the stream (the user can keep typing and we'll retry on
+   *     the next change)
+   *
+   * The subscription lives for the component lifetime; subscribing here
+   * (not on form-open) avoids a races-with-modal-close subscription leak.
+   */
+  private wireDuplicateCheck(): void {
+    this.duplicateCheckSub?.unsubscribe();
+
+    const name$ = this.partForm.get('name')!.valueChanges;
+    const sku$ = this.partForm.get('sku')!.valueChanges;
+    const mfg$ = this.partForm.get('manufacturer')!.valueChanges;
+
+    this.duplicateCheckSub = combineLatest([
+      name$, sku$, mfg$,
+    ]).pipe(
+      map(([name, sku, manufacturer]) => ({
+        name: String(name || '').trim(),
+        sku: String(sku || '').trim(),
+        manufacturer: String(manufacturer || '').trim(),
+      })),
+      debounceTime(PartsCatalogComponent.DUPLICATE_CHECK_DEBOUNCE_MS),
+      distinctUntilChanged((a, b) =>
+        a.name === b.name && a.sku === b.sku && a.manufacturer === b.manufacturer,
+      ),
+      switchMap(query => {
+        const eligible =
+          this.editingPartId === null &&
+          !this.duplicateWarningDismissed &&
+          (query.name || query.sku || query.manufacturer);
+        if (!eligible) {
+          return of<DuplicateCandidate[]>([]);
+        }
+        return this.apiService.duplicateCheckParts({ ...query, limit: 5 }).pipe(
+          map((res: any) => Array.isArray(res?.data) ? (res.data as DuplicateCandidate[]) : []),
+          catchError(() => of<DuplicateCandidate[]>([])),
+        );
+      }),
+      takeUntil(this.destroy$),
+    ).subscribe(candidates => {
+      this.duplicateCandidates = candidates;
+    });
+  }
+
   private wireBadgeClearOnEdit(): void {
     const fields: Array<{ control: string; ai: keyof PartConfidence }> = [
       // SKU is the FE binding for the AI's partNumber suggestion (the model
@@ -304,6 +378,8 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
     this.showForm = true;
     this.successMessage = '';
     this.errorMessage = '';
+    this.duplicateCandidates = [];
+    this.duplicateWarningDismissed = false;
   }
 
   onManufacturerPick(value: MasterTypeaheadValue): void {
@@ -342,7 +418,114 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
     this.aiConfidence = {};
     this.aiR2Key = null;
     this.aiWarnings = [];
+    this.duplicateCandidates = [];
+    this.duplicateWarningDismissed = false;
   }
+
+  // ── FN-1111: duplicate-warning + auto-SKU handlers ──────────────────────────
+
+  /** Whether the inline duplicate warning should render right now. */
+  get showDuplicateWarning(): boolean {
+    return (
+      this.editingPartId === null &&
+      !this.duplicateWarningDismissed &&
+      this.duplicateCandidates.length > 0
+    );
+  }
+
+  /** "Edit existing" link → close Add modal, reopen as Edit for that part. */
+  onEditExistingDuplicate(candidate: DuplicateCandidate): void {
+    this.apiService.getPartById(candidate.id).subscribe({
+      next: (response: any) => {
+        const full = response?.data ?? response;
+        this.closeForm();
+        this.openForm(full || candidate);
+      },
+      error: () => {
+        // If we can't load the full record, fall back to the candidate
+        // payload we already have — the Edit modal will gracefully accept
+        // partial fields and the BE will fill the rest on save.
+        this.closeForm();
+        this.openForm(candidate);
+      },
+    });
+  }
+
+  /** "Ignore — this is a new part" → suppress the warning for the rest of this Add session. */
+  onDismissDuplicateWarning(): void {
+    this.duplicateWarningDismissed = true;
+    this.duplicateCandidates = [];
+  }
+
+  /**
+   * Build a `<MFG>-<CAT>-<NNNN>` SKU from the manufacturer + category
+   * fields. The 4-digit counter is collision-checked against the parts
+   * already loaded into memory and retried up to 10 times. Falls back to
+   * a sequential search if random retries keep colliding.
+   */
+  generateSku(): void {
+    if (this.generateSkuBusy) return;
+    const manufacturer = String(this.partForm.value.manufacturer || '').trim();
+    const category = String(this.partForm.value.category || '').trim();
+    if (!manufacturer || !category) {
+      this.errorMessage = 'Pick a manufacturer and category before generating a SKU.';
+      return;
+    }
+    this.errorMessage = '';
+
+    const mfg = this.toAbbrev(manufacturer);
+    const cat = this.toAbbrev(category);
+    const taken = new Set<string>(
+      (this.parts || []).map((p: any) => String(p.sku || '').trim().toUpperCase()),
+    );
+
+    this.generateSkuBusy = true;
+    try {
+      let candidate = '';
+      // Random retry up to 10 attempts; if everything collides fall back to
+      // a deterministic scan (unlikely at the scale of a single tenant).
+      for (let i = 0; i < 10; i++) {
+        const nnnn = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+        const next = `${mfg}-${cat}-${nnnn}`;
+        if (!taken.has(next.toUpperCase())) {
+          candidate = next;
+          break;
+        }
+      }
+      if (!candidate) {
+        for (let n = 0; n < 10000; n++) {
+          const nnnn = String(n).padStart(4, '0');
+          const next = `${mfg}-${cat}-${nnnn}`;
+          if (!taken.has(next.toUpperCase())) {
+            candidate = next;
+            break;
+          }
+        }
+      }
+
+      if (candidate) {
+        // emitEvent: true so the duplicate-check pipeline sees the new SKU.
+        this.partForm.patchValue({ sku: candidate });
+        this.partForm.get('sku')?.markAsDirty();
+      } else {
+        this.errorMessage = 'Could not generate a unique SKU — all 10000 slots taken for this manufacturer/category.';
+      }
+    } finally {
+      this.generateSkuBusy = false;
+    }
+  }
+
+  /**
+   * Take the first three alphanumeric letters of a label and uppercase
+   * them. e.g. "Fleetguard" → "FLE", "Oil Filter" → "OIL", "AC" → "AC".
+   * Falls back to "GEN" if no letters survive (purely numeric input).
+   */
+  private toAbbrev(value: string): string {
+    const cleaned = (value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (!cleaned) return 'GEN';
+    return cleaned.slice(0, 3);
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   savePart(): void {
     if (!this.partForm.valid) {

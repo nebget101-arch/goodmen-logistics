@@ -1430,6 +1430,22 @@ export class ApiService {
     return this.http.patch(`${this.baseUrl}/parts/${id}/deactivate`, {});
   }
 
+  /**
+   * FN-1111 — fuzzy duplicate-check for the Add Part form. At least one of
+   * `name`, `sku`, or `manufacturer` must be non-empty; the BE 400s when
+   * all three are blank, so the caller is expected to gate the request.
+   */
+  duplicateCheckParts(query: { name?: string; sku?: string; manufacturer?: string; limit?: number }): Observable<any> {
+    const params = new URLSearchParams();
+    if (query.name) params.set('name', query.name);
+    if (query.sku) params.set('sku', query.sku);
+    if (query.manufacturer) params.set('manufacturer', query.manufacturer);
+    if (query.limit != null) params.set('limit', String(query.limit));
+    const qs = params.toString();
+    const url = `${this.baseUrl}/parts/duplicate-check${qs ? `?${qs}` : ''}`;
+    return this.http.get(url);
+  }
+
   // Inventory
   getInventory(locationId: string, filters?: any): Observable<any> {
     let url = `${this.baseUrl}/inventory?locationId=${locationId}`;
