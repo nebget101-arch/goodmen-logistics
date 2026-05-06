@@ -74,6 +74,7 @@ let importQueueInstance = null;
 async function initImportQueue() {
   if (!process.env.REDIS_URL) {
     console.warn('[integrations] REDIS_URL not set — FMCSA import queue disabled.');
+    app.locals._fmcsaImportInitReason = 'redis_url_missing';
     return;
   }
   try {
@@ -89,7 +90,14 @@ async function initImportQueue() {
     await importQueueInstance.initScheduler();
     console.log('[integrations] FMCSA import queue initialized (5 importers registered)');
   } catch (err) {
-    console.error('[integrations] Failed to initialize import queue:', err.message);
+    // FN-1453: persist the boot error so the 503 body can surface the actual
+    // cause instead of a misleading "Redis not connected" message. Truncated
+    // and stack-stripped to keep the public payload bounded.
+    const message = (err && err.message) ? String(err.message) : String(err);
+    app.locals._fmcsaImportInitError = message.slice(0, 500);
+    app.locals._fmcsaImportInitReason = 'init_error';
+    importQueueInstance = null;
+    console.error('[integrations] Failed to initialize import queue:', message);
   }
 }
 
@@ -103,8 +111,34 @@ app.use(
   loadUserRbac,
   requirePermission('fmcsa.imports.manage'),
   (req, res, next) => {
+    // FN-1453: distinguish between three distinct boot/runtime states so
+    // operators see the actual cause instead of a generic "Redis not
+    // connected" string for every 503.
     if (!importQueueInstance) {
-      return res.status(503).json({ success: false, error: 'FMCSA import queue unavailable (Redis not connected)' });
+      if (app.locals._fmcsaImportInitReason === 'redis_url_missing') {
+        return res.status(503).json({
+          success: false,
+          error: 'FMCSA import queue not initialized: REDIS_URL is not configured on integrations-service',
+        });
+      }
+      if (app.locals._fmcsaImportInitError) {
+        return res.status(503).json({
+          success: false,
+          error: `FMCSA import queue failed to initialize: ${app.locals._fmcsaImportInitError}`,
+        });
+      }
+      // Init has not yet completed (request landed before app.listen's
+      // initImportQueue() finished). Rare but possible during cold start.
+      return res.status(503).json({
+        success: false,
+        error: 'FMCSA import queue not initialized',
+      });
+    }
+    if (typeof importQueueInstance.isReady === 'function' && !importQueueInstance.isReady()) {
+      return res.status(503).json({
+        success: false,
+        error: 'FMCSA import queue not ready: Redis connection lost',
+      });
     }
     if (!app.locals._fmcsaImportsRouter) {
       app.locals._fmcsaImportsRouter = createImportsRouter({ importQueue: importQueueInstance });

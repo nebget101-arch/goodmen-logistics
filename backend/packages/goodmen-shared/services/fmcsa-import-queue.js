@@ -76,9 +76,18 @@ function createImportQueue({ redisUrl, fmcsaKnex } = {}) {
     redisConnected = true;
     console.log(`${LOG_PREFIX} Redis connected`);
   });
+  // FN-1453: flip the flag back on disconnect so isReady() reflects current
+  // state, not just whether Redis was ever reachable. ioredis emits 'end'
+  // after retries are exhausted; 'close' on each socket tear-down.
+  queue.client.on('end', () => { redisConnected = false; });
+  queue.client.on('close', () => { redisConnected = false; });
   queue.on('failed', (job, err) => {
     console.error(`${LOG_PREFIX} job ${job.id} failed:`, err.message);
   });
+
+  function isReady() {
+    return redisConnected;
+  }
 
   // ── Importer registry ───────────────────────────────────────────────
 
@@ -250,6 +259,7 @@ function createImportQueue({ redisUrl, fmcsaKnex } = {}) {
     initScheduler,
     registerImporter,
     shutdown,
+    isReady,
   };
 }
 
