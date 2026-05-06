@@ -13,6 +13,7 @@ const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handle
 const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
 const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
+const { handleLoadDriverMatch } = require('./handlers/load-driver-match-handler');
 const { handleBriefingGenerate } = require('./handlers/briefing-handler');
 const { handleAsk } = require('./handlers/ask-handler');
 const { handleScoreAlert } = require('./handlers/score-alert-handler');
@@ -2038,6 +2039,116 @@ function buildAiRouter(deps) {
     '/parts/extract-from-invoice',
     invoiceUpload.single('image'),
     (req, res) => handlePartsInvoiceIntake(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/loads/recommend-driver:
+   *   post:
+   *     summary: AI load-to-driver assignment (FN-1431)
+   *     description: >
+   *       Ranks candidate drivers for an unassigned load using HOS feasibility,
+   *       distance, equipment match, and prior history with the customer. Drivers
+   *       with insufficient HOS are dropped before the LLM call. Returns top-N
+   *       (default 5) candidates with score, rationale, and structured fields.
+   *       Uses Anthropic Claude with prompt caching on the static system prompt.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [loadId, load, candidateDrivers]
+   *             properties:
+   *               loadId:
+   *                 type: string
+   *               load:
+   *                 type: object
+   *                 required: [originLat, originLng, equipmentClass]
+   *                 properties:
+   *                   originLat:
+   *                     type: number
+   *                   originLng:
+   *                     type: number
+   *                   pickupAt:
+   *                     type: string
+   *                     format: date-time
+   *                   equipmentClass:
+   *                     type: string
+   *                   customerId:
+   *                     type: string
+   *               candidateDrivers:
+   *                 type: array
+   *                 items:
+   *                   type: object
+   *                   required: [driverId]
+   *                   properties:
+   *                     driverId:
+   *                       type: string
+   *                     name:
+   *                       type: string
+   *                     lat:
+   *                       type: number
+   *                     lng:
+   *                       type: number
+   *                     hosRemainingHours:
+   *                       type: number
+   *                     equipmentClass:
+   *                       type: string
+   *                     lastLoadWithCustomer:
+   *                       type: string
+   *                       format: date
+   *               topN:
+   *                 type: integer
+   *                 default: 5
+   *                 minimum: 1
+   *                 maximum: 10
+   *     responses:
+   *       200:
+   *         description: Ranked candidates with rationale
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 candidates:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       driverId:
+   *                         type: string
+   *                       score:
+   *                         type: number
+   *                       rationale:
+   *                         type: string
+   *                       hosRemaining:
+   *                         type: number
+   *                       distanceMiles:
+   *                         type: number
+   *                         nullable: true
+   *                       equipmentMatch:
+   *                         type: boolean
+   *                       lastLoadWithCustomer:
+   *                         type: string
+   *                         nullable: true
+   *                 reasoning:
+   *                   type: string
+   *                 meta:
+   *                   type: object
+   *       400:
+   *         description: Missing or invalid input
+   *       502:
+   *         description: AI upstream or parse failure
+   */
+  router.post('/loads/recommend-driver', (req, res) =>
+    handleLoadDriverMatch(req, res, deps)
   );
 
   return router;
