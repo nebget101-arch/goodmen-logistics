@@ -21,6 +21,9 @@
       (statusChange)="onWorkflowStatusChange($event)"
     ></app-wo-status-bar>
 
+    <!-- FN-1447: VIN Repair-History summary -->
+    <app-wo-repair-history-widget [vehicleId]="workOrder?.vehicleId"></app-wo-repair-history-widget>
+
     <!-- Tab Navigation -->
     <nav class="wo-tab-nav">
       <button

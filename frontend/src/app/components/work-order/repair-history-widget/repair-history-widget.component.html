@@ -1,0 +1,100 @@
+<section
+  class="repair-history-widget"
+  *ngIf="vehicleId"
+  [class.is-loading]="state === 'loading'"
+  [class.is-error]="state === 'error'"
+  [attr.aria-busy]="state === 'loading' ? 'true' : null"
+>
+  <div
+    class="repair-history-widget__row"
+    role="button"
+    tabindex="0"
+    [attr.aria-expanded]="expanded"
+    [attr.aria-disabled]="!canExpand"
+    (click)="toggleExpanded()"
+    (keydown.enter)="toggleExpanded()"
+    (keydown.space)="$event.preventDefault(); toggleExpanded()"
+  >
+    <span class="repair-history-widget__label">Repair history</span>
+
+    <ng-container [ngSwitch]="state">
+      <span class="repair-history-widget__status" *ngSwitchCase="'loading'">Loading…</span>
+
+      <span class="repair-history-widget__status repair-history-widget__status--error" *ngSwitchCase="'error'">
+        {{ errorMessage }}
+      </span>
+
+      <ng-container *ngSwitchCase="'ready'">
+        <span class="repair-history-widget__count">
+          {{ data?.priorWoCount || 0 }} prior WO{{ (data?.priorWoCount || 0) === 1 ? '' : 's' }}
+        </span>
+
+        <span class="repair-history-widget__sep" aria-hidden="true">·</span>
+
+        <span class="repair-history-widget__last" *ngIf="data?.lastVisitDate as last; else noLast">
+          last {{ last | date:'mediumDate' }}
+        </span>
+        <ng-template #noLast>
+          <span class="repair-history-widget__last">no prior visit</span>
+        </ng-template>
+
+        <span
+          *ngIf="badgeRisk && !insufficientHistory"
+          class="repair-history-widget__badge"
+          [ngClass]="badgeClass"
+          [attr.aria-label]="badgeLabel"
+        >
+          {{ badgeLabel }}
+        </span>
+
+        <span class="repair-history-widget__badge repair-history-widget__badge--insufficient"
+              *ngIf="insufficientHistory">
+          Not enough history
+        </span>
+
+        <span class="repair-history-widget__caret" *ngIf="canExpand" aria-hidden="true">
+          {{ expanded ? '▾' : '▸' }}
+        </span>
+      </ng-container>
+    </ng-container>
+  </div>
+
+  <div class="repair-history-widget__summary" *ngIf="hasData && data?.summary">
+    {{ data?.summary }}
+  </div>
+
+  <div class="repair-history-widget__panel" *ngIf="expanded && canExpand">
+    <h4 class="repair-history-widget__panel-title">Recurring patterns</h4>
+    <ul class="repair-history-widget__patterns">
+      <li
+        class="repair-history-widget__pattern"
+        *ngFor="let pattern of data?.patterns; trackBy: trackByPattern"
+      >
+        <div class="repair-history-widget__pattern-head">
+          <span class="repair-history-widget__pattern-label">{{ pattern.label }}</span>
+          <span class="repair-history-widget__pattern-meta">
+            {{ pattern.occurrences }}× · last {{ pattern.lastDate ? (pattern.lastDate | date:'mediumDate') : '—' }}
+          </span>
+        </div>
+        <ul class="repair-history-widget__refs">
+          <li
+            class="repair-history-widget__ref"
+            *ngFor="let ref of pattern.workOrders; trackBy: trackByRef"
+          >
+            <a
+              class="repair-history-widget__ref-link"
+              [routerLink]="['/work-order', ref.workOrderId]"
+              [attr.aria-label]="'Open work order ' + (ref.workOrderNumber || ref.workOrderId)"
+            >
+              <span class="repair-history-widget__ref-icon" aria-hidden="true">↗</span>
+              <span>{{ ref.workOrderNumber || ref.workOrderId }}</span>
+              <span class="repair-history-widget__ref-date" *ngIf="ref.date">
+                · {{ ref.date | date:'mediumDate' }}
+              </span>
+            </a>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+</section>
