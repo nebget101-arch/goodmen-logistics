@@ -23,12 +23,26 @@
  *   GET    /api/fmcsa/safety/my-scores
  *   GET    /api/fmcsa/safety/my-scores/:dotNumber/history
  *   GET    /api/fmcsa/safety/my-scores/:dotNumber/basic-details
+ *
+ * FN-1427 migration status (pass 1 of two):
+ *   - Tenant-facing read paths (/my-scores, /my-scores/:dot/history) now read
+ *     from fmcsa.* via fmcsa-reference.js.
+ *   - Legacy reads kept (pass 2 will retire them, drop their tables, and
+ *     remove the scrape POST endpoints once the QA parity check passes):
+ *       /dashboard                              → fmcsa_monitored_carriers + fmcsa_safety_snapshots
+ *       /carriers (CRUD)                        → fmcsa_monitored_carriers
+ *       /carriers/:id/history                   → fmcsa_safety_snapshots
+ *       /carriers/:id/basic-details*            → fmcsa_basic_details* family
+ *       /carriers/:id/inspection-details*       → fmcsa_inspection_details
+ *       /jobs, /scrape*                         → fmcsa_scrape_jobs + scraper
+ *       /my-scores/:dot/basic-details           → fmcsa_basic_details* family
  */
 
 const express = require('express');
 const router = express.Router();
 const knex = require('../config/knex');
 const { loadUserRbac, requirePermission, requireAnyPermission } = require('../middleware/rbac-middleware');
+const fmcsaRef = require('../services/fmcsa-reference');
 
 // RBAC middleware applied to all routes
 router.use(loadUserRbac);
@@ -142,6 +156,109 @@ async function verifyCarrierAccess(req, res) {
 // ─── Score thresholds for alerts ─────────────────────────────────────────────
 const ALERT_THRESHOLD = 75; // percentile above which we flag a score
 const SCORE_INCREASE_THRESHOLD = 15; // point increase between snapshots
+
+// ─── FN-1427: BASIC name → snapshot-shape field mapping ───────────────────────
+// FMCSA SMS bulk files emit BASIC tokens like "UNSAFE_DRIVING"; the legacy
+// snapshot-shaped API exposes them as fields like "unsafe_driving_score". This
+// keeps the public contract stable while we migrate the storage layer.
+const BASIC_TO_FIELD = {
+  UNSAFE_DRIVING: 'unsafe_driving_score',
+  HOS: 'hos_compliance_score',
+  HOS_COMPLIANCE: 'hos_compliance_score',
+  VEHICLE_MAINT: 'vehicle_maintenance_score',
+  VEHICLE_MAINTENANCE: 'vehicle_maintenance_score',
+  CONTROLLED_SUBS: 'controlled_substances_score',
+  CONTROLLED_SUBSTANCES: 'controlled_substances_score',
+  DRIVER_FITNESS: 'driver_fitness_score',
+  CRASH_INDICATOR: 'crash_indicator_score',
+  HAZMAT: 'hazmat_score',
+  HAZMAT_COMPLIANCE: 'hazmat_score',
+};
+
+const SCORE_FIELDS = [
+  { key: 'unsafe_driving_score', label: 'Unsafe Driving' },
+  { key: 'hos_compliance_score', label: 'HOS Compliance' },
+  { key: 'vehicle_maintenance_score', label: 'Vehicle Maintenance' },
+  { key: 'controlled_substances_score', label: 'Controlled Substances' },
+  { key: 'driver_fitness_score', label: 'Driver Fitness' },
+  { key: 'crash_indicator_score', label: 'Crash Indicator' },
+  { key: 'hazmat_score', label: 'Hazmat' },
+];
+
+/**
+ * Build a snapshot-shaped row from fmcsa.* data for one DOT.
+ * Returned object matches the field set consumers expected from
+ * `fmcsa_safety_snapshots` so the API contract stays stable for pass 1.
+ *
+ * `safety_rating`, `safety_rating_date`, and `out_of_service_date` are not
+ * yet in the fmcsa.* schema; they're returned as null until a future importer
+ * pass adds them (tracked as an Open Item on FN-1416).
+ */
+async function buildSnapshotShape(dot) {
+  const dotInt = parseInt(dot, 10);
+  if (!Number.isFinite(dotInt)) return null;
+
+  const [carrier, scores, authorities] = await Promise.all([
+    fmcsaRef.getCarrier(dotInt),
+    fmcsaRef.getBasicScores(dotInt),
+    fmcsaRef.getCarrierAuthorities(dotInt),
+  ]);
+  if (!carrier) return null;
+
+  const snap = {
+    scraped_at: null,
+    operating_status: carrier.status || null,
+    safety_rating: null,
+    safety_rating_date: null,
+    out_of_service_date: null,
+    total_drivers: carrier.drivers ?? null,
+    total_power_units: carrier.power_units ?? null,
+    bipd_insurance_required: null,
+    bipd_insurance_on_file: null,
+    cargo_insurance_required: null,
+    cargo_insurance_on_file: null,
+    bond_insurance_required: null,
+    bond_insurance_on_file: null,
+    authority_common: null,
+    authority_contract: null,
+    authority_broker: null,
+  };
+
+  for (const field of SCORE_FIELDS) snap[field.key] = null;
+
+  let mostRecent = null;
+  for (const s of scores || []) {
+    const fieldKey = BASIC_TO_FIELD[String(s.basic).toUpperCase()];
+    if (!fieldKey) continue;
+    snap[fieldKey] = s.percentile != null ? Number(s.percentile) : null;
+    if (!mostRecent || (s.computed_at && s.computed_at > mostRecent)) {
+      mostRecent = s.computed_at;
+    }
+  }
+  snap.scraped_at = mostRecent;
+
+  for (const a of authorities || []) {
+    if (a.authority_type === 'Common') snap.authority_common = a.status;
+    else if (a.authority_type === 'Contract') snap.authority_contract = a.status;
+    else if (a.authority_type === 'Broker') snap.authority_broker = a.status;
+
+    // Insurance is a JSONB blob keyed loosely by type; surface a YES/NO if any
+    // entry exists for the given type (legacy contract was a YES/NO string).
+    const amounts = parseJsonSafe(a.insurance_amounts) || {};
+    const upperKeys = Object.keys(amounts).map((k) => String(k).toUpperCase());
+    if (snap.bipd_insurance_on_file == null && upperKeys.some((k) => k.includes('BIPD'))) {
+      snap.bipd_insurance_on_file = 'YES';
+    }
+    if (snap.cargo_insurance_on_file == null && upperKeys.some((k) => k.includes('CARGO'))) {
+      snap.cargo_insurance_on_file = 'YES';
+    }
+    if (snap.bond_insurance_on_file == null && upperKeys.some((k) => k.includes('BOND'))) {
+      snap.bond_insurance_on_file = 'YES';
+    }
+  }
+
+  return snap;
+}
 
 // ─── Internal: Dashboard ─────────────────────────────────────────────────────
 
@@ -662,33 +779,23 @@ router.get('/my-scores', canView, async (req, res) => {
       return res.json({ carriers: [] });
     }
 
-    const dotNumbers = entities.map((e) => e.dot_number);
+    // FN-1427: read from fmcsa.* via fmcsa-reference instead of legacy
+    // fmcsa_monitored_carriers + fmcsa_safety_snapshots tables.
+    const carriers = await Promise.all(
+      entities.map(async (e) => {
+        const carrier = await fmcsaRef.getCarrier(e.dot_number);
+        const snap = await buildSnapshotShape(e.dot_number);
+        return {
+          id: carrier ? `dot-${carrier.dot}` : `entity-${e.id}`,
+          dot_number: e.dot_number,
+          mc_number: carrier?.mc_number || e.mc_number || null,
+          legal_name: carrier?.legal_name || e.legal_name || e.name || null,
+          ...(snap || {}),
+        };
+      })
+    );
 
-    // Get latest snapshots for these DOT numbers
-    const carriers = await knex('fmcsa_monitored_carriers as mc')
-      .leftJoin(
-        knex('fmcsa_safety_snapshots')
-          .distinctOn('monitored_carrier_id')
-          .orderBy('monitored_carrier_id')
-          .orderBy('scraped_at', 'desc')
-          .as('s'),
-        'mc.id', 's.monitored_carrier_id'
-      )
-      .whereIn('mc.dot_number', dotNumbers)
-      .select(
-        'mc.id', 'mc.dot_number', 'mc.mc_number', 'mc.legal_name',
-        's.scraped_at', 's.unsafe_driving_score', 's.hos_compliance_score',
-        's.vehicle_maintenance_score', 's.controlled_substances_score',
-        's.driver_fitness_score', 's.crash_indicator_score', 's.hazmat_score',
-        's.operating_status', 's.safety_rating', 's.total_drivers', 's.total_power_units',
-        's.bipd_insurance_required', 's.bipd_insurance_on_file',
-        's.cargo_insurance_required', 's.cargo_insurance_on_file',
-        's.bond_insurance_required', 's.bond_insurance_on_file',
-        's.authority_common', 's.authority_contract', 's.authority_broker',
-        's.safety_rating_date', 's.out_of_service_date'
-      )
-      .orderBy('mc.legal_name');
-
+    carriers.sort((a, b) => (a.legal_name || '').localeCompare(b.legal_name || ''));
     res.json({ carriers });
   } catch (err) {
     console.error('[fmcsa-safety] my-scores error', err);
@@ -716,28 +823,39 @@ router.get('/my-scores/:dotNumber/history', canView, async (req, res) => {
       return sendError(res, 403, 'DOT number not associated with your tenant');
     }
 
-    const carrier = await knex('fmcsa_monitored_carriers')
-      .where({ dot_number: dotNumber })
-      .first();
-    if (!carrier) {
-      return res.json({ snapshots: [], total: 0 });
-    }
-
+    // FN-1427: read from fmcsa.basic_scores via fmcsa-reference. Each computed_at
+    // becomes one snapshot-shaped row aggregating all BASICs for that timestamp.
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
     const offset = parseInt(req.query.offset) || 0;
 
-    const snapshots = await knex('fmcsa_safety_snapshots')
-      .where({ monitored_carrier_id: carrier.id })
-      .orderBy('scraped_at', 'desc')
-      .limit(limit)
-      .offset(offset)
-      .select('*');
+    const allScores = await fmcsaRef.getBasicScores(dotNumber, { latest: false });
+    if (!allScores.length) return res.json({ snapshots: [], total: 0, limit, offset });
 
-    const [{ count }] = await knex('fmcsa_safety_snapshots')
-      .where({ monitored_carrier_id: carrier.id })
-      .count('id as count');
+    // Group scores by computed_at into snapshot-shaped rows.
+    const byTs = new Map();
+    for (const s of allScores) {
+      const tsKey = s.computed_at instanceof Date
+        ? s.computed_at.toISOString()
+        : String(s.computed_at);
+      let snap = byTs.get(tsKey);
+      if (!snap) {
+        snap = { scraped_at: s.computed_at };
+        for (const f of SCORE_FIELDS) snap[f.key] = null;
+        byTs.set(tsKey, snap);
+      }
+      const fieldKey = BASIC_TO_FIELD[String(s.basic).toUpperCase()];
+      if (fieldKey) snap[fieldKey] = s.percentile != null ? Number(s.percentile) : null;
+    }
 
-    res.json({ snapshots, total: parseInt(count), limit, offset });
+    const snapshots = [...byTs.values()].sort((a, b) => {
+      const at = a.scraped_at ? new Date(a.scraped_at).getTime() : 0;
+      const bt = b.scraped_at ? new Date(b.scraped_at).getTime() : 0;
+      return bt - at;
+    });
+
+    const total = snapshots.length;
+    const page = snapshots.slice(offset, offset + limit);
+    res.json({ snapshots: page, total, limit, offset });
   } catch (err) {
     console.error('[fmcsa-safety] my-scores history error', err);
     sendError(res, 500, 'Failed to load score history');
