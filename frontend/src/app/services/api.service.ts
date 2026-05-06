@@ -860,6 +860,13 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/vehicles/${id}`);
   }
 
+  getVehicleMaintenanceHistory(id: string, page = 1, pageSize = 25): Observable<any> {
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    return this.http.get(`${this.baseUrl}/vehicles/${id}/maintenance-history?${params.toString()}`);
+  }
+
   createVehicle(vehicle: any): Observable<any> {
     return this.http.post(`${this.baseUrl}/vehicles`, vehicle);
   }
