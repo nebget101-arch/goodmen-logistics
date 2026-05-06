@@ -20,6 +20,7 @@ import { SeverityBadgeComponent } from './components/severity-badge/severity-bad
 import { GroupedAlertRowComponent } from './components/grouped-alert-row/grouped-alert-row.component';
 import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives/has-permission.directive';
 import { AiExplainableDirective } from '../directives/ai-explainable.directive';
+import { FabSafeAreaDirective } from '../directives/fab-safe-area.directive';
 
 @NgModule({
   declarations: [
@@ -47,7 +48,8 @@ import { AiExplainableDirective } from '../directives/ai-explainable.directive';
     ConfidenceBadgeComponent,
     SeverityBadgeComponent,
     GroupedAlertRowComponent,
-    AiExplainableDirective
+    AiExplainableDirective,
+    FabSafeAreaDirective
   ],
   exports: [
     AiSelectComponent,
@@ -63,7 +65,8 @@ import { AiExplainableDirective } from '../directives/ai-explainable.directive';
     GroupedAlertRowComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective,
-    AiExplainableDirective
+    AiExplainableDirective,
+    FabSafeAreaDirective
   ]
 })
 export class SharedModule {}

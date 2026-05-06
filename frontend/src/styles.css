@@ -15,6 +15,15 @@
   --fn-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none'%3E%3Cpath stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 
   /*
+   * FN-1356 — Ask Neuron FAB safe-area contract.
+   * Any sticky/fixed bottom-right element (paginators, drawer footers, sticky
+   * action bars) should set or increment this var to push the FAB up clear of
+   * the obstructing element. The FAB reads it via calc() in .ai-chat-launcher.
+   * The value is normally driven by FabSafeAreaService / appFabSafeArea.
+   */
+  --neuron-fab-safe-bottom: 0px;
+
+  /*
    * FN-1191 — FleetNeuron AI dark-theme palette tokens.
    * Added so reports/ + future modules can route every color through a token
    * (zero hardcoded hex in module SCSS/CSS). Slate scale + accent ramp picked
@@ -1690,17 +1699,16 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
 }
 
 /* Global AI Chat assistant */
+/* FN-1356: bottom = safe-area var + 26px gutter so any sticky element that
+   sets --neuron-fab-safe-bottom pushes the FAB up clear of itself. */
 .ai-chat-launcher {
   position: fixed;
   right: 28px;
-  bottom: 26px;
+  bottom: calc(var(--neuron-fab-safe-bottom, 0px) + 26px);
   z-index: 1400;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  min-height: 42px;
-  padding: 10px 18px;
   border-radius: 999px;
   border: 1px solid rgba(45, 212, 191, 0.62);
   background:
@@ -1709,7 +1717,7 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
     linear-gradient(135deg, rgba(15, 118, 110, 0.95), rgba(14, 116, 144, 0.95));
   color: #e6fffb;
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
+  transition: bottom 0.18s ease, transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
   box-shadow:
     0 12px 28px rgba(14, 116, 144, 0.45),
     inset 0 0 0 1px rgba(125, 211, 252, 0.2);
@@ -1724,9 +1732,64 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
     inset 0 0 0 1px rgba(125, 211, 252, 0.28);
 }
 
+.ai-chat-launcher--pill {
+  gap: 0;
+  padding: 0;
+  min-height: 42px;
+}
+
+.ai-chat-launcher--pill .ai-chat-launcher__main {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px 10px 18px;
+  background: transparent;
+  border: none;
+  border-radius: 999px 0 0 999px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ai-chat-launcher--pill .ai-chat-launcher__minimize {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 6px;
+  padding: 0;
+  background: rgba(2, 6, 23, 0.35);
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  border-radius: 50%;
+  color: #e6fffb;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.ai-chat-launcher--pill .ai-chat-launcher__minimize:hover {
+  background: rgba(2, 6, 23, 0.55);
+  border-color: rgba(103, 232, 249, 0.6);
+  transform: scale(1.04);
+}
+
+.ai-chat-launcher--orb {
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 50%;
+}
+
 .ai-chat-launcher .material-symbols-outlined {
   font-size: 18px;
   color: #a5f3fc;
+}
+
+.ai-chat-launcher--orb .material-symbols-outlined {
+  font-size: 22px;
 }
 
 .ai-chat-launcher-label {
@@ -1738,7 +1801,8 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
 .ai-chat-panel {
   position: fixed;
   right: 24px;
-  bottom: 82px;
+  /* FN-1356: ride above the FAB (which itself rides above any safe-area). */
+  bottom: calc(var(--neuron-fab-safe-bottom, 0px) + 82px);
   width: 360px;
   max-height: 70vh;
   display: flex;
@@ -2217,13 +2281,13 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
 @media (max-width: 768px) {
   .ai-chat-launcher {
     right: 16px;
-    bottom: 20px;
+    bottom: calc(var(--neuron-fab-safe-bottom, 0px) + 20px);
   }
 
   .ai-chat-panel {
     right: 8px;
     left: 8px;
-    bottom: 76px;
+    bottom: calc(var(--neuron-fab-safe-bottom, 0px) + 76px);
     width: auto;
     max-height: 70vh;
   }

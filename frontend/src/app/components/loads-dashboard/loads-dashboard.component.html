@@ -1304,7 +1304,8 @@
     </ng-container>
   </div>
 
-  <div class="pagination">
+  <!-- FN-1356: appFabSafeArea reserves bottom space so the global Ask Neuron FAB shifts up clear of the paginator. -->
+  <div class="pagination" appFabSafeArea="64">
     <button
       class="pagination-btn"
       (click)="goToPage(page - 1)"
