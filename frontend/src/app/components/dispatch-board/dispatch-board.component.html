@@ -14,7 +14,91 @@
     </div>
   </div>
 
-  <div class="toolbar">
+  <!-- FN-1435: NLQ search bar — POSTs to /api/loads/search/nlq, same endpoint as the global command palette -->
+  <div class="nlq-bar" role="search">
+    <span class="material-symbols-outlined nlq-icon" aria-hidden="true">auto_awesome</span>
+    <input
+      #nlqInput
+      type="text"
+      class="nlq-input"
+      [(ngModel)]="nlqQuery"
+      (keydown)="onNlqInputKeydown($event)"
+      placeholder='Try: empty trucks in TX expiring HOS tomorrow'
+      aria-label="Natural-language load search"
+      data-testid="nlq-search-input"
+    />
+    <span class="nlq-shortcut" aria-hidden="true" *ngIf="!nlqQuery && !nlqHasSearched">/</span>
+    <button
+      type="button"
+      class="nlq-clear"
+      *ngIf="nlqQuery || nlqHasSearched"
+      (click)="clearNlqSearch()"
+      title="Clear (Esc)"
+      data-testid="nlq-clear-btn"
+    >
+      <span class="material-symbols-outlined">close</span>
+    </button>
+    <button
+      type="button"
+      class="nlq-submit"
+      [disabled]="!nlqQuery.trim() || nlqLoading"
+      (click)="runNlqSearch()"
+      data-testid="nlq-submit-btn"
+    >
+      <span *ngIf="!nlqLoading">Search</span>
+      <span *ngIf="nlqLoading" class="nlq-spinner" aria-label="Loading"></span>
+    </button>
+  </div>
+
+  <!-- NLQ results panel: replaces the grid when an NLQ search is active -->
+  <div class="nlq-results" *ngIf="nlqHasSearched" data-testid="nlq-results">
+    <div class="nlq-results-header">
+      <span class="nlq-results-summary">
+        <ng-container *ngIf="nlqLoading">Searching for "{{ nlqSubmittedQuery }}"…</ng-container>
+        <ng-container *ngIf="!nlqLoading">
+          <strong>{{ nlqResults.length }}</strong>
+          <ng-container *ngIf="nlqResults.length === 1"> result</ng-container>
+          <ng-container *ngIf="nlqResults.length !== 1"> results</ng-container>
+          for "{{ nlqSubmittedQuery }}"
+          <span class="nlq-fallback-tag" *ngIf="nlqFallback" title="Keyword fallback (no semantic match)">keyword</span>
+        </ng-container>
+      </span>
+      <button type="button" class="btn-link nlq-back-link" (click)="clearNlqSearch()" data-testid="nlq-back-to-board">
+        Back to dispatch board
+      </button>
+    </div>
+
+    <div class="nlq-empty" *ngIf="!nlqLoading && nlqResults.length === 0" data-testid="nlq-empty">
+      <span class="material-symbols-outlined" aria-hidden="true">search_off</span>
+      <p>No loads match this query. Try simpler phrasing — e.g. "loads delivered today" or "in-transit to TX".</p>
+    </div>
+
+    <ul class="nlq-list" *ngIf="!nlqLoading && nlqResults.length > 0" data-testid="nlq-list">
+      <li
+        *ngFor="let load of nlqResults; trackBy: trackByLoadId"
+        class="nlq-row"
+        (click)="goToLoad(load)"
+        (keyup.enter)="goToLoad(load)"
+        tabindex="0"
+        role="button"
+        [attr.aria-label]="'Open load ' + formatNlqLoadLabel(load)"
+        data-testid="nlq-row"
+      >
+        <div class="nlq-row-main">
+          <span class="nlq-row-id">{{ formatNlqLoadLabel(load) }}</span>
+          <span
+            class="nlq-row-status status-badge"
+            *ngIf="load.status"
+            [ngStyle]="getLoadStatusBadgeStyle(load.status)"
+          >{{ getLoadStatusLabel(load.status) }}</span>
+        </div>
+        <div class="nlq-row-route" *ngIf="formatNlqLoadRoute(load)">{{ formatNlqLoadRoute(load) }}</div>
+        <div class="nlq-row-meta" *ngIf="formatNlqLoadMeta(load)">{{ formatNlqLoadMeta(load) }}</div>
+      </li>
+    </ul>
+  </div>
+
+  <div class="toolbar" *ngIf="!nlqHasSearched">
     <div class="toolbar-left">
       <div class="ai-date-wrapper" title="Jump to date">
         <app-date-picker
@@ -73,14 +157,14 @@
     </div>
   </div>
 
-  <div class="board-container" *ngIf="loading">
+  <div class="board-container" *ngIf="loading && !nlqHasSearched">
     <div class="loading-overlay">
       <div class="spinner"></div>
       <p>Loading schedule...</p>
     </div>
   </div>
 
-  <div class="board-grid" *ngIf="!loading">
+  <div class="board-grid" *ngIf="!loading && !nlqHasSearched">
     <div class="grid-header">
       <div class="col-driver">Driver</div>
       <div class="col-days">
@@ -213,5 +297,17 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- FN-1435: inline toast for NLQ search errors -->
+  <div
+    *ngIf="toast"
+    class="toast"
+    [class.toast-error]="toastType === 'error'"
+    [class.toast-success]="toastType === 'success'"
+    role="status"
+    data-testid="dispatch-toast"
+  >
+    {{ toast }}
   </div>
 </div>
