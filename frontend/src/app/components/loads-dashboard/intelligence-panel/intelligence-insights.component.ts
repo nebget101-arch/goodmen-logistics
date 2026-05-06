@@ -2,10 +2,12 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  EventEmitter,
   Input,
   OnChanges,
   OnDestroy,
   OnInit,
+  Output,
   SimpleChanges,
 } from '@angular/core';
 import { Subject, Subscription, timer } from 'rxjs';
@@ -32,6 +34,13 @@ export class IntelligenceInsightsComponent implements OnInit, OnChanges, OnDestr
 
   /** Polling cadence — 60s per FN-784 AC. Exposed for tests. */
   @Input() refreshMs = 60_000;
+
+  /**
+   * FN-1353: clicking an insight no longer navigates directly. The parent
+   * decides whether to apply a smart filter (mapped types) or fall back to
+   * the legacy `insight.href` navigation (unmapped types).
+   */
+  @Output() insightApply = new EventEmitter<AiInsight>();
 
   insights: AiInsight[] = [];
   loading = false;
@@ -64,6 +73,15 @@ export class IntelligenceInsightsComponent implements OnInit, OnChanges, OnDestr
   }
 
   trackById(_i: number, insight: AiInsight): string { return insight.id; }
+
+  /** FN-1353: emit the insight up to the parent so it can apply a filter
+   *  (or, for unmapped types, fall back to navigation by href). */
+  onInsightClick(insight: AiInsight, event?: Event): void {
+    if (event) {
+      event.preventDefault();
+    }
+    this.insightApply.emit(insight);
+  }
 
   iconFor(insight: AiInsight): string {
     switch (insight.type) {

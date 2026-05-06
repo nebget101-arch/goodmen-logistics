@@ -91,6 +91,13 @@
   color: #f1f5f9;
   line-height: 1.35;
   text-decoration: none;
+  /* FN-1353: was an <a>; now a <button> — strip default UA chrome and align
+     left so the click target reads identically to the previous link. */
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
 
   &:hover { color: #38bdf8; text-decoration: underline; }
 }

@@ -1,0 +1,19 @@
+<div
+  class="pipeline-pill"
+  role="img"
+  [class.pipeline-pill--cancelled]="cancelled"
+  [attr.aria-label]="ariaLabel"
+>
+  <span
+    *ngFor="let stage of stages; let i = index; trackBy: trackByKey"
+    class="pipeline-pill__seg"
+    [class.pipeline-pill__seg--reached]="isReached(i)"
+    [class.pipeline-pill__seg--current]="isCurrent(i)"
+    [attr.data-key]="stage.key"
+    [title]="stage.label"
+  >
+    <span class="pipeline-pill__label">{{ stage.label }}</span>
+    <span class="pipeline-pill__dot" *ngIf="isCurrent(i)" aria-hidden="true"></span>
+  </span>
+  <span class="pipeline-pill__slash" *ngIf="cancelled" aria-hidden="true"></span>
+</div>

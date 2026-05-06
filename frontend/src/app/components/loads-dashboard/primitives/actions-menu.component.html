@@ -1,0 +1,74 @@
+<div class="actions-menu" (click)="$event.stopPropagation()">
+  <button
+    type="button"
+    class="actions-menu__primary"
+    (click)="emitOpen($event)"
+    aria-label="Open load"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+    <span class="actions-menu__primary-label">Open</span>
+  </button>
+
+  <button
+    type="button"
+    class="actions-menu__toggle"
+    (click)="toggleMenu($event)"
+    [attr.aria-expanded]="menuOpen"
+    aria-haspopup="menu"
+    aria-label="More actions"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">more_horiz</span>
+  </button>
+
+  <div
+    *ngIf="menuOpen"
+    class="actions-menu__dropdown"
+    role="menu"
+  >
+    <button
+      type="button"
+      class="actions-menu__item"
+      role="menuitem"
+      (click)="emitEdit($event)"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+      <span>Edit</span>
+    </button>
+    <button
+      type="button"
+      class="actions-menu__item"
+      role="menuitem"
+      (click)="emitClone($event)"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+      <span>Clone</span>
+    </button>
+    <button
+      type="button"
+      class="actions-menu__item"
+      role="menuitem"
+      (click)="emitViewOnMap($event)"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">map</span>
+      <span>View on map</span>
+    </button>
+    <button
+      type="button"
+      class="actions-menu__item"
+      role="menuitem"
+      (click)="emitTrackDriver($event)"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">local_shipping</span>
+      <span>Track driver</span>
+    </button>
+    <button
+      type="button"
+      class="actions-menu__item"
+      role="menuitem"
+      (click)="emitCopyLink($event)"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">link</span>
+      <span>Copy link</span>
+    </button>
+  </div>
+</div>

@@ -31,14 +31,17 @@ export interface LoadFilters {
   smartFilter?: string[] | string;
 }
 
-/** FN-798: canonical smart-filter chip keys. Must match backend SMART_FILTER_CHIPS. */
+/** FN-798: canonical smart-filter chip keys. Must match backend SMART_FILTER_CHIPS.
+ *  FN-1353: `idle_drivers` is a new chip surfaced from the AI Insights flow;
+ *  backend wiring lands separately, so the count may be 0 until then. */
 export const SMART_FILTER_KEYS = [
   'ai_drafts',
   'overdue',
   'high_value',
   'from_email',
   'missing_docs',
-  'my_drafts'
+  'my_drafts',
+  'idle_drivers'
 ] as const;
 export type SmartFilterKey = typeof SMART_FILTER_KEYS[number];
 export type SmartFilterCounts = Record<SmartFilterKey, number>;

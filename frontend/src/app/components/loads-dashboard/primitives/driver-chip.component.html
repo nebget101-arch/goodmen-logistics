@@ -1,0 +1,7 @@
+<span class="driver-chip" [class.driver-chip--empty]="!hasName" [title]="name || 'Unassigned'">
+  <span class="driver-chip__avatar" *ngIf="hasName" aria-hidden="true">{{ initials }}</span>
+  <span class="driver-chip__avatar driver-chip__avatar--placeholder" *ngIf="!hasName" aria-hidden="true">
+    <span class="material-symbols-outlined">local_shipping</span>
+  </span>
+  <span class="driver-chip__name">{{ hasName ? name : '—' }}</span>
+</span>
