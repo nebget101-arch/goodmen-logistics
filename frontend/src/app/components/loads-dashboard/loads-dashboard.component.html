@@ -185,9 +185,12 @@
   ></app-intelligence-panel>
 
   <!-- FN-795: AI insights list (60s refresh) — visually paired with the intelligence panel -->
+  <!-- FN-1353: clicking an insight applies a smart-filter (mapped types) or
+       navigates to the original href (unmapped types). -->
   <app-intelligence-insights
     *ngIf="!isDriverRole"
     [period]="intelligencePeriod"
+    (insightApply)="applyAiInsight($event)"
   ></app-intelligence-insights>
 
   <div class="status-summary-bar status-summary-bar--collapsible" *ngIf="!loading">
@@ -286,14 +289,23 @@
     </div>
   </div>
 
-  <!-- FN-798: Smart filter chips (AND logic, teal active fill) -->
-  <app-smart-filters
-    [counts]="smartFilterCounts"
-    [active]="smartFilterKeys"
-    [loading]="smartFilterCountsLoading"
-    (toggle)="toggleSmartFilter($event)"
-    (clearAll)="clearSmartFilters()"
-  ></app-smart-filters>
+  <!-- FN-1353: Two-row filter container.
+       Row 1 = time-range / period chips (status-summary-bar above is the
+       primary period control; the active-filters summary further down is
+       still rendered in its own block).
+       Row 2 = semantic smart-filter chips (FN-798). -->
+  <div class="loads-filters">
+    <div class="loads-filters__row loads-filters__row--semantic">
+      <!-- FN-798: Smart filter chips (AND logic, teal active fill) -->
+      <app-smart-filters
+        [counts]="smartFilterCounts"
+        [active]="smartFilterKeys"
+        [loading]="smartFilterCountsLoading"
+        (toggle)="toggleSmartFilter($event)"
+        (clearAll)="clearSmartFilters()"
+      ></app-smart-filters>
+    </div>
+  </div>
 
   <!-- FN-746: Needs review toggle chip -->
   <div class="quick-filter-row" *ngIf="!isDriverRole">
@@ -532,8 +544,20 @@
     </div>
   </form>
 
-  <!-- FN-767: Loads table toolbar — column visibility picker + saved views -->
-  <div class="loads-table-toolbar" *ngIf="!isDriverRole">
+  <!-- FN-1353: List-region toolbar header — view toggle + (table-only) tools -->
+  <div class="loads-list-region-header" *ngIf="!isDriverRole">
+    <div class="loads-list-region-header__spacer"></div>
+    <app-view-toggle
+      class="loads-list-region-header__view-toggle"
+      [value]="viewMode"
+      (valueChange)="setViewMode($event)"
+    ></app-view-toggle>
+  </div>
+
+  <!-- FN-767: Loads table toolbar — column visibility picker + saved views.
+       FN-1353: only relevant in Table view (Cards/Kanban don't have user-
+       resizable columns). -->
+  <div class="loads-table-toolbar" *ngIf="!isDriverRole && viewMode === 'table'">
     <div class="loads-table-toolbar__group dropdown" (click)="$event.stopPropagation()">
       <button
         type="button"
@@ -721,7 +745,7 @@
     </div>
   </div>
 
-  <div class="table-card">
+  <div class="table-card" [attr.data-view-mode]="viewMode" [hidden]="viewMode !== 'table'" id="loads-view-table">
     <!-- FN-821: shimmer skeleton while a list fetch is in flight. -->
     <app-loads-loading-skeleton
       *ngIf="loading"
@@ -1303,6 +1327,165 @@
     </div>
     </ng-container>
   </div>
+
+  <!-- FN-1353: Cards view — hybrid row layout sharing the same data path. -->
+  <section
+    class="loads-cards-view"
+    *ngIf="viewMode === 'cards'"
+    id="loads-view-cards"
+    aria-label="Loads cards view"
+  >
+    <app-loads-loading-skeleton
+      *ngIf="loading"
+      class="loads-skeleton-slot"
+      [columns]="skeletonColumns"
+      [showSelect]="!isDriverRole"
+      [rowCount]="10"
+    ></app-loads-loading-skeleton>
+
+    <ng-container *ngIf="!loading">
+      <div class="loads-cards-grid" *ngIf="filteredLoads.length > 0; else cardsEmpty">
+        <article
+          *ngFor="let load of filteredLoads; trackBy: trackByLoadId"
+          class="loads-card"
+          [class.loads-card--attention]="isRowAttention(load)"
+          (click)="onRowClick(load, $event)"
+        >
+          <header class="loads-card__primary">
+            <span class="loads-card__load-number">#{{ load.load_number }}</span>
+            <app-driver-chip class="loads-card__driver" [name]="load.driver_name"></app-driver-chip>
+            <app-route-cell
+              class="loads-card__route"
+              [pickup]="{ city: load.pickup_city, state: load.pickup_state }"
+              [delivery]="{ city: load.delivery_city, state: load.delivery_state }"
+            ></app-route-cell>
+            <span class="loads-card__rate">
+              {{ load.rate != null ? (load.rate | currency:'USD':'symbol':'1.0-2') : '—' }}
+            </span>
+            <app-pipeline-pill
+              class="loads-card__pipeline"
+              [loadStatus]="load.status"
+              [billingStatus]="load.billing_status"
+            ></app-pipeline-pill>
+          </header>
+
+          <footer class="loads-card__secondary">
+            <span class="loads-card__meta">
+              <span class="loads-card__meta-label">Pickup</span>
+              <span class="loads-card__meta-value">{{ load.pickup_date || '—' }}</span>
+            </span>
+            <span class="loads-card__meta">
+              <span class="loads-card__meta-label">Completed</span>
+              <span class="loads-card__meta-value">{{ load.completed_date || '—' }}</span>
+            </span>
+            <span class="loads-card__meta">
+              <span class="loads-card__meta-label">PO #</span>
+              <span class="loads-card__meta-value">{{ load.po_number || '—' }}</span>
+            </span>
+            <span class="loads-card__meta">
+              <span class="loads-card__meta-label">Attachments</span>
+              <span class="loads-card__meta-value">{{ load.attachment_count || 0 }}</span>
+            </span>
+            <app-actions-menu
+              class="loads-card__actions"
+              [loadId]="load.id"
+              (open)="onCardOpen($event)"
+              (edit)="onCardEdit($event)"
+              (clone)="onCardClone($event)"
+              (viewOnMap)="onCardViewOnMap($event)"
+              (trackDriver)="onCardTrackDriver($event)"
+              (copyLink)="onCardCopyLink($event)"
+            ></app-actions-menu>
+          </footer>
+        </article>
+      </div>
+
+      <ng-template #cardsEmpty>
+        <app-loads-empty-state
+          [mode]="emptyStateMode"
+          [smartFilterLabel]="activeSmartFilterLabel"
+          [errorDetail]="loadErrorDetail"
+          (clearFilters)="onEmptyStateClearFilters()"
+          (createLoad)="onEmptyStateCreateLoad()"
+          (importFromPdf)="onEmptyStateImportFromPdf()"
+          (retry)="onEmptyStateRetry()"
+        ></app-loads-empty-state>
+      </ng-template>
+    </ng-container>
+  </section>
+
+  <!-- FN-1353: Kanban view — visual grouping by pipeline status. Read-only,
+       no drag-to-update. Each tile has the same Open/overflow actions. -->
+  <section
+    class="loads-kanban-view"
+    *ngIf="viewMode === 'kanban'"
+    id="loads-view-kanban"
+    aria-label="Loads kanban view"
+  >
+    <app-loads-loading-skeleton
+      *ngIf="loading"
+      class="loads-skeleton-slot"
+      [columns]="skeletonColumns"
+      [showSelect]="!isDriverRole"
+      [rowCount]="6"
+    ></app-loads-loading-skeleton>
+
+    <div class="loads-kanban-grid" *ngIf="!loading">
+      <div
+        class="loads-kanban-col"
+        *ngFor="let col of kanbanColumns"
+      >
+        <header class="loads-kanban-col__header">
+          <span class="loads-kanban-col__label">{{ col.label }}</span>
+          <span class="loads-kanban-col__count">{{ loadsForKanbanColumn(col.key).length }}</span>
+        </header>
+        <div class="loads-kanban-col__list">
+          <article
+            *ngFor="let load of loadsForKanbanColumn(col.key); trackBy: trackByLoadId"
+            class="loads-kanban-card"
+            [class.loads-kanban-card--attention]="isRowAttention(load)"
+            (click)="onRowClick(load, $event)"
+          >
+            <div class="loads-kanban-card__top">
+              <span class="loads-kanban-card__load-number">#{{ load.load_number }}</span>
+              <span class="loads-kanban-card__rate">
+                {{ load.rate != null ? (load.rate | currency:'USD':'symbol':'1.0-0') : '—' }}
+              </span>
+            </div>
+            <app-route-cell
+              class="loads-kanban-card__route"
+              [pickup]="{ city: load.pickup_city, state: load.pickup_state }"
+              [delivery]="{ city: load.delivery_city, state: load.delivery_state }"
+            ></app-route-cell>
+            <app-driver-chip
+              class="loads-kanban-card__driver"
+              [name]="load.driver_name"
+            ></app-driver-chip>
+            <div class="loads-kanban-card__bottom">
+              <app-pipeline-pill
+                class="loads-kanban-card__pipeline"
+                [loadStatus]="load.status"
+                [billingStatus]="load.billing_status"
+              ></app-pipeline-pill>
+              <app-actions-menu
+                class="loads-kanban-card__actions"
+                [loadId]="load.id"
+                (open)="onCardOpen($event)"
+                (edit)="onCardEdit($event)"
+                (clone)="onCardClone($event)"
+                (viewOnMap)="onCardViewOnMap($event)"
+                (trackDriver)="onCardTrackDriver($event)"
+                (copyLink)="onCardCopyLink($event)"
+              ></app-actions-menu>
+            </div>
+          </article>
+          <div *ngIf="loadsForKanbanColumn(col.key).length === 0" class="loads-kanban-col__empty">
+            No loads
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- FN-1356: appFabSafeArea reserves bottom space so the global Ask Neuron FAB shifts up clear of the paginator. -->
   <div class="pagination" appFabSafeArea="64">

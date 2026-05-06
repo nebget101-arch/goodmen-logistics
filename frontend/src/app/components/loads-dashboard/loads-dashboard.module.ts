@@ -37,6 +37,13 @@ import { SmartFiltersComponent } from './smart-filters/smart-filters.component';
 import { LoadsLoadingSkeletonComponent } from './loading-skeleton/loading-skeleton.component';
 import { LoadsEmptyStateComponent } from './empty-state/empty-state.component';
 import { ResizableColumnDirective } from './resizable-column.directive';
+// FN-1353: Loads list redesign primitives — pipeline pill, actions menu,
+// view toggle, driver chip, route cell. Used by the new Cards/Kanban view modes.
+import { PipelinePillComponent } from './primitives/pipeline-pill.component';
+import { ActionsMenuComponent } from './primitives/actions-menu.component';
+import { ViewToggleComponent } from './primitives/view-toggle.component';
+import { DriverChipComponent } from './primitives/driver-chip.component';
+import { RouteCellComponent } from './primitives/route-cell.component';
 
 const routes: Routes = [
   {
@@ -79,7 +86,13 @@ const routes: Routes = [
     SmartFiltersComponent,
     LoadsLoadingSkeletonComponent,
     LoadsEmptyStateComponent,
-    ResizableColumnDirective
+    ResizableColumnDirective,
+    // FN-1353
+    PipelinePillComponent,
+    ActionsMenuComponent,
+    ViewToggleComponent,
+    DriverChipComponent,
+    RouteCellComponent
   ],
   imports: [
     CommonModule,

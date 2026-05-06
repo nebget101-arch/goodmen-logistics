@@ -14,7 +14,10 @@ const CHIPS: ChipDef[] = [
   { key: 'high_value',   label: 'High Value',   icon: 'trending_up',   title: 'Loads above the tenant high-value threshold' },
   { key: 'from_email',   label: 'From Email',   icon: 'alternate_email', title: 'Loads created from a forwarded email' },
   { key: 'missing_docs', label: 'Missing Docs', icon: 'folder_off',    title: 'Loads without required documents attached' },
-  { key: 'my_drafts',    label: 'My Drafts',    icon: 'edit_note',     title: 'Drafts you created' }
+  { key: 'my_drafts',    label: 'My Drafts',    icon: 'edit_note',     title: 'Drafts you created' },
+  // FN-1353: Idle Drivers chip — surfaces from AI Insights `driver_idle`. Count
+  // arrives as 0 until backend support lands; visual toggle still works.
+  { key: 'idle_drivers', label: 'Idle Drivers', icon: 'local_shipping', title: 'Drivers idle for more than 24 hours' }
 ];
 
 @Component({
