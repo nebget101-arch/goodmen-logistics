@@ -1,6 +1,6 @@
 <div class="locations-admin ai-admin-shell">
   <header class="ai-header">
-    <div>
+    <div class="header-left">
       <p class="ai-kicker">FleetNeuron Admin</p>
       <h1>
         <span class="material-symbols-outlined title-icon">location_on</span>
@@ -29,7 +29,7 @@
 
   <!-- Filter bar -->
   <section class="filter-bar">
-    <div class="filter-group">
+    <div class="filter-group filter-group--search">
       <label for="locSearch" class="filter-label">Search</label>
       <div class="search-wrap">
         <span class="material-symbols-outlined search-icon">search</span>
@@ -71,33 +71,45 @@
     </div>
 
     <div class="table-wrap" *ngIf="!loading">
-      <table class="table">
+      <table class="ai-table">
         <thead>
           <tr>
-            <th scope="col" class="sortable" (click)="onSort('name')" (keydown.enter)="onSort('name')" tabindex="0">
-              Name / Code
-              <span class="material-symbols-outlined sort-icon">{{ sortIcon('name') }}</span>
+            <th scope="col" class="col-name sortable" (click)="onSort('name')" (keydown.enter)="onSort('name')" tabindex="0">
+              <span class="th-content">
+                Name / Code
+                <span class="material-symbols-outlined sort-icon">{{ sortIcon('name') }}</span>
+              </span>
             </th>
-            <th scope="col" class="sortable" (click)="onSort('location_type')" (keydown.enter)="onSort('location_type')" tabindex="0">
-              Type
-              <span class="material-symbols-outlined sort-icon">{{ sortIcon('location_type') }}</span>
+            <th scope="col" class="col-type sortable" (click)="onSort('location_type')" (keydown.enter)="onSort('location_type')" tabindex="0">
+              <span class="th-content">
+                Type
+                <span class="material-symbols-outlined sort-icon">{{ sortIcon('location_type') }}</span>
+              </span>
             </th>
-            <th scope="col" class="sortable" (click)="onSort('city')" (keydown.enter)="onSort('city')" tabindex="0">
-              City / State
-              <span class="material-symbols-outlined sort-icon">{{ sortIcon('city') }}</span>
+            <th scope="col" class="col-city sortable" (click)="onSort('city')" (keydown.enter)="onSort('city')" tabindex="0">
+              <span class="th-content">
+                City / State
+                <span class="material-symbols-outlined sort-icon">{{ sortIcon('city') }}</span>
+              </span>
             </th>
-            <th scope="col">Phone</th>
-            <th scope="col" class="col-count" title="Active bins">
-              <span class="material-symbols-outlined col-count-icon">shelves</span>
-              Bins
+            <th scope="col" class="col-phone col-secondary">Phone</th>
+            <th scope="col" class="col-count col-secondary" title="Active bins">
+              <span class="th-content">
+                <span class="material-symbols-outlined col-count-icon">shelves</span>
+                Bins
+              </span>
             </th>
-            <th scope="col" class="col-count" title="Assigned users">
-              <span class="material-symbols-outlined col-count-icon">group</span>
-              Users
+            <th scope="col" class="col-count col-secondary" title="Assigned users">
+              <span class="th-content">
+                <span class="material-symbols-outlined col-count-icon">group</span>
+                Users
+              </span>
             </th>
-            <th scope="col" class="sortable" (click)="onSort('active')" (keydown.enter)="onSort('active')" tabindex="0">
-              Status
-              <span class="material-symbols-outlined sort-icon">{{ sortIcon('active') }}</span>
+            <th scope="col" class="col-status sortable" (click)="onSort('active')" (keydown.enter)="onSort('active')" tabindex="0">
+              <span class="th-content">
+                Status
+                <span class="material-symbols-outlined sort-icon">{{ sortIcon('active') }}</span>
+              </span>
             </th>
             <th scope="col" class="col-actions">Actions</th>
           </tr>
@@ -111,20 +123,20 @@
           </tr>
           <tr *ngFor="let loc of locations">
             <!-- Name + Code -->
-            <td class="name-cell">
+            <td class="col-name name-cell">
               <span class="loc-name">{{ loc.name }}</span>
               <span class="loc-code" *ngIf="loc.code">{{ loc.code }}</span>
             </td>
 
-            <!-- Type badge -->
-            <td>
+            <!-- Type chip -->
+            <td class="col-type">
               <span [ngClass]="getTypeBadgeClass(loc.location_type)">
                 {{ getTypeLabel(loc.location_type) }}
               </span>
             </td>
 
             <!-- City / State -->
-            <td>
+            <td class="col-city">
               <ng-container *ngIf="loc.city || loc.state; else noCityState">
                 <span class="city-state">
                   {{ loc.city || '' }}{{ loc.city && loc.state ? ', ' : '' }}{{ loc.state || '' }}
@@ -134,25 +146,25 @@
             </td>
 
             <!-- Phone -->
-            <td>
+            <td class="col-phone col-secondary">
               <span *ngIf="loc.phone; else noPhone" class="loc-phone">{{ loc.phone }}</span>
               <ng-template #noPhone><span class="muted">—</span></ng-template>
             </td>
 
             <!-- # Bins -->
-            <td class="col-count">
+            <td class="col-count col-secondary">
               <span *ngIf="loc.bin_count != null" class="count-badge">{{ loc.bin_count }}</span>
               <span *ngIf="loc.bin_count == null" class="muted">—</span>
             </td>
 
             <!-- # Users -->
-            <td class="col-count">
+            <td class="col-count col-secondary">
               <span *ngIf="loc.user_count != null" class="count-badge">{{ loc.user_count }}</span>
               <span *ngIf="loc.user_count == null" class="muted">—</span>
             </td>
 
             <!-- Active status pill -->
-            <td>
+            <td class="col-status">
               <span class="status-pill" [class.status-active]="loc.active" [class.status-inactive]="!loc.active">
                 {{ loc.active ? 'Active' : 'Inactive' }}
               </span>
@@ -168,6 +180,7 @@
                   [disabled]="actionLoadingId === loc.id"
                   (click)="onEditLocation(loc)"
                   title="Edit location details"
+                  aria-label="Edit location details"
                 >
                   <span class="material-symbols-outlined">edit</span>
                 </button>
@@ -179,6 +192,7 @@
                   [disabled]="actionLoadingId === loc.id"
                   (click)="onManageBins(loc)"
                   title="Manage bins"
+                  aria-label="Manage bins"
                 >
                   <span class="material-symbols-outlined">shelves</span>
                 </button>
@@ -190,6 +204,7 @@
                   [disabled]="actionLoadingId === loc.id"
                   (click)="onManageUsers(loc)"
                   title="Manage users"
+                  aria-label="Manage users"
                 >
                   <span class="material-symbols-outlined">manage_accounts</span>
                 </button>
@@ -201,6 +216,7 @@
                   [disabled]="actionLoadingId === loc.id"
                   (click)="onDeleteLocation(loc)"
                   title="Delete location"
+                  aria-label="Delete location"
                 >
                   <span class="material-symbols-outlined">delete</span>
                 </button>
