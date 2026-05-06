@@ -1769,6 +1769,49 @@ export class ApiService {
     return this.http.post(`${aiBase}/work-order/triage`, payload);
   }
 
+  // FN-1442: AI triage + live availability in one round-trip. Backend joins
+  // AI-suggested SKUs with the tenant's parts catalog and inventory and
+  // surfaces inventoryStatus = in_stock | low_stock | out_of_stock | not_found
+  // per part. Use this from the triage panel; the AI-only triageWorkOrder
+  // above is left as-is for callers that don't need availability.
+  triageEnrichedWorkOrder(payload: {
+    description: string;
+    vehicleId?: string | null;
+    customerId?: string | null;
+    locationId?: string | null;
+  }): Observable<{
+    tasks: Array<{ description: string; estimatedHours?: number }>;
+    parts: Array<{
+      partName: string;
+      suggestedSku: string | null;
+      qty: number;
+      confidence?: number | null;
+      partId: string | null;
+      onHand: number | null;
+      binLocation: string | null;
+      reorderPoint: number | null;
+      isLowStock: boolean;
+      inventoryStatus: 'in_stock' | 'low_stock' | 'out_of_stock' | 'not_found';
+    }>;
+    priority?: string;
+    notes?: string;
+  }> {
+    return this.http.post<any>(`${this.baseUrl}/work-orders/triage-enriched`, payload);
+  }
+
+  // FN-1443: queue a reorder for an out-of-stock or low-stock part surfaced by
+  // triage. Reuses the parts-reorder endpoint (no new endpoint introduced for
+  // the reorder itself); `sourceWorkOrderId` lets the BE link the PO back.
+  createPartsReorder(payload: {
+    locationId: string;
+    partId?: string | null;
+    sku: string;
+    qty: number;
+    sourceWorkOrderId?: string | null;
+  }): Observable<{ success?: boolean; data?: any }> {
+    return this.http.post<any>(`${this.baseUrl}/parts/reorder`, payload);
+  }
+
   getInventoryRecommendations(payload: {
     locationName?: string;
     onHand: Array<{ sku?: string; name?: string; on_hand_qty?: number; reserved_qty?: number; available_qty?: number; status?: string; min_stock_level?: number; reorder_qty?: number }>;
