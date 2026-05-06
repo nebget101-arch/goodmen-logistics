@@ -201,12 +201,20 @@ router.use(auth(['admin', 'safety']));
  *         description: Server error
  */
 /**
- * Builds the per-group stats query map. When `windowBounds` is supplied,
- * each group is additionally filtered by the appropriate timestamp column
- * (`created_at` for most tables; `record_date` for hos_records). Groups that
- * are intrinsically point-in-time (vehicles maintenance status, compliance
- * cert state) receive an "as of windowEnd" interpretation by filtering rows
- * to those that existed at windowEnd.
+ * Builds the per-group stats query map.
+ *
+ * Windowing contract (FN-1360 — do not regress without updating this comment):
+ *   STATE KPIs (must reflect the fleet "as of windowEnd"; never filter by created_at>=$3):
+ *     - drivers   (activeDrivers / totalDrivers): "exists at windowEnd"
+ *     - vehicles  (active / total / oos / maintenance-due): point-in-time fleet state
+ *     - compliance (dqfComplianceRate, expiredMedCerts, upcomingMedCerts, expiredCDLs,
+ *                   clearinghouseIssues): driver cert state at windowEnd
+ *   ACTIVITY KPIs (legitimately windowed by occurrence timestamp):
+ *     - loads     (filtered by created_at / completed_date)
+ *     - hos       (filtered by hr.record_date)
+ *
+ * State KPIs use NULL-safe `as-of-windowEnd` predicates so legacy rows with
+ * `created_at = NULL` are NOT silently excluded.
  *
  * @param {object} ctx
  * @param {object} ctx.tableFlags  hasDrivers/hasLoads/hasHosRecords
@@ -222,11 +230,17 @@ function buildStatGroups({ tableFlags, vehicleSqlPg, tenantId, operatingEntityId
   const wParams = windowed ? [windowBounds.start.toISOString(), windowBounds.end.toISOString()] : [];
   const params = [...baseParams, ...wParams];
 
-  // SQL fragments that switch on whether windowing is active
-  const driversWindow = windowed ? `AND created_at >= $3 AND created_at < $4` : '';
-  const driversAsOf   = windowed ? `created_at < $4` : 'TRUE';
-  const loadsWindow   = windowed ? `AND created_at >= $3 AND created_at < $4` : '';
-  const hosWindow     = windowed ? `AND hr.record_date >= $3::date AND hr.record_date < $4::date` : '';
+  // SQL fragments that switch on whether windowing is active.
+  // `driversAsOf` is NULL-safe so legacy/seed rows missing created_at are
+  // included in state counts (fixes FN-1359 silent exclusion).
+  const driversAsOf = windowed ? `(created_at IS NULL OR created_at < $4)` : 'TRUE';
+  const loadsWindow = windowed ? `AND created_at >= $3 AND created_at < $4` : '';
+  const hosWindow   = windowed ? `AND hr.record_date >= $3::date AND hr.record_date < $4::date` : '';
+
+  // Tolerant status comparison: vehicle.status may be 'in-service' / 'out-of-service'
+  // in some tenants and 'IN_SERVICE' / 'OOS' in others. Normalize to UPPER+underscore
+  // so the stats path matches what /api/dashboard/alerts already accepts.
+  const statusNorm = `UPPER(REPLACE(COALESCE(status::text, ''), '-', '_'))`;
 
   return {
     drivers: hasDrivers
@@ -235,14 +249,14 @@ function buildStatGroups({ tableFlags, vehicleSqlPg, tenantId, operatingEntityId
           COUNT(*) AS "totalDrivers"
         FROM drivers
         WHERE tenant_id = $1 AND ($2::uuid IS NULL OR operating_entity_id = $2)
-        ${driversWindow}`, params)
+        AND ${driversAsOf}`, params)
       : Promise.resolve({ rows: [{ activeDrivers: 0, totalDrivers: 0 }] }),
 
     vehicles: query(`SELECT
-        COUNT(*) FILTER (WHERE status = 'in-service') AS "activeVehicles",
+        COUNT(*) FILTER (WHERE ${statusNorm} = 'IN_SERVICE') AS "activeVehicles",
         COUNT(*) AS "totalVehicles",
-        COUNT(*) FILTER (WHERE status = 'out-of-service') AS "oosVehicles",
-        COUNT(*) FILTER (WHERE next_pm_due <= CURRENT_DATE + INTERVAL '30 days') AS "vehiclesNeedingMaintenance"
+        COUNT(*) FILTER (WHERE ${statusNorm} IN ('OUT_OF_SERVICE', 'OOS')) AS "oosVehicles",
+        COUNT(*) FILTER (WHERE next_pm_due IS NOT NULL AND next_pm_due <= CURRENT_DATE + INTERVAL '30 days') AS "vehiclesNeedingMaintenance"
       FROM (${vehicleSqlPg}) scoped_vehicles
       ${windowed ? 'WHERE TRUE' : ''}`, params),
 
@@ -382,6 +396,8 @@ router.get('/stats', async (req, res) => {
       dtLogger.sendMetric('custom.loads.active', statsData.activeLoads || 0);
       dtLogger.sendMetric('custom.hos.violations', statsData.hosViolations || 0);
       dtLogger.sendMetric('custom.compliance.dqf_rate', statsData.dqfComplianceRate || 0);
+      // Surface silent group failures so they're visible in monitoring (FN-1360).
+      dtLogger.sendMetric('custom.dashboard.stats.degraded', degradedGroups.length);
       return res.json(statsData);
     }
 
@@ -417,6 +433,8 @@ router.get('/stats', async (req, res) => {
     const duration = Date.now() - startTime;
     dtLogger.trackDatabase('SELECT', 'dashboard_stats', duration, true);
     dtLogger.trackRequest('GET', '/api/dashboard/stats', 200, duration, { window: windowParam, ...(degraded.length ? { degraded: true, degradedGroups: degraded } : {}) });
+    // Surface silent group failures so they're visible in monitoring (FN-1360).
+    dtLogger.sendMetric('custom.dashboard.stats.degraded', degraded.length);
     return res.json(payload);
   } catch (error) {
     const duration = Date.now() - startTime;

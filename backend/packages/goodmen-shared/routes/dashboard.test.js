@@ -277,3 +277,150 @@ describe('GET /api/dashboard/stats — window param (FN-1333)', () => {
     assert.ok(p95 < 500, `p95 was ${p95}ms (budget 500ms)`);
   });
 });
+
+/**
+ * FN-1360: state-vs-activity windowing semantics. These tests assert the
+ * shape of the SQL emitted for state KPIs (drivers, vehicles, compliance)
+ * — they should use as-of-windowEnd predicates that are NULL-safe, and
+ * vehicles should be tolerant of multiple status enum encodings. They also
+ * exercise the route end-to-end with stubbed counts to confirm activeDrivers
+ * is window-stable when the underlying fleet hasn't changed.
+ */
+describe('GET /api/dashboard/stats — state-vs-activity windowing (FN-1360)', () => {
+  let state;
+  let server;
+
+  before(async () => {
+    state = { calls: [] };
+    const app = buildApp(state);
+    server = await startServer(app);
+  });
+
+  after(() => { if (server) server.close(); });
+
+  function findGroupCalls(needle) {
+    return state.calls.filter((c) => c.sql.includes(needle));
+  }
+
+  it('drivers group filters by as-of-windowEnd, not by created_at>=$3 (state, not activity)', async () => {
+    state.calls.length = 0;
+    const res = await request(server, {
+      method: 'GET',
+      path: '/api/dashboard/stats?window=30d',
+      headers: { 'x-tenant-id': 'tenant-1', 'x-oe-id': 'oe-1' }
+    });
+    assert.strictEqual(res.status, 200);
+
+    const driverCalls = findGroupCalls('"activeDrivers"');
+    assert.ok(driverCalls.length >= 2, 'drivers group ran for current and previous windows');
+    for (const c of driverCalls) {
+      // Activity-windowing predicate must be gone — drivers seeded outside
+      // the window must not be excluded.
+      assert.ok(!/created_at\s*>=\s*\$3/.test(c.sql),
+        `drivers SQL must not filter by created_at>=$3 (got: ${c.sql})`);
+      // NULL-safe as-of-windowEnd predicate must be present.
+      assert.match(c.sql, /\(\s*created_at\s+IS\s+NULL\s+OR\s+created_at\s*<\s*\$4\s*\)/i);
+    }
+  });
+
+  it('compliance group is NULL-safe so legacy rows with created_at IS NULL are included', async () => {
+    state.calls.length = 0;
+    const res = await request(server, {
+      method: 'GET',
+      path: '/api/dashboard/stats?window=30d',
+      headers: { 'x-tenant-id': 'tenant-1', 'x-oe-id': 'oe-1' }
+    });
+    assert.strictEqual(res.status, 200);
+
+    const complianceCalls = findGroupCalls('"dqfComplianceRate"');
+    assert.ok(complianceCalls.length >= 1, 'compliance group ran');
+    for (const c of complianceCalls) {
+      assert.match(c.sql, /\(\s*created_at\s+IS\s+NULL\s+OR\s+created_at\s*<\s*\$4\s*\)/i,
+        'compliance SQL must use NULL-safe as-of-windowEnd predicate');
+    }
+  });
+
+  it('vehicles group accepts both kebab and snake/upper status encodings', async () => {
+    state.calls.length = 0;
+    const res = await request(server, {
+      method: 'GET',
+      path: '/api/dashboard/stats?window=30d',
+      headers: { 'x-tenant-id': 'tenant-1', 'x-oe-id': 'oe-1' }
+    });
+    assert.strictEqual(res.status, 200);
+
+    const vehicleCalls = findGroupCalls('"activeVehicles"');
+    assert.ok(vehicleCalls.length >= 1, 'vehicles group ran');
+    for (const c of vehicleCalls) {
+      // Old fragile equality checks must be gone.
+      assert.ok(!/status\s*=\s*'in-service'/.test(c.sql),
+        `vehicles SQL must not exact-match 'in-service' (got: ${c.sql})`);
+      assert.ok(!/status\s*=\s*'out-of-service'/.test(c.sql),
+        `vehicles SQL must not exact-match 'out-of-service'`);
+      // Tolerant predicates — same shape as alerts route accepts.
+      assert.match(c.sql, /UPPER\s*\(\s*REPLACE\s*\(\s*COALESCE\s*\(\s*status::text/i);
+      assert.match(c.sql, /'IN_SERVICE'/);
+      assert.match(c.sql, /'OUT_OF_SERVICE'/);
+      assert.match(c.sql, /'OOS'/);
+    }
+  });
+
+  it('?window=7d and ?window=30d return identical activeDrivers when fleet is stable', async () => {
+    // Six drivers exist throughout both windows; same stub for every call.
+    function stableQueueOnce() {
+      state.queueByGroup = [
+        { rows: [{ activeDrivers: 5, totalDrivers: 6 }] },                                 // drivers current
+        { rows: [{ activeVehicles: 3, totalVehicles: 4, oosVehicles: 1, vehiclesNeedingMaintenance: 5 }] },
+        { rows: [{ activeLoads: 0, pendingLoads: 0, completedLoadsToday: 0, loadsDispatched: 0, loadsInTransit: 0, loadsDelivered: 0, loadsCanceled: 0 }] },
+        { rows: [{ billingPending: 0, billingCanceled: 0, billingInvoiced: 0, billingFunded: 0, billingPaid: 0 }] },
+        { rows: [{ hosViolations: 0, hosWarnings: 0 }] },
+        { rows: [{ dqfComplianceRate: 92, expiredMedCerts: 1, upcomingMedCerts: 0, expiredCDLs: 0, clearinghouseIssues: 0 }] },
+        { rows: [{ activeDrivers: 5, totalDrivers: 6 }] },                                 // drivers previous (same fleet)
+        { rows: [{ activeVehicles: 3, totalVehicles: 4, oosVehicles: 1, vehiclesNeedingMaintenance: 5 }] },
+        { rows: [{ activeLoads: 0, pendingLoads: 0, completedLoadsToday: 0, loadsDispatched: 0, loadsInTransit: 0, loadsDelivered: 0, loadsCanceled: 0 }] },
+        { rows: [{ billingPending: 0, billingCanceled: 0, billingInvoiced: 0, billingFunded: 0, billingPaid: 0 }] },
+        { rows: [{ hosViolations: 0, hosWarnings: 0 }] },
+        { rows: [{ dqfComplianceRate: 92, expiredMedCerts: 1, upcomingMedCerts: 0, expiredCDLs: 0, clearinghouseIssues: 0 }] }
+      ];
+    }
+
+    stableQueueOnce();
+    const r7 = await request(server, {
+      method: 'GET',
+      path: '/api/dashboard/stats?window=7d',
+      headers: { 'x-tenant-id': 'tenant-1', 'x-oe-id': 'oe-1' }
+    });
+    state.queueByGroup = null;
+
+    stableQueueOnce();
+    const r30 = await request(server, {
+      method: 'GET',
+      path: '/api/dashboard/stats?window=30d',
+      headers: { 'x-tenant-id': 'tenant-1', 'x-oe-id': 'oe-1' }
+    });
+    state.queueByGroup = null;
+
+    assert.strictEqual(r7.status, 200);
+    assert.strictEqual(r30.status, 200);
+    assert.strictEqual(r7.body.current.activeDrivers, r30.body.current.activeDrivers,
+      'state KPI activeDrivers must be window-stable when the fleet has not changed');
+    assert.strictEqual(r7.body.delta.activeDrivers, 0);
+    assert.strictEqual(r30.body.delta.activeDrivers, 0);
+  });
+
+  it('legacy no-window path: drivers SQL has no $3/$4 references and uses AND TRUE', async () => {
+    state.calls.length = 0;
+    const res = await request(server, {
+      method: 'GET',
+      path: '/api/dashboard/stats',
+      headers: { 'x-tenant-id': 'tenant-1', 'x-oe-id': 'oe-1' }
+    });
+    assert.strictEqual(res.status, 200);
+
+    const driverCalls = findGroupCalls('"activeDrivers"');
+    for (const c of driverCalls) {
+      assert.strictEqual(c.params.length, 2, 'no-window drivers query takes only base params');
+      assert.ok(!/\$3|\$4/.test(c.sql), `no-window drivers SQL must not reference $3/$4 (got: ${c.sql})`);
+    }
+  });
+});
