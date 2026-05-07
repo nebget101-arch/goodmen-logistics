@@ -1,4 +1,12 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import {
+  AfterViewChecked,
+  Component,
+  ElementRef,
+  HostListener,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import { Subscription } from 'rxjs';
 import {
   FmcsaImportFile,
@@ -25,17 +33,18 @@ const POLL_INTERVAL_MS = 5000;
 const ACTIVE_STATUSES: ReadonlyArray<FmcsaImportStatus> = ['queued', 'running'];
 
 /**
- * FN-1425: FleetNeuron-internal admin page for FMCSA reference data imports.
- * Lets internal operators trigger any subset of the five FMCSA importers, optionally
- * as a dry run, and watch the run ledger refresh live until every run leaves the
- * queued/running states.
+ * FN-1425 / FN-1458: FleetNeuron-internal admin page for FMCSA reference data imports.
+ * Lets internal operators trigger any subset of the five FMCSA importers (URL-based,
+ * shipped in FN-1425) **or** upload a bulk CSV/CSV.GZ from disk (FN-1458) when the FMCSA
+ * gated download flow is unavailable. Watches the run ledger live until every run leaves
+ * the queued/running states.
  */
 @Component({
   selector: 'app-fmcsa-imports-admin',
   templateUrl: './fmcsa-imports.component.html',
   styleUrls: ['./fmcsa-imports.component.css'],
 })
-export class FmcsaImportsAdminComponent implements OnInit, OnDestroy {
+export class FmcsaImportsAdminComponent implements OnInit, OnDestroy, AfterViewChecked {
   readonly fileOptions = FILE_OPTIONS;
 
   selected: Record<FmcsaImportFile, boolean> = {
@@ -58,20 +67,46 @@ export class FmcsaImportsAdminComponent implements OnInit, OnDestroy {
   message = '';
   error = '';
 
+  // ─── Upload modal state (FN-1458) ───────────────────────────────────────
+  uploadOpen = false;
+  uploadFile: File | null = null;
+  uploadFileType: FmcsaImportFile | '' = '';
+  uploadDryRun = false;
+  uploadInFlight = false;
+  uploadProgress = 0;
+  uploadError = '';
+  private uploadAutoFocused = false;
+
+  @ViewChild('uploadFileInput') uploadFileInputRef?: ElementRef<HTMLInputElement>;
+
   private listSub: Subscription | null = null;
   private runSub: Subscription | null = null;
+  private uploadSub: Subscription | null = null;
+  private progressSub: Subscription | null = null;
   private pollHandle: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly service: FmcsaImportsService) {}
 
   ngOnInit(): void {
     this.loadHistory();
+    this.progressSub = this.service.uploadProgress$.subscribe((p) => {
+      this.uploadProgress = p;
+    });
+  }
+
+  ngAfterViewChecked(): void {
+    if (this.uploadOpen && !this.uploadAutoFocused && this.uploadFileInputRef) {
+      this.uploadFileInputRef.nativeElement.focus();
+      this.uploadAutoFocused = true;
+    }
   }
 
   ngOnDestroy(): void {
     this.cancelPoll();
     this.listSub?.unsubscribe();
     this.runSub?.unsubscribe();
+    this.uploadSub?.unsubscribe();
+    this.progressSub?.unsubscribe();
   }
 
   // ─── Selection ──────────────────────────────────────────────────────────
@@ -137,6 +172,83 @@ export class FmcsaImportsAdminComponent implements OnInit, OnDestroy {
         this.error = apiError || 'Failed to queue FMCSA import.';
       },
     });
+  }
+
+  // ─── Upload modal (FN-1458) ─────────────────────────────────────────────
+
+  openUpload(prefill?: FmcsaImportFile): void {
+    if (this.submitting) return;
+    this.uploadError = '';
+    this.uploadFile = null;
+    this.uploadFileType = prefill ?? '';
+    this.uploadDryRun = false;
+    this.uploadProgress = 0;
+    this.uploadInFlight = false;
+    this.uploadAutoFocused = false;
+    this.message = '';
+    this.error = '';
+    this.uploadOpen = true;
+  }
+
+  closeUpload(): void {
+    // ESC / backdrop is ignored while an upload is in-flight to keep the UX simple
+    // (no "cancel upload?" prompt). User must wait for the current upload to finish.
+    if (this.uploadInFlight) return;
+    this.uploadOpen = false;
+    this.uploadSub?.unsubscribe();
+  }
+
+  onUploadFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.uploadFile = input.files && input.files.length > 0 ? input.files[0] : null;
+    this.uploadError = '';
+  }
+
+  uploadSubmitDisabled(): boolean {
+    return this.uploadInFlight || !this.uploadFile || !this.uploadFileType;
+  }
+
+  submitUpload(): void {
+    if (this.uploadSubmitDisabled()) return;
+    const file = this.uploadFile!;
+    const fileType = this.uploadFileType as FmcsaImportFile;
+    const dryRun = this.uploadDryRun;
+
+    this.uploadInFlight = true;
+    this.uploadError = '';
+    this.uploadProgress = 0;
+
+    this.uploadSub?.unsubscribe();
+    this.uploadSub = this.service.runUpload(file, fileType, dryRun).subscribe({
+      next: () => {
+        this.uploadInFlight = false;
+        this.uploadOpen = false;
+        this.message = dryRun
+          ? `Uploaded ${file.name} (dry-run queued).`
+          : `Uploaded ${file.name} — import queued.`;
+        this.loadHistory(true);
+      },
+      error: (err) => {
+        this.uploadInFlight = false;
+        const apiError = err?.error?.error || err?.error?.message;
+        if (err?.status === 413) {
+          this.uploadError = apiError || 'File exceeds the 1 GB upload limit.';
+        } else if (err?.status === 403) {
+          this.uploadError = apiError || 'You are not allowed to upload FMCSA bulk files.';
+        } else {
+          this.uploadError = apiError || 'Failed to upload FMCSA bulk file.';
+        }
+      },
+    });
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.uploadOpen) {
+      this.closeUpload();
+    } else if (this.confirmOpen) {
+      this.closeConfirm();
+    }
   }
 
   // ─── History + polling ──────────────────────────────────────────────────
@@ -235,5 +347,17 @@ export class FmcsaImportsAdminComponent implements OnInit, OnDestroy {
     const updated = this.formatNumber(run.rows_updated);
     const skipped = this.formatNumber(run.rows_skipped);
     return `+${inserted} / ~${updated} / ↷${skipped}`;
+  }
+
+  formatBytes(value?: number | null): string {
+    if (typeof value !== 'number' || Number.isNaN(value) || value < 0) return '—';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let i = 0;
+    let v = value;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i += 1;
+    }
+    return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
   }
 }

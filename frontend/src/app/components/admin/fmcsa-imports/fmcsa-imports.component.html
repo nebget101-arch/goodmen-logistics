@@ -12,6 +12,15 @@
     </div>
 
     <div class="header-actions">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        [disabled]="submitting || uploadInFlight"
+        (click)="openUpload()"
+      >
+        <span class="material-symbols-outlined">upload_file</span>
+        Upload bulk file
+      </button>
       <button type="button" class="btn btn-secondary" [disabled]="loadingHistory || refreshingHistory" (click)="refresh()">
         <span class="material-symbols-outlined">refresh</span>
         {{ refreshingHistory ? 'Refreshing…' : 'Refresh' }}
@@ -55,6 +64,16 @@
             <span class="file-label__hint">{{ opt.hint }}</span>
           </span>
         </label>
+        <button
+          type="button"
+          class="row-upload-btn"
+          [disabled]="submitting || uploadInFlight"
+          (click)="openUpload(opt.key)"
+          [attr.aria-label]="'Upload bulk file for ' + opt.label"
+        >
+          <span class="material-symbols-outlined">upload</span>
+          Upload
+        </button>
       </li>
     </ul>
 
@@ -190,6 +209,107 @@
         <button type="button" class="btn btn-primary" (click)="submit()" [disabled]="submitting">
           <span class="material-symbols-outlined" *ngIf="!submitting">play_arrow</span>
           {{ submitting ? 'Queuing…' : (dryRun ? 'Queue dry run' : 'Queue imports') }}
+        </button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Upload bulk file modal (FN-1458) -->
+  <div *ngIf="uploadOpen" class="modal-backdrop" (click)="closeUpload()">
+    <div
+      class="modal upload-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="fmcsaUploadTitle"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal__header">
+        <h3 id="fmcsaUploadTitle">
+          <span class="material-symbols-outlined">upload_file</span>
+          Upload FMCSA bulk file
+        </h3>
+        <button
+          type="button"
+          class="modal__close"
+          (click)="closeUpload()"
+          aria-label="Close"
+          [disabled]="uploadInFlight"
+        >
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </header>
+
+      <div class="modal__body">
+        <p class="upload-hint">
+          Pick a CSV or CSV.GZ that you downloaded from FMCSA. Max 1 GB per file. The file is streamed to the server, queued, and parsed by the matching importer.
+        </p>
+
+        <label class="upload-field">
+          <span class="upload-field__label">File</span>
+          <input
+            #uploadFileInput
+            type="file"
+            accept=".csv,.csv.gz,.gz,text/csv,application/gzip"
+            [disabled]="uploadInFlight"
+            (change)="onUploadFileSelected($event)"
+          />
+          <span *ngIf="uploadFile" class="upload-field__meta">
+            {{ uploadFile.name }} · {{ formatBytes(uploadFile.size) }}
+          </span>
+        </label>
+
+        <label class="upload-field">
+          <span class="upload-field__label">File type</span>
+          <select [(ngModel)]="uploadFileType" [disabled]="uploadInFlight">
+            <option value="" disabled>Select a file type…</option>
+            <option *ngFor="let opt of fileOptions" [value]="opt.key">{{ opt.label }} — {{ opt.hint }}</option>
+          </select>
+        </label>
+
+        <label class="dry-run-toggle">
+          <input type="checkbox" [(ngModel)]="uploadDryRun" [disabled]="uploadInFlight" />
+          <span>Dry run (parse only, no writes)</span>
+        </label>
+
+        <div class="upload-progress" *ngIf="uploadInFlight">
+          <div
+            class="upload-progress__bar"
+            role="progressbar"
+            aria-label="FMCSA upload progress"
+            [attr.aria-valuenow]="uploadProgress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <div class="upload-progress__fill" [style.width.%]="uploadProgress"></div>
+          </div>
+          <div class="upload-progress__label" aria-live="polite">
+            Uploading… {{ uploadProgress }}%
+          </div>
+        </div>
+
+        <div *ngIf="uploadError" class="alert alert-danger upload-error" role="alert">
+          <span class="material-symbols-outlined">error</span>
+          <span>{{ uploadError }}</span>
+        </div>
+      </div>
+
+      <footer class="modal__footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="closeUpload()"
+          [disabled]="uploadInFlight"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="submitUpload()"
+          [disabled]="uploadSubmitDisabled()"
+        >
+          <span class="material-symbols-outlined" *ngIf="!uploadInFlight">cloud_upload</span>
+          {{ uploadInFlight ? 'Uploading…' : (uploadDryRun ? 'Upload (dry run)' : 'Upload & queue') }}
         </button>
       </footer>
     </div>
