@@ -85,8 +85,11 @@ router.get('/', async (req, res) => {
 
     const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const result = await query(
-      `SELECT dd.*, dr.first_name, dr.last_name, dr.operating_entity_id
-       FROM dqf_documents dd
+      `SELECT dd.id, dd.driver_id, dd.doc_type AS document_type, dd.file_name,
+              dd.storage_key AS file_path, dd.size_bytes AS file_size, dd.mime_type,
+              NULL AS uploaded_by, dd.created_at,
+              dr.first_name, dr.last_name, dr.operating_entity_id
+       FROM driver_documents dd
        JOIN drivers dr ON dr.id = dd.driver_id
        ${whereClause}
        ORDER BY dd.created_at DESC`,
@@ -224,7 +227,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    const { driverId, documentType, uploadedBy } = req.body;
+    const { driverId, documentType } = req.body;
 
     if (!driverId || !documentType) {
       return res.status(400).json({ message: 'Driver ID and document type are required' });
@@ -249,18 +252,21 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       fileName: safeName
     });
 
-    // Save file metadata to database
+    // Save file metadata to database. Writes to canonical `driver_documents` so the
+    // returned UUID satisfies the FK on `dqf_driver_status.evidence_document_id`.
     const result = await query(
-      `INSERT INTO dqf_documents (driver_id, document_type, file_name, file_path, file_size, mime_type, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO driver_documents (driver_id, doc_type, file_name, storage_key, size_bytes, mime_type, storage_mode)
+       VALUES ($1, $2, $3, $4, $5, $6, 'r2')
+       RETURNING id, driver_id, doc_type AS document_type, file_name,
+                 storage_key AS file_path, size_bytes AS file_size, mime_type,
+                 NULL AS uploaded_by, created_at`,
       [
         driverId,
         documentType,
         req.file.originalname,
         storageKey,
         req.file.size,
-        req.file.mimetype,
-        uploadedBy || 'system'
+        req.file.mimetype
       ]
     );
 
@@ -392,8 +398,8 @@ async function processPspReport(driverId, docId, fileBuffer, mimeType, tenantId)
 async function createPreHireAssessmentIfReady(tenantId, driverId, docId, pspData) {
   try {
     // Check if MVR is also on file
-    const mvrDoc = await knex('dqf_documents')
-      .where({ driver_id: driverId, document_type: 'mvr_report' })
+    const mvrDoc = await knex('driver_documents')
+      .where({ driver_id: driverId, doc_type: 'mvr_report' })
       .orderBy('created_at', 'desc')
       .first('id');
 
@@ -506,7 +512,10 @@ router.get('/driver/:driverId', async (req, res) => {
     }
 
     const result = await query(
-      `SELECT * FROM dqf_documents WHERE driver_id = $1 ORDER BY created_at DESC`,
+      `SELECT id, driver_id, doc_type AS document_type, file_name,
+              storage_key AS file_path, size_bytes AS file_size, mime_type,
+              NULL AS uploaded_by, created_at
+       FROM driver_documents WHERE driver_id = $1 ORDER BY created_at DESC`,
       [req.params.driverId]
     );
     const data = await Promise.all(
@@ -594,8 +603,11 @@ router.get('/driver/:driverId/type/:documentType', async (req, res) => {
     }
 
     const result = await query(
-      `SELECT * FROM dqf_documents 
-       WHERE driver_id = $1 AND document_type = $2 
+      `SELECT id, driver_id, doc_type AS document_type, file_name,
+              storage_key AS file_path, size_bytes AS file_size, mime_type,
+              NULL AS uploaded_by, created_at
+       FROM driver_documents
+       WHERE driver_id = $1 AND doc_type = $2
        ORDER BY created_at DESC`,
       [req.params.driverId, req.params.documentType]
     );
@@ -654,7 +666,8 @@ router.get('/driver/:driverId/type/:documentType', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const result = await query(
-      'SELECT * FROM dqf_documents WHERE id = $1',
+      `SELECT id, driver_id, storage_key AS file_path
+       FROM driver_documents WHERE id = $1`,
       [req.params.id]
     );
 
@@ -678,7 +691,7 @@ router.delete('/:id', async (req, res) => {
     await deleteObject(document.file_path);
 
     // Delete from database
-    await query('DELETE FROM dqf_documents WHERE id = $1', [req.params.id]);
+    await query('DELETE FROM driver_documents WHERE id = $1', [req.params.id]);
 
     res.json({ message: 'Document deleted successfully' });
   } catch (error) {
@@ -730,7 +743,8 @@ router.delete('/:id', async (req, res) => {
 router.get('/download/:id', async (req, res) => {
   try {
     const result = await query(
-      'SELECT * FROM dqf_documents WHERE id = $1',
+      `SELECT id, driver_id, storage_key AS file_path
+       FROM driver_documents WHERE id = $1`,
       [req.params.id]
     );
 
