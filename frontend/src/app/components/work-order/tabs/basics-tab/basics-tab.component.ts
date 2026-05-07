@@ -317,9 +317,10 @@ export class WoBasicsTabComponent implements OnInit, OnDestroy {
           this.customerSearch = internalCustomer.displayName || internalCustomer.company_name || 'Internal';
           this.selectedCustomer = internalCustomer;
         }
-      } else if (vehicle.customer_id) {
-        this.workOrder.customerId = vehicle.customer_id;
-        const customer = this.customers.find((c: any) => c.id === vehicle.customer_id);
+      } else if (vehicle.shop_client_id ?? vehicle.customer_id) {
+        const ownerId = vehicle.shop_client_id ?? vehicle.customer_id;
+        this.workOrder.customerId = ownerId;
+        const customer = this.customers.find((c: any) => c.id === ownerId);
         if (customer) {
           this.customerSearch = customer.displayName || customer.company_name || customer.name;
           this.selectedCustomer = customer;
@@ -464,7 +465,7 @@ export class WoBasicsTabComponent implements OnInit, OnDestroy {
 
     /* Link to customer if one is selected; otherwise company-owned */
     if (this.workOrder.customerId) {
-      payload.customer_id = this.workOrder.customerId;
+      payload.shop_client_id = this.workOrder.customerId;
       this.apiService.createCustomerVehicle(payload).subscribe({
         next: (vehicle: any) => {
           vehicle.company_owned = false;
@@ -509,7 +510,7 @@ export class WoBasicsTabComponent implements OnInit, OnDestroy {
     if (!this.workOrder.customerId) return this.vehicles;
     const wantedId = String(this.workOrder.customerId);
     return this.vehicles.filter((v: any) => {
-      const vid = v.customer_id ?? v.customerId ?? null;
+      const vid = v.shop_client_id ?? v.customer_id ?? v.customerId ?? null;
       return vid != null && String(vid) === wantedId;
     });
   }
@@ -533,7 +534,7 @@ export class WoBasicsTabComponent implements OnInit, OnDestroy {
     const selectedVehicleId = this.workOrder.vehicleId;
     if (selectedVehicleId) {
       const selectedVehicle = this.vehicles.find((v: any) => String(v.id) === String(selectedVehicleId));
-      if (selectedVehicle && String(selectedVehicle.customer_id) !== String(this.workOrder.customerId)) {
+      if (selectedVehicle && String(selectedVehicle.shop_client_id ?? selectedVehicle.customer_id) !== String(this.workOrder.customerId)) {
         this.workOrder.vehicleId = null;
         this.vehicleSearch = '';
         this.resetVehicleDetails();
