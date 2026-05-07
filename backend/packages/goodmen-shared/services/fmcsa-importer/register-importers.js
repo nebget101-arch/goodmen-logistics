@@ -22,8 +22,8 @@
 const axios = require('axios');
 const fs = require('fs');
 
-const { runCensusImport, DEFAULT_CENSUS_URL } = require('./census');
-const { runAuthorityImport, DEFAULT_AUTHORITY_URL } = require('./authority');
+const { runCensusImport } = require('./census');
+const { runAuthorityImport } = require('./authority');
 const { runInspectionImport } = require('./inspections');
 const { runCrashImport } = require('./crashes');
 const { runSmsImport } = require('./sms');
@@ -86,21 +86,17 @@ function mapRunnerCounts(result) {
 
 async function censusImporterAdapter(knex, { dryRun } = {}) {
   if (dryRun) return { ...ZERO_RESULT };
-  const result = await runCensusImport({
-    knex,
-    source: { url: DEFAULT_CENSUS_URL },
-    triggeredBy: 'manual',
-  });
+  // Source omitted — runCensusImport defaults to the paged Socrata `/resource/{id}.csv`
+  // with `X-App-Token: $FMCSA_SOCRATA_APP_TOKEN` (FN-1455).
+  const result = await runCensusImport({ knex, triggeredBy: 'manual' });
   return mapRunnerCounts(result);
 }
 
 async function authorityImporterAdapter(knex, { dryRun } = {}) {
   if (dryRun) return { ...ZERO_RESULT };
-  const result = await runAuthorityImport({
-    knex,
-    source: { url: DEFAULT_AUTHORITY_URL },
-    triggeredBy: 'manual',
-  });
+  // Source omitted — runAuthorityImport defaults to the paged Socrata `/resource/{id}.csv`
+  // with `X-App-Token: $FMCSA_SOCRATA_APP_TOKEN` (FN-1455).
+  const result = await runAuthorityImport({ knex, triggeredBy: 'manual' });
   return mapRunnerCounts(result);
 }
 

@@ -5,11 +5,17 @@ const censusV1 = require('./parsers/census.v1');
 
 /**
  * data.transportation.gov dataset 4a2k-zf79 ("Motor Carrier Registrations Census").
- * The CSV export endpoint follows Socrata's standard download-CSV URL contract
- * and is what FN-1415 will hit on the cron schedule.
+ *
+ * The legacy `/api/views/<id>/rows.csv?accessType=DOWNLOAD` endpoint started
+ * returning HTTP 400 for unauthenticated bulk pulls (see FN-1455). We now hit
+ * the modern Socrata `/resource/{id}.csv` endpoint with `$limit/$offset` paging
+ * and an `X-App-Token` header (`FMCSA_SOCRATA_APP_TOKEN`). `DEFAULT_CENSUS_URL`
+ * is the bare resource URL — the runner appends paging params; the live-source
+ * test (`__tests__/live-source.test.js`) hits it directly with `?$limit=5`.
  */
-const DEFAULT_CENSUS_URL =
-  'https://data.transportation.gov/api/views/4a2k-zf79/rows.csv?accessType=DOWNLOAD';
+const SOCRATA_BASE_URL = 'https://data.transportation.gov';
+const CENSUS_DATASET_ID = '4a2k-zf79';
+const DEFAULT_CENSUS_URL = `${SOCRATA_BASE_URL}/resource/${CENSUS_DATASET_ID}.csv`;
 
 /**
  * Build the SQL for one batched UPSERT against fmcsa.carriers.
@@ -112,7 +118,9 @@ const censusImporter = {
  */
 async function runCensusImport({
   knex,
-  source = { url: DEFAULT_CENSUS_URL },
+  source = {
+    socrataDataset: { baseUrl: SOCRATA_BASE_URL, datasetId: CENSUS_DATASET_ID },
+  },
   triggeredBy = 'manual',
   triggeredByUserId = null,
   batchSize,
@@ -130,6 +138,8 @@ async function runCensusImport({
 module.exports = {
   runCensusImport,
   DEFAULT_CENSUS_URL,
+  SOCRATA_BASE_URL,
+  CENSUS_DATASET_ID,
   // Exported for tests
   _internals: { upsertCensusBatch, CENSUS_COLUMNS, COMPARE_COLUMNS, censusImporter },
 };

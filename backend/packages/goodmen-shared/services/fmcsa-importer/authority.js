@@ -7,9 +7,15 @@ const authorityV1 = require('./parsers/authority.v1');
  * data.transportation.gov dataset 6qg9-x4f8 ("Carrier - All With History").
  * One row per (DOT, MC/MX/FF docket, authority_type) snapshot — including
  * historical state changes — so we keep the most recent record per key.
+ *
+ * Like the census driver, this hits Socrata's `/resource/{id}.csv` endpoint
+ * with `$limit/$offset` paging and an `X-App-Token` header (FN-1455). The
+ * legacy `/api/views/<id>/rows.csv?accessType=DOWNLOAD` URL began returning
+ * HTTP 400 for anonymous bulk pulls.
  */
-const DEFAULT_AUTHORITY_URL =
-  'https://data.transportation.gov/api/views/6qg9-x4f8/rows.csv?accessType=DOWNLOAD';
+const SOCRATA_BASE_URL = 'https://data.transportation.gov';
+const AUTHORITY_DATASET_ID = '6qg9-x4f8';
+const DEFAULT_AUTHORITY_URL = `${SOCRATA_BASE_URL}/resource/${AUTHORITY_DATASET_ID}.csv`;
 
 const AUTHORITY_INSERT_COLUMNS = [
   'dot',
@@ -142,7 +148,9 @@ const authorityImporter = {
  */
 async function runAuthorityImport({
   knex,
-  source = { url: DEFAULT_AUTHORITY_URL },
+  source = {
+    socrataDataset: { baseUrl: SOCRATA_BASE_URL, datasetId: AUTHORITY_DATASET_ID },
+  },
   triggeredBy = 'manual',
   triggeredByUserId = null,
   batchSize,
@@ -160,6 +168,8 @@ async function runAuthorityImport({
 module.exports = {
   runAuthorityImport,
   DEFAULT_AUTHORITY_URL,
+  SOCRATA_BASE_URL,
+  AUTHORITY_DATASET_ID,
   // Exported for tests
   _internals: { upsertAuthorityBatch, dedupeAuthorityRecords, authorityImporter },
 };
