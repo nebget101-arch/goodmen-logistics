@@ -363,6 +363,7 @@ async function createWorkOrder(payload, userId, context = null) {
       odometer_miles: normalizeOdometer(payload.odometerMiles),
       assigned_mechanic_user_id: normalizeUuid(payload.assignedMechanicUserId),
       requested_by_user_id: resolvedUserId,
+      cost_type: payload.cost_type || payload.costType || 'BILLABLE',
       discount_type: payload.discountType || 'NONE',
       discount_value: payload.discountValue || 0,
       tax_rate_percent: payload.taxRatePercent || 0,
@@ -429,6 +430,7 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
       resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedBy || payload.requestedByUsername);
     }
 
+    const costTypePatch = payload.cost_type ?? payload.costType;
     await trx('work_orders').where({ id: workOrderId }).update({
       vehicle_id: vehicleId,
       shop_client_id: customerId,
@@ -440,6 +442,7 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
       odometer_miles: odometerMiles,
       assigned_mechanic_user_id: assignedMechanicId,
       requested_by_user_id: workOrder.requested_by_user_id || resolvedUserId,
+      ...(costTypePatch !== undefined ? { cost_type: costTypePatch } : {}),
       discount_type: payload.discountType ?? workOrder.discount_type,
       discount_value: payload.discountValue ?? workOrder.discount_value,
       tax_rate_percent: payload.taxRatePercent ?? workOrder.tax_rate_percent,
@@ -481,7 +484,7 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
   });
 }
 
-async function updateWorkOrderStatus(workOrderId, nextStatus, userRole) {
+async function updateWorkOrderStatus(workOrderId, nextStatus, userRole, userId, context = null) {
   return db.transaction(async trx => {
     const workOrder = await trx('work_orders')
       .where({ id: workOrderId })

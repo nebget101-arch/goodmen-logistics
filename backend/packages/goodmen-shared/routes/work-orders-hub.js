@@ -1088,7 +1088,7 @@ router.patch('/:id/status', authMiddleware,
       }
     }
 
-    const workOrder = await workOrdersService.updateWorkOrderStatus(req.params.id, nextStatus, req.user?.role);
+    const workOrder = await workOrdersService.updateWorkOrderStatus(req.params.id, nextStatus, req.user?.role, req.user?.id, req.context || null);
 
     // Auto-generate DRAFT invoice on COMPLETED transition (billable work orders only)
     let autoInvoice = null;
