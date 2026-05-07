@@ -14,6 +14,7 @@
  */
 
 const Queue = require('bull');
+const fs = require('fs');
 const { getFmcsaKnex } = require('./fmcsa-knex');
 
 const LOG_PREFIX = '[fmcsa-import-queue]';
@@ -109,69 +110,77 @@ function createImportQueue({ redisUrl, fmcsaKnex } = {}) {
   // ── Job processor ───────────────────────────────────────────────────
 
   queue.process('run-import', async (job) => {
-    const { runId, file, dryRun } = job.data;
+    const { runId, file, dryRun, source } = job.data;
     if (!runId) throw new Error('run-import job is missing runId');
 
-    await knex('fmcsa.import_runs')
-      .where({ id: runId })
-      .update({ status: 'running', updated_at: knex.fn.now() });
+    try {
+      await knex('fmcsa.import_runs')
+        .where({ id: runId })
+        .update({ status: 'running', updated_at: knex.fn.now() });
 
-    const importer = importers.get(file);
-    if (!importer) {
-      // Stories FN-1413 / FN-1414 will register importers. Until they do:
-      //   - dry runs succeed with 0 rows (the AC permits this).
-      //   - real runs fail loudly so the operator notices.
-      if (dryRun) {
+      const importer = importers.get(file);
+      if (!importer) {
+        // Stories FN-1413 / FN-1414 will register importers. Until they do:
+        //   - dry runs succeed with 0 rows (the AC permits this).
+        //   - real runs fail loudly so the operator notices.
+        if (dryRun) {
+          await knex('fmcsa.import_runs')
+            .where({ id: runId })
+            .update({
+              status: 'success',
+              finished_at: knex.fn.now(),
+              rows_inserted: 0,
+              rows_updated: 0,
+              rows_skipped: 0,
+              updated_at: knex.fn.now(),
+            });
+          return { runId, file, status: 'success', dryRun: true, rowsInserted: 0 };
+        }
+        const message = `No importer registered for file '${file}'`;
+        await knex('fmcsa.import_runs')
+          .where({ id: runId })
+          .update({
+            status: 'error',
+            finished_at: knex.fn.now(),
+            error_message: message,
+            updated_at: knex.fn.now(),
+          });
+        throw new Error(message);
+      }
+
+      try {
+        const result = (await importer(knex, { dryRun, source })) || {};
+        const rowsInserted = Number.isFinite(result.rowsInserted) ? result.rowsInserted : 0;
+        const rowsUpdated = Number.isFinite(result.rowsUpdated) ? result.rowsUpdated : 0;
+        const rowsSkipped = Number.isFinite(result.rowsSkipped) ? result.rowsSkipped : 0;
         await knex('fmcsa.import_runs')
           .where({ id: runId })
           .update({
             status: 'success',
             finished_at: knex.fn.now(),
-            rows_inserted: 0,
-            rows_updated: 0,
-            rows_skipped: 0,
+            rows_inserted: dryRun ? 0 : rowsInserted,
+            rows_updated: dryRun ? 0 : rowsUpdated,
+            rows_skipped: dryRun ? 0 : rowsSkipped,
             updated_at: knex.fn.now(),
           });
-        return { runId, file, status: 'success', dryRun: true, rowsInserted: 0 };
+        return { runId, file, status: 'success' };
+      } catch (err) {
+        await knex('fmcsa.import_runs')
+          .where({ id: runId })
+          .update({
+            status: 'error',
+            finished_at: knex.fn.now(),
+            error_message: err.message?.slice(0, 1000) || String(err),
+            updated_at: knex.fn.now(),
+          });
+        throw err;
       }
-      const message = `No importer registered for file '${file}'`;
-      await knex('fmcsa.import_runs')
-        .where({ id: runId })
-        .update({
-          status: 'error',
-          finished_at: knex.fn.now(),
-          error_message: message,
-          updated_at: knex.fn.now(),
-        });
-      throw new Error(message);
-    }
-
-    try {
-      const result = (await importer(knex, { dryRun })) || {};
-      const rowsInserted = Number.isFinite(result.rowsInserted) ? result.rowsInserted : 0;
-      const rowsUpdated = Number.isFinite(result.rowsUpdated) ? result.rowsUpdated : 0;
-      const rowsSkipped = Number.isFinite(result.rowsSkipped) ? result.rowsSkipped : 0;
-      await knex('fmcsa.import_runs')
-        .where({ id: runId })
-        .update({
-          status: 'success',
-          finished_at: knex.fn.now(),
-          rows_inserted: dryRun ? 0 : rowsInserted,
-          rows_updated: dryRun ? 0 : rowsUpdated,
-          rows_skipped: dryRun ? 0 : rowsSkipped,
-          updated_at: knex.fn.now(),
-        });
-      return { runId, file, status: 'success' };
-    } catch (err) {
-      await knex('fmcsa.import_runs')
-        .where({ id: runId })
-        .update({
-          status: 'error',
-          finished_at: knex.fn.now(),
-          error_message: err.message?.slice(0, 1000) || String(err),
-          updated_at: knex.fn.now(),
-        });
-      throw err;
+    } finally {
+      // FN-1457: best-effort cleanup of uploaded tmp files. Runs even on
+      // failure so partial / errored runs don't leak disk on the worker.
+      if (source && source.type === 'path' && source.value) {
+        fs.promises.unlink(source.value).catch(() => {});
+      }
     }
   });
 
@@ -180,8 +189,19 @@ function createImportQueue({ redisUrl, fmcsaKnex } = {}) {
   /**
    * Create a ledger row in 'queued' state and enqueue a Bull job.
    * Returns the inserted row.
+   *
+   * `source` (FN-1457) is optional. When supplied, it's forwarded on the
+   * job data so the registered importer can prefer it over the
+   * `FMCSA_*_URL` env-var fallback. Shape:
+   *   { type: 'path' | 'url', value: string, auth?: { user, pass } }
    */
-  async function enqueueImportRun({ file, dryRun = false, triggeredBy, triggeredByUserId = null }) {
+  async function enqueueImportRun({
+    file,
+    dryRun = false,
+    triggeredBy,
+    triggeredByUserId = null,
+    source = null,
+  }) {
     if (!SUPPORTED_FILES.includes(file)) {
       throw new Error(`unsupported file: ${file}`);
     }
@@ -197,7 +217,9 @@ function createImportQueue({ redisUrl, fmcsaKnex } = {}) {
       })
       .returning(['id', 'file', 'triggered_by', 'triggered_by_user_id', 'started_at', 'finished_at', 'status']);
 
-    await queue.add('run-import', { runId: row.id, file, dryRun: !!dryRun });
+    const jobData = { runId: row.id, file, dryRun: !!dryRun };
+    if (source) jobData.source = source;
+    await queue.add('run-import', jobData);
     return row;
   }
 
