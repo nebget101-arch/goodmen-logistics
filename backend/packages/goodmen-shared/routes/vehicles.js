@@ -256,9 +256,15 @@ router.get('/decode-vin/:vin', async (req, res) => {
  *                 format: date
  *               next_pm_mileage:
  *                 type: integer
+ *               shop_client_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Canonical FK to shop_clients. `customer_id` is accepted as a transitional alias.
  *               customer_id:
  *                 type: string
  *                 format: uuid
+ *                 deprecated: true
+ *                 description: Legacy alias for `shop_client_id`. Mapped to `shop_client_id` server-side.
  *     responses:
  *       201:
  *         description: Customer vehicle created
@@ -288,8 +294,10 @@ router.post('/customer', async (req, res) => {
       inspection_expiry,
       next_pm_due,
       next_pm_mileage,
+      shop_client_id,
       customer_id
     } = req.body;
+    const shopClientIdInput = shop_client_id ?? customer_id;
 
     if (!tenantId) {
       return res.status(403).json({ message: 'Tenant context is required to create a customer vehicle' });
@@ -307,18 +315,20 @@ router.post('/customer', async (req, res) => {
     const finalInspectionExpiry = (inspection_expiry && inspection_expiry.trim()) ? inspection_expiry : null;
     const finalNextPmDue = (next_pm_due && next_pm_due.trim()) ? next_pm_due : null;
     const finalNextPmMileage = next_pm_mileage ? parseInt(next_pm_mileage) : null;
-    const finalCustomerId = (customer_id && customer_id.trim()) ? customer_id.trim() : null;
+    const finalShopClientId = (shopClientIdInput && String(shopClientIdInput).trim())
+      ? String(shopClientIdInput).trim()
+      : null;
 
     const result = await query(
       `INSERT INTO customer_vehicles (
         unit_number, vin, make, model, year, license_plate, state, mileage,
-        inspection_expiry, next_pm_due, next_pm_mileage, customer_id, tenant_id
+        inspection_expiry, next_pm_due, next_pm_mileage, shop_client_id, tenant_id
       )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING vehicle_uuid`,
       [
         finalUnitNumber, finalVin, finalMake, finalModel, finalYear, finalLicensePlate, finalState, finalMileage,
-        finalInspectionExpiry, finalNextPmDue, finalNextPmMileage, finalCustomerId, tenantId
+        finalInspectionExpiry, finalNextPmDue, finalNextPmMileage, finalShopClientId, tenantId
       ]
     );
     const vehicleSource = await resolveVehicleSource();
@@ -1075,9 +1085,16 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ message: ownershipError });
     }
 
+    // FN-1467: customer_vehicles.customer_id was renamed to shop_client_id.
+    // Accept either inbound shape so the frontend can migrate independently.
+    if (req.body && req.body.shop_client_id === undefined && req.body.customer_id !== undefined) {
+      req.body.shop_client_id = req.body.customer_id;
+      delete req.body.customer_id;
+    }
+
     const vehicleColumns = await getVehiclesColumnSet();
     // Fields that should not be updated
-    const excludedFields = ['id', 'created_at', 'updated_at', 'customer_id', 'source'];
+    const excludedFields = ['id', 'created_at', 'updated_at', 'shop_client_id', 'source'];
 
     // String fields that must never be null in the database
     const nullSafeStringFields = new Set(['vin', 'make', 'model', 'license_plate', 'state', 'unit_number']);
@@ -1145,7 +1162,7 @@ router.put('/:id', async (req, res) => {
         'next_pm_due',
         'next_pm_mileage',
         'insurance_expiry',
-        'customer_id'
+        'shop_client_id'
       ]);
       const customerFields = [];
       const customerValues = [];
