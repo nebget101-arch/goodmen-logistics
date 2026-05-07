@@ -1,109 +1,219 @@
-/* Warehouse Receiving – AI design (barcode scanner, no phone bridge) */
+/* FN-1483 — AI dark theme tokens, palette aligned with load-detail-drawer (FN-1040). */
 
-.receiving-dashboard {
+.recv-page {
+  --recv-bg-card: rgba(15, 23, 42, 0.96);
+  --recv-bg-card-soft: rgba(2, 6, 23, 0.92);
+  --recv-border: var(--border-color);
+  --recv-border-strong: rgba(56, 189, 248, 0.35);
+  --recv-text: #e5e7eb;
+  --recv-text-strong: #e5f9ff;
+  --recv-text-muted: #94a3b8;
+  --recv-accent: #67e8f9;
+  --recv-accent-soft: rgba(56, 189, 248, 0.18);
+  --recv-success: rgba(34, 197, 94, 0.85);
+  --recv-success-soft: rgba(34, 197, 94, 0.18);
+  --recv-danger: #fca5a5;
+  --recv-danger-soft: rgba(239, 68, 68, 0.18);
+
   width: 100%;
   max-width: 1600px;
   margin: 0 auto;
-  padding: 8px 16px 24px;
-}
-
-.receiving-dashboard .header {
-  margin-bottom: 16px;
-}
-
-.receiving-dashboard .header h1 {
-  font-size: 28px;
-  margin: 0 0 4px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: #f1f5f9;
-}
-
-.receiving-dashboard .header .subtitle {
-  color: var(--text-light);
-  font-size: 14px;
-  margin: 0;
-}
-
-.receiving-dashboard .receiving-card {
-  border-radius: 16px;
-  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.12), transparent 50%),
-    rgba(15, 23, 42, 0.96);
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.9), 0 0 0 1px rgba(15, 23, 42, 1);
-  padding: 20px;
-  overflow: hidden;
-}
-
-.receiving-dashboard .alert {
-  margin: 0 0 16px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  font-size: 14px;
-}
-
-.receiving-dashboard .alert-success {
-  background: rgba(34, 197, 94, 0.2);
-  border: 1px solid rgba(34, 197, 94, 0.5);
-  color: #86efac;
-}
-
-.receiving-dashboard .alert-danger {
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  color: #fca5a5;
-}
-
-.receiving-dashboard .toolbar-panel {
-  margin-bottom: 20px;
-}
-
-.receiving-dashboard .toolbar-grid {
+  padding: 12px 16px 24px;
+  color: var(--recv-text);
   display: grid;
-  grid-template-columns: 200px 100px 1fr;
+  gap: 16px;
+}
+
+/* ---------------- Header ---------------- */
+.recv-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px;
   align-items: end;
 }
 
-.receiving-dashboard .field label {
+.recv-header__title h1 {
+  font-size: 26px;
+  margin: 0 0 4px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--recv-text-strong);
+}
+
+.recv-header__subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--recv-text-muted);
+}
+
+.recv-header__metrics {
+  display: flex;
+  gap: 12px;
+}
+
+.recv-metric {
+  min-width: 140px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--recv-bg-card);
+  border: 1px solid var(--recv-border);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.recv-metric__value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--recv-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.recv-metric__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--recv-text-muted);
+}
+
+/* ---------------- Cards ---------------- */
+.recv-card {
+  background: var(--recv-bg-card);
+  border: 1px solid var(--recv-border);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 18px 44px rgba(2, 6, 23, 0.7), 0 0 0 1px rgba(15, 23, 42, 1);
+}
+
+.recv-ticket-card__row {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(200px, 280px) minmax(180px, 1fr) minmax(160px, 1fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.recv-ticket-number {
+  min-width: 0;
+}
+
+.recv-ticket-number__value {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--recv-accent);
+  background: var(--recv-bg-card-soft);
+  border: 1px solid var(--recv-accent-soft);
+  border-radius: 10px;
+  padding: 9px 12px;
+  letter-spacing: 0.04em;
+}
+
+.recv-ticket-number__value.is-pending {
+  color: var(--recv-text-muted);
+  border-color: var(--recv-border);
+}
+
+/* ---------------- Fields & controls ---------------- */
+.recv-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.recv-field label {
   display: block;
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-light);
+  color: var(--recv-text-muted);
   margin-bottom: 6px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
-.receiving-dashboard .form-control {
+.recv-control {
   width: 100%;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.8);
-  background: radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.2), transparent 55%),
-    rgba(15, 23, 42, 0.98);
-  color: var(--text-dark);
+  border: 1px solid var(--recv-border);
+  background: var(--recv-bg-card-soft);
+  color: var(--recv-text);
   font-size: 14px;
   box-sizing: border-box;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.receiving-dashboard .form-control:focus {
+.recv-control:focus {
   outline: none;
-  border-color: rgba(34, 197, 94, 0.9);
-  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.5);
+  border-color: var(--recv-accent);
+  box-shadow: 0 0 0 1px var(--recv-accent-soft);
 }
 
-.receiving-dashboard .scan-input-group {
+.recv-control:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---------------- Banners ---------------- */
+.recv-banner {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.recv-banner--success {
+  background: var(--recv-success-soft);
+  border: 1px solid var(--recv-success);
+  color: #86efac;
+}
+
+.recv-banner--error {
+  background: var(--recv-danger-soft);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: var(--recv-danger);
+}
+
+/* ---------------- 3-zone body ---------------- */
+.recv-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 16px;
+  align-items: start;
+}
+
+/* Center column */
+.recv-center {
   display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.recv-scan {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.recv-field--mult .recv-control {
+  width: 100%;
+}
+
+.recv-scan__row {
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: stretch;
 }
 
-.receiving-dashboard .scan-input-group .form-control {
-  flex: 1;
+.recv-scan__input {
+  flex: 1 1 220px;
+  font-size: 16px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
-.receiving-dashboard .input-file-hidden {
+.recv-file-hidden {
   position: absolute;
   width: 0.1px;
   height: 0.1px;
@@ -112,216 +222,264 @@
   z-index: -1;
 }
 
-.receiving-dashboard .btn-upload {
-  padding: 10px 16px;
+/* Buttons */
+.recv-btn {
+  padding: 9px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  background: rgba(148, 163, 184, 0.15);
-  color: var(--text-dark);
+  border: 1px solid transparent;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.receiving-dashboard .btn-upload:hover {
-  background: rgba(148, 163, 184, 0.25);
-  border-color: rgba(148, 163, 184, 0.7);
+.recv-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-.receiving-dashboard .btn-phone {
-  padding: 10px 16px;
-  border-radius: 10px;
-  border: 1px solid rgba(59, 130, 246, 0.6);
-  background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
+.recv-btn--ghost {
+  border-color: var(--recv-border);
+  background: transparent;
+  color: var(--recv-text);
 }
 
-.receiving-dashboard .btn-phone:hover {
-  background: rgba(59, 130, 246, 0.35);
-  border-color: rgba(59, 130, 246, 0.8);
+.recv-btn--ghost:hover:not(:disabled) {
+  background: var(--recv-accent-soft);
+  border-color: var(--recv-border-strong);
+  color: var(--recv-text-strong);
 }
 
-.receiving-dashboard .btn-phone.connected {
+.recv-btn--accent {
+  border-color: var(--recv-border-strong);
+  background: var(--recv-accent-soft);
+  color: var(--recv-accent);
+}
+
+.recv-btn--accent:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.28);
+  color: var(--recv-text-strong);
+}
+
+.recv-btn--success {
   border-color: rgba(34, 197, 94, 0.6);
-  background: rgba(34, 197, 94, 0.2);
+  background: var(--recv-success-soft);
   color: #86efac;
 }
 
-.receiving-dashboard .qr-section {
-  margin: 0 0 20px;
-  padding: 16px;
-  background: rgba(30, 41, 59, 0.4);
-  border: 1px solid rgba(148, 163, 184, 0.25);
+.recv-btn--primary {
+  padding: 10px 18px;
+  border-color: rgba(34, 197, 94, 0.6);
+  background: rgba(22, 101, 52, 0.7);
+  color: #fff;
+  font-weight: 600;
+}
+
+.recv-btn--primary:hover:not(:disabled) {
+  background: rgba(22, 101, 52, 0.9);
+  border-color: rgba(34, 197, 94, 0.9);
+}
+
+/* QR section */
+.recv-qr {
+  padding: 14px;
+  background: var(--recv-bg-card-soft);
+  border: 1px solid var(--recv-border);
   border-radius: 12px;
   text-align: center;
 }
 
-.receiving-dashboard .qr-title {
-  margin: 0 0 12px;
+.recv-qr__title {
+  margin: 0 0 10px;
   font-size: 13px;
-  color: var(--text-light);
+  color: var(--recv-text-muted);
   font-weight: 500;
 }
 
-.receiving-dashboard .qr-code-image {
+.recv-qr__image {
   width: 220px;
   height: 220px;
-  border: 2px solid rgba(59, 130, 246, 0.4);
+  border: 2px solid var(--recv-accent-soft);
   border-radius: 8px;
   background: #fff;
-  padding: 8px;
+  padding: 6px;
 }
 
-.receiving-dashboard .qr-link {
-  margin: 12px 0 4px;
+.recv-qr__link {
+  margin: 10px 0 4px;
 }
 
-.receiving-dashboard .qr-link a {
-  color: #93c5fd;
+.recv-qr__link a {
+  color: var(--recv-accent);
   font-size: 13px;
   text-decoration: none;
 }
 
-.receiving-dashboard .qr-link a:hover {
+.recv-qr__link a:hover {
   text-decoration: underline;
 }
 
-.receiving-dashboard .link-camera-this-device {
+.recv-qr__camera-link {
   display: inline-block;
-  margin-top: 8px;
-  padding: 10px 16px;
+  margin-top: 6px;
+  padding: 8px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(59, 130, 246, 0.6);
-  background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
+  border: 1px solid var(--recv-border-strong);
+  background: var(--recv-accent-soft);
   font-weight: 600;
-  text-decoration: none;
+  text-decoration: none !important;
 }
 
-.receiving-dashboard .link-camera-this-device:hover {
-  background: rgba(59, 130, 246, 0.35);
-  border-color: rgba(59, 130, 246, 0.8);
-}
-
-.receiving-dashboard .qr-status {
+.recv-qr__status {
   margin: 0;
   font-size: 12px;
-  color: var(--text-light);
+  color: var(--recv-text-muted);
 }
 
-.receiving-dashboard .scan-input {
-  font-size: 16px;
-  font-family: ui-monospace, monospace;
-}
-
-.receiving-dashboard .section-title {
-  margin: 0 0 12px;
-  font-size: 16px;
+/* Lines table */
+.recv-section-title {
+  margin: 0 0 10px;
+  font-size: 14px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--recv-text-strong);
 }
 
-.receiving-dashboard .table-section {
-  margin-bottom: 20px;
-}
-
-.receiving-dashboard .table-wrap {
+.recv-table-wrap {
   overflow-x: auto;
+  border: 1px solid var(--recv-border);
+  border-radius: 10px;
+  background: var(--recv-bg-card-soft);
 }
 
-.receiving-dashboard .report-table {
+.recv-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.receiving-dashboard .report-table thead th {
-  background: rgba(30, 41, 59, 0.5);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  color: var(--text-light);
+.recv-table thead th {
+  background: rgba(2, 6, 23, 0.6);
+  border-bottom: 1px solid var(--recv-border);
+  color: var(--recv-text-muted);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 14px;
+  letter-spacing: 0.06em;
+  padding: 10px 12px;
   text-align: left;
 }
 
-.receiving-dashboard .report-table td {
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+.recv-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--recv-border);
   font-size: 13px;
-  color: var(--text-dark);
+  color: var(--recv-text);
 }
 
-.receiving-dashboard .report-table tbody tr:hover {
-  background: rgba(59, 130, 246, 0.06);
+.recv-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
-.receiving-dashboard .inline-input {
-  max-width: 100px;
-  padding: 6px 10px;
-  font-size: 13px;
+.recv-table tbody tr:hover {
+  background: var(--recv-accent-soft);
 }
 
-.receiving-dashboard .bin-override-cell {
-  min-width: 180px;
-  max-width: 240px;
+.recv-table__sku {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--recv-text-strong);
 }
 
-.receiving-dashboard .bin-override-cell app-bin-picker {
-  display: block;
+.recv-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
-.receiving-dashboard .btn-remove {
-  padding: 6px 12px;
+.recv-table__action {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.recv-btn-remove {
+  padding: 5px 10px;
   border-radius: 8px;
   border: 1px solid rgba(239, 68, 68, 0.5);
-  background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
+  background: var(--recv-danger-soft);
+  color: var(--recv-danger);
   font-size: 12px;
   cursor: pointer;
 }
 
-.receiving-dashboard .btn-remove:hover {
-  background: rgba(239, 68, 68, 0.25);
+.recv-btn-remove:hover {
+  background: rgba(239, 68, 68, 0.3);
 }
 
-.receiving-dashboard .form-actions .btn-primary {
-  padding: 10px 18px;
-  border-radius: 12px;
-  border: 1px solid rgba(34, 197, 94, 0.6);
-  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.4), transparent 55%),
-    rgba(22, 101, 52, 0.7);
-  color: #fff;
-  font-weight: 600;
-  cursor: pointer;
+.recv-empty {
+  padding: 18px;
+  border: 1px dashed var(--recv-border);
+  border-radius: 10px;
+  background: var(--recv-bg-card-soft);
+  color: var(--recv-text-muted);
+  font-size: 13px;
+  text-align: center;
 }
 
-.receiving-dashboard .form-actions .btn-primary:hover:not(:disabled) {
-  background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.5), transparent 55%),
-    rgba(22, 101, 52, 0.85);
-  border-color: rgba(34, 197, 94, 0.9);
+.recv-empty p {
+  margin: 0;
 }
 
-.receiving-dashboard .form-actions .btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.recv-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
-@media (max-width: 900px) {
-  .receiving-dashboard .toolbar-grid {
-    grid-template-columns: 1fr 100px;
+/* Right rail */
+.recv-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-self: stretch;
+}
+
+.recv-rail__slot {
+  min-height: 96px;
+  display: block;
+}
+
+/* Hide rail slots that have no projected content (CSS :empty respects whitespace; ensure HTML has no inner whitespace beyond ng-content). */
+.recv-rail__slot:empty {
+  display: none;
+}
+
+/* ---------------- Responsive ---------------- */
+@media (max-width: 1100px) {
+  .recv-body {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .receiving-dashboard .scan-field {
-    grid-column: 1 / -1;
+  .recv-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .recv-rail__slot {
+    flex: 1 1 260px;
+  }
+}
+
+@media (max-width: 820px) {
+  .recv-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .recv-header__metrics {
+    flex-wrap: wrap;
+  }
+  .recv-ticket-card__row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .recv-scan {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 520px) {
-  .receiving-dashboard .toolbar-grid {
-    grid-template-columns: 1fr;
+  .recv-ticket-card__row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

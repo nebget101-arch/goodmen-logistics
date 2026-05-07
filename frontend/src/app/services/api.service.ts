@@ -1517,6 +1517,15 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/receiving/${ticketId}/post`, {});
   }
 
+  getReceivingDraft(locationId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/receiving/draft?locationId=${encodeURIComponent(locationId)}`);
+  }
+
+  getReceivingTodaySummary(locationId?: string): Observable<any> {
+    const qs = locationId ? `?locationId=${encodeURIComponent(locationId)}` : '';
+    return this.http.get(`${this.baseUrl}/receiving/summary/today${qs}`);
+  }
+
   // Adjustments
   getAdjustments(locationId: string): Observable<any> {
     return this.http.get(`${this.baseUrl}/adjustments?locationId=${locationId}`);
