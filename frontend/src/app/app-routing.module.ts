@@ -106,6 +106,15 @@ const routes: Routes = [
     loadChildren: () => import('./components/work-order/work-order.module').then(m => m.WorkOrderModule)
   },
   {
+    // FN-1594: spreadsheet import wizard. Registered before the lazy `loads`
+    // route so `/loads/import` resolves to this module rather than falling
+    // through to LoadsDashboardModule's children.
+    path: 'loads/import',
+    loadChildren: () => import('./loads/loads-import-wizard/loads-import.module').then(m => m.LoadsImportModule),
+    canActivate: [AuthGuard, PlanGuard],
+    data: { planPath: '/loads' }
+  },
+  {
     path: 'loads',
     loadChildren: () => import('./components/loads-dashboard/loads-dashboard.module').then(m => m.LoadsDashboardModule)
   },

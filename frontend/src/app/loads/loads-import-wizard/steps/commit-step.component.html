@@ -1,0 +1,54 @@
+<div class="li-step-panel">
+  <div class="li-step-heading">
+    <h2>Ready to Commit</h2>
+    <p>Loads will be created in your tenant. <em>Needs review</em> rows are imported as drafts in the existing draft-loads queue.</p>
+  </div>
+
+  <div class="li-commit-summary" *ngIf="stageResult">
+    <div class="li-commit-row">
+      <span class="li-commit-label">OK rows</span>
+      <span class="li-commit-value">{{ stageResult.okCount }}</span>
+    </div>
+    <div class="li-commit-row">
+      <span class="li-commit-label">Needs-review rows</span>
+      <span class="li-commit-value">{{ stageResult.needsReviewCount }}</span>
+    </div>
+    <div class="li-commit-row" *ngIf="stageResult.errorCount > 0">
+      <span class="li-commit-label">Error rows (skipped)</span>
+      <span class="li-commit-value warn">{{ stageResult.errorCount }}</span>
+    </div>
+    <div class="li-commit-row">
+      <span class="li-commit-label">Will be committed</span>
+      <span class="li-commit-value amber">{{ totalCommittable }}</span>
+    </div>
+  </div>
+
+  <label class="li-commit-row" style="display:flex; gap:10px; align-items:center; cursor:pointer; padding: 10px 18px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid rgba(255,255,255,0.07); margin-bottom: 16px;">
+    <input type="checkbox"
+           [checked]="importNeedsReview"
+           (change)="toggleNeedsReview($any($event.target).checked)"
+           style="accent-color:#fbbf24;" />
+    <span style="font-size:13px; color:#cbd5e1;">
+      Import <em>needs-review</em> rows as drafts (uncheck to skip them).
+    </span>
+  </label>
+
+  <div class="li-error-banner" *ngIf="error">
+    <span class="material-symbols-outlined">error</span> {{ error }}
+  </div>
+
+  <div class="li-commit-progress" *ngIf="loading">
+    <div class="li-spinner"></div> Committing rows… please don't close the page.
+  </div>
+
+  <div class="li-step-footer" *ngIf="!loading">
+    <button type="button" class="li-btn-ghost" (click)="back.emit()" [disabled]="loading">
+      <span class="material-symbols-outlined">arrow_back</span> Back
+    </button>
+    <button type="button" class="li-btn-primary" (click)="commit.emit()" [disabled]="loading || !stageResult">
+      <span *ngIf="loading" class="li-spinner-sm"></span>
+      <span *ngIf="!loading"><span class="material-symbols-outlined">upload</span> Commit Now</span>
+      <span *ngIf="loading">Committing…</span>
+    </button>
+  </div>
+</div>

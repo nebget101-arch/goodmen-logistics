@@ -1,0 +1,103 @@
+<div class="li-wizard">
+
+  <!-- Page header -->
+  <div class="li-page-header">
+    <h1>
+      <span class="material-symbols-outlined">upload_file</span>
+      Import Loads from Spreadsheet
+    </h1>
+    <p>Upload a CSV or Excel file. Claude will suggest a column mapping; you can adjust it before committing.</p>
+  </div>
+
+  <!-- Progress rail -->
+  <div class="li-progress-rail">
+    <div class="li-rail-inner">
+      <div *ngFor="let s of steps; let i = index"
+           class="li-rail-step"
+           [class.active]="currentStep === s"
+           [class.done]="stepIndex > i"
+           (click)="goToStep(s)"
+           [attr.data-step]="s">
+        <div class="li-rail-bubble">
+          <span class="material-symbols-outlined" *ngIf="stepIndex > i">check</span>
+          <span *ngIf="stepIndex <= i">{{ i + 1 }}</span>
+        </div>
+        <span class="li-rail-label">{{ stepLabels[s] }}</span>
+        <div class="li-rail-line" *ngIf="i < steps.length - 1"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step body -->
+  <div class="li-wizard-body">
+
+    <app-loads-import-upload-step
+      *ngIf="currentStep === 'upload'"
+      [file]="selectedFile"
+      [error]="uploadError"
+      (fileSelected)="onFileSelected($event)"
+      (errorChange)="onUploadError($event)"
+      (next)="startPreview()">
+    </app-loads-import-upload-step>
+
+    <app-loads-import-ai-analysis-step
+      *ngIf="currentStep === 'ai_analysis'"
+      [loading]="previewLoading"
+      [error]="previewError"
+      [data]="previewResult"
+      [fields]="fields"
+      (back)="currentStep = 'upload'"
+      (acceptMapping)="acceptAiMapping()"
+      (skipMapping)="skipAiMapping()">
+    </app-loads-import-ai-analysis-step>
+
+    <app-loads-import-mapping-step
+      *ngIf="currentStep === 'mapping'"
+      [fields]="fields"
+      [headerOptions]="headerOptions"
+      [columnMap]="columnMap"
+      [multiStopPattern]="multiStopPattern"
+      [aiMapping]="previewResult?.aiMapping || null"
+      (mappingChange)="onMappingChange($event)"
+      (back)="currentStep = 'ai_analysis'"
+      (next)="startStage()">
+    </app-loads-import-mapping-step>
+
+    <app-loads-import-validate-step
+      *ngIf="currentStep === 'validate'"
+      [loading]="stageLoading"
+      [error]="stageError"
+      [result]="stageResult"
+      (back)="currentStep = 'mapping'"
+      (next)="proceedToCommit()">
+    </app-loads-import-validate-step>
+
+    <app-loads-import-commit-step
+      *ngIf="currentStep === 'commit'"
+      [stageResult]="stageResult"
+      [loading]="commitLoading"
+      [error]="commitError"
+      [(importNeedsReview)]="importNeedsReview"
+      (back)="currentStep = 'validate'"
+      (commit)="startCommit()">
+    </app-loads-import-commit-step>
+
+    <app-loads-import-result-step
+      *ngIf="currentStep === 'result'"
+      [result]="commitResult"
+      (viewLoads)="goToLoads()"
+      (viewNeedsReview)="goToNeedsReview()"
+      (showDuplicates)="reopenDuplicateModal()"
+      (startOver)="startOver()">
+    </app-loads-import-result-step>
+
+  </div>
+
+  <!-- Duplicate review modal: opens automatically when result.duplicates.length > 0 -->
+  <app-loads-import-duplicate-review-modal
+    *ngIf="showDuplicateModal && commitResult"
+    [duplicates]="commitResult.duplicates"
+    (close)="closeDuplicateModal()">
+  </app-loads-import-duplicate-review-modal>
+
+</div>
