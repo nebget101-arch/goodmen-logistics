@@ -330,8 +330,23 @@ async function handleVehicleRepairHistorySummary(req, res, deps) {
     });
   } catch (err) {
     const processingTimeMs = Date.now() - startedAt;
+    // FN-1527: Anthropic errors carry `status` (HTTP) and `error.type`
+    // (e.g. overloaded_error, rate_limit_error). Surface both so Render logs
+    // are diagnosable without re-running the request.
+    const anthropicStatus = err?.status ?? null;
+    const anthropicType = err?.error?.type || err?.type || null;
+    const errorCode = err?.code || null;
     // eslint-disable-next-line no-console
-    console.error('[ai-service] repair history error', err.message || err);
+    console.error('[ai-service] repair history error', {
+      message: err?.message || String(err),
+      status: anthropicStatus,
+      type: anthropicType,
+      code: errorCode,
+      vin: trimmedVin,
+      rowsAnalyzed: normalizedHistory.length,
+      processingTimeMs,
+      model
+    });
 
     logAiInteraction({
       userId: null,
@@ -339,10 +354,12 @@ async function handleVehicleRepairHistorySummary(req, res, deps) {
       message: `Repair history upstream failure: ${trimmedVin}`,
       conversationId: null,
       success: false,
-      errorCode: err.status ? `HTTP_${err.status}` : 'AI_UNAVAILABLE',
+      errorCode: anthropicStatus ? `HTTP_${anthropicStatus}` : (anthropicType || errorCode || 'AI_UNAVAILABLE'),
       processingTimeMs
     });
 
+    // FN-1527: hint to the orchestrator (and any direct caller) when to retry.
+    res.set('Retry-After', '5');
     return res.status(502).json({
       success: false,
       error: 'AI service unavailable',

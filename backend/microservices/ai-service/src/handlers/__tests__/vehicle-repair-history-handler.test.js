@@ -22,12 +22,17 @@ function makeRes() {
   return {
     statusCode: 200,
     body: null,
+    headers: {},
     status(code) {
       this.statusCode = code;
       return this;
     },
     json(payload) {
       this.body = payload;
+      return this;
+    },
+    set(name, value) {
+      this.headers[name] = value;
       return this;
     }
   };
@@ -284,6 +289,43 @@ async function runUnparseableFallback() {
   console.log('  ok  unparseable model output falls back to safe defaults');
 }
 
+async function runUpstreamFailure502() {
+  // FN-1527: when the Anthropic client throws, the handler must respond with
+  // 502, code AI_UNAVAILABLE, and Retry-After: 5 so the orchestrator and any
+  // direct caller has a deterministic backoff hint.
+  clearCache();
+  const upstreamErr = new Error('overloaded');
+  upstreamErr.status = 529;
+  upstreamErr.error = { type: 'overloaded_error' };
+  const deps = {
+    anthropic: {
+      messages: {
+        create: async () => { throw upstreamErr; }
+      }
+    }
+  };
+  const res = makeRes();
+  await handleVehicleRepairHistorySummary(
+    {
+      body: {
+        vin: 'UPSTREAM999999999',
+        history: [
+          { id: 'a', complaint: 'x' },
+          { id: 'b', complaint: 'y' }
+        ]
+      }
+    },
+    res,
+    deps
+  );
+  assert.equal(res.statusCode, 502);
+  assert.equal(res.body.success, false);
+  assert.equal(res.body.code, 'AI_UNAVAILABLE');
+  assert.equal(res.headers['Retry-After'], '5', 'Retry-After header set on 502');
+  // eslint-disable-next-line no-console
+  console.log('  ok  Anthropic upstream failure → 502 + Retry-After header');
+}
+
 async function runMaxRowsCap() {
   clearCache();
   const capture = { lastArgs: null };
@@ -357,6 +399,7 @@ async function main() {
   await runValidationCases();
   await runSchemaValidation();
   await runUnparseableFallback();
+  await runUpstreamFailure502();
   await runMaxRowsCap();
   await runHelpers();
 

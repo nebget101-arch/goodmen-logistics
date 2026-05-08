@@ -15,14 +15,30 @@
 
 const axios = require('axios');
 const dbBridge = require('../internal/db');
+const logger = require('../utils/logger');
 
 const WINDOW_DAYS_DEFAULT = 365;
 const WINDOW_DAYS_MIN = 30;
 const WINDOW_DAYS_MAX = 1825;
 const MAX_AI_ROWS = 50;
 const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000;
-const AI_TIMEOUT_MS = Number(process.env.AI_REPAIR_HISTORY_TIMEOUT_MS || 12000);
+// FN-1527: 12s was shorter than ai-service Render cold-start latency, causing
+// ECONNRESET/ETIMEDOUT under load and a 502 on the WO page repair-history widget.
+const AI_TIMEOUT_MS = Number(process.env.AI_REPAIR_HISTORY_TIMEOUT_MS || 30000);
 const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || 'http://localhost:4100').replace(/\/$/, '');
+
+// FN-1527: One retry with backoff on transient downstream failures so a single
+// cold-start blip does not surface as a user-facing 502. ECONNABORTED is what
+// axios throws when its `timeout` fires; ECONNREFUSED is intentionally NOT
+// retried — that usually means the service is down for non-transient reasons
+// (bad deploy, mis-set AI_SERVICE_URL) and a retry just delays the failure.
+const AI_RETRY_MAX_ATTEMPTS = 2;
+const TRANSIENT_HTTP_STATUSES = new Set([502, 503, 504]);
+const TRANSIENT_NET_CODES = new Set([
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ECONNABORTED'
+]);
 
 const routeCache = new Map();
 
@@ -141,20 +157,75 @@ async function requestRepairHistorySummary(req, { vin, history }) {
   const bearer = pickBearer(req);
   if (bearer) headers.Authorization = bearer;
 
+  const url = `${AI_SERVICE_URL}/api/ai/vehicles/repair-history-summary`;
+  const body = { vin, history };
   // FN-1500: validateStatus only suppresses HTTP-status errors. Network-layer
   // failures (DNS, ECONNREFUSED, ECONNRESET, timeout) still throw, so the
   // route catch turned an AI-down event into a 500 instead of letting the
-  // orchestrator surface { ok: false, reason: 'ai_unavailable' } → 502. Wrap
-  // the call and translate any throw into a synthetic non-200 response.
-  try {
-    return await axios.post(
-      `${AI_SERVICE_URL}/api/ai/vehicles/repair-history-summary`,
-      { vin, history },
-      { headers, timeout: AI_TIMEOUT_MS, validateStatus: () => true }
-    );
-  } catch (_err) {
-    return { status: 0, data: null };
+  // orchestrator surface { ok: false, reason: 'ai_unavailable' } → 502.
+  const opts = { headers, timeout: AI_TIMEOUT_MS, validateStatus: () => true };
+  // FN-1527: Read backoff per-call so tests can override via env var without
+  // module reload.
+  const backoffMs = Number(process.env.AI_REPAIR_HISTORY_RETRY_BACKOFF_MS ?? 2000);
+  const historyLen = Array.isArray(history) ? history.length : 0;
+
+  let lastResponse = { status: 0, data: null };
+  for (let attempt = 1; attempt <= AI_RETRY_MAX_ATTEMPTS; attempt += 1) {
+    const startedAt = Date.now();
+    try {
+      const response = await axios.post(url, body, opts);
+      const durationMs = Date.now() - startedAt;
+      const transient = TRANSIENT_HTTP_STATUSES.has(response.status);
+      if (transient && attempt < AI_RETRY_MAX_ATTEMPTS) {
+        logger.warn('vehicle_repair_history_ai_transient_status', {
+          vin,
+          attempt,
+          downstreamStatus: response.status,
+          durationMs,
+          historyLen
+        });
+        if (backoffMs > 0) await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        lastResponse = response;
+        continue;
+      }
+      if (response.status !== 200) {
+        logger.warn('vehicle_repair_history_ai_non_200', {
+          vin,
+          attempt,
+          downstreamStatus: response.status,
+          durationMs,
+          historyLen
+        });
+      }
+      return response;
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      const errorCode = err?.code || null;
+      const transient = TRANSIENT_NET_CODES.has(errorCode);
+      if (transient && attempt < AI_RETRY_MAX_ATTEMPTS) {
+        logger.warn('vehicle_repair_history_ai_transient_throw', {
+          vin,
+          attempt,
+          errorCode,
+          message: err?.message,
+          durationMs,
+          historyLen
+        });
+        if (backoffMs > 0) await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        continue;
+      }
+      logger.error('vehicle_repair_history_ai_request_failed', err, {
+        vin,
+        attempt,
+        errorCode,
+        durationMs,
+        historyLen
+      });
+      return { status: 0, data: null };
+    }
   }
+  // Reached max attempts with the last attempt still transient (response path).
+  return lastResponse;
 }
 
 function cacheKey(tenantId, vehicleId, windowDays) {
