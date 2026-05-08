@@ -3,18 +3,21 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
 import { RouterTestingModule } from '@angular/router/testing';
-import { of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 
 import { WoRepairHistoryWidgetComponent } from './repair-history-widget.component';
 import { RepairHistorySummary, VehicleService } from '../../../services/vehicle.service';
 
 class VehicleServiceStub {
   response: RepairHistorySummary | null = null;
-  shouldError = false;
+  errorToThrow: { status?: number; error?: { error?: string }; message?: string } | null = null;
+  callCount = 0;
 
-  getRepairHistorySummary() {
-    if (this.shouldError) {
-      return throwError(() => new Error('boom'));
+  getRepairHistorySummary(): Observable<RepairHistorySummary> {
+    this.callCount += 1;
+    if (this.errorToThrow) {
+      const err = this.errorToThrow;
+      return throwError(() => err);
     }
     return of(this.response as RepairHistorySummary);
   }
@@ -93,7 +96,7 @@ describe('WoRepairHistoryWidgetComponent', () => {
     });
   });
 
-  describe('insufficient history', () => {
+  describe('insufficient history (200 path)', () => {
     it('hides the comeback badge but still shows the count', () => {
       vehicleStub.response = buildSummary({
         priorWoCount: 1,
@@ -153,11 +156,68 @@ describe('WoRepairHistoryWidgetComponent', () => {
     });
   });
 
-  it('surfaces a friendly error message when the request fails', () => {
-    vehicleStub.shouldError = true;
-    setVehicleId('veh-1');
+  describe('error responses', () => {
+    it('treats 404 as a neutral empty state — never shows the red error UI', () => {
+      vehicleStub.errorToThrow = { status: 404, error: { error: 'Vehicle not found' } };
+      setVehicleId('veh-1');
 
-    expect(component.state).toBe('error');
-    expect(component.errorMessage).toBe('boom');
+      expect(component.state).toBe('ready');
+      expect(component.errorMessage).toBe('');
+      expect(component.insufficientHistory).toBeTrue();
+      expect(component.data?.priorWoCount).toBe(0);
+      expect(component.data?.windowDays).toBe(component.windowDays);
+
+      const root: HTMLElement = fixture.nativeElement;
+      const errorEl = root.querySelector('.repair-history-widget__status--error');
+      expect(errorEl).toBeNull();
+
+      const insufficientBadge = root.querySelector('.repair-history-widget__badge--insufficient');
+      expect(insufficientBadge?.textContent).toContain('Not enough history');
+    });
+
+    it('renders an inline retry chip on 502 (AI unavailable) and re-fetches on Retry click', () => {
+      vehicleStub.errorToThrow = { status: 502, error: { error: 'AI service unavailable' } };
+      setVehicleId('veh-1');
+
+      expect(component.state).toBe('ai_unavailable');
+      expect(component.errorMessage).toBe('');
+
+      const root: HTMLElement = fixture.nativeElement;
+      const unavailableBadge = root.querySelector('.repair-history-widget__badge--unavailable');
+      expect(unavailableBadge?.textContent).toContain('Service unavailable');
+
+      const retryBtn = root.querySelector<HTMLButtonElement>('.repair-history-widget__retry');
+      expect(retryBtn).toBeTruthy();
+
+      vehicleStub.errorToThrow = null;
+      vehicleStub.response = buildSummary();
+      const callsBefore = vehicleStub.callCount;
+
+      retryBtn!.click();
+      fixture.detectChanges();
+
+      expect(vehicleStub.callCount).toBe(callsBefore + 1);
+      expect(component.state).toBe('ready');
+      expect(root.querySelector('.repair-history-widget__badge--unavailable')).toBeNull();
+    });
+
+    it('preserves the loud error UI for 500 / unknown failures', () => {
+      vehicleStub.errorToThrow = { status: 500, error: { error: 'Failed to fetch repair history summary' } };
+      setVehicleId('veh-1');
+
+      expect(component.state).toBe('error');
+      expect(component.errorMessage).toBe('Failed to fetch repair history summary');
+
+      const errorEl = fixture.nativeElement.querySelector('.repair-history-widget__status--error');
+      expect(errorEl?.textContent).toContain('Failed to fetch repair history summary');
+    });
+
+    it('falls back to err.message when no status is present (network failure)', () => {
+      vehicleStub.errorToThrow = { message: 'boom' };
+      setVehicleId('veh-1');
+
+      expect(component.state).toBe('error');
+      expect(component.errorMessage).toBe('boom');
+    });
   });
 });
