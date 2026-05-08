@@ -97,7 +97,8 @@ async function main() {
           qty: '4',
           unitCost: '$24.50',
           manufacturer: 'Wagner',
-          confidence: { sku: 0.9, description: 0.95, qty: 0.9, unitCost: 0.85, manufacturer: 0.8 },
+          category: 'Brakes',
+          confidence: { sku: 0.9, description: 0.95, qty: 0.9, unitCost: 0.85, manufacturer: 0.8, category: 0.95 },
         },
       ],
       warnings: ['watermark obscures 2nd page', 42],
@@ -109,6 +110,8 @@ async function main() {
     assert.equal(out.lineItems.length, 1);
     assert.equal(out.lineItems[0].qty, 4);
     assert.equal(out.lineItems[0].unitCost, 24.5);
+    assert.equal(out.lineItems[0].category, 'Brakes');
+    assert.equal(out.lineItems[0].confidence.category, 0.95);
     assert.deepEqual(out.warnings, ['watermark obscures 2nd page']);
   });
 
@@ -119,6 +122,53 @@ async function main() {
     assert.deepEqual(out.confidence, { vendor: 0, invoiceNumber: 0 });
     assert.deepEqual(out.lineItems, []);
     assert.deepEqual(out.warnings, []);
+  });
+
+  await run('validateExtractionResult round-trips category=null and clamps confidence.category', () => {
+    const out = validateExtractionResult({
+      vendor: 'NAPA',
+      invoiceNumber: 'X',
+      confidence: { vendor: 1, invoiceNumber: 1 },
+      lineItems: [
+        {
+          sku: 'X-1',
+          description: 'Misc shop supply',
+          qty: 1,
+          unitCost: 1,
+          manufacturer: '',
+          category: null,
+          confidence: { sku: 0.5, description: 0.5, qty: 1, unitCost: 1, manufacturer: 0, category: 0.1 },
+        },
+        {
+          sku: 'X-2',
+          description: 'Unclear line',
+          qty: 1,
+          unitCost: 0,
+          manufacturer: '',
+          // category omitted entirely — must default to null
+          confidence: { sku: 0, description: 0.4, qty: 0.7, unitCost: 0 },
+        },
+        {
+          sku: 'X-3',
+          description: 'Overconfident line',
+          qty: 1,
+          unitCost: 0,
+          manufacturer: '',
+          category: 'Engine',
+          confidence: { category: 1.4 },
+        },
+      ],
+      warnings: [],
+    });
+    assert.equal(out.lineItems.length, 3);
+    assert.equal(out.lineItems[0].category, null);
+    assert.equal(out.lineItems[0].confidence.category, 0.1);
+    // missing -> null + confidence 0
+    assert.equal(out.lineItems[1].category, null);
+    assert.equal(out.lineItems[1].confidence.category, 0);
+    // out-of-range confidence -> clamped
+    assert.equal(out.lineItems[2].category, 'Engine');
+    assert.equal(out.lineItems[2].confidence.category, 1);
   });
 
   await run('parseAiResponse strips markdown fences', () => {
@@ -158,7 +208,8 @@ async function main() {
           qty: 6,
           unitCost: 28.99,
           manufacturer: 'Mobil',
-          confidence: { sku: 0.95, description: 0.96, qty: 0.99, unitCost: 0.98, manufacturer: 0.94 },
+          category: 'Fluids',
+          confidence: { sku: 0.95, description: 0.96, qty: 0.99, unitCost: 0.98, manufacturer: 0.94, category: 0.97 },
         },
         {
           sku: 'FLT-OIL-12',
@@ -166,7 +217,8 @@ async function main() {
           qty: 6,
           unitCost: 7.49,
           manufacturer: 'WIX',
-          confidence: { sku: 0.9, description: 0.95, qty: 0.99, unitCost: 0.97, manufacturer: 0.85 },
+          category: 'Filters',
+          confidence: { sku: 0.9, description: 0.95, qty: 0.99, unitCost: 0.97, manufacturer: 0.85, category: 0.93 },
         },
         {
           sku: '',
@@ -174,7 +226,8 @@ async function main() {
           qty: 2,
           unitCost: 4.5,
           manufacturer: '',
-          confidence: { sku: 0, description: 0.62, qty: 0.7, unitCost: 0.55, manufacturer: 0 },
+          category: null,
+          confidence: { sku: 0, description: 0.62, qty: 0.7, unitCost: 0.55, manufacturer: 0, category: 0.2 },
         },
       ],
       warnings: [],
@@ -198,6 +251,12 @@ async function main() {
     // all fields present even on the sparse line
     assert.equal(res.body.data.lineItems[2].sku, '');
     assert.equal(res.body.data.lineItems[2].manufacturer, '');
+    // category is present on every line; null round-trips for the ambiguous handwritten line
+    assert.equal(res.body.data.lineItems[0].category, 'Fluids');
+    assert.equal(res.body.data.lineItems[0].confidence.category, 0.97);
+    assert.equal(res.body.data.lineItems[1].category, 'Filters');
+    assert.equal(res.body.data.lineItems[2].category, null);
+    assert.equal(res.body.data.lineItems[2].confidence.category, 0.2);
     assert.equal(typeof res.body.processingTimeMs, 'number');
 
     // request shape: image content block
@@ -219,7 +278,8 @@ async function main() {
           qty: 1,
           unitCost: 189.0,
           manufacturer: 'Interstate',
-          confidence: { sku: 0.99, description: 0.99, qty: 0.99, unitCost: 0.99, manufacturer: 0.95 },
+          category: 'Electrical',
+          confidence: { sku: 0.99, description: 0.99, qty: 0.99, unitCost: 0.99, manufacturer: 0.95, category: 0.96 },
         },
       ],
       warnings: [],
@@ -234,6 +294,7 @@ async function main() {
 
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.data.lineItems[0].sku, 'BAT-31');
+    assert.equal(res.body.data.lineItems[0].category, 'Electrical');
     assert.equal(cap.lastCall.messages[0].content[0].type, 'document');
     assert.equal(cap.lastCall.messages[0].content[0].source.media_type, SUPPORTED_PDF_TYPE);
   });
