@@ -318,6 +318,85 @@ describe('AiPartsService', () => {
     );
   });
 
+  // FN-1472: invoice handler now returns category per line; bulk-create
+  // returns the auto-generated FN-XXXXXXXX barcode per created row. Both
+  // are optional — older response shapes still parse cleanly.
+  it('extractFromInvoice surfaces the AI-extracted category and confidence per line', (done) => {
+    service.extractFromInvoice(makeInvoiceFile()).subscribe((res) => {
+      expect(res.data.lineItems[0].category).toBe('Filtration');
+      expect(res.data.lineItems[0].confidence.category).toBe(0.81);
+      // Lines without an AI category come back as undefined (not '').
+      expect(res.data.lineItems[1].category).toBeUndefined();
+      expect(res.data.lineItems[1].confidence.category).toBeUndefined();
+      done();
+    });
+
+    const req = http.expectOne(`${environment.apiUrl}/ai/parts/extract-from-invoice`);
+    req.flush({
+      success: true,
+      aiResult: {
+        success: true,
+        data: {
+          vendor: 'NAPA',
+          invoiceNumber: 'INV-001',
+          confidence: { vendor: 0.95, invoiceNumber: 0.9 },
+          lineItems: [
+            {
+              sku: 'FRAM-PH7317',
+              description: 'Oil filter',
+              qty: 12,
+              unitCost: 4.5,
+              manufacturer: 'Fram',
+              category: 'Filtration',
+              confidence: {
+                sku: 0.92, description: 0.9, qty: 0.95, unitCost: 0.85,
+                manufacturer: 0.88, category: 0.81,
+              },
+            },
+            {
+              sku: 'WIX-51515',
+              description: 'Oil filter',
+              qty: 6,
+              unitCost: 5.25,
+              manufacturer: 'Wix',
+              confidence: {
+                sku: 0.88, description: 0.7, qty: 0.95, unitCost: 0.65,
+                manufacturer: 0.8,
+              },
+            },
+          ],
+          warnings: [],
+        },
+        processingTimeMs: 1200,
+      },
+      r2Key: 'parts/invoices/uuid.pdf',
+    });
+  });
+
+  it('bulkCreate passes through the auto-generated barcode per created row', (done) => {
+    service.bulkCreate([{ sku: 'A1', name: 'Filter' }]).subscribe((res) => {
+      expect(res.created.length).toBe(2);
+      expect(res.created[0].barcode).toBe('FN-AB7K2QXP');
+      // Pre-FN-1474 backends omit barcode — normalize to undefined, never
+      // crash on a missing field.
+      expect(res.created[1].barcode).toBeUndefined();
+      done();
+    });
+
+    const req = http.expectOne(`${environment.apiUrl}/parts/bulk`);
+    req.flush(
+      {
+        success: true,
+        created: [
+          { id: 'p1', sku: 'A1', name: 'Filter', barcode: 'FN-AB7K2QXP' },
+          { id: 'p2', sku: 'A2', name: 'Hose' },
+        ],
+        skipped: [],
+      },
+      { status: 201, statusText: 'Created' },
+    );
+  });
+
   it('bulkCreate normalizes 400 to a friendly error', (done) => {
     service.bulkCreate([]).subscribe({
       next: () => fail('should have errored'),

@@ -53,6 +53,15 @@ export class QuickAddInvoiceModalComponent implements OnInit, OnChanges {
    */
   @Input() existingSkus: Set<string> = new Set<string>();
 
+  /**
+   * FN-1472: Category suggestions sourced from the parent's catalog list
+   * (`GET /api/parts/categories`). Wired through a `<datalist>` so the
+   * per-row Category cell behaves as an editable dropdown — same set the
+   * manual Add Part form filters by, but the user can still type a brand
+   * new category if the AI surfaced one we haven't seen.
+   */
+  @Input() categories: string[] = [];
+
   @Output() confirmed = new EventEmitter<BulkCreateResponse>();
   @Output() closed = new EventEmitter<void>();
 
@@ -130,10 +139,10 @@ export class QuickAddInvoiceModalComponent implements OnInit, OnChanges {
     return {
       sku: line.sku || '',
       description: line.description || '',
-      // FN-1365: editable per-row category. The AI invoice handler doesn't
-      // extract category, so this starts blank — the user fills it in if
-      // they want it set on the created part. Optional on the wire.
-      category: '',
+      // FN-1472/FN-1473: prefill category from the AI extraction. The user
+      // can still override before save; the AI confidence badge surfaces
+      // alongside the field until the user edits it.
+      category: line.category || '',
       qty: line.qty,
       unitCost: line.unitCost,
       manufacturer: line.manufacturer || '',
@@ -174,7 +183,7 @@ export class QuickAddInvoiceModalComponent implements OnInit, OnChanges {
   ): void {
     const target = event.target as HTMLInputElement | null;
     row[field] = target?.value ?? '';
-    if (field === 'sku' || field === 'description') {
+    if (field === 'sku' || field === 'description' || field === 'category') {
       row.confidence = { ...row.confidence, [field]: undefined };
     }
     if (field === 'sku') {
@@ -319,6 +328,7 @@ interface ReviewRow {
     qty?: number;
     unitCost?: number;
     manufacturer?: number;
+    category?: number;
   };
   selected: boolean;
   alreadyExists: boolean;
