@@ -94,6 +94,12 @@ function normalizeOdometer(value) {
   return Number.isNaN(num) ? null : Math.trunc(num);
 }
 
+function normalizeDateString(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  return value;
+}
+
 function computeDueDate(issuedDate, paymentTerms, customDays) {
   if (!issuedDate) return null;
   const base = new Date(issuedDate);
@@ -367,6 +373,9 @@ async function createWorkOrder(payload, userId, context = null) {
       discount_type: payload.discountType || 'NONE',
       discount_value: payload.discountValue || 0,
       tax_rate_percent: payload.taxRatePercent || 0,
+      scheduled_date: normalizeDateString(payload.scheduledDate),
+      start_date: normalizeDateString(payload.startDate),
+      completion_date: normalizeDateString(payload.completionDate),
       created_at: trx.fn.now(),
       updated_at: trx.fn.now()
     }).returning('*');
@@ -446,6 +455,9 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
       discount_type: payload.discountType ?? workOrder.discount_type,
       discount_value: payload.discountValue ?? workOrder.discount_value,
       tax_rate_percent: payload.taxRatePercent ?? workOrder.tax_rate_percent,
+      ...(payload.scheduledDate !== undefined ? { scheduled_date: normalizeDateString(payload.scheduledDate) } : {}),
+      ...(payload.startDate !== undefined ? { start_date: normalizeDateString(payload.startDate) } : {}),
+      ...(payload.completionDate !== undefined ? { completion_date: normalizeDateString(payload.completionDate) } : {}),
       updated_at: trx.fn.now()
     });
 
@@ -1191,5 +1203,6 @@ module.exports = {
   deleteLaborLine,
   recomputeWorkOrderTotals,
   generateInvoiceForWorkOrder,
-  uploadDocument
+  uploadDocument,
+  normalizeDateString
 };
