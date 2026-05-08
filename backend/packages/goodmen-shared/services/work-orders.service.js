@@ -94,6 +94,72 @@ function normalizeOdometer(value) {
   return Number.isNaN(num) ? null : Math.trunc(num);
 }
 
+function normalizeNullableText(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  return value;
+}
+
+function normalizeNullableNumber(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const num = Number(value);
+  return Number.isNaN(num) ? null : num;
+}
+
+function normalizeRoadCall(value) {
+  if (value === undefined || value === null || value === '') return false;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const str = String(value).trim().toLowerCase();
+  return str === 'true' || str === '1' || str === 'yes';
+}
+
+// FN-1518: maps Service Details payload (camelCase) to snake_case columns
+// added by FN-1528. Insert form populates all 8 fields; patch form only
+// includes keys present in the payload so omitted fields keep their value.
+function buildServiceDetailsInsert(payload) {
+  return {
+    service_category: normalizeNullableText(payload.serviceCategory),
+    service_description: normalizeNullableText(payload.serviceDescription),
+    problem_reported: normalizeNullableText(payload.problemReported),
+    safety_issue: normalizeNullableText(payload.safetyIssue),
+    downtime_reason: normalizeNullableText(payload.downtimeReason),
+    road_call: normalizeRoadCall(payload.roadCall),
+    breakdown_location: normalizeNullableText(payload.breakdownLocation),
+    estimated_duration_hours: normalizeNullableNumber(payload.estimatedDurationHours)
+  };
+}
+
+function buildServiceDetailsPatch(payload) {
+  const patch = {};
+  if ('serviceCategory' in payload) {
+    patch.service_category = normalizeNullableText(payload.serviceCategory);
+  }
+  if ('serviceDescription' in payload) {
+    patch.service_description = normalizeNullableText(payload.serviceDescription);
+  }
+  if ('problemReported' in payload) {
+    patch.problem_reported = normalizeNullableText(payload.problemReported);
+  }
+  if ('safetyIssue' in payload) {
+    patch.safety_issue = normalizeNullableText(payload.safetyIssue);
+  }
+  if ('downtimeReason' in payload) {
+    patch.downtime_reason = normalizeNullableText(payload.downtimeReason);
+  }
+  if ('roadCall' in payload) {
+    patch.road_call = normalizeRoadCall(payload.roadCall);
+  }
+  if ('breakdownLocation' in payload) {
+    patch.breakdown_location = normalizeNullableText(payload.breakdownLocation);
+  }
+  if ('estimatedDurationHours' in payload) {
+    patch.estimated_duration_hours = normalizeNullableNumber(payload.estimatedDurationHours);
+  }
+  return patch;
+}
+
 function computeDueDate(issuedDate, paymentTerms, customDays) {
   if (!issuedDate) return null;
   const base = new Date(issuedDate);
@@ -367,6 +433,7 @@ async function createWorkOrder(payload, userId, context = null) {
       discount_type: payload.discountType || 'NONE',
       discount_value: payload.discountValue || 0,
       tax_rate_percent: payload.taxRatePercent || 0,
+      ...buildServiceDetailsInsert(payload),
       created_at: trx.fn.now(),
       updated_at: trx.fn.now()
     }).returning('*');
@@ -446,6 +513,7 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
       discount_type: payload.discountType ?? workOrder.discount_type,
       discount_value: payload.discountValue ?? workOrder.discount_value,
       tax_rate_percent: payload.taxRatePercent ?? workOrder.tax_rate_percent,
+      ...buildServiceDetailsPatch(payload),
       updated_at: trx.fn.now()
     });
 
