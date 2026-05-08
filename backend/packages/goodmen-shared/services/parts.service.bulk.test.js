@@ -22,7 +22,11 @@ const dbBridge = require('../internal/db');
  *   db('vendors').where({normalized_name}).first() / .insert().returning()
  */
 function makeMockDb() {
-	const tables = { parts: [], manufacturers: [], vendors: [] };
+	// FN-1474: bulk-create now generates barcodes via `isBarcodeTaken`, which
+	// queries both `parts.barcode` and `part_barcodes.barcode_value` — so the
+	// mock has to know about `part_barcodes` even though the bulk path doesn't
+	// insert into it.
+	const tables = { parts: [], manufacturers: [], vendors: [], part_barcodes: [] };
 	let nextId = 1;
 
 	function tableBuilder(name) {
@@ -31,8 +35,14 @@ function makeMockDb() {
 		let whereInColExpr = null; // raw expression OR column name
 		let whereInValues = null;
 		const builder = {
-			where(criteria) {
-				whereCriteria = criteria;
+			where(criteriaOrCol, value) {
+				// Accept both shapes: .where({col: val}) and .where('col', val).
+				// `isBarcodeTaken` (FN-1400) uses the two-arg form.
+				if (typeof criteriaOrCol === 'string' && arguments.length === 2) {
+					whereCriteria = { [criteriaOrCol]: value };
+				} else {
+					whereCriteria = criteriaOrCol;
+				}
 				return this;
 			},
 			whereIn(col, values) {
@@ -277,4 +287,56 @@ test('bulkCreateParts: a single existing-SKU lookup query is used, not N queries
 	assert.equal(result.created.length, 1);
 	assert.equal(result.created[0].sku, 'C-1');
 	assert.equal(result.skipped.filter((s) => s.reason === 'sku_exists').length, 2);
+});
+
+const FN_BARCODE_FORMAT = /^FN-[A-HJ-NP-Z2-9]{8}$/;
+
+test('FN-1474 bulkCreateParts: 3 rows without barcode → all 3 receive distinct FN-XXXXXXXX', async () => {
+	const { partsService, tables } = loadServicesWithMockDb();
+
+	const result = await partsService.bulkCreateParts([
+		{ sku: 'AI-1', name: 'AI Part 1' },
+		{ sku: 'AI-2', name: 'AI Part 2' },
+		{ sku: 'AI-3', name: 'AI Part 3' },
+	]);
+
+	assert.equal(result.created.length, 3);
+	const barcodes = result.created.map((r) => r.barcode);
+	for (const bc of barcodes) {
+		assert.match(bc, FN_BARCODE_FORMAT, `barcode ${bc} does not match FN-XXXXXXXX`);
+	}
+	assert.equal(new Set(barcodes).size, 3, 'expected 3 distinct barcodes');
+
+	// Persisted to the parts table, so the FE can render labels without a re-fetch.
+	for (const created of result.created) {
+		const row = tables.parts.find((p) => p.sku === created.sku);
+		assert.equal(row.barcode, created.barcode);
+	}
+});
+
+test('FN-1474 bulkCreateParts: explicit barcode is preserved verbatim', async () => {
+	const { partsService, tables } = loadServicesWithMockDb();
+
+	const result = await partsService.bulkCreateParts([
+		{ sku: 'PRESERVE-1', name: 'Pre-labeled Part', barcode: 'EXTERNAL-12345' },
+	]);
+
+	assert.equal(result.created.length, 1);
+	assert.equal(result.created[0].barcode, 'EXTERNAL-12345');
+	const row = tables.parts.find((p) => p.sku === 'PRESERVE-1');
+	assert.equal(row.barcode, 'EXTERNAL-12345');
+});
+
+test('FN-1474 bulkCreateParts: AI-supplied category persists into parts.category', async () => {
+	const { partsService, tables } = loadServicesWithMockDb();
+
+	const result = await partsService.bulkCreateParts([
+		{ sku: 'CAT-1', name: 'Brake Pad', category: 'Brakes' },
+	]);
+
+	assert.equal(result.created.length, 1);
+	const row = tables.parts.find((p) => p.sku === 'CAT-1');
+	assert.equal(row.category, 'Brakes');
+	// Barcode also auto-generated (regression guard for the same path).
+	assert.match(row.barcode, FN_BARCODE_FORMAT);
 });
