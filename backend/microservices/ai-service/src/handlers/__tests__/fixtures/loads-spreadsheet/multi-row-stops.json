@@ -1,0 +1,19 @@
+{
+  "id": "msg_fixture_multi_row_stops",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-4-20250514",
+  "stop_reason": "end_turn",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"columnMapping\": {\n    \"load_number\":      { \"sourceHeader\": \"Order Number\",  \"confidence\": 0.95 },\n    \"po_number\":        { \"sourceHeader\": \"PO Number\",     \"confidence\": 0.94 },\n    \"rate\":             { \"sourceHeader\": \"Line Haul\",     \"confidence\": 0.90 },\n    \"broker_name\":      { \"sourceHeader\": \"Broker Name\",   \"confidence\": 0.96 },\n    \"broker_mc\":        { \"sourceHeader\": null,             \"confidence\": 0    },\n    \"broker_dot\":       { \"sourceHeader\": null,             \"confidence\": 0    },\n    \"pickup_city\":      { \"sourceHeader\": \"Stop City\",     \"confidence\": 0.65 },\n    \"pickup_state\":     { \"sourceHeader\": \"Stop State\",    \"confidence\": 0.65 },\n    \"pickup_zip\":       { \"sourceHeader\": \"Stop Zip\",      \"confidence\": 0.65 },\n    \"pickup_address1\":  { \"sourceHeader\": \"Stop Address\",  \"confidence\": 0.60 },\n    \"pickup_date\":      { \"sourceHeader\": \"Stop Date\",     \"confidence\": 0.70 },\n    \"delivery_city\":    { \"sourceHeader\": \"Stop City\",     \"confidence\": 0.65 },\n    \"delivery_state\":   { \"sourceHeader\": \"Stop State\",    \"confidence\": 0.65 },\n    \"delivery_zip\":     { \"sourceHeader\": \"Stop Zip\",      \"confidence\": 0.65 },\n    \"delivery_address1\":{ \"sourceHeader\": \"Stop Address\",  \"confidence\": 0.60 },\n    \"delivery_date\":    { \"sourceHeader\": \"Stop Date\",     \"confidence\": 0.70 },\n    \"driver_name\":      { \"sourceHeader\": \"Driver Name\",   \"confidence\": 0.93 },\n    \"truck_unit\":       { \"sourceHeader\": \"Tractor #\",     \"confidence\": 0.92 },\n    \"trailer_unit\":     { \"sourceHeader\": \"Trailer #\",     \"confidence\": 0.92 },\n    \"status\":           { \"sourceHeader\": \"Load Status\",   \"confidence\": 0.94 },\n    \"billing_status\":   { \"sourceHeader\": \"Invoice Status\",\"confidence\": 0.91 },\n    \"notes\":            { \"sourceHeader\": \"Comments\",      \"confidence\": 0.85 }\n  },\n  \"statusEnumMapping\": {\n    \"Delivered\":   \"DELIVERED\",\n    \"Completed\":   \"COMPLETED\",\n    \"En Route\":    \"EN_ROUTE\",\n    \"Picked Up\":   \"PICKED_UP\",\n    \"On Hold\":     \"DRAFT\"\n  },\n  \"billingStatusEnumMapping\": {\n    \"Awaiting BOL\":      \"PENDING\",\n    \"Sent to Factor\":    \"SENT_TO_FACTORING\",\n    \"Funded\":            \"FUNDED\",\n    \"Paid Out\":          \"PAID\"\n  },\n  \"multiStopPattern\": \"multi_row\",\n  \"extraStopColumns\": [],\n  \"groupByColumn\":    \"Order Number\",\n  \"warnings\": [\n    { \"code\": \"MULTI_ROW_STOPS\", \"message\": \"Rows share a single Order Number; group by Order Number to reconstruct each load with multiple stops.\" }\n  ],\n  \"overallConfidence\": 0.83\n}"
+    }
+  ],
+  "usage": {
+    "input_tokens": 920,
+    "output_tokens": 640,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 720
+  }
+}
