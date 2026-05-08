@@ -132,10 +132,11 @@
   margin: 0;
 }
 
-/* Row layout: info | qty input | + Add button. FN-1546 (was single-button row). */
+/* Row layout: info | qty input | cost input | + Add button.
+   FN-1562 added the cost input column (was 3 columns in FN-1546). */
 .qap__row-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 56px auto;
+  grid-template-columns: minmax(0, 1fr) 56px 84px auto;
   align-items: center;
   gap: 8px;
   background: var(--qap-bg-soft);
@@ -191,6 +192,41 @@
 }
 
 .qap__row-qty:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* FN-1562 — per-row unit cost input. Mirrors qty input styling. */
+.qap__row-cost-input {
+  width: 84px;
+  appearance: none;
+  -moz-appearance: textfield;
+  background: var(--qap-bg);
+  border: 1px solid var(--qap-border);
+  border-radius: 6px;
+  color: var(--qap-text);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding: 6px 6px;
+  min-height: 32px;
+  box-sizing: border-box;
+}
+
+.qap__row-cost-input::-webkit-outer-spin-button,
+.qap__row-cost-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.qap__row-cost-input:focus {
+  outline: none;
+  border-color: var(--qap-border-strong);
+  box-shadow: 0 0 0 2px var(--qap-accent-soft);
+}
+
+.qap__row-cost-input:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }

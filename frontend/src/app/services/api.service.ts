@@ -1574,6 +1574,31 @@ export class ApiService {
     return this.http.delete(`${this.baseUrl}/receiving/${ticketId}/lines/${lineId}`);
   }
 
+  /**
+   * FN-1562 — Patch a DRAFT receiving line. Backend (FN-1566) accepts any
+   * subset of `unit_cost`, `qty_received`, `bin_location_override` and
+   * rejects edits on POSTED tickets.
+   */
+  updateReceivingLine(
+    ticketId: string,
+    lineId: string,
+    body: { unit_cost?: number; qty_received?: number; bin_location_override?: string | null }
+  ): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/receiving/${ticketId}/lines/${lineId}`, body);
+  }
+
+  /**
+   * FN-1562 — Update a part's default cost (and optionally retail) from the
+   * receiving reconcile prompt. Hits the same `PATCH /parts/:id` route as
+   * other partial updates (FN-1566 keeps that contract).
+   */
+  updatePartCost(
+    partId: string,
+    body: { default_cost: number; default_retail_price?: number }
+  ): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/parts/${partId}`, body);
+  }
+
   postReceivingTicket(ticketId: string): Observable<any> {
     return this.http.post(`${this.baseUrl}/receiving/${ticketId}/post`, {});
   }

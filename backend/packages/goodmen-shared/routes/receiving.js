@@ -10,6 +10,7 @@ const db = require('../internal/db').knex;
 const { v4: uuidv4 } = require('uuid');
 const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 const { extractInvoiceViaAi } = require('../services/receiving-invoice.service');
+const receivingService = require('../services/receiving.service');
 
 // FN-1490: invoice upload (image or PDF) for AI line extraction.
 // 15 MB cap matches the AI service's 12 MiB document limit with headroom
@@ -994,6 +995,98 @@ router.delete('/:ticketId/lines/:lineId', authMiddleware, requireRole(['admin', 
 	} catch (error) {
 		dtLogger.error('receiving_line_deletion_failed', { ticketId: req.params.ticketId, error: error.message });
 		res.status(400).json({ error: error.message });
+	}
+});
+
+/**
+ * @openapi
+ * /api/receiving/{ticketId}/lines/{lineId}:
+ *   patch:
+ *     summary: Update a receive-line on a DRAFT ticket
+ *     description: >-
+ *       Updates `unit_cost`, `qty_received`, and/or `bin_location_override` on
+ *       a receiving line. The ticket must be in DRAFT status. Costs must be
+ *       non-negative finite numbers with at most two decimal places. Quantities
+ *       must be positive integers. Requires Admin or Parts Manager role.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: ticketId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Receiving ticket UUID
+ *       - in: path
+ *         name: lineId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Line item UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               unit_cost:
+ *                 type: number
+ *                 minimum: 0
+ *               qty_received:
+ *                 type: integer
+ *                 minimum: 1
+ *               bin_location_override:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       200:
+ *         description: Updated line item
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error or ticket not in DRAFT status
+ *       403:
+ *         description: Insufficient role
+ *       404:
+ *         description: Ticket or line not found
+ */
+router.patch('/:ticketId/lines/:lineId', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
+	try {
+		const updated = await receivingService.updateLine(
+			req.params.ticketId,
+			req.params.lineId,
+			req.body || {}
+		);
+		res.json({ success: true, data: updated });
+	} catch (error) {
+		const status = Number(error.statusCode) || 400;
+		if (status >= 500) {
+			dtLogger.error('receiving_line_update_failed', {
+				ticketId: req.params.ticketId,
+				lineId: req.params.lineId,
+				error: error.message
+			});
+		} else {
+			dtLogger.info('receiving_line_update_rejected', {
+				ticketId: req.params.ticketId,
+				lineId: req.params.lineId,
+				status,
+				reason: error.message
+			});
+		}
+		res.status(status).json({ error: error.message });
 	}
 });
 

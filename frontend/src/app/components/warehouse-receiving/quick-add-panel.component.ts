@@ -31,6 +31,7 @@ export interface QuickAddPart {
 export interface QuickAddEvent {
   part: QuickAddPart;
   qty: number;
+  unitCost: number;
 }
 
 interface CachedList {
@@ -82,6 +83,9 @@ export class QuickAddPanelComponent implements OnInit, OnChanges, OnDestroy, Aft
 
   /** Per-row qty input value, keyed by part.id. Defaults to 1 when not present. */
   private qtyByPart = new Map<string, number>();
+
+  /** Per-row unit-cost input value, keyed by part.id. Defaults to part.default_cost. */
+  private costByPart = new Map<string, number>();
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
 
@@ -164,7 +168,8 @@ export class QuickAddPanelComponent implements OnInit, OnChanges, OnDestroy, Aft
     if (this.disabled || !part) return;
     const userQty = Math.max(1, Math.floor(this.qtyByPart.get(part.id) ?? 1));
     const mult = Math.max(1, Number(this.qtyMultiplier) || 1);
-    this.addPart.emit({ part, qty: userQty * mult });
+    const unitCost = this.getRowCost(part);
+    this.addPart.emit({ part, qty: userQty * mult, unitCost });
   }
 
   /** Read the per-row qty value (defaults to 1) — used by the template. */
@@ -176,6 +181,24 @@ export class QuickAddPanelComponent implements OnInit, OnChanges, OnDestroy, Aft
   setRowQty(id: string, value: any): void {
     const n = Math.floor(Number(value));
     this.qtyByPart.set(id, Number.isFinite(n) && n >= 1 ? n : 1);
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Read the per-row unit cost (defaults to part.default_cost ?? 0).
+   * Used by the template to seed the cost input.
+   */
+  getRowCost(part: QuickAddPart): number {
+    const stored = this.costByPart.get(part.id);
+    if (stored !== undefined) return stored;
+    const dc = Number(part?.default_cost ?? 0);
+    return Number.isFinite(dc) && dc >= 0 ? dc : 0;
+  }
+
+  /** Sanitize and store the per-row unit-cost input. Falls back to 0 for invalid values. */
+  setRowCost(id: string, value: any): void {
+    const n = Number(value);
+    this.costByPart.set(id, Number.isFinite(n) && n >= 0 ? n : 0);
     this.cdr.markForCheck();
   }
 

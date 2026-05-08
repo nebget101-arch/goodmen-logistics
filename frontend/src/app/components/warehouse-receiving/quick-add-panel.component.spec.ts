@@ -135,6 +135,8 @@ describe('QuickAddPanelComponent', () => {
     expect(captured).not.toBeNull();
     expect(captured!.qty).toBe(2);
     expect(captured!.part.id).toBe('p1');
+    // FN-1562 — emitted event now carries unitCost too.
+    expect(captured!.unitCost).toBe(1.25);
   });
 
   it('FN-1546: per-row qty input multiplies with qtyMultiplier on add', () => {
@@ -192,6 +194,59 @@ describe('QuickAddPanelComponent', () => {
   it('FN-1546: getRowQty returns default 1 for unknown parts', () => {
     fixture.detectChanges();
     expect(component.getRowQty('never-set')).toBe(1);
+  });
+
+  it('FN-1562: cost input defaults from part.default_cost', () => {
+    fixture.detectChanges();
+    const part = { id: 'p1', sku: 'SKU1', name: 'Bolt', default_cost: 4.5 };
+    expect(component.getRowCost(part)).toBe(4.5);
+  });
+
+  it('FN-1562: cost defaults to 0 when default_cost is null/undefined/invalid', () => {
+    fixture.detectChanges();
+    expect(component.getRowCost({ id: 'a', sku: 'A', name: 'A' })).toBe(0);
+    expect(component.getRowCost({ id: 'b', sku: 'B', name: 'B', default_cost: null })).toBe(0);
+    // Negative or non-finite values fall back to 0.
+    expect(component.getRowCost({ id: 'c', sku: 'C', name: 'C', default_cost: -5 } as any)).toBe(0);
+  });
+
+  it('FN-1562: setRowCost overrides the default and is included in emitted event', () => {
+    fixture.detectChanges();
+    let captured: QuickAddEvent | null = null;
+    component.addPart.subscribe((evt) => (captured = evt));
+
+    const part = { id: 'p1', sku: 'SKU1', name: 'Bolt', default_cost: 1.25 };
+    component.setRowCost('p1', 9.99);
+    expect(component.getRowCost(part)).toBe(9.99);
+
+    component.onAddClick(part);
+    expect(captured!.unitCost).toBe(9.99);
+    expect(captured!.qty).toBe(2);
+  });
+
+  it('FN-1562: invalid cost inputs (negative, non-numeric) fall back to 0', () => {
+    fixture.detectChanges();
+    const part = { id: 'p1', sku: 'SKU1', name: 'Bolt', default_cost: 5 };
+
+    component.setRowCost('p1', -3);
+    expect(component.getRowCost(part)).toBe(0);
+
+    component.setRowCost('p1', 'abc');
+    expect(component.getRowCost(part)).toBe(0);
+  });
+
+  it('FN-1562: per-part cost values are isolated', () => {
+    fixture.detectChanges();
+    const events: QuickAddEvent[] = [];
+    component.addPart.subscribe((evt) => events.push(evt));
+
+    component.setRowCost('p1', 7.5);
+    // p2 untouched → defaults from part.default_cost
+    component.onAddClick({ id: 'p1', sku: 'A', name: 'A', default_cost: 1 });
+    component.onAddClick({ id: 'p2', sku: 'B', name: 'B', default_cost: 2 });
+
+    expect(events[0].unitCost).toBe(7.5);
+    expect(events[1].unitCost).toBe(2);
   });
 
   it('does not emit when disabled', () => {
