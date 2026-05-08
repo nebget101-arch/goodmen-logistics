@@ -76,6 +76,7 @@
           [technicians]="technicians"
           [workOrderParts]="workOrderParts"
           (reloadWorkOrder)="onWorkTabReload()"
+          (financialsChanged)="recomputeFinancialsPreview()"
         ></app-wo-work-tab>
       </div>
 
@@ -94,6 +95,7 @@
           (generateInvoice)="generateInvoice()"
           (sendInvoice)="sendInvoice()"
           (useCustomerCreditChange)="onCreditToggle($event)"
+          (financialsChanged)="recomputeFinancialsPreview()"
         ></app-wo-financials-tab>
       </div>
 

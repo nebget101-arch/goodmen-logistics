@@ -38,6 +38,7 @@ export class WoFinancialsTabComponent {
   @Output() generateInvoice = new EventEmitter<void>();
   @Output() sendInvoice = new EventEmitter<void>();
   @Output() useCustomerCreditChange = new EventEmitter<boolean>();
+  @Output() financialsChanged = new EventEmitter<void>();
 
   showTaxTooltip = false;
 
@@ -176,17 +177,20 @@ export class WoFinancialsTabComponent {
     if (this.workOrder.taxRatePercent == null) {
       this.workOrder.taxRatePercent = Number(this.effectiveTaxRatePercent.toFixed(4));
     }
+    this.financialsChanged.emit();
   }
 
   /** Revert restores the state default — server picks the rule on next save. */
   revertTaxOverride(): void {
     this.workOrder.taxRateOverride = false;
     this.workOrder.taxRatePercent = null;
+    this.financialsChanged.emit();
   }
 
   onTaxRatePercentChange(value: any): void {
     const num = Number(value);
     this.workOrder.taxRatePercent = Number.isFinite(num) ? num : 0;
+    this.financialsChanged.emit();
   }
 
   private formatRate(rate: number): string {
