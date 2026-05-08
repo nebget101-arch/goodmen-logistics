@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpEventType, HttpRequest } from '@angular/common/http';
 import { Observable, timeout } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { filter, map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { LocationBin, BinFormValue, BulkBinPayload, LocationListResponse } from '../models/location.model';
 
@@ -16,6 +16,35 @@ export interface LocationUserRecord {
   role: string | null;
   assigned_at: string | null;
 }
+
+// FN-1491 — POST /api/receiving/:id/invoice contracts.
+// The backend (FN-1490) stores the file, calls the AI extractor (FN-1489),
+// and returns this shape. `match` is populated when the AI service resolves
+// a SKU against the parts catalog; rows without a match render as
+// "Unmatched" in the review modal so the user can Quick-Add or Skip.
+export interface InvoiceExtractedLine {
+  sku?: string | null;
+  description: string;
+  qty: number;
+  unitCost: number;
+  match?: { partId: string; sku: string; name: string } | null;
+}
+
+export interface InvoiceExtractionResult {
+  vendor?: string | null;
+  reference?: string | null;
+  invoiceDate?: string | null;
+  lines: InvoiceExtractedLine[];
+}
+
+export interface InvoiceUploadResult {
+  fileUrl: string;
+  extracted: InvoiceExtractionResult;
+}
+
+export type InvoiceUploadEvent =
+  | { kind: 'progress'; progress: number }
+  | { kind: 'result'; result: InvoiceUploadResult };
 
 @Injectable({
   providedIn: 'root'
@@ -1594,6 +1623,76 @@ export class ApiService {
     if (filters.vendor) p.set('vendor', filters.vendor);
     const qs = p.toString();
     return `${this.baseUrl}/receiving/activity.csv${qs ? '?' + qs : ''}`;
+  }
+
+  // FN-1491 — Invoice upload + AI extraction (parent FN-1480).
+  // Backend (FN-1490) accepts multipart `file`, persists to ticket, forwards
+  // to AI service (FN-1489), and responds with { fileUrl, extracted }.
+  // Emits progress events while the file is uploading so the UI can surface
+  // a 0–100% indicator; the final result event carries the extraction body.
+  uploadReceivingInvoice(ticketId: string, file: File): Observable<InvoiceUploadEvent> {
+    const form = new FormData();
+    form.append('file', file);
+    const req = new HttpRequest(
+      'POST',
+      `${this.baseUrl}/receiving/${encodeURIComponent(ticketId)}/invoice`,
+      form,
+      { reportProgress: true }
+    );
+    return this.http.request<any>(req).pipe(
+      map((event: any): InvoiceUploadEvent | null => {
+        if (event.type === HttpEventType.UploadProgress) {
+          const total = event.total || 0;
+          const loaded = event.loaded || 0;
+          const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+          // Cap at 99 until we get the response body — extraction is happening
+          // server-side and we don't want a 100% bar that hangs.
+          return { kind: 'progress', progress: Math.min(pct, 99) };
+        }
+        if (event.type === HttpEventType.Response) {
+          const body = event.body || {};
+          const data = body.data ?? body;
+          return {
+            kind: 'result',
+            result: {
+              fileUrl: data.fileUrl ?? data.invoice_file_url ?? '',
+              extracted: this.normalizeInvoiceExtraction(
+                data.extracted ?? data.extracted_data ?? data
+              )
+            }
+          };
+        }
+        return null;
+      }),
+      filter((e): e is InvoiceUploadEvent => e !== null)
+    );
+  }
+
+  private normalizeInvoiceExtraction(raw: any): InvoiceExtractionResult {
+    const lines = Array.isArray(raw?.lines) ? raw.lines : [];
+    return {
+      vendor: raw?.vendor ?? null,
+      reference: raw?.reference ?? raw?.referenceNumber ?? raw?.invoiceNumber ?? null,
+      invoiceDate: raw?.invoiceDate ?? raw?.invoice_date ?? null,
+      lines: lines.map((l: any) => {
+        const matchRaw = l?.match;
+        const partId = matchRaw?.partId ?? matchRaw?.part_id ?? null;
+        const match = partId
+          ? {
+              partId,
+              sku: matchRaw?.sku ?? '',
+              name: matchRaw?.name ?? matchRaw?.description ?? ''
+            }
+          : null;
+        return {
+          sku: l?.sku ?? null,
+          description: l?.description ?? '',
+          qty: Number(l?.qty ?? l?.quantity ?? 0),
+          unitCost: Number(l?.unitCost ?? l?.unit_cost ?? 0),
+          match
+        };
+      })
+    };
   }
 
   // Adjustments

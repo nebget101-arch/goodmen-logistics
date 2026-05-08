@@ -52,6 +52,8 @@ import { WarehouseReceivingComponent } from './components/warehouse-receiving/wa
 import { QuickAddPanelComponent } from './components/warehouse-receiving/quick-add-panel.component';
 import { ReceivingActivityComponent } from './components/warehouse-receiving/receiving-activity.component';
 import { ReceivingActivityDrawerComponent } from './components/warehouse-receiving/receiving-activity-drawer.component';
+import { InvoiceUploadCardComponent } from './components/warehouse-receiving/invoice-upload-card.component';
+import { InvoiceReviewModalComponent } from './components/warehouse-receiving/invoice-review-modal.component';
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
@@ -128,6 +130,8 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     QuickAddPanelComponent,
     ReceivingActivityComponent,
     ReceivingActivityDrawerComponent,
+    InvoiceUploadCardComponent,
+    InvoiceReviewModalComponent,
     InventoryTransfersComponent,
     DirectSalesComponent,
     InventoryReportsComponent,

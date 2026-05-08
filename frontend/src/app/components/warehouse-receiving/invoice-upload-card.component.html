@@ -1,0 +1,79 @@
+<div
+  class="iuc"
+  [class.iuc--drag]="dragActive"
+  [class.iuc--disabled]="!canInteract && !uploading && !errorMsg"
+  (dragover)="onDragOver($event)"
+  (dragleave)="onDragLeave($event)"
+  (drop)="onDrop($event)"
+  (paste)="onPaste($event)"
+  tabindex="0"
+  role="region"
+  aria-label="Upload vendor invoice"
+>
+  <header class="iuc__header">
+    <h3 class="iuc__title">Invoice upload</h3>
+    <p class="iuc__hint">Drop, click, or paste an invoice (JPG, PNG, HEIC, PDF).</p>
+  </header>
+
+  <input
+    #fileInput
+    type="file"
+    class="iuc__file"
+    accept="image/*,application/pdf,.heic,.heif"
+    (change)="onFileChange($event)"
+  />
+
+  <ng-container *ngIf="!uploading && !hasResult">
+    <button
+      type="button"
+      class="iuc__dropzone"
+      (click)="triggerPicker()"
+      [disabled]="!canInteract"
+      [attr.aria-disabled]="!canInteract"
+      aria-label="Choose invoice file"
+    >
+      <div class="iuc__dropzone-icon" aria-hidden="true">⇪</div>
+      <div class="iuc__dropzone-label">
+        {{ ticketId ? 'Drop file or click to upload' : 'Open a ticket to upload' }}
+      </div>
+      <div class="iuc__dropzone-sub">Paste from clipboard works too.</div>
+    </button>
+  </ng-container>
+
+  <ng-container *ngIf="uploading">
+    <div class="iuc__progress" aria-live="polite">
+      <div class="iuc__progress-label">
+        Uploading {{ fileName }}<span *ngIf="progress > 0"> · {{ progress }}%</span>
+      </div>
+      <div
+        class="iuc__progress-bar"
+        role="progressbar"
+        [attr.aria-valuenow]="progress"
+        aria-valuemin="0"
+        aria-valuemax="100"
+      >
+        <div class="iuc__progress-fill" [style.width.%]="progress"></div>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="hasResult && !uploading">
+    <div class="iuc__success">
+      <div class="iuc__thumb" aria-hidden="true">
+        <img *ngIf="thumbUrl" [src]="thumbUrl" alt="Invoice preview" />
+        <span *ngIf="!thumbUrl" class="iuc__thumb-placeholder">PDF</span>
+      </div>
+      <div class="iuc__success-meta">
+        <div class="iuc__success-name" [title]="fileName">{{ fileName }}</div>
+        <button type="button" class="iuc__link" (click)="reupload()">Re-upload</button>
+      </div>
+    </div>
+  </ng-container>
+
+  <div *ngIf="errorMsg" class="iuc__error" role="alert">
+    <div class="iuc__error-text">{{ errorMsg }}</div>
+    <button type="button" class="iuc__retry" (click)="retry()" [disabled]="!ticketId || disabled">
+      Retry
+    </button>
+  </div>
+</div>
