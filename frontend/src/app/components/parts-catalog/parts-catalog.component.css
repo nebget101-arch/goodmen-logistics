@@ -1108,38 +1108,9 @@ label app-confidence-badge {
   color: #bae6fd;
 }
 
-/* Off-screen by default; flipped to the only visible element under @media print. */
-.label-print-area {
-  position: fixed;
-  left: -10000px;
-  top: -10000px;
-  z-index: -1;
-  background: #fff;
-}
-
-@media print {
-  /* Hide all UI chrome — only the label container prints. Mirrors the
-     pattern used by drivers.component.ts for the DQF print view. */
-  body * {
-    visibility: hidden;
-  }
-
-  .label-print-area,
-  .label-print-area * {
-    visibility: visible;
-  }
-
-  .label-print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: auto;
-    z-index: 9999;
-    background: #fff;
-  }
-
-  /* Trim browser-default page margins so the 4x2" label sits flush. */
-  @page {
-    margin: 0.25in;
-  }
-}
+/* FN-1568: print-label CSS lives in `frontend/src/styles.css` (global scope).
+   It cannot live here — Angular's ViewEncapsulation.Emulated rewrites
+   `body *` to a scoped attribute selector that matches nothing, so the
+   `visibility: hidden` rule is silently dropped and app chrome leaks into
+   the printed PDF (FN-1567 regression). The off-screen positioning rule
+   also moves with it so the screen/print specificity pair stays balanced. */
