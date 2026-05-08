@@ -1625,14 +1625,16 @@ router.get(
   loadUserRbac,
   requirePermission('work_orders.view'),
   async (req, res) => {
+    const vehicleId = req.params.id;
+    const tenantId = req.context?.tenantId || null;
+    let windowDays;
     try {
-      const tenantId = req.context?.tenantId || null;
       if (!tenantId) {
         return res.status(403).json({ message: 'Tenant context required' });
       }
 
-      const windowDays = clampWindowDays(req.query.windowDays);
-      const result = await getRepairHistorySummary(req.params.id, {
+      windowDays = clampWindowDays(req.query.windowDays);
+      const result = await getRepairHistorySummary(vehicleId, {
         tenantId,
         windowDays,
         req
@@ -1647,8 +1649,13 @@ router.get(
 
       res.json({ ...result.body, windowDays, cached: result.fromCache === true });
     } catch (error) {
-      dtLogger.error('vehicle_repair_history_summary_failed', error, { vehicleId: req.params.id });
-      console.error('Error fetching vehicle repair history summary:', error);
+      dtLogger.error('vehicle_repair_history_summary_failed_unhandled', {
+        error: error.message,
+        stack: error.stack,
+        vehicleId,
+        tenantId,
+        windowDays
+      });
       res.status(500).json({ message: 'Failed to fetch repair history summary' });
     }
   }
