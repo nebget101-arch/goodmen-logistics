@@ -119,7 +119,13 @@
 
 .recv-ticket-card__row {
   display: grid;
-  grid-template-columns: minmax(180px, 220px) minmax(200px, 280px) minmax(180px, 1fr) minmax(160px, 1fr);
+  /* FN-1546 — proportional sizing: Location 1fr / Ticket # 1.6fr / Vendor 1.2fr / Reference 1.2fr.
+     Ticket # gets the most space because the generated value is the longest token. */
+  grid-template-columns:
+    minmax(160px, 1fr)
+    minmax(220px, 1.6fr)
+    minmax(160px, 1.2fr)
+    minmax(160px, 1.2fr);
   gap: 14px;
   align-items: end;
 }
@@ -130,14 +136,24 @@
 
 .recv-ticket-number__value {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  font-size: 18px;
+  /* FN-1546 — was 18px which forced wraps for long ticket IDs. */
+  font-size: 13px;
   font-weight: 600;
   color: var(--recv-accent);
   background: var(--recv-bg-card-soft);
   border: 1px solid var(--recv-accent-soft);
   border-radius: 10px;
   padding: 9px 12px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  /* Never wrap; truncate gracefully when the column is narrow. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Tap-friendly height on mobile. */
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .recv-ticket-number__value.is-pending {
@@ -165,6 +181,8 @@
 .recv-control {
   width: 100%;
   padding: 9px 12px;
+  /* FN-1546 — tap-friendly minimum on mobile. */
+  min-height: 40px;
   border-radius: 10px;
   border: 1px solid var(--recv-border);
   background: var(--recv-bg-card-soft);
@@ -384,7 +402,17 @@
 .recv-table {
   width: 100%;
   border-collapse: collapse;
+  /* FN-1546 — fixed layout makes <colgroup> widths authoritative,
+     so QTY / UNIT COST columns don't drift as rows are added. */
+  table-layout: fixed;
 }
+
+/* FN-1546 — stable column widths so header and cell content align. */
+.recv-table__col-sku { width: 18ch; }
+.recv-table__col-name { width: auto; }
+.recv-table__col-qty { width: 9ch; }
+.recv-table__col-cost { width: 13ch; }
+.recv-table__col-action { width: 92px; }
 
 .recv-table thead th {
   background: rgba(2, 6, 23, 0.6);
@@ -396,6 +424,12 @@
   letter-spacing: 0.06em;
   padding: 10px 12px;
   text-align: left;
+}
+
+/* FN-1546 — header cells with numeric alignment.
+   Without this, `.recv-table thead th { text-align: left }` outranks `.recv-table__num`. */
+.recv-table thead th.recv-table__num {
+  text-align: right;
 }
 
 .recv-table tbody td {

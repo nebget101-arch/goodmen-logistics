@@ -137,6 +137,63 @@ describe('QuickAddPanelComponent', () => {
     expect(captured!.part.id).toBe('p1');
   });
 
+  it('FN-1546: per-row qty input multiplies with qtyMultiplier on add', () => {
+    fixture.detectChanges();
+    let captured: QuickAddEvent | null = null;
+    component.addPart.subscribe((evt) => (captured = evt));
+
+    const part = { id: 'p1', sku: 'SKU1', name: 'Bolt' };
+    component.setRowQty('p1', 3);
+    expect(component.getRowQty('p1')).toBe(3);
+    component.onAddClick(part);
+
+    // 3 (user input) × 2 (qtyMultiplier) = 6
+    expect(captured!.qty).toBe(6);
+  });
+
+  it('FN-1546: invalid qty inputs (0, negative, fractional, NaN) fall back to 1', () => {
+    fixture.detectChanges();
+    let captured: QuickAddEvent | null = null;
+    component.addPart.subscribe((evt) => (captured = evt));
+    const part = { id: 'p1', sku: 'SKU1', name: 'Bolt' };
+
+    component.setRowQty('p1', 0);
+    expect(component.getRowQty('p1')).toBe(1);
+
+    component.setRowQty('p1', -3);
+    expect(component.getRowQty('p1')).toBe(1);
+
+    component.setRowQty('p1', 'abc');
+    expect(component.getRowQty('p1')).toBe(1);
+
+    // 1.7 → floor(1.7) = 1, still ≥ 1, kept as 1
+    component.setRowQty('p1', 1.7);
+    expect(component.getRowQty('p1')).toBe(1);
+
+    component.onAddClick(part);
+    expect(captured!.qty).toBe(2); // 1 × qtyMultiplier(2)
+  });
+
+  it('FN-1546: per-part qty values are isolated', () => {
+    fixture.detectChanges();
+    const events: QuickAddEvent[] = [];
+    component.addPart.subscribe((evt) => events.push(evt));
+
+    component.setRowQty('p1', 4);
+    // p2 untouched → defaults to 1
+
+    component.onAddClick({ id: 'p1', sku: 'A', name: 'A' });
+    component.onAddClick({ id: 'p2', sku: 'B', name: 'B' });
+
+    expect(events[0].qty).toBe(8); // 4 × 2
+    expect(events[1].qty).toBe(2); // 1 × 2
+  });
+
+  it('FN-1546: getRowQty returns default 1 for unknown parts', () => {
+    fixture.detectChanges();
+    expect(component.getRowQty('never-set')).toBe(1);
+  });
+
   it('does not emit when disabled', () => {
     component.disabled = true;
     fixture.detectChanges();

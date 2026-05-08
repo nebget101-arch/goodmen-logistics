@@ -142,31 +142,45 @@
 </div>
 
 <ng-template #rowTpl let-part let-i="index" let-list="list">
-  <button
-    #rowBtn
-    type="button"
-    class="qap__row-btn"
-    [disabled]="disabled"
-    (click)="onAddClick(part)"
-    (keydown)="onRowKeydown($event, i, list)"
-    [attr.aria-label]="'Add ' + (part.sku || '') + ' ' + (part.name || '')"
-  >
-    <span class="qap__row-main">
-      <span class="qap__row-sku">{{ part.sku }}</span>
-      <span class="qap__row-name">{{ part.name }}</span>
-    </span>
-    <span class="qap__row-meta">
-      <span
-        *ngIf="part.on_hand_qty !== null && part.on_hand_qty !== undefined"
-        class="qap__pill"
-        [class.qap__pill--low]="(part.on_hand_qty || 0) <= 0"
-      >
-        {{ part.on_hand_qty }}
+  <div class="qap__row-grid">
+    <div class="qap__row-info">
+      <span class="qap__row-main">
+        <span class="qap__row-sku">{{ part.sku }}</span>
+        <span class="qap__row-name">{{ part.name }}</span>
       </span>
-      <span class="qap__row-cost" *ngIf="part.default_cost !== null && part.default_cost !== undefined">
-        {{ part.default_cost | number: '1.2-2' }}
+      <span class="qap__row-meta">
+        <span
+          *ngIf="part.on_hand_qty !== null && part.on_hand_qty !== undefined"
+          class="qap__pill"
+          [class.qap__pill--low]="(part.on_hand_qty || 0) <= 0"
+        >
+          {{ part.on_hand_qty }}
+        </span>
+        <span class="qap__row-cost" *ngIf="part.default_cost !== null && part.default_cost !== undefined">
+          {{ part.default_cost | number: '1.2-2' }}
+        </span>
       </span>
-      <span class="qap__row-add" aria-hidden="true">+ Add</span>
-    </span>
-  </button>
+    </div>
+    <input
+      type="number"
+      class="qap__row-qty"
+      min="1"
+      step="1"
+      inputmode="numeric"
+      [value]="getRowQty(part.id)"
+      (input)="setRowQty(part.id, $any($event.target).value)"
+      (keydown.enter)="onAddClick(part); $event.preventDefault()"
+      [disabled]="disabled"
+      [attr.aria-label]="'Quantity for ' + (part.sku || part.name || '')"
+    />
+    <button
+      #rowBtn
+      type="button"
+      class="qap__row-add-btn"
+      [disabled]="disabled"
+      (click)="onAddClick(part)"
+      (keydown)="onRowKeydown($event, i, list)"
+      [attr.aria-label]="'Add ' + (part.sku || '') + ' ' + (part.name || '')"
+    >+ Add</button>
+  </div>
 </ng-template>
