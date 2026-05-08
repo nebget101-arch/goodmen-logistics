@@ -383,7 +383,12 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
   openForm(part?: any): void {
     if (part) {
       this.editingPartId = part.id;
-      this.partForm.patchValue(part);
+      // FN-1543: bulk-uploaded parts can land in the catalog with null required
+      // fields (category/manufacturer) when the upload row omits them. patchValue
+      // would set those controls to null, making partForm.valid permanently false
+      // and silently disabling Save. Coerce known required string fields to ''
+      // and required numerics to 0 so the form is editable + Save can fire.
+      this.partForm.patchValue(this.sanitizePartForForm(part));
       // Hydrate the typeaheads. If the part has a FK we trust it; if it only
       // has the legacy free-text we still display it and let the BE upgrade
       // it to a FK on save (FN-1093 resolveManufacturerVendor).
@@ -557,7 +562,15 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
 
   savePart(): void {
     if (!this.partForm.valid) {
-      this.errorMessage = 'Please fill in all required fields';
+      // FN-1543: surface *which* fields are missing so the user can act on the
+      // toast instead of perceiving a silent no-op. markAllAsTouched lights up
+      // per-field validation styling for any control that exposes it.
+      this.partForm.markAllAsTouched();
+      const missing = this.getMissingRequiredFieldLabels();
+      this.errorMessage = missing.length
+        ? `Please fill in: ${missing.join(', ')}`
+        : 'Please fill in all required fields';
+      setTimeout(() => (this.errorMessage = ''), 5000);
       return;
     }
 
@@ -1245,5 +1258,45 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
     this.openForm();
     this.partForm.patchValue({ barcode: code }, { emitEvent: false });
     this.barcodePrefilled = true;
+  }
+
+  // FN-1543: User-visible labels for required form controls. Drives the
+  // "Please fill in: X, Y" toast surfaced when Save is clicked on an invalid form.
+  private static readonly REQUIRED_FIELD_LABELS: Record<string, string> = {
+    sku: 'SKU',
+    name: 'Name',
+    category: 'Category',
+    manufacturer: 'Manufacturer',
+    unit_cost: 'Unit Cost',
+  };
+
+  private getMissingRequiredFieldLabels(): string[] {
+    const missing: string[] = [];
+    for (const [name, label] of Object.entries(PartsCatalogComponent.REQUIRED_FIELD_LABELS)) {
+      const ctrl = this.partForm.get(name);
+      if (ctrl && ctrl.hasError('required')) missing.push(label);
+    }
+    return missing;
+  }
+
+  /**
+   * FN-1543: Coerce nulls in a part record to safe form defaults before
+   * patchValue. Bulk-uploaded parts can have null category/manufacturer/
+   * unit_cost when the upload row omits them; setting those into a
+   * Validators.required control silently locks the form into invalid state
+   * (and disables Save). Coercing to '' / 0 lets the user see the empty
+   * required field and fill it in.
+   */
+  private sanitizePartForForm(part: any): any {
+    const stringDefaults: Record<string, string> = { sku: '', name: '', category: '', manufacturer: '' };
+    const numberDefaults: Record<string, number> = { unit_cost: 0 };
+    const out: any = { ...part };
+    for (const k of Object.keys(stringDefaults)) {
+      if (out[k] == null) out[k] = stringDefaults[k];
+    }
+    for (const k of Object.keys(numberDefaults)) {
+      if (out[k] == null) out[k] = numberDefaults[k];
+    }
+    return out;
   }
 }
