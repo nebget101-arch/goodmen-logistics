@@ -1399,8 +1399,30 @@ export class ApiService {
     if (filters?.category) params.set('category', filters.category);
     if (filters?.manufacturer) params.set('manufacturer', filters.manufacturer);
     if (filters?.search) params.set('search', filters.search);
+    if (filters?.is_active !== undefined) params.set('is_active', String(filters.is_active));
+    if (filters?.limit !== undefined) params.set('limit', String(filters.limit));
     if (params.toString()) url += `?${params.toString()}`;
     return this.http.get(url);
+  }
+
+  // Quick-add (FN-1486): location-scoped recent and common parts.
+  // Backend endpoints land in FN-1485; missing endpoint returns empty list (caller treats error as empty).
+  getRecentPartsAtLocation(locationId: string, limit: number = 20): Observable<any> {
+    const qs = new URLSearchParams({ limit: String(limit) }).toString();
+    return this.http.get(
+      `${this.baseUrl}/parts/recent-at-location/${encodeURIComponent(locationId)}?${qs}`
+    );
+  }
+
+  getCommonPartsAtLocation(
+    locationId: string,
+    days: number = 90,
+    limit: number = 20
+  ): Observable<any> {
+    const qs = new URLSearchParams({ days: String(days), limit: String(limit) }).toString();
+    return this.http.get(
+      `${this.baseUrl}/parts/common-at-location/${encodeURIComponent(locationId)}?${qs}`
+    );
   }
 
   getPartCategories(): Observable<any> {
