@@ -674,7 +674,7 @@
           type="button"
           class="btn-primary"
           (click)="savePart()"
-          [disabled]="!partForm.valid || loading"
+          [disabled]="loading"
         >
           {{ loading ? 'Saving…' : 'Save Part' }}
         </button>

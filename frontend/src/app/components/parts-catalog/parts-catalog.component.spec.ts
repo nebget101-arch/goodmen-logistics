@@ -868,3 +868,124 @@ describe('PartsCatalogComponent — FN-1111 duplicate detection + auto-SKU', () 
     });
   });
 });
+
+describe('PartsCatalogComponent — FN-1543 Save no-op for invoice/bulk-uploaded parts', () => {
+  let fixture: ComponentFixture<PartsCatalogComponent>;
+  let component: PartsCatalogComponent;
+  let api: ApiServiceStub;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterTestingModule],
+      declarations: [
+        PartsCatalogComponent,
+        ConfidenceBadgeComponent,
+        DuplicateWarningComponent,
+        StubMasterTypeaheadComponent,
+      ],
+      providers: [
+        { provide: ApiService, useClass: ApiServiceStub },
+        { provide: ManufacturersService, useClass: ManufacturersServiceStub },
+        { provide: VendorsService, useClass: VendorsServiceStub },
+        { provide: AiPartsService, useClass: AiPartsServiceStub },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(PartsCatalogComponent);
+    component = fixture.componentInstance;
+    api = TestBed.inject(ApiService) as unknown as ApiServiceStub;
+    fixture.detectChanges();
+  });
+
+  // The bug: a bulk-uploaded part with null required fields would set the
+  // form to permanently invalid via patchValue, the Save button's
+  // [disabled]="!partForm.valid" gate would never lift, and a click would
+  // silently no-op. The fix coerces nulls to safe defaults and surfaces a
+  // visible toast listing what the user still needs to fill in.
+
+  it('openForm coerces null required fields so the form starts editable', () => {
+    const bulkPart = {
+      id: 'p-bulk-1',
+      sku: 'BULK-001',
+      name: 'Bulk Part',
+      category: null,
+      manufacturer: null,
+      unit_cost: null,
+      unit_price: 9.99,
+    };
+
+    component.openForm(bulkPart);
+
+    expect(component.partForm.value.category).toBe('');
+    expect(component.partForm.value.manufacturer).toBe('');
+    expect(component.partForm.value.unit_cost).toBe(0);
+    expect(component.partForm.value.unit_price).toBe(9.99);
+  });
+
+  it('savePart on an invalid form surfaces a toast listing missing fields and does not call the API', () => {
+    component.openForm({
+      id: 'p-bulk-1',
+      sku: 'BULK-001',
+      name: 'Bulk Part',
+      category: null,
+      manufacturer: null,
+      unit_cost: null,
+    });
+
+    component.partForm.patchValue({ unit_price: 19.99 });
+
+    component.savePart();
+
+    expect(api.updatePart).not.toHaveBeenCalled();
+    expect(component.errorMessage).toMatch(/Please fill in:/);
+    expect(component.errorMessage).toContain('Category');
+    expect(component.errorMessage).toContain('Manufacturer');
+    expect(component.partForm.get('category')?.touched).toBe(true);
+    expect(component.partForm.get('manufacturer')?.touched).toBe(true);
+  });
+
+  it('savePart succeeds once the user fills in the missing required fields', () => {
+    component.openForm({
+      id: 'p-bulk-1',
+      sku: 'BULK-001',
+      name: 'Bulk Part',
+      category: null,
+      manufacturer: null,
+      unit_cost: null,
+    });
+
+    component.partForm.patchValue({
+      category: 'Filtration',
+      manufacturer: 'Bosch',
+      unit_cost: 5,
+      unit_price: 19.99,
+    });
+
+    component.savePart();
+
+    expect(api.updatePart).toHaveBeenCalled();
+    const [id, payload] = api.updatePart.calls.mostRecent().args;
+    expect(id).toBe('p-bulk-1');
+    expect(payload.unit_price).toBe(19.99);
+    expect(payload.category).toBe('Filtration');
+  });
+
+  it('savePart on a manually-created part with all required fields populated still saves (no regression)', () => {
+    component.openForm({
+      id: 'p-manual-1',
+      sku: 'MAN-001',
+      name: 'Manual Part',
+      category: 'Filtration',
+      manufacturer: 'Bosch',
+      unit_cost: 5,
+      unit_price: 9.99,
+    });
+
+    component.partForm.patchValue({ unit_price: 11.99 });
+
+    component.savePart();
+
+    expect(api.updatePart).toHaveBeenCalled();
+    expect(component.errorMessage).toBe('');
+  });
+});

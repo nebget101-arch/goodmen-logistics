@@ -260,7 +260,11 @@ async function createPart(partData) {
 			quantity_on_hand: partData.quantity_on_hand || 0,
 			reorder_level: partData.reorder_level || 5,
 			supplier_id: partData.supplier_id,
-			status: 'ACTIVE',
+			// FN-1544: respect caller-supplied status (e.g. bulk-upload row may
+			// be INACTIVE) instead of hard-coding ACTIVE.
+			status: typeof partData.status === 'string' && partData.status.trim()
+				? partData.status.toUpperCase()
+				: 'ACTIVE',
 			barcode,
 			...mvPatch,
 			...imagePatch,
