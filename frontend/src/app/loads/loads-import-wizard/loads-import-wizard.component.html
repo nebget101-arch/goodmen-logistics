@@ -57,7 +57,7 @@
       [headerOptions]="headerOptions"
       [columnMap]="columnMap"
       [multiStopPattern]="multiStopPattern"
-      [aiMapping]="previewResult?.aiMapping || null"
+      [columnMapping]="previewResult?.columnMapping || null"
       (mappingChange)="onMappingChange($event)"
       (back)="currentStep = 'ai_analysis'"
       (next)="startStage()">

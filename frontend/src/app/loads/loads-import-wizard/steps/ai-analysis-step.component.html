@@ -63,12 +63,12 @@
         </div>
         <div *ngFor="let row of aiMappingRows"
              class="li-ai-mapping-row"
-             [class.unmapped]="!row.rawHeader">
+             [class.unmapped]="!row.sourceHeader">
           <span class="li-ai-col-field">{{ row.field }}</span>
           <span class="li-ai-col-arrow">
             <span class="material-symbols-outlined">arrow_forward</span>
           </span>
-          <span class="li-ai-col-raw">{{ row.rawHeader || '— not detected —' }}</span>
+          <span class="li-ai-col-raw">{{ row.sourceHeader || '— not detected —' }}</span>
           <span class="li-ai-col-confidence">
             <span class="li-confidence-badge" [ngClass]="confidenceClass(row.confidence)">
               {{ confidenceLabel(row.confidence) }}

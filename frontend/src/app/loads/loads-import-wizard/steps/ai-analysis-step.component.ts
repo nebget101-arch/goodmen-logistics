@@ -1,14 +1,14 @@
-// FN-1594 — Step 2: AI analysis (mapping suggestions + multi-stop pattern).
+// Step 2: AI analysis (mapping suggestions + multi-stop pattern).
 // Renders Claude attribution while loading and lets the user accept the AI
 // mapping or skip to manual.
 
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { ImportPreviewResponse, LoadsImportFieldDef } from '../loads-import.model';
+import { ImportPreviewResponse, LoadsImportFieldDef, MultiStopPattern } from '../loads-import.model';
 
 interface AiMappingRow {
   field: string;
   fieldKey: string;
-  rawHeader: string | null;
+  sourceHeader: string | null;
   confidence: number;
 }
 
@@ -27,13 +27,13 @@ export class LoadsImportAiAnalysisStepComponent {
   @Output() skipMapping = new EventEmitter<void>();
 
   get aiMappingRows(): AiMappingRow[] {
-    if (!this.data?.aiMapping) return [];
+    if (!this.data?.columnMapping) return [];
     return this.fields.map((f) => {
-      const m = this.data!.aiMapping![f.key];
+      const m = this.data!.columnMapping![f.key];
       return {
         field: f.label,
         fieldKey: f.key,
-        rawHeader: m?.rawHeader ?? null,
+        sourceHeader: m?.sourceHeader ?? null,
         confidence: m?.confidence ?? 0,
       };
     });
@@ -55,7 +55,16 @@ export class LoadsImportAiAnalysisStepComponent {
     return `${Math.round(c * 100)}%`;
   }
 
-  multiStopLabel(p?: string): string {
-    return p === 'multi' ? 'Multi-stop (one row per stop)' : 'Single (one row per load)';
+  multiStopLabel(p?: MultiStopPattern | null): string {
+    switch (p) {
+      case 'multi_row':
+      case 'extra_columns':
+        return 'Multi-stop (one row per stop or extra stop columns)';
+      case 'free_text':
+        return 'Free-text stops (will need review)';
+      case 'single':
+      default:
+        return 'Single (one row per load)';
+    }
   }
 }

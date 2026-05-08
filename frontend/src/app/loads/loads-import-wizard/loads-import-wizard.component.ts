@@ -106,9 +106,9 @@ export class LoadsImportWizardComponent {
       next: (res) => {
         this.previewResult = res;
         this.headerOptions = (res.headers || []).map((h) => ({ value: h, label: h }));
-        const aiMap = res.aiMapping || {};
+        const aiMap = res.columnMapping || {};
         this.columnMap = this.fields.reduce<Record<string, string | null>>((acc, f) => {
-          acc[f.key] = aiMap[f.key]?.rawHeader ?? null;
+          acc[f.key] = aiMap[f.key]?.sourceHeader ?? null;
           return acc;
         }, {});
         this.multiStopPattern = res.multiStopPattern || 'single';
@@ -143,12 +143,31 @@ export class LoadsImportWizardComponent {
   }
 
   startStage(): void {
-    if (!this.selectedFile) return;
+    if (!this.previewResult?.batchId) return;
     this.stageLoading = true;
     this.stageError = '';
     this.stageResult = null;
     this.currentStep = 'validate';
-    this.importApi.stage(this.selectedFile, this.columnMap, this.multiStopPattern).subscribe({
+    // Translate the FE columnMap (FN field key → header string) into the BE
+    // columnMapping shape ({ sourceHeader, confidence }) so /stage can be
+    // re-applied without round-tripping through AI.
+    const aiMap = this.previewResult.columnMapping || {};
+    const columnMapping: Record<string, { sourceHeader: string | null; confidence: number }> = {};
+    for (const f of this.fields) {
+      const header = this.columnMap[f.key] ?? null;
+      const aiSuggestion = aiMap[f.key];
+      columnMapping[f.key] = {
+        sourceHeader: header,
+        confidence: header && aiSuggestion?.sourceHeader === header ? aiSuggestion.confidence : (header ? 1 : 0),
+      };
+    }
+    this.importApi.stage({
+      batchId: this.previewResult.batchId,
+      columnMapping,
+      multiStopPattern: this.multiStopPattern,
+      statusEnumMapping: this.previewResult.statusEnumMapping || {},
+      billingStatusEnumMapping: this.previewResult.billingStatusEnumMapping || {},
+    }).subscribe({
       next: (res) => {
         this.stageResult = res;
         this.stageLoading = false;
