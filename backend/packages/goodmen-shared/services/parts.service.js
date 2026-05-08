@@ -423,10 +423,22 @@ async function bulkCreateParts(items) {
 	// Resolve FK vendor/manufacturer outside the trx (each call may
 	// `findOrCreate` against the master tables). Then insert all parts in
 	// one transaction so a failure midway rolls everything back.
+	//
+	// FN-1474: also resolve `barcode` per row before the trx using the same
+	// generator + retry that `createPart()` uses. `isBarcodeTaken` only sees
+	// committed rows, so we track values minted within this batch in
+	// `mintedInBatch` to keep them globally unique across the request.
+	const mintedInBatch = new Set();
+	const checkBarcodeExists = async (candidate) => {
+		if (mintedInBatch.has(candidate)) return true;
+		return isBarcodeTaken(candidate);
+	};
 	const prepared = [];
 	for (const c of toInsert) {
 		const mvPatch = await resolveManufacturerVendor(c);
 		const imagePatch = resolveImageR2Patch(c);
+		const barcode = await resolveBarcodeForCreate(c.barcode, checkBarcodeExists);
+		mintedInBatch.add(barcode);
 		prepared.push({
 			sku: c.sku,
 			name: c.name,
@@ -438,6 +450,7 @@ async function bulkCreateParts(items) {
 			reorder_level: c.reorder_level || 5,
 			supplier_id: c.supplier_id,
 			status: 'ACTIVE',
+			barcode,
 			...mvPatch,
 			...imagePatch,
 		});

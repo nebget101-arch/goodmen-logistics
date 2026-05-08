@@ -48,7 +48,7 @@ Identify what is visible in the image and return a JSON object with the followin
 {
   "manufacturer": "<brand name printed/embossed on the part, or null>",
   "partNumber": "<exact part / model number printed on the part, or null>",
-  "category": "<broad category, e.g. 'Brakes', 'Filtration', 'Hydraulics', 'Electrical', 'Suspension', 'Lighting', or null>",
+  "category": "<one of: Brakes | Filters | Electrical | Fluids | Engine | Tires | Body | Other, or null>",
   "descriptionGuess": "<one short sentence describing what the part is, or null>",
   "dimensionsGuess": "<approximate dimensions if visible/measurable, e.g. '12in x 4in', or null>",
   "confidence": {
@@ -71,13 +71,28 @@ Identify what is visible in the image and return a JSON object with the followin
 
 If a field is null, its confidence MUST be ≤ 0.3.
 
+## Category classification
+
+Choose ONE label from this fixed vocabulary so the FE catalog can filter consistently:
+
+- "Brakes" — pads, rotors, calipers, drums, brake fluid lines, ABS sensors.
+- "Filters" — oil, air, fuel, cabin, hydraulic, transmission filters.
+- "Electrical" — batteries, alternators, starters, sensors, wiring, lights, fuses.
+- "Fluids" — oil, coolant, transmission fluid, DEF, washer fluid, grease.
+- "Engine" — engine internals, gaskets, belts, hoses, pulleys, water pumps, turbos.
+- "Tires" — tires, tubes, valve stems, tire chains.
+- "Body" — bumpers, mirrors, door handles, body panels, fenders, glass.
+- "Other" — anything that does not clearly belong to the categories above.
+
+Set category = null ONLY when the photo is too ambiguous to classify (e.g. wrong shot, no part visible).
+
 ## Few-shot examples
 
 Example A (sharp photo of a Bosch oil filter, full label visible):
 {
   "manufacturer": "Bosch",
   "partNumber": "F002H20064",
-  "category": "Filtration",
+  "category": "Filters",
   "descriptionGuess": "Spin-on engine oil filter",
   "dimensionsGuess": "approx 4in x 3in diameter",
   "confidence": { "manufacturer": 0.97, "partNumber": 0.95, "category": 0.95, "description": 0.9, "dimensions": 0.55 },

@@ -151,12 +151,17 @@
                   <input
                     type="text"
                     class="cell-input"
+                    list="invoice-categories"
                     placeholder="Category (optional)"
                     [value]="row.category"
                     (input)="onRowFieldInput(row, 'category', $event)"
                     [disabled]="saving"
                     [attr.aria-label]="'Category for line ' + (i + 1)"
                   />
+                  <app-confidence-badge
+                    *ngIf="row.confidence.category != null"
+                    [confidence]="row.confidence.category"
+                  ></app-confidence-badge>
                 </div>
               </td>
               <td class="col-qty">
@@ -230,17 +235,54 @@
       </ng-template>
     </section>
 
+    <!--
+      FN-1472: shared dropdown source for the per-row Category cells. Fed
+      from the parent's `categories` list (same set the manual Add Part
+      form filters by) — pairing a plain <input list="…"> with a <datalist>
+      gives an editable autocomplete without changing the storage type.
+    -->
+    <datalist id="invoice-categories">
+      <option *ngFor="let c of categories" [value]="c"></option>
+    </datalist>
+
     <div *ngIf="errorMessage" class="invoice-modal-error" role="alert">
       {{ errorMessage }}
     </div>
 
     <div *ngIf="resultSummary && resultSummary.success" class="invoice-modal-success" role="status">
-      Created {{ resultSummary.created.length }}
-      <ng-container *ngIf="resultSummary.created.length === 1">part</ng-container>
-      <ng-container *ngIf="resultSummary.created.length !== 1">parts</ng-container>
-      <span *ngIf="resultSummary.skipped.length > 0">
-        · {{ resultSummary.skipped.length }} skipped
-      </span>
+      <div class="invoice-modal-success-summary">
+        Created {{ resultSummary.created.length }}
+        <ng-container *ngIf="resultSummary.created.length === 1">part</ng-container>
+        <ng-container *ngIf="resultSummary.created.length !== 1">parts</ng-container>
+        <span *ngIf="resultSummary.skipped.length > 0">
+          · {{ resultSummary.skipped.length }} skipped
+        </span>
+      </div>
+
+      <!--
+        FN-1472: render the auto-generated `FN-XXXXXXXX` barcode for every
+        created row. Surfacing this here means the user can hand the codes
+        to the existing FN-1398 "Print label" action without a re-fetch.
+      -->
+      <ul
+        *ngIf="resultSummary.created.length > 0"
+        class="invoice-modal-success-list"
+        aria-label="Created parts and their generated barcodes"
+      >
+        <li *ngFor="let row of resultSummary.created" class="invoice-modal-success-row">
+          <span class="invoice-modal-success-sku">{{ row.sku }}</span>
+          <span class="invoice-modal-success-name">{{ row.name }}</span>
+          <code
+            *ngIf="row.barcode"
+            class="invoice-modal-success-barcode"
+            [attr.aria-label]="'Generated barcode for ' + row.sku"
+          >{{ row.barcode }}</code>
+          <span
+            *ngIf="!row.barcode"
+            class="invoice-modal-success-barcode invoice-modal-success-barcode--missing"
+          >no barcode</span>
+        </li>
+      </ul>
     </div>
 
     <footer class="invoice-modal-footer">
