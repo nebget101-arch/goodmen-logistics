@@ -57,7 +57,11 @@
 
       <div class="recv-field recv-ticket-number">
         <label>Ticket #</label>
-        <div class="recv-ticket-number__value" [class.is-pending]="!ticket">
+        <div
+          class="recv-ticket-number__value"
+          [class.is-pending]="!ticket"
+          [attr.title]="ticket?.ticketNumber || null"
+        >
           {{ ticket?.ticketNumber || (loadingTicket ? 'Loading…' : '—') }}
         </div>
       </div>
@@ -172,6 +176,13 @@
         <h3 class="recv-section-title">Receive lines</h3>
         <div class="recv-table-wrap">
           <table class="recv-table">
+            <colgroup>
+              <col class="recv-table__col-sku" />
+              <col class="recv-table__col-name" />
+              <col class="recv-table__col-qty" />
+              <col class="recv-table__col-cost" />
+              <col class="recv-table__col-action" />
+            </colgroup>
             <thead>
               <tr>
                 <th>SKU</th>
