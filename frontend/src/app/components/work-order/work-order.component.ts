@@ -158,7 +158,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
         const wo = payload.workOrder || payload;
         Object.assign(this.workOrder, {
           id: wo.id, workOrderNumber: wo.work_order_number || wo.workOrderNumber || '',
-          vehicleId: wo.vehicle_id || wo.vehicleId, customerId: wo.customer_id || wo.customerId,
+          vehicleId: wo.vehicle_id || wo.vehicleId, customerId: wo.shop_client_id || wo.shopClientId || wo.customer_id || wo.customerId,
           shopLocationId: wo.location_id || wo.locationId, title: wo.description || '',
           type: wo.type || 'REPAIR', status: this.normalizeStatusForSelect(wo.status || 'DRAFT'),
           priority: wo.priority || '', requestDate: wo.created_at ? wo.created_at.slice(0, 10) : '',
