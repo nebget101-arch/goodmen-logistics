@@ -52,19 +52,62 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let line of workOrderParts">
+        <tr *ngFor="let line of workOrderParts" [class.row-saving]="line._saving" [class.row-error]="line._error">
           <td class="sku-cell">{{ line.part_sku || '—' }}</td>
           <td>
             {{ line.part_name || line.part_id }}
+            <span class="saving-indicator" *ngIf="line._saving" aria-live="polite">
+              <span class="material-symbols-outlined">sync</span> Saving…
+            </span>
           </td>
-          <td class="col-num">{{ line.qty_requested }}</td>
-          <td class="col-num">{{ line.qty_reserved }}</td>
-          <td class="col-num">{{ line.qty_issued }}</td>
+          <td class="col-num">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              class="qty-input"
+              [class.has-error]="line._error?.field === 'qty_requested'"
+              [ngModel]="line.qty_requested"
+              (ngModelChange)="onQtyEdit(line, 'qtyRequested', $event)"
+              [attr.aria-invalid]="line._error?.field === 'qty_requested' ? 'true' : null"
+              [title]="line._error?.field === 'qty_requested' ? line._error.message : ''"
+              [name]="'qtyReq_' + line.id"
+            >
+          </td>
+          <td class="col-num">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              class="qty-input"
+              [class.has-error]="line._error?.field === 'qty_reserved'"
+              [ngModel]="line.qty_reserved"
+              (ngModelChange)="onQtyEdit(line, 'qtyReserved', $event)"
+              [attr.aria-invalid]="line._error?.field === 'qty_reserved' ? 'true' : null"
+              [title]="line._error?.field === 'qty_reserved' ? line._error.message : ''"
+              [name]="'qtyRes_' + line.id"
+            >
+          </td>
+          <td class="col-num">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              class="qty-input"
+              [class.has-error]="line._error?.field === 'qty_issued'"
+              [ngModel]="line.qty_issued"
+              (ngModelChange)="onQtyEdit(line, 'qtyIssued', $event)"
+              [attr.aria-invalid]="line._error?.field === 'qty_issued' ? 'true' : null"
+              [title]="line._error?.field === 'qty_issued' ? line._error.message : ''"
+              [name]="'qtyIss_' + line.id"
+            >
+          </td>
           <td class="col-num">${{ line.unit_price | number:'1.2-2' }}</td>
           <td class="col-num">${{ line.line_total | number:'1.2-2' }}</td>
           <td class="bin-cell">{{ line.bin_location || '—' }}</td>
           <td>
             <span [ngClass]="getStatusBadgeClass(line.status)">{{ line.status }}</span>
+            <div class="row-error-msg" *ngIf="line._error">{{ line._error.message }}</div>
           </td>
           <td class="col-actions">
             <div class="row-actions">
@@ -311,7 +354,7 @@
                     [style.color]="(p.quantity_on_hand > 0) ? '#4ade80' : '#f87171'"
                     style="font-weight:600"
                   >Stock: {{ p.quantity_on_hand || 0 }}</span>
-                · Price: ${{ p.unit_price | number:'1.2-2' }}
+                · Price: ${{ (resolveSellingPrice(p) ?? 0) | number:'1.2-2' }}
               </div>
             </div>
           </div>
@@ -331,7 +374,10 @@
           >
         </div>
         <div class="form-row">
-          <label class="form-label">Unit Price</label>
+          <label class="form-label">
+            Unit Price
+            <span class="price-tag-retail" *ngIf="catalogSelected">(retail)</span>
+          </label>
           <input
             type="number"
             class="form-control"
