@@ -48,25 +48,25 @@ import { PartLabelPrintComponent } from './components/part-label-print/part-labe
 import { MasterTypeaheadComponent } from './components/shared/master-typeahead/master-typeahead.component';
 import { ConfidenceBadgeComponent } from './components/shared/confidence-badge/confidence-badge.component';
 import { BarcodeScannerDialogComponent } from './components/shared/barcode-scanner-dialog/barcode-scanner-dialog.component';
-import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
-import { QuickAddPanelComponent } from './components/warehouse-receiving/quick-add-panel.component';
-import { ReceivingActivityComponent } from './components/warehouse-receiving/receiving-activity.component';
-import { ReceivingActivityDrawerComponent } from './components/warehouse-receiving/receiving-activity-drawer.component';
-import { InvoiceUploadCardComponent } from './components/warehouse-receiving/invoice-upload-card.component';
-import { InvoiceReviewModalComponent } from './components/warehouse-receiving/invoice-review-modal.component';
+// FN-1549: WarehouseReceivingComponent + 5 children moved into
+// WarehouseReceivingModule (lazy-loaded at /receiving).
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
-import { OnboardingPacketComponent } from './components/onboarding-packet/onboarding-packet.component';
+// FN-1549: OnboardingPacketComponent + 3 children moved into
+// OnboardingPacketModule (lazy-loaded at /onboard/:packetId).
 import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-policy.component';
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { DatePickerComponent } from './components/shared/date-picker/date-picker.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
-import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
+// FN-1549: TrialRequestsAdminComponent moved into TrialRequestsAdminModule
+// (lazy-loaded at /admin/trial-requests).
 import { InboundEmailSettingsComponent } from './components/admin/inbound-email-settings/inbound-email-settings.component';
-import { FmcsaImportsAdminComponent } from './components/admin/fmcsa-imports/fmcsa-imports.component';
-import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
+// FN-1549: FmcsaImportsAdminComponent moved into FmcsaImportsAdminModule
+// (lazy-loaded at /admin/fmcsa-imports).
+// FN-1549: EmploymentApplicationComponent moved into EmploymentApplicationModule
+// (lazy-loaded at /employment-application).
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 import { EmployerResponseComponent } from './public/components/employer-response/employer-response.component';
@@ -83,9 +83,8 @@ import { PreEmploymentGateComponent } from './components/drivers/pre-employment-
 import { InvestigationPanelComponent } from './components/drivers/investigation-panel/investigation-panel.component';
 import { RecordResponseModalComponent } from './components/drivers/investigation-panel/record-response-modal/record-response-modal.component';
 import { InvestigationHistoryComponent } from './components/drivers/investigation-history/investigation-history.component';
-import { ConsentFormComponent } from './components/onboarding-packet/consent-form/consent-form.component';
-import { EmployerHistoryTieredComponent } from './components/onboarding-packet/employer-history-tiered/employer-history-tiered.component';
-import { DisqualificationHistoryComponent } from './components/onboarding-packet/disqualification-history/disqualification-history.component';
+// FN-1549: ConsentForm/EmployerHistoryTiered/DisqualificationHistory now live
+// in OnboardingPacketModule (lazy-loaded with their parent packet route).
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
 import { LocationsAdminModule } from './components/locations-admin/locations-admin.module';
 // FN-770: LoadWizardModule, StepStopsComponent, WizardStepDriverComponent,
@@ -126,23 +125,14 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     MasterTypeaheadComponent,
     ConfidenceBadgeComponent,
     BarcodeScannerDialogComponent,
-    WarehouseReceivingComponent,
-    QuickAddPanelComponent,
-    ReceivingActivityComponent,
-    ReceivingActivityDrawerComponent,
-    InvoiceUploadCardComponent,
-    InvoiceReviewModalComponent,
     InventoryTransfersComponent,
     DirectSalesComponent,
     InventoryReportsComponent,
-    OnboardingPacketComponent,
     PrivacyPolicyComponent,
     TermsComponent,
     CommunicationPreferencesComponent,
     DatePickerComponent,
-    MultiMcAdminComponent
-    ,TrialRequestsAdminComponent
-    ,EmploymentApplicationComponent,
+    MultiMcAdminComponent,
     RoadsideBoardComponent,
     PublicRoadsideComponent,
     EmployerResponseComponent,
@@ -155,15 +145,11 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     InvestigationPanelComponent,
     RecordResponseModalComponent,
     InvestigationHistoryComponent,
-    ConsentFormComponent,
-    EmployerHistoryTieredComponent,
-    DisqualificationHistoryComponent,
     IdleTruckAlertsComponent,
     InventoryItemEditDialogComponent,
     AutoReplenishmentComponent,
     AiExtractionFlowComponent,
-    InboundEmailSettingsComponent,
-    FmcsaImportsAdminComponent
+    InboundEmailSettingsComponent
   ],
   imports: [
     BrowserModule,
