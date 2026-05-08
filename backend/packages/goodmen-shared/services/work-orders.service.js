@@ -712,7 +712,7 @@ async function reservePart(workOrderId, payload, userId) {
         qty_requested: qtyRequested,
         qty_reserved: reserveQty,
         qty_issued: 0,
-        unit_price: normalizeDecimal(payload.unitPrice) || part.unit_price || 0,
+        unit_price: normalizeDecimal(payload.unitPrice) || normalizeDecimal(part.default_retail_price) || 0,
         taxable: payload.taxable !== undefined ? payload.taxable === true : (part.taxable === true),
         status: backordered ? 'BACKORDERED' : 'RESERVED',
         line_total: 0
@@ -898,6 +898,157 @@ async function returnPart(workOrderId, partLineId, payload, userId) {
 
     const updated = await recomputeWorkOrderTotals(trx, workOrderId);
     return updated;
+  });
+}
+
+function derivePartLineStatus(qtyRequested, qtyReserved, qtyIssued, currentStatus) {
+  if (qtyRequested > 0 && qtyIssued >= qtyRequested) return 'ISSUED';
+  if (qtyReserved >= qtyRequested && qtyRequested > 0) return 'RESERVED';
+  if (qtyReserved < qtyRequested) return 'BACKORDERED';
+  return currentStatus;
+}
+
+async function updatePartLine(workOrderId, partLineId, payload, userId) {
+  return db.transaction(async trx => {
+    const line = await trx('work_order_part_items')
+      .where({ id: partLineId, work_order_id: workOrderId })
+      .first();
+    if (!line) throw new Error('Part line not found');
+
+    const currentRequested = normalizeDecimal(line.qty_requested);
+    const currentReserved = normalizeDecimal(line.qty_reserved);
+    const currentIssued = normalizeDecimal(line.qty_issued);
+
+    const newRequested = payload.qtyRequested !== undefined
+      ? normalizeDecimal(payload.qtyRequested)
+      : currentRequested;
+    const newReserved = payload.qtyReserved !== undefined
+      ? normalizeDecimal(payload.qtyReserved)
+      : currentReserved;
+    const newIssued = payload.qtyIssued !== undefined
+      ? normalizeDecimal(payload.qtyIssued)
+      : currentIssued;
+
+    if (newRequested < 0) throw new Error('qtyRequested cannot be negative');
+    if (newReserved < 0) throw new Error('qtyReserved cannot be negative');
+    if (newIssued < 0) throw new Error('qtyIssued cannot be negative');
+    if (newReserved > newRequested) {
+      throw new Error('qty_reserved cannot exceed qty_requested');
+    }
+    if (newIssued > newReserved) {
+      throw new Error('qty_issued cannot exceed qty_reserved');
+    }
+
+    const reservedDelta = newReserved - currentReserved;
+    const issuedDelta = newIssued - currentIssued;
+
+    const locationId = line.location_id;
+    const partId = line.part_id;
+    const resolvedUserId = await resolveUserId(trx, userId);
+
+    if (reservedDelta !== 0) {
+      if (reservedDelta > 0) {
+        const inventory = await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .first();
+        if (!inventory) throw new Error('Inventory not found for this location/part');
+        const available = normalizeDecimal(inventory.on_hand_qty) - normalizeDecimal(inventory.reserved_qty);
+        if (reservedDelta > available) {
+          throw new Error('Not enough inventory available to reserve additional quantity');
+        }
+        await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .increment('reserved_qty', reservedDelta)
+          .update({ updated_at: trx.fn.now() });
+      } else {
+        await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .decrement('reserved_qty', Math.abs(reservedDelta))
+          .update({ updated_at: trx.fn.now() });
+      }
+
+      await trx('inventory_transactions').insert({
+        location_id: locationId,
+        part_id: partId,
+        transaction_type: 'RESERVE',
+        qty_change: reservedDelta,
+        unit_cost_at_time: null,
+        reference_type: 'WORK_ORDER',
+        reference_id: workOrderId,
+        performed_by_user_id: resolvedUserId,
+        notes: reservedDelta > 0
+          ? 'Increased reservation via patch'
+          : 'Released reservation via patch'
+      });
+    }
+
+    if (issuedDelta !== 0) {
+      if (issuedDelta > 0) {
+        await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .decrement('reserved_qty', issuedDelta)
+          .decrement('on_hand_qty', issuedDelta)
+          .update({ last_issued_at: trx.fn.now(), updated_at: trx.fn.now() });
+
+        await trx('inventory_transactions').insert({
+          location_id: locationId,
+          part_id: partId,
+          transaction_type: 'ISSUE',
+          qty_change: -issuedDelta,
+          unit_cost_at_time: line.unit_price,
+          reference_type: 'WORK_ORDER',
+          reference_id: workOrderId,
+          performed_by_user_id: resolvedUserId,
+          notes: 'Issued via patch'
+        });
+      } else {
+        const returnQty = Math.abs(issuedDelta);
+        await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .increment('on_hand_qty', returnQty)
+          .update({ updated_at: trx.fn.now() });
+
+        await trx('inventory_transactions').insert({
+          location_id: locationId,
+          part_id: partId,
+          transaction_type: 'RETURN',
+          qty_change: returnQty,
+          unit_cost_at_time: line.unit_price,
+          reference_type: 'WORK_ORDER',
+          reference_id: workOrderId,
+          performed_by_user_id: resolvedUserId,
+          notes: 'Returned via patch'
+        });
+      }
+    }
+
+    const finalUnitPrice = payload.unitPrice !== undefined
+      ? normalizeDecimal(payload.unitPrice)
+      : normalizeDecimal(line.unit_price);
+    if (finalUnitPrice < 0) throw new Error('unitPrice cannot be negative');
+    const finalTaxable = payload.taxable !== undefined
+      ? payload.taxable === true
+      : line.taxable;
+
+    const newStatus = derivePartLineStatus(newRequested, newReserved, newIssued, line.status);
+    const lineTotal = newIssued * finalUnitPrice;
+
+    const [updatedLine] = await trx('work_order_part_items')
+      .where({ id: partLineId })
+      .update({
+        qty_requested: newRequested,
+        qty_reserved: newReserved,
+        qty_issued: newIssued,
+        unit_price: finalUnitPrice,
+        taxable: finalTaxable,
+        status: newStatus,
+        line_total: lineTotal,
+        updated_at: trx.fn.now()
+      })
+      .returning('*');
+
+    const recomputed = await recomputeWorkOrderTotals(trx, workOrderId);
+    return { line: updatedLine, workOrder: recomputed.workOrder };
   });
 }
 
@@ -1265,6 +1416,7 @@ module.exports = {
   reservePartsFromBarcodes,
   issuePart,
   returnPart,
+  updatePartLine,
   updateCharges,
   addLaborLine,
   updateLaborLine,

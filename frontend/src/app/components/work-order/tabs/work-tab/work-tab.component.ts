@@ -1,7 +1,12 @@
 import { Component, Input, Output, EventEmitter, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ApiService } from '../../../../services/api.service';
-import { lastValueFrom } from 'rxjs';
+import { lastValueFrom, Subject, Subscription } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 import * as QRCode from 'qrcode';
+
+type QtyField = 'qtyRequested' | 'qtyReserved' | 'qtyIssued';
+type WoTotalsKey = 'labor_subtotal' | 'parts_subtotal' | 'fees_subtotal' | 'tax_amount' | 'total_amount';
+const WO_TOTALS_FIELDS: WoTotalsKey[] = ['labor_subtotal', 'parts_subtotal', 'fees_subtotal', 'tax_amount', 'total_amount'];
 
 @Component({
   selector: 'app-wo-work-tab',
@@ -61,10 +66,21 @@ export class WoWorkTabComponent implements OnDestroy {
   // ─── Technician dropdown ───────────────────────────────────────────────────
   activeMechanicIndex: number | null = null;
 
+  // ─── Inline qty edit ───────────────────────────────────────────────────────
+  // Debounced PATCH per line, accumulating multi-field edits within the window.
+  private pendingPatch = new Map<string, Partial<Record<QtyField, number>>>();
+  private patchSubjects = new Map<string, Subject<void>>();
+  private patchSubs = new Map<string, Subscription>();
+  private static readonly PATCH_DEBOUNCE_MS = 500;
+
   constructor(private apiService: ApiService, private cdr: ChangeDetectorRef) {}
 
   ngOnDestroy(): void {
     this.stopPhoneBridge();
+    this.patchSubs.forEach(s => s.unsubscribe());
+    this.patchSubs.clear();
+    this.patchSubjects.clear();
+    this.pendingPatch.clear();
   }
 
   // ─── Add Part dialog ───────────────────────────────────────────────────────
@@ -131,7 +147,8 @@ export class WoWorkTabComponent implements OnDestroy {
     this.catalogSelected = part;
     this.catalogSearch = `${part.sku} — ${part.name}`;
     this.catalogShowDropdown = false;
-    this.catalogPrice = part.unit_cost ?? part.unit_price ?? null;
+    // FN-1534: default Unit Price to selling price (default_retail_price), not cost.
+    this.catalogPrice = this.resolveSellingPrice(part);
     this.stockWarning = '';
     const qoh = part.quantity_on_hand ?? Infinity;
     if (isFinite(qoh) && qoh < this.catalogQty) {
@@ -171,7 +188,7 @@ export class WoWorkTabComponent implements OnDestroy {
       await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
         partId: this.catalogSelected.id,
         qtyRequested: this.catalogQty,
-        unitPrice: this.catalogPrice ?? this.catalogSelected.unit_cost ?? this.catalogSelected.unit_price ?? 0,
+        unitPrice: this.catalogPrice ?? this.resolveSellingPrice(this.catalogSelected) ?? 0,
         locationId: this.dialogLocationId || undefined,
         taxable: true
       }));
@@ -215,7 +232,8 @@ export class WoWorkTabComponent implements OnDestroy {
       await lastValueFrom(this.apiService.reserveWorkOrderPart(this.workOrderId, {
         partId: part.id,
         qtyRequested: packQty,
-        unitPrice: part.unit_price ?? part.unit_cost ?? 0,
+        // FN-1534: prefer selling price (default_retail_price) over unit_price/unit_cost.
+        unitPrice: this.resolveSellingPrice(part) ?? 0,
         locationId: this.dialogLocationId || undefined,
         taxable: true
       }));
@@ -274,6 +292,113 @@ export class WoWorkTabComponent implements OnDestroy {
       totalCost: this.manualQty * this.manualPrice
     });
     this.closeAddPartDialog();
+  }
+
+  // ─── Selling-price helper ─────────────────────────────────────────────────
+
+  /**
+   * Resolves the selling/retail price for a part. Prefers default_retail_price
+   * (selling), falls back to unit_price, then unit_cost. Returns null only when
+   * no price source exists.
+   */
+  resolveSellingPrice(part: any): number | null {
+    if (!part) return null;
+    const candidates = [part.default_retail_price, part.unit_price, part.unit_cost];
+    for (const v of candidates) {
+      if (v !== null && v !== undefined && v !== '') {
+        const n = Number(v);
+        if (!isNaN(n)) return n;
+      }
+    }
+    return null;
+  }
+
+  // ─── Inline qty edit (debounced PATCH) ────────────────────────────────────
+
+  /**
+   * Called by the editable Requested/Reserved/Issued cells. Optimistically
+   * updates the local row, accumulates the pending payload, and schedules a
+   * debounced PATCH (500 ms). Multiple field edits within the window are
+   * collapsed into a single request so backend invariants see a consistent
+   * snapshot (qty_reserved <= qty_requested, qty_issued <= qty_reserved).
+   */
+  onQtyEdit(line: any, field: QtyField, rawValue: any): void {
+    if (!this.workOrderId || !line?.id) return;
+    const num = Number(rawValue);
+    const value = isNaN(num) ? 0 : num;
+
+    // Optimistic local update keeps the input from flickering on re-render.
+    const localCol =
+      field === 'qtyRequested' ? 'qty_requested' :
+      field === 'qtyReserved'  ? 'qty_reserved'  : 'qty_issued';
+    line[localCol] = value;
+
+    // Clear any prior error on the field being typed.
+    if (line._error?.field === localCol) line._error = null;
+
+    const pending = this.pendingPatch.get(line.id) || {};
+    pending[field] = value;
+    this.pendingPatch.set(line.id, pending);
+
+    let subject = this.patchSubjects.get(line.id);
+    if (!subject) {
+      subject = new Subject<void>();
+      this.patchSubjects.set(line.id, subject);
+      const lineRef = line;
+      const sub = subject.pipe(debounceTime(WoWorkTabComponent.PATCH_DEBOUNCE_MS))
+        .subscribe(() => this.flushPendingPatch(lineRef));
+      this.patchSubs.set(line.id, sub);
+    }
+    subject.next();
+    this.cdr.markForCheck();
+  }
+
+  private flushPendingPatch(line: any): void {
+    if (!this.workOrderId || !line?.id) return;
+    const payload = this.pendingPatch.get(line.id);
+    if (!payload || Object.keys(payload).length === 0) return;
+    this.pendingPatch.delete(line.id);
+
+    line._saving = true;
+    this.cdr.markForCheck();
+
+    this.apiService.patchWorkOrderPart(this.workOrderId, line.id, payload).subscribe({
+      next: (res: any) => {
+        const data = res?.data ?? res;
+        const updatedLine = data?.line ?? data;
+        const updatedWo = data?.workOrder;
+        if (updatedLine && typeof updatedLine === 'object') {
+          Object.assign(line, updatedLine);
+        }
+        line._saving = false;
+        line._error = null;
+        // Sync WO totals from server response. Mutating the @Input is intentional —
+        // a full reloadWorkOrder() round-trip would dismiss the dropdown the user is
+        // typing in. The parent uses OnPush and observes the same object reference.
+        if (updatedWo && this.workOrder) {
+          for (const key of WO_TOTALS_FIELDS) {
+            if (key in updatedWo) {
+              this.workOrder[key] = (updatedWo as any)[key];
+            }
+          }
+        }
+        this.cdr.markForCheck();
+      },
+      error: (err: any) => {
+        line._saving = false;
+        const msg = err?.error?.error || err?.message || 'Failed to update';
+        // Map server-side message to which field to highlight.
+        let errorField = '';
+        if (/qty_requested/i.test(msg))      errorField = 'qty_requested';
+        else if (/qty_reserved/i.test(msg))  errorField = 'qty_reserved';
+        else if (/qty_issued/i.test(msg))    errorField = 'qty_issued';
+        else if (/qtyRequested/i.test(msg))  errorField = 'qty_requested';
+        else if (/qtyReserved/i.test(msg))   errorField = 'qty_reserved';
+        else if (/qtyIssued/i.test(msg))     errorField = 'qty_issued';
+        line._error = { field: errorField, message: msg };
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   // ─── Inline row actions ────────────────────────────────────────────────────
