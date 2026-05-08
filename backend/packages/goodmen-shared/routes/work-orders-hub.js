@@ -1530,6 +1530,83 @@ router.post('/:id/parts/:partLineId/return', authMiddleware, requireRole(['admin
 
 /**
  * @openapi
+ * /api/work-orders/{id}/parts/{partLineId}:
+ *   patch:
+ *     summary: Inline-edit a work-order part line
+ *     description: >-
+ *       Updates quantity, unit price, or taxable flag on an existing part line
+ *       and returns the updated line plus recomputed work-order totals.
+ *       Enforces qty_reserved <= qty_requested and qty_issued <= qty_reserved.
+ *       Decrementing qty_reserved releases inventory back to available; decrementing
+ *       qty_issued returns inventory to on-hand stock.
+ *     tags:
+ *       - Work Orders
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Work order ID
+ *       - in: path
+ *         name: partLineId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part line ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               qtyRequested:
+ *                 type: number
+ *               qtyReserved:
+ *                 type: number
+ *               qtyIssued:
+ *                 type: number
+ *               unitPrice:
+ *                 type: number
+ *               taxable:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Part line updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     line:
+ *                       type: object
+ *                     workOrder:
+ *                       type: object
+ *       400:
+ *         description: Validation error
+ */
+router.patch('/:id/parts/:partLineId', authMiddleware, requireRole(['admin', 'service_advisor', 'technician', 'shop_manager', 'shop_clerk', 'service_writer', 'mechanic']), async (req, res) => {
+  try {
+    const result = await workOrdersService.updatePartLine(req.params.id, req.params.partLineId, req.body || {}, req.user?.id);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    dtLogger.error('work_orders_part_patch_failed', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * @openapi
  * /api/work-orders/{id}/charges:
  *   put:
  *     summary: Update work order charges
