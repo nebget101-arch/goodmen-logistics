@@ -113,6 +113,184 @@ router.get('/', authMiddleware, async (req, res) => {
 
 /**
  * @openapi
+ * /api/receiving/draft:
+ *   get:
+ *     summary: Get the current user's open DRAFT ticket for a location
+ *     description: Returns the most recent DRAFT receiving ticket created by the authenticated user at the given location, with its line items pre-joined. Returns 204 No Content when the user has no open DRAFT — the frontend uses this to decide whether to resume work or create a new ticket.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Location UUID
+ *     responses:
+ *       200:
+ *         description: Open DRAFT ticket with lines
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       204:
+ *         description: No open DRAFT for this user/location
+ *       400:
+ *         description: Missing locationId
+ *       500:
+ *         description: Server error
+ */
+router.get('/draft', authMiddleware, async (req, res) => {
+	try {
+		const locationId = req.query.locationId;
+		if (!locationId) {
+			return res.status(400).json({ error: 'locationId query parameter is required' });
+		}
+
+		const ticket = await db('receiving_tickets')
+			.where({
+				location_id: locationId,
+				status: 'DRAFT',
+				created_by: req.user.id
+			})
+			.leftJoin('users as created_user', 'receiving_tickets.created_by', 'created_user.id')
+			.select(
+				'receiving_tickets.*',
+				'created_user.name as created_by_name'
+			)
+			.orderBy('receiving_tickets.created_at', 'desc')
+			.first();
+
+		if (!ticket) {
+			return res.status(204).end();
+		}
+
+		const lines = await db('receiving_ticket_lines')
+			.where('ticket_id', ticket.id)
+			.join('parts', 'receiving_ticket_lines.part_id', 'parts.id')
+			.select(
+				'receiving_ticket_lines.*',
+				'parts.sku',
+				'parts.name',
+				'parts.uom',
+				'parts.default_cost'
+			);
+
+		ticket.lines = lines;
+
+		res.json({
+			success: true,
+			data: ticket
+		});
+	} catch (error) {
+		dtLogger.error('receiving_draft_get_failed', { error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * @openapi
+ * /api/receiving/summary/today:
+ *   get:
+ *     summary: Today's receiving summary for a location
+ *     description: Returns aggregated counts for receiving tickets posted at the given location since 00:00 of the server's local day. Used by the receiving page header metric strip.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Location UUID
+ *     responses:
+ *       200:
+ *         description: Aggregated counts for today
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalParts:
+ *                       type: number
+ *                       description: Sum of qty_received across all lines on tickets posted today
+ *                     totalLines:
+ *                       type: number
+ *                       description: Count of line items on tickets posted today
+ *                     totalTickets:
+ *                       type: number
+ *                       description: Count of tickets posted today
+ *       400:
+ *         description: Missing locationId
+ *       500:
+ *         description: Server error
+ */
+router.get('/summary/today', authMiddleware, async (req, res) => {
+	try {
+		const locationId = req.query.locationId;
+		if (!locationId) {
+			return res.status(400).json({ error: 'locationId query parameter is required' });
+		}
+
+		const startOfToday = new Date();
+		startOfToday.setHours(0, 0, 0, 0);
+
+		const ticketRow = await db('receiving_tickets')
+			.where('location_id', locationId)
+			.andWhere('status', 'POSTED')
+			.andWhere('posted_at', '>=', startOfToday)
+			.count({ totalTickets: 'id' })
+			.first();
+
+		const totalTickets = Number(ticketRow?.totalTickets || 0);
+
+		let totalLines = 0;
+		let totalParts = 0;
+
+		if (totalTickets > 0) {
+			const lineAgg = await db('receiving_ticket_lines as l')
+				.join('receiving_tickets as t', 'l.ticket_id', 't.id')
+				.where('t.location_id', locationId)
+				.andWhere('t.status', 'POSTED')
+				.andWhere('t.posted_at', '>=', startOfToday)
+				.select(
+					db.raw('count(l.id) as "totalLines"'),
+					db.raw('coalesce(sum(l.qty_received), 0) as "totalParts"')
+				)
+				.first();
+
+			totalLines = Number(lineAgg?.totalLines || 0);
+			totalParts = Number(lineAgg?.totalParts || 0);
+		}
+
+		res.json({
+			success: true,
+			data: { totalParts, totalLines, totalTickets }
+		});
+	} catch (error) {
+		dtLogger.error('receiving_summary_today_failed', { error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * @openapi
  * /api/receiving/{id}:
  *   get:
  *     summary: Get a receiving ticket by ID
