@@ -1,11 +1,9 @@
+<label *ngIf="label" class="ai-date-picker-label" [attr.for]="inputId || null">{{ label }}</label>
 <mat-form-field
   appearance="outline"
-  class="ai-date-picker-field"
-  [class.ai-date-picker-field--external-label]="!label"
+  class="ai-date-picker-field ai-date-picker-field--external-label"
   subscriptSizing="dynamic"
-  [floatLabel]="$any(label ? 'auto' : 'never')"
 >
-  <mat-label *ngIf="label">{{ label }}</mat-label>
   <input
     matInput
     [attr.id]="inputId || null"
