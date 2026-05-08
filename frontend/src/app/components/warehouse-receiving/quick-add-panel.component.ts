@@ -80,6 +80,9 @@ export class QuickAddPanelComponent implements OnInit, OnChanges, OnDestroy, Aft
   private inflightRecent?: Subscription;
   private inflightCommon?: Subscription;
 
+  /** Per-row qty input value, keyed by part.id. Defaults to 1 when not present. */
+  private qtyByPart = new Map<string, number>();
+
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
@@ -159,8 +162,21 @@ export class QuickAddPanelComponent implements OnInit, OnChanges, OnDestroy, Aft
 
   onAddClick(part: QuickAddPart): void {
     if (this.disabled || !part) return;
-    const qty = Math.max(1, Number(this.qtyMultiplier) || 1);
-    this.addPart.emit({ part, qty });
+    const userQty = Math.max(1, Math.floor(this.qtyByPart.get(part.id) ?? 1));
+    const mult = Math.max(1, Number(this.qtyMultiplier) || 1);
+    this.addPart.emit({ part, qty: userQty * mult });
+  }
+
+  /** Read the per-row qty value (defaults to 1) — used by the template. */
+  getRowQty(id: string): number {
+    return this.qtyByPart.get(id) ?? 1;
+  }
+
+  /** Sanitize and store the per-row qty input. Falls back to 1 for invalid values. */
+  setRowQty(id: string, value: any): void {
+    const n = Math.floor(Number(value));
+    this.qtyByPart.set(id, Number.isFinite(n) && n >= 1 ? n : 1);
+    this.cdr.markForCheck();
   }
 
   onRowKeydown(event: KeyboardEvent, index: number, list: QuickAddPart[]): void {
