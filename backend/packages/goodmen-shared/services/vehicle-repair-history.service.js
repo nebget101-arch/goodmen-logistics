@@ -53,10 +53,15 @@ async function resolveVehicleSource() {
  * handler actually needs, applies the windowDays filter at the SQL layer,
  * and caps the result at `capRows` (default 50) sent to the model.
  *
+ * Vehicle resolution order (FN-1500): the WO form sends a vehicleId sourced
+ * from customer_vehicles, while the legacy fleet UI sends a vehicles.id. Try
+ * the vehicles/all_vehicles table first; on miss, fall back to
+ * customer_vehicles.vehicle_uuid. Only return null when neither resolves.
+ *
  * Returns `null` when the vehicle is not visible to the tenant — caller maps
  * that to 404. Returns `{ vin, history: [] }` when the vehicle exists but no
- * work orders fall in the window; the AI handler short-circuits that to
- * "Not enough history".
+ * work orders fall in the window; the orchestrator short-circuits that to
+ * `insufficientHistory: true` without calling the AI service.
  */
 async function fetchVehicleWorkOrderHistory(vehicleId, { tenantId, windowDays, capRows = MAX_AI_ROWS } = {}) {
   if (!vehicleId || !tenantId) return null;
@@ -64,12 +69,21 @@ async function fetchVehicleWorkOrderHistory(vehicleId, { tenantId, windowDays, c
   const vehicleSource = await resolveVehicleSource();
   if (vehicleSource === 'none') return null;
 
+  let vin = null;
   const vehicleResult = await dbBridge.query(
     `SELECT vin FROM ${vehicleSource} WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
     [vehicleId, tenantId]
   );
-  if (!vehicleResult.rows.length) return null;
-  const vin = vehicleResult.rows[0].vin;
+  if (vehicleResult.rows.length) {
+    vin = vehicleResult.rows[0].vin;
+  } else {
+    const cvDirect = await dbBridge.query(
+      'SELECT vin FROM customer_vehicles WHERE vehicle_uuid = $1 AND tenant_id = $2 LIMIT 1',
+      [vehicleId, tenantId]
+    );
+    if (!cvDirect.rows.length) return null;
+    vin = cvDirect.rows[0].vin;
+  }
   if (!vin) return { vin: null, history: [] };
 
   const cvResult = await dbBridge.query(
@@ -127,11 +141,20 @@ async function requestRepairHistorySummary(req, { vin, history }) {
   const bearer = pickBearer(req);
   if (bearer) headers.Authorization = bearer;
 
-  return axios.post(
-    `${AI_SERVICE_URL}/api/ai/vehicles/repair-history-summary`,
-    { vin, history },
-    { headers, timeout: AI_TIMEOUT_MS, validateStatus: () => true }
-  );
+  // FN-1500: validateStatus only suppresses HTTP-status errors. Network-layer
+  // failures (DNS, ECONNREFUSED, ECONNRESET, timeout) still throw, so the
+  // route catch turned an AI-down event into a 500 instead of letting the
+  // orchestrator surface { ok: false, reason: 'ai_unavailable' } → 502. Wrap
+  // the call and translate any throw into a synthetic non-200 response.
+  try {
+    return await axios.post(
+      `${AI_SERVICE_URL}/api/ai/vehicles/repair-history-summary`,
+      { vin, history },
+      { headers, timeout: AI_TIMEOUT_MS, validateStatus: () => true }
+    );
+  } catch (_err) {
+    return { status: 0, data: null };
+  }
 }
 
 function cacheKey(tenantId, vehicleId, windowDays) {
@@ -173,6 +196,20 @@ async function getRepairHistorySummary(vehicleId, { tenantId, windowDays, req } 
     capRows: MAX_AI_ROWS
   });
   if (fetched === null) return null;
+
+  // FN-1500: short-circuit empty history without round-tripping the AI
+  // service. The widget renders this as a neutral "Not enough history" pill,
+  // and we still cache so a re-render within TTL doesn't repeat the DB work.
+  if (!Array.isArray(fetched.history) || fetched.history.length === 0) {
+    const emptyBody = {
+      insufficientHistory: true,
+      count: 0,
+      vin: fetched.vin,
+      windowDays: safeWindow
+    };
+    writeCache(key, emptyBody, now);
+    return { ok: true, body: emptyBody, fromCache: false };
+  }
 
   const aiResponse = await requestRepairHistorySummary(req, {
     vin: fetched.vin,

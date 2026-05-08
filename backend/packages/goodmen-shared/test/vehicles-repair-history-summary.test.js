@@ -24,6 +24,7 @@ const dbBridge = require('../internal/db');
 // service's `require('axios')` returns the spy. This avoids a real HTTP call.
 const axiosCalls = [];
 let axiosResponse = { status: 200, data: { summary: 'ok', recurringIssues: [], comebackRisk: 'low' } };
+let axiosThrow = null;
 
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
@@ -31,6 +32,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
     return {
       post: async (url, body, opts) => {
         axiosCalls.push({ url, body, opts });
+        if (axiosThrow) throw axiosThrow;
         return axiosResponse;
       }
     };
@@ -116,7 +118,8 @@ function withDb(query, run) {
 test('fetchVehicleWorkOrderHistory: returns null when vehicle not visible to tenant', async () => {
   const stub = makeQueryStub([
     { rows: [{ rel: 'all_vehicles' }] }, // resolveVehicleSource → all_vehicles
-    { rows: [] } // vehicle lookup misses on tenant_id
+    { rows: [] }, // vehicle lookup misses on tenant_id
+    { rows: [] }  // customer_vehicles fallback also misses (FN-1500)
   ]);
   await withDb(stub.fn, async () => {
     const result = await fetchVehicleWorkOrderHistory('veh-1', {
@@ -125,8 +128,39 @@ test('fetchVehicleWorkOrderHistory: returns null when vehicle not visible to ten
     });
     assert.equal(result, null);
   });
-  // Tenant scoping: the vehicle SELECT is parameterized on (vehicleId, tenantId).
+  // Tenant scoping on both lookups: vehicle SELECT and customer_vehicles fallback
+  // are both parameterized on (vehicleId, tenantId).
   assert.deepEqual(stub.calls[1].params, ['veh-1', 'tenant-A']);
+  assert.deepEqual(stub.calls[2].params, ['veh-1', 'tenant-A']);
+  assert.match(stub.calls[2].sql, /customer_vehicles WHERE vehicle_uuid = \$1/);
+});
+
+test('fetchVehicleWorkOrderHistory: resolves via customer_vehicles fallback when vehicles miss (FN-1500)', async () => {
+  // WO form's vehicleId comes from customer_vehicles.vehicle_uuid, so the
+  // primary vehicles/all_vehicles lookup misses. Service must fall back to
+  // customer_vehicles to recover the VIN before going to work_orders.
+  const stub = makeQueryStub([
+    { rows: [{ rel: 'all_vehicles' }] },
+    { rows: [] }, // vehicles/all_vehicles miss
+    { rows: [{ vin: 'VIN-CV-FALLBACK' }] }, // customer_vehicles fallback hit
+    { rows: [{ vehicle_uuid: 'cv-1' }, { vehicle_uuid: 'cv-2' }] }, // VIN→UUIDs join
+    { rows: [
+      { work_order_id: 'wo-1', work_order_number: 'WO-1', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: '10' },
+      { work_order_id: 'wo-2', work_order_number: 'WO-2', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: '20' }
+    ] }
+  ]);
+
+  await withDb(stub.fn, async () => {
+    const result = await fetchVehicleWorkOrderHistory('cv-uuid-from-wo-form', {
+      tenantId: 'tenant-A',
+      windowDays: 365
+    });
+    assert.ok(result);
+    assert.equal(result.vin, 'VIN-CV-FALLBACK');
+    assert.equal(result.history.length, 2);
+  });
+
+  assert.deepEqual(stub.calls[2].params, ['cv-uuid-from-wo-form', 'tenant-A']);
 });
 
 test('fetchVehicleWorkOrderHistory: caps SQL LIMIT at 50 rows and forwards windowDays', async () => {
@@ -240,14 +274,9 @@ test('getRepairHistorySummary: forwards bearer token + body to ai-service', asyn
   assert.equal(call.opts.headers.Authorization, 'Bearer test-token');
 });
 
-test('getRepairHistorySummary: not-enough-history pass-through (AI returns short-circuit body)', async () => {
+test('getRepairHistorySummary: empty-history short-circuits without calling AI (FN-1500)', async () => {
   _resetCacheForTests();
   axiosCalls.length = 0;
-  // AI handler short-circuits on history.length < 2 — route forwards verbatim.
-  axiosResponse = {
-    status: 200,
-    data: { summary: 'Not enough history', recurringIssues: [], comebackRisk: 'low' }
-  };
 
   const stub = makeQueryStub([
     { rows: [{ rel: 'all_vehicles' }] },
@@ -263,15 +292,85 @@ test('getRepairHistorySummary: not-enough-history pass-through (AI returns short
       req: makeReq()
     });
     assert.ok(result?.ok);
-    assert.equal(result.body.summary, 'Not enough history');
-    assert.equal(result.body.comebackRisk, 'low');
-    assert.deepEqual(result.body.recurringIssues, []);
+    assert.equal(result.fromCache, false);
+    assert.equal(result.body.insufficientHistory, true);
+    assert.equal(result.body.count, 0);
+    assert.equal(result.body.vin, 'VIN-NEW');
+    assert.equal(result.body.windowDays, 365);
   });
 
-  // Route still calls the AI handler with empty history — the handler is the
-  // single source of truth for the short-circuit response.
-  assert.equal(axiosCalls.length, 1);
-  assert.deepEqual(axiosCalls[0].body.history, []);
+  // Empty history must NOT round-trip to the AI service — that's the whole
+  // point of the short-circuit.
+  assert.equal(axiosCalls.length, 0);
+});
+
+test('getRepairHistorySummary: empty-history response is cached for the TTL window', async () => {
+  _resetCacheForTests();
+  axiosCalls.length = 0;
+
+  const stub = makeQueryStub([
+    { rows: [{ rel: 'all_vehicles' }] },
+    { rows: [{ vin: 'VIN-EMPTY' }] },
+    { rows: [{ vehicle_uuid: 'cv-empty' }] },
+    { rows: [] }
+  ]);
+
+  const opts = { tenantId: 'tenant-A', windowDays: 365, req: makeReq() };
+
+  await withDb(stub.fn, async () => {
+    const first = await getRepairHistorySummary('veh-empty', opts);
+    assert.equal(first.fromCache, false);
+    assert.equal(first.body.insufficientHistory, true);
+  });
+
+  // Second call must skip DB entirely and return cached body.
+  let dbHit = 0;
+  const errStub = async () => { dbHit += 1; throw new Error('DB should not be hit on cache hit'); };
+  await withDb(errStub, async () => {
+    const second = await getRepairHistorySummary('veh-empty', opts);
+    assert.equal(second.fromCache, true);
+    assert.equal(second.body.insufficientHistory, true);
+  });
+  assert.equal(dbHit, 0);
+  assert.equal(axiosCalls.length, 0);
+});
+
+test('getRepairHistorySummary: axios network throw → ai_unavailable (FN-1500)', async () => {
+  // Pre-FN-1500, validateStatus only suppressed HTTP-status errors. A real
+  // network failure (DNS, ECONNREFUSED, timeout) bubbled to the route catch
+  // and returned 500. Now the orchestrator must translate any throw into the
+  // same `{ ok: false, reason: 'ai_unavailable' }` path → route 502.
+  _resetCacheForTests();
+  axiosCalls.length = 0;
+  const networkError = new Error('connect ECONNREFUSED 127.0.0.1:4100');
+  networkError.code = 'ECONNREFUSED';
+  axiosThrow = networkError;
+
+  const stub = makeQueryStub([
+    { rows: [{ rel: 'all_vehicles' }] },
+    { rows: [{ vin: 'VIN-DOWN' }] },
+    { rows: [{ vehicle_uuid: 'cv-d' }] },
+    { rows: [
+      { work_order_id: 'wo-1', work_order_number: 'WO-1', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: null },
+      { work_order_id: 'wo-2', work_order_number: 'WO-2', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: null }
+    ] }
+  ]);
+
+  try {
+    await withDb(stub.fn, async () => {
+      const result = await getRepairHistorySummary('veh-down', {
+        tenantId: 'tenant-A',
+        windowDays: 365,
+        req: makeReq()
+      });
+      assert.equal(result.ok, false);
+      assert.equal(result.reason, 'ai_unavailable');
+      assert.equal(result.status, 0);
+    });
+    assert.equal(axiosCalls.length, 1, 'axios was invoked once before throwing');
+  } finally {
+    axiosThrow = null;
+  }
 });
 
 test('getRepairHistorySummary: returns ai_unavailable on non-200 from ai-service', async () => {
