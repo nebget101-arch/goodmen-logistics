@@ -1,11 +1,41 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const multer = require('multer');
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const inventoryService = require('../services/inventory.service');
 const partsService = require('../services/parts.service');
 const db = require('../internal/db').knex;
 const { v4: uuidv4 } = require('uuid');
+const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
+const { extractInvoiceViaAi } = require('../services/receiving-invoice.service');
+
+// FN-1490: invoice upload (image or PDF) for AI line extraction.
+// 15 MB cap matches the AI service's 12 MiB document limit with headroom
+// for multipart overhead; types restricted to formats Claude Vision and
+// the Documents API support natively.
+const INVOICE_ALLOWED_MIME = new Set([
+	'image/jpeg',
+	'image/png',
+	'image/heic',
+	'image/heif',
+	'application/pdf'
+]);
+const INVOICE_ALLOWED_EXT = /^\.(jpe?g|png|heic|heif|pdf)$/i;
+const INVOICE_MAX_BYTES = 15 * 1024 * 1024;
+
+const invoiceUpload = multer({
+	storage: multer.memoryStorage(),
+	limits: { fileSize: INVOICE_MAX_BYTES },
+	fileFilter: (req, file, cb) => {
+		const ext = path.extname(file.originalname || '').toLowerCase();
+		if (INVOICE_ALLOWED_MIME.has(file.mimetype) && INVOICE_ALLOWED_EXT.test(ext)) {
+			return cb(null, true);
+		}
+		cb(new Error('Only JPG, PNG, HEIC, or PDF files are allowed'));
+	}
+});
 
 /**
  * Permission helpers
@@ -776,4 +806,223 @@ router.post('/:id/post', authMiddleware, requireRole(['admin', 'parts_manager'])
 	}
 });
 
+/**
+ * @openapi
+ * /api/receiving/{id}/invoice:
+ *   post:
+ *     summary: Upload a vendor invoice and run AI line extraction
+ *     description: |
+ *       Uploads an invoice image or PDF (multipart/form-data, field name `file`),
+ *       persists the storage reference on the receiving ticket, then forwards
+ *       a short-lived signed URL to the AI service for vendor + line extraction.
+ *
+ *       Re-uploading replaces the previous file and extraction (orphaned R2
+ *       objects are reaped by a separate sweeper, out of scope here).
+ *
+ *       The file is persisted to storage **before** the AI call, so an AI
+ *       upstream failure leaves the ticket with a usable file_url and a null
+ *       extraction. Callers can retry just the extraction in a follow-up.
+ *
+ *       Vendor name and reference number are auto-filled from the extraction
+ *       only when currently null on the ticket — never overwritten.
+ *
+ *       Requires `admin` or `parts_manager` role.
+ *     tags:
+ *       - Receiving
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Receiving ticket UUID (must be in DRAFT status).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Invoice image (jpg/png/heic) or PDF, up to 15 MB.
+ *     responses:
+ *       200:
+ *         description: File uploaded; extraction succeeded or returned null on AI failure.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     ticket: { type: object, description: Updated receiving ticket. }
+ *                     extraction:
+ *                       type: object
+ *                       nullable: true
+ *                       description: |
+ *                         Claude Vision payload —
+ *                         `{ vendor, reference, invoiceDate, lines: [{ sku, description, qty, unitCost, match }] }`.
+ *                         Null when the AI call failed; the file is still persisted.
+ *                     fileUrl:
+ *                       type: string
+ *                       description: Short-lived signed download URL for the uploaded file.
+ *                     aiError:
+ *                       type: string
+ *                       nullable: true
+ *                       description: Upstream error code when extraction failed; null on success.
+ *       400:
+ *         description: Missing file, unsupported type, or ticket not in DRAFT.
+ *       403:
+ *         description: Caller lacks admin or parts_manager role.
+ *       404:
+ *         description: Receiving ticket not found.
+ *       500:
+ *         description: Storage upload failed.
+ */
+/**
+ * Core handler for POST /:id/invoice — extracted from the Express closure
+ * so it can be unit-tested with injected deps. The route below is just a
+ * thin wrapper that wires multer + the real R2 + AI client.
+ */
+async function processInvoiceUpload(
+	{ ticketId, file },
+	{ db: dbDep, uploadBuffer: uploadDep, getSignedDownloadUrl: signDep, extractInvoiceViaAi: aiDep, logger, req }
+) {
+	if (!file) {
+		return { status: 400, body: { error: 'file is required (multipart field "file")' } };
+	}
+
+	const ticket = await dbDep('receiving_tickets').where('id', ticketId).first();
+	if (!ticket) {
+		return { status: 404, body: { error: 'Receiving ticket not found' } };
+	}
+	if (ticket.status !== 'DRAFT') {
+		return { status: 400, body: { error: 'Cannot attach invoice to a posted ticket' } };
+	}
+
+	let storageKey;
+	try {
+		const uploaded = await uploadDep({
+			buffer: file.buffer,
+			contentType: file.mimetype,
+			prefix: `receiving/${ticketId}/invoice`,
+			fileName: file.originalname || 'invoice'
+		});
+		storageKey = uploaded.key;
+	} catch (uploadErr) {
+		logger.error('receiving_invoice_upload_failed', { ticketId, error: uploadErr.message });
+		return { status: 500, body: { error: 'Failed to upload invoice file' } };
+	}
+
+	// Persist the file reference BEFORE calling AI so a downstream AI failure
+	// doesn't lose the upload. Stored value is the R2 storage key (signed on
+	// demand for downloads); column name reads "url" but holds the key.
+	await dbDep('receiving_tickets')
+		.where('id', ticketId)
+		.update({
+			invoice_file_url: storageKey,
+			invoice_extracted_data: null,
+			invoice_extracted_at: null
+		});
+
+	let signedUrl;
+	try {
+		signedUrl = await signDep(storageKey);
+	} catch (signErr) {
+		logger.error('receiving_invoice_sign_failed', { ticketId, error: signErr.message });
+		return { status: 500, body: { error: 'Failed to sign invoice URL for AI service' } };
+	}
+
+	const aiResult = await aiDep(req, { fileUrl: signedUrl, contentType: file.mimetype });
+
+	let extraction = null;
+	let aiError = null;
+	if (aiResult && aiResult.ok && aiResult.data) {
+		extraction = aiResult.data;
+		const ticketPatch = {
+			invoice_extracted_data: JSON.stringify(extraction),
+			invoice_extracted_at: new Date()
+		};
+		if (!ticket.vendor_name && extraction.vendor) {
+			ticketPatch.vendor_name = extraction.vendor;
+		}
+		if (!ticket.reference_number && extraction.reference) {
+			ticketPatch.reference_number = extraction.reference;
+		}
+		await dbDep('receiving_tickets').where('id', ticketId).update(ticketPatch);
+		logger.info('receiving_invoice_extracted', {
+			ticketId,
+			lineCount: Array.isArray(extraction.lines) ? extraction.lines.length : 0,
+			vendorAutoFilled: !ticket.vendor_name && Boolean(extraction.vendor),
+			referenceAutoFilled: !ticket.reference_number && Boolean(extraction.reference)
+		});
+	} else {
+		aiError = (aiResult && aiResult.error) || 'AI_UPSTREAM_ERROR';
+		logger.warn('receiving_invoice_extract_failed', { ticketId, aiError });
+	}
+
+	const updatedTicket = await dbDep('receiving_tickets').where('id', ticketId).first();
+
+	return {
+		status: 200,
+		body: {
+			success: true,
+			data: {
+				ticket: updatedTicket,
+				extraction,
+				fileUrl: signedUrl,
+				aiError
+			}
+		}
+	};
+}
+
+router.post(
+	'/:id/invoice',
+	authMiddleware,
+	requireRole(['admin', 'parts_manager']),
+	(req, res, next) => {
+		invoiceUpload.single('file')(req, res, (err) => {
+			if (!err) return next();
+			if (err.code === 'LIMIT_FILE_SIZE') {
+				return res.status(400).json({ error: 'File exceeds 15 MB limit' });
+			}
+			return res.status(400).json({ error: err.message || 'Upload failed' });
+		});
+	},
+	async (req, res) => {
+		try {
+			const result = await processInvoiceUpload(
+				{ ticketId: req.params.id, file: req.file },
+				{
+					db,
+					uploadBuffer,
+					getSignedDownloadUrl,
+					extractInvoiceViaAi,
+					logger: dtLogger,
+					req
+				}
+			);
+			return res.status(result.status).json(result.body);
+		} catch (error) {
+			dtLogger.error('receiving_invoice_endpoint_failed', {
+				ticketId: req.params.id,
+				error: error.message
+			});
+			return res.status(500).json({ error: error.message });
+		}
+	}
+);
+
 module.exports = router;
+module.exports.processInvoiceUpload = processInvoiceUpload;
+module.exports.INVOICE_ALLOWED_MIME = INVOICE_ALLOWED_MIME;
+module.exports.INVOICE_MAX_BYTES = INVOICE_MAX_BYTES;
