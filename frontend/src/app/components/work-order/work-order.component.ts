@@ -162,7 +162,9 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
           shopLocationId: wo.location_id || wo.locationId, title: wo.description || '',
           type: wo.type || 'REPAIR', status: this.normalizeStatusForSelect(wo.status || 'DRAFT'),
           priority: wo.priority || '', requestDate: wo.created_at ? wo.created_at.slice(0, 10) : '',
-          completionDate: wo.completed_at ? wo.completed_at.slice(0, 10) : '',
+          scheduledDate: this.toDateInputValue(wo.scheduled_date ?? wo.scheduledDate),
+          startDate: this.toDateInputValue(wo.start_date ?? wo.startDate),
+          completionDate: this.toDateInputValue(wo.completion_date ?? wo.completionDate ?? wo.completed_at),
           currentOdometer: wo.odometer_miles || '', assignedTo: wo.assigned_mechanic_user_id || ''
         });
         const rbn = payload.requestedBy?.username
@@ -174,6 +176,11 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
         const vehicle = payload.vehicle || {};
         this.workOrder.unitNumber = vehicle.unit_number || wo.vehicle_unit || '';
         this.workOrder.vin = vehicle.vin || wo.vehicle_vin || '';
+        this.workOrder.make = vehicle.make || '';
+        this.workOrder.model = vehicle.model || '';
+        this.workOrder.year = vehicle.year ?? '';
+        this.workOrder.licensePlate = vehicle.license_plate || vehicle.licensePlate || this.workOrder.licensePlate || '';
+        this.workOrder.vehicleType = vehicle.type || vehicle.vehicle_type || this.workOrder.vehicleType || '';
         this.documents = payload.documents || [];
         this.invoiceInfo = (payload.invoices?.length) ? payload.invoices[0] : null;
         this.workOrderParts = payload.parts || [];
@@ -228,6 +235,9 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
       odometerMiles: this.workOrder.currentOdometer,
       assignedMechanicUserId: this.getPrimaryMechanicId(),
       requestedBy: this.workOrder.requestedBy,
+      scheduledDate: this.toDateInputValue(this.workOrder.scheduledDate) || null,
+      startDate: this.toDateInputValue(this.workOrder.startDate) || null,
+      completionDate: this.toDateInputValue(this.workOrder.completionDate) || null,
       labor: laborLines,
       fees: this.workOrder.fees || [],
       discountType: this.workOrder.discountType,
@@ -426,6 +436,20 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
   }
 
   private isLikelyUuid(v: string): boolean { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((v || '').trim()); }
+
+  private toDateInputValue(value: any): string {
+    if (value == null) return '';
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) return '';
+      const y = value.getFullYear();
+      const mo = String(value.getMonth() + 1).padStart(2, '0');
+      const d = String(value.getDate()).padStart(2, '0');
+      return `${y}-${mo}-${d}`;
+    }
+    const s = String(value).trim();
+    if (!s) return '';
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  }
 
   canEditWorkOrder(): boolean { return this.permissions.hasAnyPermission([PERMISSIONS.WORK_ORDERS_EDIT, PERMISSIONS.WORK_ORDERS_CREATE]); }
   private canCloseWorkOrder(): boolean { return this.permissions.hasAnyPermission([PERMISSIONS.WORK_ORDERS_CLOSE, PERMISSIONS.WORK_ORDERS_FINALIZE]); }
