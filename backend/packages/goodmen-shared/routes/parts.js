@@ -591,6 +591,235 @@ router.get('/manufacturers', authMiddleware, async (req, res) => {
 	}
 });
 
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+function clampInt(value, fallback, min, max) {
+	const n = Number(value);
+	if (!Number.isFinite(n)) return fallback;
+	return Math.min(Math.max(Math.trunc(n), min), max);
+}
+
+/**
+ * @openapi
+ * /api/parts/recent-at-location/{locationId}:
+ *   get:
+ *     summary: Recently received parts at a location (FN-1485)
+ *     description: >-
+ *       Returns DISTINCT active parts most recently received at the location,
+ *       ordered by `MAX(inventory_transactions.created_at)` for transactions of
+ *       type RECEIVE. Powers the "Recent" tab of the warehouse-receiving
+ *       quick-add panel (FN-1479). Empty set returns `{ data: [] }`, not 404.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Location UUID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: List of recently received parts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       sku:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       default_cost:
+ *                         type: number
+ *                       on_hand_qty:
+ *                         type: integer
+ *                       last_received_at:
+ *                         type: string
+ *                         format: date-time
+ *       400:
+ *         description: Invalid locationId
+ *       500:
+ *         description: Server error
+ */
+router.get('/recent-at-location/:locationId', authMiddleware, async (req, res) => {
+	try {
+		const { locationId } = req.params;
+		if (!UUID_RE.test(locationId)) {
+			return res.status(400).json({ error: 'locationId must be a UUID' });
+		}
+		const limit = clampInt(req.query.limit, 20, 1, 100);
+
+		const recent = db('inventory_transactions')
+			.select('part_id')
+			.max({ last_received_at: 'created_at' })
+			.where({ location_id: locationId, transaction_type: 'RECEIVE' })
+			.groupBy('part_id')
+			.orderBy('last_received_at', 'desc')
+			.limit(limit)
+			.as('recent');
+
+		const rows = await db
+			.from(recent)
+			.innerJoin('parts', 'parts.id', 'recent.part_id')
+			.leftJoin({ inv: 'inventory' }, function () {
+				this.on('inv.part_id', '=', 'parts.id').andOn(
+					'inv.location_id',
+					'=',
+					db.raw('?', [locationId])
+				);
+			})
+			.where('parts.is_active', true)
+			.select(
+				'parts.id',
+				'parts.sku',
+				'parts.name',
+				'parts.default_cost',
+				db.raw('COALESCE(inv.on_hand_qty, 0)::int as on_hand_qty'),
+				'recent.last_received_at'
+			)
+			.orderBy('recent.last_received_at', 'desc');
+
+		res.json({ success: true, data: rows });
+	} catch (error) {
+		dtLogger.error('parts_recent_at_location_failed', { error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * @openapi
+ * /api/parts/common-at-location/{locationId}:
+ *   get:
+ *     summary: Most-received parts at a location over a time window (FN-1485)
+ *     description: >-
+ *       Returns active parts ranked by `SUM(inventory_transactions.qty_change)`
+ *       for transactions of type RECEIVE at the location within the last
+ *       `days` days. Powers the "Common" tab of the warehouse-receiving
+ *       quick-add panel (FN-1479). Empty set returns `{ data: [] }`, not 404.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: days
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 365
+ *           default: 90
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: List of most-received parts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       sku:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       default_cost:
+ *                         type: number
+ *                       on_hand_qty:
+ *                         type: integer
+ *                       total_received_qty:
+ *                         type: integer
+ *       400:
+ *         description: Invalid locationId
+ *       500:
+ *         description: Server error
+ */
+router.get('/common-at-location/:locationId', authMiddleware, async (req, res) => {
+	try {
+		const { locationId } = req.params;
+		if (!UUID_RE.test(locationId)) {
+			return res.status(400).json({ error: 'locationId must be a UUID' });
+		}
+		const days = clampInt(req.query.days, 90, 1, 365);
+		const limit = clampInt(req.query.limit, 20, 1, 100);
+
+		const common = db('inventory_transactions')
+			.select('part_id')
+			.sum({ total_received_qty: 'qty_change' })
+			.where({ location_id: locationId, transaction_type: 'RECEIVE' })
+			.andWhere('created_at', '>=', db.raw(`NOW() - (? || ' days')::interval`, [days]))
+			.groupBy('part_id')
+			.orderBy('total_received_qty', 'desc')
+			.limit(limit)
+			.as('common');
+
+		const rows = await db
+			.from(common)
+			.innerJoin('parts', 'parts.id', 'common.part_id')
+			.leftJoin({ inv: 'inventory' }, function () {
+				this.on('inv.part_id', '=', 'parts.id').andOn(
+					'inv.location_id',
+					'=',
+					db.raw('?', [locationId])
+				);
+			})
+			.where('parts.is_active', true)
+			.select(
+				'parts.id',
+				'parts.sku',
+				'parts.name',
+				'parts.default_cost',
+				db.raw('COALESCE(inv.on_hand_qty, 0)::int as on_hand_qty'),
+				db.raw('common.total_received_qty::int as total_received_qty')
+			)
+			.orderBy('total_received_qty', 'desc');
+
+		res.json({ success: true, data: rows });
+	} catch (error) {
+		dtLogger.error('parts_common_at_location_failed', { error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
 /**
  * @openapi
  * /api/parts/duplicate-check:
