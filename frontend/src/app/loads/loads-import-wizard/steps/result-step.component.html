@@ -1,0 +1,68 @@
+<div class="li-step-panel" *ngIf="result">
+  <div class="li-step-heading">
+    <h2>
+      <span class="material-symbols-outlined" style="color:#4ade80;">task_alt</span>
+      Import Complete
+    </h2>
+    <p>Drill into any bucket below for details.</p>
+  </div>
+
+  <div class="li-result-grid">
+    <button type="button"
+            class="li-result-card green clickable"
+            (click)="viewLoads.emit()"
+            [attr.aria-label]="'View created loads'">
+      <span class="li-result-card-num green">{{ result.autoCreatedCount }}</span>
+      <span class="li-result-card-label">Auto-created</span>
+      <span class="li-result-card-hint">
+        <span class="material-symbols-outlined">arrow_forward</span> View loads
+      </span>
+    </button>
+
+    <button type="button"
+            class="li-result-card yellow"
+            [class.clickable]="result.needsReviewCount > 0"
+            [disabled]="result.needsReviewCount === 0"
+            (click)="result.needsReviewCount > 0 && viewNeedsReview.emit()">
+      <span class="li-result-card-num yellow">{{ result.needsReviewCount }}</span>
+      <span class="li-result-card-label">Needs review</span>
+      <span class="li-result-card-hint" *ngIf="result.needsReviewCount > 0">
+        <span class="material-symbols-outlined">arrow_forward</span> Open draft queue
+      </span>
+    </button>
+
+    <button type="button"
+            class="li-result-card muted"
+            [class.clickable]="duplicatesCount > 0"
+            [disabled]="duplicatesCount === 0"
+            (click)="duplicatesCount > 0 && showDuplicates.emit()">
+      <span class="li-result-card-num muted">{{ duplicatesCount }}</span>
+      <span class="li-result-card-label">Duplicates skipped</span>
+      <span class="li-result-card-hint" *ngIf="duplicatesCount > 0">
+        <span class="material-symbols-outlined">arrow_forward</span> Review duplicates
+      </span>
+    </button>
+
+    <button type="button"
+            class="li-result-card red"
+            [disabled]="errorsCount === 0">
+      <span class="li-result-card-num red">{{ errorsCount }}</span>
+      <span class="li-result-card-label">Errors</span>
+      <span class="li-result-card-hint" *ngIf="errorsCount > 0">
+        See validate step for details
+      </span>
+    </button>
+  </div>
+
+  <div class="li-result-actions">
+    <button type="button" class="li-btn-primary" (click)="viewLoads.emit()">
+      <span class="material-symbols-outlined">list</span> Go to Loads
+    </button>
+    <button type="button" class="li-btn-ghost" *ngIf="result.needsReviewCount > 0" (click)="viewNeedsReview.emit()">
+      <span class="material-symbols-outlined">flag</span> Review drafts
+    </button>
+    <button type="button" class="li-btn-ghost" (click)="startOver.emit()">
+      <span class="material-symbols-outlined">refresh</span> Import another file
+    </button>
+  </div>
+</div>

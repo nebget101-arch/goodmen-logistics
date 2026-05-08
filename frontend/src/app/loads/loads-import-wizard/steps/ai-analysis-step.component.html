@@ -1,0 +1,102 @@
+<div class="li-step-panel">
+  <div class="li-step-heading">
+    <h2>
+      AI Analysis
+      <span class="li-claude-chip">
+        <span class="material-symbols-outlined">auto_awesome</span> Claude
+      </span>
+    </h2>
+    <p>Claude inspects your file headers and a sample of rows to suggest the column mapping and detect a multi-stop pattern.</p>
+  </div>
+
+  <div class="li-loading-state" *ngIf="loading">
+    <div class="li-spinner"></div> Analyzing file with Claude…
+  </div>
+
+  <div class="li-error-banner" *ngIf="error && !loading">
+    <span class="material-symbols-outlined">error</span> {{ error }}
+  </div>
+
+  <div *ngIf="!loading && error">
+    <div class="li-step-footer">
+      <button type="button" class="li-btn-ghost" (click)="back.emit()">
+        <span class="material-symbols-outlined">arrow_back</span> Back
+      </button>
+      <button type="button" class="li-btn-primary" (click)="skipMapping.emit()">
+        Map Manually <span class="material-symbols-outlined">arrow_forward</span>
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="!loading && !error && data">
+
+    <div class="li-ai-banner" [ngClass]="overallConfidenceClass" *ngIf="data.overallConfidence != null">
+      <span class="material-symbols-outlined">psychology</span>
+      Overall confidence:
+      <strong>{{ confidenceLabel(data.overallConfidence) }}</strong>
+    </div>
+
+    <div class="li-ai-banner" *ngIf="data.cacheHit">
+      <span class="material-symbols-outlined">bolt</span>
+      Used a saved mapping for this broker. Review and adjust if needed.
+    </div>
+
+    <div class="li-ai-section" *ngIf="data.headers?.length">
+      <h3 class="li-ai-section-title">
+        <span class="material-symbols-outlined">view_column</span> Detected Columns
+        <span style="margin-left: 8px; font-weight: 500; color: #94a3b8; font-size: 12px;">
+          {{ data.headers.length }} columns · {{ data.totalRows }} rows
+        </span>
+      </h3>
+    </div>
+
+    <div class="li-ai-section">
+      <h3 class="li-ai-section-title">
+        <span class="material-symbols-outlined">view_column</span> Suggested Column Mapping
+      </h3>
+      <div class="li-ai-mapping-table">
+        <div class="li-ai-mapping-header">
+          <span>FleetNeuron Field</span>
+          <span></span>
+          <span>Detected Header</span>
+          <span style="text-align:right;">Confidence</span>
+        </div>
+        <div *ngFor="let row of aiMappingRows"
+             class="li-ai-mapping-row"
+             [class.unmapped]="!row.rawHeader">
+          <span class="li-ai-col-field">{{ row.field }}</span>
+          <span class="li-ai-col-arrow">
+            <span class="material-symbols-outlined">arrow_forward</span>
+          </span>
+          <span class="li-ai-col-raw">{{ row.rawHeader || '— not detected —' }}</span>
+          <span class="li-ai-col-confidence">
+            <span class="li-confidence-badge" [ngClass]="confidenceClass(row.confidence)">
+              {{ confidenceLabel(row.confidence) }}
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="li-ai-section" *ngIf="data.multiStopPattern">
+      <h3 class="li-ai-section-title">
+        <span class="material-symbols-outlined">alt_route</span> Multi-stop Pattern
+      </h3>
+      <p style="margin: 0; color: #94a3b8; font-size: 13px;">
+        {{ multiStopLabel(data.multiStopPattern) }}
+      </p>
+    </div>
+
+    <div class="li-step-footer">
+      <button type="button" class="li-btn-ghost" (click)="back.emit()">
+        <span class="material-symbols-outlined">arrow_back</span> Back
+      </button>
+      <button type="button" class="li-btn-ghost" (click)="skipMapping.emit()">
+        Map Manually
+      </button>
+      <button type="button" class="li-btn-primary" (click)="acceptMapping.emit()">
+        Accept &amp; Adjust Mapping <span class="material-symbols-outlined">arrow_forward</span>
+      </button>
+    </div>
+  </div>
+</div>

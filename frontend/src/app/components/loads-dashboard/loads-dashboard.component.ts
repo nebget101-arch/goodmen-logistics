@@ -2191,6 +2191,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.router.navigate(['/loads/templates']);
   }
 
+  /** FN-1594: open the spreadsheet-import wizard. */
+  navigateToImport(): void {
+    this.router.navigate(['/loads/import']);
+  }
+
   /**
    * Open the Save-As-Template prompt for the given load ID.
    * Defaults to the currently-open editing load when no id is passed.
