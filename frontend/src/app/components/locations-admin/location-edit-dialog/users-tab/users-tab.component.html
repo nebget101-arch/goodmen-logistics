@@ -106,7 +106,6 @@
           <td>
             <div class="user-name-cell">
               <strong>{{ formatName(user) }}</strong>
-              <span class="username-sub">&#64;{{ user.username }}</span>
             </div>
           </td>
           <td>{{ user.email || '--' }}</td>
@@ -115,11 +114,11 @@
           </td>
           <td>{{ formatDate(user.assigned_at) }}</td>
           <td>
-            <ng-container *ngIf="confirmingRemoveId !== user.user_id; else confirmBlock">
+            <ng-container *ngIf="confirmingRemoveId !== user.id; else confirmBlock">
               <button
                 type="button"
                 class="btn btn-danger btn-sm"
-                (click)="confirmRemove(user.user_id)"
+                (click)="confirmRemove(user.id)"
               >
                 <span class="material-symbols-outlined">person_remove</span>
                 Remove
@@ -132,7 +131,7 @@
                   type="button"
                   class="btn btn-danger btn-sm"
                   [disabled]="removeLoading"
-                  (click)="executeRemove(user.user_id)"
+                  (click)="executeRemove(user.id)"
                 >
                   {{ removeLoading ? 'Removing...' : 'Yes' }}
                 </button>
