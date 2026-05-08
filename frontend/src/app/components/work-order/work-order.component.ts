@@ -163,7 +163,15 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
           type: wo.type || 'REPAIR', status: this.normalizeStatusForSelect(wo.status || 'DRAFT'),
           priority: wo.priority || '', requestDate: wo.created_at ? wo.created_at.slice(0, 10) : '',
           completionDate: wo.completed_at ? wo.completed_at.slice(0, 10) : '',
-          currentOdometer: wo.odometer_miles || '', assignedTo: wo.assigned_mechanic_user_id || ''
+          currentOdometer: wo.odometer_miles || '', assignedTo: wo.assigned_mechanic_user_id || '',
+          serviceCategory: wo.service_category ?? wo.serviceCategory ?? '',
+          serviceDescription: wo.service_description ?? wo.serviceDescription ?? '',
+          problemReported: wo.problem_reported ?? wo.problemReported ?? '',
+          safetyIssue: wo.safety_issue ?? wo.safetyIssue ?? '',
+          downtimeReason: wo.downtime_reason ?? wo.downtimeReason ?? '',
+          roadCall: (wo.road_call ?? wo.roadCall) === true,
+          breakdownLocation: wo.breakdown_location ?? wo.breakdownLocation ?? '',
+          estimatedDurationHours: wo.estimated_duration_hours ?? wo.estimatedDurationHours ?? ''
         });
         const rbn = payload.requestedBy?.username
           || (payload.requestedBy?.first_name && payload.requestedBy?.last_name
@@ -232,7 +240,15 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
       fees: this.workOrder.fees || [],
       discountType: this.workOrder.discountType,
       discountValue: this.workOrder.discountValue,
-      taxRatePercent: this.workOrder.taxRatePercent ?? this.partsTaxRate
+      taxRatePercent: this.workOrder.taxRatePercent ?? this.partsTaxRate,
+      serviceCategory: this.workOrder.serviceCategory ?? '',
+      serviceDescription: this.workOrder.serviceDescription ?? '',
+      problemReported: this.workOrder.problemReported ?? '',
+      safetyIssue: this.workOrder.safetyIssue ?? '',
+      downtimeReason: this.workOrder.downtimeReason ?? '',
+      roadCall: this.workOrder.roadCall === true,
+      breakdownLocation: this.workOrder.breakdownLocation ?? '',
+      estimatedDurationHours: this.workOrder.estimatedDurationHours ?? ''
     };
 
     const save$ = this.isEditMode && this.workOrderId
