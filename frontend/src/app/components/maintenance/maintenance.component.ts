@@ -54,6 +54,20 @@ interface MechanicOption {
   name: string;
 }
 
+const YYYY_MM_DD = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export function parseLocalDateStart(value: string | null | undefined): Date | null {
+  const m = value && YYYY_MM_DD.exec(value);
+  if (!m) return null;
+  return new Date(+m[1], +m[2] - 1, +m[3], 0, 0, 0, 0);
+}
+
+export function parseLocalDateEnd(value: string | null | undefined): Date | null {
+  const m = value && YYYY_MM_DD.exec(value);
+  if (!m) return null;
+  return new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59, 999);
+}
+
 @Component({
   selector: 'app-maintenance',
   templateUrl: './maintenance.component.html',
@@ -326,14 +340,14 @@ export class MaintenanceComponent implements OnInit, OnDestroy {
       result = result.filter(wo => wo.invoice_status === this.filterInvoiceStatus);
     }
 
-    // Date range
-    if (this.filterDateFrom) {
-      const from = new Date(this.filterDateFrom);
+    // Date range. `new Date('YYYY-MM-DD')` parses as UTC midnight, so we build
+    // the boundaries in local time to match the calendar day the user picked.
+    const from = parseLocalDateStart(this.filterDateFrom);
+    if (from) {
       result = result.filter(wo => new Date(wo.created_at) >= from);
     }
-    if (this.filterDateTo) {
-      const to = new Date(this.filterDateTo);
-      to.setHours(23, 59, 59, 999);
+    const to = parseLocalDateEnd(this.filterDateTo);
+    if (to) {
       result = result.filter(wo => new Date(wo.created_at) <= to);
     }
 
