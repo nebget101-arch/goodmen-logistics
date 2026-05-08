@@ -13,6 +13,7 @@ const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handle
 const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
 const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
+const { handleInvoiceExtract } = require('./handlers/invoice-extractor-handler');
 const { handleLoadDriverMatch } = require('./handlers/load-driver-match-handler');
 const { handleVehicleRepairHistorySummary } = require('./handlers/vehicle-repair-history-handler');
 const { handleBriefingGenerate } = require('./handlers/briefing-handler');
@@ -2253,6 +2254,113 @@ function buildAiRouter(deps) {
    */
   router.post('/vehicles/repair-history-summary', (req, res) =>
     handleVehicleRepairHistorySummary(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/invoice/extract:
+   *   post:
+   *     summary: AI vendor invoice extraction (FN-1489)
+   *     description: >
+   *       Extracts vendor metadata and line items from a vendor invoice (image or PDF) using
+   *       Claude Vision/Document. Default model `claude-haiku-4-5-20251001` (override via
+   *       `AI_INVOICE_MODEL`). Uses prompt caching on the system prompt + schema. SKUs are
+   *       matched against the `parts` table; each line includes `match: { partId, sku, name } | null`.
+   *       Logs file size and content-type only — never invoice content.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             oneOf:
+   *               - type: object
+   *                 required: [fileUrl]
+   *                 properties:
+   *                   fileUrl:
+   *                     type: string
+   *                     description: HTTP(S) URL pointing to an image or PDF
+   *                   contentType:
+   *                     type: string
+   *                     description: Optional MIME hint (image/* or application/pdf)
+   *               - type: object
+   *                 required: [base64, contentType]
+   *                 properties:
+   *                   base64:
+   *                     type: string
+   *                     description: Base64-encoded file content
+   *                   contentType:
+   *                     type: string
+   *                     enum: [image/jpeg, image/png, image/webp, image/gif, image/heic, image/heif, application/pdf]
+   *     responses:
+   *       200:
+   *         description: Extracted invoice with matched parts
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     vendor:
+   *                       type: string
+   *                       nullable: true
+   *                     reference:
+   *                       type: string
+   *                       nullable: true
+   *                     invoiceDate:
+   *                       type: string
+   *                       format: date
+   *                       nullable: true
+   *                     lines:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           sku:
+   *                             type: string
+   *                             nullable: true
+   *                           description:
+   *                             type: string
+   *                           qty:
+   *                             type: number
+   *                           unitCost:
+   *                             type: number
+   *                           match:
+   *                             type: object
+   *                             nullable: true
+   *                             properties:
+   *                               partId:
+   *                                 type: string
+   *                               sku:
+   *                                 type: string
+   *                               name:
+   *                                 type: string
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     model:
+   *                       type: string
+   *                     processingTimeMs:
+   *                       type: number
+   *                     usage:
+   *                       type: object
+   *                       nullable: true
+   *       400:
+   *         description: Invalid request body
+   *       422:
+   *         description: AI returned unparseable JSON (after retry)
+   *       502:
+   *         description: AI upstream unavailable
+   */
+  router.post('/invoice/extract', (req, res) =>
+    handleInvoiceExtract(req, res, deps)
   );
 
   return router;
