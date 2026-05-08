@@ -1296,6 +1296,8 @@ router.put('/:id([0-9a-fA-F-]{36})', authMiddleware, requireRole(['admin', 'part
  *                   type: string
  *       400:
  *         description: Validation error
+ *       404:
+ *         description: Part not found
  */
 router.patch('/:id([0-9a-fA-F-]{36})/deactivate', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
@@ -1308,7 +1310,8 @@ router.patch('/:id([0-9a-fA-F-]{36})/deactivate', authMiddleware, requireRole(['
 		});
 	} catch (error) {
 		dtLogger.error('part_deactivation_failed', { id: req.params.id, error: error.message });
-		res.status(400).json({ error: error.message });
+		const status = /not found/i.test(error.message) ? 404 : 400;
+		res.status(status).json({ error: error.message });
 	}
 });
 

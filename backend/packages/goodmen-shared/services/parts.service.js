@@ -354,6 +354,42 @@ async function deletePart(id) {
 }
 
 /**
+ * FN-1555: Soft-delete (deactivate) a part. Schema-compatible with both shapes
+ * the parts table has shipped under: `status` (ACTIVE/INACTIVE) where present,
+ * else fall back to the `is_active` boolean column. Returns the updated row.
+ */
+async function deactivatePart(id) {
+	try {
+		const existing = await db('parts').where({ id }).first();
+		if (!existing) {
+			throw new Error(`Part ${id} not found`);
+		}
+
+		const cols = await db('parts').columnInfo();
+		const updateData = {};
+		if (cols.status) {
+			updateData.status = 'INACTIVE';
+		} else if (cols.is_active) {
+			updateData.is_active = false;
+		} else {
+			throw new Error('parts table is missing both status and is_active columns');
+		}
+		if (cols.updated_at) {
+			updateData.updated_at = db.fn.now();
+		}
+
+		const updated = await db('parts').where({ id }).update(updateData).returning('*');
+
+		dtLogger.info('part_deactivated', { id, sku: existing.sku });
+
+		return updated[0];
+	} catch (error) {
+		dtLogger.error('part_deactivation_failed', { id, error: error.message });
+		throw error;
+	}
+}
+
+/**
  * FN-1103: Bulk-create parts from a JSON list (Quick Add Invoice flow).
  *
  * - Dedup within the request: if the same SKU appears more than once,
@@ -599,6 +635,7 @@ module.exports = {
 	createPart,
 	updatePart,
 	deletePart,
+	deactivatePart,
 	bulkCreateParts,
 	findDuplicateCandidates,
 	getCategories,
