@@ -165,6 +165,19 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
           completionDate: wo.completed_at ? wo.completed_at.slice(0, 10) : '',
           currentOdometer: wo.odometer_miles || '', assignedTo: wo.assigned_mechanic_user_id || ''
         });
+        // Server-computed financials (FN-1538 tax engine). These win over client estimates.
+        const laborSubtotal = Number(wo.labor_subtotal || 0);
+        const partsSubtotal = Number(wo.parts_subtotal || 0);
+        const feesSubtotal = Number(wo.fees_subtotal || 0);
+        this.workOrder.laborSubtotal = laborSubtotal;
+        this.workOrder.partsSubtotal = partsSubtotal;
+        this.workOrder.feesSubtotal = feesSubtotal;
+        this.workOrder.tax = Number(Number(wo.tax_amount || 0).toFixed(2));
+        this.workOrder.totalCost = Number(Number(wo.total_amount || 0).toFixed(2));
+        this.workOrder.actualCost = Number((laborSubtotal + partsSubtotal + feesSubtotal).toFixed(2));
+        this.workOrder.taxRatePercent = wo.tax_rate_percent != null ? Number(wo.tax_rate_percent) : null;
+        this.workOrder.taxRateOverride = wo.tax_rate_override === true;
+        this.workOrder.taxBreakdown = this.parseTaxBreakdown(wo.tax_breakdown);
         const rbn = payload.requestedBy?.username
           || (payload.requestedBy?.first_name && payload.requestedBy?.last_name
             ? `${payload.requestedBy.first_name}.${payload.requestedBy.last_name}`.toLowerCase() : '')
@@ -180,7 +193,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
         this.workOrder.labor = Array.isArray(payload.labor) && payload.labor.length
           ? payload.labor.map((l: any) => ({ ...l, mechanicName: l.mechanicName || l.mechanic_username || '', rate: l.rate ?? l.labor_rate ?? '', cost: l.cost ?? l.line_total ?? '' }))
           : [];
-        this.computeFinancials();
+        this.recomputeActualCost();
         this.populateUserDisplay(wo, this.workOrder.labor);
         if (!this.workOrder.requestedBy) this.setRequestedByFromCurrentUser();
         setTimeout(() => {
@@ -207,7 +220,7 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     this.workOrderSaveError = '';
     this.workOrderSaveSuccess = '';
     this.setRequestedByFromCurrentUser();
-    this.computeFinancials();
+    this.recomputeActualCost();
 
     const laborLines = (this.workOrder.labor || []).map((line: any) => {
       if (line?.mechanicId) return line;
@@ -232,7 +245,8 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
       fees: this.workOrder.fees || [],
       discountType: this.workOrder.discountType,
       discountValue: this.workOrder.discountValue,
-      taxRatePercent: this.workOrder.taxRatePercent ?? this.partsTaxRate
+      taxRatePercent: this.workOrder.taxRatePercent ?? this.partsTaxRate,
+      taxRateOverride: this.workOrder.taxRateOverride === true
     };
 
     const save$ = this.isEditMode && this.workOrderId
@@ -334,17 +348,25 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     }
   }
 
-  private computeFinancials(): void {
+  // Pre-save sanity calc for Actual Cost only. Tax + Total are server-computed
+  // by the FN-1538 state-aware engine; loadWorkOrder copies tax_amount /
+  // total_amount onto the model after each save.
+  private recomputeActualCost(): void {
     const labor = (this.workOrder.labor || []).reduce((s: number, l: any) => s + (Number(l.cost) || Number(l.line_total) || 0), 0);
     const parts = (this.workOrderParts || []).reduce((s: number, l: any) => {
       const lt = Number(l.line_total); if (!Number.isNaN(lt) && lt > 0) return s + lt;
       return s + ((Number(l.qty_issued) || 0) * (Number(l.unit_price) || 0));
     }, 0);
-    const tax = parts * (this.partsTaxRate / 100), total = labor + parts;
-    this.workOrder.actualCost = Number(total.toFixed(2));
-    this.workOrder.tax = Number(tax.toFixed(2));
-    this.workOrder.totalCost = Number((total + tax).toFixed(2));
-    this.workOrder.taxRatePercent = this.partsTaxRate;
+    const fees = (this.workOrder.fees || []).reduce((s: number, f: any) => s + (Number(f.amount) || 0), 0);
+    this.workOrder.actualCost = Number((labor + parts + fees).toFixed(2));
+  }
+
+  private parseTaxBreakdown(raw: any): any {
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch { return null; }
+    }
+    return raw;
   }
 
   private setRequestedByFromCurrentUser(): void {
