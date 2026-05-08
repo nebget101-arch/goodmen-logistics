@@ -80,8 +80,8 @@ router.get('/', authMiddleware, async (req, res) => {
 			.leftJoin('users as posted_user', 'receiving_tickets.posted_by', 'posted_user.id')
 			.select(
 				'receiving_tickets.*',
-				'created_user.name as created_by_name',
-				'posted_user.name as posted_by_name'
+				db.raw("COALESCE(created_user.first_name || ' ' || created_user.last_name, '') AS created_by_name"),
+				db.raw("COALESCE(posted_user.first_name || ' ' || posted_user.last_name, '') AS posted_by_name")
 			)
 			.orderBy('receiving_tickets.created_at', 'desc');
 
@@ -164,7 +164,7 @@ router.get('/draft', authMiddleware, async (req, res) => {
 			.leftJoin('users as created_user', 'receiving_tickets.created_by', 'created_user.id')
 			.select(
 				'receiving_tickets.*',
-				'created_user.name as created_by_name'
+				db.raw("COALESCE(created_user.first_name || ' ' || created_user.last_name, '') AS created_by_name")
 			)
 			.orderBy('receiving_tickets.created_at', 'desc')
 			.first();
@@ -332,8 +332,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
 			.leftJoin('users as posted_user', 'receiving_tickets.posted_by', 'posted_user.id')
 			.select(
 				'receiving_tickets.*',
-				'created_user.name as created_by_name',
-				'posted_user.name as posted_by_name'
+				db.raw("COALESCE(created_user.first_name || ' ' || created_user.last_name, '') AS created_by_name"),
+				db.raw("COALESCE(posted_user.first_name || ' ' || posted_user.last_name, '') AS posted_by_name")
 			)
 			.first();
 

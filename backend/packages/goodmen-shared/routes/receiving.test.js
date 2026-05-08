@@ -55,7 +55,17 @@ class FakeQuery {
     return this;
   }
   andWhere(...args) { return this.where(...args); }
-  leftJoin() { return this; }
+  leftJoin(tableSpec, leftCol, rightCol) {
+    const parts = String(tableSpec).split(/\s+as\s+/i);
+    this.joins.push({
+      table: parts[0].trim(),
+      alias: parts[1] ? parts[1].trim() : parts[0].trim(),
+      leftCol,
+      rightCol,
+      outer: true
+    });
+    return this;
+  }
   join(tableSpec, leftCol, rightCol) {
     const parts = String(tableSpec).split(/\s+as\s+/i);
     this.joins.push({
@@ -104,6 +114,9 @@ class FakeQuery {
           const k = j.rightCol.includes('.') ? j.rightCol.split('.').pop() : j.rightCol;
           return rr[k] === lkey;
         });
+        if (matches.length === 0 && j.outer) {
+          return [{ ...combined, [j.alias]: null, [j.table]: null }];
+        }
         return matches.map((m) => ({ ...combined, [j.alias]: m, [j.table]: m }));
       });
     }
@@ -132,9 +145,11 @@ class FakeQuery {
     if (this.countAlias) {
       return [{ [this.countAlias]: rows.length }];
     }
-    if (this.rawCols.length > 0) {
+    const aggRaws = this.rawCols.filter((raw) => /count\([^)]+\)\s+as\s+"?\w+"?/i.test(raw)
+      || /coalesce\(sum\([^)]+\),\s*0\)\s+as\s+"?\w+"?/i.test(raw));
+    if (aggRaws.length > 0) {
       const result = {};
-      for (const raw of this.rawCols) {
+      for (const raw of aggRaws) {
         const c = raw.match(/count\(([^)]+)\)\s+as\s+"?(\w+)"?/i);
         if (c) {
           result[c[2]] = rows.length;
@@ -155,7 +170,20 @@ class FakeQuery {
       const out = {};
       Object.assign(out, r[this.alias] || r[this.table] || {});
       for (const j of this.joins) {
-        if (r[j.alias]) Object.assign(out, r[j.alias]);
+        if (r[j.alias]) {
+          for (const [k, v] of Object.entries(r[j.alias])) {
+            if (!(k in out)) out[k] = v;
+          }
+        }
+      }
+      for (const raw of this.rawCols) {
+        const m = raw.match(/COALESCE\(\s*(\w+)\.(\w+)\s*\|\|\s*'([^']*)'\s*\|\|\s*(\w+)\.(\w+)\s*,\s*'([^']*)'\s*\)\s+AS\s+(\w+)/i);
+        if (m) {
+          const [, a1, c1, sep, a2, c2, fallback, outName] = m;
+          const v1 = r[a1] ? r[a1][c1] : undefined;
+          const v2 = r[a2] ? r[a2][c2] : undefined;
+          out[outName] = (v1 == null || v2 == null) ? fallback : `${v1}${sep}${v2}`;
+        }
       }
       return out;
     });
@@ -190,6 +218,9 @@ function buildApp(state) {
     knex: makeKnex(state)
   });
 
+  // Receiving captures the db ref at module load. Re-evaluate so each
+  // buildApp() call wires the route to the latest state's knex.
+  delete require.cache[require.resolve('./receiving')];
   const router = require('./receiving');
   const app = express();
   app.use(express.json());
@@ -241,8 +272,8 @@ describe('receiving routes — DRAFT-resume + today summary (FN-1482)', () => {
       receiving_tickets: [],
       receiving_ticket_lines: [],
       users: [
-        { id: 'mock-user-id', name: 'Alice' },
-        { id: 'u-other', name: 'Bob' }
+        { id: 'mock-user-id', first_name: 'Alice', last_name: 'Smith' },
+        { id: 'u-other', first_name: 'Bob', last_name: 'Jones' }
       ],
       parts: [
         { id: 'p1', sku: 'SKU-A', name: 'Part A', uom: 'EA', default_cost: 10 }
@@ -362,6 +393,143 @@ describe('receiving routes — DRAFT-resume + today summary (FN-1482)', () => {
       assert.strictEqual(res.body.data.totalTickets, 2);
       assert.strictEqual(res.body.data.totalLines, 3);
       assert.strictEqual(res.body.data.totalParts, 15);
+    });
+  });
+});
+
+/**
+ * FN-1504: Tests for the user-name joins on GET /, GET /draft, GET /:id.
+ * These endpoints used to select `created_user.name` / `posted_user.name`,
+ * which 500'd in Postgres because the users table has no `name` column.
+ * They now use `COALESCE(first_name || ' ' || last_name, '')`.
+ */
+describe('receiving routes — user-name joins (FN-1504)', () => {
+  let state;
+  let server;
+
+  before(async () => {
+    state = {
+      receiving_tickets: [],
+      receiving_ticket_lines: [],
+      users: [
+        { id: 'mock-user-id', first_name: 'Alice', last_name: 'Smith' },
+        { id: 'u-poster', first_name: 'Carol', last_name: 'Davis' }
+      ],
+      parts: [
+        { id: 'p1', sku: 'SKU-A', name: 'Part A', uom: 'EA', default_cost: 10 }
+      ]
+    };
+    const app = buildApp(state);
+    server = await startServer(app);
+  });
+
+  after(() => { if (server) server.close(); });
+
+  beforeEach(() => {
+    state.receiving_tickets = [];
+    state.receiving_ticket_lines = [];
+  });
+
+  describe('GET /:id', () => {
+    it('returns 200 with populated created_by_name and posted_by_name when both users exist', async () => {
+      state.receiving_tickets = [
+        {
+          id: 't-1',
+          location_id: 'loc-1',
+          status: 'POSTED',
+          created_by: 'mock-user-id',
+          posted_by: 'u-poster',
+          ticket_number: 'RCV-1'
+        }
+      ];
+
+      const res = await request(server, { method: 'GET', path: '/api/receiving/t-1' });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.success, true);
+      assert.strictEqual(res.body.data.id, 't-1');
+      assert.strictEqual(res.body.data.created_by_name, 'Alice Smith');
+      assert.strictEqual(res.body.data.posted_by_name, 'Carol Davis');
+    });
+
+    it('returns 200 with empty posted_by_name when posted_by is null (DRAFT)', async () => {
+      state.receiving_tickets = [
+        {
+          id: 't-draft',
+          location_id: 'loc-1',
+          status: 'DRAFT',
+          created_by: 'mock-user-id',
+          posted_by: null,
+          ticket_number: 'RCV-DRAFT'
+        }
+      ];
+
+      const res = await request(server, { method: 'GET', path: '/api/receiving/t-draft' });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.data.created_by_name, 'Alice Smith');
+      assert.strictEqual(res.body.data.posted_by_name, '');
+    });
+
+    it('returns 200 with empty names when neither user FK matches a user', async () => {
+      state.receiving_tickets = [
+        {
+          id: 't-orphan',
+          location_id: 'loc-1',
+          status: 'DRAFT',
+          created_by: 'unknown-user',
+          posted_by: null,
+          ticket_number: 'RCV-ORPHAN'
+        }
+      ];
+
+      const res = await request(server, { method: 'GET', path: '/api/receiving/t-orphan' });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.data.created_by_name, '');
+      assert.strictEqual(res.body.data.posted_by_name, '');
+    });
+  });
+
+  describe('GET / (list)', () => {
+    it('returns 200 with populated created_by_name and posted_by_name for each ticket', async () => {
+      state.receiving_tickets = [
+        {
+          id: 't-list-1',
+          location_id: 'loc-1',
+          status: 'POSTED',
+          created_by: 'mock-user-id',
+          posted_by: 'u-poster',
+          created_at: '2026-05-07T10:00:00Z',
+          ticket_number: 'RCV-LIST-1'
+        }
+      ];
+
+      const res = await request(server, { method: 'GET', path: '/api/receiving?locationId=loc-1' });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.success, true);
+      assert.strictEqual(res.body.data.length, 1);
+      assert.strictEqual(res.body.data[0].id, 't-list-1');
+      assert.strictEqual(res.body.data[0].created_by_name, 'Alice Smith');
+      assert.strictEqual(res.body.data[0].posted_by_name, 'Carol Davis');
+    });
+  });
+
+  describe('GET /draft', () => {
+    it('returns 200 with populated created_by_name on the open DRAFT', async () => {
+      state.receiving_tickets = [
+        {
+          id: 't-d',
+          location_id: 'loc-1',
+          status: 'DRAFT',
+          created_by: 'mock-user-id',
+          posted_by: null,
+          created_at: '2026-05-07T10:00:00Z',
+          ticket_number: 'RCV-D'
+        }
+      ];
+
+      const res = await request(server, { method: 'GET', path: '/api/receiving/draft?locationId=loc-1' });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.data.id, 't-d');
+      assert.strictEqual(res.body.data.created_by_name, 'Alice Smith');
     });
   });
 });
