@@ -1,0 +1,78 @@
+<div class="li-step-panel">
+  <div class="li-step-heading">
+    <h2>Validate Rows</h2>
+    <p>Each row is checked against your mapping. Rows flagged <em>needs review</em> import as drafts; <em>error</em> rows are skipped.</p>
+  </div>
+
+  <div class="li-loading-state" *ngIf="loading">
+    <div class="li-spinner"></div> Staging and validating rows…
+  </div>
+
+  <div class="li-error-banner" *ngIf="error && !loading">
+    <span class="material-symbols-outlined">error</span> {{ error }}
+  </div>
+
+  <div *ngIf="!loading && result">
+    <div class="li-validation-summary">
+      <div class="li-vsummary-chip green">
+        <span class="material-symbols-outlined">check_circle</span>
+        <strong>{{ result.okCount }}</strong> OK
+      </div>
+      <div class="li-vsummary-chip yellow">
+        <span class="material-symbols-outlined">flag</span>
+        <strong>{{ result.needsReviewCount }}</strong> Needs review
+      </div>
+      <div class="li-vsummary-chip red">
+        <span class="material-symbols-outlined">error</span>
+        <strong>{{ result.errorCount }}</strong> Error
+      </div>
+    </div>
+
+    <div class="li-row-list" *ngIf="result.rows?.length">
+      <div class="li-row-list-header">
+        <span>Row</span>
+        <span>Status</span>
+        <span>Load #</span>
+        <span>Pickup</span>
+        <span>Delivery</span>
+        <span>Rate</span>
+      </div>
+      <ng-container *ngFor="let row of result.rows">
+        <div class="li-row-list-row"
+             [class.expanded]="isExpanded(row)"
+             (click)="toggleRow(row)">
+          <span>{{ row.rowNumber }}</span>
+          <span><span class="li-row-pill" [ngClass]="row.outcome">{{ row.outcome }}</span></span>
+          <span>{{ row.loadNumber || '—' }}</span>
+          <span>{{ row.pickupCity || '—' }}</span>
+          <span>{{ row.deliveryCity || '—' }}</span>
+          <span>{{ row.rate || '—' }}</span>
+        </div>
+        <div class="li-row-detail"
+             *ngIf="isExpanded(row) && ((row.errors && row.errors.length) || (row.warnings && row.warnings.length))">
+          <div *ngIf="row.errors && row.errors.length">
+            <strong>Errors:</strong>
+            <ul>
+              <li class="error" *ngFor="let e of row.errors">{{ e }}</li>
+            </ul>
+          </div>
+          <div *ngIf="row.warnings && row.warnings.length" style="margin-top: 6px;">
+            <strong>Warnings:</strong>
+            <ul>
+              <li class="warn" *ngFor="let w of row.warnings">{{ w }}</li>
+            </ul>
+          </div>
+        </div>
+      </ng-container>
+    </div>
+  </div>
+
+  <div class="li-step-footer" *ngIf="!loading">
+    <button type="button" class="li-btn-ghost" (click)="back.emit()">
+      <span class="material-symbols-outlined">arrow_back</span> Back
+    </button>
+    <button type="button" class="li-btn-primary" (click)="next.emit()" [disabled]="!canProceed">
+      Continue to Commit <span class="material-symbols-outlined">arrow_forward</span>
+    </button>
+  </div>
+</div>

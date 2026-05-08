@@ -123,6 +123,17 @@
         <span class="material-symbols-outlined">bookmark</span>
         Templates
       </button>
+      <!-- FN-1594: entry point to the spreadsheet-import wizard. -->
+      <button
+        type="button"
+        class="btn btn-secondary btn-templates"
+        (click)="navigateToImport()"
+        *appHasPermission="'loads.create'"
+        data-testid="loads-import-from-spreadsheet"
+      >
+        <span class="material-symbols-outlined">upload_file</span>
+        Import from spreadsheet
+      </button>
     </div>
   </div>
 

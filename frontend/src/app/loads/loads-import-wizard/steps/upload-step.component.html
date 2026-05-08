@@ -1,0 +1,43 @@
+<div class="li-step-panel">
+  <div class="li-step-heading">
+    <h2>Upload Spreadsheet</h2>
+    <p>Drop a <strong>CSV</strong> or <strong>Excel</strong> file (.xlsx / .xls). Max 15 MB.</p>
+  </div>
+
+  <div class="li-drop-zone"
+       [class.drag-over]="dragOver"
+       [class.has-file]="!!file"
+       (dragover)="onDragOver($event)"
+       (dragleave)="onDragLeave()"
+       (drop)="onDrop($event)">
+    <div class="li-drop-inner" *ngIf="!file">
+      <span class="material-symbols-outlined li-drop-icon">upload_file</span>
+      <p>Drag &amp; drop your file here</p>
+      <span class="li-drop-or">or</span>
+      <label class="li-browse-btn">
+        Browse Files
+        <input type="file" accept=".csv,.xlsx,.xls" (change)="onFileChange($event)" hidden />
+      </label>
+    </div>
+
+    <div class="li-drop-inner" *ngIf="file">
+      <span class="material-symbols-outlined li-drop-icon green">check_circle</span>
+      <p class="li-file-name">{{ file.name }}</p>
+      <span class="li-file-size">{{ fileSizeKb(file) }} KB</span>
+      <label class="li-browse-btn li-browse-btn--ghost">
+        Change File
+        <input type="file" accept=".csv,.xlsx,.xls" (change)="onFileChange($event)" hidden />
+      </label>
+    </div>
+  </div>
+
+  <div class="li-error-banner" *ngIf="error">
+    <span class="material-symbols-outlined">error</span> {{ error }}
+  </div>
+
+  <div class="li-step-footer">
+    <button type="button" class="li-btn-primary" (click)="next.emit()" [disabled]="!file">
+      Analyze with AI <span class="material-symbols-outlined">arrow_forward</span>
+    </button>
+  </div>
+</div>
