@@ -964,6 +964,16 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/work-orders/${id}/parts/${partLineId}/return`, { qtyToReturn });
   }
 
+  patchWorkOrderPart(id: string, partLineId: string, payload: {
+    qtyRequested?: number;
+    qtyReserved?: number;
+    qtyIssued?: number;
+    unitPrice?: number;
+    taxable?: boolean;
+  }): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/work-orders/${id}/parts/${partLineId}`, payload);
+  }
+
   listWorkOrders(filters?: any): Observable<any> {
     const params = new URLSearchParams();
     if (filters) {
