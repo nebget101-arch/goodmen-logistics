@@ -126,7 +126,7 @@ router.post('/login', async (req, res) => {
  *       content:
  *         application/json:
  *           schema:
-    const isGlobalAdmin = roles.includes('super_admin');
+ *             type: object
  *             required: [email]
  *             properties:
  *               email:
