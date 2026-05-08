@@ -219,16 +219,17 @@ export class MaintenanceComponent implements OnInit, OnDestroy {
   }
 
   loadDriversAsMechanics(): void {
+    type MechanicRow = { id: string; firstName?: string; lastName?: string; email?: string };
     this.apiService.getDrivers().subscribe({
-      next: (res: { rows?: { id: string; first_name?: string; last_name?: string }[]; data?: { id: string; first_name?: string; last_name?: string }[] } | { id: string; first_name?: string; last_name?: string }[]) => {
+      next: (res: { rows?: MechanicRow[]; data?: MechanicRow[] } | MechanicRow[]) => {
         const list = Array.isArray(res)
           ? res
-          : (res as { rows?: { id: string; first_name?: string; last_name?: string }[] }).rows
-            || (res as { data?: { id: string; first_name?: string; last_name?: string }[] }).data
+          : (res as { rows?: MechanicRow[] }).rows
+            || (res as { data?: MechanicRow[] }).data
             || [];
-        this.mechanics = list.map((d: { id: string; first_name?: string; last_name?: string }) => ({
+        this.mechanics = list.map((d: MechanicRow) => ({
           id: d.id,
-          name: [d.first_name, d.last_name].filter(Boolean).join(' ') || d.id
+          name: [d.firstName, d.lastName].filter(Boolean).join(' ') || d.email || d.id
         }));
         this.cdr.markForCheck();
       }
