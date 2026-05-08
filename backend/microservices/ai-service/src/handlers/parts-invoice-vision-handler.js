@@ -58,12 +58,14 @@ Extract the vendor identity and EVERY line item, returning a JSON object with th
       "qty": <number>,
       "unitCost": <number>,
       "manufacturer": "<brand / manufacturer if listed, or empty string>",
+      "category": "<one of: Brakes | Filters | Electrical | Fluids | Engine | Tires | Body | Other, or null>",
       "confidence": {
         "sku": <0.0 to 1.0>,
         "description": <0.0 to 1.0>,
         "qty": <0.0 to 1.0>,
         "unitCost": <0.0 to 1.0>,
-        "manufacturer": <0.0 to 1.0>
+        "manufacturer": <0.0 to 1.0>,
+        "category": <0.0 to 1.0>
       }
     }
   ],
@@ -78,7 +80,22 @@ Extract the vendor identity and EVERY line item, returning a JSON object with th
 4. If a field is genuinely not present on the invoice (e.g. no manufacturer column), return "" for strings or 0 for numbers AND set the corresponding confidence to 0.
 5. Vendor should be the supplier (who issued the invoice), not the customer / "bill to" / "ship to".
 6. If the invoice is unreadable (blank, blurry beyond use, wrong document type, or contains no parts) return vendor = "" and lineItems = [], and explain in warnings.
-7. Return ONLY valid JSON. No markdown fences, no explanatory text.`;
+7. Return ONLY valid JSON. No markdown fences, no explanatory text.
+
+## Category classification
+
+For each line item, infer a single best-guess category for downstream catalog filtering. Choose ONE label from this fixed vocabulary:
+
+- "Brakes" — pads, rotors, calipers, drums, brake fluid lines, ABS sensors.
+- "Filters" — oil, air, fuel, cabin, hydraulic, transmission filters.
+- "Electrical" — batteries, alternators, starters, sensors, wiring, lights, fuses.
+- "Fluids" — oil, coolant, transmission fluid, DEF, washer fluid, grease.
+- "Engine" — engine internals, gaskets, belts, hoses, pulleys, water pumps, turbos.
+- "Tires" — tires, tubes, valve stems, tire chains.
+- "Body" — bumpers, mirrors, door handles, body panels, fenders, glass.
+- "Other" — anything that does not clearly belong to the categories above.
+
+Set category = null ONLY when the line is genuinely too ambiguous (blank description, unreadable text). Set confidence.category < 0.7 when the choice is a guess from a partial description; ≥ 0.85 when the description plainly fits a category (e.g. "BRAKE PAD SET" → Brakes).`;
 }
 
 function parseAiResponse(content) {
@@ -105,6 +122,13 @@ function toNumber(v, fallback = 0) {
   return fallback;
 }
 
+function normalizeCategory(raw) {
+  if (raw == null) return null;
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
 function normalizeLineItem(raw) {
   const c = raw && typeof raw.confidence === 'object' && raw.confidence !== null ? raw.confidence : {};
   return {
@@ -113,12 +137,14 @@ function normalizeLineItem(raw) {
     qty: toNumber(raw?.qty, 1),
     unitCost: toNumber(raw?.unitCost, 0),
     manufacturer: typeof raw?.manufacturer === 'string' ? raw.manufacturer.trim() : '',
+    category: normalizeCategory(raw?.category),
     confidence: {
       sku: clampConfidence(c.sku),
       description: clampConfidence(c.description),
       qty: clampConfidence(c.qty),
       unitCost: clampConfidence(c.unitCost),
       manufacturer: clampConfidence(c.manufacturer),
+      category: clampConfidence(c.category),
     },
   };
 }

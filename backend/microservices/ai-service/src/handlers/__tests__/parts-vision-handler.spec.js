@@ -271,6 +271,47 @@ function testValidateExtractionRejectsNonObject() {
   console.log('  ok  validateExtractionResult throws on non-object input');
 }
 
+function testValidateExtractionCategoryNullRoundTrip() {
+  // null category + low confidence round-trips intact (FN-1473)
+  const out = validateExtractionResult({
+    manufacturer: null,
+    partNumber: null,
+    category: null,
+    descriptionGuess: 'Indistinct part',
+    dimensionsGuess: null,
+    confidence: { manufacturer: 0, partNumber: 0, category: 0.05, description: 0.4, dimensions: 0 },
+    isUnreadable: false,
+    warnings: [],
+  });
+  assert.equal(out.category, null);
+  assert.equal(out.confidence.category, 0.05);
+
+  // string category from documented vocabulary is preserved
+  const out2 = validateExtractionResult({
+    manufacturer: 'Bosch',
+    partNumber: 'XYZ',
+    category: 'Filters',
+    descriptionGuess: 'Spin-on oil filter',
+    dimensionsGuess: null,
+    confidence: { manufacturer: 0.9, partNumber: 0.9, category: 0.95, description: 0.85, dimensions: 0 },
+    isUnreadable: false,
+    warnings: [],
+  });
+  assert.equal(out2.category, 'Filters');
+  assert.equal(out2.confidence.category, 0.95);
+
+  // empty string and whitespace coerce to null
+  const out3 = validateExtractionResult({
+    manufacturer: null,
+    partNumber: null,
+    category: '   ',
+    confidence: { category: 0.1 },
+  });
+  assert.equal(out3.category, null);
+  // eslint-disable-next-line no-console
+  console.log('  ok  validateExtractionResult round-trips category null/string and clamps confidence.category');
+}
+
 async function main() {
   // eslint-disable-next-line no-console
   console.log('parts-vision-handler tests');
@@ -278,6 +319,7 @@ async function main() {
   testConfidenceClamp();
   testValidateExtractionDefaultsAndShape();
   testValidateExtractionRejectsNonObject();
+  testValidateExtractionCategoryNullRoundTrip();
 
   await testHappyMock();
   await testLowConfidenceResponse();
