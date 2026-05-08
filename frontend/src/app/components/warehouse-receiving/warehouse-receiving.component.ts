@@ -1,6 +1,7 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ApiService } from '../../services/api.service';
 import * as QRCode from 'qrcode';
+import { QuickAddEvent } from './quick-add-panel.component';
 
 interface ReceivingLineView {
   id: string;
@@ -288,6 +289,38 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
       error: (err: any) => {
         this.error = err?.error?.error || err?.message || 'Failed to decode barcode from image';
         input.value = '';
+      }
+    });
+  }
+
+  onQuickAdd(event: QuickAddEvent): void {
+    this.clearMessages();
+    if (!this.ticket) {
+      this.error = 'Receiving ticket not ready';
+      return;
+    }
+    const ticketSnapshot = this.ticket;
+    const part = event.part;
+    const qty = event.qty;
+    const unitCost = part.default_cost != null ? Number(part.default_cost) : undefined;
+
+    this.api.addReceivingLine(ticketSnapshot.id, part.id, qty, unitCost).subscribe({
+      next: (lineRes: any) => {
+        const line = lineRes?.data;
+        const view: ReceivingLineView = {
+          id: line?.id,
+          partId: part.id,
+          sku: part.sku,
+          name: part.name,
+          qty: Number(line?.qty_received ?? qty),
+          unitCost: Number(line?.unit_cost ?? part.default_cost ?? 0),
+          binLocationOverride: line?.bin_location_override ?? null
+        };
+        ticketSnapshot.lines = [view, ...ticketSnapshot.lines];
+        this.message = `Added ${part.sku} x${qty}`;
+      },
+      error: (err: any) => {
+        this.error = err?.error?.error || err?.message || 'Failed to add line';
       }
     });
   }
