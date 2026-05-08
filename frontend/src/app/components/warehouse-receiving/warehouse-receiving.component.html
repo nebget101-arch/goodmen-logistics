@@ -105,6 +105,32 @@
   <div *ngIf="message" class="recv-banner recv-banner--success">{{ message }}</div>
   <div *ngIf="error" class="recv-banner recv-banner--error">{{ error }}</div>
 
+  <!-- FN-1562 — non-blocking reconcile prompts: one per part whose unit_cost
+       drifted from default_cost by > 1¢. Stacked above the lines table so
+       they live near the cost edit they were triggered by. -->
+  <div
+    *ngIf="costReconcilePrompts.length > 0"
+    class="recv-reconcile"
+    role="region"
+    aria-label="Default cost reconcile"
+  >
+    <div
+      *ngFor="let prompt of costReconcilePrompts; trackBy: trackByReconcile"
+      class="recv-reconcile__row"
+    >
+      <span class="recv-reconcile__msg">
+        Update <strong>{{ prompt.sku }}</strong> default cost from
+        <span class="recv-reconcile__old">${{ prompt.oldDefault | number: '1.2-2' }}</span>
+        to <span class="recv-reconcile__new">${{ prompt.newCost | number: '1.2-2' }}</span>?
+      </span>
+      <span class="recv-reconcile__actions">
+        <button type="button" class="recv-btn recv-btn--accent" (click)="onCostReconcileUpdate(prompt)">Update</button>
+        <button type="button" class="recv-btn recv-btn--ghost" (click)="onCostReconcileSkip(prompt)">Skip</button>
+        <button type="button" class="recv-btn recv-btn--ghost" (click)="onCostReconcileSkipAll()" title="Mute these prompts until you leave the page">Skip all</button>
+      </span>
+    </div>
+  </div>
+
   <div class="recv-body">
     <section class="recv-card recv-center" aria-label="Scan and lines">
       <div class="recv-scan">
@@ -197,7 +223,26 @@
                 <td class="recv-table__sku">{{ line.sku }}</td>
                 <td>{{ line.name }}</td>
                 <td class="recv-table__num">{{ line.qty }}</td>
-                <td class="recv-table__num">{{ line.unitCost | number: '1.2-2' }}</td>
+                <td class="recv-table__num">
+                  <!-- FN-1562 — DRAFT tickets allow inline cost edits; POSTED stays read-only. -->
+                  <ng-container *ngIf="ticket?.status === 'DRAFT'; else costReadOnly">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputmode="decimal"
+                      class="recv-table__cost-input"
+                      [value]="line.unitCost | number: '1.2-2'"
+                      (focus)="onLineCostFocus(line)"
+                      (blur)="onLineCostCommit(line, $any($event.target).value)"
+                      (keydown.enter)="onLineCostCommit(line, $any($event.target).value); $any($event.target).blur()"
+                      [attr.aria-label]="'Unit cost for ' + line.sku"
+                    />
+                  </ng-container>
+                  <ng-template #costReadOnly>
+                    {{ line.unitCost | number: '1.2-2' }}
+                  </ng-template>
+                </td>
                 <td class="recv-table__action">
                   <button type="button" class="recv-btn-remove" (click)="removeLine(line)">Remove</button>
                 </td>

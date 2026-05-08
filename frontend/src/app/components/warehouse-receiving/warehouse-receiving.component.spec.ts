@@ -49,7 +49,9 @@ describe('WarehouseReceivingComponent (FN-1483)', () => {
       'lookupBarcode',
       'createScanBridgeSession',
       'decodeBarcodeFromImage',
-      'getBaseUrl'
+      'getBaseUrl',
+      'updateReceivingLine',
+      'updatePartCost'
     ]);
 
     api.getLocations.and.returnValue(of({ data: mockLocations }));
@@ -203,5 +205,193 @@ describe('WarehouseReceivingComponent (FN-1483)', () => {
     fixture.detectChanges();
 
     expect(component.todaySummary).toEqual({ partsReceived: 99, ticketsPosted: 9 });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // FN-1562 — quick-add uses event.unitCost, inline cost edits, reconcile
+  // ──────────────────────────────────────────────────────────────────────
+
+  it('FN-1562: onQuickAdd posts the user-entered unitCost (not part.default_cost)', () => {
+    fixture.detectChanges();
+    api.addReceivingLine.and.returnValue(of({
+      data: { id: 'line-3', qty_received: 5, unit_cost: 12.34, bin_location_override: null }
+    }));
+
+    component.onQuickAdd({
+      part: { id: 'part-9', sku: 'SKU-9', name: 'Sensor', default_cost: 0 },
+      qty: 5,
+      unitCost: 12.34
+    });
+
+    expect(api.addReceivingLine).toHaveBeenCalledWith('tkt-1', 'part-9', 5, 12.34);
+    expect(component.lines[0]).toEqual(jasmine.objectContaining({ id: 'line-3', unitCost: 12.34 }));
+  });
+
+  it('FN-1562: surfaces a reconcile prompt when entered cost differs from default by > 1¢', () => {
+    fixture.detectChanges();
+    api.addReceivingLine.and.returnValue(of({
+      data: { id: 'line-4', qty_received: 1, unit_cost: 5, bin_location_override: null }
+    }));
+
+    component.onQuickAdd({
+      part: { id: 'part-9', sku: 'SKU-9', name: 'Sensor', default_cost: 0 },
+      qty: 1,
+      unitCost: 5
+    });
+
+    expect(component.costReconcilePrompts.length).toBe(1);
+    expect(component.costReconcilePrompts[0]).toEqual(jasmine.objectContaining({
+      partId: 'part-9',
+      sku: 'SKU-9',
+      oldDefault: 0,
+      newCost: 5
+    }));
+  });
+
+  it('FN-1562: no reconcile prompt when entered cost matches default within 1¢', () => {
+    fixture.detectChanges();
+    api.addReceivingLine.and.returnValue(of({
+      data: { id: 'line-5', qty_received: 1, unit_cost: 5, bin_location_override: null }
+    }));
+
+    component.onQuickAdd({
+      part: { id: 'part-9', sku: 'SKU-9', name: 'Sensor', default_cost: 5.005 },
+      qty: 1,
+      unitCost: 5
+    });
+
+    expect(component.costReconcilePrompts.length).toBe(0);
+  });
+
+  it('FN-1562: "Skip all this session" mutes future reconcile prompts', () => {
+    fixture.detectChanges();
+    api.addReceivingLine.and.returnValue(of({
+      data: { id: 'line-6', qty_received: 1, unit_cost: 8, bin_location_override: null }
+    }));
+
+    component.onQuickAdd({
+      part: { id: 'part-9', sku: 'SKU-9', name: 'Sensor', default_cost: 0 },
+      qty: 1,
+      unitCost: 8
+    });
+    expect(component.costReconcilePrompts.length).toBe(1);
+
+    component.onCostReconcileSkipAll();
+    expect(component.costReconcilePrompts.length).toBe(0);
+    expect(component.skipAllReconciles).toBeTrue();
+
+    // Subsequent quick-add with mismatched cost should NOT enqueue a prompt.
+    component.onQuickAdd({
+      part: { id: 'part-10', sku: 'SKU-10', name: 'Other', default_cost: 0 },
+      qty: 1,
+      unitCost: 99
+    });
+    expect(component.costReconcilePrompts.length).toBe(0);
+  });
+
+  it('FN-1562: onCostReconcileUpdate calls updatePartCost and clears the prompt', () => {
+    fixture.detectChanges();
+    api.updatePartCost.and.returnValue(of({ data: { id: 'part-9' } }));
+    component.costReconcilePrompts = [
+      { partId: 'part-9', sku: 'SKU-9', oldDefault: 0, newCost: 7.5 }
+    ];
+
+    component.onCostReconcileUpdate(component.costReconcilePrompts[0]);
+
+    expect(api.updatePartCost).toHaveBeenCalledWith('part-9', { default_cost: 7.5 });
+    expect(component.costReconcilePrompts.length).toBe(0);
+  });
+
+  it('FN-1562: inline cost edit on DRAFT line PATCHes via updateReceivingLine and surfaces reconcile', () => {
+    api.getReceivingDraft.and.returnValue(of({
+      data: {
+        ...mockDraftTicket,
+        lines: [
+          {
+            id: 'line-1',
+            part_id: 'part-1',
+            sku: 'SKU-1',
+            name: 'Existing part',
+            qty_received: 3,
+            unit_cost: 5,
+            bin_location_override: null,
+            part_default_cost: 5
+          }
+        ]
+      }
+    }));
+    api.updateReceivingLine.and.returnValue(of({ data: {} }));
+    fixture.detectChanges();
+
+    const line = component.lines[0];
+    expect(line.partDefaultCost).toBe(5);
+
+    component.onLineCostFocus(line);
+    component.onLineCostCommit(line, '7.50');
+
+    expect(api.updateReceivingLine).toHaveBeenCalledWith('tkt-1', 'line-1', { unit_cost: 7.5 });
+    expect(line.unitCost).toBe(7.5);
+    expect(component.costReconcilePrompts.length).toBe(1);
+    expect(component.costReconcilePrompts[0].partId).toBe('part-1');
+  });
+
+  it('FN-1562: inline cost edit reverts the optimistic update when PATCH fails', () => {
+    api.getReceivingDraft.and.returnValue(of({
+      data: {
+        ...mockDraftTicket,
+        lines: [
+          {
+            id: 'line-1',
+            part_id: 'part-1',
+            sku: 'SKU-1',
+            name: 'Existing part',
+            qty_received: 3,
+            unit_cost: 5,
+            bin_location_override: null
+          }
+        ]
+      }
+    }));
+    api.updateReceivingLine.and.returnValue(throwError(() => ({ error: { error: 'denied' } })));
+    fixture.detectChanges();
+
+    const line = component.lines[0];
+    component.onLineCostFocus(line);
+    component.onLineCostCommit(line, '99');
+
+    expect(line.unitCost).toBe(5); // reverted
+    expect(component.error).toBe('denied');
+  });
+
+  it('FN-1562: inline cost edit is a no-op when the value is unchanged or invalid', () => {
+    api.getReceivingDraft.and.returnValue(of({
+      data: {
+        ...mockDraftTicket,
+        lines: [
+          {
+            id: 'line-1',
+            part_id: 'part-1',
+            sku: 'SKU-1',
+            name: 'Existing part',
+            qty_received: 3,
+            unit_cost: 5,
+            bin_location_override: null
+          }
+        ]
+      }
+    }));
+    fixture.detectChanges();
+
+    const line = component.lines[0];
+
+    component.onLineCostFocus(line);
+    component.onLineCostCommit(line, '5'); // unchanged
+    expect(api.updateReceivingLine).not.toHaveBeenCalled();
+    expect(line.unitCost).toBe(5);
+
+    component.onLineCostFocus(line);
+    component.onLineCostCommit(line, 'abc'); // invalid → revert
+    expect(api.updateReceivingLine).not.toHaveBeenCalled();
+    expect(line.unitCost).toBe(5);
   });
 });
