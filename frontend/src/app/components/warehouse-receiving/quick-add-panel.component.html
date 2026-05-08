@@ -156,9 +156,6 @@
         >
           {{ part.on_hand_qty }}
         </span>
-        <span class="qap__row-cost" *ngIf="part.default_cost !== null && part.default_cost !== undefined">
-          {{ part.default_cost | number: '1.2-2' }}
-        </span>
       </span>
     </div>
     <input
@@ -172,6 +169,18 @@
       (keydown.enter)="onAddClick(part); $event.preventDefault()"
       [disabled]="disabled"
       [attr.aria-label]="'Quantity for ' + (part.sku || part.name || '')"
+    />
+    <input
+      type="number"
+      class="qap__row-cost-input"
+      min="0"
+      step="0.01"
+      inputmode="decimal"
+      [value]="getRowCost(part)"
+      (input)="setRowCost(part.id, $any($event.target).value)"
+      (keydown.enter)="onAddClick(part); $event.preventDefault()"
+      [disabled]="disabled"
+      [attr.aria-label]="'Unit cost for ' + (part.sku || part.name || '')"
     />
     <button
       #rowBtn

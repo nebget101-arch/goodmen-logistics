@@ -222,6 +222,56 @@
   color: var(--recv-danger);
 }
 
+/* ---------------- FN-1562 — Default-cost reconcile prompts ---------------- */
+.recv-reconcile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recv-reconcile__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--recv-accent-soft);
+  border: 1px solid var(--recv-accent);
+  color: var(--recv-text);
+  font-size: 13px;
+}
+
+.recv-reconcile__msg {
+  flex: 1 1 320px;
+  min-width: 0;
+  color: var(--recv-text);
+}
+
+.recv-reconcile__msg strong {
+  color: var(--recv-text-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.recv-reconcile__old {
+  color: var(--recv-text-muted);
+  text-decoration: line-through;
+  font-variant-numeric: tabular-nums;
+}
+
+.recv-reconcile__new {
+  color: var(--recv-accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.recv-reconcile__actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ---------------- 3-zone body ---------------- */
 .recv-body {
   display: grid;
@@ -455,6 +505,38 @@
 .recv-table__num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* FN-1562 — inline UNIT COST editor on DRAFT lines. Sized to fit the
+   13ch cost column (see .recv-table__col-cost) with a touch of breathing
+   room for the spinner area on focus. */
+.recv-table__cost-input {
+  width: 100%;
+  max-width: 110px;
+  appearance: none;
+  -moz-appearance: textfield;
+  background: var(--recv-bg-card-soft);
+  border: 1px solid var(--recv-border);
+  border-radius: 6px;
+  color: var(--recv-text-strong);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding: 4px 6px;
+  box-sizing: border-box;
+}
+
+.recv-table__cost-input::-webkit-outer-spin-button,
+.recv-table__cost-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.recv-table__cost-input:focus {
+  outline: none;
+  border-color: var(--recv-accent);
+  box-shadow: 0 0 0 2px var(--recv-accent-soft);
 }
 
 .recv-table__action {

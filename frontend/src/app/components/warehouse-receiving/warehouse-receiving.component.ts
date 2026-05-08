@@ -12,6 +12,21 @@ interface ReceivingLineView {
   qty: number;
   unitCost: number;
   binLocationOverride: string | null;
+  /**
+   * FN-1562 — the part's `default_cost` at the moment the line was added (or
+   * loaded). Used to drive the reconcile prompt when the line's `unit_cost`
+   * drifts from the part's stored default. May be null for older lines
+   * loaded from the server when the API didn't include it.
+   */
+  partDefaultCost: number | null;
+}
+
+/** FN-1562 — pending "Update default_cost?" prompt, one per partId. */
+interface CostReconcilePrompt {
+  partId: string;
+  sku: string;
+  oldDefault: number;
+  newCost: number;
 }
 
 interface ReceivingTicketView {
@@ -63,6 +78,12 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
   invoiceModalOpen = false;
   invoiceExtracting = false;
   invoiceResult: InvoiceUploadResult | null = null;
+
+  // FN-1562 — default-cost reconcile prompts and inline cost-edit revert map.
+  costReconcilePrompts: CostReconcilePrompt[] = [];
+  skipAllReconciles = false;
+  /** Pre-edit unit_cost per lineId, used to revert on PATCH failure. */
+  private lineCostBeforeEdit = new Map<string, number>();
 
   constructor(private api: ApiService) {}
 
@@ -145,15 +166,19 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
       vendorName: raw.vendor_name || raw.vendorName || '',
       referenceNumber: raw.reference_number || raw.referenceNumber || '',
       status: (raw.status || 'DRAFT') as 'DRAFT' | 'POSTED',
-      lines: lines.map((l: any) => ({
-        id: l.id,
-        partId: l.part_id || l.partId,
-        sku: l.sku,
-        name: l.name,
-        qty: Number(l.qty_received ?? l.qty ?? 0),
-        unitCost: Number(l.unit_cost ?? l.unitCost ?? 0),
-        binLocationOverride: l.bin_location_override ?? l.binLocationOverride ?? null
-      }))
+      lines: lines.map((l: any) => {
+        const pdc = l.part_default_cost ?? l.partDefaultCost ?? l.default_cost ?? l.defaultCost;
+        return {
+          id: l.id,
+          partId: l.part_id || l.partId,
+          sku: l.sku,
+          name: l.name,
+          qty: Number(l.qty_received ?? l.qty ?? 0),
+          unitCost: Number(l.unit_cost ?? l.unitCost ?? 0),
+          binLocationOverride: l.bin_location_override ?? l.binLocationOverride ?? null,
+          partDefaultCost: pdc != null ? Number(pdc) : null
+        };
+      })
     };
   }
 
@@ -193,7 +218,8 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
               name: part.name,
               qty: Number(line?.qty_received ?? qty),
               unitCost: Number(line?.unit_cost ?? part.default_cost ?? 0),
-              binLocationOverride: line?.bin_location_override ?? null
+              binLocationOverride: line?.bin_location_override ?? null,
+              partDefaultCost: part.default_cost != null ? Number(part.default_cost) : null
             };
             ticketSnapshot.lines = [view, ...ticketSnapshot.lines];
             this.scanCode = '';
@@ -311,7 +337,10 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
     const ticketSnapshot = this.ticket;
     const part = event.part;
     const qty = event.qty;
-    const unitCost = part.default_cost != null ? Number(part.default_cost) : undefined;
+    // FN-1562 — use the cost the user typed in the quick-add row, not the
+    // stale `default_cost` (which was the source of $0.00 receives in FN-1560).
+    const unitCost = Number(event.unitCost);
+    const partDefault = part.default_cost != null ? Number(part.default_cost) : null;
 
     this.api.addReceivingLine(ticketSnapshot.id, part.id, qty, unitCost).subscribe({
       next: (lineRes: any) => {
@@ -322,16 +351,123 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
           sku: part.sku,
           name: part.name,
           qty: Number(line?.qty_received ?? qty),
-          unitCost: Number(line?.unit_cost ?? part.default_cost ?? 0),
-          binLocationOverride: line?.bin_location_override ?? null
+          unitCost: Number(line?.unit_cost ?? unitCost),
+          binLocationOverride: line?.bin_location_override ?? null,
+          partDefaultCost: partDefault
         };
         ticketSnapshot.lines = [view, ...ticketSnapshot.lines];
         this.message = `Added ${part.sku} x${qty}`;
+        if (partDefault != null) {
+          this.maybeShowCostReconcile(part.id, part.sku, partDefault, view.unitCost);
+        }
       },
       error: (err: any) => {
         this.error = err?.error?.error || err?.message || 'Failed to add line';
       }
     });
+  }
+
+  /**
+   * FN-1562 — Inline UNIT COST edit on a DRAFT receiving line.
+   * Captures the pre-edit value so a PATCH failure can revert the optimistic
+   * update. Called from the cell input's (focus) handler.
+   */
+  onLineCostFocus(line: ReceivingLineView): void {
+    if (!line?.id) return;
+    this.lineCostBeforeEdit.set(line.id, Number(line.unitCost));
+  }
+
+  /**
+   * FN-1562 — Commit an inline UNIT COST edit on (blur) or Enter. Persists
+   * via PATCH; on success, may surface a reconcile prompt; on failure,
+   * reverts the optimistic update.
+   */
+  onLineCostCommit(line: ReceivingLineView, value: any): void {
+    if (!this.ticket || this.ticket.status !== 'DRAFT') return;
+    if (!line?.id) return;
+    const original = this.lineCostBeforeEdit.get(line.id);
+    if (original === undefined) return;
+    this.lineCostBeforeEdit.delete(line.id);
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      // Invalid — revert silently to the last known-good value.
+      line.unitCost = original;
+      return;
+    }
+    if (Math.abs(parsed - original) <= 0.0001) {
+      // No change — keep value (already what the server has).
+      line.unitCost = original;
+      return;
+    }
+
+    // Optimistic update + persist.
+    line.unitCost = parsed;
+    const ticketId = this.ticket.id;
+    const sku = line.sku;
+    this.api.updateReceivingLine(ticketId, line.id, { unit_cost: parsed }).subscribe({
+      next: () => {
+        this.message = `Updated ${sku} unit cost to $${parsed.toFixed(2)}`;
+        if (line.partDefaultCost != null) {
+          this.maybeShowCostReconcile(line.partId, sku, line.partDefaultCost, parsed);
+        }
+      },
+      error: (err: any) => {
+        line.unitCost = original;
+        this.error = err?.error?.error || err?.message || `Failed to update ${sku} unit cost`;
+      }
+    });
+  }
+
+  /**
+   * FN-1562 — If the entered/edited unit_cost differs from the part's stored
+   * default_cost by more than 1¢, surface a non-blocking reconcile prompt
+   * (deduped per partId). No-op while "Skip all this session" is active.
+   */
+  private maybeShowCostReconcile(partId: string, sku: string, oldDefault: number, newCost: number): void {
+    if (this.skipAllReconciles) return;
+    if (!Number.isFinite(newCost)) return;
+    if (Math.abs(newCost - oldDefault) <= 0.01) return;
+    // Replace any earlier prompt for the same part with the latest values.
+    this.costReconcilePrompts = [
+      ...this.costReconcilePrompts.filter(p => p.partId !== partId),
+      { partId, sku, oldDefault, newCost }
+    ];
+  }
+
+  /** FN-1562 — User accepted the reconcile prompt → push new default cost. */
+  onCostReconcileUpdate(prompt: CostReconcilePrompt): void {
+    this.api.updatePartCost(prompt.partId, { default_cost: prompt.newCost }).subscribe({
+      next: () => {
+        this.message = `Updated ${prompt.sku} default cost to $${prompt.newCost.toFixed(2)}`;
+        if (this.ticket) {
+          this.ticket.lines = this.ticket.lines.map(l =>
+            l.partId === prompt.partId ? { ...l, partDefaultCost: prompt.newCost } : l
+          );
+        }
+        this.dismissCostReconcile(prompt.partId);
+      },
+      error: (err: any) => {
+        this.error = err?.error?.error || err?.message || `Failed to update ${prompt.sku} default cost`;
+      }
+    });
+  }
+
+  /** FN-1562 — Dismiss this reconcile prompt only. */
+  onCostReconcileSkip(prompt: CostReconcilePrompt): void {
+    this.dismissCostReconcile(prompt.partId);
+  }
+
+  /** FN-1562 — Mute reconcile prompts for the rest of this page session. */
+  onCostReconcileSkipAll(): void {
+    this.skipAllReconciles = true;
+    this.costReconcilePrompts = [];
+  }
+
+  trackByReconcile = (_i: number, p: CostReconcilePrompt) => p.partId;
+
+  private dismissCostReconcile(partId: string): void {
+    this.costReconcilePrompts = this.costReconcilePrompts.filter(p => p.partId !== partId);
   }
 
   removeLine(line: ReceivingLineView): void {
