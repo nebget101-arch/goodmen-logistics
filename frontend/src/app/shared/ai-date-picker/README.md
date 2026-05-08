@@ -20,7 +20,7 @@ Shared AI-themed date field using Angular Material `MatDatepicker`. Styling alig
 
 | Input | Description |
 |-------|-------------|
-| `label` | Floating label |
+| `label` | Visible label rendered above the field (block label, not Material's floating label) |
 | `placeholder` | Input placeholder |
 | `min` / `max` | `Date` bounds for the picker |
 | `startView` | `'month'` \| `'year'` \| `'multi-year'` (default `'month'`) |
@@ -30,7 +30,7 @@ Shared AI-themed date field using Angular Material `MatDatepicker`. Styling alig
 
 Form / `ngModel` value: `YYYY-MM-DD` string or `null` (same as native `type="date"`).
 
-**Visible labels (a11y + sighted users):** Use either the `label` input (Material floating label) **or** a real HTML `<label for="inputId">` with `[label]="''"` on the picker so the control is not identified only by placeholder/`ariaLabel`.
+**Visible labels (a11y + sighted users):** Use either the `label` input (component renders a `<label for="inputId">` above the field) **or** a real HTML `<label for="inputId">` in the parent template with `[label]="''"` on the picker so the control is not identified only by placeholder/`ariaLabel`.
 
 ## Dependencies
 

@@ -3,6 +3,17 @@
   width: 100%;
 }
 
+/* External label rendered when [label] is provided. Sits above the field —
+   the dark-theme overrides below replace .mdc-notched-outline with a custom
+   border, which would otherwise clip Material's floating <mat-label>. */
+.ai-date-picker-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(203, 213, 225, 0.9);
+  margin-bottom: 6px;
+}
+
 :host(.ai-date-picker--inline) {
   display: inline-block;
   width: auto;
