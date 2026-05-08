@@ -3,6 +3,7 @@ const dtLogger = require('../utils/logger');
 const manufacturersService = require('./manufacturers.service');
 const vendorsService = require('./vendors.service');
 const { resolveBarcodeForCreate } = require('./barcode-generator');
+const { ValidationError, validateCostValue } = require('../utils/cost-validators');
 
 /**
  * FN-1098: Resolve the image-storage patch for a part insert/update.
@@ -592,12 +593,68 @@ async function getManufacturers() {
 	}
 }
 
+/**
+ * FN-1566: Reconcile a part's `default_cost` and/or `default_retail_price`
+ * after a receiving-line edit. Scoped narrowly so the warehouse-receiving
+ * "update default cost?" prompt cannot accidentally clobber other fields.
+ * Emits a `parts_cost_changed` audit log via dtLogger with old/new values,
+ * partId, performedBy, and the originating ticketId (if the FE supplied it).
+ */
+async function updatePartCostDefaults(id, patch = {}, audit = {}) {
+	if (!id) {
+		throw new ValidationError('id is required', 'id');
+	}
+
+	const update = {};
+	if (Object.prototype.hasOwnProperty.call(patch, 'default_cost')) {
+		update.default_cost = validateCostValue(patch.default_cost, 'default_cost');
+	}
+	if (Object.prototype.hasOwnProperty.call(patch, 'default_retail_price')) {
+		update.default_retail_price = validateCostValue(patch.default_retail_price, 'default_retail_price');
+	}
+	if (Object.keys(update).length === 0) {
+		throw new ValidationError(
+			'At least one of default_cost or default_retail_price is required',
+			'body'
+		);
+	}
+
+	const existing = await db('parts').where({ id }).first();
+	if (!existing) {
+		const err = new Error(`Part ${id} not found`);
+		err.statusCode = 404;
+		throw err;
+	}
+
+	const updated = (await db('parts').where({ id }).update(update).returning('*'))[0];
+
+	const changes = {};
+	for (const field of Object.keys(update)) {
+		const before = existing[field] !== null && existing[field] !== undefined
+			? Number(existing[field])
+			: null;
+		const after = update[field];
+		changes[field] = { from: before, to: after };
+	}
+
+	dtLogger.info('parts_cost_changed', {
+		partId: id,
+		sku: updated.sku,
+		performedBy: audit.performedBy || null,
+		ticketId: audit.ticketId || null,
+		changes
+	});
+
+	return updated;
+}
+
 module.exports = {
 	getParts,
 	getPartById,
 	getPartBySku,
 	createPart,
 	updatePart,
+	updatePartCostDefaults,
 	deletePart,
 	bulkCreateParts,
 	findDuplicateCandidates,

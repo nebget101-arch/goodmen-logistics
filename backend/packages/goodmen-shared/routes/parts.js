@@ -1262,6 +1262,88 @@ router.put('/:id([0-9a-fA-F-]{36})', authMiddleware, requireRole(['admin', 'part
 
 /**
  * @openapi
+ * /api/parts/{id}:
+ *   patch:
+ *     summary: Update part cost defaults
+ *     description: >-
+ *       FN-1566. Updates the part's `default_cost` and/or `default_retail_price`
+ *       — used by the warehouse-receiving "update default cost?" reconcile
+ *       prompt. Costs must be non-negative finite numbers with at most two
+ *       decimal places. Requires admin or parts_manager role. Emits a
+ *       `parts_cost_changed` audit log entry with old/new values.
+ *     tags:
+ *       - Parts
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               default_cost:
+ *                 type: number
+ *                 minimum: 0
+ *               default_retail_price:
+ *                 type: number
+ *                 minimum: 0
+ *               ticketId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Receiving ticket that triggered the reconcile (audit only).
+ *     responses:
+ *       200:
+ *         description: Part updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Validation error
+ *       403:
+ *         description: Insufficient role
+ *       404:
+ *         description: Part not found
+ */
+router.patch('/:id([0-9a-fA-F-]{36})', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
+	try {
+		const body = req.body || {};
+		const patch = {};
+		if (Object.prototype.hasOwnProperty.call(body, 'default_cost')) patch.default_cost = body.default_cost;
+		if (Object.prototype.hasOwnProperty.call(body, 'default_retail_price')) patch.default_retail_price = body.default_retail_price;
+		const part = await partsService.updatePartCostDefaults(
+			req.params.id,
+			patch,
+			{ performedBy: req.user?.id || null, ticketId: body.ticketId || null }
+		);
+		res.json({ success: true, data: part });
+	} catch (error) {
+		const status = Number(error.statusCode) || 400;
+		if (status >= 500) {
+			dtLogger.error('part_cost_update_failed', { id: req.params.id, error: error.message });
+		} else {
+			dtLogger.info('part_cost_update_rejected', { id: req.params.id, status, reason: error.message });
+		}
+		res.status(status).json({ error: error.message });
+	}
+});
+
+/**
+ * @openapi
  * /api/parts/{id}/deactivate:
  *   patch:
  *     summary: Deactivate a part
