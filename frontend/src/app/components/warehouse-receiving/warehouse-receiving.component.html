@@ -19,6 +19,27 @@
     </div>
   </header>
 
+  <!-- FN-1494 — page tabs -->
+  <nav class="recv-tabs" role="tablist" aria-label="Receiving sections">
+    <button
+      type="button"
+      role="tab"
+      class="recv-tab"
+      [class.is-active]="activeTab === 'receive'"
+      [attr.aria-selected]="activeTab === 'receive'"
+      (click)="activeTab = 'receive'"
+    >Receive</button>
+    <button
+      type="button"
+      role="tab"
+      class="recv-tab"
+      [class.is-active]="activeTab === 'activity'"
+      [attr.aria-selected]="activeTab === 'activity'"
+      (click)="activeTab = 'activity'"
+    >Activity</button>
+  </nav>
+
+  <ng-container *ngIf="activeTab === 'receive'">
   <section class="recv-card recv-ticket-card">
     <div class="recv-ticket-card__row">
       <div class="recv-field">
@@ -211,4 +232,10 @@
       </section>
     </aside>
   </div>
+  </ng-container>
+
+  <!-- FN-1494 — Activity tab -->
+  <ng-container *ngIf="activeTab === 'activity'">
+    <app-receiving-activity [locationId]="locationId"></app-receiving-activity>
+  </ng-container>
 </div>

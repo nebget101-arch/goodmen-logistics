@@ -50,6 +50,8 @@ import { ConfidenceBadgeComponent } from './components/shared/confidence-badge/c
 import { BarcodeScannerDialogComponent } from './components/shared/barcode-scanner-dialog/barcode-scanner-dialog.component';
 import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
 import { QuickAddPanelComponent } from './components/warehouse-receiving/quick-add-panel.component';
+import { ReceivingActivityComponent } from './components/warehouse-receiving/receiving-activity.component';
+import { ReceivingActivityDrawerComponent } from './components/warehouse-receiving/receiving-activity-drawer.component';
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
@@ -124,6 +126,8 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     BarcodeScannerDialogComponent,
     WarehouseReceivingComponent,
     QuickAddPanelComponent,
+    ReceivingActivityComponent,
+    ReceivingActivityDrawerComponent,
     InventoryTransfersComponent,
     DirectSalesComponent,
     InventoryReportsComponent,

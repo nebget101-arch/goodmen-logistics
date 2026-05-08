@@ -1,0 +1,275 @@
+<div class="rcv-act">
+  <!-- ── Filter bar ──────────────────────────────────────────────────────── -->
+  <section class="rcv-act-card rcv-act-filters" aria-label="Filters">
+    <div class="rcv-act-filters__chips" role="group" aria-label="Date range">
+      <button
+        type="button"
+        class="rcv-act-chip"
+        [class.is-active]="filters.preset === 'today'"
+        (click)="setPreset('today')"
+      >Today</button>
+      <button
+        type="button"
+        class="rcv-act-chip"
+        [class.is-active]="filters.preset === '7d'"
+        (click)="setPreset('7d')"
+      >7d</button>
+      <button
+        type="button"
+        class="rcv-act-chip"
+        [class.is-active]="filters.preset === '30d'"
+        (click)="setPreset('30d')"
+      >30d</button>
+      <button
+        type="button"
+        class="rcv-act-chip"
+        [class.is-active]="filters.preset === 'custom'"
+        (click)="setPreset('custom')"
+      >Custom</button>
+    </div>
+
+    <div *ngIf="filters.preset === 'custom'" class="rcv-act-filters__custom">
+      <label class="rcv-act-field">
+        <span class="rcv-act-field__label">From</span>
+        <input
+          type="datetime-local"
+          class="rcv-act-control"
+          [ngModel]="filters.from | slice:0:16"
+          (ngModelChange)="filters.from = $event ? $event + ':00Z' : null; onCustomDateChange()"
+        />
+      </label>
+      <label class="rcv-act-field">
+        <span class="rcv-act-field__label">To</span>
+        <input
+          type="datetime-local"
+          class="rcv-act-control"
+          [ngModel]="filters.to | slice:0:16"
+          (ngModelChange)="filters.to = $event ? $event + ':00Z' : null; onCustomDateChange()"
+        />
+      </label>
+    </div>
+
+    <div class="rcv-act-filters__row">
+      <label class="rcv-act-field">
+        <span class="rcv-act-field__label">User</span>
+        <input
+          type="text"
+          list="rcv-act-user-list"
+          class="rcv-act-control"
+          placeholder="Filter by user"
+          [ngModel]="filters.userId"
+          (ngModelChange)="onUserChange($event)"
+        />
+        <datalist id="rcv-act-user-list">
+          <option *ngFor="let u of users" [value]="u.id">{{ u.name }}</option>
+        </datalist>
+      </label>
+
+      <label class="rcv-act-field">
+        <span class="rcv-act-field__label">Vendor</span>
+        <input
+          type="text"
+          list="rcv-act-vendor-list"
+          class="rcv-act-control"
+          placeholder="Filter by vendor"
+          [ngModel]="filters.vendor"
+          (ngModelChange)="onVendorChange($event)"
+        />
+        <datalist id="rcv-act-vendor-list">
+          <option *ngFor="let v of byVendor" [value]="v.name">{{ v.name }} ({{ v.count }})</option>
+        </datalist>
+      </label>
+
+      <label class="rcv-act-field">
+        <span class="rcv-act-field__label">Ticket #</span>
+        <input
+          type="search"
+          class="rcv-act-control"
+          placeholder="Search current page"
+          [(ngModel)]="filters.ticketNumber"
+          (ngModelChange)="onTicketSearch()"
+        />
+      </label>
+
+      <div class="rcv-act-filters__actions">
+        <button type="button" class="rcv-act-btn rcv-act-btn--ghost" (click)="clearAllFilters()">
+          Reset
+        </button>
+        <a
+          class="rcv-act-btn rcv-act-btn--primary"
+          [href]="csvUrl()"
+          target="_blank"
+          rel="noopener"
+          download="receiving-activity.csv"
+        >Export CSV</a>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      class="rcv-act-mobile-trigger"
+      (click)="toggleMobileFilters()"
+      aria-label="Open filters"
+    >
+      Filters
+    </button>
+  </section>
+
+  <!-- ── Mobile filter sheet ─────────────────────────────────────────────── -->
+  <div
+    *ngIf="showMobileFilters"
+    class="rcv-act-mobile-sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Filters"
+    (click)="closeMobileFilters()"
+  >
+    <div class="rcv-act-mobile-sheet__panel" (click)="$event.stopPropagation()">
+      <header class="rcv-act-mobile-sheet__header">
+        <h3>Filters</h3>
+        <button type="button" class="rcv-act-mobile-sheet__close" (click)="closeMobileFilters()" aria-label="Close">×</button>
+      </header>
+      <div class="rcv-act-mobile-sheet__body">
+        <p class="rcv-act-mobile-sheet__hint">Filters apply to the table below.</p>
+        <button
+          type="button"
+          class="rcv-act-btn rcv-act-btn--ghost"
+          (click)="clearAllFilters(); closeMobileFilters()"
+        >Reset filters</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Summary tiles ───────────────────────────────────────────────────── -->
+  <section class="rcv-act-tiles" aria-label="Summary totals">
+    <div class="rcv-act-tile">
+      <div class="rcv-act-tile__label">Parts received</div>
+      <div class="rcv-act-tile__value">{{ totalParts | number: '1.0-2' }}</div>
+    </div>
+    <div class="rcv-act-tile">
+      <div class="rcv-act-tile__label">Total cost</div>
+      <div class="rcv-act-tile__value">${{ totalCost | number: '1.2-2' }}</div>
+    </div>
+    <div class="rcv-act-tile">
+      <div class="rcv-act-tile__label">Tickets</div>
+      <div class="rcv-act-tile__value">{{ total }}</div>
+    </div>
+    <div class="rcv-act-tile">
+      <div class="rcv-act-tile__label">Unique users</div>
+      <div class="rcv-act-tile__value">{{ uniqueUsers }}</div>
+    </div>
+  </section>
+
+  <!-- ── Error / loading / empty / table ─────────────────────────────────── -->
+  <div *ngIf="error" class="rcv-act-banner rcv-act-banner--error" role="alert">
+    <span>{{ error }}</span>
+    <button type="button" class="rcv-act-btn rcv-act-btn--ghost" (click)="retry()">Retry</button>
+  </div>
+
+  <section *ngIf="loading" class="rcv-act-card rcv-act-skeleton" aria-label="Loading activity">
+    <div class="rcv-act-skeleton__row" *ngFor="let _ of [1,2,3,4,5]"></div>
+  </section>
+
+  <section
+    *ngIf="!loading && !error && rows.length === 0"
+    class="rcv-act-card rcv-act-empty"
+    aria-label="No tickets"
+  >
+    <p class="rcv-act-empty__title">No posted tickets in this range</p>
+    <p class="rcv-act-empty__hint">
+      Try widening the date range or clearing user / vendor filters.
+    </p>
+    <button type="button" class="rcv-act-btn rcv-act-btn--ghost" (click)="clearAllFilters()">
+      Reset filters
+    </button>
+  </section>
+
+  <section
+    *ngIf="!loading && !error && rows.length > 0"
+    class="rcv-act-card rcv-act-table-card"
+    aria-label="Receiving activity"
+  >
+    <div class="rcv-act-table-wrap">
+      <table class="rcv-act-table">
+        <thead>
+          <tr>
+            <th>Ticket #</th>
+            <th>Posted</th>
+            <th>Vendor</th>
+            <th>Reference</th>
+            <th>Posted by</th>
+            <th class="rcv-act-num">Parts</th>
+            <th class="rcv-act-num">Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let row of visibleRows; trackBy: trackRow"
+            class="rcv-act-row"
+            tabindex="0"
+            role="button"
+            [attr.aria-label]="'Open ticket ' + row.ticketNumber"
+            (click)="openTicket(row)"
+            (keydown)="onRowKeydown($event, row)"
+          >
+            <td class="rcv-act-row__ticket">{{ row.ticketNumber }}</td>
+            <td>{{ (row.postedAt | date: 'short') || '—' }}</td>
+            <td>{{ row.vendorName || '—' }}</td>
+            <td>{{ row.referenceNumber || '—' }}</td>
+            <td>{{ row.postedByName || '—' }}</td>
+            <td class="rcv-act-num">{{ row.totalParts | number: '1.0-2' }}</td>
+            <td class="rcv-act-num">${{ row.totalCost | number: '1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Mobile cards (rendered alongside table; CSS hides one or the other) ── -->
+    <ul class="rcv-act-cards">
+      <li
+        *ngFor="let row of visibleRows; trackBy: trackRow"
+        class="rcv-act-mobile-card"
+        tabindex="0"
+        role="button"
+        [attr.aria-label]="'Open ticket ' + row.ticketNumber"
+        (click)="openTicket(row)"
+        (keydown)="onRowKeydown($event, row)"
+      >
+        <div class="rcv-act-mobile-card__head">
+          <span class="rcv-act-mobile-card__ticket">{{ row.ticketNumber }}</span>
+          <span class="rcv-act-mobile-card__date">{{ (row.postedAt | date: 'short') || '—' }}</span>
+        </div>
+        <div class="rcv-act-mobile-card__body">
+          <div><span>Vendor</span><strong>{{ row.vendorName || '—' }}</strong></div>
+          <div><span>Posted by</span><strong>{{ row.postedByName || '—' }}</strong></div>
+          <div><span>Parts</span><strong>{{ row.totalParts | number: '1.0-2' }}</strong></div>
+          <div><span>Cost</span><strong>${{ row.totalCost | number: '1.2-2' }}</strong></div>
+        </div>
+      </li>
+    </ul>
+
+    <footer class="rcv-act-pager">
+      <button
+        type="button"
+        class="rcv-act-btn rcv-act-btn--ghost"
+        (click)="prevPage()"
+        [disabled]="page <= 1"
+      >Prev</button>
+      <span class="rcv-act-pager__info">
+        Page {{ page }} of {{ totalPages }} · {{ total }} ticket{{ total === 1 ? '' : 's' }}
+      </span>
+      <button
+        type="button"
+        class="rcv-act-btn rcv-act-btn--ghost"
+        (click)="nextPage()"
+        [disabled]="page >= totalPages"
+      >Next</button>
+    </footer>
+  </section>
+
+  <app-receiving-activity-drawer
+    *ngIf="selectedTicket"
+    [ticket]="selectedTicket"
+    (close)="closeDrawer()"
+  ></app-receiving-activity-drawer>
+</div>

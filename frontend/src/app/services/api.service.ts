@@ -1548,6 +1548,54 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/receiving/summary/today${qs}`);
   }
 
+  /**
+   * FN-1493/FN-1494 — Receiving activity report. Returns paged POSTED tickets
+   * with line items expanded for the current page plus aggregations
+   * (totalParts, totalLines, totalCost, byUser, byVendor) computed across
+   * the full filtered set. Filters mirror the backend.
+   */
+  getReceivingActivity(filters: {
+    locationId?: string;
+    from?: string;
+    to?: string;
+    userId?: string;
+    vendor?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}): Observable<any> {
+    const p = new URLSearchParams();
+    if (filters.locationId) p.set('locationId', filters.locationId);
+    if (filters.from) p.set('from', filters.from);
+    if (filters.to) p.set('to', filters.to);
+    if (filters.userId) p.set('userId', filters.userId);
+    if (filters.vendor) p.set('vendor', filters.vendor);
+    if (filters.page) p.set('page', String(filters.page));
+    if (filters.pageSize) p.set('pageSize', String(filters.pageSize));
+    const qs = p.toString();
+    return this.http.get(`${this.baseUrl}/receiving/activity${qs ? '?' + qs : ''}`);
+  }
+
+  /**
+   * FN-1494 — Build the absolute URL for the streaming CSV export. Filters
+   * mirror `GET /receiving/activity` (ticket# search is client-side only).
+   */
+  getReceivingActivityCsvUrl(filters: {
+    locationId?: string;
+    from?: string;
+    to?: string;
+    userId?: string;
+    vendor?: string;
+  } = {}): string {
+    const p = new URLSearchParams();
+    if (filters.locationId) p.set('locationId', filters.locationId);
+    if (filters.from) p.set('from', filters.from);
+    if (filters.to) p.set('to', filters.to);
+    if (filters.userId) p.set('userId', filters.userId);
+    if (filters.vendor) p.set('vendor', filters.vendor);
+    const qs = p.toString();
+    return `${this.baseUrl}/receiving/activity.csv${qs ? '?' + qs : ''}`;
+  }
+
   // Adjustments
   getAdjustments(locationId: string): Observable<any> {
     return this.http.get(`${this.baseUrl}/adjustments?locationId=${locationId}`);
