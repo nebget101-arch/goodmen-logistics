@@ -244,4 +244,148 @@ describe('QuickAddInvoiceModalComponent (FN-1104)', () => {
       expect(items[1].category).toBeUndefined();
     });
   });
+
+  // FN-1472: AI prefills category, user can override, generated barcode rendered
+  describe('FN-1472 — AI category prefill + barcode in success state', () => {
+    it('prefills the Category cell from the AI lineItem and surfaces the confidence badge', () => {
+      component.aiResult = makeAiResult({
+        lineItems: [
+          {
+            sku: 'FRAM-PH7317',
+            description: 'Oil filter',
+            qty: 12,
+            unitCost: 4.5,
+            manufacturer: 'Fram',
+            category: 'Filtration',
+            confidence: {
+              sku: 0.92,
+              description: 0.9,
+              qty: 0.95,
+              unitCost: 0.85,
+              manufacturer: 0.88,
+              category: 0.81,
+            },
+          },
+        ],
+      });
+      component.ngOnChanges({
+        aiResult: { previousValue: undefined, currentValue: component.aiResult, firstChange: false, isFirstChange: () => false },
+      } as any);
+      fixture.detectChanges();
+
+      expect(component.rows[0].category).toBe('Filtration');
+      expect(component.rows[0].confidence.category).toBe(0.81);
+
+      const catInput = fixture.nativeElement.querySelector('.col-cat .cell-input') as HTMLInputElement;
+      expect(catInput.value).toBe('Filtration');
+      // The category cell is wired to the shared <datalist> so the input
+      // becomes an editable autocomplete dropdown.
+      expect(catInput.getAttribute('list')).toBe('invoice-categories');
+
+      // Confidence badge for category renders alongside the cell.
+      const catCell = fixture.nativeElement.querySelector('.col-cat');
+      expect(catCell.querySelector('app-confidence-badge')).toBeTruthy();
+    });
+
+    it('renders the parent-supplied categories into the shared <datalist>', () => {
+      component.categories = ['Filtration', 'Brakes', 'Electrical'];
+      fixture.detectChanges();
+
+      const datalist = fixture.nativeElement.querySelector('datalist#invoice-categories');
+      expect(datalist).toBeTruthy();
+      const options = datalist.querySelectorAll('option');
+      expect(options.length).toBe(3);
+      expect(Array.from(options).map((o: any) => o.value)).toEqual([
+        'Filtration',
+        'Brakes',
+        'Electrical',
+      ]);
+    });
+
+    it('lets the user override the AI-prefilled category before save and clears the badge', () => {
+      component.aiResult = makeAiResult({
+        lineItems: [
+          {
+            sku: 'FRAM-PH7317',
+            description: 'Oil filter',
+            qty: 12,
+            unitCost: 4.5,
+            manufacturer: 'Fram',
+            category: 'Filtration',
+            confidence: {
+              sku: 0.92, description: 0.9, qty: 0.95, unitCost: 0.85,
+              manufacturer: 0.88, category: 0.81,
+            },
+          },
+        ],
+      });
+      component.ngOnChanges({
+        aiResult: { previousValue: undefined, currentValue: component.aiResult, firstChange: false, isFirstChange: () => false },
+      } as any);
+      fixture.detectChanges();
+
+      const catInput = fixture.nativeElement.querySelector('.col-cat .cell-input') as HTMLInputElement;
+      catInput.value = 'Brakes';
+      catInput.dispatchEvent(new Event('input'));
+
+      expect(component.rows[0].category).toBe('Brakes');
+      // Editing clears the AI confidence on category — same pattern as
+      // sku/description so the badge disappears once the user overrides.
+      expect(component.rows[0].confidence.category).toBeUndefined();
+
+      aiPartsService.bulkCreate.and.returnValue(
+        of<BulkCreateResponse>({
+          success: true,
+          created: [{ id: 'p1', sku: 'FRAM-PH7317', name: 'Oil filter', barcode: 'FN-AB7K2QXP' }],
+          skipped: [],
+        }),
+      );
+      component.confirm();
+      const items = aiPartsService.bulkCreate.calls.mostRecent().args[0];
+      expect(items[0].category).toBe('Brakes');
+    });
+
+    it('renders the auto-generated barcode for every created row in the success state', () => {
+      aiPartsService.bulkCreate.and.returnValue(
+        of<BulkCreateResponse>({
+          success: true,
+          created: [
+            { id: 'p1', sku: 'FRAM-PH7317', name: 'Oil filter', barcode: 'FN-AB7K2QXP' },
+            { id: 'p2', sku: 'WIX-51515', name: 'Oil filter', barcode: 'FN-9XYZ4PQR' },
+          ],
+          skipped: [],
+        }),
+      );
+
+      component.confirm();
+      fixture.detectChanges();
+
+      const successRows = fixture.nativeElement.querySelectorAll('.invoice-modal-success-row');
+      expect(successRows.length).toBe(2);
+
+      const barcodes = Array.from(
+        fixture.nativeElement.querySelectorAll('.invoice-modal-success-barcode'),
+      ).map((el: any) => el.textContent.trim());
+      expect(barcodes).toEqual(['FN-AB7K2QXP', 'FN-9XYZ4PQR']);
+    });
+
+    it('marks rows without a barcode (pre-FN-1474 backend) so users see the gap explicitly', () => {
+      aiPartsService.bulkCreate.and.returnValue(
+        of<BulkCreateResponse>({
+          success: true,
+          created: [{ id: 'p1', sku: 'FRAM-PH7317', name: 'Oil filter' }],
+          skipped: [],
+        }),
+      );
+
+      component.confirm();
+      fixture.detectChanges();
+
+      const missing = fixture.nativeElement.querySelector(
+        '.invoice-modal-success-barcode--missing',
+      );
+      expect(missing).toBeTruthy();
+      expect(missing.textContent.trim()).toBe('no barcode');
+    });
+  });
 });

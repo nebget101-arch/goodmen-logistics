@@ -95,6 +95,7 @@ export interface InvoiceLineConfidence {
   qty?: number;
   unitCost?: number;
   manufacturer?: number;
+  category?: number;
 }
 
 export interface InvoiceLineItem {
@@ -103,6 +104,9 @@ export interface InvoiceLineItem {
   qty: number;
   unitCost: number;
   manufacturer: string;
+  // FN-1472/FN-1473: invoice vision handler now classifies each line. The
+  // field is optional so older response shapes still parse cleanly.
+  category?: string;
   confidence: InvoiceLineConfidence;
 }
 
@@ -147,9 +151,15 @@ export interface BulkPartSkipped {
   reason: 'duplicate_in_request' | 'sku_exists' | 'missing_sku_or_name' | string;
 }
 
+/**
+ * FN-1472: bulk-create returns the auto-generated `FN-XXXXXXXX` barcode per
+ * created row (FN-1474 routes the bulk path through `createPart()` so the
+ * FN-1400 barcode generator fires). Optional so the FE keeps rendering when
+ * deployed against a pre-FN-1474 backend.
+ */
 export interface BulkCreateResponse {
   success: boolean;
-  created: Array<{ id?: string; sku: string; name: string }>;
+  created: Array<{ id?: string; sku: string; name: string; barcode?: string }>;
   skipped: BulkPartSkipped[];
 }
 
@@ -296,12 +306,14 @@ export class AiPartsService {
       qty: typeof raw?.qty === 'number' && Number.isFinite(raw.qty) ? raw.qty : 1,
       unitCost: typeof raw?.unitCost === 'number' && Number.isFinite(raw.unitCost) ? raw.unitCost : 0,
       manufacturer: typeof raw?.manufacturer === 'string' ? raw.manufacturer : '',
+      category: typeof raw?.category === 'string' ? raw.category : undefined,
       confidence: {
         sku: typeof c.sku === 'number' ? c.sku : undefined,
         description: typeof c.description === 'number' ? c.description : undefined,
         qty: typeof c.qty === 'number' ? c.qty : undefined,
         unitCost: typeof c.unitCost === 'number' ? c.unitCost : undefined,
         manufacturer: typeof c.manufacturer === 'number' ? c.manufacturer : undefined,
+        category: typeof c.category === 'number' ? c.category : undefined,
       },
     };
   }
@@ -340,9 +352,18 @@ export class AiPartsService {
   }
 
   private normalizeBulkCreate(res: any): BulkCreateResponse {
+    const createdRaw = Array.isArray(res?.created) ? res.created : [];
     return {
       success: !!res?.success,
-      created: Array.isArray(res?.created) ? res.created : [],
+      created: createdRaw.map((row: any) => ({
+        id: typeof row?.id === 'string' ? row.id : undefined,
+        sku: typeof row?.sku === 'string' ? row.sku : '',
+        name: typeof row?.name === 'string' ? row.name : '',
+        // FN-1472: backend now returns the auto-generated `FN-XXXXXXXX`
+        // barcode per row. Pass it through verbatim; the modal renders it
+        // in the success summary so users can immediately print labels.
+        barcode: typeof row?.barcode === 'string' ? row.barcode : undefined,
+      })),
       skipped: Array.isArray(res?.skipped) ? res.skipped : [],
     };
   }
