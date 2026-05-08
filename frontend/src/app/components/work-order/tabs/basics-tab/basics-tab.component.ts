@@ -511,11 +511,26 @@ export class WoBasicsTabComponent implements OnInit, OnDestroy {
 
   private getVehicleSearchPool(): any[] {
     if (!this.workOrder.customerId) return this.vehicles;
-    const wantedId = String(this.workOrder.customerId);
-    return this.vehicles.filter((v: any) => {
-      const vid = v.shop_client_id ?? v.customer_id ?? v.customerId ?? null;
-      return vid != null && String(vid) === wantedId;
-    });
+    return this.vehicles.filter((v: any) => this.vehicleBelongsToCustomer(v, this.workOrder.customerId));
+  }
+
+  /**
+   * A vehicle belongs to a customer if:
+   *  - it's a customer_vehicles row whose owner id matches (post-rename `shop_client_id`,
+   *    or legacy `customer_id`/`customerId` for tolerance), OR
+   *  - it's a fleet vehicle whose operating_entity DOT matches the customer's DOT
+   *    (covers operator-as-customer: shop_clients and operating_entities share no FK,
+   *    only DOT — surfaced via FN-1582).
+   */
+  private vehicleBelongsToCustomer(vehicle: any, customerId: any): boolean {
+    if (!vehicle || customerId == null) return false;
+    const wantedId = String(customerId);
+    const ownerId = vehicle.shop_client_id ?? vehicle.customer_id ?? vehicle.customerId ?? null;
+    if (ownerId != null && String(ownerId) === wantedId) return true;
+    const customer = this.customers.find((c: any) => String(c.id) === wantedId);
+    const wantedDot = customer?.dot_number ? String(customer.dot_number) : null;
+    if (wantedDot && vehicle.operating_entity_dot_number && String(vehicle.operating_entity_dot_number) === wantedDot) return true;
+    return false;
   }
 
   private emptyNewCustomer(): any {
@@ -537,7 +552,7 @@ export class WoBasicsTabComponent implements OnInit, OnDestroy {
     const selectedVehicleId = this.workOrder.vehicleId;
     if (selectedVehicleId) {
       const selectedVehicle = this.vehicles.find((v: any) => String(v.id) === String(selectedVehicleId));
-      if (selectedVehicle && String(selectedVehicle.shop_client_id ?? selectedVehicle.customer_id) !== String(this.workOrder.customerId)) {
+      if (selectedVehicle && !this.vehicleBelongsToCustomer(selectedVehicle, this.workOrder.customerId)) {
         this.workOrder.vehicleId = null;
         this.vehicleSearch = '';
         this.resetVehicleDetails();

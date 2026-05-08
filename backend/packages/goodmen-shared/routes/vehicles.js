@@ -497,7 +497,8 @@ router.get('/', async (req, res) => {
         COALESCE(av.license_plate, '') AS license_plate,
         COALESCE(av.state, '') AS state,
         COALESCE(av.unit_number, '') AS unit_number,
-        oe.name AS operating_entity_name
+        oe.name AS operating_entity_name,
+        oe.dot_number AS operating_entity_dot_number
       FROM ${vehicleSource} av
       LEFT JOIN operating_entities oe ON oe.id = av.operating_entity_id
       WHERE 1=1
@@ -511,7 +512,8 @@ router.get('/', async (req, res) => {
         COALESCE(av.license_plate, '') AS license_plate,
         COALESCE(av.state, '') AS state,
         COALESCE(av.unit_number, '') AS unit_number,
-        NULL::text AS operating_entity_name
+        NULL::text AS operating_entity_name,
+        NULL::text AS operating_entity_dot_number
       FROM ${vehicleSource} av
       WHERE 1=1
     `;
