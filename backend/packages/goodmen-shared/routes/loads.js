@@ -4631,4 +4631,218 @@ router.post('/:id/recommend-driver', requireRole(['admin', 'dispatch']), async (
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FN-1590 — Spreadsheet → loads import (preview / stage / commit / list / get).
+// ─────────────────────────────────────────────────────────────────────────────
+const loadsImportService = require('../services/loads-import-service');
+
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/octet-stream',
+      'text/plain'
+    ];
+    const ext = path.extname(file.originalname || '').toLowerCase().replace('.', '');
+    if (allowed.includes(file.mimetype) || ['csv', 'xlsx', 'xls', 'txt'].includes(ext)) {
+      return cb(null, true);
+    }
+    cb(new Error('Only CSV and XLSX files are accepted'));
+  }
+});
+
+function sendImportError(res, err, fallbackMsg) {
+  const status = err && err.status ? err.status : 500;
+  return res.status(status).json({ success: false, error: err?.message || fallbackMsg });
+}
+
+/**
+ * @openapi
+ * /api/loads/import/preview:
+ *   post:
+ *     summary: Upload and preview a loads spreadsheet (CSV/XLSX)
+ *     description: Hashes the file, stores it in R2, optionally calls the AI service for column mapping, and creates a load_import_batches row in 'pending' status. Returns headers, sample rows, and the AI-suggested mapping.
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200: { description: Preview result with batchId, headers, sampleRows, columnMapping (or null on AI miss) }
+ *       400: { description: Missing file or unparseable headers }
+ *       413: { description: File exceeds Phase 1 row cap }
+ */
+router.post('/import/preview', requireRole(['admin', 'dispatch']), importUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const result = await loadsImportService.previewImport({
+      tenantId: req.context?.tenantId || null,
+      operatingEntityId: req.context?.operatingEntityId || null,
+      userId: req.user?.id || null,
+      buffer: req.file.buffer,
+      fileName: req.file.originalname,
+      fileMime: req.file.mimetype
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_preview_error', err);
+    sendImportError(res, err, 'Preview failed');
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/import/stage:
+ *   post:
+ *     summary: Apply a finalized column mapping to a previewed batch
+ *     description: Walks every row deterministically, writes per-row outcomes to load_import_rows, transitions the batch to 'staged'. No AI calls.
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [batchId, columnMapping]
+ *             properties:
+ *               batchId:                  { type: string, format: uuid }
+ *               columnMapping:            { type: object }
+ *               statusEnumMapping:        { type: object }
+ *               billingStatusEnumMapping: { type: object }
+ *               multiStopPattern:         { type: string, enum: [single, multi_row, extra_columns, free_text] }
+ *               groupByColumn:            { type: string }
+ *     responses:
+ *       200: { description: Stage summary (totalRows, ok, needsReview, errors) }
+ *       404: { description: Batch not found }
+ *       409: { description: Batch already committed or never previewed }
+ */
+router.post('/import/stage', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await loadsImportService.stageBatch({
+      tenantId: req.context?.tenantId || null,
+      operatingEntityId: req.context?.operatingEntityId || null,
+      batchId: body.batchId,
+      columnMapping: body.columnMapping,
+      statusEnumMapping: body.statusEnumMapping || {},
+      billingStatusEnumMapping: body.billingStatusEnumMapping || {},
+      multiStopPattern: body.multiStopPattern || 'single',
+      groupByColumn: body.groupByColumn || null
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_stage_error', err);
+    sendImportError(res, err, 'Stage failed');
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/import/commit/{batchId}:
+ *   post:
+ *     summary: Commit a staged loads import batch
+ *     description: Single transaction. Inserts loads + load_stops for `ok` rows, marks duplicates by per-tenant load_number collision, fuzzy-matches broker/driver/truck/trailer, applies the auto-threshold (env LOADS_IMPORT_AUTO_THRESHOLD, default 0.85) to route rows to NEW vs DRAFT+needs_review. Idempotent — re-committing returns the cached result_summary.
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: batchId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Commit summary (created, duplicates, errors) }
+ *       404: { description: Batch not found }
+ *       409: { description: Batch is not in staged status }
+ */
+router.post('/import/commit/:batchId', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const result = await loadsImportService.commitBatch({
+      tenantId: req.context?.tenantId || null,
+      operatingEntityId: req.context?.operatingEntityId || null,
+      userId: req.user?.id || null,
+      batchId: req.params.batchId,
+      autoThreshold: typeof req.body?.autoThreshold === 'number' ? req.body.autoThreshold : undefined
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_commit_error', err, { batchId: req.params.batchId });
+    sendImportError(res, err, 'Commit failed');
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/import/batches:
+ *   get:
+ *     summary: List loads import batches for the tenant
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50, maximum: 200 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *     responses:
+ *       200: { description: Batch list }
+ */
+router.get('/import/batches', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const result = await loadsImportService.listBatches({
+      tenantId: req.context?.tenantId || null,
+      operatingEntityId: req.context?.operatingEntityId || null,
+      limit: req.query.limit,
+      offset: req.query.offset
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_list_error', err);
+    sendImportError(res, err, 'Failed to list batches');
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/import/batches/{id}:
+ *   get:
+ *     summary: Get a loads import batch with row-level breakdown
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Batch detail }
+ *       404: { description: Batch not found }
+ */
+router.get('/import/batches/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ success: false, error: 'Batch not found' });
+    const result = await loadsImportService.getBatchDetail({
+      tenantId: req.context?.tenantId || null,
+      batchId: req.params.id
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_detail_error', err, { batchId: req.params.id });
+    sendImportError(res, err, 'Failed to fetch batch');
+  }
+});
+
 module.exports = router;
