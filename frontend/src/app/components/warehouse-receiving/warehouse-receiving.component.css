@@ -71,6 +71,36 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* FN-1494 — Page tabs (Receive | Activity) */
+.recv-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--recv-border);
+  padding: 0 4px;
+}
+
+.recv-tab {
+  background: transparent;
+  color: var(--recv-text-muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.recv-tab:hover { color: var(--recv-text); }
+.recv-tab:focus-visible {
+  outline: 2px solid var(--recv-accent);
+  outline-offset: 2px;
+}
+
+.recv-tab.is-active {
+  color: var(--recv-text-strong);
+  border-bottom-color: var(--recv-accent);
+}
+
 .recv-metric__label {
   font-size: 11px;
   text-transform: uppercase;

@@ -1,0 +1,99 @@
+<div *ngIf="ticket" class="rcv-act-scrim" (mousedown)="onScrimClick($event)">
+  <aside
+    #drawerPanel
+    class="rcv-act-drawer"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="'Receiving ticket ' + ticket.ticketNumber + ' detail'"
+    tabindex="-1"
+  >
+    <header class="rcv-act-drawer__header">
+      <div class="rcv-act-drawer__header-text">
+        <h2 class="rcv-act-drawer__title">Ticket {{ ticket.ticketNumber }}</h2>
+        <p class="rcv-act-drawer__subtitle">
+          {{ ticket.vendorName || '—' }}
+          <span *ngIf="ticket.referenceNumber"> · Ref {{ ticket.referenceNumber }}</span>
+        </p>
+      </div>
+      <button
+        type="button"
+        class="rcv-act-drawer__close"
+        (click)="onCloseClick()"
+        aria-label="Close drawer"
+        data-drawer-initial-focus
+      >
+        ×
+      </button>
+    </header>
+
+    <section class="rcv-act-drawer__meta" aria-label="Ticket metadata">
+      <div class="rcv-act-meta-row">
+        <span class="rcv-act-meta-row__label">Posted</span>
+        <span class="rcv-act-meta-row__value">
+          {{ (ticket.postedAt | date: 'medium') || '—' }}
+        </span>
+      </div>
+      <div class="rcv-act-meta-row">
+        <span class="rcv-act-meta-row__label">By</span>
+        <span class="rcv-act-meta-row__value">{{ ticket.postedByName || '—' }}</span>
+      </div>
+      <div class="rcv-act-meta-row">
+        <span class="rcv-act-meta-row__label">Location</span>
+        <span class="rcv-act-meta-row__value">{{ ticket.locationName || '—' }}</span>
+      </div>
+      <div class="rcv-act-meta-row" *ngIf="ticket.invoiceUrl">
+        <span class="rcv-act-meta-row__label">Invoice</span>
+        <a
+          class="rcv-act-meta-row__link"
+          [href]="ticket.invoiceUrl"
+          target="_blank"
+          rel="noopener"
+        >
+          {{ ticket.invoiceFileName || 'Open invoice' }}
+        </a>
+      </div>
+    </section>
+
+    <section class="rcv-act-drawer__totals" aria-label="Ticket totals">
+      <div class="rcv-act-total">
+        <div class="rcv-act-total__label">Total parts</div>
+        <div class="rcv-act-total__value">{{ ticket.totalParts | number: '1.0-2' }}</div>
+      </div>
+      <div class="rcv-act-total">
+        <div class="rcv-act-total__label">Total cost</div>
+        <div class="rcv-act-total__value">${{ ticket.totalCost | number: '1.2-2' }}</div>
+      </div>
+      <div class="rcv-act-total">
+        <div class="rcv-act-total__label">Lines</div>
+        <div class="rcv-act-total__value">{{ ticket.lines.length }}</div>
+      </div>
+    </section>
+
+    <section class="rcv-act-drawer__lines" aria-label="Line items">
+      <h3 class="rcv-act-drawer__section-title">Line items</h3>
+      <div *ngIf="ticket.lines.length === 0" class="rcv-act-drawer__empty">
+        No line items recorded.
+      </div>
+      <div *ngIf="ticket.lines.length > 0" class="rcv-act-drawer__table-wrap">
+        <table class="rcv-act-drawer__table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Name</th>
+              <th class="rcv-act-num">Qty</th>
+              <th class="rcv-act-num">Unit cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let line of ticket.lines; let i = index; trackBy: trackLine">
+              <td class="rcv-act-drawer__sku">{{ line.sku }}</td>
+              <td>{{ line.name }}</td>
+              <td class="rcv-act-num">{{ line.qty | number: '1.0-2' }}</td>
+              <td class="rcv-act-num">${{ line.unitCost | number: '1.2-2' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </aside>
+</div>
