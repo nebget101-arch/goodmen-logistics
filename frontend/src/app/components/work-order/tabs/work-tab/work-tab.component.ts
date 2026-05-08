@@ -23,6 +23,7 @@ export class WoWorkTabComponent implements OnDestroy {
   @Input() workOrderParts: any[] = [];
 
   @Output() reloadWorkOrder = new EventEmitter<void>();
+  @Output() financialsChanged = new EventEmitter<void>();
 
   // ─── Add Part dialog ───────────────────────────────────────────────────────
   showAddPartDialog = false;
@@ -381,8 +382,22 @@ export class WoWorkTabComponent implements OnDestroy {
               this.workOrder[key] = (updatedWo as any)[key];
             }
           }
+          // Mirror snake_case totals to the camelCase fields the Financials tab
+          // binds to. Without this, [(ngModel)]="workOrder.tax/totalCost" stays
+          // stale until the next full loadWorkOrder() round-trip.
+          const laborSubtotal = Number(updatedWo.labor_subtotal ?? this.workOrder.laborSubtotal ?? 0);
+          const partsSubtotal = Number(updatedWo.parts_subtotal ?? this.workOrder.partsSubtotal ?? 0);
+          const feesSubtotal = Number(updatedWo.fees_subtotal ?? this.workOrder.feesSubtotal ?? 0);
+          if ('tax_amount' in updatedWo) {
+            this.workOrder.tax = Number(Number(updatedWo.tax_amount || 0).toFixed(2));
+          }
+          if ('total_amount' in updatedWo) {
+            this.workOrder.totalCost = Number(Number(updatedWo.total_amount || 0).toFixed(2));
+          }
+          this.workOrder.actualCost = Number((laborSubtotal + partsSubtotal + feesSubtotal).toFixed(2));
         }
         this.cdr.markForCheck();
+        this.financialsChanged.emit();
       },
       error: (err: any) => {
         line._saving = false;
@@ -621,11 +636,13 @@ export class WoWorkTabComponent implements OnDestroy {
     if (!this.workOrder.labor) { this.workOrder.labor = []; }
     this.workOrder.labor.push({});
     this.updateAssignedToFromLabor();
+    this.financialsChanged.emit();
   }
 
   removeLabor(index: number): void {
     this.workOrder.labor.splice(index, 1);
     this.updateAssignedToFromLabor();
+    this.financialsChanged.emit();
   }
 
   onMechanicLookup(index: number, lookupValue: string): void {
@@ -667,6 +684,7 @@ export class WoWorkTabComponent implements OnDestroy {
     const rate = Number(labor.rate) || 0;
     labor.cost = hours * rate;
     this.workOrder.labor[index] = labor;
+    this.financialsChanged.emit();
   }
 
   updateAssignedToFromLabor(): void {

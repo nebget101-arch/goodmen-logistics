@@ -374,17 +374,86 @@ export class WorkOrderComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Pre-save sanity calc for Actual Cost only. Tax + Total are server-computed
-  // by the FN-1538 state-aware engine; loadWorkOrder copies tax_amount /
-  // total_amount onto the model after each save.
-  private recomputeActualCost(): void {
-    const labor = (this.workOrder.labor || []).reduce((s: number, l: any) => s + (Number(l.cost) || Number(l.line_total) || 0), 0);
-    const parts = (this.workOrderParts || []).reduce((s: number, l: any) => {
+  // Client-side preview of Actual Cost / Tax / Total. Server (FN-1538 engine)
+  // is the source of truth on save; this keeps the Financials tab in sync with
+  // unsaved Work-tab edits (labor lines, override-rate changes) so the user
+  // does not have to save+reload to see the impact. recomputeFinancialsPreview
+  // is intentionally idempotent and mirrors the server's taxable-subtotal logic
+  // — when a tax_breakdown is present (loaded after a save), its taxable flags
+  // and rate drive the preview; otherwise we fall back to the legacy
+  // parts-only-at-8.5% rule that matches the server fallback.
+  recomputeFinancialsPreview(): void {
+    const labor = this.sumLaborCost();
+    const parts = this.sumPartsCost();
+    const fees = this.sumFeesAmount();
+    const subtotal = labor + parts + fees;
+    this.workOrder.actualCost = Number(subtotal.toFixed(2));
+
+    const bd = this.workOrder?.taxBreakdown || null;
+    const ratePct = this.resolveEffectiveRatePercent(bd);
+    const taxableSubtotal = this.computeTaxableSubtotal(labor, parts, fees, bd);
+
+    // Mirror server discount apportionment: discount reduces the taxable base
+    // proportionally, not in full. Without this the preview can over-tax when
+    // a percent / amount discount is applied.
+    const discountAmount = this.computeDiscountAmount(subtotal);
+    const taxableAfterDiscount = subtotal > 0
+      ? taxableSubtotal - (discountAmount * (taxableSubtotal / subtotal))
+      : taxableSubtotal;
+
+    const tax = Number(((taxableAfterDiscount * ratePct) / 100).toFixed(2));
+    this.workOrder.tax = tax;
+    this.workOrder.totalCost = Number((subtotal - discountAmount + tax).toFixed(2));
+  }
+
+  private computeDiscountAmount(subtotal: number): number {
+    const type = (this.workOrder?.discountType || 'NONE').toString().toUpperCase();
+    const val = Number(this.workOrder?.discountValue) || 0;
+    if (type === 'PERCENT') return subtotal * (val / 100);
+    if (type === 'AMOUNT') return val;
+    return 0;
+  }
+
+  private sumLaborCost(): number {
+    return (this.workOrder.labor || []).reduce((s: number, l: any) => s + (Number(l.cost) || Number(l.line_total) || 0), 0);
+  }
+
+  private sumPartsCost(): number {
+    return (this.workOrderParts || []).reduce((s: number, l: any) => {
       const lt = Number(l.line_total); if (!Number.isNaN(lt) && lt > 0) return s + lt;
       return s + ((Number(l.qty_issued) || 0) * (Number(l.unit_price) || 0));
     }, 0);
-    const fees = (this.workOrder.fees || []).reduce((s: number, f: any) => s + (Number(f.amount) || 0), 0);
-    this.workOrder.actualCost = Number((labor + parts + fees).toFixed(2));
+  }
+
+  private sumFeesAmount(): number {
+    return (this.workOrder.fees || []).reduce((s: number, f: any) => s + (Number(f.amount) || 0), 0);
+  }
+
+  private resolveEffectiveRatePercent(bd: any): number {
+    if (this.workOrder?.taxRateOverride === true) {
+      const rp = Number(this.workOrder?.taxRatePercent);
+      return Number.isFinite(rp) ? rp : 0;
+    }
+    if (bd && typeof bd.rate === 'number') return bd.rate * 100;
+    const rp = Number(this.workOrder?.taxRatePercent);
+    if (Number.isFinite(rp) && rp > 0) return rp;
+    return this.partsTaxRate;
+  }
+
+  private computeTaxableSubtotal(labor: number, parts: number, fees: number, bd: any): number {
+    if (!bd) return parts;
+    const partsTaxable = bd.parts_taxable !== false;
+    const laborTaxable = bd.labor_taxable === true;
+    const feesTaxable = bd.fees_taxable === true;
+    return (partsTaxable ? parts : 0) + (laborTaxable ? labor : 0) + (feesTaxable ? fees : 0);
+  }
+
+  // Updates Actual Cost only (labor + parts + fees). Used at load time, where
+  // the server already provided authoritative tax / total amounts and we don't
+  // want to overwrite them with a client preview.
+  private recomputeActualCost(): void {
+    const subtotal = this.sumLaborCost() + this.sumPartsCost() + this.sumFeesAmount();
+    this.workOrder.actualCost = Number(subtotal.toFixed(2));
   }
 
   private parseTaxBreakdown(raw: any): any {
