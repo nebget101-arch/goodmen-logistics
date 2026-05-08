@@ -691,6 +691,25 @@ router.get('/', authMiddleware, async (req, res) => {
  *               assignedMechanicUserId:
  *                 type: string
  *                 format: uuid
+ *               serviceCategory:
+ *                 type: string
+ *                 description: Service Details — category (FN-1518)
+ *               serviceDescription:
+ *                 type: string
+ *               problemReported:
+ *                 type: string
+ *               safetyIssue:
+ *                 type: string
+ *                 enum: [none, low, medium, high]
+ *               downtimeReason:
+ *                 type: string
+ *               roadCall:
+ *                 type: boolean
+ *                 default: false
+ *               breakdownLocation:
+ *                 type: string
+ *               estimatedDurationHours:
+ *                 type: number
  *     responses:
  *       201:
  *         description: Work order created
@@ -944,6 +963,24 @@ router.get('/:id', authMiddleware, async (req, res) => {
  *               description:
  *                 type: string
  *               odometerMiles:
+ *                 type: number
+ *               serviceCategory:
+ *                 type: string
+ *                 description: Service Details — category (FN-1518)
+ *               serviceDescription:
+ *                 type: string
+ *               problemReported:
+ *                 type: string
+ *               safetyIssue:
+ *                 type: string
+ *                 enum: [none, low, medium, high]
+ *               downtimeReason:
+ *                 type: string
+ *               roadCall:
+ *                 type: boolean
+ *               breakdownLocation:
+ *                 type: string
+ *               estimatedDurationHours:
  *                 type: number
  *     responses:
  *       200:
