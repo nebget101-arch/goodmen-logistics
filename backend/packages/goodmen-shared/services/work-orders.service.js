@@ -81,6 +81,16 @@ function normalizeStatus(value, fallback) {
   return mapped || fallback;
 }
 
+function formatUserDisplayName(user) {
+  if (!user) return null;
+  const full = [user.first_name, user.last_name]
+    .filter(Boolean)
+    .map(part => String(part).trim())
+    .filter(Boolean)
+    .join(' ');
+  return full || user.username || null;
+}
+
 function normalizeUuid(value) {
   if (value === undefined || value === null) return null;
   if (typeof value === 'string' && value.trim() === '') return null;
@@ -481,6 +491,7 @@ async function getWorkOrderById(workOrderId, context = null) {
         email: requester.email || null
       };
       workOrder.requested_by_username = requester.username;
+      workOrder.requestedBy = formatUserDisplayName(requester);
     }
   }
 
@@ -490,6 +501,7 @@ async function getWorkOrderById(workOrderId, context = null) {
     if (assignedMechanic) {
       workOrder.assigned_mechanic_username = assignedMechanic.username;
       workOrder.assigned_to = assignedMechanic.username;
+      workOrder.assignedTo = formatUserDisplayName(assignedMechanic);
     }
   }
 
@@ -546,7 +558,7 @@ async function createWorkOrder(payload, userId, context = null) {
 
     let resolvedUserId = normalizeUuid(userId);
     if (!resolvedUserId) {
-      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedBy || payload.requestedByUsername);
+      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedByUsername || payload.requestedBy);
     }
 
     const resolvedDescription = payload.description || payload.title || 'Work order';
@@ -632,7 +644,7 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
 
     let resolvedUserId = normalizeUuid(userId);
     if (!resolvedUserId) {
-      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedBy || payload.requestedByUsername);
+      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedByUsername || payload.requestedBy);
     }
 
     const costTypePatch = payload.cost_type ?? payload.costType;
@@ -1563,5 +1575,6 @@ module.exports = {
   // Exported for unit tests (FN-1538). Pure functions; no DB.
   computeWorkOrderTotals,
   loadStateTaxRule,
-  LEGACY_FALLBACK_TAX_RATE
+  LEGACY_FALLBACK_TAX_RATE,
+  formatUserDisplayName
 };
