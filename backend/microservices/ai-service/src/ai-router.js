@@ -13,6 +13,7 @@ const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handle
 const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
 const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
+const { handleLoadsSpreadsheetImport } = require('./handlers/loads-spreadsheet-handler');
 const { handleInvoiceExtract } = require('./handlers/invoice-extractor-handler');
 const { handleLoadDriverMatch } = require('./handlers/load-driver-match-handler');
 const { handleVehicleRepairHistorySummary } = require('./handlers/vehicle-repair-history-handler');
@@ -2361,6 +2362,100 @@ function buildAiRouter(deps) {
    */
   router.post('/invoice/extract', (req, res) =>
     handleInvoiceExtract(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/loads/spreadsheet-import:
+   *   post:
+   *     summary: AI loads spreadsheet column mapping (FN-1592)
+   *     description: >
+   *       Maps a spreadsheet's headers + sample rows to FleetNeuron's `loads`
+   *       schema, normalizes status / billing-status enum values, and detects
+   *       the multi-stop encoding pattern (single | multi_row | extra_columns
+   *       | free_text). Uses Anthropic Claude Sonnet 4 with prompt caching on
+   *       the system prompt block, and reuses the `load_ai_extractions` cache
+   *       table (tenant-scoped, 7-day TTL) keyed on SHA-256(stable JSON of
+   *       {headers, sampleRows}). On parse failure returns
+   *       `{ success: true, fallback: true }` instead of 5xx.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - headers
+   *               - sampleRows
+   *               - tenantId
+   *             properties:
+   *               headers:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                 description: Source spreadsheet column headers
+   *               sampleRows:
+   *                 type: array
+   *                 maxItems: 20
+   *                 items:
+   *                   type: object
+   *                 description: Up to 20 sample row objects
+   *               tenantId:
+   *                 type: string
+   *                 description: Tenant UUID for cache scoping
+   *               fileName:
+   *                 type: string
+   *                 description: Optional original filename for prompt context
+   *     responses:
+   *       200:
+   *         description: Column mapping + multi-stop pattern, or fallback envelope
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 fallback:
+   *                   type: boolean
+   *                 cacheHit:
+   *                   type: boolean
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     columnMapping:
+   *                       type: object
+   *                     statusEnumMapping:
+   *                       type: object
+   *                     billingStatusEnumMapping:
+   *                       type: object
+   *                     multiStopPattern:
+   *                       type: string
+   *                       enum: [single, multi_row, extra_columns, free_text]
+   *                     extraStopColumns:
+   *                       type: array
+   *                       items:
+   *                         type: string
+   *                     groupByColumn:
+   *                       type: string
+   *                       nullable: true
+   *                     warnings:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                     overallConfidence:
+   *                       type: number
+   *                 meta:
+   *                   type: object
+   *       400:
+   *         description: Missing or invalid headers / sampleRows / tenantId
+   */
+  router.post('/loads/spreadsheet-import', (req, res) =>
+    handleLoadsSpreadsheetImport(req, res, deps)
   );
 
   return router;

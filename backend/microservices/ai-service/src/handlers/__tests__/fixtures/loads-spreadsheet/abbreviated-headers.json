@@ -1,0 +1,19 @@
+{
+  "id": "msg_fixture_abbrev_headers",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-4-20250514",
+  "stop_reason": "end_turn",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"columnMapping\": {\n    \"load_number\":      { \"sourceHeader\": \"LD\",       \"confidence\": 0.78 },\n    \"po_number\":        { \"sourceHeader\": \"PO\",       \"confidence\": 0.72 },\n    \"rate\":             { \"sourceHeader\": \"Amt\",      \"confidence\": 0.70 },\n    \"broker_name\":      { \"sourceHeader\": \"Brkr\",     \"confidence\": 0.85 },\n    \"broker_mc\":        { \"sourceHeader\": \"MC\",       \"confidence\": 0.80 },\n    \"broker_dot\":       { \"sourceHeader\": \"DOT\",      \"confidence\": 0.80 },\n    \"pickup_city\":      { \"sourceHeader\": \"PU City\",  \"confidence\": 0.85 },\n    \"pickup_state\":     { \"sourceHeader\": \"PU St\",    \"confidence\": 0.85 },\n    \"pickup_zip\":       { \"sourceHeader\": \"PU Zip\",   \"confidence\": 0.88 },\n    \"pickup_address1\":  { \"sourceHeader\": \"PU Addr\",  \"confidence\": 0.82 },\n    \"pickup_date\":      { \"sourceHeader\": \"PU Date\",  \"confidence\": 0.90 },\n    \"delivery_city\":    { \"sourceHeader\": \"DL City\",  \"confidence\": 0.85 },\n    \"delivery_state\":   { \"sourceHeader\": \"DL St\",    \"confidence\": 0.85 },\n    \"delivery_zip\":     { \"sourceHeader\": \"DL Zip\",   \"confidence\": 0.88 },\n    \"delivery_address1\":{ \"sourceHeader\": \"DL Addr\",  \"confidence\": 0.82 },\n    \"delivery_date\":    { \"sourceHeader\": \"DL Date\",  \"confidence\": 0.90 },\n    \"driver_name\":      { \"sourceHeader\": \"Drv\",      \"confidence\": 0.78 },\n    \"truck_unit\":       { \"sourceHeader\": \"Trk\",      \"confidence\": 0.80 },\n    \"trailer_unit\":     { \"sourceHeader\": \"Trl\",      \"confidence\": 0.80 },\n    \"status\":           { \"sourceHeader\": \"Stat\",     \"confidence\": 0.75 },\n    \"billing_status\":   { \"sourceHeader\": \"Bill\",     \"confidence\": 0.65 },\n    \"notes\":            { \"sourceHeader\": null,        \"confidence\": 0    }\n  },\n  \"statusEnumMapping\": {\n    \"Del\":   \"DELIVERED\",\n    \"InTr\":  \"IN_TRANSIT\",\n    \"Disp\":  \"DISPATCHED\",\n    \"Cncl\":  \"CANCELLED\"\n  },\n  \"billingStatusEnumMapping\": {\n    \"Pd\":    \"PAID\",\n    \"Pend\":  \"PENDING\",\n    \"Inv\":   \"INVOICED\",\n    \"Fnd\":   \"FUNDED\"\n  },\n  \"multiStopPattern\": \"single\",\n  \"extraStopColumns\": [],\n  \"groupByColumn\":    null,\n  \"warnings\": [\n    { \"code\": \"ABBREVIATED_HEADERS\", \"message\": \"Source headers are heavily abbreviated; verify mappings before commit.\" }\n  ],\n  \"overallConfidence\": 0.78\n}"
+    }
+  ],
+  "usage": {
+    "input_tokens": 880,
+    "output_tokens": 590,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 720
+  }
+}

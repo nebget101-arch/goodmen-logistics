@@ -1,0 +1,19 @@
+{
+  "id": "msg_fixture_clean_headers",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-4-20250514",
+  "stop_reason": "end_turn",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"columnMapping\": {\n    \"load_number\":      { \"sourceHeader\": \"Load #\",        \"confidence\": 0.97 },\n    \"po_number\":        { \"sourceHeader\": \"PO #\",          \"confidence\": 0.95 },\n    \"rate\":             { \"sourceHeader\": \"Rate\",          \"confidence\": 0.94 },\n    \"broker_name\":      { \"sourceHeader\": \"Broker\",        \"confidence\": 0.96 },\n    \"broker_mc\":        { \"sourceHeader\": \"Broker MC\",     \"confidence\": 0.95 },\n    \"broker_dot\":       { \"sourceHeader\": null,             \"confidence\": 0   },\n    \"pickup_city\":      { \"sourceHeader\": \"Pickup City\",   \"confidence\": 0.97 },\n    \"pickup_state\":     { \"sourceHeader\": \"Pickup State\",  \"confidence\": 0.97 },\n    \"pickup_zip\":       { \"sourceHeader\": \"Pickup Zip\",    \"confidence\": 0.97 },\n    \"pickup_address1\":  { \"sourceHeader\": \"Pickup Address\", \"confidence\": 0.95 },\n    \"pickup_date\":      { \"sourceHeader\": \"Pickup Date\",   \"confidence\": 0.97 },\n    \"delivery_city\":    { \"sourceHeader\": \"Delivery City\", \"confidence\": 0.97 },\n    \"delivery_state\":   { \"sourceHeader\": \"Delivery State\",\"confidence\": 0.97 },\n    \"delivery_zip\":     { \"sourceHeader\": \"Delivery Zip\",  \"confidence\": 0.97 },\n    \"delivery_address1\":{ \"sourceHeader\": \"Delivery Address\",\"confidence\":0.95 },\n    \"delivery_date\":    { \"sourceHeader\": \"Delivery Date\", \"confidence\": 0.97 },\n    \"driver_name\":      { \"sourceHeader\": \"Driver\",        \"confidence\": 0.94 },\n    \"truck_unit\":       { \"sourceHeader\": \"Truck #\",       \"confidence\": 0.96 },\n    \"trailer_unit\":     { \"sourceHeader\": \"Trailer #\",     \"confidence\": 0.96 },\n    \"status\":           { \"sourceHeader\": \"Status\",        \"confidence\": 0.95 },\n    \"billing_status\":   { \"sourceHeader\": \"Billing Status\",\"confidence\": 0.95 },\n    \"notes\":            { \"sourceHeader\": \"Notes\",         \"confidence\": 0.92 }\n  },\n  \"statusEnumMapping\": {\n    \"Delivered\":   \"DELIVERED\",\n    \"In Transit\":  \"IN_TRANSIT\",\n    \"Dispatched\":  \"DISPATCHED\"\n  },\n  \"billingStatusEnumMapping\": {\n    \"Paid\":     \"PAID\",\n    \"Pending\":  \"PENDING\",\n    \"Invoiced\": \"INVOICED\"\n  },\n  \"multiStopPattern\": \"single\",\n  \"extraStopColumns\": [],\n  \"groupByColumn\":    null,\n  \"warnings\":         [],\n  \"overallConfidence\": 0.95\n}"
+    }
+  ],
+  "usage": {
+    "input_tokens": 850,
+    "output_tokens": 540,
+    "cache_creation_input_tokens": 720,
+    "cache_read_input_tokens": 0
+  }
+}
