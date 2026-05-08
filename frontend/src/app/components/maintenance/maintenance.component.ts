@@ -239,21 +239,30 @@ export class MaintenanceComponent implements OnInit, OnDestroy {
      STATS COMPUTATION
      ══════════════════════════════════════════════════ */
 
+  // The DB stores legacy lowercase statuses ('open', 'in_progress', 'completed', 'closed')
+  // alongside canonical uppercase values. Normalise to canonical so KPI/filter logic matches
+  // regardless of which wire format the API returns.
+  private normalizeStatus(raw: string | undefined | null): string {
+    if (!raw) return '';
+    const upper = String(raw).trim().toUpperCase();
+    return upper === 'OPEN' ? 'DRAFT' : upper;
+  }
+
   computeStats(): void {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const openStatuses = ['DRAFT', 'IN_PROGRESS', 'WAITING_PARTS'];
 
-    this.openCount = this.allWorkOrders.filter(wo => openStatuses.includes(wo.status)).length;
-    this.waitingPartsCount = this.allWorkOrders.filter(wo => wo.status === 'WAITING_PARTS').length;
+    this.openCount = this.allWorkOrders.filter(wo => openStatuses.includes(this.normalizeStatus(wo.status))).length;
+    this.waitingPartsCount = this.allWorkOrders.filter(wo => this.normalizeStatus(wo.status) === 'WAITING_PARTS').length;
     this.completedTodayCount = this.allWorkOrders.filter(wo => {
-      if (wo.status !== 'COMPLETED' || !wo.completed_at) return false;
+      if (this.normalizeStatus(wo.status) !== 'COMPLETED' || !wo.completed_at) return false;
       const d = new Date(wo.completed_at);
       d.setHours(0, 0, 0, 0);
       return d.getTime() === today.getTime();
     }).length;
     this.overdueCount = this.allWorkOrders.filter(wo => {
-      if (!openStatuses.includes(wo.status) || !wo.scheduled_date) return false;
+      if (!openStatuses.includes(this.normalizeStatus(wo.status)) || !wo.scheduled_date) return false;
       return new Date(wo.scheduled_date) < today;
     }).length;
 
@@ -278,7 +287,8 @@ export class MaintenanceComponent implements OnInit, OnDestroy {
 
     // Status filter (already applied on server, but also on client for quick chip filtering)
     if (this.filterStatus) {
-      result = result.filter(wo => wo.status === this.filterStatus);
+      const target = this.normalizeStatus(this.filterStatus);
+      result = result.filter(wo => this.normalizeStatus(wo.status) === target);
     }
 
     // Type
@@ -349,7 +359,7 @@ export class MaintenanceComponent implements OnInit, OnDestroy {
 
     if (this.quickOverdue) {
       result = result.filter(wo =>
-        openStatuses.includes(wo.status) && wo.scheduled_date && new Date(wo.scheduled_date) < today
+        openStatuses.includes(this.normalizeStatus(wo.status)) && wo.scheduled_date && new Date(wo.scheduled_date) < today
       );
     }
 
