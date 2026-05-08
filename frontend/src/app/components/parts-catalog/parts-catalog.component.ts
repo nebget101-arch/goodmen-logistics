@@ -173,7 +173,8 @@ export class PartsCatalogComponent implements OnInit, OnDestroy {
       category: ['', Validators.required],
       // Free-text manufacturer is preserved on the wire — the BE keeps it in
       // sync with manufacturer_id (FN-1093). The typeahead drives both fields.
-      manufacturer: ['', Validators.required],
+      // Optional (FN-1557): AI/invoice-uploaded parts can have empty manufacturer.
+      manufacturer: [''],
       manufacturer_id: [null as number | null],
       preferred_vendor_name: [''],
       vendor_id: [null as number | null],
