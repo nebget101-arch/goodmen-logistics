@@ -36,6 +36,9 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
   @ViewChild('scanInput') scanInput?: ElementRef<HTMLInputElement>;
   @ViewChild('decodeFileInput') decodeFileInput?: ElementRef<HTMLInputElement>;
 
+  /** FN-1494 — top-level page tabs. */
+  activeTab: 'receive' | 'activity' = 'receive';
+
   locations: any[] = [];
   locationId = '';
   scanCode = '';
