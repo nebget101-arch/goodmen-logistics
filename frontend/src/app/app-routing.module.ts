@@ -19,25 +19,23 @@ import { UserCreateComponent } from './components/user-create/user-create.compon
 import { UsersAdminComponent } from './components/users-admin/users-admin.component';
 import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
-import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
+// FN-1549: warehouse-receiving, onboarding-packet, employment-application,
+// trial-requests-admin, and fmcsa-imports are lazy-loaded via loadChildren
+// below — see their feature modules.
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
-import { OnboardingPacketComponent } from './components/onboarding-packet/onboarding-packet.component';
-import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
 import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-policy.component';
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
-import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
 import { InboundEmailSettingsComponent } from './components/admin/inbound-email-settings/inbound-email-settings.component';
-import { FmcsaImportsAdminComponent } from './components/admin/fmcsa-imports/fmcsa-imports.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 import { EmployerResponseComponent } from './public/components/employer-response/employer-response.component';
 import { PERMISSIONS } from './models/access-control.model';
-import { InternalTrialAdminGuard } from './guards/internal-trial-admin.guard';
-import { InternalTenantGuard } from './guards/internal-tenant.guard';
+// FN-1549: InternalTrialAdminGuard / InternalTenantGuard now applied inside
+// the lazy admin route modules (trial-requests-admin, fmcsa-imports).
 import { BillingAdminGuard } from './guards/billing-admin.guard';
 import { BillingComponent } from './billing/billing.component';
 import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
@@ -124,15 +122,24 @@ const routes: Routes = [
     path: 'barcodes',
     loadChildren: () => import('./components/barcode-management/barcode-management.module').then(m => m.BarcodeManagementModule)
   },
-  { path: 'receiving', component: WarehouseReceivingComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/receiving' } },
+  {
+    path: 'receiving',
+    loadChildren: () => import('./components/warehouse-receiving/warehouse-receiving.module').then(m => m.WarehouseReceivingModule)
+  },
   { path: 'inventory-transfers', component: InventoryTransfersComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-transfers' } },
   { path: 'direct-sales', component: DirectSalesComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/direct-sales' } },
   { path: 'inventory-reports', component: InventoryReportsComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-reports' } },
   { path: 'reports/auto-replenishment', component: AutoReplenishmentComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-reports' } },
-  // Employment application standalone route
-  { path: 'employment-application', component: EmploymentApplicationComponent },
-  // Public driver onboarding packet link (no AuthGuard)
-  { path: 'onboard/:packetId', component: OnboardingPacketComponent },
+  // Employment application standalone route (lazy — FN-1549)
+  {
+    path: 'employment-application',
+    loadChildren: () => import('./onboarding/employment-application/employment-application.module').then(m => m.EmploymentApplicationModule)
+  },
+  // Public driver onboarding packet link (no AuthGuard, lazy — FN-1549)
+  {
+    path: 'onboard/:packetId',
+    loadChildren: () => import('./components/onboarding-packet/onboarding-packet.module').then(m => m.OnboardingPacketModule)
+  },
   { path: 'roadside/:callId', component: PublicRoadsideComponent },
   // Public employer investigation response (no AuthGuard — token-validated)
   { path: 'employer-response/:tokenId', component: EmployerResponseComponent },
@@ -237,8 +244,7 @@ const routes: Routes = [
   },
   {
     path: 'admin/trial-requests',
-    component: TrialRequestsAdminComponent,
-    canActivate: [AuthGuard, InternalTrialAdminGuard]
+    loadChildren: () => import('./components/trial-requests-admin/trial-requests-admin.module').then(m => m.TrialRequestsAdminModule)
   },
   {
     path: 'admin/locations',
@@ -254,8 +260,7 @@ const routes: Routes = [
   },
   {
     path: 'admin/fmcsa-imports',
-    component: FmcsaImportsAdminComponent,
-    canActivate: [AuthGuard, InternalTenantGuard]
+    loadChildren: () => import('./components/admin/fmcsa-imports/fmcsa-imports.module').then(m => m.FmcsaImportsAdminModule)
   },
   // FN-1326 — dev-only severity-system preview. Excluded from production builds
   // so the route does not ship to customers; lazy-loaded so it adds zero bundle
