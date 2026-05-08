@@ -11,8 +11,13 @@
  *   2. fetchVehicleWorkOrderHistory — tenant scoping (404 case), VIN→
  *      customer_vehicles join, 50-row cap passed to SQL, windowDays passed.
  *   3. getRepairHistorySummary — happy path, AI failure surfaces, in-process
- *      cache prevents duplicate AI calls, "not enough history" pass-through.
+ *      cache prevents duplicate AI calls, "not enough history" pass-through,
+ *      transient retry path (FN-1527).
  */
+
+// FN-1527: drop the inter-attempt backoff to zero so retry assertions complete
+// quickly. Production default is 2000ms.
+process.env.AI_REPAIR_HISTORY_RETRY_BACKOFF_MS = '0';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -25,6 +30,10 @@ const dbBridge = require('../internal/db');
 const axiosCalls = [];
 let axiosResponse = { status: 200, data: { summary: 'ok', recurringIssues: [], comebackRisk: 'low' } };
 let axiosThrow = null;
+// FN-1527: optional script — when set, each call yields the next entry. An
+// entry can be either a response object or an Error (which the stub throws).
+// When the script is exhausted it falls back to the singleton axiosResponse.
+let axiosScript = null;
 
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
@@ -32,6 +41,11 @@ Module._load = function patchedLoad(request, parent, isMain) {
     return {
       post: async (url, body, opts) => {
         axiosCalls.push({ url, body, opts });
+        if (axiosScript && axiosScript.length) {
+          const next = axiosScript.shift();
+          if (next instanceof Error) throw next;
+          return next;
+        }
         if (axiosThrow) throw axiosThrow;
         return axiosResponse;
       }
@@ -395,6 +409,120 @@ test('getRepairHistorySummary: returns ai_unavailable on non-200 from ai-service
     assert.equal(result.reason, 'ai_unavailable');
     assert.equal(result.status, 503);
   });
+  // FN-1527: 503 is in the transient set, so the orchestrator should attempt
+  // the call exactly twice before giving up.
+  assert.equal(axiosCalls.length, 2, 'transient 503 triggers one retry');
+});
+
+test('getRepairHistorySummary: retries once on transient 503 then surfaces 200 (FN-1527)', async () => {
+  _resetCacheForTests();
+  axiosCalls.length = 0;
+  axiosScript = [
+    { status: 503, data: null },
+    {
+      status: 200,
+      data: { summary: 'recovered', recurringIssues: [], comebackRisk: 'low' }
+    }
+  ];
+
+  const stub = makeQueryStub([
+    { rows: [{ rel: 'all_vehicles' }] },
+    { rows: [{ vin: 'VIN-RETRY' }] },
+    { rows: [{ vehicle_uuid: 'cv-r' }] },
+    { rows: [
+      { work_order_id: 'wo-1', work_order_number: 'WO-1', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: null },
+      { work_order_id: 'wo-2', work_order_number: 'WO-2', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: null }
+    ] }
+  ]);
+
+  try {
+    await withDb(stub.fn, async () => {
+      const result = await getRepairHistorySummary('veh-r', {
+        tenantId: 'tenant-A',
+        windowDays: 365,
+        req: makeReq()
+      });
+      assert.ok(result?.ok);
+      assert.equal(result.body.summary, 'recovered');
+    });
+    assert.equal(axiosCalls.length, 2, 'first attempt + one retry');
+  } finally {
+    axiosScript = null;
+  }
+});
+
+test('getRepairHistorySummary: retries once on ECONNRESET then surfaces 200 (FN-1527)', async () => {
+  _resetCacheForTests();
+  axiosCalls.length = 0;
+  const transient = new Error('socket hang up');
+  transient.code = 'ECONNRESET';
+  axiosScript = [
+    transient,
+    {
+      status: 200,
+      data: { summary: 'recovered after ECONNRESET', recurringIssues: [], comebackRisk: 'low' }
+    }
+  ];
+
+  const stub = makeQueryStub([
+    { rows: [{ rel: 'all_vehicles' }] },
+    { rows: [{ vin: 'VIN-RST' }] },
+    { rows: [{ vehicle_uuid: 'cv-rst' }] },
+    { rows: [
+      { work_order_id: 'wo-1', work_order_number: 'WO-1', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: null },
+      { work_order_id: 'wo-2', work_order_number: 'WO-2', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: null }
+    ] }
+  ]);
+
+  try {
+    await withDb(stub.fn, async () => {
+      const result = await getRepairHistorySummary('veh-rst', {
+        tenantId: 'tenant-A',
+        windowDays: 365,
+        req: makeReq()
+      });
+      assert.ok(result?.ok);
+      assert.equal(result.body.summary, 'recovered after ECONNRESET');
+    });
+    assert.equal(axiosCalls.length, 2, 'transient throw retried once');
+  } finally {
+    axiosScript = null;
+  }
+});
+
+test('getRepairHistorySummary: ECONNREFUSED is NOT retried (FN-1527)', async () => {
+  // ECONNREFUSED usually means the service is mis-configured / down for a
+  // non-transient reason — retrying just delays the failure surface.
+  _resetCacheForTests();
+  axiosCalls.length = 0;
+  const networkError = new Error('connect ECONNREFUSED 127.0.0.1:4100');
+  networkError.code = 'ECONNREFUSED';
+  axiosThrow = networkError;
+
+  const stub = makeQueryStub([
+    { rows: [{ rel: 'all_vehicles' }] },
+    { rows: [{ vin: 'VIN-DOWN-2' }] },
+    { rows: [{ vehicle_uuid: 'cv-d2' }] },
+    { rows: [
+      { work_order_id: 'wo-1', work_order_number: 'WO-1', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: null },
+      { work_order_id: 'wo-2', work_order_number: 'WO-2', type: 'm', status: 'OPEN', title: 't', request_date: null, completion_date: null, grand_total: null }
+    ] }
+  ]);
+
+  try {
+    await withDb(stub.fn, async () => {
+      const result = await getRepairHistorySummary('veh-down-2', {
+        tenantId: 'tenant-A',
+        windowDays: 365,
+        req: makeReq()
+      });
+      assert.equal(result.ok, false);
+      assert.equal(result.reason, 'ai_unavailable');
+    });
+    assert.equal(axiosCalls.length, 1, 'ECONNREFUSED is non-transient — no retry');
+  } finally {
+    axiosThrow = null;
+  }
 });
 
 test('getRepairHistorySummary: caches successful response (no second AI call inside TTL)', async () => {

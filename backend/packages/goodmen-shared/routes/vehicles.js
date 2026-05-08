@@ -1644,6 +1644,9 @@ router.get(
         return res.status(404).json({ message: 'Vehicle not found' });
       }
       if (!result.ok) {
+        // FN-1527: tell the widget when to safely retry so the spinner timer
+        // is meaningful instead of a tight client-side loop.
+        res.set('Retry-After', '5');
         return res.status(502).json({ message: 'AI summary service unavailable' });
       }
 
