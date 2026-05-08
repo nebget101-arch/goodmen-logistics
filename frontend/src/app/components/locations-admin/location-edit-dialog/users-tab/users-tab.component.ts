@@ -77,7 +77,7 @@ export class UsersTabComponent implements OnInit, OnChanges {
     this.error = '';
     this.api.getLocationUsers(this.locationId).subscribe({
       next: (res) => {
-        this.assignedUsers = res?.data ?? [];
+        this.assignedUsers = res ?? [];
         this.loading = false;
         this.cdr.markForCheck();
       },
@@ -125,7 +125,7 @@ export class UsersTabComponent implements OnInit, OnChanges {
   }
 
   private filterSuggestions(): void {
-    const assignedIds = new Set(this.assignedUsers.map((u) => u.user_id));
+    const assignedIds = new Set(this.assignedUsers.map((u) => u.id));
     const selectedIds = new Set(this.selectedUsers.map((u) => u.id));
     const term = (this.assignSearchCtrl.value || '').toLowerCase().trim();
 
@@ -215,7 +215,7 @@ export class UsersTabComponent implements OnInit, OnChanges {
     const first = user.first_name || '';
     const last = user.last_name || '';
     const full = `${first} ${last}`.trim();
-    return full || user.username;
+    return full || user.email || '—';
   }
 
   formatTenantName(user: TenantUser): string {
@@ -232,7 +232,7 @@ export class UsersTabComponent implements OnInit, OnChanges {
   }
 
   trackByUserId(_index: number, user: LocationUserRecord): string {
-    return user.user_id;
+    return user.id;
   }
 
   trackByTenantUserId(_index: number, user: TenantUser): string {

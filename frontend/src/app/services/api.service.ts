@@ -8,8 +8,6 @@ import { LocationBin, BinFormValue, BulkBinPayload, LocationListResponse } from 
 /** Shape returned by GET /api/locations/:id/users */
 export interface LocationUserRecord {
   id: string;
-  user_id: string;
-  username: string;
   first_name: string | null;
   last_name: string | null;
   email: string | null;
@@ -155,14 +153,14 @@ export class ApiService {
 
   // ── Location Users — FN-694 / FN-700 ─────────────────────────────────────
 
-  getLocationUsers(locationId: string): Observable<{ data: LocationUserRecord[] }> {
-    return this.http.get<{ data: LocationUserRecord[] }>(
+  getLocationUsers(locationId: string): Observable<LocationUserRecord[]> {
+    return this.http.get<LocationUserRecord[]>(
       `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users`
     );
   }
 
-  assignLocationUsers(locationId: string, userIds: string[]): Observable<{ data: LocationUserRecord[] }> {
-    return this.http.post<{ data: LocationUserRecord[] }>(
+  assignLocationUsers(locationId: string, userIds: string[]): Observable<unknown> {
+    return this.http.post<unknown>(
       `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users`,
       { user_ids: userIds }
     );
