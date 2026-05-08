@@ -3,6 +3,7 @@
   *ngIf="vehicleId"
   [class.is-loading]="state === 'loading'"
   [class.is-error]="state === 'error'"
+  [class.is-unavailable]="state === 'ai_unavailable'"
   [attr.aria-busy]="state === 'loading' ? 'true' : null"
 >
   <div
@@ -23,6 +24,22 @@
       <span class="repair-history-widget__status repair-history-widget__status--error" *ngSwitchCase="'error'">
         {{ errorMessage }}
       </span>
+
+      <ng-container *ngSwitchCase="'ai_unavailable'">
+        <span class="repair-history-widget__badge repair-history-widget__badge--unavailable">
+          Service unavailable
+        </span>
+        <button
+          type="button"
+          class="repair-history-widget__retry"
+          (click)="retry($event)"
+          (keydown.enter)="retry($event)"
+          (keydown.space)="$event.preventDefault(); retry($event)"
+          aria-label="Retry loading repair history"
+        >
+          Retry
+        </button>
+      </ng-container>
 
       <ng-container *ngSwitchCase="'ready'">
         <span class="repair-history-widget__count">
