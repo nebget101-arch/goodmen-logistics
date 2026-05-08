@@ -304,6 +304,101 @@
   color: #e2e8f0;
 }
 
+/* ─── Tax field — FN-1539 ─────────────────────────────────────────────────── */
+
+.tax-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tax-info-btn,
+.tax-override-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.tax-info-btn {
+  padding: 1px 4px;
+  border-color: transparent;
+  color: #94a3b8;
+}
+
+.tax-info-btn .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.tax-info-btn:hover {
+  color: #38bdf8;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.tax-override-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: #bfdbfe;
+}
+
+.tax-revert-btn {
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fca5a5;
+}
+
+.tax-revert-btn:hover {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+}
+
+.tax-tooltip {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.tax-tooltip-title {
+  color: #93c5fd;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.tax-tooltip-body {
+  color: #cbd5e1;
+}
+
+.tax-override-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.tax-override-label {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.tax-override-input {
+  max-width: 110px;
+}
+
 /* ─── Utility ─────────────────────────────────────────────────────────────── */
 
 .text-success { color: #86efac; font-weight: 500; }

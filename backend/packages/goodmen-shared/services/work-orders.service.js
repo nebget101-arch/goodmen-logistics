@@ -178,7 +178,43 @@ function computeDueDate(issuedDate, paymentTerms, customDays) {
   return due.toISOString().slice(0, 10);
 }
 
-function computeTotalsFromLines({ laborLines, partLines, feeLines, discountType, discountValue, taxRatePercent }) {
+// Legacy fallback rate when no rule is found for a known state. See FN-1538.
+const LEGACY_FALLBACK_TAX_RATE = 0.085;
+
+function round2(value) {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Compute work-order totals + tax_breakdown using a state-aware tax engine.
+ *
+ * Per-component taxability comes from `state_tax_rules` (rule.labor_taxable,
+ * parts_taxable, fees_taxable). When no rule is available, we fall back to
+ * the legacy per-line `taxable` flag so existing data keeps producing the
+ * same numbers.
+ *
+ * Rate selection (in priority order):
+ *   1. `taxRateOverride === true`  → user-supplied `taxRatePercent / 100`
+ *   2. rule found                  → `rule.default_sales_tax_rate`
+ *   3. location has state, no rule → `LEGACY_FALLBACK_TAX_RATE` (0.085)
+ *   4. location with no state      → `LEGACY_FALLBACK_TAX_RATE` (0.085)
+ *   5. no location at all          → 0  (skip tax — spec wants warn + zero)
+ *
+ * Discounts are apportioned proportionally against the taxable subtotal so
+ * a 10% off coupon reduces the taxable base by 10%, not the whole discount.
+ */
+function computeWorkOrderTotals({
+  laborLines,
+  partLines,
+  feeLines,
+  discountType,
+  discountValue,
+  taxRatePercent,
+  taxRateOverride,
+  rule,
+  hasLocation,
+  hasState
+}) {
   const laborSubtotal = laborLines.reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0);
   const partsSubtotal = partLines.reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0);
   const feesSubtotal = feeLines.reduce((sum, l) => sum + normalizeDecimal(l.amount), 0);
@@ -190,18 +226,70 @@ function computeTotalsFromLines({ laborLines, partLines, feeLines, discountType,
     ? subtotal * (discountVal / 100)
     : (discountTypeValue === 'AMOUNT' ? discountVal : 0);
 
-  const taxableSubtotal = laborLines.filter(l => l.taxable)
-    .reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0)
-    + partLines.filter(l => l.taxable)
-      .reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0)
-    + feeLines.filter(l => l.taxable)
+  const overrideActive = taxRateOverride === true;
+
+  let rate = 0;
+  let fallbackReason = null;
+  if (overrideActive) {
+    rate = normalizeDecimal(taxRatePercent) / 100;
+  } else if (rule) {
+    rate = Number(rule.default_sales_tax_rate);
+  } else if (!hasLocation) {
+    rate = 0;
+    fallbackReason = 'no-location';
+  } else if (!hasState) {
+    rate = LEGACY_FALLBACK_TAX_RATE;
+    fallbackReason = 'no-state';
+  } else {
+    rate = LEGACY_FALLBACK_TAX_RATE;
+    fallbackReason = 'no-rule-for-state';
+  }
+
+  // Per-component taxability: rule wins. Without a rule, fall back to the
+  // legacy per-line `taxable` flag so we don't silently change historical
+  // numbers for tenants who never set up state rules.
+  let laborTaxableSubtotal;
+  let partsTaxableSubtotal;
+  let feesTaxableSubtotal;
+  if (rule) {
+    laborTaxableSubtotal = rule.labor_taxable ? laborSubtotal : 0;
+    partsTaxableSubtotal = rule.parts_taxable ? partsSubtotal : 0;
+    feesTaxableSubtotal = rule.fees_taxable ? feesSubtotal : 0;
+  } else {
+    laborTaxableSubtotal = laborLines
+      .filter((l) => l.taxable)
+      .reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0);
+    partsTaxableSubtotal = partLines
+      .filter((l) => l.taxable)
+      .reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0);
+    feesTaxableSubtotal = feeLines
+      .filter((l) => l.taxable)
       .reduce((sum, l) => sum + normalizeDecimal(l.amount), 0);
+  }
 
-  const taxRate = normalizeDecimal(taxRatePercent);
-  const taxableAfterDiscount = subtotal > 0 ? taxableSubtotal - (discountAmount * (taxableSubtotal / subtotal)) : taxableSubtotal;
-  const taxAmount = taxableAfterDiscount * (taxRate / 100);
-
+  const taxableSubtotal = laborTaxableSubtotal + partsTaxableSubtotal + feesTaxableSubtotal;
+  const taxableAfterDiscount = subtotal > 0
+    ? taxableSubtotal - (discountAmount * (taxableSubtotal / subtotal))
+    : taxableSubtotal;
+  const taxAmount = round2(taxableAfterDiscount * rate);
   const totalAmount = subtotal - discountAmount + taxAmount;
+
+  const taxBreakdown = {
+    rule_state: rule ? rule.state_code : null,
+    rate,
+    override: overrideActive,
+    fallback_reason: fallbackReason,
+    labor_taxable: rule ? rule.labor_taxable : null,
+    parts_taxable: rule ? rule.parts_taxable : null,
+    fees_taxable: rule ? rule.fees_taxable : null,
+    labor_subtotal: round2(laborSubtotal),
+    parts_subtotal: round2(partsSubtotal),
+    fees_subtotal: round2(feesSubtotal),
+    taxable_subtotal: round2(taxableSubtotal),
+    taxable_after_discount: round2(taxableAfterDiscount),
+    discount_amount: round2(discountAmount),
+    tax_amount: round2(taxAmount)
+  };
 
   return {
     laborSubtotal,
@@ -209,8 +297,22 @@ function computeTotalsFromLines({ laborLines, partLines, feeLines, discountType,
     feesSubtotal,
     discountAmount,
     taxAmount,
-    totalAmount
+    totalAmount,
+    taxBreakdown
   };
+}
+
+async function loadStateTaxRule(trx, stateCode) {
+  if (!stateCode) return null;
+  const code = String(stateCode).trim().toUpperCase();
+  if (!code) return null;
+  return trx('state_tax_rules')
+    .where('state_code', code)
+    .andWhere('effective_from', '<=', trx.fn.now())
+    .andWhere(function () {
+      this.whereNull('effective_to').orWhere('effective_to', '>=', trx.fn.now());
+    })
+    .first();
 }
 
 async function recomputeWorkOrderTotals(trx, workOrderId) {
@@ -221,13 +323,38 @@ async function recomputeWorkOrderTotals(trx, workOrderId) {
 
   if (!workOrder) throw new Error('Work order not found');
 
-  const totals = computeTotalsFromLines({
+  let location = null;
+  if (workOrder.location_id) {
+    location = await trx('locations').where({ id: workOrder.location_id }).first();
+  }
+  const stateCode = location?.state ? String(location.state).trim() : null;
+  const rule = stateCode ? await loadStateTaxRule(trx, stateCode) : null;
+
+  if (!workOrder.location_id) {
+    dtLogger.warn?.('work_order_tax_skip_no_location', { work_order_id: workOrderId });
+  } else if (!stateCode) {
+    dtLogger.warn?.('work_order_tax_legacy_no_state', {
+      work_order_id: workOrderId,
+      location_id: workOrder.location_id
+    });
+  } else if (!rule) {
+    dtLogger.warn?.('work_order_tax_legacy_no_rule_for_state', {
+      work_order_id: workOrderId,
+      state: stateCode
+    });
+  }
+
+  const totals = computeWorkOrderTotals({
     laborLines,
     partLines,
     feeLines,
     discountType: workOrder.discount_type,
     discountValue: workOrder.discount_value,
-    taxRatePercent: workOrder.tax_rate_percent
+    taxRatePercent: workOrder.tax_rate_percent,
+    taxRateOverride: workOrder.tax_rate_override === true,
+    rule,
+    hasLocation: !!workOrder.location_id,
+    hasState: !!stateCode
   });
 
   const [updated] = await trx('work_orders')
@@ -238,6 +365,7 @@ async function recomputeWorkOrderTotals(trx, workOrderId) {
       fees_subtotal: totals.feesSubtotal,
       tax_amount: totals.taxAmount,
       total_amount: totals.totalAmount,
+      tax_breakdown: JSON.stringify(totals.taxBreakdown),
       updated_at: trx.fn.now()
     })
     .returning('*');
@@ -439,6 +567,7 @@ async function createWorkOrder(payload, userId, context = null) {
       discount_type: payload.discountType || 'NONE',
       discount_value: payload.discountValue || 0,
       tax_rate_percent: payload.taxRatePercent || 0,
+      tax_rate_override: payload.taxRateOverride === true,
       scheduled_date: normalizeDateString(payload.scheduledDate),
       start_date: normalizeDateString(payload.startDate),
       completion_date: normalizeDateString(payload.completionDate),
@@ -522,6 +651,9 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
       discount_type: payload.discountType ?? workOrder.discount_type,
       discount_value: payload.discountValue ?? workOrder.discount_value,
       tax_rate_percent: payload.taxRatePercent ?? workOrder.tax_rate_percent,
+      tax_rate_override: payload.taxRateOverride === undefined
+        ? workOrder.tax_rate_override
+        : payload.taxRateOverride === true,
       ...(payload.scheduledDate !== undefined ? { scheduled_date: normalizeDateString(payload.scheduledDate) } : {}),
       ...(payload.startDate !== undefined ? { start_date: normalizeDateString(payload.startDate) } : {}),
       ...(payload.completionDate !== undefined ? { completion_date: normalizeDateString(payload.completionDate) } : {}),
@@ -1073,6 +1205,9 @@ async function updateCharges(workOrderId, payload) {
       discount_type: payload.discountType ?? workOrder.discount_type,
       discount_value: payload.discountValue ?? workOrder.discount_value,
       tax_rate_percent: payload.taxRatePercent ?? workOrder.tax_rate_percent,
+      tax_rate_override: payload.taxRateOverride === undefined
+        ? workOrder.tax_rate_override
+        : payload.taxRateOverride === true,
       updated_at: trx.fn.now()
     });
 
@@ -1424,5 +1559,9 @@ module.exports = {
   recomputeWorkOrderTotals,
   generateInvoiceForWorkOrder,
   uploadDocument,
-  normalizeDateString
+  normalizeDateString,
+  // Exported for unit tests (FN-1538). Pure functions; no DB.
+  computeWorkOrderTotals,
+  loadStateTaxRule,
+  LEGACY_FALLBACK_TAX_RATE
 };
