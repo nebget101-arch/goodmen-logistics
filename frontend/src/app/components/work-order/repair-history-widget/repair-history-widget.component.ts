@@ -6,7 +6,7 @@ import {
   VehicleService
 } from '../../../services/vehicle.service';
 
-type ViewState = 'idle' | 'loading' | 'ready' | 'error';
+type ViewState = 'idle' | 'loading' | 'ready' | 'ai_unavailable' | 'error';
 
 @Component({
   selector: 'app-wo-repair-history-widget',
@@ -36,6 +36,13 @@ export class WoRepairHistoryWidgetComponent implements OnChanges {
       return;
     }
     this.expanded = !this.expanded;
+  }
+
+  retry(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.load();
   }
 
   trackByPattern = (_: number, pattern: RepairHistoryPattern): string => pattern.label;
@@ -84,14 +91,35 @@ export class WoRepairHistoryWidgetComponent implements OnChanges {
       this.data = null;
       return;
     }
+    const vehicleId = this.vehicleId;
     this.state = 'loading';
     this.errorMessage = '';
-    this.vehicleService.getRepairHistorySummary(this.vehicleId, this.windowDays).subscribe({
+    this.vehicleService.getRepairHistorySummary(vehicleId, this.windowDays).subscribe({
       next: (res) => {
         this.data = res || null;
         this.state = 'ready';
       },
       error: (err) => {
+        const status = err?.status;
+        if (status === 404) {
+          this.data = {
+            vehicleId,
+            vin: null,
+            windowDays: this.windowDays,
+            priorWoCount: 0,
+            insufficientHistory: true,
+            patterns: []
+          };
+          this.state = 'ready';
+          this.errorMessage = '';
+          return;
+        }
+        if (status === 502) {
+          this.data = null;
+          this.state = 'ai_unavailable';
+          this.errorMessage = '';
+          return;
+        }
         this.data = null;
         this.errorMessage = err?.error?.error || err?.message || 'Failed to load repair history.';
         this.state = 'error';
