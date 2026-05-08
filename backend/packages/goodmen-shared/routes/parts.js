@@ -191,15 +191,108 @@ router.get('/template', authMiddleware, requireRole(['admin', 'parts_manager']),
  *       500:
  *         description: Server error
  */
+/**
+ * FN-1544: Normalize a raw bulk-upload row into the shape expected by
+ * `partsService.createPart` / `partsService.updatePart`.
+ */
+function normalizeBulkUploadRow(row) {
+	const sku = pick(row, ['sku', 'part_sku']).toUpperCase();
+	const name = pick(row, ['name', 'part_name']);
+	return {
+		sku,
+		name,
+		category: pick(row, ['category']),
+		manufacturer: pick(row, ['manufacturer']),
+		description: pick(row, ['description']),
+		unit_cost: toNumberOrDefault(pick(row, ['unit_cost', 'cost']), 0),
+		unit_price: toNumberOrDefault(pick(row, ['unit_price', 'price', 'default_retail_price']), 0),
+		reorder_level: toNumberOrDefault(pick(row, ['reorder_level', 'min_stock_level']), 5),
+		status: (pick(row, ['status']) || 'ACTIVE').toUpperCase(),
+		barcode_value: pick(row, ['barcode', 'barcode_value']),
+		vendor: pick(row, ['vendor']),
+		pack_qty: Math.max(1, Math.floor(toNumberOrDefault(pick(row, ['pack_qty']), 1)))
+	};
+}
+
+/**
+ * FN-1544: Process one normalized bulk-upload row by delegating part
+ * creation/update to the canonical `partsService`. This unifies the
+ * create→update contract so `PUT /api/parts/:id` behaves identically
+ * regardless of whether a part was created manually or via bulk upload.
+ *
+ * Dependencies are injected so the helper is unit-testable without
+ * standing up Express, multer, or a live database.
+ *
+ * Returns one of:
+ *   { kind: 'created'|'updated', part }
+ *   { kind: 'barcode_conflict', part, error }
+ *   { kind: 'skipped', error }
+ */
+async function processBulkUploadRow(normalizedRow, deps) {
+	const { db: dbi, partsService: svc } = deps;
+	const { sku, name, barcode_value, vendor, pack_qty, ...partFields } = normalizedRow;
+
+	if (!sku || !name) {
+		return { kind: 'skipped', error: 'sku and name are required' };
+	}
+
+	const existing = await dbi('parts')
+		.whereRaw('LOWER(sku) = LOWER(?)', [sku])
+		.first();
+
+	const partPayload = { sku, name, ...partFields };
+
+	let part;
+	let kind;
+	if (existing) {
+		part = await svc.updatePart(existing.id, partPayload);
+		kind = 'updated';
+	} else {
+		part = await svc.createPart(partPayload);
+		kind = 'created';
+	}
+
+	if (!barcode_value) {
+		return { kind, part };
+	}
+
+	const existingBarcode = await dbi('part_barcodes')
+		.whereRaw('LOWER(barcode_value) = LOWER(?)', [barcode_value])
+		.first();
+
+	if (!existingBarcode) {
+		await dbi('part_barcodes').insert({
+			barcode_value,
+			part_id: part.id,
+			pack_qty,
+			vendor: vendor || null,
+			is_active: true
+		});
+	} else if (existingBarcode.part_id === part.id) {
+		await dbi('part_barcodes')
+			.where({ id: existingBarcode.id })
+			.update({
+				pack_qty,
+				vendor: vendor || existingBarcode.vendor,
+				is_active: true
+			});
+	} else {
+		return {
+			kind: 'barcode_conflict',
+			part,
+			rowKind: kind,
+			error: `Barcode ${barcode_value} already assigned to another part`
+		};
+	}
+
+	return { kind, part };
+}
+
 router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'parts_manager']), upload.single('file'), async (req, res) => {
 	try {
 		if (!req.file?.buffer) {
 			return res.status(400).json({ error: 'file is required' });
 		}
-
-		// Check if reorder_level column exists in the database
-		const partsColumns = await db('parts').columnInfo();
-		const hasReorderLevel = 'reorder_level' in partsColumns;
 
 		const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
 		const firstSheetName = workbook.SheetNames[0];
@@ -222,102 +315,29 @@ router.post('/bulk-upload', authMiddleware, requireRole(['admin', 'parts_manager
 			errors: []
 		};
 
+		const deps = { db, partsService };
+
 		for (let i = 0; i < records.length; i += 1) {
-			const row = records[i];
 			const rowNumber = i + 2; // header row is 1
-
-			const sku = pick(row, ['sku', 'part_sku']).toUpperCase();
-			const name = pick(row, ['name', 'part_name']);
-			const category = pick(row, ['category']);
-			const manufacturer = pick(row, ['manufacturer']);
-			const description = pick(row, ['description']);
-			const barcodeValue = pick(row, ['barcode', 'barcode_value']);
-			const vendor = pick(row, ['vendor']);
-			const status = (pick(row, ['status']) || 'ACTIVE').toUpperCase();
-			const unitCost = toNumberOrDefault(pick(row, ['unit_cost', 'cost']), 0);
-			const unitPrice = toNumberOrDefault(pick(row, ['unit_price', 'price', 'default_retail_price']), 0);
-			const reorderLevel = toNumberOrDefault(pick(row, ['reorder_level', 'min_stock_level']), 5);
-			const packQty = Math.max(1, Math.floor(toNumberOrDefault(pick(row, ['pack_qty']), 1)));
-
-			if (!sku || !name) {
-				summary.skipped += 1;
-				summary.errors.push({ row: rowNumber, sku, error: 'sku and name are required' });
-				continue;
-			}
+			const normalized = normalizeBulkUploadRow(records[i]);
 
 			try {
-				const existing = await db('parts').whereRaw('LOWER(sku) = LOWER(?)', [sku]).first();
-
-				let part;
-				if (existing) {
-					const updateData = {
-						sku,
-						name,
-						category,
-						manufacturer,
-						description,
-						unit_cost: unitCost,
-						unit_price: unitPrice,
-						status
-					};
-					if (hasReorderLevel) {
-						updateData.reorder_level = reorderLevel;
-					}
-					const [updated] = await db('parts')
-						.where({ id: existing.id })
-						.update(updateData)
-						.returning('*');
-					part = updated;
-					summary.updated += 1;
-				} else {
-					const insertData = {
-						sku,
-						name,
-						category,
-						manufacturer,
-						description,
-						unit_cost: unitCost,
-						unit_price: unitPrice,
-						status
-					};
-					if (hasReorderLevel) {
-						insertData.reorder_level = reorderLevel;
-					}
-					const [created] = await db('parts')
-						.insert(insertData)
-						.returning('*');
-					part = created;
+				const outcome = await processBulkUploadRow(normalized, deps);
+				if (outcome.kind === 'skipped') {
+					summary.skipped += 1;
+					summary.errors.push({ row: rowNumber, sku: normalized.sku, error: outcome.error });
+				} else if (outcome.kind === 'created') {
 					summary.created += 1;
-				}
-
-				if (barcodeValue) {
-					const existingBarcode = await db('part_barcodes')
-						.whereRaw('LOWER(barcode_value) = LOWER(?)', [barcodeValue])
-						.first();
-
-					if (!existingBarcode) {
-						await db('part_barcodes').insert({
-							barcode_value: barcodeValue,
-							part_id: part.id,
-							pack_qty: packQty,
-							vendor: vendor || null,
-							is_active: true
-						});
-					} else if (existingBarcode.part_id === part.id) {
-						await db('part_barcodes')
-							.where({ id: existingBarcode.id })
-							.update({
-								pack_qty: packQty,
-								vendor: vendor || existingBarcode.vendor,
-								is_active: true
-							});
-					} else {
-						summary.errors.push({ row: rowNumber, sku, error: `Barcode ${barcodeValue} already assigned to another part` });
-					}
+				} else if (outcome.kind === 'updated') {
+					summary.updated += 1;
+				} else if (outcome.kind === 'barcode_conflict') {
+					if (outcome.rowKind === 'created') summary.created += 1;
+					else if (outcome.rowKind === 'updated') summary.updated += 1;
+					summary.errors.push({ row: rowNumber, sku: normalized.sku, error: outcome.error });
 				}
 			} catch (rowErr) {
 				summary.skipped += 1;
-				summary.errors.push({ row: rowNumber, sku, error: rowErr.message });
+				summary.errors.push({ row: rowNumber, sku: normalized.sku, error: rowErr.message });
 			}
 		}
 
@@ -1293,3 +1313,5 @@ router.patch('/:id([0-9a-fA-F-]{36})/deactivate', authMiddleware, requireRole(['
 });
 
 module.exports = router;
+module.exports.normalizeBulkUploadRow = normalizeBulkUploadRow;
+module.exports.processBulkUploadRow = processBulkUploadRow;
