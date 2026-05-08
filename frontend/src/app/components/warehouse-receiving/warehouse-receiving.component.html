@@ -198,7 +198,12 @@
 
     <aside class="recv-rail" aria-label="Companion tools">
       <section class="recv-card recv-rail__slot" data-slot="quick-add">
-        <ng-content select="[recv-rail-quick-add]"></ng-content>
+        <app-quick-add-panel
+          [locationId]="locationId"
+          [qtyMultiplier]="qtyMultiplier"
+          [disabled]="!ticket"
+          (addPart)="onQuickAdd($event)"
+        ></app-quick-add-panel>
       </section>
 
       <section class="recv-card recv-rail__slot" data-slot="invoice-upload">
