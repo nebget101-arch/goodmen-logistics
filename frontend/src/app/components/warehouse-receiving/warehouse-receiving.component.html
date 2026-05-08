@@ -207,8 +207,23 @@
       </section>
 
       <section class="recv-card recv-rail__slot" data-slot="invoice-upload">
-        <ng-content select="[recv-rail-invoice-upload]"></ng-content>
+        <app-invoice-upload-card
+          [ticketId]="ticket?.id || null"
+          [disabled]="!ticket"
+          (uploadStart)="onInvoiceUploadStart()"
+          (extracted)="onInvoiceExtracted($event)"
+          (uploadError)="onInvoiceUploadError($event)"
+        ></app-invoice-upload-card>
       </section>
     </aside>
   </div>
+
+  <app-invoice-review-modal
+    [open]="invoiceModalOpen"
+    [extracting]="invoiceExtracting"
+    [result]="invoiceResult"
+    [ticketId]="ticket?.id || null"
+    (closed)="onInvoiceModalClosed()"
+    (applied)="onInvoiceLinesApplied($event)"
+  ></app-invoice-review-modal>
 </div>

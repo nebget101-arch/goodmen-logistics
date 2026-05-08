@@ -1,7 +1,8 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { ApiService } from '../../services/api.service';
+import { ApiService, InvoiceUploadResult } from '../../services/api.service';
 import * as QRCode from 'qrcode';
 import { QuickAddEvent } from './quick-add-panel.component';
+import { AppliedSummary } from './invoice-review-modal.component';
 
 interface ReceivingLineView {
   id: string;
@@ -54,6 +55,11 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
   bridgeConnected = false;
   qrCodeDataUrl = '';
   private bridgeEvents?: EventSource;
+
+  // FN-1491 — invoice upload + review modal state.
+  invoiceModalOpen = false;
+  invoiceExtracting = false;
+  invoiceResult: InvoiceUploadResult | null = null;
 
   constructor(private api: ApiService) {}
 
@@ -383,6 +389,71 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
         // Keep last known summary on transient error
       }
     });
+  }
+
+  // FN-1491 — Invoice upload card → opens the review modal in extracting state.
+  onInvoiceUploadStart(): void {
+    this.clearMessages();
+    this.invoiceResult = null;
+    this.invoiceExtracting = true;
+    this.invoiceModalOpen = true;
+  }
+
+  onInvoiceExtracted(result: InvoiceUploadResult): void {
+    this.invoiceResult = result;
+    this.invoiceExtracting = false;
+    this.invoiceModalOpen = true;
+    // Auto-fill vendor + reference on the ticket header IF the user hasn't
+    // already typed values — never overwrite manual input (AC: "Vendor +
+    // reference auto-fill … don't overwrite user values").
+    const ticket = this.ticket;
+    if (ticket) {
+      const ext = result.extracted;
+      if (ext?.vendor && !ticket.vendorName) {
+        ticket.vendorName = ext.vendor;
+      }
+      if (ext?.reference && !ticket.referenceNumber) {
+        ticket.referenceNumber = ext.reference;
+      }
+    }
+  }
+
+  onInvoiceUploadError(message: string): void {
+    // Close any in-flight modal so the user sees the error banner directly
+    // and can retry from the upload card.
+    this.invoiceExtracting = false;
+    this.invoiceModalOpen = false;
+    this.invoiceResult = null;
+    this.error = message;
+  }
+
+  onInvoiceModalClosed(): void {
+    this.invoiceModalOpen = false;
+    this.invoiceExtracting = false;
+  }
+
+  onInvoiceLinesApplied(summary: AppliedSummary): void {
+    if (summary.appliedCount > 0 && this.ticket) {
+      // Refresh the ticket so newly-added lines render with their server ids.
+      this.api.getReceivingTicket(this.ticket.id).subscribe({
+        next: (res: any) => {
+          if (res?.data) this.ticket = this.toTicketView(res.data);
+          this.message = `Applied ${summary.appliedCount} line${
+            summary.appliedCount === 1 ? '' : 's'
+          } from invoice`;
+        },
+        error: () => {
+          this.message = `Applied ${summary.appliedCount} line${
+            summary.appliedCount === 1 ? '' : 's'
+          } from invoice`;
+        }
+      });
+    }
+    if (summary.failedCount > 0) {
+      this.error = `${summary.failedCount} line${
+        summary.failedCount === 1 ? '' : 's'
+      } failed — see modal for details.`;
+    }
   }
 
   private clearMessages(): void {
