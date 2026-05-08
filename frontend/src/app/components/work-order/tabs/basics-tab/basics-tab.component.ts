@@ -105,31 +105,34 @@ export class WoBasicsTabComponent implements OnInit, OnDestroy {
   /* ─── Customer search ─── */
 
   populateCustomerDisplay(): void {
-    if (this.workOrder.customerId && this.customers.length > 0) {
+    if (!this.workOrder.customerId) return;
+    if (this.customers.length > 0) {
       const customer = this.customers.find((c: any) => c.id === this.workOrder.customerId) ||
         this.customers.find((c: any) => String(c.id) === String(this.workOrder.customerId));
       if (customer) {
         this.customerSearch = customer.displayName || customer.company_name || customer.name || '';
         this.selectedCustomer = customer;
-      } else {
-        this.apiService.getCustomers({ pageSize: 5000 }).subscribe({
-          next: (data: any) => {
-            const allCustomers = data?.rows || data?.data || data || [];
-            const fetchedCustomer = allCustomers.find((c: any) => c.id === this.workOrder.customerId);
-            if (fetchedCustomer) {
-              const mappedCustomer = {
-                ...fetchedCustomer,
-                company_name: fetchedCustomer.company_name || fetchedCustomer.companyName || fetchedCustomer.name || '',
-                displayName: fetchedCustomer.company_name || fetchedCustomer.companyName || fetchedCustomer.name || ''
-              };
-              this.customers.push(mappedCustomer);
-              this.customerSearch = mappedCustomer.displayName;
-              this.selectedCustomer = mappedCustomer;
-            }
-          }
-        });
+        this.cdr.markForCheck();
+        return;
       }
     }
+    this.apiService.getCustomers({ pageSize: 5000 }).subscribe({
+      next: (data: any) => {
+        const allCustomers = data?.rows || data?.data || data || [];
+        const fetchedCustomer = allCustomers.find((c: any) => c.id === this.workOrder.customerId);
+        if (fetchedCustomer) {
+          const mappedCustomer = {
+            ...fetchedCustomer,
+            company_name: fetchedCustomer.company_name || fetchedCustomer.companyName || fetchedCustomer.name || '',
+            displayName: fetchedCustomer.company_name || fetchedCustomer.companyName || fetchedCustomer.name || ''
+          };
+          this.customers.push(mappedCustomer);
+          this.customerSearch = mappedCustomer.displayName;
+          this.selectedCustomer = mappedCustomer;
+          this.cdr.markForCheck();
+        }
+      }
+    });
   }
 
   populateVehicleDisplay(): void {
