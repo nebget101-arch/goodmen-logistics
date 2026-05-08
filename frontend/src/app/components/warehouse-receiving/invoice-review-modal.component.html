@@ -1,0 +1,181 @@
+<div
+  *ngIf="open"
+  class="irm__backdrop"
+  (click)="onBackdropClick($event)"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="irm-title"
+>
+  <div class="irm__panel">
+    <header class="irm__header">
+      <h2 id="irm-title" class="irm__title">Review extracted invoice lines</h2>
+      <button
+        type="button"
+        class="irm__close"
+        (click)="close()"
+        [disabled]="applying"
+        aria-label="Close"
+      >
+        ×
+      </button>
+    </header>
+
+    <div *ngIf="extracting" class="irm__loading" aria-live="polite">
+      <div class="irm__spinner" aria-hidden="true"></div>
+      <div class="irm__loading-text">
+        Extracting…
+        <span class="irm__elapsed">{{ elapsedSec }}s</span>
+      </div>
+      <p class="irm__loading-hint">Reading invoice and matching SKUs against the parts catalog.</p>
+    </div>
+
+    <ng-container *ngIf="!extracting && result">
+      <section class="irm__summary">
+        <div class="irm__chip irm__chip--matched">{{ matchedCount }} matched</div>
+        <div class="irm__chip irm__chip--unmatched">{{ unmatchedCount }} unmatched</div>
+        <div class="irm__chip irm__chip--skipped" *ngIf="skippedCount > 0">
+          {{ skippedCount }} skipped
+        </div>
+        <div class="irm__meta" *ngIf="result.extracted.vendor || result.extracted.reference">
+          <span *ngIf="result.extracted.vendor">Vendor: <strong>{{ result.extracted.vendor }}</strong></span>
+          <span *ngIf="result.extracted.reference">Ref: <strong>{{ result.extracted.reference }}</strong></span>
+        </div>
+      </section>
+
+      <div class="irm__table-wrap">
+        <table class="irm__table">
+          <thead>
+            <tr>
+              <th class="irm__th-status">Status</th>
+              <th>SKU</th>
+              <th>Description</th>
+              <th class="irm__num">Qty</th>
+              <th class="irm__num">Unit cost</th>
+              <th class="irm__th-action"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let row of rows; trackBy: trackByRow"
+              [class.irm__row--skipped]="row.status === 'skipped'"
+              [class.irm__row--matched]="row.status === 'matched'"
+            >
+              <td class="irm__cell-status">
+                <span
+                  class="irm__rowchip"
+                  [class.irm__rowchip--matched]="row.status === 'matched'"
+                  [class.irm__rowchip--unmatched]="row.status === 'unmatched'"
+                  [class.irm__rowchip--skipped]="row.status === 'skipped'"
+                >
+                  {{ statusLabel(row) }}
+                </span>
+                <div *ngIf="row.partName && row.status === 'matched'" class="irm__partname" [title]="row.partName">
+                  {{ row.partName }}
+                </div>
+              </td>
+              <td>
+                <input
+                  type="text"
+                  class="irm__input"
+                  [value]="row.sku"
+                  (input)="onSkuInput(row, $event)"
+                  [disabled]="row.status === 'skipped' || applying"
+                  placeholder="SKU"
+                />
+              </td>
+              <td>
+                <input
+                  type="text"
+                  class="irm__input"
+                  [value]="row.description"
+                  (input)="onDescriptionInput(row, $event)"
+                  [disabled]="row.status === 'skipped' || applying"
+                  placeholder="Description"
+                />
+              </td>
+              <td class="irm__num">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="irm__input irm__input--num"
+                  [value]="row.qty"
+                  (input)="onQtyInput(row, $event)"
+                  [disabled]="row.status === 'skipped' || applying"
+                />
+              </td>
+              <td class="irm__num">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="irm__input irm__input--num"
+                  [value]="row.unitCost"
+                  (input)="onUnitCostInput(row, $event)"
+                  [disabled]="row.status === 'skipped' || applying"
+                />
+              </td>
+              <td class="irm__cell-action">
+                <ng-container *ngIf="row.status !== 'skipped'">
+                  <button
+                    *ngIf="row.status === 'unmatched'"
+                    type="button"
+                    class="irm__btn irm__btn--accent"
+                    (click)="quickAddPart(row)"
+                    [disabled]="row.quickAddBusy || applying"
+                  >
+                    {{ row.quickAddBusy ? 'Adding…' : 'Quick Add Part' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="irm__btn irm__btn--ghost"
+                    (click)="skipRow(row)"
+                    [disabled]="applying"
+                  >
+                    Skip
+                  </button>
+                </ng-container>
+                <button
+                  *ngIf="row.status === 'skipped'"
+                  type="button"
+                  class="irm__btn irm__btn--ghost"
+                  (click)="unskipRow(row)"
+                  [disabled]="applying"
+                >
+                  Restore
+                </button>
+                <div *ngIf="row.quickAddError" class="irm__row-error" role="alert">
+                  {{ row.quickAddError }}
+                </div>
+                <div *ngIf="row.applyError" class="irm__row-error" role="alert">
+                  {{ row.applyError }}
+                </div>
+              </td>
+            </tr>
+            <tr *ngIf="rows.length === 0">
+              <td colspan="6" class="irm__empty">No line items extracted.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div *ngIf="errorMsg" class="irm__banner irm__banner--error" role="alert">
+        {{ errorMsg }}
+      </div>
+
+      <footer class="irm__footer">
+        <button type="button" class="irm__btn irm__btn--ghost" (click)="close()" [disabled]="applying">
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="irm__btn irm__btn--primary"
+          [disabled]="!canApply"
+          (click)="apply()"
+        >
+          {{ applying ? 'Applying…' : 'Apply ' + matchedCount + ' matched line' + (matchedCount === 1 ? '' : 's') }}
+        </button>
+      </footer>
+    </ng-container>
+  </div>
+</div>
