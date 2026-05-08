@@ -127,8 +127,8 @@
     <div class="col">
       <label for="workOrderRoadCall">Road Call</label>
       <select id="workOrderRoadCall" class="form-control" [(ngModel)]="workOrder.roadCall" name="roadCall">
-        <option value="No">No</option>
-        <option value="Yes">Yes</option>
+        <option [ngValue]="false">No</option>
+        <option [ngValue]="true">Yes</option>
       </select>
     </div>
   </div>
@@ -139,7 +139,7 @@
     </div>
     <div class="col">
       <label for="workOrderEstimatedDuration">Estimated Duration (hrs)</label>
-      <input id="workOrderEstimatedDuration" type="number" class="form-control" [(ngModel)]="workOrder.estimatedDuration" name="estimatedDuration">
+      <input id="workOrderEstimatedDuration" type="number" class="form-control" [(ngModel)]="workOrder.estimatedDurationHours" name="estimatedDurationHours">
     </div>
     <div class="col">
       <label for="workOrderCurrentOdometerSvc">Odometer Reading</label>
