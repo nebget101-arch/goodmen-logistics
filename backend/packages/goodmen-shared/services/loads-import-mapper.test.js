@@ -88,6 +88,62 @@ describe('loads-import-service / buildStopsFromRow', () => {
 	});
 });
 
+describe('loads-import-service / buildStopsFromRow — stop date coercion (FN-1609)', () => {
+	it('coerces a JS Date.toString() form into ISO YYYY-MM-DD', () => {
+		const normalized = {
+			pickup_city: 'Dallas',
+			pickup_date: 'Thu May 07 2026 00:00:00 GMT+0000 (Coordinated Universal Time)',
+			_stops_hint: { pattern: 'single' },
+		};
+		const stops = buildStopsFromRow(normalized);
+		assert.equal(stops.length, 1);
+		assert.equal(stops[0].stopDate, '2026-05-07');
+	});
+
+	it('coerces a real Date instance into ISO YYYY-MM-DD', () => {
+		const normalized = {
+			pickup_city: 'Dallas',
+			pickup_date: new Date(Date.UTC(2026, 4, 7)),
+			_stops_hint: { pattern: 'single' },
+		};
+		const stops = buildStopsFromRow(normalized);
+		assert.equal(stops[0].stopDate, '2026-05-07');
+	});
+
+	it('keeps an ISO date string as ISO', () => {
+		const normalized = {
+			pickup_city: 'Dallas',
+			pickup_date: '2026-05-07',
+			_stops_hint: { pattern: 'single' },
+		};
+		const stops = buildStopsFromRow(normalized);
+		assert.equal(stops[0].stopDate, '2026-05-07');
+	});
+
+	it('coerces M/D/YYYY into ISO YYYY-MM-DD', () => {
+		const normalized = {
+			pickup_city: 'Dallas',
+			pickup_date: '5/7/2026',
+			_stops_hint: { pattern: 'single' },
+		};
+		const stops = buildStopsFromRow(normalized);
+		assert.equal(stops[0].stopDate, '2026-05-07');
+	});
+
+	it('returns null stopDate when the date field is null or unparseable', () => {
+		const cases = [null, undefined, '', '   ', 'not a date'];
+		for (const value of cases) {
+			const stops = buildStopsFromRow({
+				pickup_city: 'Dallas',
+				pickup_date: value,
+				_stops_hint: { pattern: 'single' },
+			});
+			assert.equal(stops.length, 1, `stop should still be emitted for ${JSON.stringify(value)}`);
+			assert.equal(stops[0].stopDate, null, `stopDate should be null for ${JSON.stringify(value)}`);
+		}
+	});
+});
+
 describe('loads-import-mapper / coerceRate', () => {
 	it('strips $ and commas before parsing', () => {
 		assert.equal(coerceRate('$1,500.00'), 1500);
