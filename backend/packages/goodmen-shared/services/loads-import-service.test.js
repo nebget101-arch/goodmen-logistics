@@ -335,3 +335,285 @@ test('previewImport surfaces aiUnavailable when AI returns a fallback envelope',
     global.fetch = originalFetch;
   }
 });
+
+// ─── FN-1601: parseImportDate ────────────────────────────────────────────────
+
+test('parseImportDate handles ISO, MM/DD/YYYY, JS toString, and Date objects', () => {
+  const { parseImportDate } = loadService(makeQueryStub());
+
+  // Bug repro fixture: spreadsheet cell stringified as JS Date.toString()
+  assert.equal(
+    parseImportDate('Thu May 07 2026 00:00:00 GMT+0000 (Coordinated Universal Time)'),
+    '2026-05-07'
+  );
+  // ISO date (DATE column form)
+  assert.equal(parseImportDate('2026-05-07'), '2026-05-07');
+  // ISO timestamp — must keep the calendar day, not drift in host TZ
+  assert.equal(parseImportDate('2026-05-07T00:00:00.000Z'), '2026-05-07');
+  // US slash format
+  assert.equal(parseImportDate('5/7/2026'), '2026-05-07');
+  assert.equal(parseImportDate('05/07/2026'), '2026-05-07');
+  // Two-digit year → 2000s
+  assert.equal(parseImportDate('5/7/26'), '2026-05-07');
+  // Real Date instance (xlsx cellDates: true)
+  assert.equal(parseImportDate(new Date(Date.UTC(2026, 4, 7))), '2026-05-07');
+
+  // Empty / unparseable → null (so the DATE column stays valid)
+  assert.equal(parseImportDate(''), null);
+  assert.equal(parseImportDate('   '), null);
+  assert.equal(parseImportDate(null), null);
+  assert.equal(parseImportDate(undefined), null);
+  assert.equal(parseImportDate('not a date'), null);
+  assert.equal(parseImportDate(new Date('invalid')), null);
+});
+
+// ─── FN-1601: commitBatch persists dates / driver_name / mapped status ───────
+
+const COMMIT_BATCH_AI_METADATA = Object.freeze({
+  finalColumnMapping: {
+    pickup_date: { sourceHeader: 'Pickup Date', confidence: 0.95 },
+    delivery_date: { sourceHeader: 'Delivery Date', confidence: 0.92 },
+    completed_date: { sourceHeader: 'Completed Date', confidence: 0.9 },
+    driver_name: { sourceHeader: 'Driver', confidence: 0.95 },
+    status: { sourceHeader: 'Status', confidence: 0.95 }
+  },
+  statusEnumMapping: { Delivered: 'DELIVERED', Canceled: 'CANCELED' },
+  billingStatusEnumMapping: { Funded: 'FUNDED' }
+});
+
+/**
+ * Build a {query, getClient} pair that simulates a staged batch ready for
+ * commit. Returns the captured INSERT INTO loads param array(s) so tests can
+ * assert on per-row column values without a real Postgres.
+ */
+function makeCommitFixture({ stagedRow, batchAiMetadata = COMMIT_BATCH_AI_METADATA }) {
+  const insertedLoads = [];
+  const query = async (sql, params) => {
+    if (/^\s*SELECT id, tenant_id, operating_entity_id, file_name, file_hash/i.test(sql)) {
+      // getBatch
+      return {
+        rows: [{
+          id: params[0],
+          tenant_id: params[1],
+          status: 'staged',
+          ai_metadata: batchAiMetadata,
+          result_summary: null,
+          storage_key: 'k'
+        }]
+      };
+    }
+    if (/^\s*SELECT id, source_row_index, raw_values, normalized_values, validation_status/i.test(sql)) {
+      return {
+        rows: [{
+          id: 'row-1',
+          source_row_index: 0,
+          raw_values: stagedRow.raw_values || {},
+          normalized_values: stagedRow.normalized_values,
+          validation_status: stagedRow.validation_status || 'ok'
+        }]
+      };
+    }
+    if (/UPDATE load_import_batches SET status = 'failed'/i.test(sql)) return { rows: [] };
+    return { rows: [] };
+  };
+
+  const getClient = async () => ({
+    query: async (sql, params) => {
+      if (/^\s*BEGIN/i.test(sql) || /^\s*COMMIT/i.test(sql) || /^\s*ROLLBACK/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/^\s*SELECT id, load_number FROM loads/i.test(sql)) {
+        return { rows: [] }; // no duplicate
+      }
+      if (/^\s*INSERT INTO loads\b/i.test(sql)) {
+        insertedLoads.push(params);
+        return { rows: [{ id: 'load-uuid-1' }] };
+      }
+      // UPDATEs to load_import_rows / load_import_batches / INSERT INTO load_stops
+      return { rows: [] };
+    },
+    release() {}
+  });
+
+  return { query, getClient, insertedLoads };
+}
+
+function loadServiceWithClient(query, getClient) {
+  dbBridge.setDatabase({ query, getClient });
+  delete require.cache[servicePath];
+  return require('./loads-import-service');
+}
+
+// INSERT column order from commitBatch (FN-1601):
+//   $1 tenant_id, $2 operating_entity_id, $3 load_number, $4 status,
+//   $5 billing_status, $6 dispatcher_user_id, $7 driver_id, $8 truck_id,
+//   $9 trailer_id, $10 broker_id, $11 broker_name, $12 driver_name,
+//   $13 pickup_date, $14 delivery_date, $15 completed_date,
+//   $16 po_number, $17 rate, $18 notes, $19 needs_review, $20 ai_metadata
+const IDX = {
+  status: 3,
+  billing_status: 4,
+  broker_name: 10,
+  driver_name: 11,
+  pickup_date: 12,
+  delivery_date: 13,
+  completed_date: 14,
+  ai_metadata: 19
+};
+
+test('commitBatch persists pickup_date/delivery_date/completed_date parsed from JS Date.toString', async () => {
+  const fixture = makeCommitFixture({
+    stagedRow: {
+      normalized_values: {
+        load_number: 'L-1',
+        driver_name: 'Rishawn Williams',
+        pickup_date: 'Thu May 07 2026 00:00:00 GMT+0000 (Coordinated Universal Time)',
+        delivery_date: '5/9/2026',
+        completed_date: '2026-05-10',
+        status: 'Delivered',
+        _status: 'DELIVERED',
+        _billing_status: 'PENDING',
+        _stops_hint: { pattern: 'single' },
+        pickup_city: 'Dallas', pickup_state: 'TX' // give buildStopsFromRow a stop
+      }
+    }
+  });
+  const { commitBatch } = loadServiceWithClient(fixture.query, fixture.getClient);
+
+  await commitBatch({ tenantId: 't1', userId: 'u1', batchId: 'batch-1' });
+
+  assert.equal(fixture.insertedLoads.length, 1);
+  const params = fixture.insertedLoads[0];
+  assert.equal(params[IDX.pickup_date], '2026-05-07');
+  assert.equal(params[IDX.delivery_date], '2026-05-09');
+  assert.equal(params[IDX.completed_date], '2026-05-10');
+});
+
+test('commitBatch keeps the AI-mapped status even when fuzzy match is below threshold', async () => {
+  // Pre-FN-1601 bug: low broker/driver score force-DRAFTed the row, throwing
+  // away the AI-mapped DELIVERED status. Here both fuzzy matchers return null
+  // (default stub), so maxScore=0 < threshold=0.85 → aboveThreshold=false.
+  const fixture = makeCommitFixture({
+    stagedRow: {
+      normalized_values: {
+        load_number: 'L-1',
+        status: 'Delivered',
+        _status: 'DELIVERED',
+        _billing_status: 'FUNDED',
+        _stops_hint: { pattern: 'single' },
+        pickup_city: 'Dallas'
+      }
+    }
+  });
+  const { commitBatch } = loadServiceWithClient(fixture.query, fixture.getClient);
+
+  await commitBatch({ tenantId: 't1', userId: 'u1', batchId: 'batch-1' });
+
+  const params = fixture.insertedLoads[0];
+  assert.equal(params[IDX.status], 'DELIVERED', 'mapped status must survive low FK score');
+  assert.equal(params[IDX.billing_status], 'FUNDED', 'billing_status enum unchanged (regression)');
+});
+
+test('commitBatch applies stashed statusEnumMapping when stage did not pre-map _status', async () => {
+  // Simulate a row where stage failed to set _status (e.g. another error
+  // demoted the row to needs_review before the status branch ran). The
+  // mapping is still in batch.ai_metadata.statusEnumMapping; commit should
+  // recover and produce DELIVERED rather than NEW/DRAFT.
+  const fixture = makeCommitFixture({
+    stagedRow: {
+      validation_status: 'needs_review',
+      normalized_values: {
+        load_number: 'L-1',
+        status: 'Delivered',
+        _status: null,
+        _billing_status: 'PENDING',
+        _stops_hint: { pattern: 'single' },
+        pickup_city: 'Dallas'
+      }
+    }
+  });
+  const { commitBatch } = loadServiceWithClient(fixture.query, fixture.getClient);
+
+  await commitBatch({ tenantId: 't1', userId: 'u1', batchId: 'batch-1' });
+
+  const params = fixture.insertedLoads[0];
+  assert.equal(params[IDX.status], 'DELIVERED');
+});
+
+test('commitBatch falls back to DRAFT and warns when mapped status is not in FN enum', async () => {
+  const fixture = makeCommitFixture({
+    stagedRow: {
+      normalized_values: {
+        load_number: 'L-1',
+        status: 'AwaitingPaperwork',
+        _status: null,
+        _billing_status: 'PENDING',
+        _stops_hint: { pattern: 'single' },
+        pickup_city: 'Dallas'
+      }
+    }
+  });
+  const { commitBatch } = loadServiceWithClient(fixture.query, fixture.getClient);
+
+  await commitBatch({ tenantId: 't1', userId: 'u1', batchId: 'batch-1' });
+
+  const params = fixture.insertedLoads[0];
+  const meta = JSON.parse(params[IDX.ai_metadata]);
+  assert.equal(params[IDX.status], 'DRAFT');
+  assert.ok(Array.isArray(meta.warnings) && meta.warnings.length >= 1, 'must record a warning');
+  assert.match(meta.warnings[0], /AwaitingPaperwork/);
+});
+
+test('commitBatch writes raw driver_name text when fuzzy match returns no driver_id', async () => {
+  const fixture = makeCommitFixture({
+    stagedRow: {
+      normalized_values: {
+        load_number: 'L-1',
+        driver_name: 'Rishawn Williams',
+        _status: 'NEW',
+        _billing_status: 'PENDING',
+        _stops_hint: { pattern: 'single' },
+        pickup_city: 'Dallas'
+      }
+    }
+  });
+  const { commitBatch } = loadServiceWithClient(fixture.query, fixture.getClient);
+
+  await commitBatch({ tenantId: 't1', userId: 'u1', batchId: 'batch-1' });
+
+  const params = fixture.insertedLoads[0];
+  assert.equal(params[IDX.driver_name], 'Rishawn Williams');
+});
+
+test('commitBatch records per-row confidences from finalColumnMapping in ai_metadata', async () => {
+  const fixture = makeCommitFixture({
+    stagedRow: {
+      normalized_values: {
+        load_number: 'L-1',
+        driver_name: 'Rishawn Williams',
+        pickup_date: '2026-05-07',
+        delivery_date: '2026-05-09',
+        completed_date: '2026-05-10',
+        status: 'Delivered',
+        _status: 'DELIVERED',
+        _billing_status: 'PENDING',
+        _stops_hint: { pattern: 'single' },
+        pickup_city: 'Dallas'
+      }
+    }
+  });
+  const { commitBatch } = loadServiceWithClient(fixture.query, fixture.getClient);
+
+  await commitBatch({ tenantId: 't1', userId: 'u1', batchId: 'batch-1' });
+
+  const params = fixture.insertedLoads[0];
+  const meta = JSON.parse(params[IDX.ai_metadata]);
+  assert.equal(meta.confidences.pickup_date, 0.95);
+  assert.equal(meta.confidences.delivery_date, 0.92);
+  assert.equal(meta.confidences.completed_date, 0.9);
+  assert.equal(meta.confidences.driver_name, 0.95);
+  assert.equal(meta.confidences.status, 0.95);
+  // Pre-existing match-score confidences must still be present.
+  assert.ok('broker' in meta.confidences);
+  assert.ok('driver' in meta.confidences);
+});
