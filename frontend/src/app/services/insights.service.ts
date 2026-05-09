@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { localDateIso } from '../shared/utils/local-date';
 
 export type TrendSeriesId = 'loadVolume' | 'maintenance' | 'onTimePct' | 'fuelCost';
 
@@ -41,7 +42,9 @@ export class InsightsService {
   constructor(private http: HttpClient) {}
 
   getTrends(options: { range?: '7d'; refresh?: boolean } = {}): Observable<TrendsResponse> {
-    let params = new HttpParams().set('range', options.range ?? '7d');
+    let params = new HttpParams()
+      .set('range', options.range ?? '7d')
+      .set('localDate', localDateIso());
     if (options.refresh) {
       params = params.set('refresh', 'true');
     }
