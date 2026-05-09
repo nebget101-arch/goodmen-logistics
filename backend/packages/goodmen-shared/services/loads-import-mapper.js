@@ -129,7 +129,12 @@ function buildStopsFromRow(normalized) {
     const city = trimOrNull(normalized[`${prefix}_city`]);
     const state = trimOrNull(normalized[`${prefix}_state`]);
     const zip = trimOrNull(normalized[`${prefix}_zip`]);
-    const date = trimOrNull(normalized[`${prefix}_date`]);
+    // Coerce the raw stop date — which may be a Date instance, JS Date.toString()
+    // form, ISO, or M/D/YYYY — to ISO-or-null. Mirrors how the load-level dates
+    // are normalized in commitBatch; without this, raw values like
+    // "Thu May 07 2026 00:00:00 GMT+0000 (...)" reach the DATE column and
+    // PostgreSQL aborts the whole commit transaction (FN-1609).
+    const date = parseImportDate(normalized[`${prefix}_date`]);
     if (!city && !state && !zip) return;
     stops.push({ stopType: type, city, state, zip, stopDate: date, sequence });
   }

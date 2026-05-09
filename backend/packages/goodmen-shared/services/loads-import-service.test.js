@@ -585,6 +585,139 @@ test('commitBatch writes raw driver_name text when fuzzy match returns no driver
   assert.equal(params[IDX.driver_name], 'Rishawn Williams');
 });
 
+// ─── FN-1609: stop_date coercion in load_stops INSERT ────────────────────────
+
+test('commitBatch persists stop_date as ISO when normalized pickup/delivery dates arrive in JS Date.toString form', async () => {
+  // Pre-fix, buildStopsFromRow passed the raw string straight through and the
+  // load_stops INSERT 500'd with `invalid input syntax for type date: ...`,
+  // aborting the whole commit transaction.
+  const insertedLoads = [];
+  const insertedStops = [];
+  const query = async (sql, params) => {
+    if (/^\s*SELECT id, tenant_id, operating_entity_id, file_name, file_hash/i.test(sql)) {
+      return {
+        rows: [{
+          id: params[0],
+          tenant_id: params[1],
+          status: 'staged',
+          ai_metadata: COMMIT_BATCH_AI_METADATA,
+          result_summary: null,
+          storage_key: 'k'
+        }]
+      };
+    }
+    if (/^\s*SELECT id, source_row_index, raw_values, normalized_values, validation_status/i.test(sql)) {
+      return {
+        rows: [{
+          id: 'row-1',
+          source_row_index: 0,
+          raw_values: {},
+          normalized_values: {
+            load_number: 'L-1',
+            pickup_date: 'Thu May 07 2026 00:00:00 GMT+0000 (Coordinated Universal Time)',
+            delivery_date: '5/9/2026',
+            _status: 'NEW',
+            _billing_status: 'PENDING',
+            _stops_hint: { pattern: 'single' },
+            pickup_city: 'Dallas', pickup_state: 'TX',
+            delivery_city: 'Atlanta', delivery_state: 'GA'
+          },
+          validation_status: 'ok'
+        }]
+      };
+    }
+    return { rows: [] };
+  };
+
+  const getClient = async () => ({
+    query: async (sql, params) => {
+      if (/^\s*BEGIN/i.test(sql) || /^\s*COMMIT/i.test(sql) || /^\s*ROLLBACK/i.test(sql)) return { rows: [] };
+      if (/^\s*SELECT id, load_number FROM loads/i.test(sql)) return { rows: [] };
+      if (/^\s*INSERT INTO loads\b/i.test(sql)) {
+        insertedLoads.push(params);
+        return { rows: [{ id: 'load-uuid-1' }] };
+      }
+      if (/^\s*INSERT INTO load_stops\b/i.test(sql)) {
+        // [load_id, stop_type, stop_date, city, state, zip, sequence]
+        insertedStops.push(params);
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    release() {}
+  });
+
+  const { commitBatch } = loadServiceWithClient(query, getClient);
+  await commitBatch({ tenantId: 't1', userId: 'u1', batchId: 'batch-1' });
+
+  assert.equal(insertedLoads.length, 1, 'commit must succeed (no aborted transaction)');
+  assert.equal(insertedStops.length, 2, 'one PICKUP and one DELIVERY stop should be inserted');
+
+  const pickup = insertedStops.find((p) => p[1] === 'PICKUP');
+  const delivery = insertedStops.find((p) => p[1] === 'DELIVERY');
+  assert.equal(pickup[2], '2026-05-07', 'pickup stop_date must be ISO-coerced');
+  assert.equal(delivery[2], '2026-05-09', 'delivery stop_date must be ISO-coerced');
+});
+
+test('commitBatch inserts the stop with stop_date = NULL when normalized date is unparseable', async () => {
+  // AC: gibberish stop date must not fail the whole row; the stop is still
+  // created so the load + addresses persist with stop_date = NULL.
+  const insertedStops = [];
+  const query = async (sql, params) => {
+    if (/^\s*SELECT id, tenant_id, operating_entity_id, file_name, file_hash/i.test(sql)) {
+      return {
+        rows: [{
+          id: params[0],
+          tenant_id: params[1],
+          status: 'staged',
+          ai_metadata: COMMIT_BATCH_AI_METADATA,
+          result_summary: null,
+          storage_key: 'k'
+        }]
+      };
+    }
+    if (/^\s*SELECT id, source_row_index, raw_values, normalized_values, validation_status/i.test(sql)) {
+      return {
+        rows: [{
+          id: 'row-1',
+          source_row_index: 0,
+          raw_values: {},
+          normalized_values: {
+            load_number: 'L-1',
+            pickup_date: 'not-a-date',
+            _status: 'NEW',
+            _billing_status: 'PENDING',
+            _stops_hint: { pattern: 'single' },
+            pickup_city: 'Dallas'
+          },
+          validation_status: 'ok'
+        }]
+      };
+    }
+    return { rows: [] };
+  };
+
+  const getClient = async () => ({
+    query: async (sql, params) => {
+      if (/^\s*BEGIN/i.test(sql) || /^\s*COMMIT/i.test(sql) || /^\s*ROLLBACK/i.test(sql)) return { rows: [] };
+      if (/^\s*SELECT id, load_number FROM loads/i.test(sql)) return { rows: [] };
+      if (/^\s*INSERT INTO loads\b/i.test(sql)) return { rows: [{ id: 'load-uuid-1' }] };
+      if (/^\s*INSERT INTO load_stops\b/i.test(sql)) {
+        insertedStops.push(params);
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    release() {}
+  });
+
+  const { commitBatch } = loadServiceWithClient(query, getClient);
+  await commitBatch({ tenantId: 't1', userId: 'u1', batchId: 'batch-1' });
+
+  assert.equal(insertedStops.length, 1);
+  assert.equal(insertedStops[0][2], null, 'unparseable stop_date must be NULL, not a raw string');
+});
+
 test('commitBatch records per-row confidences from finalColumnMapping in ai_metadata', async () => {
   const fixture = makeCommitFixture({
     stagedRow: {
